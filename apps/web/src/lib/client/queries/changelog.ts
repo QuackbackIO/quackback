@@ -15,6 +15,7 @@ import {
 } from '@/lib/server/functions/changelog'
 import { listChangelogCategoriesFn } from '@/lib/server/functions/changelog-categories'
 import { fetchChangelogSettingsFn } from '@/lib/server/functions/settings'
+import { listSegmentsFn } from '@/lib/server/functions/admin'
 
 const STALE_TIME_SHORT = 30 * 1000
 const STALE_TIME_MEDIUM = 60 * 1000
@@ -25,7 +26,8 @@ const STALE_TIME_MEDIUM = 60 * 1000
 export const changelogKeys = {
   all: ['changelogs'] as const,
   lists: () => [...changelogKeys.all, 'list'] as const,
-  list: (filters: { status?: string }) => [...changelogKeys.lists(), filters] as const,
+  list: (filters: { status?: string; sort?: string }) =>
+    [...changelogKeys.lists(), filters] as const,
   details: () => [...changelogKeys.all, 'detail'] as const,
   detail: (id: ChangelogId) => [...changelogKeys.details(), id] as const,
   topViewed: () => [...changelogKeys.all, 'top-viewed'] as const,
@@ -48,6 +50,13 @@ export const changelogCategoryQueries = {
       queryFn: () => listChangelogCategoriesFn(),
       staleTime: STALE_TIME_MEDIUM,
     }),
+  /** The segments a label can be gated to (segment.view), named on each gated label. */
+  segments: () =>
+    queryOptions({
+      queryKey: ['admin', 'segments'] as const,
+      queryFn: () => listSegmentsFn(),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
 }
 
 /** Admin-only changelog settings (Settings > Changelog, `changelog.manage`). */
@@ -64,13 +73,17 @@ export const changelogSettingsQueries = {
  * Admin changelog queries
  */
 export const changelogQueries = {
-  list: (params: { status?: 'draft' | 'scheduled' | 'published' | 'all' }) =>
+  list: (params: {
+    status?: 'draft' | 'scheduled' | 'published' | 'all'
+    sort?: 'newest' | 'oldest'
+  }) =>
     infiniteQueryOptions({
       queryKey: changelogKeys.list(params),
       queryFn: ({ pageParam }) =>
         listChangelogsFn({
           data: {
             status: params.status,
+            sort: params.sort,
             cursor: pageParam,
             limit: 20,
           },

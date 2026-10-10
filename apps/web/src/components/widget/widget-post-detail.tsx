@@ -5,11 +5,11 @@ import { useIntl, FormattedMessage } from 'react-intl'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PostContent } from '@/components/public/post-content'
-import { fetchPublicPostDetail } from '@/lib/server/functions/portal'
-import { createCommentFn } from '@/lib/server/functions/comments'
+import { widgetFetchPublicPostDetailFn } from '@/lib/server/functions/widget/posts'
+import { widgetCreateCommentFn } from '@/lib/server/functions/widget/comments'
 import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-auth'
 import { buildPortalUrl } from './build-portal-url'
-import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
+import { widgetQueryKeys, widgetQueryKeyPrefixEquals } from '@/lib/client/hooks/use-widget-vote'
 import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetCommentList } from './widget-comment-list'
@@ -21,9 +21,10 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { WidgetCommentForm } from './widget-comment-form'
 import { WidgetPortalTitle } from './widget-portal-title'
+import { WidgetPostDetailSkeleton } from './widget-skeletons'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId } from '@quackback/ids'
-import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useWidgetMediaUpload } from './use-widget-image-upload'
 
 interface StatusInfo {
   id: string
@@ -38,9 +39,16 @@ interface WidgetPostDetailProps {
 
 export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   const intl = useIntl()
-  const { upload: uploadImage } = useWidgetImageUpload()
-  const { isIdentified, hmacRequired, user, ensureSessionThen, emitEvent, sessionVersion } =
-    useWidgetAuth()
+  const { upload: uploadMedia } = useWidgetMediaUpload()
+  const {
+    isIdentified,
+    hmacRequired,
+    user,
+    canPortalHandoff,
+    ensureSessionThen,
+    emitEvent,
+    sessionVersion,
+  } = useWidgetAuth()
   const queryClient = useQueryClient()
 
   // Widget-specific post detail query that injects Bearer headers so the server
@@ -54,7 +62,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   } = useQuery({
     queryKey: detailKey,
     queryFn: async (): Promise<PublicPostDetailView> => {
-      const result = await fetchPublicPostDetail({
+      const result = await widgetFetchPublicPostDetailFn({
         // Smaller first page for the constrained widget viewport; further roots
         // load via "show more".
         data: { postId, commentsLimit: WIDGET_COMMENT_PAGE_SIZE },
@@ -63,6 +71,16 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
       if (!result) throw new Error('Post not found')
       return result as PublicPostDetailView
     },
+    // Minting/identifying bumps sessionVersion mid-action (first-visit upload,
+    // reaction, comment), which re-keys this query. Keep showing the same
+    // post while the Bearer refetch runs so the comment editors and reaction
+    // chips stay mounted for the in-flight request to land in — a skeleton
+    // here would tear them down. Only for the same post: switching posts
+    // still shows the skeleton rather than the previous post.
+    placeholderData: (prev, prevQuery) =>
+      widgetQueryKeyPrefixEquals([...widgetQueryKeys.postDetail.all, postId], prevQuery?.queryKey)
+        ? prev
+        : undefined,
     staleTime: 30 * 1000,
   })
 
@@ -77,22 +95,22 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
 
   const handleViewOnPortal = useCallback(async () => {
     if (!post) return
-    const ott = isIdentified ? await generateOneTimeToken() : null
+    const ott = isIdentified && canPortalHandoff ? await generateOneTimeToken() : null
     const url = buildPortalUrl({
       origin: window.location.origin,
       boardSlug: post.board.slug,
       postId: post.id,
-      isIdentified,
+      isIdentified: isIdentified && canPortalHandoff,
       ott,
     })
     sendToHost({ type: 'quackback:navigate', url })
-  }, [post, isIdentified])
+  }, [post, isIdentified, canPortalHandoff])
 
   /** Submit a comment (root or reply). */
   const submitComment = useCallback(
     async (content: string, contentJson: TiptapContent | null, parentId?: string) => {
       await ensureSessionThen(async () => {
-        const result = await createCommentFn({
+        const result = await widgetCreateCommentFn({
           data: { postId, content, contentJson: contentJson ?? undefined, parentId },
           headers: getWidgetAuthHeaders(),
         })
@@ -115,7 +133,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   )
 
   // Per-board vote/comment capability, computed server-side for the real actor
-  // (fetchPublicPostDetail runs with the widget's Bearer identity and the query
+  // (widgetFetchPublicPostDetailFn runs with the widget's Bearer identity and the query
   // re-keys on sessionVersion, so this refetches after identify). Replaces the
   // old workspace-wide anonymous flags, which advertised CTAs on boards whose
   // per-action tier requires sign-in (#191). Undefined (legacy/cached) → false.
@@ -142,23 +160,14 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   const liveCommentCount = post?.comments ? countLiveComments(post.comments) : 0
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col h-full px-3 pt-3">
-        <div className="space-y-3 animate-pulse">
-          <div className="h-5 bg-muted/50 rounded w-3/4" />
-          <div className="h-3 bg-muted/30 rounded w-1/3" />
-          <div className="h-20 bg-muted/30 rounded mt-2" />
-          <div className="h-3 bg-muted/30 rounded w-1/2 mt-4" />
-          <div className="space-y-2 mt-2">
-            <div className="h-12 bg-muted/20 rounded" />
-            <div className="h-12 bg-muted/20 rounded" />
-          </div>
-        </div>
-      </div>
-    )
+    return <WidgetPostDetailSkeleton />
   }
 
   if (error || !post) {
+    // "Post not found" is the one error we raise ourselves and can name; any
+    // other message is a transport/stack string a visitor can't act on, so
+    // show the generic line and keep the raw text in a tooltip for support.
+    const notFound = error instanceof Error && error.message === 'Post not found'
     return (
       <div className="flex flex-col items-center justify-center h-full px-4 text-center">
         <p className="text-sm text-muted-foreground">
@@ -167,13 +176,21 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
             defaultMessage="Could not load post"
           />
         </p>
-        <p className="text-xs text-muted-foreground/60 mt-1">
-          {error instanceof Error
-            ? error.message
-            : intl.formatMessage({
-                id: 'widget.postDetail.error.somethingWrong',
-                defaultMessage: 'Something went wrong',
-              })}
+        <p
+          className="text-xs text-muted-foreground/60 mt-1"
+          title={!notFound && error instanceof Error ? error.message : undefined}
+        >
+          {notFound ? (
+            <FormattedMessage
+              id="widget.postDetail.error.notFound"
+              defaultMessage="This post may have been removed or made private."
+            />
+          ) : (
+            <FormattedMessage
+              id="widget.postDetail.error.somethingWrong"
+              defaultMessage="Something went wrong"
+            />
+          )}
         </p>
       </div>
     )
@@ -308,7 +325,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
               isIdentified={isIdentified}
               user={user}
               onSubmit={submitComment}
-              onImageUpload={uploadImage}
+              onImageUpload={uploadMedia}
             />
           )}
 
@@ -339,7 +356,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
             pinnedCommentId={post.pinnedCommentId}
             canComment={canComment && !post.isCommentsLocked}
             onSubmitComment={handleSubmitReply}
-            onImageUpload={uploadImage}
+            onImageUpload={uploadMedia}
           />
 
           {hasMoreComments && (

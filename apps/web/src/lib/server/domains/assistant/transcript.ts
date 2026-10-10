@@ -39,11 +39,13 @@ export const OMITTED_MESSAGES_MARKER = '\n\n[... earlier messages omitted ...]\n
  * Render a thread (oldest-first) as plain "Speaker: content" lines. A 'system'
  * message (e.g. a status-change notice) is bookkeeping, not something either
  * party said, so it never belongs in the rendered thread; text-less messages
- * carry nothing for the model UNLESS they hold image attachments — those
- * render as a `[image attached: name]` note so the model knows a screenshot
- * exists (the live image stream, gated on model capability, is vision.ts's
- * job; this text note is the always-on fallback). An internal note is
- * labelled `Note (internal):` (see the module doc on D1).
+ * carry nothing for the model UNLESS they hold an attachment — an image
+ * renders as a `[image attached: name]` note (the live image stream, gated
+ * on model capability, is vision.ts's job; this text note is the always-on
+ * fallback) and any other file renders as a `[file attached: name]` note, so
+ * a text-less, file-only message is never silently dropped from the
+ * transcript. An internal note is labelled `Note (internal):` (see the
+ * module doc on D1).
  */
 function renderTranscript(messages: ConversationMessageDTO[]): string {
   const lines: string[] = []
@@ -53,14 +55,18 @@ function renderTranscript(messages: ConversationMessageDTO[]): string {
     const imageNames = (m.attachments ?? [])
       .filter((a) => a.contentType.startsWith('image/'))
       .map((a) => a.name)
+    const fileNames = (m.attachments ?? [])
+      .filter((a) => !a.contentType.startsWith('image/'))
+      .map((a) => a.name)
     const imageNote = imageNames.length > 0 ? `[image attached: ${imageNames.join(', ')}]` : ''
-    if (!content && !imageNote) continue
+    const fileNote = fileNames.length > 0 ? `[file attached: ${fileNames.join(', ')}]` : ''
+    if (!content && !imageNote && !fileNote) continue
     const speaker = m.isInternal
       ? 'Note (internal)'
       : m.senderType === 'visitor'
         ? 'Customer'
         : 'Agent'
-    lines.push(`${speaker}: ${[content, imageNote].filter(Boolean).join(' ')}`)
+    lines.push(`${speaker}: ${[content, imageNote, fileNote].filter(Boolean).join(' ')}`)
   }
   return lines.join('\n')
 }

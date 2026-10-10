@@ -16,6 +16,20 @@
  *    for a named customer, being first through the door is a race anyone who
  *    can guess a hostname may enter. See {@link isOpenToBootstrapClaim}.
  *
+ * The onboarding promoter also asks a fourth, {@link isSetupOpenToClaim}: the
+ * workspace step is for finishing setup, so a workspace whose setup is done
+ * is not claimable there. The SSO callback does not ask it, because recovering
+ * a workspace whose admin is gone is what that path is for, and it already
+ * requires an address at a domain this provider verified.
+ *
+ * On an install whose setup is still open, the onboarding promoter decides one
+ * thing more: who claimed it. That is the first human account created there
+ * ({@link findSetupClaimant}), not whoever reaches the workspace step first,
+ * because the gap between creating an account and finishing that step is a
+ * window in which a second visitor could otherwise take the install. The
+ * server's operator can name a different owner instead, with
+ * `SETUP_OWNER_EMAIL` ({@link namedSetupOwnerEmail}).
+ *
  * Two promoters, and both consult all three: `functions/onboarding.ts`'s
  * `ensureBootstrapAdmin` and `auth/hooks.ts`'s `handleSsoCallbackAfter`. The
  * second one used to consult only the first two, which produced the
@@ -29,9 +43,16 @@
  * them). A blocked admin still owns setup for the same reason: the promoter
  * counts them, so the screen must too.
  */
-import { and, eq, principal, sql } from '@/lib/server/db'
+import type { UserId } from '@quackback/ids'
+import { and, asc, eq, isNotNull, principal, sql, user } from '@/lib/server/db'
 import type { Database, Transaction } from '@/lib/server/db'
 import { isProvisionedWorkspace } from '@/lib/server/workspaces/provenance'
+import {
+  getSetupState,
+  isOnboardingComplete,
+  needsCloudOnboardingWizard,
+  type SetupState,
+} from '@/lib/shared/db-types'
 
 /** The live db or an open transaction. */
 type Executor = Database | Transaction
@@ -89,4 +110,149 @@ export async function findHumanAdmin(exec: Executor): Promise<{ id: string } | u
  */
 export async function isOpenToBootstrapClaim(exec: Executor): Promise<boolean> {
   return !(await isProvisionedWorkspace(exec))
+}
+
+/**
+ * Is this workspace's setup still waiting for its owner to finish it?
+ *
+ * The onboarding claim is a way to finish setting a workspace up, not a way
+ * into one that is already running. Without this, an install whose human
+ * admins are all gone (only service principals left) handed admin, and the
+ * workspace name, slug and modules, to whichever signed-in user posted the
+ * workspace step first, portal users included.
+ *
+ * "Still open" is the same answer the onboarding layout routes on: setup is
+ * finished once the wizard's steps are complete, unless a declarative config
+ * file or a provisioner stamped them complete before the owner ever arrived
+ * ({@link needsCloudOnboardingWizard}). That pre-stamped workspace has no owner
+ * yet and its first user must still be able to claim it. No settings row is a
+ * fresh install, which is open.
+ *
+ * Take the transaction, not the pool, for the same reason as
+ * {@link isOpenToBootstrapClaim}.
+ */
+export async function isSetupOpenToClaim(exec: Executor): Promise<boolean> {
+  const rows = await readSetupStates(exec)
+  if (rows.length === 0) return true
+  // Not a singleton: no honest answer, so refuse rather than open.
+  if (rows.length > 1) return false
+  return isSetupStateOpen(getSetupState(rows[0]!))
+}
+
+/** Up to two stored setup states: enough to tell none, one and too many apart. */
+async function readSetupStates(exec: Executor): Promise<Array<string | null>> {
+  const result = await exec.execute(
+    sql`SELECT s.setup_state AS setup_state FROM settings s LIMIT 2`
+  )
+  const rows = (result ?? []) as unknown as Array<{ setup_state: string | null }>
+  return rows.map((row) => row.setup_state ?? null)
+}
+
+/**
+ * {@link isSetupOpenToClaim} for a setup state already in hand, such as one
+ * read under the settings row lock. Kept as one function so a write that
+ * re-checks under its own lock asks exactly the question the early check did.
+ */
+export function isSetupStateOpen(state: SetupState | null): boolean {
+  return !isOnboardingComplete(state) || needsCloudOnboardingWizard(state)
+}
+
+/**
+ * The setup owner the server's operator named with `SETUP_OWNER_EMAIL`,
+ * normalised, or null when it is unset.
+ *
+ * The way out of a stranded install. The first account created owns setup, and
+ * that account can belong to the wrong person: a smoke test, a stray visitor, a
+ * script that hit sign-up, or the operator's own account with its password lost
+ * and no mail to reset it. Every later sign-up is then refused until setup
+ * finishes, which only that account can do. Naming an owner hands the claim to
+ * the account at that address instead, and lets that address create its
+ * account if it has none. Removing the variable restores the first-account
+ * rule.
+ *
+ * It is the environment's word, so only someone who controls the server's
+ * configuration can say it, and it is read where the first-account rule
+ * applies and nowhere else: never on a provisioned workspace, and never once
+ * setup is finished.
+ *
+ * Read directly from `process.env`, not the zod config, so it works in any
+ * context without a full config load.
+ */
+export function namedSetupOwnerEmail(): string | null {
+  // A value no account can hold still names nobody else: setup stays held for
+  // it rather than falling back to whoever signed up first.
+  return process.env.SETUP_OWNER_EMAIL?.trim().toLowerCase() || null
+}
+
+/**
+ * Does an account created on this workspace own its setup?
+ *
+ * Yes on an install nobody provisioned whose setup is not finished. Nothing but
+ * the wizard is reachable there (the root gate returns every other page to
+ * onboarding), so every account on it was made to set it up, and the first one
+ * belongs to whoever is doing that, unless the operator named the owner.
+ * Deciding at the workspace step instead left the time between creating an
+ * account and finishing that step open to anyone else who created one.
+ *
+ * No on a provisioned workspace, whose owner is recorded where it was created.
+ * No once setup reads complete, including on a workspace the config file
+ * stamped complete before its owner arrived: its portal is live, people sign up
+ * there to leave feedback, and being first to sign up says nothing about who
+ * set it up. A stamp is not an owner, so that workspace's first user still
+ * claims it at the workspace step.
+ *
+ * Take the transaction, not the pool, for the same reason as
+ * {@link isOpenToBootstrapClaim}.
+ */
+async function isSetupClaimedByAccount(exec: Executor): Promise<boolean> {
+  if (!(await isOpenToBootstrapClaim(exec))) return false
+  const rows = await readSetupStates(exec)
+  if (rows.length === 0) return true
+  if (rows.length > 1) return false
+  return !isOnboardingComplete(getSetupState(rows[0]!))
+}
+
+/** Who holds an install's setup while an account decides it. */
+export interface SetupClaimant {
+  /**
+   * The account that owns setup. Null only while the owner the operator named
+   * has no account yet: setup is held for that address, and nobody holds it.
+   */
+  userId: UserId | null
+  /** The address the operator named, or null where the first account owns setup. */
+  ownerEmail: string | null
+}
+
+/**
+ * The account that has claimed setup, where an account does (see
+ * {@link isSetupClaimedByAccount}). Undefined anywhere else, and before anyone
+ * has an account unless the operator named the owner.
+ *
+ * Where the operator named an owner ({@link namedSetupOwnerEmail}), the account
+ * at that address, or a claim held for it until it has one. Otherwise the first
+ * human account, never an anonymous visitor: the widget mints anonymous
+ * principals for people who have not signed up, and one that arrives first
+ * must not own the install. Ties on creation time break on id, so every reader
+ * names the same account.
+ *
+ * Says nothing about whether that account holds admin yet: the workspace step
+ * is where the claimant is promoted.
+ */
+export async function findSetupClaimant(exec: Executor): Promise<SetupClaimant | undefined> {
+  if (!(await isSetupClaimedByAccount(exec))) return undefined
+  const ownerEmail = namedSetupOwnerEmail()
+  if (ownerEmail) {
+    // Better-Auth stores addresses lowercased, as the sign-up gate assumes.
+    const named = await exec.query.user.findFirst({
+      where: eq(user.email, ownerEmail),
+      columns: { id: true },
+    })
+    return { userId: (named?.id as UserId | undefined) ?? null, ownerEmail }
+  }
+  const first = await exec.query.principal.findFirst({
+    where: and(eq(principal.type, 'user'), isNotNull(principal.userId)),
+    columns: { userId: true },
+    orderBy: [asc(principal.createdAt), asc(principal.id)],
+  })
+  return first?.userId ? { userId: first.userId, ownerEmail: null } : undefined
 }

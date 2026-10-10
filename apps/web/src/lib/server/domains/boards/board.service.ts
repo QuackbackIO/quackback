@@ -28,7 +28,7 @@ import { emitBestEffort } from '@/lib/server/events/emit'
 import { boardCreated, boardDeleted } from '@/lib/server/events/catalogue'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'
-import { slugify } from '@/lib/shared/utils'
+import { slugify } from '@/lib/shared/utils/slugify'
 import { type BoardAccess } from '@/lib/server/db'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 
@@ -68,6 +68,7 @@ export function accessToAudience(access: BoardAccess): LegacyBoardAudience {
   }
 }
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'boards' })
@@ -345,7 +346,7 @@ export async function listBoards(): Promise<Board[]> {
 }
 
 /**
- * List all boards with post counts (excludes soft-deleted)
+ * List all boards with post counts (excludes soft-deleted and merged duplicates)
  */
 export async function listBoardsWithDetails(): Promise<BoardWithDetails[]> {
   // Get all active boards ordered by name
@@ -366,7 +367,14 @@ export async function listBoardsWithDetails(): Promise<BoardWithDetails[]> {
       count: sql<number>`count(*)`.as('count'),
     })
     .from(posts)
-    .where(and(inArray(posts.boardId, boardIds), sql`${posts.deletedAt} IS NULL`))
+    .where(
+      and(
+        inArray(posts.boardId, boardIds),
+        isNull(posts.deletedAt),
+        isNull(posts.canonicalPostId),
+        notTestPrincipal(posts.principalId)
+      )
+    )
     .groupBy(posts.boardId)
 
   // Create a map of board ID -> post count

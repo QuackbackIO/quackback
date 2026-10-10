@@ -110,7 +110,7 @@ export function RoadmapBoard({
             onSelect={setSelectedRoadmap}
           />
           {selectedRoadmap?.description && (
-            <Card className="bg-muted/50 border-none shadow-none">
+            <Card className="border-none">
               <CardContent className="py-3 px-4">
                 <p className="text-sm text-muted-foreground">{selectedRoadmap.description}</p>
               </CardContent>
@@ -149,7 +149,7 @@ export function RoadmapBoard({
       />
 
       {effectiveSelectedId && (
-        <div className="relative flex-1 min-h-0">
+        <div className="relative flex-1 min-h-[24rem] sm:min-h-0">
           <div
             ref={columnsScroll.ref}
             className="flex gap-4 pb-4 h-full overflow-x-auto overflow-y-hidden scrollbar-none snap-x snap-mandatory"

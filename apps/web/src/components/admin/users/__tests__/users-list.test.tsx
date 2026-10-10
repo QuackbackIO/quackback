@@ -109,6 +109,33 @@ describe('<UsersList>', () => {
   })
 })
 
+describe('<UsersList> toolbar', () => {
+  it('orders the list through one Sort menu instead of a row of pills', async () => {
+    const changes: Array<Partial<UsersFilters>> = []
+    renderList(USERS, { onFiltersChange: (u) => changes.push(u) })
+    expect(screen.queryByRole('button', { name: 'Oldest' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Sort: Newest/ }))
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Most active' }))
+    expect(changes).toContainEqual({ sort: 'most_active' })
+  })
+
+  it('puts a Filter control on the toolbar row after Sort, with no Add filter line', () => {
+    renderList(USERS, { onNewPerson: () => {} })
+    const toolbar = document.querySelector('[data-slot="admin-list-search"]')!.parentElement!
+    const labels = Array.from(toolbar.querySelectorAll('button')).map((b) => b.textContent?.trim())
+    expect(labels.slice(0, 2)).toEqual(['Sort: Newest', 'Filter'])
+    expect(screen.queryByText('Add filter')).toBeNull()
+  })
+
+  it('names the create action New user and runs it', () => {
+    let opened = 0
+    renderList(USERS, { onNewPerson: () => opened++ })
+    expect(screen.queryByRole('button', { name: 'New person' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New user' }))
+    expect(opened).toBe(1)
+  })
+})
+
 describe('<UsersList> metric column headers', () => {
   it('labels the post, comment and vote counts as scannable table columns', () => {
     renderList()
@@ -127,10 +154,7 @@ describe('<UsersList> metric column headers', () => {
   it('adds a Country column header once the field is turned on', async () => {
     renderList()
     expect(screen.queryByText('Country')).toBeNull()
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }))
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(await screen.findAllByText('Country')).not.toHaveLength(0)
   })
@@ -144,21 +168,14 @@ describe('<UsersList> column picker', () => {
 
   it('shows the Country field for every row once turned on from the Columns menu', async () => {
     renderList()
-    // Radix DropdownMenuTrigger opens on pointerDown (not click).
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }))
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(await screen.findByText('United States')).toBeInTheDocument()
   })
 
   it('remembers the Country column choice across remounts', async () => {
     const first = renderList()
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }))
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(await screen.findByText('United States')).toBeInTheDocument()
 
@@ -169,16 +186,9 @@ describe('<UsersList> column picker', () => {
 
   it('remembers turning the column back off across remounts', async () => {
     const first = renderList()
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }))
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(await screen.findByText('United States')).toBeInTheDocument()
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(screen.queryByText('United States')).toBeNull()
 
@@ -189,17 +199,10 @@ describe('<UsersList> column picker', () => {
 
   it('turning the column back off hides it again', async () => {
     renderList()
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }))
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(await screen.findByText('United States')).toBeInTheDocument()
 
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(screen.queryByText('United States')).toBeNull()
   })

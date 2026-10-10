@@ -75,7 +75,7 @@ describe('updateMemberRole', () => {
       role: 'admin',
     })
 
-    await updateMemberRole(TARGET, 'member', ACTING)
+    await updateMemberRole(TARGET, 'member', ACTING, null, undefined, { granterRole: 'admin' })
 
     expect(mockCacheDel).toHaveBeenCalledWith(`principal:user:${TARGET_USER}`)
   })
@@ -89,8 +89,21 @@ describe('updateMemberRole', () => {
       role: 'admin',
     })
 
-    await updateMemberRole(TARGET, 'member', ACTING)
+    await updateMemberRole(TARGET, 'member', ACTING, null, undefined, { granterRole: 'admin' })
 
+    expect(mockCacheDel).not.toHaveBeenCalled()
+  })
+
+  it('refuses to change the role of a support principal', async () => {
+    mockFindFirst.mockResolvedValue({
+      id: TARGET,
+      userId: TARGET_USER,
+      type: 'support',
+      role: 'admin',
+    })
+    await expect(updateMemberRole(TARGET, 'member', ACTING)).rejects.toMatchObject({
+      code: 'MEMBER_NOT_FOUND',
+    })
     expect(mockCacheDel).not.toHaveBeenCalled()
   })
 })
@@ -107,5 +120,18 @@ describe('removeTeamMember', () => {
     await removeTeamMember(TARGET, ACTING)
 
     expect(mockCacheDel).toHaveBeenCalledWith(`principal:user:${TARGET_USER}`)
+  })
+
+  it('refuses to remove a support principal', async () => {
+    mockFindFirst.mockResolvedValue({
+      id: TARGET,
+      userId: TARGET_USER,
+      type: 'support',
+      role: 'admin',
+    })
+    await expect(removeTeamMember(TARGET, ACTING)).rejects.toMatchObject({
+      code: 'MEMBER_NOT_FOUND',
+    })
+    expect(mockCacheDel).not.toHaveBeenCalled()
   })
 })

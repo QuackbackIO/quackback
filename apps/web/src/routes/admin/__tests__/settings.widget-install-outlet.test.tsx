@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const useChildMatches = vi.fn()
 
@@ -11,7 +13,8 @@ vi.mock('@tanstack/react-router', async () => {
     ...actual,
     useChildMatches,
     Outlet: () => <div>install-outlet</div>,
-    useRouteContext: () => ({ settings: {} }),
+    useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
+      select({ settings: {} }),
     Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
   }
 })
@@ -28,9 +31,10 @@ vi.mock('@/lib/client/queries/admin', () => ({
     onboardingStatus: () => ({ queryKey: ['o'] }),
   },
 }))
-vi.mock('@tanstack/react-query', () => ({
+vi.mock('@tanstack/react-query', async () => ({
+  ...(await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query')),
   useSuspenseQuery: () => ({
-    data: { messenger: { enabled: false }, tabs: {}, home: {} },
+    data: Object.assign([], { messenger: { enabled: false }, tabs: {}, home: {} }),
   }),
 }))
 vi.mock('next-themes', () => ({
@@ -45,9 +49,25 @@ vi.mock('@/lib/client/mutations/settings', () => ({
 describe('widget settings child outlet', () => {
   it('renders the install child instead of the general widget page', async () => {
     useChildMatches.mockReturnValue([{ id: '/admin/settings/widget/install' }])
-    const { WidgetSettingsGate } = await import('../settings.widget')
+    const { WidgetSettingsGate } =
+      await import('@/components/admin/settings/widget/widget-settings-page')
     render(<WidgetSettingsGate />)
     expect(screen.getByText('install-outlet')).toBeTruthy()
-    expect(screen.queryByText(/Add the SDK to your site/i)).toBeNull()
+    expect(screen.queryByText('Quinn')).toBeNull()
+  })
+
+  it('renders the general widget page when there is no child route', async () => {
+    useChildMatches.mockReturnValue([])
+    const { WidgetSettingsGate } =
+      await import('@/components/admin/settings/widget/widget-settings-page')
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <IntlProvider locale="en" defaultLocale="en">
+          <WidgetSettingsGate />
+        </IntlProvider>
+      </QueryClientProvider>
+    )
+    expect(screen.queryByText('install-outlet')).toBeNull()
+    expect(screen.getByText('Quinn')).toBeTruthy()
   })
 })

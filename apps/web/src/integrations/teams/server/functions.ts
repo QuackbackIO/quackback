@@ -5,6 +5,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 export interface TeamsOAuthState {
   type: 'teams_oauth'
@@ -26,11 +27,6 @@ export interface TeamsChannel {
   isPrivate: boolean
 }
 
-interface TeamsIntegrationConfig {
-  workspaceName?: string
-  tokenExpiresAt?: string
-}
-
 export const getTeamsConnectUrl = createServerFn({ method: 'GET' }).handler(
   async (): Promise<string> => {
     const { randomBytes } = await import('crypto')
@@ -42,7 +38,8 @@ export const getTeamsConnectUrl = createServerFn({ method: 'GET' }).handler(
     const { hasPlatformCredentials } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
     if (!(await hasPlatformCredentials('teams'))) {
-      throw new Error(
+      throw new ValidationError(
+        'PLATFORM_CREDENTIALS_NOT_CONFIGURED',
         'Teams platform credentials not configured. Configure them in integration settings first.'
       )
     }
@@ -61,49 +58,6 @@ export const getTeamsConnectUrl = createServerFn({ method: 'GET' }).handler(
   }
 )
 
-/** Refresh Teams token if expired or about to expire (within 5 minutes). Returns current access token. */
-async function getTeamsAccessToken(integration: { secrets: unknown; config: unknown }) {
-  const { decryptSecrets, encryptSecrets } = await import('@/lib/server/integrations/encryption')
-  const { db, integrations, eq } = await import('@/lib/server/db')
-  const { logger } = await import('@/lib/server/logger')
-  const log = logger.child({ component: 'teams' })
-
-  const secrets = decryptSecrets<{ accessToken: string; refreshToken?: string }>(
-    integration.secrets as string
-  )
-  const cfg = (integration.config ?? {}) as TeamsIntegrationConfig
-
-  if (secrets.refreshToken && cfg.tokenExpiresAt) {
-    const expiresAt = new Date(cfg.tokenExpiresAt).getTime()
-    const bufferMs = 5 * 60 * 1000
-    if (Date.now() >= expiresAt - bufferMs) {
-      log.info('access token expired, refreshing')
-      const { refreshTeamsToken } = await import('@/integrations/teams/server/oauth')
-      const { getPlatformCredentials } =
-        await import('@/lib/server/domains/platform-credentials/platform-credential.service')
-      const credentials = await getPlatformCredentials('teams')
-      const refreshed = await refreshTeamsToken(secrets.refreshToken, credentials ?? undefined)
-
-      const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
-      await db
-        .update(integrations)
-        .set({
-          secrets: encryptSecrets({
-            accessToken: refreshed.accessToken,
-            refreshToken: refreshed.refreshToken,
-          }),
-          config: { ...cfg, tokenExpiresAt: newExpiry },
-          updatedAt: new Date(),
-        })
-        .where(eq(integrations.integrationType, 'teams'))
-
-      return refreshed.accessToken
-    }
-  }
-
-  return secrets.accessToken
-}
-
 export const fetchTeamsTeamsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<TeamsTeam[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
@@ -120,7 +74,8 @@ export const fetchTeamsTeamsFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('Teams not connected')
     }
 
-    const accessToken = await getTeamsAccessToken(integration)
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
+    const accessToken = await getValidAccessToken(integration.id)
     return listTeams(accessToken)
   }
 )
@@ -142,6 +97,7 @@ export const fetchTeamsChannelsFn = createServerFn({ method: 'GET' })
       throw new Error('Teams not connected')
     }
 
-    const accessToken = await getTeamsAccessToken(integration)
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
+    const accessToken = await getValidAccessToken(integration.id)
     return listTeamsChannels(accessToken, data.teamId)
   })

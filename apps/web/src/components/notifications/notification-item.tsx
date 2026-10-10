@@ -1,13 +1,19 @@
 'use client'
 
 import { Link } from '@tanstack/react-router'
-import { formatDistanceToNow, isToday, format } from 'date-fns'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { ArchiveBoxIcon } from '@heroicons/react/24/outline'
-import { cn, getInitials } from '@/lib/shared/utils'
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import { cn } from '@/lib/shared/utils'
+import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
+import { TimeAgo } from '@/components/ui/time-ago'
 import { getNotificationTypeConfig } from './notification-type-config'
 import { getNotificationTarget } from './notification-target'
+import {
+  notificationText,
+  type NotificationText,
+} from '@/lib/shared/notifications/notification-text'
 import type { SerializedNotification } from '@/lib/client/hooks/use-notifications-queries'
 
 interface NotificationItemProps {
@@ -37,6 +43,8 @@ export function NotificationItem({
   className,
   style,
 }: NotificationItemProps) {
+  const intl = useIntl()
+  const text = notificationText(notification, intl)
   const config = getNotificationTypeConfig(notification.type)
   const Icon = config.icon
   const isUnread = !notification.readAt
@@ -67,6 +75,7 @@ export function NotificationItem({
       iconClass={config.iconClass}
       bgClass={config.bgClass}
       isUnread={isUnread}
+      text={text}
       onArchive={onArchive}
     />
   ) : (
@@ -76,13 +85,14 @@ export function NotificationItem({
       iconClass={config.iconClass}
       bgClass={config.bgClass}
       isUnread={isUnread}
+      text={text}
     />
   )
 
   // `group` scopes the archive button's hover/focus visibility to this row;
   // only applied for the full variant, which is the only one that ever
   // renders the button.
-  const rowClassName = cn(isFullVariant && 'group', className)
+  const rowClassName = cn(isFullVariant && 'group block', className)
 
   const target = getNotificationTarget(notification)
 
@@ -134,6 +144,8 @@ interface ContentProps {
   iconClass: string
   bgClass: string
   isUnread: boolean
+  /** Title and body in the reader's language. */
+  text: NotificationText
   /** Full-variant only; ignored by CompactContent. */
   onArchive?: (id: SerializedNotification['id']) => void
 }
@@ -163,12 +175,12 @@ function NotificationLeadingVisual({
   if (notification.actorName) {
     return (
       <div className="relative flex-shrink-0">
-        <Avatar className="h-9 w-9">
-          {notification.actorAvatarUrl && (
-            <AvatarImage src={notification.actorAvatarUrl} alt={notification.actorName} />
-          )}
-          <AvatarFallback className="text-xs">{getInitials(notification.actorName)}</AvatarFallback>
-        </Avatar>
+        <Avatar
+          className="h-9 w-9"
+          src={notification.actorAvatarUrl}
+          name={notification.actorName}
+          fallbackClassName="text-xs"
+        />
         <span
           className={cn(
             'absolute -bottom-0.5 -end-0.5 w-[17px] h-[17px] rounded-full border-2 border-card flex items-center justify-center',
@@ -194,7 +206,62 @@ function NotificationLeadingVisual({
   )
 }
 
-function CompactContent({ notification, icon: Icon, iconClass, bgClass, isUnread }: ContentProps) {
+const STAMP: Intl.DateTimeFormatOptions = {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+}
+const EARLIER: Intl.DateTimeFormatOptions = {
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+}
+const CALENDAR_DAY: Intl.DateTimeFormatOptions = {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+}
+
+/**
+ * A notification's time, with the full stamp ("Oct 1, 2026, 3:04 PM") in its
+ * title: relative ("5 minutes ago") always, or only for today with "Oct 1,
+ * 3:04 PM" before that, all in the app's language. Today and the stamp follow
+ * the viewer's zone once hydrated; as a leaf, that switch re-renders only
+ * this text.
+ */
+function NotificationTime({
+  createdAt,
+  relative,
+  className,
+}: {
+  createdAt: string
+  relative: 'always' | 'today'
+  className: string
+}) {
+  const format = useLocalDateFormatter()
+  const isToday = format(createdAt, CALENDAR_DAY) === format(new Date(), CALENDAR_DAY)
+  return (
+    <time
+      className={className}
+      dateTime={new Date(createdAt).toISOString()}
+      title={format(createdAt, STAMP)}
+    >
+      {relative === 'always' || isToday ? <TimeAgo date={createdAt} /> : format(createdAt, EARLIER)}
+    </time>
+  )
+}
+
+function CompactContent({
+  notification,
+  icon: Icon,
+  iconClass,
+  bgClass,
+  isUnread,
+  text,
+}: ContentProps) {
   return (
     <div
       className={cn(
@@ -211,23 +278,22 @@ function CompactContent({ notification, icon: Icon, iconClass, bgClass, isUnread
       />
 
       <div className="flex-1 min-w-0 space-y-0.5">
-        {/* The dot below is aria-hidden, so this plain-English label is the
-            only unread signal exposed to screen readers. Both surfaces share
-            this component, so full i18n of the row is out of scope here. */}
-        {isUnread && <span className="sr-only">Unread</span>}
-        <p className={cn('text-sm leading-tight', isUnread ? 'font-medium' : 'text-foreground')}>
-          {notification.title}
-        </p>
-        {notification.body && (
-          <p className="text-xs text-muted-foreground line-clamp-2">{notification.body}</p>
+        {/* The dot below is aria-hidden, so this label is the only unread
+            signal exposed to screen readers. */}
+        {isUnread && (
+          <span className="sr-only">
+            <FormattedMessage id="portal.notifications.item.unread" defaultMessage="Unread" />
+          </span>
         )}
-        <time
+        <p className={cn('text-sm leading-tight', isUnread ? 'font-medium' : 'text-foreground')}>
+          {text.title}
+        </p>
+        {text.body && <p className="text-xs text-muted-foreground line-clamp-2">{text.body}</p>}
+        <NotificationTime
+          createdAt={notification.createdAt}
+          relative="always"
           className="block text-xs text-muted-foreground/70"
-          dateTime={new Date(notification.createdAt).toISOString()}
-          title={format(new Date(notification.createdAt), 'MMM d, yyyy, h:mm a')}
-        >
-          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-        </time>
+        />
       </div>
 
       {isUnread && (
@@ -243,10 +309,10 @@ function FullContent({
   iconClass,
   bgClass,
   isUnread,
+  text,
   onArchive,
 }: ContentProps) {
-  const createdAt = new Date(notification.createdAt)
-
+  const intl = useIntl()
   function handleArchiveClick(event: React.MouseEvent<HTMLButtonElement>): void {
     // The row itself is (or is wrapped by) a Link — stop the click from
     // bubbling into it so archiving never triggers a navigation.
@@ -258,17 +324,10 @@ function FullContent({
   return (
     <div
       className={cn(
-        'relative flex items-start gap-4 px-5 py-4 transition-colors hover:bg-muted/30',
+        'relative flex min-h-14 items-center gap-3 py-2.5 transition-colors hover:bg-muted/30',
         isUnread && 'bg-primary/[0.02]'
       )}
     >
-      {isUnread && (
-        <div
-          className="absolute start-0 top-3 bottom-3 w-0.5 rounded-full bg-primary"
-          aria-hidden="true"
-        />
-      )}
-
       <NotificationLeadingVisual
         notification={notification}
         icon={Icon}
@@ -277,49 +336,48 @@ function FullContent({
         variant="full"
       />
 
-      {/* End padding reserves room for the absolutely-positioned unread dot
-          and archive button so long titles never run underneath them. */}
-      <div className="flex-1 min-w-0 pe-14">
-        {/* The accent bar and dot are aria-hidden, so this plain-English
-            label is the only unread signal exposed to screen readers. Both
-            surfaces share this component, so full i18n of the row is out of
-            scope here. */}
-        {isUnread && <span className="sr-only">Unread</span>}
-        <p className={cn('text-sm leading-tight', isUnread ? 'font-medium' : 'text-foreground')}>
-          {notification.title}
-        </p>
-        {notification.body && (
-          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{notification.body}</p>
+      {/* The time sits on the row's right edge and fades while the archive
+          button, which takes its place, is showing. */}
+      <div className="min-w-0 flex-1">
+        {/* The dot is aria-hidden, so this label is the only unread signal
+            exposed to screen readers. */}
+        {isUnread && (
+          <span className="sr-only">
+            <FormattedMessage id="portal.notifications.item.unread" defaultMessage="Unread" />
+          </span>
         )}
-        <div className="flex items-center gap-2 mt-1">
-          {notification.post && (
-            <>
-              <span className="text-[11px] text-muted-foreground/60 truncate max-w-[200px]">
-                {notification.post.title}
-              </span>
-              <span className="text-muted-foreground/40">·</span>
-            </>
-          )}
-          <time
-            className="text-[11px] text-muted-foreground/60 whitespace-nowrap"
-            dateTime={createdAt.toISOString()}
-            title={format(createdAt, 'MMM d, yyyy, h:mm a')}
+        <div className="flex items-baseline justify-between gap-3">
+          <p
+            className={cn(
+              'min-w-0 truncate text-sm leading-tight',
+              isUnread ? 'font-medium' : 'text-foreground'
+            )}
           >
-            {isToday(createdAt)
-              ? formatDistanceToNow(createdAt, { addSuffix: true })
-              : format(createdAt, 'MMM d, h:mm a')}
-          </time>
+            {text.title}
+          </p>
+          <span className="flex shrink-0 items-center gap-2 transition-opacity group-focus-within:opacity-0 group-hover:opacity-0">
+            {isUnread && (
+              <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+            )}
+            <NotificationTime
+              createdAt={notification.createdAt}
+              relative="today"
+              className="text-xs whitespace-nowrap text-muted-foreground"
+            />
+          </span>
         </div>
+        {(text.body || notification.post) && (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {text.body}
+            {text.body && notification.post && (
+              <span className="text-muted-foreground/40"> · </span>
+            )}
+            {notification.post && (
+              <span className="text-muted-foreground/70">{notification.post.title}</span>
+            )}
+          </p>
+        )}
       </div>
-
-      {/* Sits to the start-side of the archive button (below), clear of its
-          hitbox so the two never overlap. */}
-      {isUnread && (
-        <div
-          className="absolute end-10 top-4 flex-shrink-0 w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-primary/10"
-          aria-hidden="true"
-        />
-      )}
 
       {onArchive && (
         <Button
@@ -327,9 +385,12 @@ function FullContent({
           variant="ghost"
           size="icon"
           onClick={handleArchiveClick}
-          aria-label="Archive notification"
+          aria-label={intl.formatMessage({
+            id: 'portal.notifications.item.archive',
+            defaultMessage: 'Archive notification',
+          })}
           className={cn(
-            'absolute end-2 top-2 h-7 w-7',
+            'absolute end-0 top-1/2 h-7 w-7 -translate-y-1/2',
             'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-within:opacity-100',
             'transition-opacity'
           )}

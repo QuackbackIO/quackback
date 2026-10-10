@@ -84,6 +84,20 @@ describe('createApiKey scopes', () => {
     expect(result.apiKey.scopes).toEqual(['read:feedback', 'read:article'])
   })
 
+  it('stores the sibling read when only a write is requested', async () => {
+    const result = await createApiKey({ name: 'k', scopes: ['write:feedback'] }, CREATOR)
+    expect(JSON.parse(mockInsertValues.mock.calls[0][0].scopes)).toEqual([
+      'read:feedback',
+      'write:feedback',
+    ])
+    expect(result.apiKey.scopes).toEqual(['read:feedback', 'write:feedback'])
+  })
+
+  it('does not invent a read:changelog scope', async () => {
+    await createApiKey({ name: 'k', scopes: ['write:changelog'] }, CREATOR)
+    expect(JSON.parse(mockInsertValues.mock.calls[0][0].scopes)).toEqual(['write:changelog'])
+  })
+
   it('dedupes repeated scopes', async () => {
     await createApiKey(
       { name: 'k', scopes: ['read:feedback', 'read:feedback', 'write:feedback'] },

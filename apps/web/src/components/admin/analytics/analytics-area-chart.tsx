@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/chart'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { cn } from '@/lib/shared/utils'
-import { CHART_HEIGHT_CLASS } from './analytics-constants'
+import { CHART_HEIGHT_CLASS, formatBucketDay } from './analytics-constants'
 
 interface AnalyticsAreaChartProps {
   data: Array<Record<string, string | number>>
@@ -16,11 +16,6 @@ interface AnalyticsAreaChartProps {
   label: string
   /** Metric token suffix: the series paints with `var(--metric-<metric>)`. */
   metric: string
-}
-
-function formatDate(dateStr: string) {
-  const date = new Date(dateStr + 'T00:00:00')
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 /** The shared daily time-series: one gradient-filled area over a `date` axis.
@@ -66,7 +61,7 @@ export function AnalyticsAreaChart({ data, dataKey, label, metric }: AnalyticsAr
           axisLine={false}
           tickMargin={10}
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-          tickFormatter={formatDate}
+          tickFormatter={formatBucketDay}
         />
         <YAxis
           tickLine={false}
@@ -78,7 +73,9 @@ export function AnalyticsAreaChart({ data, dataKey, label, metric }: AnalyticsAr
           domain={[0, (dataMax: number) => Math.max(dataMax, 4)]}
         />
         <ChartTooltip
-          content={<ChartTooltipContent labelFormatter={(label) => formatDate(String(label))} />}
+          content={
+            <ChartTooltipContent labelFormatter={(label) => formatBucketDay(String(label))} />
+          }
         />
         <Area
           type="monotone"

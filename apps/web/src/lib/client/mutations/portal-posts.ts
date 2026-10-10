@@ -17,7 +17,9 @@ import {
   postPermissionsKeys,
 } from '@/lib/client/hooks/use-portal-posts-query'
 import { portalDetailQueries, type PublicPostDetailView } from '@/lib/client/queries/portal-detail'
+import { adminQueries } from '@/lib/client/queries/admin'
 import type { PublicPostListItem } from '@/lib/shared/types'
+import type { JSONContent } from '@tiptap/react'
 import type { PostId, BoardId, PostStatusId } from '@quackback/ids'
 
 // ============================================================================
@@ -46,7 +48,8 @@ interface CreatePostInput {
   boardId: BoardId
   title: string
   content: string
-  contentJson: unknown
+  /** The details as a document; left out when there are none. */
+  contentJson?: JSONContent
   /** Answers to the board's configured custom fields, keyed by field key. */
   customFields?: Record<string, unknown>
 }
@@ -209,7 +212,7 @@ export function useCreatePublicPost() {
           boardId,
           title,
           content,
-          contentJson: contentJson as { type: 'doc'; content?: unknown[] },
+          contentJson: contentJson as { type: 'doc'; content?: unknown[] } | undefined,
           customFields,
         },
       }),
@@ -262,6 +265,7 @@ export function useCreatePublicPost() {
 
       // Invalidate to get fresh data with all fields populated
       queryClient.invalidateQueries({ queryKey: publicPostsKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }
@@ -352,6 +356,7 @@ export function useUserDeletePost({ onSuccess, onError }: UseUserDeletePostOptio
       queryClient.removeQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
       // Invalidate to get fresh data
       queryClient.invalidateQueries({ queryKey: publicPostsKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
       onSuccess?.()
     },
     onError: (error: Error) => {

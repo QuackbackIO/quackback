@@ -16,7 +16,8 @@ afterEach(() => {
 })
 
 const META: AskAiSourceMeta = {
-  articleId: 'kb_article_1',
+  articleId: 'article_1',
+  urlId: 1,
   title: 'Refund policy',
   slug: 'refund-policy',
   categorySlug: 'billing',
@@ -33,7 +34,7 @@ describe('useAskAi', () => {
     const answer = {
       kind: 'grounded',
       answer: 'Do the thing.',
-      sources: [{ articleId: 'kb_article_1' }],
+      sources: [{ articleId: 'article_1' }],
     }
     stubAguiFetch(
       aguiRun({
@@ -62,7 +63,7 @@ describe('useAskAi', () => {
       kind: 'grounded',
       answer: 'A.',
       // The model cited an id that never appeared in the snapshot join.
-      sources: [{ articleId: 'kb_article_1' }, { articleId: 'kb_ghost' }],
+      sources: [{ articleId: 'article_1' }, { articleId: 'kb_ghost' }],
     }
     stubAguiFetch(
       aguiRun({ middle: [snapshotChunk([META]), ...structuredDeltas(answer)], result: answer })
@@ -132,8 +133,23 @@ describe('useAskAi', () => {
     expect(result.current.state.status).toBe('error')
   })
 
+  it('sends getHeaders on the AG-UI request', async () => {
+    const answer = { kind: 'grounded', answer: 'A.', sources: [] }
+    const fetchMock = stubAguiFetch(aguiRun({ middle: structuredDeltas(answer), result: answer }))
+
+    const { result } = renderHook(() =>
+      useAskAi({ getHeaders: () => ({ Authorization: 'Bearer widget-token' }) })
+    )
+    await act(async () => {
+      await result.current.ask('q')
+    })
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer widget-token')
+  })
+
   it('reset returns the hook to idle', async () => {
-    const answer = { kind: 'grounded', answer: 'A.', sources: [{ articleId: 'kb_article_1' }] }
+    const answer = { kind: 'grounded', answer: 'A.', sources: [{ articleId: 'article_1' }] }
     stubAguiFetch(
       aguiRun({ middle: [snapshotChunk([META]), ...structuredDeltas(answer)], result: answer })
     )
@@ -148,5 +164,39 @@ describe('useAskAi', () => {
       result.current.reset()
     })
     expect(result.current.state.status).toBe('idle')
+  })
+
+  it('a reset while the streaming client loads cancels the ask', async () => {
+    const answer = { kind: 'grounded', answer: 'A.', sources: [] }
+    const fetchMock = stubAguiFetch(aguiRun({ middle: structuredDeltas(answer), result: answer }))
+
+    const { result } = renderHook(() => useAskAi())
+    await act(async () => {
+      const asking = result.current.ask('q')
+      result.current.reset()
+      await asking
+    })
+
+    expect(result.current.state.status).toBe('idle')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('asking again while the streaming client loads answers only the latest question', async () => {
+    const answer = { kind: 'grounded', answer: 'Second.', sources: [] }
+    const fetchMock = stubAguiFetch(aguiRun({ middle: structuredDeltas(answer), result: answer }))
+
+    const { result } = renderHook(() => useAskAi())
+    await act(async () => {
+      const first = result.current.ask('first')
+      const second = result.current.ask('second')
+      await Promise.all([first, second])
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result.current.state).toMatchObject({
+      status: 'done',
+      question: 'second',
+      answer: 'Second.',
+    })
   })
 })

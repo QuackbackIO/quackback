@@ -66,6 +66,7 @@ export const EVENT_TYPES = [
   'message.created',
   'message.note_created',
   'message.deleted',
+  'message.updated',
   'ticket.created',
   'ticket.status_changed',
   'ticket.assigned',
@@ -404,6 +405,11 @@ export interface MessageDeletedPayload {
   message: { id: string; conversationId: string }
   conversation: EventConversationRef
 }
+export interface MessageUpdatedPayload {
+  message: EventMessageData
+  conversation: EventConversationRef
+  editedAt: string
+}
 
 // Ticket events (support platform §4.2). A ticket is a tracked-work peer of the
 // conversation; these are the agent/integration-facing lifecycle signals (the
@@ -708,6 +714,9 @@ export interface MessageNoteCreatedEvent extends EventBase<'message.note_created
 export interface MessageDeletedEvent extends EventBase<'message.deleted'> {
   data: MessageDeletedPayload
 }
+export interface MessageUpdatedEvent extends EventBase<'message.updated'> {
+  data: MessageUpdatedPayload
+}
 export interface TicketCreatedEvent extends EventBase<'ticket.created'> {
   data: TicketCreatedPayload
 }
@@ -789,6 +798,7 @@ export type EventData =
   | MessageCreatedEvent
   | MessageNoteCreatedEvent
   | MessageDeletedEvent
+  | MessageUpdatedEvent
   | TicketCreatedEvent
   | TicketStatusChangedEvent
   | TicketAssignedEvent

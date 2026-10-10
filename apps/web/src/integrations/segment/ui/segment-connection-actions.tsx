@@ -63,6 +63,7 @@ export function SegmentConnectionActions(props: { integrationId?: string; isConn
         <Checkbox
           checked={outgoingEnabled}
           onCheckedChange={(checked) => setOutgoingEnabled(checked === true)}
+          data-in-label
         />
         Push segment membership changes back to Segment
       </label>

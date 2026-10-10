@@ -15,7 +15,7 @@ export function JsonPanel({
   return (
     <div className="flex-1 space-y-1.5 overflow-auto bg-muted/10 p-4">
       {draft.notice && (
-        <p className="truncate text-xs text-amber-600 dark:text-amber-500" title={draft.notice}>
+        <p className="truncate text-xs text-warning" title={draft.notice}>
           {draft.notice}
         </p>
       )}

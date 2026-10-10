@@ -14,10 +14,10 @@
  */
 
 import { cancelJob, enqueueJob, enqueueJobs } from '@/lib/server/jobs/job-queue'
+import { queueHookSync } from '@/lib/server/integrations/sync/hooks'
 import { HOOK_RETRY_ATTEMPTS } from './retry-schedule'
 import type { HookJobData } from './hook-job'
 import type { EventData } from './types'
-import type { ConversationId, TicketId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'event-process' })
@@ -38,83 +38,34 @@ export async function processEvent(event: EventData): Promise<void> {
   // outbox makes the trigger durable up to the workflow engine's own dispatch
   // queue — closing the crash window the old branch could drop a trigger in.
 
-  // Settle SLA breach clocks off the same event (first-response / time-to-close).
-  // Same fire-and-forget + lazy-import isolation as the workflow dispatch.
-  void import('@/lib/server/domains/sla/sla.event-hooks')
-    .then((m) => m.recordSlaFromEvent(event))
-    .catch((err) => log.error({ err, event_type: event.type }, 'SLA hook failed to load'))
-
-  // Convergence Phase 1a: a visitor message on a conversation paired with a
-  // customer ticket reopens that ticket (dealbreaker 3 — a Messenger reply
-  // must not leave the ticket stuck in "Waiting on customer"). Same
-  // fire-and-forget + lazy-import isolation as the SLA hook above.
-  void import('@/lib/server/domains/tickets/ticket.event-hooks')
-    .then((m) => m.autoReopenPairTicketFromEvent(event))
-    .catch((err) => log.error({ err, event_type: event.type }, 'ticket event hook failed to load'))
-
-  // Confirm the assistant's resolution off a positive first CSAT rating. The
-  // event only fires on the first submission, so the confirm runs at most once
-  // per survey. Same fire-and-forget + lazy-import isolation as above.
-  if (event.type === 'conversation.csat_submitted') {
-    void import('@/lib/server/domains/assistant/assistant.involvement')
-      .then((m) =>
-        m.confirmResolutionFromCsat(event.data.conversation.id as ConversationId, event.data.rating)
-      )
-      .catch((err) =>
-        log.error({ err, event_type: event.type }, 'assistant CSAT hook failed to load')
-      )
-  }
-
-  // Summarize the conversation for future Quinn grounding (P2-A.4) once it
-  // closes. A distinct branch from the generic SLA/CSAT hooks above — never
-  // routed through the workflow engine's SUMMARY_EVENT_TYPES/'summary' target,
-  // since this always runs on close, not per-workspace configuration. Same
-  // fire-and-forget + lazy-import isolation; the service itself is also
-  // best-effort (see conversation-summary.service.ts), so this never throws.
-  if (event.type === 'conversation.status_changed' && event.data.newStatus === 'closed') {
-    void import('@/lib/server/domains/assistant/conversation-summary.service')
-      .then((m) => m.summarizeConversationOnClose(event.data.conversation.id as ConversationId))
-      .catch((err) =>
-        log.error({ err, event_type: event.type }, 'conversation summary hook failed to load')
-      )
-  }
-
-  // Ticket sibling of the conversation-close summary above (Quinn Phase 4:
-  // ticket grounding). Same fire-and-forget + lazy-import isolation; the
-  // service is itself best-effort (see ticket-summary.service.ts), so this
-  // never throws. Ticket status is a three-value category ('open' | 'pending'
-  // | 'closed'); 'closed' is the resolution moment worth summarizing.
-  if (event.type === 'ticket.status_changed' && event.data.newStatus === 'closed') {
-    void import('@/lib/server/domains/assistant/ticket-summary.service')
-      .then((m) => m.summarizeTicketOnClose(event.data.ticket.id as TicketId))
-      .catch((err) =>
-        log.error({ err, event_type: event.type }, 'ticket summary hook failed to load')
-      )
-  }
-
   // EVENTING-V2 (WO-18 cutover): the durable outbox is the ONLY path. The event
   // is written transactionally (closing the commit-vs-enqueue loss window) and
   // `event-dispatch` resolves targets and enqueues onto the `events` queue.
-  // The legacy direct getHookTargets + bulk-add path is deleted.
+  // The legacy direct getHookTargets + bulk-add path is deleted. The write also
+  // queues the event's reactions (SLA clocks, pair-ticket reopen, CSAT confirm,
+  // close summaries; see event-reactions.ts), so nothing reacts in-process.
   const { writeEventToOutbox } = await import('./outbox-dispatch')
   await writeEventToOutbox(event)
 }
 
 /**
- * Enqueue pre-resolved hook jobs with caller-supplied deterministic keys.
- * `event-dispatch` passes `jobId = ${eventId}:${sink}:${targetKey}` so a
- * retried dispatch re-enqueues the SAME key, which the unique index on
- * `(queue, dedupe_key)` turns into a no-op (and `hook_deliveries` catches
- * the rest) — the load-bearing mechanism for effectively-once delivery.
- * One statement, whatever the fan-out.
+ * Route integration targets through the durable sync ledger; ordinary hooks
+ * retain the event queue. The relay can supply its transaction so its receipt
+ * and all delivery intents commit together. Stable operation keys survive
+ * queue pruning, while ordinary jobs deduplicate by the relay's jobId.
  */
 export async function enqueueHookJobsWithIds(
   jobs: Array<{ name: string; data: HookJobData; jobId: string }>,
   opts?: { executor?: import('@/lib/server/jobs/job-queue').JobSqlExecutor }
 ): Promise<void> {
   if (jobs.length === 0) return
+  const ordinary = jobs.filter(({ data }) => typeof data.config.integrationId !== 'string')
+  for (const { data } of jobs) {
+    if (typeof data.config.integrationId === 'string') await queueHookSync(data, opts?.executor)
+  }
+  if (!ordinary.length) return
   await enqueueJobs(
-    jobs.map(({ data, jobId }) => ({
+    ordinary.map(({ data, jobId }) => ({
       queue: EVENTS_QUEUE,
       payload: data as unknown as Record<string, unknown>,
       dedupeKey: jobId,

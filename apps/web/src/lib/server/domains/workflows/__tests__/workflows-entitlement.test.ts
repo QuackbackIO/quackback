@@ -71,25 +71,25 @@ describe('createWorkflow — no cloud config', () => {
 
 describe('createWorkflow — plan gate', () => {
   it('refuses on a plan without the entitlement and names the plan that has it', async () => {
-    // Growth, not Free: the refusal has to name the cheapest plan that GRANTS
-    // workflows (Pro), not merely the next plan up from the workspace's own.
-    withCloud(storedCloud('growth'))
+    // Pro, not Free: the refusal has to name the cheapest plan that GRANTS
+    // workflows (Business), not merely the next plan up from the workspace's own.
+    withCloud(storedCloud('pro'))
 
     const refusal = await createWorkflow(INPUT).catch((error: unknown) => error)
 
     expect(refusal).toBeInstanceOf(EntitlementRequiredError)
     const error = refusal as EntitlementRequiredError
     expect(error.entitlement).toBe('workflows')
-    expect(error.requiredPlanName).toBe('Pro')
+    expect(error.requiredPlanName).toBe('Business')
     expect(error.statusCode).toBe(402)
     expect(error.message).toBe(
-      'Workflows are a Pro feature. Your workspace is on Growth. Upgrade to Pro to enable it.'
+      'Workflows are a Business feature. Your workspace is on Pro. Upgrade to Business to enable it.'
     )
     expect(hoisted.mockInsert).not.toHaveBeenCalled()
   })
 
   it('creates the workflow on a plan that includes it', async () => {
-    withCloud(storedCloud('pro'))
+    withCloud(storedCloud('business'))
     await expect(createWorkflow(INPUT)).resolves.toMatchObject({ id: 'workflow_1' })
     expect(hoisted.mockInsert).toHaveBeenCalledOnce()
   })
@@ -98,7 +98,7 @@ describe('createWorkflow — plan gate', () => {
     withCloud(storedCloud('free', { workflows: true }))
     await expect(createWorkflow(INPUT)).resolves.toBeDefined()
 
-    withCloud(storedCloud('scale', { workflows: false }))
+    withCloud(storedCloud('enterprise', { workflows: false }))
     await expect(createWorkflow(INPUT)).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 })

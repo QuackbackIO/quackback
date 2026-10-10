@@ -9,6 +9,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 /**
  * Slack OAuth state payload.
@@ -43,7 +44,8 @@ export const getSlackConnectUrl = createServerFn({ method: 'GET' }).handler(
     const { hasPlatformCredentials } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
     if (!(await hasPlatformCredentials('slack'))) {
-      throw new Error(
+      throw new ValidationError(
+        'PLATFORM_CREDENTIALS_NOT_CONFIGURED',
         'Slack platform credentials not configured. Configure them in integration settings first.'
       )
     }
@@ -74,7 +76,7 @@ export const fetchSlackChannelsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }: { data: FetchSlackChannelsInput }): Promise<SlackChannel[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
     const { listSlackChannels } = await import('@/integrations/slack/server/channels')
     const { logger } = await import('@/lib/server/logger')
     const log = logger.child({ component: 'slack' })
@@ -94,7 +96,7 @@ export const fetchSlackChannelsFn = createServerFn({ method: 'GET' })
       throw new Error('Slack secrets missing')
     }
 
-    const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
+    const secrets = { accessToken: await getValidAccessToken(integration.id) }
     if (!secrets.accessToken) {
       throw new Error('Slack access token missing')
     }

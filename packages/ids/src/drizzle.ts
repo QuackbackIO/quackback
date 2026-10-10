@@ -12,7 +12,7 @@
  */
 
 import { customType } from 'drizzle-orm/pg-core'
-import { generateId, fromUuid, toUuid } from './core'
+import { generateId, fromUuid, toUuid, isUuid } from './core'
 import type { IdPrefix } from './prefixes'
 import type { TypeId } from './types'
 
@@ -138,4 +138,29 @@ export function typeIdWithDefault<P extends IdPrefix>(prefix: P) {
  */
 export function typeIdReference<P extends IdPrefix>(prefix: P) {
   return typeIdColumn(prefix)
+}
+
+/**
+ * TypeID column stored as `text` holding the UUID form.
+ *
+ * Used when a migration created the id as text rather than uuid, so the
+ * standard `typeIdColumn` (uuid) would drift from the live schema. App-layer
+ * conversion is identical; a follow-up migration to uuid can revert the
+ * table to `typeIdWithDefault`.
+ */
+export function typeIdTextColumn<P extends IdPrefix>(prefix: P) {
+  return customType<{ data: TypeId<P>; driverData: string }>({
+    dataType() {
+      return 'text'
+    },
+    toDriver(value: TypeId<P>): string {
+      return isUuid(value) ? value : toUuid(value)
+    },
+    fromDriver(value: unknown): TypeId<P> {
+      if (typeof value !== 'string') {
+        throw new Error(`Expected string from database, got ${typeof value}`)
+      }
+      return fromUuid(prefix, value)
+    },
+  })
 }

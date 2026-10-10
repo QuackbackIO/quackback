@@ -1,4 +1,4 @@
-import { createFileRoute, Navigate, useNavigate, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute, Navigate, useNavigate, useLoaderData } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
@@ -9,7 +9,7 @@ import { BackLink } from '@/components/ui/back-link'
 import { EmptyState } from '@/components/shared/empty-state'
 import { VisitorConversationThread } from '@/components/shared/conversation/visitor-conversation-thread'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
-import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { usePortalFileUpload } from '@/lib/client/hooks/use-file-upload'
 import { getConversationPresenceFn } from '@/lib/server/functions/conversation'
 import {
   CONVERSATION_PRESENCE_POLL_MS,
@@ -20,6 +20,7 @@ import {
   PORTAL_MY_CONVERSATIONS_QUERY_KEY,
 } from '@/lib/client/queries/portal-support'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/_portal/support/$conversationId')({
   component: SupportThreadPage,
@@ -36,9 +37,15 @@ function SupportThreadPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { conversationId } = Route.useParams()
-  const { session, settings } = useRouteContext({ from: '__root__' })
+  const session = useSessionContext()
+  const settings = useWorkspaceSettings()
+  const portalLoader = useLoaderData({ from: '/_portal' })
+  const portalAvatar =
+    portalLoader && 'initialUserData' in portalLoader
+      ? (portalLoader.initialUserData?.avatarUrl ?? null)
+      : null
   const authPopover = useAuthPopoverSafe()
-  const { upload } = usePortalImageUpload()
+  const { upload } = usePortalFileUpload()
 
   // Converged Messages: ticket pairs open here too, so a tickets-enabled
   // workspace keeps this route alive even with the messenger/portal-support
@@ -117,8 +124,8 @@ function SupportThreadPage() {
               conversationId === 'new' ? 'new' : (conversationId as ConversationId)
             }
             linkPreviews={!!settings?.featureFlags?.supportInbox}
-            currentUser={user ? { name: user.name, avatarUrl: user.image } : null}
-            uploadImage={upload}
+            currentUser={user ? { name: user.name, avatarUrl: portalAvatar ?? user.image } : null}
+            uploadFile={upload}
             presence={presenceQuery.data ?? OFFLINE}
             embedOpenMode="navigate"
             onConversationStarted={onConversationStarted}

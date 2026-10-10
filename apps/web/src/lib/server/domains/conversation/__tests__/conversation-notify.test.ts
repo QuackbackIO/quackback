@@ -131,6 +131,18 @@ vi.mock('@/lib/server/email/recipient', async (orig) => {
   }
 })
 
+// Attachment byte loading + the email-safe link for whatever does not fit the
+// per-email budget. Defaults keep every pre-existing test (none of which pass
+// `attachments`) exercising nothing here.
+const getS3Object =
+  vi.fn<(key: string) => Promise<{ body: ReadableStream<Uint8Array>; contentType: string }>>()
+const getEmailSafeUrl = vi.fn<(key: string | null | undefined) => string | null>()
+vi.mock('@/lib/server/storage/s3', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/storage/s3')>()),
+  getS3Object: (...a: [string]) => getS3Object(...a),
+  getEmailSafeUrl: (...a: [string | null | undefined]) => getEmailSafeUrl(...a),
+}))
+
 vi.mock('@/lib/server/db', async (importOriginal) => {
   // A thenable chain. `.where()` resolves to the team rows (so a bare await on
   // the where() builder yields the array); `.limit()` resolves to the single
@@ -160,6 +172,14 @@ import {
 import { generateContentHTML } from '@/lib/shared/content-html'
 
 const conversationId = 'conversation_1' as ConversationId
+vi.mock('../conversation.test-delivery', () => ({
+  conversationTestDelivery: async (id: ConversationId) => {
+    const ordinaryThreads = new Map([[conversationId, { test: false as const }]])
+    const delivery = ordinaryThreads.get(id)
+    if (!delivery) throw new Error('Unknown notification fixture conversation')
+    return delivery
+  },
+}))
 const conversation = { id: conversationId } as unknown as Conversation
 const ctx = {
   workspaceName: 'Acme',
@@ -180,7 +200,22 @@ beforeEach(() => {
   // reported Message-ID exercised by nothing.
   sendConversationMessageEmail.mockResolvedValue({ sent: true })
   listParticipantReplyRecipients.mockResolvedValue([])
+  getEmailSafeUrl.mockImplementation((key) => (key ? `https://cdn.test/${key}?email=1` : null))
 })
+
+function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  let sent = false
+  return new ReadableStream({
+    pull(controller) {
+      if (!sent) {
+        controller.enqueue(bytes)
+        sent = true
+      } else {
+        controller.close()
+      }
+    },
+  })
+}
 
 describe('notifyVisitorMessage', () => {
   // WO-3 slice 5: notifyVisitorMessage is now EMAIL-ONLY — the in-app team
@@ -625,6 +660,43 @@ describe('conversation email send retry', () => {
     delete process.env.EMAIL_INBOUND_SIGNING_SECRET
   })
 
+  it('sends one idempotency key for every attempt of one email, and a new one per email', async () => {
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    const { currentEmailIdempotencyKey } = await import('@quackback/email/idempotency')
+    const keys: Array<string | undefined> = []
+    sendConversationMessageEmail
+      .mockImplementationOnce(async () => {
+        keys.push(currentEmailIdempotencyKey())
+        throw new Error('provider 503')
+      })
+      .mockImplementationOnce(async () => {
+        keys.push(currentEmailIdempotencyKey())
+        return { sent: true }
+      })
+      .mockImplementationOnce(async () => {
+        keys.push(currentEmailIdempotencyKey())
+        return { sent: true }
+      })
+
+    const reply = () =>
+      notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Agent',
+        channel: 'messenger',
+      })
+    await reply()
+    await reply()
+
+    expect(keys).toHaveLength(3)
+    expect(keys[0]).toMatch(/^qb-[0-9a-f]{64}$/)
+    expect(keys[1]).toBe(keys[0])
+    expect(keys[2]).toMatch(/^qb-[0-9a-f]{64}$/)
+    expect(keys[2]).not.toBe(keys[0])
+  })
+
   it('does not retry an error that declares itself permanent', async () => {
     // Retrying is the default precisely because a hand-maintained taxonomy of
     // transient errors fails closed. An error that says re-sending reproduces it
@@ -819,7 +891,7 @@ describe('conversation email body (P4.5)', () => {
         { type: 'paragraph', content: [{ type: 'text', text: 'see:' }] },
         // Self-origin storage ref: mail clients won't follow the route's 302,
         // so the email body must carry the force-proxy hint.
-        { type: 'chatImage', attrs: { src: '/api/storage/chat-images/a.png' } },
+        { type: 'resizableImage', attrs: { src: '/api/storage/chat-images/a.png' } },
         // Foreign origin: left byte-identical.
         { type: 'resizableImage', attrs: { src: 'https://cdn.example.com/b.png' } },
       ],
@@ -860,6 +932,178 @@ describe('conversation email body (P4.5)', () => {
     expect(call.bodyHtml).toBe(`<p>${'A'.repeat(200)}</p><p>second &lt;script&gt; line</p>`)
     // messagePreview stays the truncated excerpt.
     expect((call.messagePreview as string).length).toBeLessThan(body.length)
+  })
+})
+
+// Outbound email carries attachments: a real MIME part for a file that fits
+// the per-email budget, a plain link appended to the body for one that does
+// not load.
+describe('conversation email attachments', () => {
+  const visitorPrincipalId = 'principal_visitor' as PrincipalId
+
+  it('carries a loadable attachment as a real MIME part on an agent reply', async () => {
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    const bytes = new TextEncoder().encode('%PDF-1.4')
+    getS3Object.mockResolvedValue({ body: streamOf(bytes), contentType: 'application/pdf' })
+
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'see attached',
+      agentName: 'Agent',
+      channel: 'messenger',
+      attachments: [
+        {
+          url: '/api/storage/files/a.pdf?read=sig',
+          name: 'a.pdf',
+          contentType: 'application/pdf',
+          fileId: 'file_1',
+          size: bytes.byteLength,
+        },
+      ],
+    })
+
+    const call = sendConversationMessageEmail.mock.calls[0][0]
+    expect(call.attachments).toEqual([
+      { filename: 'a.pdf', contentType: 'application/pdf', content: bytes },
+    ])
+    // Carried as a real part, not also linked in the body.
+    expect(call.bodyHtml).not.toContain('Attachments')
+  })
+
+  it('links a file whose bytes fail to load instead of dropping it silently', async () => {
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    getS3Object.mockRejectedValue(new Error('object not found'))
+
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'see attached',
+      agentName: 'Agent',
+      channel: 'messenger',
+      attachments: [
+        {
+          url: '/api/storage/files/a.pdf?read=sig',
+          name: 'a.pdf',
+          contentType: 'application/pdf',
+          size: 100,
+        },
+      ],
+    })
+
+    const call = sendConversationMessageEmail.mock.calls[0][0]
+    expect(call.attachments).toEqual([])
+    expect(call.bodyHtml).toContain('Attachments')
+    expect(call.bodyHtml).toContain('https://cdn.test/files/a.pdf?email=1')
+    expect(call.bodyHtml).toContain('a.pdf')
+  })
+
+  it('carries attachments on the first message of an agent-started conversation', async () => {
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    const bytes = new TextEncoder().encode('hello')
+    getS3Object.mockResolvedValue({ body: streamOf(bytes), contentType: 'text/plain' })
+
+    const { notifyConversationStarted } = await import('../conversation.notify')
+    await notifyConversationStarted({
+      conversationId,
+      visitorPrincipalId,
+      content: 'welcome',
+      agentName: 'Agent',
+      attachments: [
+        {
+          url: '/api/storage/files/notes.txt?read=sig',
+          name: 'notes.txt',
+          contentType: 'text/plain',
+          fileId: 'file_1',
+          size: bytes.byteLength,
+        },
+      ],
+    })
+
+    const call = sendConversationMessageEmail.mock.calls[0][0]
+    expect(call.attachments).toEqual([
+      { filename: 'notes.txt', contentType: 'text/plain', content: bytes },
+    ])
+  })
+
+  // The team alert is about the VISITOR's own message, so its attachments get
+  // an extra gate resolveEmailAttachments's agent-reply callers never need:
+  // real MIME only from a sender the alert can vouch for (an identified
+  // session on our own surface). An anonymous visitor or an inbound-email
+  // correspondent always links, whatever the file's type.
+  describe('team alert sender trust', () => {
+    const screenshotAttachment = [
+      {
+        url: '/api/storage/files/screenshot.png?read=sig',
+        name: 'screenshot.png',
+        contentType: 'image/png',
+        fileId: 'file_1',
+        size: 17,
+      },
+    ]
+
+    it('carries an identified visitor’s own attachment through to the team email', async () => {
+      isAnyAgentOnline.mockResolvedValue(false)
+      teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+      visitorRows = [{ type: 'user' }]
+      const bytes = new TextEncoder().encode('screenshot-bytes')
+      getS3Object.mockResolvedValue({ body: streamOf(bytes), contentType: 'image/png' })
+
+      await notifyVisitorMessage({
+        conversation: { id: conversationId, channel: 'messenger' } as unknown as Conversation,
+        content: 'see my screenshot',
+        authorName: 'Visitor',
+        isFirstMessage: true,
+        attachments: screenshotAttachment,
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.attachments).toEqual([
+        { filename: 'screenshot.png', contentType: 'image/png', content: bytes },
+      ])
+    })
+
+    it('never attaches an anonymous visitor’s file to the team alert, links instead', async () => {
+      isAnyAgentOnline.mockResolvedValue(false)
+      teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+      visitorRows = [{ type: 'anonymous' }]
+      getEmailSafeUrl.mockImplementation((key) => (key ? `https://cdn.test/${key}?email=1` : null))
+
+      await notifyVisitorMessage({
+        conversation: { id: conversationId, channel: 'messenger' } as unknown as Conversation,
+        content: 'see my screenshot',
+        authorName: 'Visitor',
+        isFirstMessage: true,
+        attachments: screenshotAttachment,
+      })
+
+      expect(getS3Object).not.toHaveBeenCalled()
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.attachments).toEqual([])
+      expect(call.bodyHtml).toContain('https://cdn.test/files/screenshot.png?email=1')
+    })
+
+    it('never attaches an inbound-email visitor’s file to the team alert, even an identified one', async () => {
+      isAnyAgentOnline.mockResolvedValue(false)
+      teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+      // Identified ('user'), but arriving over the email correspondence
+      // channel — still unverified for MIME-attachment purposes.
+      visitorRows = [{ type: 'user' }]
+
+      await notifyVisitorMessage({
+        conversation: { id: conversationId, channel: 'email' } as unknown as Conversation,
+        content: 'see my screenshot',
+        authorName: 'Visitor',
+        isFirstMessage: true,
+        attachments: screenshotAttachment,
+      })
+
+      expect(getS3Object).not.toHaveBeenCalled()
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.attachments).toEqual([])
+    })
   })
 })
 

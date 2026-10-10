@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { billingQueries } from '@/lib/client/queries/billing'
 import { formatUsd } from '@/lib/shared/format-usd'
 import { QuantityStepper } from './quantity-stepper'
@@ -19,6 +20,7 @@ export function TopUpDialog(props: {
   meter: 'ai' | 'email' | null
   onOpenChange: (open: boolean) => void
 }) {
+  const formatNumber = useFormatNumber()
   const [packs, setPacks] = useState(1)
   const catalogue = useQuery({ ...billingQueries.catalogue(), enabled: props.open })
   const packCents =
@@ -26,10 +28,10 @@ export function TopUpDialog(props: {
   const packUnits = props.meter === 'email' ? catalogue.data?.emailTopUpPackUnits : null
   const priced = hasTopUpPackPrice(packCents)
   const total = priced ? packCents * packs : null
-  const title = props.meter === 'email' ? 'Top up emails' : 'Top up AI usage'
+  const title = props.meter === 'email' ? 'Top up emails' : 'Top up Quinn usage'
   const unitHint =
     props.meter === 'email' && packUnits
-      ? `${packUnits.toLocaleString()} emails per pack`
+      ? `${formatNumber(packUnits)} changelog and status-page emails per pack`
       : 'Credit carries over until it is used.'
 
   return (
@@ -68,6 +70,9 @@ export function TopUpDialog(props: {
             <input type="hidden" name="action" value="topup" />
             <input type="hidden" name="meter" value={props.meter ?? 'ai'} />
             <input type="hidden" name="packs" value={String(packs)} />
+            {/* The price shown above, so the checkout charges exactly that. */}
+            {priced ? <input type="hidden" name="packCents" value={String(packCents)} /> : null}
+            {packUnits ? <input type="hidden" name="packUnits" value={String(packUnits)} /> : null}
             <Button type="submit" disabled={!props.meter || !priced}>
               Continue to checkout
             </Button>

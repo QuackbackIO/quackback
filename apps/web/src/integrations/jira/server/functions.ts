@@ -5,6 +5,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 export interface JiraOAuthState {
   type: 'jira_oauth'
@@ -45,7 +46,8 @@ export const getJiraConnectUrl = createServerFn({ method: 'GET' }).handler(
     const { hasPlatformCredentials } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
     if (!(await hasPlatformCredentials('jira'))) {
-      throw new Error(
+      throw new ValidationError(
+        'PLATFORM_CREDENTIALS_NOT_CONFIGURED',
         'Jira platform credentials not configured. Configure them in integration settings first.'
       )
     }
@@ -64,9 +66,6 @@ export const getJiraConnectUrl = createServerFn({ method: 'GET' }).handler(
   }
 )
 
-// Token refresh lives in ./token so the issues capability (service-side
-// create) can share it with these server functions.
-
 export const fetchJiraProjectsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<JiraProject[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
@@ -83,13 +82,13 @@ export const fetchJiraProjectsFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('Jira not connected')
     }
 
-    const cloudId = (integration.config as JiraIntegrationConfig)?.cloudId
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
+    const { accessToken, config } = await getIntegrationAuth(integration.id)
+    const cloudId = (config as JiraIntegrationConfig).cloudId
     if (!cloudId) {
       throw new Error('Jira cloud ID not found in integration config')
     }
 
-    const { getJiraAccessToken } = await import('@/integrations/jira/server/token')
-    const accessToken = await getJiraAccessToken(integration)
     return listJiraProjects(accessToken, cloudId)
   }
 )
@@ -115,12 +114,12 @@ export const fetchJiraIssueTypesFn = createServerFn({ method: 'POST' })
       throw new Error('Jira not connected')
     }
 
-    const cloudId = (integration.config as JiraIntegrationConfig)?.cloudId
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
+    const { accessToken, config } = await getIntegrationAuth(integration.id)
+    const cloudId = (config as JiraIntegrationConfig).cloudId
     if (!cloudId) {
       throw new Error('Jira cloud ID not found in integration config')
     }
 
-    const { getJiraAccessToken } = await import('@/integrations/jira/server/token')
-    const accessToken = await getJiraAccessToken(integration)
     return listJiraIssueTypes(accessToken, cloudId, data.projectId)
   })

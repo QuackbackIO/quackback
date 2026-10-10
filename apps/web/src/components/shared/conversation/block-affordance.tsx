@@ -351,7 +351,7 @@ export function BlockCsatRow({
               id: 'widget.messenger.csat.commentPlaceholder',
               defaultMessage: 'Add a comment (optional)',
             })}
-            className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/20"
           />
           <button
             type="button"
@@ -376,7 +376,7 @@ export function BlockCsatRow({
   )
 }
 
-/** "We're online — typically replies in under an hour" / away variant — a
+/** "We're online, typically replies in under an hour" / away variant: a
  *  quiet system-style caption (never a chat bubble), localized client-side
  *  from `block.status` (the message's stored `content` is only the English
  *  transcript/email fallback). */
@@ -390,7 +390,7 @@ export function BlockReplyTimeCaption({
       {status === 'online' ? (
         <FormattedMessage
           id="widget.messenger.replyTime.online"
-          defaultMessage="We're online — typically replies in under an hour."
+          defaultMessage="We're online, typically replies in under an hour."
         />
       ) : (
         <FormattedMessage

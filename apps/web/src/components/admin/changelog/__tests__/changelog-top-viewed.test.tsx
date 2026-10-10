@@ -39,7 +39,9 @@ describe('<ChangelogTopViewed>', () => {
     // must not silently drop entries past a fixed card count.
     for (const entry of ENTRIES) {
       expect(screen.getByText(entry.title)).toBeInTheDocument()
-      expect(screen.getByText(entry.viewCount.toLocaleString())).toBeInTheDocument()
+      expect(
+        screen.getByText(new Intl.NumberFormat('en').format(entry.viewCount))
+      ).toBeInTheDocument()
     }
   })
 
@@ -81,5 +83,14 @@ describe('<ChangelogTopViewed>', () => {
     hoisted.topViewedChangelogsFn.mockResolvedValue([])
     const { container } = renderWithClient(<ChangelogTopViewed />)
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('titles the card Most viewed in sentence case', async () => {
+    hoisted.topViewedChangelogsFn.mockResolvedValue(ENTRIES)
+    const { container } = renderWithClient(<ChangelogTopViewed />)
+
+    const title = await screen.findByText('Most viewed')
+    expect(title.className).not.toContain('uppercase')
+    expect(container.textContent).not.toMatch(/top viewed/i)
   })
 })

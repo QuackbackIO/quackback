@@ -1,7 +1,9 @@
 import { Link } from '@tanstack/react-router'
+import { FormattedMessage } from 'react-intl'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { LocalDate } from '@/components/ui/local-date'
 import { BackLink } from '@/components/ui/back-link'
 import { ChevronUpIcon } from '@heroicons/react/24/outline'
 import type { ChangelogId, PostId } from '@quackback/ids'
@@ -36,13 +38,8 @@ interface ChangelogEntryDetailProps {
   categories?: CategoryBadge[]
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
+/** The entry's date, e.g. "October 1, 2026", in the reader's zone once hydrated. */
+const ENTRY_DATE: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric' }
 
 export function ChangelogEntryDetail({
   title,
@@ -57,26 +54,27 @@ export function ChangelogEntryDetail({
     <article>
       {/* Back link */}
       <BackLink to="/changelog" className="mb-8">
-        Changelog
+        <FormattedMessage id="portal.changelog.entry.backLink" defaultMessage="Changelog" />
       </BackLink>
 
       <div className="flex gap-8 lg:gap-16">
         {/* Date sidebar */}
         <div className="hidden md:block w-40 shrink-0 pt-1">
-          <time dateTime={publishedAt} className="text-sm text-muted-foreground">
-            {formatDate(publishedAt)}
-          </time>
+          <LocalDate
+            date={publishedAt}
+            options={ENTRY_DATE}
+            className="text-sm text-muted-foreground"
+          />
         </div>
 
         {/* Main content */}
         <div className="flex-1 min-w-0">
           {/* Mobile date */}
-          <time
-            dateTime={publishedAt}
+          <LocalDate
+            date={publishedAt}
+            options={ENTRY_DATE}
             className="md:hidden text-sm text-muted-foreground mb-4 block"
-          >
-            {formatDate(publishedAt)}
-          </time>
+          />
 
           {/* Category labels */}
           {categories.length > 0 && (
@@ -119,7 +117,12 @@ export function ChangelogEntryDetail({
           {/* Linked posts */}
           {linkedPosts.length > 0 && (
             <section className="mt-8 pt-8 border-t border-border/40">
-              <h2 className="text-lg font-semibold mb-4">Shipped Features</h2>
+              <h2 className="text-lg font-semibold mb-4">
+                <FormattedMessage
+                  id="portal.changelog.entry.shippedFeatures"
+                  defaultMessage="Shipped Features"
+                />
+              </h2>
               <div className="grid gap-2">
                 {linkedPosts.map((post) => (
                   <Link

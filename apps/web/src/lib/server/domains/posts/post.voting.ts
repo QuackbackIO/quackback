@@ -14,6 +14,7 @@ import {
   user,
   sql,
   eq,
+  and,
 } from '@/lib/server/db'
 import { createId, fromUuid, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { relatedPostIdsSql } from './post.merge-ids'
@@ -21,6 +22,7 @@ import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import { dispatchPostVoted } from '@/lib/server/events/dispatch'
 import type { VoteResult } from './post.types'
 
@@ -63,7 +65,7 @@ async function emitPostVotedEvent(
       .innerJoin(boards, eq(boards.id, posts.boardId))
       .leftJoin(principal, eq(principal.id, principalId))
       .leftJoin(user, eq(user.id, principal.userId))
-      .where(eq(posts.id, postId))
+      .where(and(eq(posts.id, postId), notTestPrincipal(principal.id)))
       .limit(1)
     if (!row) return
 
@@ -161,6 +163,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
         END
       )
       WHERE id = (SELECT id FROM post_check)
+        AND ${notTestPrincipal(sql`${principalUuid}::uuid`)}
       RETURNING vote_count
     ),
     anon_check AS (
@@ -172,6 +175,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
       SELECT ${subscriptionId}::uuid, (SELECT id FROM post_check), ${principalUuid}::uuid, 'vote', true, true
       WHERE EXISTS (SELECT 1 FROM inserted)
         AND NOT EXISTS (SELECT 1 FROM anon_check)
+        AND ${notTestPrincipal(sql`${principalUuid}::uuid`)}
       ON CONFLICT (post_id, principal_id) DO NOTHING
       RETURNING 1
     )
@@ -282,6 +286,7 @@ export async function addVoteOnBehalf(
       UPDATE ${posts}
       SET vote_count = GREATEST(0, vote_count + 1)
       WHERE id = (SELECT id FROM post_check)
+        AND ${notTestPrincipal(sql`${principalUuid}::uuid`)}
         AND EXISTS (SELECT 1 FROM inserted)
       RETURNING vote_count
     ),
@@ -289,6 +294,7 @@ export async function addVoteOnBehalf(
       INSERT INTO ${postSubscriptions} (id, post_id, principal_id, reason, notify_comments, notify_status_changes)
       SELECT ${subscriptionId}::uuid, (SELECT id FROM post_check), ${principalUuid}::uuid, 'vote', true, true
       WHERE EXISTS (SELECT 1 FROM inserted)
+        AND ${notTestPrincipal(sql`${principalUuid}::uuid`)}
       ON CONFLICT (post_id, principal_id) DO NOTHING
       RETURNING 1
     )
@@ -367,6 +373,7 @@ export async function removeVote(
       UPDATE ${posts}
       SET vote_count = GREATEST(0, vote_count - 1)
       WHERE id = (SELECT id FROM post_check)
+        AND ${notTestPrincipal(sql`${principalUuid}::uuid`)}
         AND EXISTS (SELECT 1 FROM deleted)
       RETURNING vote_count
     )

@@ -72,6 +72,73 @@ const DYNAMIC_PERMISSION = (
 ): Classification => ({ intent: 'DYNAMIC_PERMISSION', resolvesToAny, why })
 
 export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
+  'lib/server/functions/website-branding.ts::startAutomaticWebsiteBrandingFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE],
+    'lookup and logo writes require current settings management; color writes additionally require branding permission'
+  ),
+  'lib/server/functions/website-branding.ts::getAutomaticWebsiteBrandingStatusFn':
+    DYNAMIC_PERMISSION(
+      [PERMISSIONS.SETTINGS_MANAGE],
+      'private lookup status requires current settings management; ineligible callers receive no status'
+    ),
+  'lib/server/functions/website-branding.ts::undoAutomaticWebsiteBrandingFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE],
+    'Undo requires current settings management and every permission required by the stored receipt'
+  ),
+  'lib/server/functions/website-branding.ts::acceptWebsiteBrandingOfferFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE],
+    'Use it applies the offered logo with current settings management; its color additionally requires branding permission'
+  ),
+  'lib/server/functions/website-branding.ts::declineWebsiteBrandingOfferFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE],
+    'Not now closes the offer and requires current settings management'
+  ),
+  'lib/server/functions/ask-search.ts::searchAskEntitiesFn': DYNAMIC_PERMISSION(
+    [
+      PERMISSIONS.POST_VIEW_PRIVATE,
+      PERMISSIONS.HELP_CENTER_MANAGE,
+      PERMISSIONS.CHANGELOG_VIEW_DRAFT,
+      PERMISSIONS.CHANGELOG_MANAGE,
+      PERMISSIONS.CONVERSATION_VIEW,
+      PERMISSIONS.TICKET_VIEW,
+    ],
+    'team dashboard search checks each product permission and scopes every entity query to the actor'
+  ),
+  'lib/server/functions/workspace-copilot.ts::getWorkspaceCopilotAvailabilityFn': END_USER(
+    'returns only whether this caller has Copilot permission and the enabled capability'
+  ),
+  'lib/server/functions/workspace-copilot.ts::listWorkspaceCopilotThreadsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.COPILOT_USE],
+    'human team member with Copilot permission reads only their own threads'
+  ),
+  'lib/server/functions/workspace-copilot.ts::createWorkspaceCopilotThreadFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.COPILOT_USE],
+    'human team member creates only their own thread after the capability gate'
+  ),
+  'lib/server/functions/workspace-copilot.ts::getWorkspaceCopilotThreadFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.COPILOT_USE],
+    'human team member with Copilot permission must own the requested thread'
+  ),
+  'lib/server/functions/workspace-copilot.ts::applyWorkspaceSettingsProposalFn': DYNAMIC_PERMISSION(
+    [
+      PERMISSIONS.COPILOT_USE,
+      PERMISSIONS.SETTINGS_MANAGE,
+      PERMISSIONS.SETTINGS_BRANDING,
+      PERMISSIONS.OFFICE_HOURS_MANAGE,
+      PERMISSIONS.CHANGELOG_MANAGE,
+    ],
+    'caller owns the proposal thread and holds every current permission required by its selected changes'
+  ),
+  'lib/server/functions/workspace-copilot.ts::undoWorkspaceSettingsProposalFn': DYNAMIC_PERMISSION(
+    [
+      PERMISSIONS.COPILOT_USE,
+      PERMISSIONS.SETTINGS_MANAGE,
+      PERMISSIONS.SETTINGS_BRANDING,
+      PERMISSIONS.OFFICE_HOURS_MANAGE,
+      PERMISSIONS.CHANGELOG_MANAGE,
+    ],
+    'caller owns the proposal thread and holds every current permission required to restore its applied changes'
+  ),
   // Anyone signed in acts only on their OWN address here: the principal comes
   // from the session, never from the request, so there is no object whose
   // visibility could be checked and no permission that would mean anything.
@@ -94,17 +161,22 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   // every permission declared by the current Writer tool specification.
   'lib/server/functions/assistant-pending-actions.ts::getAssistantPendingActionFn':
     DYNAMIC_PERMISSION(
-      [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+      [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW, PERMISSIONS.COPILOT_USE],
       'caller must be able to view the pending action parent'
     ),
   'lib/server/functions/assistant-actions.ts::rejectAssistantActionFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+    [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW, PERMISSIONS.COPILOT_USE],
     'caller must be able to view the pending action parent'
   ),
   'lib/server/functions/assistant-actions.ts::approveAssistantActionFn': DYNAMIC_PERMISSION(
     [
       PERMISSIONS.CONVERSATION_VIEW,
       PERMISSIONS.TICKET_VIEW,
+      PERMISSIONS.COPILOT_USE,
+      PERMISSIONS.SETTINGS_MANAGE,
+      PERMISSIONS.SETTINGS_BRANDING,
+      PERMISSIONS.OFFICE_HOURS_MANAGE,
+      PERMISSIONS.CHANGELOG_MANAGE,
       PERMISSIONS.CONVERSATION_SET_ATTRIBUTES,
       PERMISSIONS.CONVERSATION_SET_STATUS,
       PERMISSIONS.TICKET_CREATE,
@@ -156,6 +228,15 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   'lib/server/functions/conversation.ts::deleteConversationMessageFn': END_USER(
     'author deletes their own conversation message'
+  ),
+  'lib/server/functions/conversation.ts::editConversationMessageFn': DYNAMIC_PERMISSION(
+    [
+      PERMISSIONS.CONVERSATION_REPLY,
+      PERMISSIONS.CONVERSATION_NOTE,
+      PERMISSIONS.TICKET_REPLY,
+      PERMISSIONS.TICKET_NOTE,
+    ],
+    'author edits their own message; needs the permission that writes that kind (reply or note, conversation or ticket)'
   ),
 
   // Requester tickets (converged Messages surface): a signed-in requester's
@@ -235,11 +316,83 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/user.ts::requirePrincipalId': END_USER(
     'own-profile helper — resolves the caller principal'
   ),
+  'lib/server/functions/admin-overview.ts::fetchAdminOverviewFn': END_USER(
+    'admin home aggregation — each product section still gates on its own permission'
+  ),
+
+  // Widget BFF: Bearer-only surfaces. Site `requireAuth` denies widget; these
+  // call `requireWidgetAuth` and reuse the same domain run* helpers.
+  'lib/server/functions/widget/posts.ts::widgetCreatePublicPostFn': END_USER(
+    'widget visitor submits a post'
+  ),
+  'lib/server/functions/widget/posts.ts::widgetToggleVoteFn': END_USER(
+    'widget visitor votes on a post'
+  ),
+  'lib/server/functions/widget/comments.ts::widgetCreateCommentFn': END_USER(
+    'widget visitor posts a comment'
+  ),
+  'lib/server/functions/widget/comments.ts::widgetAddReactionFn': END_USER(
+    'widget visitor adds a reaction'
+  ),
+  'lib/server/functions/widget/comments.ts::widgetRemoveReactionFn': END_USER(
+    'widget visitor removes their reaction'
+  ),
+  'lib/server/functions/widget/tickets.ts::widgetGetMyTicketsFn': END_USER(
+    'widget visitor lists their own tickets'
+  ),
+  'lib/server/functions/widget/tickets.ts::widgetGetMyTicketStageLabelsFn': END_USER(
+    'widget visitor reads ticket stage labels'
+  ),
+  'lib/server/functions/widget/tickets.ts::widgetGetMyTicketFormFn': END_USER(
+    'widget visitor reads intake form labels'
+  ),
+  'lib/server/functions/widget/tickets.ts::widgetGetMyTicketWatchStatusFn': END_USER(
+    'widget visitor reads watch state of their ticket'
+  ),
+  'lib/server/functions/widget/tickets.ts::widgetGetConversationLinkedTicketFn': END_USER(
+    "widget visitor reads their conversation's linked ticket"
+  ),
+  'lib/server/functions/widget/tickets.ts::widgetCreateMyTicketFn': END_USER(
+    'widget visitor files their own ticket'
+  ),
+  'lib/server/functions/widget/tickets.ts::widgetWatchMyTicketFn': END_USER(
+    'widget visitor watches their own ticket'
+  ),
+  'lib/server/functions/widget/tickets.ts::widgetUnwatchMyTicketFn': END_USER(
+    'widget visitor unwatches their own ticket'
+  ),
+  'lib/server/functions/widget/conversation.ts::widgetSendConversationMessageFn': END_USER(
+    'widget visitor sends a conversation message'
+  ),
+  'lib/server/functions/widget/conversation.ts::widgetListConversationMessagesFn': END_USER(
+    'widget visitor pages their own conversation'
+  ),
+  'lib/server/functions/widget/conversation.ts::widgetMarkConversationReadFn': END_USER(
+    'widget visitor marks their conversation read'
+  ),
+  'lib/server/functions/widget/conversation.ts::widgetSendConversationTypingFn': END_USER(
+    'widget visitor typing indicator'
+  ),
+  'lib/server/functions/widget/conversation.ts::widgetSubmitCsatFn': END_USER(
+    'widget visitor submits a CSAT rating'
+  ),
+  'lib/server/functions/widget/conversation.ts::widgetMintConversationStreamTokenFn': END_USER(
+    'widget visitor mints their SSE stream token'
+  ),
+  'lib/server/functions/widget/user.ts::widgetGetUserStatsFn': END_USER(
+    'widget visitor reads own engagement stats'
+  ),
+  'lib/server/functions/user.ts::updateNotificationPreferencesFn': END_USER(
+    'update own notification preferences; widget scope is refused separately'
+  ),
   'lib/server/functions/teammate-preferences.ts::getMyLanguagePreferenceFn': END_USER(
     'teammate reads their own language preference'
   ),
   'lib/server/functions/teammate-preferences.ts::setMyLanguagePreferenceFn': END_USER(
     'teammate sets their own language preference'
+  ),
+  'lib/server/functions/billing.ts::shouldLockAdminToBillingFn': END_USER(
+    'admin layout lock: any teammate may read it; only billing.manage is redirected'
   ),
 
   // MCP transport entry: a valid key authenticates; per-tool scopes authorize
@@ -360,6 +513,13 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     'advertised plan catalogue; null when cloud is off'
   ),
 
+  // Current plan name and trial eligibility for upgrade prompts. Same audience
+  // as the catalogue: the plan name already reaches every teammate through the
+  // trial banner, and nothing else (references, dates, entitlements) is exposed.
+  'lib/server/functions/billing.ts::fetchUpgradeContextFn': END_USER(
+    'current plan + trial eligibility; null when cloud is off'
+  ),
+
   // Cloud workspace ownership. The gate admits any authenticated principal and
   // the *handler* makes the access decision by comparing the caller's own
   // session address against the owner the control plane reports — there is no
@@ -411,15 +571,20 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     roleBar: 'team',
     why: 'permission echo for portal UI affordances: non-team callers fail open to an empty permission list rather than an error',
   },
-  'routes/api/widget/identify.ts::POST::isTeamMember': {
-    intent: 'SECONDARY_GATE',
-    roleBar: 'team',
-    why: 'widget identify refuses to mint a widget-scoped session when the resolved identity is a staff/team member, so a dashboard-authorized session is never handed to an embedding origin',
-  },
   'lib/server/functions/onboarding.ts::saveWorkspaceAndGoalFn::isAdmin': {
     intent: 'SECONDARY_GATE',
     roleBar: 'admin',
     why: 'onboarding bootstrap: the first authenticated user provisions as admin; once the workspace step is done, completing setup requires an existing admin',
+  },
+  'lib/server/functions/onboarding.ts::ensureOnboardingHomeReadyFn::isAdmin': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'admin',
+    why: 'home launch-plan stamp: only an admin can mark workspace details and starting point as seen',
+  },
+  'lib/server/functions/data-runs.ts::listImportRunsFn::isAdmin': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'admin',
+    why: 'import history: admins only, as the REST import-run reads are; settings.manage alone admits the page, not the history',
   },
 
   // Behavior refinements sitting behind an already-present entry gate.
@@ -429,22 +594,28 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/onboarding.ts::ensureBootstrapAdmin::isAdmin': NOT_A_GATE(
     'promotes an existing non-admin principal during bootstrap — not an access check'
   ),
+  'routes/api/widget/identify.ts::POST::isTeamMember': NOT_A_GATE(
+    'skips overwriting a teammate dashboard profile from the host-app JWT; identify still mints a widget-scoped customer session'
+  ),
+  'lib/server/functions/widget-auth.ts::getWidgetSession::isTeamMember': NOT_A_GATE(
+    'sets canPortalHandoff from the stored role; presented session role stays portal-tier'
+  ),
   'lib/server/functions/conversation.ts::assertVisitorConversationAccess::isTeamMember': NOT_A_GATE(
     'team bypasses the portal-access check; entry is the bare requireAuth on each caller'
   ),
-  'lib/server/functions/conversation.ts::sendConversationMessageFn::isTeamMember': NOT_A_GATE(
+  'lib/server/functions/conversation.ts::runSendConversationMessage::isTeamMember': NOT_A_GATE(
     'team skips the per-visitor send-rate throttle'
   ),
-  'lib/server/functions/conversation.ts::getMyConversationFn::isTeamMember': NOT_A_GATE(
+  'lib/server/functions/conversation.ts::runGetMyConversation::isTeamMember': NOT_A_GATE(
     'non-team callers gated behind portal access; team reads from the admin inbox'
   ),
-  'lib/server/functions/conversation.ts::getMyConversationsFn::isTeamMember': NOT_A_GATE(
+  'lib/server/functions/conversation.ts::runGetMyConversations::isTeamMember': NOT_A_GATE(
     'non-team callers gated behind portal access; team reads from the admin inbox'
   ),
-  'lib/server/functions/conversation.ts::listConversationMessagesFn::isTeamMember': NOT_A_GATE(
+  'lib/server/functions/conversation.ts::runListConversationMessages::isTeamMember': NOT_A_GATE(
     'internal notes are agent-only; visitors never see them'
   ),
-  'lib/server/functions/conversation.ts::getMessengerUnreadFn::isTeamMember': NOT_A_GATE(
+  'lib/server/functions/conversation.ts::runGetMessengerUnread::isTeamMember': NOT_A_GATE(
     'non-team callers gated behind portal access; team reads from the admin inbox'
   ),
   'lib/server/functions/conversation.ts::exportConversationTranscriptFn::isTeamMember': {
@@ -452,6 +623,12 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     roleBar: 'team',
     resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
     why: 'transcript export carries internal notes; team-only on top of the CONVERSATION_VIEW permission gate',
+  },
+  'lib/server/functions/conversation-files.ts::listConversationFilesFn::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
+    why: 'the Files sidebar lists attachments off internal notes too; team-only on top of the CONVERSATION_VIEW permission gate (the conversation-target branch only — the ticket-target branch gates on TICKET_VIEW + assertTicketVisible, mirroring getTicketActivityFn)',
   },
   'lib/server/functions/embeds.ts::scopeTicketEmbed::isTeamMember': NOT_A_GATE(
     'getEmbedPreviewFn already gates on portal access; team resolves any ticket embed (teammate read path), non-team callers resolve only their own customer ticket via the same ownership rule as loadOwnedTicketOr404'
@@ -468,18 +645,12 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/link-preview.ts::unfurlLinkFn::isTeamMember': NOT_A_GATE(
     'team bypasses the portal-access check; entry is the bare requireAuth'
   ),
-  'lib/server/functions/portal.ts::fetchPublicRoadmapPosts::isTeamMember': NOT_A_GATE(
-    'team may narrow by segment; non-team callers get the public result shape'
+  'lib/server/functions/portal.ts::resolvePublicRoadmapQuery::isTeamMember': NOT_A_GATE(
+    'shared by fetchPublicRoadmapPosts and fetchPublicRoadmapColumns: team may narrow by segment; non-team callers get the public result shape'
   ),
   'routes/api/v1/principals/$principalId.ts::fetchTeamMemberWithUser::isTeamMember': NOT_A_GATE(
     'route is already key-gated (member.view/manage); this returns 404 for non-team principals'
   ),
-
-  'lib/server/functions/onboarding.ts::saveCloudOnboardingGoalFn::isAdmin': {
-    intent: 'SECONDARY_GATE',
-    roleBar: 'admin',
-    why: 'the control-plane-provisioned variant of the same step: the workspace already exists, so there is no bootstrap case and an existing admin is always required',
-  },
 
   'lib/server/functions/contact-email.ts::confirmEmailChangeFn::isTeamMember': NOT_A_GATE(
     'decides whether the confirmed address changes a control-plane seat — a teammate is a seat, an end-user is not; the address was already written above it'

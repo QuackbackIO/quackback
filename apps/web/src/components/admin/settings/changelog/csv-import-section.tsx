@@ -79,13 +79,10 @@ export function CsvImportSection() {
   }
 
   return (
-    <div className="border-t border-border/50 pt-5 space-y-3">
+    <div className="space-y-3">
       <div>
         <p className="text-sm font-medium">Import subscribers</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Upload a CSV with an "Email" column to subscribe existing accounts to changelog emails.
-          Rows that don't match an existing account are skipped.
-        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">Upload a CSV with an Email column</p>
       </div>
 
       {result ? (
@@ -143,6 +140,7 @@ export function CsvImportSection() {
                   checked={consentChecked}
                   onCheckedChange={(checked) => setConsentChecked(checked === true)}
                   className="mt-0.5"
+                  data-in-label
                 />
                 <span>
                   I confirm every person on this list has agreed to receive email from us, and I am

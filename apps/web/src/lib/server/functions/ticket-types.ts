@@ -17,9 +17,9 @@ import type { TicketTypeId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { TICKET_TYPES } from '@/lib/shared/db-types'
 import { ticketFormSchema } from '@/lib/shared/tickets'
+import { HexColorFormatSchema } from '@/lib/shared/schemas/taxonomy'
 import { requireAuth } from './auth-helpers'
 
-const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Invalid color format')
 const ticketTypeIdSchema = z.string().refine((v) => isValidTypeId(v, 'ticket_type'), {
   message: 'Invalid ticket type id',
 })
@@ -33,7 +33,7 @@ const createTicketTypeSchema = z.object({
     .max(64)
     .optional(),
   icon: z.string().trim().max(16).nullish(),
-  color: hexColor.optional(),
+  color: HexColorFormatSchema.optional(),
   fields: ticketFormSchema.optional(),
   intakeVisible: z.boolean().optional(),
   isDefault: z.boolean().optional(),
@@ -49,7 +49,7 @@ const updateTicketTypeSchema = z.object({
     .optional(),
   category: z.enum(TICKET_TYPES).optional(),
   icon: z.string().trim().max(16).nullish(),
-  color: hexColor.optional(),
+  color: HexColorFormatSchema.optional(),
   fields: ticketFormSchema.optional(),
   intakeVisible: z.boolean().optional(),
   isDefault: z.boolean().optional(),

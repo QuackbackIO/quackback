@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Ticket } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
+import type { PrincipalId } from '@quackback/ids'
+
+const loadAuthors = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/domains/principals/principal-display', () => ({ loadAuthors }))
 
 const dispatch = vi.hoisted(() => ({
   dispatchTicketCreated: vi.fn().mockResolvedValue(undefined),
@@ -67,7 +71,10 @@ const baseMessage = {
   systemEvent: null,
 } as unknown as ConversationMessageDTO
 
-beforeEach(() => Object.values(dispatch).forEach((m) => m.mockClear()))
+beforeEach(() => {
+  Object.values(dispatch).forEach((m) => m.mockClear())
+  loadAuthors.mockReset().mockResolvedValue(new Map())
+})
 
 describe('ticket.webhooks emit helpers', () => {
   it('emitTicketCreated sends EventTicketData with a user actor + status category + stage', async () => {
@@ -147,6 +154,49 @@ describe('ticket.webhooks emit helpers', () => {
 })
 
 describe('ticket.webhooks reply + note emit helpers', () => {
+  it.each(['Anonymous', null])(
+    'keeps the account name in agent alerts for a requester with public name %s',
+    async (publicName) => {
+      const principalId = 'principal_r' as PrincipalId
+      loadAuthors.mockResolvedValue(
+        new Map([[principalId, { principalId, displayName: publicName, avatarUrl: null }]])
+      )
+      const requester = { ...agentActor, principalId, role: 'user' } as Actor
+      const message = {
+        ...baseMessage,
+        senderType: 'visitor' as const,
+        author: { principalId, displayName: 'Avery Requester', avatarUrl: null },
+      }
+
+      await emitTicketReplied(requester, baseTicket, message)
+
+      expect(dispatch.dispatchTicketReplied).toHaveBeenCalledTimes(1)
+      expect(dispatch.dispatchTicketReplied.mock.calls[0][7]).toBe('Avery Requester')
+      expect(loadAuthors).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['Support Ada', null])(
+    'uses the public author name (%s) for requester reply notifications',
+    async (publicName) => {
+      const principalId = 'principal_a' as PrincipalId
+      loadAuthors.mockResolvedValue(
+        new Map([[principalId, { principalId, displayName: publicName, avatarUrl: null }]])
+      )
+      const message = {
+        ...baseMessage,
+        author: { principalId, displayName: 'Private Agent Name', avatarUrl: null },
+      }
+
+      await emitTicketReplied(agentActor, baseTicket, message)
+
+      expect(dispatch.dispatchTicketReplied).toHaveBeenCalledTimes(1)
+      expect(dispatch.dispatchTicketReplied.mock.calls[0][7]).toBe(publicName)
+      expect(loadAuthors).toHaveBeenCalledExactlyOnceWith([principalId])
+      expect(message.author.displayName).toBe('Private Agent Name')
+    }
+  )
+
   it('emitTicketReplied fires ticket.replied with the ref, message id, markdown content, and senderType', async () => {
     await emitTicketReplied(agentActor, baseTicket, baseMessage)
     expect(dispatch.dispatchTicketReplied).toHaveBeenCalledTimes(1)

@@ -11,21 +11,22 @@
     "./templates": "./src/templates/index.ts",
     "./anon": "./src/anon.ts",
     "./message-id": "./src/message-id.ts",
+    "./idempotency": "./src/idempotency.ts",
+    "./provider": "./src/provider.ts",
     "./recipient": "./src/recipient.ts",
     "./sender": "./src/sender.ts",
     "./ses": "./src/ses.ts",
     "./ses-identity": "./src/ses-identity.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-sesv2": "^3.1111.0",
+    "@aws-sdk/client-sesv2": "^3.1131.0",
     "@quackback/logger": "workspace:*",
     "@react-email/components": "^1.0.12",
-    "nodemailer": "^9.0.5",
-    "react": "^19.2.8",
-    "resend": "^6.20.0"
+    "nodemailer": "^10.0.9",
+    "react": "^19.3.0",
+    "resend": "^6.28.0"
   },
   "devDependencies": {
-    "@types/nodemailer": "^8.0.1",
-    "@types/react": "^19.2.18"
+    "@types/react": "^19.3.0"
   }
 }

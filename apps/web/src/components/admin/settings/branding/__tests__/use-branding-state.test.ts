@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
+import { generateWorkspaceThemeCSS, replaceCssVar, type ThemeConfig } from '@/lib/shared/theme'
 
 const { saveBrandingTheme } = vi.hoisted(() => ({
   saveBrandingTheme: vi.fn(
@@ -17,12 +20,36 @@ vi.mock('@/lib/client/mutations/settings', () => ({
 }))
 
 import { useBrandingState } from '../use-branding-state'
+import { updateThemeSchema } from '@/lib/shared/schemas/settings'
 
 beforeEach(() => {
   saveBrandingTheme.mockClear()
 })
 
 describe('useBrandingState setThemeMode', () => {
+  it('saves both palettes through the shared settings validator', async () => {
+    const { result } = renderHook(() =>
+      useBrandingState({
+        initialLogoUrl: null,
+        initialThemeConfig: { themeMode: 'user' },
+        initialCustomCss: '',
+      })
+    )
+    await act(async () => {
+      await result.current.saveTheme()
+    })
+    const payload = saveBrandingTheme.mock.calls[0]![0]
+    const parsed = updateThemeSchema.parse({ brandingConfig: payload.brandingConfig })
+    expect(parsed.brandingConfig.light).toMatchObject({
+      success: 'oklch(0.49 0.115 165.6)',
+      fontSans: '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif',
+      radius: '0.5rem',
+    })
+    expect(parsed.brandingConfig.dark).toMatchObject({
+      success: 'oklch(0.696 0.149 163)',
+      fontSans: '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif',
+    })
+  })
   it('keeps both palettes in cssText when switching from user to light', () => {
     const { result } = renderHook(() =>
       useBrandingState({
@@ -239,5 +266,115 @@ describe('useBrandingState initial cssText', () => {
 
     expect(result.current.parsedCssVariables.light['--primary']).toBe(cssPrimary)
     expect(result.current.cssText).toContain('.brand { color: red; }')
+  })
+})
+
+// What a visitor sees on a workspace that never customised its theme comes
+// from the stylesheet's tokens in globals.css. The editor has to start from
+// exactly that.
+const SRC = join(__dirname, '../../../../..')
+const globalsCss = readFileSync(join(SRC, 'globals.css'), 'utf8')
+
+function cssBlock(css: string, selector: string): Record<string, string> {
+  const start = css.indexOf(`${selector} {`)
+  if (start < 0) throw new Error(`no ${selector} block`)
+  const body = css.slice(start + selector.length + 2, css.indexOf('}', start))
+  return Object.fromEntries(
+    [...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()])
+  )
+}
+
+const STYLESHEETS = {
+  globalsLight: cssBlock(globalsCss, ':root'),
+  globalsDark: cssBlock(globalsCss, '.dark'),
+}
+
+/** The value an unbranded page resolves for `cssVar`. */
+function unbranded(mode: 'light' | 'dark', cssVar: string) {
+  const { globalsLight, globalsDark } = STYLESHEETS
+  const layers = mode === 'dark' ? [globalsDark, globalsLight] : [globalsLight]
+  return layers.find((layer) => layer[cssVar])?.[cssVar]
+}
+
+/** The theme a workspace stores, and the variable each key is rendered as. */
+const STORED_AS = {
+  primary: '--primary',
+  background: '--background',
+  foreground: '--foreground',
+  card: '--card',
+  muted: '--muted',
+  mutedForeground: '--muted-foreground',
+  border: '--border',
+  destructive: '--destructive',
+  success: '--success',
+  radius: '--radius',
+  fontSans: '--font-sans',
+}
+
+/** Declarations per selector in generated theme CSS. */
+function declarations(css: string): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    for (const decl of body.split(';')) {
+      const at = decl.indexOf(':')
+      if (at < 0) continue
+      out.set(`${selector.trim()} ${decl.slice(0, at).trim()}`, decl.slice(at + 1).trim())
+    }
+  }
+  return out
+}
+
+function renderUntouched() {
+  return renderHook(() =>
+    useBrandingState({
+      initialLogoUrl: null,
+      initialThemeConfig: {},
+      initialCustomCss: '',
+    })
+  )
+}
+
+describe('useBrandingState on an uncustomised workspace', () => {
+  it('saves what visitors already see when one colour changes', async () => {
+    const { result } = renderUntouched()
+    const primary = 'oklch(0.55 0.2 250)'
+    act(() => {
+      result.current.setCssText(replaceCssVar(result.current.cssText, '--primary', primary))
+    })
+    await act(async () => {
+      await result.current.saveTheme()
+    })
+
+    const saved = saveBrandingTheme.mock.calls[0]![0].brandingConfig as ThemeConfig
+    for (const mode of ['light', 'dark'] as const) {
+      const stored = saved[mode] as Record<string, string>
+      for (const [key, cssVar] of Object.entries(STORED_AS)) {
+        const expected = key === 'primary' ? primary : unbranded(mode, cssVar)
+        expect(stored[key], `${mode} ${key}`).toBe(expected)
+      }
+    }
+  })
+
+  it('shows the font and radius visitors see, with Default as the preset', () => {
+    const { result } = renderUntouched()
+    expect(result.current.font).toBe(unbranded('light', '--font-sans'))
+    expect(result.current.currentFontId).toBe('inter')
+    expect(`${result.current.radius}rem`).toBe(unbranded('light', '--radius'))
+    expect(result.current.activePresetId).toBe('default')
+  })
+
+  it('saves a theme the portal renders exactly as the unbranded one', async () => {
+    const { result } = renderUntouched()
+    await act(async () => {
+      await result.current.saveTheme()
+    })
+
+    const saved = saveBrandingTheme.mock.calls[0]![0].brandingConfig as ThemeConfig
+    const before = declarations(generateWorkspaceThemeCSS({}))
+    const after = declarations(generateWorkspaceThemeCSS(saved))
+    expect(before.size).toBeGreaterThan(0)
+    for (const [declaration, value] of before) {
+      expect(after.get(declaration), declaration).toBe(value)
+    }
   })
 })

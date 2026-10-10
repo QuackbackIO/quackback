@@ -78,6 +78,8 @@ vi.mock('@/lib/server/db', () => ({
         where: () => ({
           orderBy: () => Promise.resolve([]),
         }),
+        // The redirect-style read of `settings`: no settings row.
+        limit: () => Promise.resolve([]),
       }),
     })),
     transaction: async (fn: (tx: object) => Promise<unknown>) => {
@@ -87,6 +89,8 @@ vi.mock('@/lib/server/db', () => ({
           from: () => ({
             // Returns whatever txSelectResult holds at call time.
             where: () => Promise.resolve(hoisted.txSelectResult),
+            // The redirect-style write locks `settings`: no settings row.
+            limit: () => ({ for: () => Promise.resolve([]) }),
           }),
         }),
         update: () => ({
@@ -124,6 +128,7 @@ vi.mock('@/lib/server/db', () => ({
     },
   },
   identityProvider: {},
+  settings: {},
   ssoVerifiedDomain: {},
   eq: vi.fn(),
 }))
@@ -327,11 +332,38 @@ describe('upsertIdentityProvider — detailsChangedAt restamp (Fix 6)', () => {
     await upsertIdentityProvider({
       ...BASE_INPUT,
       id: 'idp_existing' as `idp_${string}`,
+      acknowledgeAdminRules: true,
       claimMapping: {
         role: { claimPath: 'groups', rules: [{ whenContains: 'admins', role: 'admin' }] },
       },
     })
     expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeUndefined()
+  })
+
+  it('rejects a typed mapping DTO that would drop nested unknown role extras', async () => {
+    hoisted.txSelectResult = [
+      {
+        ...EXISTING_ROW,
+        claimMapping: {
+          role: {
+            claimPath: 'groups',
+            rules: [{ whenContains: 'admins', role: 'admin', note: 'keep' }],
+            custom: 1,
+          },
+        },
+      },
+    ]
+    await expect(
+      upsertIdentityProvider({
+        ...BASE_INPUT,
+        id: 'idp_existing' as `idp_${string}`,
+        acknowledgeAdminRules: true,
+        claimMapping: {
+          role: { claimPath: 'groups', rules: [{ whenContains: 'admins', role: 'admin' }] },
+        },
+      })
+    ).rejects.toMatchObject({ code: 'MAPPING_UNSUPPORTED_STRIPPED' })
+    expect(hoisted.capturedSetPatch).toBeNull()
   })
 
   it('does NOT restamp detailsChangedAt when only claimMapping.attributes change', async () => {

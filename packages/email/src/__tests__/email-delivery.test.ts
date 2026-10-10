@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
-import { sendInvitationEmail, sendRawEmail } from '../index'
+import { sendChangelogPublishedEmail, sendInvitationEmail, sendRawEmail } from '../index'
 import { sealedTo, sendingAs } from './brands'
 import {
   clearMailbox,
@@ -92,6 +92,42 @@ describe.skipIf(!mailpitAvailable)('email delivery (real SMTP via mailpit)', () 
     )
     expect(headers['In-Reply-To']?.[0]).toBe(`<${parentId}>`)
     expect(headers['References']?.[0]).toBe(`<${rootId}> <${parentId}>`)
+  })
+
+  it('delivers a real MIME attachment alongside the body', async () => {
+    const content = new TextEncoder().encode('id,name\n1,ada\n2,grace')
+    const result = await sendRawEmail({
+      from: sendingAs('Support <support@acme.test>'),
+      to: 'customer@example.test',
+      subject: 'Your export',
+      html: '<p>Your export is attached.</p>',
+      attachments: [{ filename: 'export.csv', contentType: 'text/csv', content }],
+    })
+    expect(result.sent).toBe(true)
+
+    const [summary] = await waitForMessages(1)
+    const message = await getMessage(summary.ID)
+    expect(message.Attachments).toHaveLength(1)
+    expect(message.Attachments[0].FileName).toBe('export.csv')
+    expect(message.Attachments[0].ContentType).toBe('text/csv')
+    expect(message.Attachments[0].Size).toBe(content.byteLength)
+  })
+
+  it('delivers RFC 8058 one-click unsubscribe headers on a changelog email', async () => {
+    const result = await sendChangelogPublishedEmail({
+      to: 'subscriber@example.test',
+      changelogTitle: 'May release',
+      changelogUrl: 'https://acme.test/changelog/1',
+      contentPreview: 'New things',
+      workspaceName: 'Acme',
+      unsubscribeUrl: 'https://acme.test/unsubscribe?token=tok-smtp',
+    })
+    expect(result.sent).toBe(true)
+
+    const [summary] = await waitForMessages(1)
+    const headers = await getHeaders(summary.ID)
+    expect(headers['List-Unsubscribe']).toEqual(['<https://acme.test/unsubscribe?token=tok-smtp>'])
+    expect(headers['List-Unsubscribe-Post']).toEqual(['List-Unsubscribe=One-Click'])
   })
 
   it('refuses to deliver to a synthetic anonymous address', async () => {

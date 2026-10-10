@@ -12,6 +12,7 @@ describe('summarizeQuinnPerformance', () => {
       resolutionRate: 0,
       handedOff: 0,
       systemErrors: 0,
+      pending: 0,
       escalationRate: 0,
       actionsTaken: 0,
       dailyTrend: [],
@@ -44,6 +45,22 @@ describe('summarizeQuinnPerformance', () => {
     expect(s.resolutionRate).toBe(50) // 2 of 4
     expect(s.handedOff).toBe(1)
     expect(s.escalationRate).toBe(25) // 1 of 4
+  })
+
+  it('counts involvements Quinn has neither resolved nor handed off as pending', () => {
+    const at = '2026-06-01T10:00:00Z'
+    const rows = [
+      { status: 'resolved_confirmed' as const, handoffReason: null, createdAt: at },
+      { status: 'handed_off' as const, handoffReason: 'low_confidence', createdAt: at },
+      { status: 'handed_off' as const, handoffReason: 'system_error', createdAt: at },
+      { status: 'active' as const, handoffReason: null, createdAt: at },
+      { status: 'active' as const, handoffReason: null, createdAt: at },
+    ]
+    const s = summarizeQuinnPerformance(rows, 5, 0)
+    expect(s.pending).toBe(2)
+    expect(s.resolvedConfirmed + s.resolvedAssumed + s.handedOff + s.systemErrors + s.pending).toBe(
+      s.involvements
+    )
   })
 
   it('computes the involvement rate against total conversations in range', () => {

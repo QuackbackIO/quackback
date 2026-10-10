@@ -6,7 +6,8 @@ Quackback is designed so product and support teams can run customer feedback and
 
 - **AGPL-3.0** — run Quackback on your own infrastructure, fully functional, with no seat tax.
 - Data stays in **your PostgreSQL**. There is no queue or cache service to operate beside it, and no required third-party analytics plane for product data.
-- Anonymous usage statistics (version, coarse product-adoption counts — never emails, URLs, hostnames, or content) are sent once a day and can be switched off with `DISABLE_TELEMETRY=true`.
+- Anonymous usage statistics (version, setup and banded usage counts; never emails, names, URLs, hostnames, IP-derived location or content) are sent to PostHog once a day and can be switched off with `DISABLE_TELEMETRY=true`. [telemetry.md](telemetry.md) lists every field.
+- Browser product analytics are off unless an operator sets `POSTHOG_KEY`, and then load only in the admin app.
 - Enterprise images add **SSO (OIDC/SAML via your IdP), audit logs, and IP allowlists** (see `deploy/self-hosted`).
 
 ## Cloud

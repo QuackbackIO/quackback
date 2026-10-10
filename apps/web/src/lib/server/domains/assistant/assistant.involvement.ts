@@ -13,6 +13,7 @@ import {
   conversationMessages,
   and,
   eq,
+  lte,
   gt,
   lt,
   isNull,
@@ -26,6 +27,7 @@ import {
 } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import { logger } from '@/lib/server/logger'
+import { notTestConversation } from '@/lib/server/test-data'
 import type { AssistantInvolvementId, ConversationId } from '@quackback/ids'
 import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
 
@@ -64,6 +66,8 @@ export async function countAssistantInboxBuckets(
   const rows = await exec
     .select({ status: assistantInvolvements.status, n: sql<number>`count(*)::int` })
     .from(assistantInvolvements)
+    // Badges count real conversations; a teammate's test thread is not work.
+    .where(notTestConversation(assistantInvolvements.conversationId))
     .groupBy(assistantInvolvements.status)
   const byStatus = new Map(rows.map((r) => [r.status, r.n]))
   const sum = (statuses: readonly AssistantInvolvementStatus[]) =>
@@ -255,18 +259,41 @@ const POSITIVE_CSAT_RATING = 4
 /**
  * Resolve Quinn's active involvement as confirmed off a positive CSAT rating
  * when it already gave a real answer. Subscribed to conversation.csat_submitted
- * (events/process.ts), which fires only on the first submission — a later
- * rating change does not re-run it. No-op without an active involvement, one
+ * (events/event-reactions.ts), which fires only on the first submission;
+ * a later rating change does not re-run it. No-op without an active involvement, one
  * Quinn hasn't yet answered, or a rating below the positive threshold.
  * Best-effort: a failure never surfaces to the CSAT submission that raised it.
+ *
+ * The reaction can run late, so the rating is bound to the involvement it was
+ * given about: the latest one opened at or before `submittedAt` (at most one
+ * is active at a time). Only that involvement is confirmed, and only while it
+ * is still active; one opened after the rating is never touched.
  */
 export async function confirmResolutionFromCsat(
   conversationId: ConversationId,
-  rating: number
+  rating: number,
+  submittedAt: Date
 ): Promise<void> {
   try {
-    const involvement = await getActiveInvolvement(conversationId)
-    if (!involvement?.lastAssistantAnswerAt) return
+    const [involvement] = await db
+      .select()
+      .from(assistantInvolvements)
+      .where(
+        and(
+          eq(assistantInvolvements.conversationId, conversationId),
+          lte(assistantInvolvements.createdAt, submittedAt)
+        )
+      )
+      .orderBy(desc(assistantInvolvements.createdAt))
+      .limit(1)
+    if (!involvement || involvement.status !== 'active') {
+      log.debug(
+        { conversation_id: conversationId, submitted_at: submittedAt.toISOString() },
+        'no active involvement from the time of the rating, skipped'
+      )
+      return
+    }
+    if (!involvement.lastAssistantAnswerAt) return
     const eligible = confirmedResolutionEligible({
       gaveRealAnswer: true,
       explicitAffirmation: rating >= POSITIVE_CSAT_RATING,

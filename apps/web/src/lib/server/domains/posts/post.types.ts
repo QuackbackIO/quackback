@@ -131,6 +131,10 @@ export interface InboxPostListParams {
   /** Filter by segment IDs - posts whose author is in any of these segments */
   segmentIds?: import('@quackback/ids').SegmentId[]
   ownerId?: string | null
+  /** Filter to posts authored by this teammate. */
+  authorId?: PrincipalId
+  /** Filter to posts whose author user email matches (case-insensitive). */
+  authorEmail?: string
   search?: string
   dateFrom?: Date
   dateTo?: Date
@@ -142,6 +146,8 @@ export interface InboxPostListParams {
   sort?: 'newest' | 'oldest' | 'votes' | 'priority'
   /** Show only soft-deleted posts (within 30-day restorable window) */
   showDeleted?: boolean
+  /** Leave out teammates' test ideas (API, MCP and Copilot reads). */
+  excludeTest?: boolean
   cursor?: string
   limit?: number
 }

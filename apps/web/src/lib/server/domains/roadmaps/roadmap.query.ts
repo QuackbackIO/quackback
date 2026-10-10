@@ -13,13 +13,21 @@ import {
   roadmapColumns,
   posts,
   postTagAssignments,
+  postTags,
   boards,
   userSegments,
   type Roadmap,
 } from '@/lib/server/db'
 import { type RoadmapId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
-import { ANONYMOUS_ACTOR, boardViewFilter, canViewRoadmap, type Actor } from '@/lib/server/policy'
+import {
+  ANONYMOUS_ACTOR,
+  boardViewFilter,
+  canViewRoadmap,
+  postTestViewFilter,
+  type Actor,
+} from '@/lib/server/policy'
+import { publicTagCondition } from '@/lib/server/domains/posts/post.public'
 import {
   parseRoadmapDateBucket,
   roadmapBaseFilterSchema,
@@ -42,19 +50,32 @@ function parseBaseFilter(roadmap: Roadmap): RoadmapBaseFilter {
   return parsed.data as RoadmapBaseFilter
 }
 
-function addDimensionConditions(conditions: SQL[], filter: RoadmapBaseFilter): void {
+/**
+ * `viewer` is set only for caller-supplied (runtime) filters on the public
+ * roadmap: an internal tag id in a crafted URL must then be inert for
+ * non-team viewers, or the filter would reveal which posts carry a tag they
+ * are never shown. Admin-configured base filters define the roadmap's
+ * membership and are not caller-controlled, so they pass no viewer.
+ */
+function addDimensionConditions(
+  conditions: SQL[],
+  filter: RoadmapBaseFilter,
+  viewer?: Actor
+): void {
   if (filter.statusIds?.length) conditions.push(inArray(posts.statusId, filter.statusIds))
   if (filter.boardIds?.length) conditions.push(inArray(posts.boardId, filter.boardIds))
   if (filter.tagIds?.length) {
-    conditions.push(
-      inArray(
-        posts.id,
-        db
+    const tagSubquery = viewer
+      ? db
+          .selectDistinct({ postId: postTagAssignments.postId })
+          .from(postTagAssignments)
+          .innerJoin(postTags, eq(postTags.id, postTagAssignments.tagId))
+          .where(and(inArray(postTagAssignments.tagId, filter.tagIds), publicTagCondition(viewer)))
+      : db
           .selectDistinct({ postId: postTagAssignments.postId })
           .from(postTagAssignments)
           .where(inArray(postTagAssignments.tagId, filter.tagIds))
-      )
-    )
+    conditions.push(inArray(posts.id, tagSubquery))
   }
   if (filter.segmentIds?.length) {
     conditions.push(
@@ -105,18 +126,22 @@ function membershipConditions(
   return conditions
 }
 
-function runtimeFilterConditions(options: RoadmapPostsQueryOptions): SQL[] {
+function runtimeFilterConditions(options: RoadmapPostsQueryOptions, viewer?: Actor): SQL[] {
   const conditions: SQL[] = []
   if (options.search) {
     conditions.push(
       sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${options.search})`
     )
   }
-  addDimensionConditions(conditions, {
-    boardIds: options.boardIds,
-    tagIds: options.tagIds,
-    segmentIds: options.segmentIds,
-  })
+  addDimensionConditions(
+    conditions,
+    {
+      boardIds: options.boardIds,
+      tagIds: options.tagIds,
+      segmentIds: options.segmentIds,
+    },
+    viewer
+  )
   return conditions
 }
 
@@ -145,11 +170,18 @@ async function queryRoadmapPosts(
   const { limit = 20, offset = 0 } = options
   const conditions: SQL[] = [isNull(posts.deletedAt), isNull(posts.canonicalPostId)]
   if (publicActor) {
-    conditions.push(eq(posts.moderationState, 'published'), boardViewFilter(publicActor))
+    conditions.push(
+      eq(posts.moderationState, 'published'),
+      boardViewFilter(publicActor),
+      postTestViewFilter(publicActor)
+    )
   } else {
     conditions.push(isNull(boards.deletedAt))
   }
-  conditions.push(...membershipConditions(roadmap, options), ...runtimeFilterConditions(options))
+  conditions.push(
+    ...membershipConditions(roadmap, options),
+    ...runtimeFilterConditions(options, publicActor)
+  )
   const orderBy = sortFor(options)
 
   const [results, countResult] = await Promise.all([
@@ -208,6 +240,27 @@ export async function getPublicRoadmapPosts(
   return queryRoadmapPosts(roadmap, options, actor)
 }
 
+/**
+ * The first page of every column of one public roadmap board, under the same
+ * filters, in one request rather than one per column. Loads and authorizes
+ * the roadmap once and reuses it for every column, instead of the roundtrip
+ * per column `getPublicRoadmapPosts` would repeat.
+ */
+export async function getPublicRoadmapColumnsPosts(
+  roadmapId: RoadmapId,
+  columns: Pick<RoadmapPostsQueryOptions, 'statusId' | 'bucketId'>[],
+  shared: Omit<RoadmapPostsQueryOptions, 'statusId' | 'bucketId' | 'offset'>,
+  actor: Actor = ANONYMOUS_ACTOR
+): Promise<RoadmapPostsListResult[]> {
+  const roadmap = await loadRoadmap(roadmapId)
+  if (!canViewRoadmap(actor, roadmap).allowed) {
+    throw new NotFoundError('ROADMAP_NOT_FOUND', `Roadmap with ID ${roadmapId} not found`)
+  }
+  return Promise.all(
+    columns.map((column) => queryRoadmapPosts(roadmap, { ...shared, ...column, offset: 0 }, actor))
+  )
+}
+
 async function dateBucketsFor(roadmapId: RoadmapId, actor?: Actor): Promise<RoadmapDateBucket[]> {
   const roadmap = await loadRoadmap(roadmapId)
   if (roadmap.type !== 'date') return []
@@ -217,7 +270,11 @@ async function dateBucketsFor(roadmapId: RoadmapId, actor?: Actor): Promise<Road
 
   const conditions: SQL[] = [isNull(posts.deletedAt), isNull(posts.canonicalPostId)]
   if (actor) {
-    conditions.push(eq(posts.moderationState, 'published'), boardViewFilter(actor))
+    conditions.push(
+      eq(posts.moderationState, 'published'),
+      boardViewFilter(actor),
+      postTestViewFilter(actor)
+    )
   } else {
     conditions.push(isNull(boards.deletedAt))
   }

@@ -22,8 +22,8 @@ export const Route = createFileRoute('/admin/status')({
 
 function StatusPage() {
   return (
-    <main className="h-full">
+    <div className="h-full">
       <StatusAdmin />
-    </main>
+    </div>
   )
 }

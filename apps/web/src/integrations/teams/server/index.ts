@@ -1,3 +1,4 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { teamsHook } from '@/integrations/teams/server/hook'
 import {
@@ -12,6 +13,7 @@ const log = logger.child({ component: 'teams' })
 
 export const teamsIntegration: IntegrationDefinition = {
   id: 'teams',
+  destination: channelDestination(['teamId', 'tenantId']),
   catalog: teamsCatalog,
   oauth: {
     stateType: 'teams_oauth',

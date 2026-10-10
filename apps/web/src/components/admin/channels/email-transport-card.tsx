@@ -1,59 +1,50 @@
 import { useQuery } from '@tanstack/react-query'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { getEmailChannelStatusFn } from '@/lib/server/functions/settings'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
+import { channelSettingsQueries } from '@/lib/client/queries/channel-settings'
 
-function EmailStatusRow({ label, value, ok }: { label: string; value: string; ok: boolean }) {
-  return (
-    <div className="flex items-center justify-between py-1.5">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="flex items-center gap-2 text-sm">
-        <span
-          className={
-            ok ? 'size-2 rounded-full bg-emerald-500' : 'size-2 rounded-full bg-muted-foreground/40'
-          }
-          aria-hidden
-        />
-        {value}
-      </span>
-    </div>
-  )
+function TransportValue({ children }: { children: string }) {
+  return <span className="text-sm">{children}</span>
 }
+
+const OUTBOUND_LABEL = {
+  ses: 'Amazon SES',
+  smtp: 'SMTP',
+  resend: 'Resend',
+  console: 'Not configured',
+} as const
 
 /** Read-only env probe: outbound provider, from-address, inbound domain. */
 export function EmailTransportCard() {
-  const { data } = useQuery({
-    queryKey: ['settings', 'email-channel-status'],
-    queryFn: () => getEmailChannelStatusFn(),
-    staleTime: 60_000,
-  })
+  const { data } = useQuery(channelSettingsQueries.emailStatus())
 
   if (!data) return null
 
-  const outboundLabel =
-    data.provider === 'smtp' ? 'SMTP' : data.provider === 'ses' ? 'Amazon SES' : 'Not configured'
+  const outboundLabel = OUTBOUND_LABEL[data.provider]
 
   return (
     <SettingsCard
       title="Transport"
       description="How conversation emails are sent and received. Configured via environment variables on the server."
     >
-      <div className="divide-y divide-border/40">
-        <EmailStatusRow
+      <SettingRows>
+        <SettingRow
           label="Outbound email"
-          value={outboundLabel}
-          ok={data.provider !== 'console'}
+          control={<TransportValue>{outboundLabel}</TransportValue>}
         />
-        <EmailStatusRow
+        <SettingRow
           label="From address"
-          value={data.fromAddress ?? 'Not set'}
-          ok={!!data.fromAddress}
+          control={<TransportValue>{data.fromAddress ?? 'Not set'}</TransportValue>}
         />
-        <EmailStatusRow
+        <SettingRow
           label="Inbound replies"
-          value={data.inboundConfigured ? (data.inboundDomain ?? 'Configured') : 'Not configured'}
-          ok={data.inboundConfigured}
+          control={
+            <TransportValue>
+              {data.inboundConfigured ? (data.inboundDomain ?? 'Configured') : 'Not configured'}
+            </TransportValue>
+          }
         />
-      </div>
+      </SettingRows>
     </SettingsCard>
   )
 }

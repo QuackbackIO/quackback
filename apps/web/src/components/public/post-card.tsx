@@ -13,7 +13,7 @@ import {
 import { toast } from 'sonner'
 import { contentPreview } from '@/lib/shared/utils/string'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -27,7 +27,7 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
-import { cn, getInitials } from '@/lib/shared/utils'
+import { cn } from '@/lib/shared/utils'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import type { PostId, PostStatusId, PrincipalId } from '@quackback/ids'
@@ -257,7 +257,7 @@ export function PostCard({
         'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border transition-colors duration-200',
         'w-12 py-2 gap-0.5',
         currentHasVoted
-          ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15'
+          ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
           : 'bg-muted/40 text-muted-foreground border-border/50',
         // Hover affordances only when the button is actionable (not denied).
         !currentHasVoted &&
@@ -459,12 +459,12 @@ export function PostCard({
   const authorInner = (
     <>
       {showAvatar && (
-        <Avatar className="h-5 w-5">
-          {authorAvatarUrl && (
-            <AvatarImage src={authorAvatarUrl} alt={authorName || authorFallback} />
-          )}
-          <AvatarFallback className="bg-muted text-xs">{getInitials(authorName)}</AvatarFallback>
-        </Avatar>
+        <Avatar
+          className="h-5 w-5"
+          src={authorAvatarUrl}
+          name={authorName}
+          fallbackClassName="bg-muted text-xs"
+        />
       )}
       <span className={showAvatar ? '' : 'text-foreground/80'}>{authorName || authorFallback}</span>
     </>

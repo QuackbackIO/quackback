@@ -5,10 +5,11 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { ShieldCheckIcon } from '@heroicons/react/24/solid'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { AuthSettings, type AuthTab } from '@/components/admin/settings/security/auth-settings'
+import { readBatch } from '@/lib/client/queries/read-batch'
+import { warmQuery } from '@/lib/client/queries/warm-query'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const searchSchema = z.object({
   // The Access & Security page splits by CONCERN, not by surface:
@@ -29,24 +30,32 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/admin/settings/security/authentication')({
+  head: adminPageHead('Authentication settings'),
   validateSearch: searchSchema,
-  loader: async ({ context }) => {
+  loader: async ({ context, location }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.AUTH_MANAGE)
 
     const { queryClient } = context
-    // Auth + SSO reads are cheap and never 402. The audit feed is a Scale
+    // The portal access tab (the default) lists the segments a private portal
+    // can admit, read under segment.view.
+    const tab = (location.search as { tab?: unknown }).tab ?? 'portal-access'
+    const warmSegments =
+      tab === 'portal-access' && !!context.permissions?.includes(PERMISSIONS.SEGMENT_VIEW)
+    // Auth + SSO reads are cheap and never 402. The audit feed is an Enterprise
     // entitlement: prefetching it here took down Portal access and Sign-in
     // on every other plan. The audit tab loads that query only when entitled.
     const { listEntitlementsFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const ensure = readBatch(queryClient)
     const [, entitlements] = await Promise.all([
       Promise.all([
-        queryClient.ensureQueryData(settingsQueries.authConfig()),
-        queryClient.ensureQueryData(settingsQueries.verifiedDomains()),
-        queryClient.ensureQueryData(settingsQueries.portalConfig()),
-        queryClient.ensureQueryData(adminQueries.authProviderStatus()),
-        queryClient.ensureQueryData(settingsQueries.identityProviders()),
-        queryClient.ensureQueryData(adminQueries.recoveryCodes()),
+        ensure(settingsQueries.authConfig()),
+        ensure(settingsQueries.verifiedDomains()),
+        ensure(settingsQueries.portalConfig()),
+        ensure(adminQueries.authProviderStatus()),
+        ensure(settingsQueries.identityProviders()),
+        ensure(adminQueries.recoveryCodes()),
+        warmSegments ? warmQuery(ensure, adminQueries.segments()) : undefined,
       ]),
       listEntitlementsFn(),
       ensureBillingCatalogue(queryClient, context.billingEnabled),
@@ -68,15 +77,10 @@ function AuthenticationPage() {
   const { ssoEntitled, auditEntitled } = Route.useLoaderData()
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
-      </div>
-      <PageHeader
-        icon={ShieldCheckIcon}
-        title="Access & Security"
-        description="Who can reach the portal, how everyone signs in, and what admins changed."
-      />
+    <SettingsPage
+      page="/admin/settings/security/authentication"
+      width={tab === 'audit-log' ? 'wide' : 'form'}
+    >
       <AuthSettings
         tab={tab}
         teamAuthConfig={authConfigQuery.data}
@@ -85,6 +89,6 @@ function AuthenticationPage() {
         customOidcProviderTier={ssoEntitled}
         auditEntitled={auditEntitled}
       />
-    </div>
+    </SettingsPage>
   )
 }

@@ -2,7 +2,6 @@ import { createAuthClient } from 'better-auth/client'
 import {
   anonymousClient,
   emailOTPClient,
-  genericOAuthClient,
   magicLinkClient,
   oneTimeTokenClient,
   twoFactorClient,
@@ -32,7 +31,6 @@ export const authClient = createAuthClient({
   plugins: [
     anonymousClient(),
     emailOTPClient(),
-    genericOAuthClient(),
     magicLinkClient(),
     oneTimeTokenClient(),
     twoFactorClient({
@@ -47,7 +45,12 @@ export const authClient = createAuthClient({
  * Sign out the current user
  * Note: Call router.invalidate() after signOut to update session
  */
-export const signOut = authClient.signOut
+export const signOut: typeof authClient.signOut = async (...args) => {
+  if (typeof window !== 'undefined') {
+    window.Quackback?.('logout')
+  }
+  return authClient.signOut(...args)
+}
 
 /**
  * Check if the browser has an active session cookie.

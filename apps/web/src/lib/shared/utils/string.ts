@@ -1,9 +1,8 @@
+import { nameInitial } from './initial'
+
 /**
  * String utilities
  */
-
-import slugifyLib from 'slugify'
-import { transliterate } from 'transliteration'
 
 /**
  * Compute initials from a name string.
@@ -18,10 +17,10 @@ export function getInitials(name: string | null | undefined): string {
   if (!name) return '?'
   return name
     .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
+    .map((word) => nameInitial(word))
+    .filter(Boolean)
     .slice(0, 2)
+    .join('')
 }
 
 /**
@@ -68,23 +67,6 @@ export function stripMarkdownPreview(text: string, maxLength = 150): string {
     .trim()
   if (plain.length <= maxLength) return plain
   return plain.slice(0, maxLength).trimEnd() + '...'
-}
-
-/**
- * Generate a URL-friendly slug from text.
- *
- * Transliterates to ASCII first so non-Latin scripts survive as readable
- * romanizations — CJK via pinyin/romaji/romaja (反馈 -> "fan-kui"), plus
- * Cyrillic, Greek, etc. — then runs the strict slugifier for consistent
- * casing/separator handling. Returns '' for input that romanizes to nothing
- * (emoji- or punctuation-only); callers that need a guaranteed-present slug
- * supply their own fallback.
- */
-export function slugify(text: string): string {
-  // Guard nullish input: transliterate() coerces via String(), which would
-  // otherwise turn undefined/null into the literal slug "undefined"/"null".
-  if (!text) return ''
-  return slugifyLib(transliterate(text), { lower: true, strict: true })
 }
 
 /**

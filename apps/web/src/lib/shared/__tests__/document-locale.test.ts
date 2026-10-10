@@ -12,6 +12,31 @@ describe('documentLocale', () => {
   it('localizes the standalone auth and widget routes', () => {
     expect(documentLocale(['__root__', '/auth/reset-password'], 'zh-cn')).toBe('zh-cn')
     expect(documentLocale(['__root__', '/widget'], 'ar')).toBe('ar')
+    expect(documentLocale(['__root__', '/unsubscribe'], 'ar')).toBe('ar')
+  })
+  it('localizes the AI & Automation pages under settings and the workflow builder', () => {
+    for (const id of [
+      '/admin/settings/agent',
+      '/admin/settings/copilot',
+      '/admin/settings/skills',
+      '/admin/settings/connectors',
+      '/admin/settings/connectors_/$connectorId',
+      '/admin/settings/workflows',
+      '/admin/settings_/workflows/$workflowId',
+    ]) {
+      expect(documentLocale(['__root__', '/admin', id], 'zh-cn'), id).toBe('zh-cn')
+    }
+  })
+  it('keeps the other settings pages on the default', () => {
+    for (const id of [
+      '/admin/settings',
+      '/admin/settings/general',
+      '/admin/settings/agents',
+      '/admin/settings/integrations',
+      '/admin/settings/widget',
+    ]) {
+      expect(documentLocale(['__root__', '/admin', '/admin/settings', id], 'zh-cn'), id).toBe('en')
+    }
   })
   it('keeps untranslated auth utility pages on the default locale', () => {
     // These render hard-coded English with no IntlProvider — labeling them
@@ -29,7 +54,6 @@ describe('documentLocale', () => {
     expect(documentLocale(['__root__', '/admin/posts'], 'zh-cn')).toBe('en')
     expect(documentLocale(['__root__', '/onboarding'], 'ar')).toBe('en')
     expect(documentLocale(['__root__', '/apps'], 'zh-cn')).toBe('en')
-    expect(documentLocale(['__root__', '/unsubscribe'], 'zh-cn')).toBe('en')
     expect(documentLocale(['__root__', '/verify-magic-link'], 'zh-cn')).toBe('en')
   })
 })

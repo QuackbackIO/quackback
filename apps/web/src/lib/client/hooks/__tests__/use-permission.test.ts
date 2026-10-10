@@ -42,7 +42,8 @@ describe('usePermission', () => {
   it('resolves from the /admin route context principal.role', async () => {
     vi.resetModules()
     vi.doMock('@tanstack/react-router', () => ({
-      useRouteContext: () => ({ principal: { role: 'admin' } }),
+      useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
+        select({ principal: { role: 'admin' } }),
     }))
     const { usePermission } = await import('../use-permission')
 
@@ -56,7 +57,7 @@ describe('usePermission', () => {
   it('is false when there is no principal on the route context', async () => {
     vi.resetModules()
     vi.doMock('@tanstack/react-router', () => ({
-      useRouteContext: () => ({}),
+      useRouteContext: ({ select }: { select: (context: unknown) => unknown }) => select({}),
     }))
     const { usePermission } = await import('../use-permission')
 

@@ -1,9 +1,11 @@
 /**
  * OpenGraph / Twitter meta-tag parser.
  *
- * Pure function: no I/O, no imports, never throws.
+ * Pure function: no I/O, never throws.
  * Only scans up to the first 200 KB of HTML, stopping at </head>.
  */
+
+import { normalizeHexColor } from '@/lib/shared/website-brand-color'
 
 const MAX_SCAN_BYTES = 200 * 1024
 
@@ -44,7 +46,7 @@ function cap(s: string | null, max: number): string | null {
  * Attribute order is irrelevant.
  */
 function extractAttr(tag: string, attr: string): string | null {
-  const re = new RegExp(`${attr}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s/>]*))`, 'i')
+  const re = new RegExp(`(?:^|\\s)${attr}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s/>]*))`, 'i')
   const m = re.exec(tag)
   if (!m) return null
   return m[1] ?? m[2] ?? m[3] ?? null
@@ -73,6 +75,7 @@ export interface OpenGraphData {
   siteName: string | null
   imageUrl: string | null
   faviconUrl: string | null
+  themeColor: string | null
 }
 
 /**
@@ -97,6 +100,8 @@ export function parseOpenGraph(html: string, baseUrl: string): OpenGraphData {
     let twitterImage: string | null = null
     let htmlTitle: string | null = null
     let metaDescription: string | null = null
+    let themeColor: string | null = null
+    let themePriority = 0
 
     // Extract <title>...</title>
     const titleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(head)
@@ -124,6 +129,19 @@ export function parseOpenGraph(html: string, baseUrl: string): OpenGraphData {
       else if (name === 'twitter:description') twitterDescription = decoded
       else if (name === 'twitter:image') twitterImage = decoded
       else if (name === 'description') metaDescription = decoded
+      else if (name === 'theme-color') {
+        const media = extractAttr(tag, 'media')?.trim().toLowerCase() ?? ''
+        const priority = !media
+          ? 2
+          : /^\(\s*prefers-color-scheme\s*:\s*light\s*\)$/.test(media)
+            ? 1
+            : 0
+        const color = normalizeHexColor(decoded)
+        if (color && priority > themePriority) {
+          themeColor = color
+          themePriority = priority
+        }
+      }
     }
 
     // Priority: og: > twitter: > html fallback
@@ -170,8 +188,67 @@ export function parseOpenGraph(html: string, baseUrl: string): OpenGraphData {
       siteName: cap(rawSiteName, 100),
       imageUrl,
       faviconUrl,
+      themeColor,
     }
   } catch {
-    return { title: null, description: null, siteName: null, imageUrl: null, faviconUrl: null }
+    return {
+      title: null,
+      description: null,
+      siteName: null,
+      imageUrl: null,
+      faviconUrl: null,
+      themeColor: null,
+    }
+  }
+}
+
+export interface IconLink {
+  url: string
+  /** `apple-touch-icon`, which sites publish at a large size. */
+  touch: boolean
+  /** The largest declared square side in px, or null when not declared. */
+  size: number | null
+  type: string | null
+}
+
+const MAX_ICON_LINKS = 12
+
+function largestDeclaredSize(sizes: string | null): number | null {
+  const sides = (sizes ?? '')
+    .toLowerCase()
+    .split(/\s+/)
+    .map((entry) => /^(\d{1,5})x(\d{1,5})$/.exec(entry))
+    .filter((match): match is RegExpExecArray => match !== null)
+    .map((match) => Math.min(Number(match[1]), Number(match[2])))
+  return sides.length ? Math.max(...sides) : null
+}
+
+/**
+ * Every icon and touch-icon link in the head, in document order, with its
+ * declared size and type. Pure: no I/O, never throws.
+ */
+export function parseIconLinks(html: string, baseUrl: string): IconLink[] {
+  try {
+    const scoped = html.slice(0, MAX_SCAN_BYTES)
+    const headEnd = scoped.search(/<\/head\s*>/i)
+    const head = headEnd !== -1 ? scoped.slice(0, headEnd) : scoped
+    const icons: IconLink[] = []
+    const linkTagRe = /<link\s[^>]+>/gi
+    let match: RegExpExecArray | null
+    while ((match = linkTagRe.exec(head)) !== null && icons.length < MAX_ICON_LINKS) {
+      const tag = match[0]
+      const tokens = (extractAttr(tag, 'rel') ?? '').trim().toLowerCase().split(/\s+/)
+      const touch =
+        tokens.includes('apple-touch-icon') || tokens.includes('apple-touch-icon-precomposed')
+      if (!touch && !tokens.includes('icon')) continue
+      const href = extractAttr(tag, 'href')
+      const url = href ? resolveHttpUrl(decodeEntities(href), baseUrl, 2048) : null
+      if (!url) continue
+      const type = extractAttr(tag, 'type')?.trim().toLowerCase() || null
+      icons.push({ url, touch, size: largestDeclaredSize(extractAttr(tag, 'sizes')), type })
+    }
+    return icons
+  } catch {
+    return []
   }
 }

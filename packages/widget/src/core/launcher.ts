@@ -1,6 +1,12 @@
 export interface LauncherOptions {
   placement: 'left' | 'right'
   onClick: () => void
+  /**
+   * Mount the button (and greeting) inside this element with absolute
+   * positioning. Used by the admin live preview so the real launcher sits in
+   * the fake page instead of `position: fixed` on the viewport.
+   */
+  root?: HTMLElement
 }
 
 export interface LauncherHandle {
@@ -46,10 +52,15 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   // Visible button label — when set, it doubles as the accessible name.
   let labelText = ''
   // Proactive greeting bubble state. Dismissal persists per browser session so
-  // the bubble invites once without nagging on every page.
+  // the bubble invites once without nagging on every page. A contained preview
+  // must not write that key — it would hide the bubble for a later host visit.
   let greetingText: string | null = null
+  let localDismissed = false
+  const contained = Boolean(opts.root)
+  const edge = contained ? '0px' : '24px'
   const GREETING_DISMISS_KEY = 'quackback:launcher-greeting-dismissed'
   const greetingDismissed = (): boolean => {
+    if (contained) return localDismissed
     try {
       return sessionStorage.getItem(GREETING_DISMISS_KEY) === '1'
     } catch {
@@ -59,9 +70,9 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
 
   const btn = document.createElement('button')
   Object.assign(btn.style, {
-    position: 'fixed',
-    bottom: '24px',
-    [opts.placement === 'left' ? 'left' : 'right']: '24px',
+    position: contained ? 'absolute' : 'fixed',
+    bottom: contained ? '0px' : '24px',
+    [opts.placement === 'left' ? 'left' : 'right']: edge,
     zIndex: '2147483647',
     display: 'flex',
     alignItems: 'center',
@@ -171,9 +182,9 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   const side = opts.placement === 'left' ? 'left' : 'right'
   const bubble = document.createElement('div')
   Object.assign(bubble.style, {
-    position: 'fixed',
+    position: contained ? 'absolute' : 'fixed',
     bottom: '84px',
-    [side]: '24px',
+    [side]: edge,
     zIndex: '2147483646',
     display: 'none',
     alignItems: 'center',
@@ -213,17 +224,22 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     bubble.style.display = show ? 'flex' : 'none'
   }
   bubbleClose.addEventListener('click', () => {
-    try {
-      sessionStorage.setItem(GREETING_DISMISS_KEY, '1')
-    } catch {
-      /* private mode — dismiss for this page load only */
-      greetingText = null
+    if (contained) {
+      localDismissed = true
+    } else {
+      try {
+        sessionStorage.setItem(GREETING_DISMISS_KEY, '1')
+      } catch {
+        /* private mode — dismiss for this page load only */
+        greetingText = null
+      }
     }
     renderGreeting()
   })
   bubble.appendChild(bubbleText)
   bubble.appendChild(bubbleClose)
-  document.body.appendChild(bubble)
+  const mount = opts.root ?? document.body
+  mount.appendChild(bubble)
 
   btn.addEventListener('mouseenter', () => {
     btn.style.transform = 'translateY(-2px)'
@@ -235,7 +251,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   })
   btn.addEventListener('click', opts.onClick)
 
-  document.body.appendChild(btn)
+  mount.appendChild(btn)
 
   return {
     el: btn,
@@ -268,7 +284,9 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       renderBadge()
     },
     setGreeting(text) {
-      greetingText = text?.trim() || null
+      const next = text?.trim() || null
+      if (contained && next !== greetingText) localDismissed = false
+      greetingText = next
       bubbleText.textContent = greetingText ?? ''
       renderGreeting()
     },
@@ -285,10 +303,10 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       if (!isOpen) btn.setAttribute('aria-label', labelText || 'Open feedback widget')
     },
     setPlacement(side) {
-      btn.style.left = side === 'left' ? '24px' : ''
-      btn.style.right = side === 'right' ? '24px' : ''
-      bubble.style.left = side === 'left' ? '24px' : ''
-      bubble.style.right = side === 'right' ? '24px' : ''
+      btn.style.left = side === 'left' ? edge : ''
+      btn.style.right = side === 'right' ? edge : ''
+      bubble.style.left = side === 'left' ? edge : ''
+      bubble.style.right = side === 'right' ? edge : ''
     },
     reveal() {
       btn.style.opacity = '1'

@@ -1,3 +1,4 @@
+import { DEFAULT_WORKSPACE_ASSISTANT } from '@/lib/shared/assistant/config'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AssistantConfig } from '@/lib/shared/assistant/config'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -29,6 +30,7 @@ const hoisted = vi.hoisted(() => ({
   updateAssistantIdentity: vi.fn(),
   updateAssistantVoice: vi.fn(),
   updateWidgetAssistantDeployment: vi.fn(),
+  isAssistantConfigured: vi.fn(),
   requestHeaders: new Headers({
     'user-agent': 'assistant-settings-test',
     'x-request-id': 'request_1',
@@ -44,6 +46,10 @@ vi.mock('@/lib/server/domains/settings/settings.assistant', async (importOrigina
   getAssistantSettings: hoisted.getAssistantSettings,
   updateAssistantIdentity: hoisted.updateAssistantIdentity,
   updateAssistantVoice: hoisted.updateAssistantVoice,
+}))
+
+vi.mock('@/lib/server/domains/assistant/assistant.runtime', () => ({
+  isAssistantConfigured: hoisted.isAssistantConfigured,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
@@ -66,9 +72,10 @@ import {
 } from '../assistant-settings'
 
 const CONFIG: AssistantConfig = {
-  version: 3,
+  version: 4,
   identity: { name: 'Quinn', avatarUrl: null },
   agents: {
+    workspace: structuredClone(DEFAULT_WORKSPACE_ASSISTANT),
     agent: {
       voice: { tone: 'balanced', responseLength: 'balanced', additionalInstructions: '' },
       knowledge: {
@@ -134,6 +141,7 @@ beforeEach(() => {
   hoisted.requireAuth.mockResolvedValue(AUTH_CONTEXT)
   hoisted.actorFromAuth.mockReturnValue(AUDIT_ACTOR)
   hoisted.getAssistantSettings.mockResolvedValue(SETTINGS_RESULT)
+  hoisted.isAssistantConfigured.mockReturnValue(true)
   hoisted.updateAssistantIdentity.mockResolvedValue(CONFIG_RESULT)
   hoisted.updateAssistantVoice.mockResolvedValue(CONFIG_RESULT)
   hoisted.updateWidgetAssistantDeployment.mockResolvedValue({ enabled: true, respond: true })
@@ -174,9 +182,21 @@ describe('assistant settings permission gates', () => {
   })
 })
 
+describe('assistant settings availability', () => {
+  it('reports whether an AI model is configured so Copilot can say it is unavailable', async () => {
+    hoisted.isAssistantConfigured.mockReturnValue(false)
+    await expect(getAssistantSettingsFn()).resolves.toMatchObject({ aiAvailable: false })
+    hoisted.isAssistantConfigured.mockReturnValue(true)
+    await expect(getAssistantSettingsFn()).resolves.toMatchObject({ aiAvailable: true })
+  })
+})
+
 describe('assistant settings V2 boundary', () => {
   it('returns the complete config, revision, and managed paths from the strict read', async () => {
-    await expect(getAssistantSettingsFn()).resolves.toEqual(SETTINGS_RESULT)
+    await expect(getAssistantSettingsFn()).resolves.toEqual({
+      ...SETTINGS_RESULT,
+      aiAvailable: true,
+    })
     expect(hoisted.getAssistantSettings).toHaveBeenCalledOnce()
   })
 

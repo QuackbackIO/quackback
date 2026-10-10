@@ -21,8 +21,8 @@
  *
  * `summarizeConversationOnClose` is best-effort end to end: every failure
  * (unconfigured AI, a malformed model response, a DB error) is caught and
- * logged here, so it never throws into its caller — the event hook
- * (events/process.ts) that fires it fire-and-forget.
+ * logged here, so it never throws into its caller: the event reaction
+ * (events/event-reactions.ts) that runs it.
  */
 import { chat } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
@@ -33,11 +33,18 @@ import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
 } from '@/lib/server/domains/ai/config'
+import { abortControllerFor } from '@/lib/server/domains/ai/abort'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 import { getChatModel, getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import { loadConversationThread } from './assistant.thread'
+import {
+  isCurrentClose,
+  upToClose,
+  writeForCurrentClose,
+  type TriggeringClose,
+} from './close-summary'
 import { buildConversationTranscript, GROUNDING_CHAR_BUDGET } from './transcript'
 import { createId, type ConversationId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
@@ -71,11 +78,15 @@ const ConversationSummarySchema = z.object({ summary: z.string() })
  * summarize yet (or the conversation itself can't be found); the caller
  * treats `null` as "nothing to summarize" rather than an error.
  */
-async function loadConversationSummaryInput(conversationId: ConversationId) {
+async function loadConversationSummaryInput(
+  conversationId: ConversationId,
+  close: TriggeringClose
+) {
   await enforceAiTokenBudget()
 
   const model = getChatModel('summary')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return null
+  if (!(await isCurrentClose('conversation', conversationId, close))) return null
 
   const [conversationRow, messages] = await Promise.all([
     db.query.conversations.findFirst({
@@ -89,7 +100,7 @@ async function loadConversationSummaryInput(conversationId: ConversationId) {
     return null
   }
 
-  const transcript = buildConversationTranscript(messages)
+  const transcript = buildConversationTranscript(upToClose(messages, close))
   if (!transcript) return null // nothing customer-visible happened; no summary to write
 
   const truncated =
@@ -106,12 +117,21 @@ async function loadConversationSummaryInput(conversationId: ConversationId) {
  * `summary` chat model isn't configured — mirrors
  * `generateAndSavePostSummary`'s guard — and never throws: every failure path
  * (missing conversation, empty transcript, malformed model output, a DB or
- * provider error) is logged and swallowed, since this runs fire-and-forget
- * off the conversation-close event.
+ * provider error) is logged and swallowed, since this runs off the
+ * conversation-close event. `signal` (the reaction job's deadline) aborts the
+ * provider calls.
+ *
+ * Bound to `close`, the close that queued it (see close-summary.ts): it
+ * summarizes the messages up to that close, and writes only while that close
+ * is still the conversation's current one and the deadline has not passed.
  */
-export async function summarizeConversationOnClose(conversationId: ConversationId): Promise<void> {
+export async function summarizeConversationOnClose(
+  conversationId: ConversationId,
+  close: TriggeringClose,
+  opts: { signal?: AbortSignal } = {}
+): Promise<void> {
   try {
-    const input = await loadConversationSummaryInput(conversationId)
+    const input = await loadConversationSummaryInput(conversationId, close)
     if (!input) return
     const { model, conversationRow, transcript } = input
 
@@ -128,6 +148,7 @@ export async function summarizeConversationOnClose(conversationId: ConversationI
       messages: [{ role: 'user', content: transcript }],
       outputSchema: ConversationSummarySchema,
       stream: false,
+      abortController: abortControllerFor(opts.signal),
       modelOptions: { max_tokens: 400, ...structuredOutputProviderOptions() },
       middleware: [
         createUsageLoggingMiddleware({
@@ -147,9 +168,11 @@ export async function summarizeConversationOnClose(conversationId: ConversationI
     // Best-effort: a failed/unavailable embedding still saves the summary
     // text (retrieval's keyword fallback can still use it), just without the
     // semantic ranking path.
-    const embedding = await generateEmbedding(summaryText, {
-      pipelineStep: 'assistant_summary_embedding',
-    })
+    const embedding = await generateEmbedding(
+      summaryText,
+      { pipelineStep: 'assistant_summary_embedding' },
+      { signal: opts.signal }
+    )
 
     const values = {
       conversationId,
@@ -165,15 +188,22 @@ export async function summarizeConversationOnClose(conversationId: ConversationI
         : {}),
     }
 
-    await db
-      .insert(conversationSummaries)
-      .values({ id: createId('conversation_summary'), ...values })
-      .onConflictDoUpdate({
-        target: conversationSummaries.conversationId,
-        set: values,
-      })
-
-    log.info({ conversation_id: conversationId }, 'conversation summary generated')
+    const written = await writeForCurrentClose(
+      'conversation',
+      conversationId,
+      close,
+      opts.signal,
+      async (tx) => {
+        await tx
+          .insert(conversationSummaries)
+          .values({ id: createId('conversation_summary'), ...values })
+          .onConflictDoUpdate({
+            target: conversationSummaries.conversationId,
+            set: values,
+          })
+      }
+    )
+    if (written) log.info({ conversation_id: conversationId }, 'conversation summary generated')
   } catch (err) {
     log.error({ err, conversation_id: conversationId }, 'conversation summary generation failed')
   }

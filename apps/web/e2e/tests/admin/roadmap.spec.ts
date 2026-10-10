@@ -55,21 +55,20 @@ test.describe('Admin Roadmap - Sidebar', () => {
 
   test('shows create roadmap button in sidebar', async ({ page }) => {
     // The + icon button lives next to the "Roadmaps" header
-    // It has no accessible name but is the only button in that header area
-    const createRoadmapBtn = page.locator('main aside').getByRole('button').first()
+    const createRoadmapBtn = page.locator('main aside').getByRole('button', { name: 'New roadmap' })
     await expect(createRoadmapBtn).toBeVisible({ timeout: 10000 })
   })
 
   test('can open create roadmap dialog', async ({ page }) => {
     // Click the + button next to the "Roadmaps" heading
-    const createBtn = page.locator('main aside').getByRole('button').first()
+    const createBtn = page.locator('main aside').getByRole('button', { name: 'New roadmap' })
 
     if ((await createBtn.count()) > 0) {
       await createBtn.click()
 
       const dialog = page.getByRole('dialog')
       await expect(dialog).toBeVisible({ timeout: 5000 })
-      await expect(dialog.getByText('Create Roadmap')).toBeVisible()
+      await expect(dialog.getByRole('heading', { name: 'Create roadmap' })).toBeVisible()
 
       // Dialog should expose the saved-view layout and visibility controls.
       await expect(dialog.getByLabel('Name', { exact: true })).toBeVisible()
@@ -87,7 +86,7 @@ test.describe('Admin Roadmap - Sidebar', () => {
   })
 
   test('can close create roadmap dialog with Escape', async ({ page }) => {
-    const createBtn = page.locator('main aside').getByRole('button').first()
+    const createBtn = page.locator('main aside').getByRole('button', { name: 'New roadmap' })
 
     if ((await createBtn.count()) > 0) {
       await createBtn.click()
@@ -224,7 +223,7 @@ test.describe('Admin Roadmap - CRUD', () => {
 
           const editDialog = page.getByRole('dialog')
           await expect(editDialog).toBeVisible({ timeout: 5000 })
-          await expect(editDialog.getByText('Edit Roadmap')).toBeVisible()
+          await expect(editDialog.getByText('Edit roadmap')).toBeVisible()
 
           // Name field should be pre-filled
           await expect(editDialog.getByLabel(/^name$/i)).not.toHaveValue('')
@@ -297,7 +296,9 @@ test.describe('Admin Roadmap - CRUD', () => {
           // ConfirmDialog renders as an alertdialog or dialog
           const confirmDialog = page.getByRole('alertdialog').or(page.getByRole('dialog'))
           await expect(confirmDialog).toBeVisible({ timeout: 5000 })
-          await expect(confirmDialog.getByText(/delete roadmap/i)).toBeVisible()
+          await expect(
+            confirmDialog.getByRole('heading', { name: /delete roadmap/i })
+          ).toBeVisible()
 
           // Cancel — do not actually delete
           const cancelBtn = confirmDialog.getByRole('button', { name: /cancel/i })
@@ -746,22 +747,22 @@ test.describe('Admin Roadmap - Filters bar', () => {
     await page.waitForLoadState('networkidle')
   })
 
-  test('shows search button in filters bar', async ({ page }) => {
+  test('shows the search field in the toolbar', async ({ page }) => {
     const noRoadmapMsg = page.getByText('No roadmap selected')
 
     if ((await noRoadmapMsg.count()) === 0) {
-      const searchBtn = page.getByRole('button', { name: /search/i }).or(page.getByText('Search'))
-      await expect(searchBtn.first()).toBeVisible({ timeout: 10000 })
+      await expect(page.getByPlaceholder('Search posts...')).toBeVisible({ timeout: 10000 })
     }
   })
 
-  test('shows sort options (Votes, Newest, Oldest)', async ({ page }) => {
+  test('shows sort options (Votes, Newest, Oldest) in the sort menu', async ({ page }) => {
     const noRoadmapMsg = page.getByText('No roadmap selected')
 
     if ((await noRoadmapMsg.count()) === 0) {
-      await expect(page.getByRole('button', { name: 'Votes' })).toBeVisible({ timeout: 10000 })
-      await expect(page.getByRole('button', { name: 'Newest' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Oldest' })).toBeVisible()
+      await page.getByRole('button', { name: 'Sort: Votes' }).click({ timeout: 10000 })
+      await expect(page.getByRole('menuitemradio', { name: 'Votes' })).toBeVisible()
+      await expect(page.getByRole('menuitemradio', { name: 'Newest' })).toBeVisible()
+      await expect(page.getByRole('menuitemradio', { name: 'Oldest' })).toBeVisible()
     }
   })
 
@@ -769,38 +770,38 @@ test.describe('Admin Roadmap - Filters bar', () => {
     const noRoadmapMsg = page.getByText('No roadmap selected')
 
     if ((await noRoadmapMsg.count()) === 0) {
-      const newestBtn = page.getByRole('button', { name: 'Newest' })
-      await newestBtn.click()
+      await page.getByRole('button', { name: 'Sort: Votes' }).click()
+      await page.getByRole('menuitemradio', { name: 'Newest' }).click()
 
       // URL should have sort=newest
       await expect(page).toHaveURL(/sort=newest/, { timeout: 5000 })
     }
   })
 
-  test('shows "Add filter" button', async ({ page }) => {
+  test('shows the Filter button', async ({ page }) => {
     const noRoadmapMsg = page.getByText('No roadmap selected')
 
     if ((await noRoadmapMsg.count()) === 0) {
-      const addFilterBtn = page.getByText('Add filter')
+      const addFilterBtn = page.getByRole('button', { name: 'Filter', exact: true })
       await expect(addFilterBtn).toBeVisible({ timeout: 10000 })
     }
   })
 
-  test('can open Add filter popover', async ({ page }) => {
+  test('can open the Filter popover', async ({ page }) => {
     const noRoadmapMsg = page.getByText('No roadmap selected')
 
     if ((await noRoadmapMsg.count()) === 0) {
-      const addFilterBtn = page.getByText('Add filter')
+      const addFilterBtn = page.getByRole('button', { name: 'Filter', exact: true })
 
       if ((await addFilterBtn.count()) > 0) {
         await addFilterBtn.click()
 
-        // Popover should open with Board / PostTag categories
+        // Popover should open with Board / Tag categories
         const popover = page.locator('[data-slot="popover-content"]')
         await expect(popover).toBeVisible({ timeout: 5000 })
 
         await expect(popover.getByText('Board')).toBeVisible()
-        await expect(popover.getByText('PostTag')).toBeVisible()
+        await expect(popover.getByText('Tag')).toBeVisible()
 
         // Close popover
         await page.keyboard.press('Escape')
@@ -808,25 +809,14 @@ test.describe('Admin Roadmap - Filters bar', () => {
     }
   })
 
-  test('can open search popover and type a query', async ({ page }) => {
+  test('can type a search query', async ({ page }) => {
     const noRoadmapMsg = page.getByText('No roadmap selected')
 
     if ((await noRoadmapMsg.count()) === 0) {
-      const searchBtn = page.getByText('Search').first()
+      await page.getByPlaceholder('Search posts...').fill('test query')
 
-      if ((await searchBtn.count()) > 0) {
-        await searchBtn.click()
-
-        // Search popover shows an input
-        const searchInput = page.getByPlaceholder('Search posts...')
-        await expect(searchInput).toBeVisible({ timeout: 5000 })
-
-        await searchInput.fill('test query')
-        await page.keyboard.press('Enter')
-
-        // URL should reflect the search param
-        await expect(page).toHaveURL(/search=test/, { timeout: 5000 })
-      }
+      // URL should reflect the search param
+      await expect(page).toHaveURL(/search=test/, { timeout: 5000 })
     }
   })
 })

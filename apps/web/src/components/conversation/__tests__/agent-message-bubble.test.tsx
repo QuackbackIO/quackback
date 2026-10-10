@@ -6,9 +6,12 @@
  * toggle, flips to the original on click, and reads "Show translation" once
  * showing the original.
  */
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
-import { AgentMessageBubble } from '../message-bubble'
+import { IntlProvider } from 'react-intl'
+import { AgentMessageBubble, VisitorMessageBubble } from '../message-bubble'
+import { canDeleteAgentMessage, canEditAgentMessage } from '../message-edit'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 afterEach(cleanup)
@@ -36,6 +39,135 @@ function baseMessage(over: Partial<AgentConversationMessageDTO> = {}): AgentConv
     ...over,
   }
 }
+
+describe('AgentMessageBubble — edited mark', () => {
+  it('shows a small (edited) note after the time once the body has been edited', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          editedAt: '2026-07-01T01:00:00.000Z',
+        })}
+      />
+    )
+    expect(screen.getByText('(edited)')).toBeInTheDocument()
+    expect(screen.getByTitle(/^Edited /)).toBeInTheDocument()
+  })
+
+  it('omits the note on a message that was never edited', () => {
+    render(<AgentMessageBubble message={baseMessage()} />)
+    expect(screen.queryByText('(edited)')).not.toBeInTheDocument()
+  })
+
+  it('renders the visitor-side mark from the localized label it is given', () => {
+    render(
+      <VisitorMessageBubble side="peer" content="Hi" time="10:00" editedLabel="(bearbeitet)" />
+    )
+    expect(screen.getByText('(bearbeitet)')).toBeInTheDocument()
+    cleanup()
+    render(<VisitorMessageBubble side="peer" content="Hi" time="10:00" />)
+    expect(screen.queryByText('(edited)')).not.toBeInTheDocument()
+  })
+
+  it('opens an inline editor from the message menu', () => {
+    const onEdit = vi.fn(async () => {})
+    render(
+      <AgentMessageBubble
+        canEdit
+        onEdit={onEdit}
+        message={baseMessage({
+          senderType: 'agent',
+          content: 'Hello there',
+          author: { principalId: 'principal_me' as never, displayName: 'James', avatarUrl: null },
+        })}
+      />
+    )
+    fireEvent.click(screen.getByLabelText('More actions'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit message' }))
+    expect(screen.getByTestId('message-edit-form')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByTestId('message-edit-form')).not.toBeInTheDocument()
+    expect(screen.getByText('Hello there')).toBeInTheDocument()
+  })
+
+  it("offers Edit message only for the author's own ordinary message", () => {
+    const own = baseMessage({
+      senderType: 'agent',
+      author: { principalId: 'principal_me' as never, displayName: 'James', avatarUrl: null },
+    })
+    const all = new Set(Object.values(PERMISSIONS))
+    expect(canEditAgentMessage(own, 'principal_me', all)).toBe(true)
+    expect(canEditAgentMessage(own, 'principal_other', all)).toBe(false)
+    expect(canEditAgentMessage({ ...own, isAssistant: true }, 'principal_me', all)).toBe(false)
+    expect(canEditAgentMessage({ ...own, senderType: 'system' }, 'principal_me', all)).toBe(false)
+    // A teammate who wrote as a customer does not get to edit that row.
+    expect(canEditAgentMessage({ ...own, senderType: 'visitor' }, 'principal_me', all)).toBe(false)
+    expect(
+      canEditAgentMessage(
+        { ...own, block: { kind: 'buttons', prompt: 'Pick', options: [] } as never },
+        'principal_me',
+        all
+      )
+    ).toBe(false)
+  })
+
+  it('hides Edit message without the permission that writes that kind of message', () => {
+    const own = baseMessage({
+      senderType: 'agent',
+      author: { principalId: 'principal_me' as never, displayName: 'James', avatarUrl: null },
+    })
+    const ticketReply = { ...own, conversationId: null, ticketId: 'ticket_1' as never }
+    const note = { ...own, isInternal: true }
+    const only = (key: PermissionKey) => new Set([key])
+    expect(canEditAgentMessage(ticketReply, 'principal_me', only(PERMISSIONS.TICKET_REPLY))).toBe(
+      true
+    )
+    expect(
+      canEditAgentMessage(ticketReply, 'principal_me', only(PERMISSIONS.CONVERSATION_REPLY))
+    ).toBe(false)
+    expect(canEditAgentMessage(note, 'principal_me', only(PERMISSIONS.CONVERSATION_NOTE))).toBe(
+      true
+    )
+    expect(canEditAgentMessage(note, 'principal_me', only(PERMISSIONS.CONVERSATION_REPLY))).toBe(
+      false
+    )
+  })
+})
+
+describe('canDeleteAgentMessage', () => {
+  const own = baseMessage({
+    senderType: 'agent',
+    author: { principalId: 'principal_me' as never, displayName: 'James', avatarUrl: null },
+  })
+  const replier = new Set<PermissionKey>([PERMISSIONS.CONVERSATION_REPLY])
+  const moderator = new Set<PermissionKey>([PERMISSIONS.CONVERSATION_MANAGE])
+
+  it('offers Delete on your own agent message', () => {
+    expect(canDeleteAgentMessage(own, 'principal_me', replier)).toBe(true)
+    expect(canDeleteAgentMessage(own, 'principal_other', replier)).toBe(false)
+    expect(canDeleteAgentMessage(baseMessage(), 'principal_v', replier)).toBe(false)
+  })
+
+  it("offers Delete on anyone's message to a moderator, never on a system line", () => {
+    expect(canDeleteAgentMessage(own, 'principal_other', moderator)).toBe(true)
+    expect(canDeleteAgentMessage(baseMessage(), 'principal_other', moderator)).toBe(true)
+    expect(
+      canDeleteAgentMessage({ ...own, senderType: 'system' }, 'principal_other', moderator)
+    ).toBe(false)
+  })
+
+  it('hides Delete in the menu unless allowed', () => {
+    const { unmount } = render(<AgentMessageBubble message={own} />)
+    fireEvent.click(screen.getByLabelText('More actions'))
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument()
+    unmount()
+    render(<AgentMessageBubble message={own} canDelete />)
+    fireEvent.click(screen.getByLabelText('More actions'))
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+  })
+})
 
 describe('AgentMessageBubble — inbox translation (P2-D.1)', () => {
   it('renders the plain content with no toggle when translation is absent (pin: unchanged default)', () => {
@@ -120,6 +252,121 @@ describe('AgentMessageBubble — inbox translation (P2-D.1)', () => {
   })
 })
 
+describe('AgentMessageBubble — channel delivery ticks', () => {
+  it('shows a sending tick on a pending GitHub reply', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          content: 'the fix is out',
+          channelDelivery: { status: 'pending', channel: 'github', at: '2026-08-29T12:00:00.000Z' },
+        })}
+      />
+    )
+    expect(screen.getByLabelText('Sending to GitHub')).toBeInTheDocument()
+  })
+
+  it('shows a sent tick once GitHub accepted the comment', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          content: 'the fix is out',
+          channelDelivery: {
+            status: 'sent',
+            channel: 'github',
+            at: '2026-08-29T12:00:01.000Z',
+            externalId: '444',
+          },
+        })}
+      />
+    )
+    expect(screen.getByLabelText('Sent to GitHub')).toBeInTheDocument()
+  })
+
+  it('shows the failure reason when the comment did not land', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          content: 'the fix is out',
+          channelDelivery: {
+            status: 'failed',
+            channel: 'github',
+            at: '2026-08-29T12:00:01.000Z',
+            error: 'GitHub is not connected.',
+          },
+        })}
+      />
+    )
+    expect(screen.getByLabelText('GitHub is not connected.')).toBeInTheDocument()
+  })
+
+  it('does not show ticks on visitor messages or notes', () => {
+    const { rerender } = render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'visitor',
+          channelDelivery: { status: 'sent', channel: 'github', at: 't' },
+        })}
+      />
+    )
+    expect(screen.queryByLabelText('Sent to GitHub')).not.toBeInTheDocument()
+    rerender(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          isInternal: true,
+          content: 'internal',
+          channelDelivery: { status: 'pending', channel: 'github', at: 't' },
+        })}
+      />
+    )
+    expect(screen.queryByLabelText('Sending to GitHub')).not.toBeInTheDocument()
+  })
+
+  it('exposes a retry control only on a failed GitHub send', () => {
+    const onRetry = vi.fn()
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          content: 'the fix is out',
+          channelDelivery: {
+            status: 'failed',
+            channel: 'github',
+            at: '2026-08-29T12:00:01.000Z',
+            error: 'GitHub is not connected.',
+          },
+        })}
+        onRetryChannelDelivery={onRetry}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'GitHub is not connected. Retry' }))
+    expect(onRetry).toHaveBeenCalledWith('conversation_msg_1')
+  })
+
+  it('does not expose retry on a sent GitHub tick', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          content: 'the fix is out',
+          channelDelivery: {
+            status: 'sent',
+            channel: 'github',
+            at: '2026-08-29T12:00:01.000Z',
+            externalId: '444',
+          },
+        })}
+        onRetryChannelDelivery={vi.fn()}
+      />
+    )
+    expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Sent to GitHub')).toBeInTheDocument()
+  })
+})
+
 describe('AgentMessageBubble — pair-thread provenance (convergence Phase 2)', () => {
   it('labels a legacy ticket-parented row "via ticket thread" in a pair view', () => {
     render(
@@ -165,5 +412,47 @@ describe('AgentMessageBubble — pair-thread provenance (convergence Phase 2)', 
     )
     expect(screen.getByText('Internal note')).toBeInTheDocument()
     expect(screen.queryByText(/via ticket thread/)).not.toBeInTheDocument()
+  })
+})
+
+describe('AgentMessageBubble — note attachments', () => {
+  const pdfAttachment = {
+    url: '/f/plan.pdf',
+    name: 'plan.pdf',
+    contentType: 'application/pdf',
+    size: 10,
+    family: 'pdf' as const,
+  }
+
+  it("gives an internal note's attachments the note's amber border treatment", () => {
+    render(
+      <IntlProvider locale="en-US" messages={{}}>
+        <AgentMessageBubble
+          message={baseMessage({
+            senderType: 'agent',
+            isInternal: true,
+            attachments: [pdfAttachment],
+          })}
+        />
+      </IntlProvider>
+    )
+    const card = screen.getByLabelText('Open plan.pdf, PDF, 10 B')
+    expect(card.className).toContain('border-amber-400/30')
+  })
+
+  it("leaves a regular reply's attachments without the amber treatment", () => {
+    render(
+      <IntlProvider locale="en-US" messages={{}}>
+        <AgentMessageBubble
+          message={baseMessage({
+            senderType: 'agent',
+            isInternal: false,
+            attachments: [pdfAttachment],
+          })}
+        />
+      </IntlProvider>
+    )
+    const card = screen.getByLabelText('Open plan.pdf, PDF, 10 B')
+    expect(card.className).not.toContain('amber')
   })
 })

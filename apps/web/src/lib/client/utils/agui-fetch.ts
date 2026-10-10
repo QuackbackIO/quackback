@@ -16,9 +16,16 @@ function aguiErrorFrame(code: string, message: string): string {
   return `data: ${JSON.stringify({ type: 'RUN_ERROR', code, message })}\n\n`
 }
 
-export function aguiFetchClient(): typeof fetch {
+export function aguiFetchClient(getHeaders?: () => HeadersInit | undefined): typeof fetch {
   const wrapped = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const res = await fetch(input, init)
+    const extra = getHeaders?.()
+    const headers = extra ? new Headers(init?.headers) : init?.headers
+    if (extra) {
+      new Headers(extra).forEach((value, key) => {
+        ;(headers as Headers).set(key, value)
+      })
+    }
+    const res = await fetch(input, extra ? { ...init, headers } : init)
     if (res.ok) return res
     const message = await extractHttpErrorMessage(res)
     return new Response(aguiErrorFrame(`http_${res.status}`, message), {

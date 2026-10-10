@@ -11,10 +11,11 @@ interface UseConversationStreamOptions {
   enabled: boolean
   onEvent: (event: ConversationStreamEvent) => void
   /**
-   * Called after a reconnect (not the first connect). Use it to refetch state
-   * so any events missed while disconnected are caught up — we recreate the
-   * EventSource on error (to re-mint the token), which forgoes the built-in
-   * Last-Event-ID replay.
+   * Called after the stream becomes live following a gap: a reconnect, or the
+   * first successful open after one or more failed attempts. Not called on a
+   * clean first connect. Use it to refetch state so events missed while
+   * disconnected are caught up — we recreate the EventSource on error (to
+   * re-mint the token), which forgoes the built-in Last-Event-ID replay.
    */
   onReconnect?: () => void
   /** Key that, when changed, tears down and rebuilds the connection. */
@@ -44,14 +45,21 @@ const NAMED_EVENTS = [
   'read',
   'typing',
   'message_deleted',
-  // Agent-only: a reaction/flag changed on an existing message. The server only
-  // ever publishes this on the inbox channel, so the visitor stream never
-  // receives it even though the event name is registered here.
+  // Agent-only: a reaction, flag, or body edit on an existing message. The
+  // server publishes this on the inbox channel. Visitors receive a body edit
+  // as `message_edited` instead, so agent-only fields never ride along.
   'message_updated',
+  'message_edited',
   // Ephemeral AI-assistant turn signals (conversation channel only). EventSource
   // drops any named frame with no matching listener, so these MUST be registered.
   'assistant_activity',
   'assistant_delta',
+  // Ticket frames (inbox stream). EventSource drops named events with no
+  // listener, so hover-prefetched ticket caches would stay stale without these.
+  'ticket_message',
+  'ticket_message_updated',
+  'ticket_updated',
+  'ticket_read',
 ] as const
 
 // After this many consecutive SSE failures with no successful open in between,
@@ -107,6 +115,10 @@ export function useConversationStream({
     let stopped = false
     let retry = 0
     let openedOnce = false
+    // True once a connect attempt has failed (error or mint miss) before the
+    // next successful open. The first clean open must not refetch; an open
+    // that follows a failed attempt is a gap the same way a reconnect is.
+    let missedWhileDisconnected = false
     let sseFailures = 0
     let polling = false
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -156,6 +168,7 @@ export function useConversationStream({
       }
       if (stopped) return
       if (!url) {
+        missedWhileDisconnected = true
         scheduleReconnect()
         return
       }
@@ -168,14 +181,16 @@ export function useConversationStream({
         retry = 0
         sseFailures = 0
         setConnected(true)
-        if (openedOnce) onReconnectRef.current?.()
+        if (openedOnce || missedWhileDisconnected) onReconnectRef.current?.()
         openedOnce = true
+        missedWhileDisconnected = false
       }
       es.onerror = () => {
         // The token may have expired; recreate with a fresh one + backoff.
         es?.close()
         es = null
         sseFailures++
+        missedWhileDisconnected = true
         setConnected(false)
         // Once reconnecting is clearly futile and a poll fallback exists, stop
         // hammering SSE and switch to polling for the rest of this connection.

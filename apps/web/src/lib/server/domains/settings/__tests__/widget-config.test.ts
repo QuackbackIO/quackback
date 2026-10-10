@@ -20,9 +20,11 @@ vi.mock('../settings.helpers', async (importOriginal) => ({
 
 import {
   generateWidgetSecret,
+  ensureWidgetSecret,
   publicMessengerConfig,
   getPublicWidgetConfig,
 } from '../settings.widget'
+import { getWidgetInstallStatus } from '../widget-install-pairing'
 import { deepMerge } from '../settings.helpers'
 
 function fixtureRow(widget: WidgetConfig, featureFlags?: Record<string, boolean>) {
@@ -51,6 +53,14 @@ describe('Widget Config Types', () => {
 
     it('keeps the messenger (Messages) tab on by default', () => {
       expect(DEFAULT_WIDGET_CONFIG.tabs?.messenger).toBe(true)
+    })
+
+    it('keeps the Tickets tab on by default', () => {
+      expect(DEFAULT_WIDGET_CONFIG.tabs?.tickets).toBe(true)
+    })
+
+    it('keeps the feedback tab on by default', () => {
+      expect(DEFAULT_WIDGET_CONFIG.tabs?.feedback).toBe(true)
     })
 
     it('keeps the changelog tab on by default', () => {
@@ -273,10 +283,10 @@ describe('getPublicWidgetConfig — help tab projection', () => {
   })
 })
 
-describe('getPublicWidgetConfig — tickets projection (converged Messages)', () => {
-  it('projects tabs.tickets from the supportTickets flag alone — no stored tab', async () => {
+describe('getPublicWidgetConfig — tickets tab projection', () => {
+  it('projects tabs.tickets from the flag + stored tab, defaulting on', async () => {
     // The flag is set explicitly, and the stored tabs deliberately carry no
-    // `tickets` key: that is the point of the assertion. DEFAULT_FEATURE_FLAGS
+    // `tickets` key: missing means on, matching messenger. DEFAULT_FEATURE_FLAGS
     // is core-only (Feedback + Changelog) since 0268, so relying on a default
     // here would assert the default rather than the projection.
     settingsRow.current = fixtureRow(
@@ -284,10 +294,22 @@ describe('getPublicWidgetConfig — tickets projection (converged Messages)', ()
       { supportTickets: true }
     )
     const projected = await getPublicWidgetConfig()
-    // Ticket pairs surface through Messages; the flag alone decides.
     expect(projected.tabs?.tickets).toBe(true)
     // Tickets can be the sole enabled surface (email-first workspaces).
     expect(projected.enabled).toBe(true)
+  })
+
+  it('keeps the Tickets tab off when the stored tab is off', async () => {
+    settingsRow.current = fixtureRow(
+      {
+        enabled: true,
+        tabs: { feedback: false, changelog: false, messenger: false, tickets: false },
+      },
+      { supportTickets: true }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.tabs?.tickets).toBe(false)
+    expect(projected.enabled).toBe(false)
   })
 
   it('projects tabs.tickets false when the flag is off', async () => {
@@ -302,18 +324,18 @@ describe('getPublicWidgetConfig — tickets projection (converged Messages)', ()
 })
 
 describe('getPublicWidgetConfig — translations', () => {
-  it('projects per-locale copy so the widget iframe sees Home and messenger strings', async () => {
+  it('projects per-locale messenger copy so the widget iframe sees welcome/offline strings', async () => {
     settingsRow.current = fixtureRow({
       enabled: true,
       translations: {
-        de: { greeting: 'Hallo', welcomeMessage: 'Willkommen' },
+        de: { welcomeMessage: 'Willkommen', offlineMessage: 'Wir sind offline' },
       },
       launcherGreeting: 'Need a hand?',
       launcherLabel: 'Chat',
     })
     const projected = await getPublicWidgetConfig()
     expect(projected.translations).toEqual({
-      de: { greeting: 'Hallo', welcomeMessage: 'Willkommen' },
+      de: { welcomeMessage: 'Willkommen', offlineMessage: 'Wir sind offline' },
     })
     expect(projected.launcherGreeting).toBe('Need a hand?')
     expect(projected.launcherLabel).toBe('Chat')
@@ -341,5 +363,32 @@ describe('generateWidgetSecret', () => {
     const secret1 = generateWidgetSecret()
     const secret2 = generateWidgetSecret()
     expect(secret1).not.toBe(secret2)
+  })
+})
+
+describe('ensureWidgetSecret', () => {
+  it('returns the existing secret without writing', async () => {
+    settingsRow.current = { id: 'settings_1', widgetSecret: 'wgt_existing' }
+    await expect(ensureWidgetSecret()).resolves.toBe('wgt_existing')
+  })
+})
+
+describe('getWidgetInstallStatus', () => {
+  it('reports connection evidence without a signing secret', async () => {
+    settingsRow.current = {
+      id: 'settings_1',
+      widgetSecret: 'wgt_must_not_leak',
+      widgetConfig: JSON.stringify({ enabled: true }),
+      widgetInstalledFirstSeenAt: new Date('2026-09-11T10:00:00.000Z'),
+      widgetInstalledLastSeenAt: new Date('2026-09-11T10:05:00.000Z'),
+      widgetInstalledOriginHost: 'app.example.com',
+      widgetInstalledSdkVersion: '0.1.6',
+    }
+    const status = await getWidgetInstallStatus()
+    expect(status.connected).toBe(true)
+    expect(status.enabled).toBe(true)
+    expect(status.originHost).toBe('app.example.com')
+    expect(status.lastDetectedAt).toBe('2026-09-11T10:05:00.000Z')
+    expect(JSON.stringify(status)).not.toContain('wgt_')
   })
 })

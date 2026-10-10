@@ -87,10 +87,10 @@ describe('macro library — plan gate', () => {
     expect(refusal).toBeInstanceOf(EntitlementRequiredError)
     const error = refusal as EntitlementRequiredError
     expect(error.entitlement).toBe('aiDrafts')
-    expect(error.requiredPlanName).toBe('Growth')
+    expect(error.requiredPlanName).toBe('Pro')
     expect(error.statusCode).toBe(402)
     expect(error.message).toBe(
-      'AI drafts are a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
+      'AI drafts are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
     )
     expect(hoisted.mockSelect).not.toHaveBeenCalled()
   })
@@ -102,7 +102,7 @@ describe('macro library — plan gate', () => {
   })
 
   it('lists and creates macros on a plan that includes it', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
     await expect(listMacros('support')).resolves.toEqual([ROW])
     await expect(createMacro(CREATE_INPUT)).resolves.toEqual(ROW)
     expect(hoisted.mockSelect).toHaveBeenCalledOnce()
@@ -113,7 +113,7 @@ describe('macro library — plan gate', () => {
     withCloud(storedCloud('free', { aiDrafts: true }))
     await expect(listMacros()).resolves.toEqual([ROW])
 
-    withCloud(storedCloud('scale', { aiDrafts: false }))
+    withCloud(storedCloud('enterprise', { aiDrafts: false }))
     await expect(listMacros()).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 })

@@ -112,17 +112,17 @@ describe('createWebhook — plan gate', () => {
     expect(refusal).toBeInstanceOf(EntitlementRequiredError)
     const error = refusal as EntitlementRequiredError
     expect(error.entitlement).toBe('webhooks')
-    expect(error.requiredPlanName).toBe('Growth')
+    expect(error.requiredPlanName).toBe('Pro')
     expect(error.statusCode).toBe(402)
     expect(error.message).toBe(
-      'Webhooks are a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
+      'Webhooks are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
     )
     // Nothing was written.
     expect(hoisted.mockInsert).not.toHaveBeenCalled()
   })
 
   it('creates the webhook on a plan that includes it', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
     await expect(createWebhook(INPUT, CREATOR)).resolves.toMatchObject({
       webhook: { url: INPUT.url },
     })
@@ -133,7 +133,7 @@ describe('createWebhook — plan gate', () => {
     withCloud(storedCloud('free', { webhooks: true }))
     await expect(createWebhook(INPUT, CREATOR)).resolves.toBeDefined()
 
-    withCloud(storedCloud('scale', { webhooks: false }))
+    withCloud(storedCloud('enterprise', { webhooks: false }))
     await expect(createWebhook(INPUT, CREATOR)).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 })

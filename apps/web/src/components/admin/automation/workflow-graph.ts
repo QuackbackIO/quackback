@@ -62,6 +62,7 @@ import type { ConditionOperator } from '@/lib/server/domains/workflows/condition
 import { CSAT_FACES, TICKET_STATUS_CATEGORIES } from '@/lib/shared/db-types'
 import type { TiptapContent, TicketStatusCategory } from '@/lib/shared/db-types'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
+import { formatFirstRenderDate, type LocalDateFormatter } from '@/components/ui/local-date'
 import { truncate } from '@/lib/shared/utils/string'
 
 // ---------------------------------------------------------------------------
@@ -334,23 +335,23 @@ export const CONDITION_FIELD_META: Record<ConditionField, ConditionFieldMeta> = 
     ],
   },
   'person.segments': {
-    label: 'Person segments',
+    label: 'User segments',
     kind: 'list',
     placeholder: 'Segment IDs, comma-separated',
   },
   'person.email': {
-    label: 'Person email',
+    label: 'User email',
     kind: 'text',
     placeholder: 'name@example.com',
   },
   // The visitor's first-class user columns (country captured from geo-aware
   // proxy headers; locale) — free text, not a fixed choice set: the workspace
   // sees whichever ISO country / BCP-47 values its traffic carries.
-  'person.country': { label: 'Person country', kind: 'text', placeholder: 'DE' },
-  'person.locale': { label: 'Person locale', kind: 'text', placeholder: 'de-DE' },
+  'person.country': { label: 'User country', kind: 'text', placeholder: 'DE' },
+  'person.locale': { label: 'User locale', kind: 'text', placeholder: 'de-DE' },
   // The plan label stored under user.metadata's `plan` key — the same source
   // segments' plan attribute reads, so both target the same vocabulary.
-  'person.plan': { label: 'Person plan', kind: 'text', placeholder: 'enterprise' },
+  'person.plan': { label: 'User plan', kind: 'text', placeholder: 'enterprise' },
   // The workspace's ticket-type registry is live, so — like conversation.team
   // above — resolveConditionField fills `options` in from the `ticketTypes`
   // map it's passed rather than any fixed set here.
@@ -364,8 +365,8 @@ export const CONDITION_FIELD_LIST = Object.keys(CONDITION_FIELD_META) as StaticC
 /**
  * The static field picker organized by entity group (RuleGroupBuilder,
  * consumed by condition-editor.tsx / branch-editor.tsx's paths / the
- * trigger's Audience section): Conversation / Message / Person / Ticket /
- * Availability — the dynamic attribute groups (Conversation attribute / Person attribute /
+ * trigger's Audience section): Conversation / Message / User / Ticket /
+ * Availability. The dynamic attribute groups (Conversation attribute / User attribute /
  * Company attribute) render as their own SelectGroups alongside these, keyed
  * off the live registries instead of this static catalogue. A Record (not a
  * loop over CONDITION_FIELD_LIST) so a newly added static field fails
@@ -382,11 +383,11 @@ export const STATIC_CONDITION_FIELD_GROUP: Record<StaticConditionField, string> 
   'csat.rating': 'Conversation',
   'message.body': 'Message',
   'message.sender': 'Message',
-  'person.segments': 'Person',
-  'person.email': 'Person',
-  'person.country': 'Person',
-  'person.locale': 'Person',
-  'person.plan': 'Person',
+  'person.segments': 'User',
+  'person.email': 'User',
+  'person.country': 'User',
+  'person.locale': 'User',
+  'person.plan': 'User',
   'ticket.type': 'Ticket',
   office_hours: 'Availability',
 }
@@ -397,7 +398,7 @@ export const STATIC_CONDITION_FIELD_GROUP: Record<StaticConditionField, string> 
 export const CONDITION_FIELD_GROUP_ORDER = [
   'Conversation',
   'Message',
-  'Person',
+  'User',
   'Ticket',
   'Availability',
 ] as const
@@ -801,7 +802,7 @@ export const TRIGGER_DESCRIPTIONS: Partial<Record<TriggerType, string>> = {
   'sla.breached':
     'Runs once when an applied SLA’s first response, next response, time to close, or linked ticket’s time to resolve clock passes its due date with nothing settling it.',
   'ticket.created':
-    'Only fires for a ticket that has a linked conversation — a standalone ticket with no linked conversation never triggers this.',
+    'Only fires for a ticket that has a linked conversation. A standalone ticket with no linked conversation never triggers this.',
   'ticket.status_changed':
     'Only fires for a ticket that has a linked conversation. Optionally restrict it to when the ticket enters a specific status category below.',
 }
@@ -858,7 +859,7 @@ export function audienceUnreachableFieldWarning(
   if (!audience) return null
   if (MESSAGE_CARRYING_TRIGGER_TYPES.includes(triggerType as TriggerType)) return null
   if (!conditionReferencesMessageField(audience)) return null
-  return `This audience checks the message, but "${triggerLabel(triggerType)}" never carries one — it will never match.`
+  return `This audience checks the message, but "${triggerLabel(triggerType)}" never carries one, so it will never match.`
 }
 
 export const WORKFLOW_CLASSES = [
@@ -893,9 +894,9 @@ export type FrequencyCapType = FrequencyCap['type']
 
 export const FREQUENCY_CAP_LABELS: Record<FrequencyCapType, string> = {
   unlimited: 'No limit',
-  once: 'Once per person',
-  once_per_days: 'Once per person, every N days',
-  n_total: 'At most N times per person',
+  once: 'Once per user',
+  once_per_days: 'Once per user, every N days',
+  n_total: 'At most N times per user',
 }
 export const FREQUENCY_CAP_TYPES = Object.keys(FREQUENCY_CAP_LABELS) as FrequencyCapType[]
 
@@ -948,11 +949,11 @@ export function frequencyCapSummary(cap: FrequencyCap | undefined): string {
   if (!cap || cap.type === 'unlimited') return 'No limit'
   switch (cap.type) {
     case 'once':
-      return 'Once per person'
+      return 'Once per user'
     case 'once_per_days':
-      return `Once per person, every ${cap.days} day${cap.days === 1 ? '' : 's'}`
+      return `Once per user, every ${cap.days} day${cap.days === 1 ? '' : 's'}`
     case 'n_total':
-      return `At most ${cap.count} time${cap.count === 1 ? '' : 's'} per person`
+      return `At most ${cap.count} time${cap.count === 1 ? '' : 's'} per user`
   }
 }
 
@@ -2426,6 +2427,21 @@ export interface EntityLabels {
   /** Ticket-type id -> display name, for convert_to_ticket step summaries
    *  (convergence Phase 4). */
   ticketTypes?: ReadonlyMap<string, string>
+  /** Formats an absolute instant (a legacy snooze's wake time). The builder
+   *  passes `useLocalDateFormatter()`'s, so the server and the hydrating
+   *  browser render the same text; without one, the first-render format. */
+  formatDate?: LocalDateFormatter
+}
+
+/** A legacy absolute snooze's wake time, e.g. "Aug 1, 2026, 9:00 AM". */
+export const SNOOZE_UNTIL_FORMAT: Intl.DateTimeFormatOptions = {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+}
+
+/** A legacy absolute snooze's wake time, with the labels' formatter. */
+export function snoozeUntilLabel(untilIso: string, labels: EntityLabels): string {
+  return (labels.formatDate ?? formatFirstRenderDate)(untilIso, SNOOZE_UNTIL_FORMAT)
 }
 
 const shortId = (id: string): string => (id.length > 14 ? `${id.slice(0, 14)}…` : id)
@@ -2449,7 +2465,7 @@ export function actionSummary(action: GraphAction, labels: EntityLabels = {}): s
     case 'snooze':
       if ('seconds' in action) return `Snooze for ${durationPhrase(action.seconds)}`
       return action.untilIso
-        ? `Snooze until ${new Date(action.untilIso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
+        ? `Snooze until ${snoozeUntilLabel(action.untilIso, labels)}`
         : 'Snooze until they reply'
     case 'close':
       return 'Close the conversation'
@@ -2899,7 +2915,7 @@ export function actionIssue(action: GraphAction): string | null {
  *  server-side wording naming the mechanism (this step is already selected,
  *  so it doesn't need to be named again). */
 const CLASS_RESTRICTED_STEP_MESSAGE =
-  'Only allowed in a customer-facing workflow — a background run parked here could never resume'
+  'Only allowed in a customer-facing workflow. A background run parked here could never resume'
 
 /** Every step id in the tree with an unresolved issue, mapped to its message.
  *  Amendment 3 (PHASE-C-BLOCK-CONTRACT.md): a standalone disable_composer (no

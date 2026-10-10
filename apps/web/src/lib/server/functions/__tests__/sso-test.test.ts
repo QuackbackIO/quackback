@@ -18,6 +18,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { claimMappingFor, identityMappingFor } from '@/lib/shared/oidc-claim-mapping'
 
 type AnyHandler = (args: { data: Record<string, unknown> }) => Promise<unknown>
 
@@ -117,7 +118,7 @@ describe('startSsoTestFn', () => {
   })
 
   it('returns testId + authorizeUrl when preconditions met (legacy sso provider)', async () => {
-    hoisted.listIdentityProviders.mockResolvedValue([ssoProvider])
+    hoisted.listIdentityProviders.mockResolvedValue([{ ...ssoProvider, redirectStyle: 'legacy' }])
     hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
     hoisted.safeFetch.mockResolvedValue(
       new Response(
@@ -139,9 +140,10 @@ describe('startSsoTestFn', () => {
 
     expect(result.testId).toMatch(/^ssotest_/)
     expect(result.authorizeUrl).toMatch(/^https:\/\/idp\/auth\?/)
-    // Redirect URI is the provider's own production callback.
-    expect(result.authorizeUrl).toMatch(
-      /redirect_uri=https%3A%2F%2Fqb\.test%2Fapi%2Fauth%2Foauth2%2Fcallback%2Fsso/
+    // Redirect URI is the one production sends for this provider: a legacy
+    // provider sends the URL its IdP already has.
+    expect(new URL(result.authorizeUrl).searchParams.get('redirect_uri')).toBe(
+      'https://qb.test/api/auth/oauth2/callback/sso'
     )
     // PKCE is mandatory for OAuth 2.1 IdPs and ignored by IdPs that don't
     // support it — the authorize URL must carry an S256 challenge pair.
@@ -149,9 +151,14 @@ describe('startSsoTestFn', () => {
     expect(result.authorizeUrl).toMatch(/code_challenge_method=S256/)
     expect(hoisted.cacheSet).toHaveBeenCalledTimes(1)
 
-    // Session persisted to the KV store must carry the registrationId.
-    const [, session] = hoisted.cacheSet.mock.calls[0] as [string, { registrationId: string }]
+    // Session persisted to the KV store must carry the registrationId, and the
+    // same redirect URI for the callback's token exchange.
+    const [, session] = hoisted.cacheSet.mock.calls[0] as [
+      string,
+      { registrationId: string; redirectUri: string },
+    ]
     expect(session.registrationId).toBe('sso')
+    expect(session.redirectUri).toBe('https://qb.test/api/auth/oauth2/callback/sso')
   })
 
   it('requests the provider-configured scopes (mirrors production) instead of a hardcoded set', async () => {
@@ -199,6 +206,80 @@ describe('startSsoTestFn', () => {
       authorizeUrl: string
     }
     expect(result.authorizeUrl).toMatch(/scope=openid\+email\+profile(&|$)/)
+  })
+
+  describe('ID token nonce', () => {
+    async function startWith(provider: Record<string, unknown>) {
+      hoisted.listIdentityProviders.mockResolvedValue([provider])
+      hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
+      hoisted.safeFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            issuer: 'https://idp',
+            authorization_endpoint: 'https://idp/auth',
+            token_endpoint: 'https://idp/token',
+            jwks_uri: 'https://idp/jwks',
+          }),
+          { status: 200 }
+        )
+      )
+      hoisted.cacheSet.mockResolvedValue(undefined)
+      const result = (await startSsoTest({ data: { registrationId: 'sso' } })) as {
+        authorizeUrl: string
+      }
+      const [, session] = hoisted.cacheSet.mock.calls[0] as [string, { nonce?: string }]
+      return { params: new URL(result.authorizeUrl).searchParams, session }
+    }
+
+    it('sends a nonce and keeps it to check by default', async () => {
+      const { params, session } = await startWith(ssoProvider)
+      expect(params.get('nonce')).toBeTruthy()
+      expect(session.nonce).toBe(params.get('nonce'))
+    })
+
+    it('still sends a nonce for a provider set to not use one, to notice when it starts returning it', async () => {
+      // The test decides the setting, so it must be able to see an echo that
+      // sign-in, having stopped sending a nonce, never would.
+      const { params, session } = await startWith({ ...ssoProvider, idTokenNonce: 'off' })
+      expect(params.get('nonce')).toBeTruthy()
+      expect(session.nonce).toBe(params.get('nonce'))
+    })
+
+    it('sends no nonce for a manual-endpoint provider, which sign-in never binds', async () => {
+      // Sign-in binds a nonce only when a discovery document supplies the key
+      // set and issuer to verify the ID token. Requiring one here would fail a
+      // test for a provider that signs in fine.
+      const { params, session } = await startWith({
+        ...ssoProvider,
+        discoveryUrl: null,
+        authorizationUrl: 'https://idp/auth',
+        tokenUrl: 'https://idp/token',
+        jwksUri: 'https://idp/jwks',
+        issuer: 'https://idp',
+      })
+      expect(params.has('nonce')).toBe(false)
+      expect(session.nonce).toBeUndefined()
+    })
+
+    it('sends no nonce when the discovery document has no key set to verify with', async () => {
+      hoisted.listIdentityProviders.mockResolvedValue([ssoProvider])
+      hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
+      hoisted.safeFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            issuer: 'https://idp',
+            authorization_endpoint: 'https://idp/auth',
+            token_endpoint: 'https://idp/token',
+          }),
+          { status: 200 }
+        )
+      )
+      hoisted.cacheSet.mockResolvedValue(undefined)
+      const result = (await startSsoTest({ data: { registrationId: 'sso' } })) as {
+        authorizeUrl: string
+      }
+      expect(new URL(result.authorizeUrl).searchParams.has('nonce')).toBe(false)
+    })
   })
 
   it('tests a manual-endpoint provider (no discovery doc) using its stored endpoints', async () => {
@@ -310,14 +391,65 @@ describe('startSsoTestFn', () => {
       authorizeUrl: string
     }
 
-    // Redirect URI must be the provider's OWN callback, not the legacy sso path.
-    expect(result.authorizeUrl).toMatch(
-      /redirect_uri=https%3A%2F%2Fqb\.test%2Fapi%2Fauth%2Foauth2%2Fcallback%2Foidc_abc123/
+    // Redirect URI must be the provider's OWN callback; no recorded style is
+    // the current path.
+    expect(new URL(result.authorizeUrl).searchParams.get('redirect_uri')).toBe(
+      'https://qb.test/api/auth/callback/oidc_abc123'
     )
 
-    // Session must carry the correct registrationId.
-    const [, session] = hoisted.cacheSet.mock.calls[0] as [string, { registrationId: string }]
+    // Session must carry the correct registrationId and the same redirect URI.
+    const [, session] = hoisted.cacheSet.mock.calls[0] as [
+      string,
+      { registrationId: string; redirectUri: string },
+    ]
     expect(session.registrationId).toBe('oidc_abc123')
+    expect(session.redirectUri).toBe('https://qb.test/api/auth/callback/oidc_abc123')
+  })
+
+  it('forwards stored profile paths through the shared identity mapping adapter', async () => {
+    const claimMapping = {
+      profile: {
+        sources: ['accessTokenJwt', 'idToken'],
+        claims: { id: 'oid', email: 'upn', name: 'preferred_username' },
+      },
+    }
+    hoisted.listIdentityProviders.mockResolvedValue([{ ...ssoProvider, claimMapping }])
+    hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
+    hoisted.safeFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          issuer: 'https://idp',
+          authorization_endpoint: 'https://idp/auth',
+          token_endpoint: 'https://idp/token',
+          jwks_uri: 'https://idp/jwks',
+        }),
+        { status: 200 }
+      )
+    )
+    hoisted.cacheSet.mockResolvedValue(undefined)
+
+    await startSsoTest({ data: { registrationId: 'sso' } })
+
+    const [, session] = hoisted.cacheSet.mock.calls[0] as [
+      string,
+      {
+        identityMapping?: {
+          sources?: string[]
+          idClaim?: string
+          emailClaim?: string
+          nameClaim?: string
+        }
+        claimMapping?: unknown
+      },
+    ]
+    expect(session.identityMapping).toEqual(identityMappingFor(claimMapping))
+    expect(session.identityMapping).toEqual({
+      sources: ['accessTokenJwt', 'idToken'],
+      idClaim: 'oid',
+      emailClaim: 'upn',
+      nameClaim: 'preferred_username',
+    })
+    expect(session.claimMapping).toEqual(claimMappingFor(claimMapping))
   })
 })
 

@@ -1,9 +1,8 @@
 import { useMemo } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import { PortalBrandMark } from './portal-brand-mark'
-import { generateThemeCSS } from '@/lib/shared/theme'
-import type { BrandingConfig } from '@/lib/server/domains/settings/settings.types'
+import { generateWorkspaceThemeCSS } from '@/lib/shared/theme'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 interface PortalAuthShellProps {
   heading: React.ReactNode
@@ -28,17 +27,11 @@ interface PortalAuthShellProps {
  * optional subheading, the form, then a footer for the cross-link.
  */
 export function PortalAuthShell({ heading, subheading, children, footer }: PortalAuthShellProps) {
-  const ctx = useRouteContext({ from: '__root__' }) as {
-    settings?: { brandingConfig?: BrandingConfig; customCss?: string }
-  }
-  const brandingConfig = ctx.settings?.brandingConfig
-  const customCss = ctx.settings?.customCss ?? ''
+  const settings = useWorkspaceSettings()
+  const brandingConfig = settings?.brandingConfig
+  const customCss = settings?.customCss ?? ''
 
-  const themeStyles = useMemo(() => {
-    if (!brandingConfig) return ''
-    const hasThemeConfig = brandingConfig.light || brandingConfig.dark
-    return hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
-  }, [brandingConfig])
+  const themeStyles = useMemo(() => generateWorkspaceThemeCSS(brandingConfig), [brandingConfig])
 
   return (
     <div className="relative min-h-screen flex items-center justify-center px-4 py-12 overflow-hidden">

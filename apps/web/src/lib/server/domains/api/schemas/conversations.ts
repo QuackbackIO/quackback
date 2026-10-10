@@ -18,7 +18,7 @@ import {
   UnauthorizedErrorSchema,
   NotFoundErrorSchema,
 } from './common'
-import { CONVERSATION_STATUSES } from '@/lib/shared/db-types'
+import { CHANNELS, CONVERSATION_STATUSES } from '@/lib/shared/db-types'
 
 // Conversation schema (GET /conversations, GET /conversations/:id)
 export const ConversationSchema = z.object({
@@ -27,7 +27,7 @@ export const ConversationSchema = z.object({
     description: 'Current conversation status',
     example: 'open',
   }),
-  channel: z.enum(['messenger', 'email']).meta({
+  channel: z.enum(CHANNELS).meta({
     description: 'Channel the conversation arrived on',
     example: 'messenger',
   }),
@@ -80,6 +80,9 @@ export const MessageSchema = z.object({
   }),
   content: z.string().meta({ example: 'Hello, I need help with my account.' }),
   createdAt: TimestampSchema,
+  editedAt: NullableTimestampSchema.meta({
+    description: 'When the author last edited the message, null if never edited',
+  }),
 })
 
 // A conversation tag (POST/DELETE /conversations/:id/tags response).

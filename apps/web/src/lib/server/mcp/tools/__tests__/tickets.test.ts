@@ -106,6 +106,7 @@ describe('ticket MCP tools', () => {
     const body = parse(out)
     expect(body.tickets[0]).toEqual({
       id: 'ticket_1',
+      url: '/admin/inbox?i=ticket_1',
       number: 42,
       reference: '#42',
       type: 'customer',
@@ -170,6 +171,7 @@ describe('ticket MCP tools', () => {
     expect(mockListMessages).toHaveBeenCalledWith('ticket_1', {
       before: undefined,
       includeInternal: false,
+      preferAccountName: true,
     })
     const body = parse(out)
     expect(body.ticket).toMatchObject({ id: 'ticket_1', reference: '#42', stage: 'in_progress' })
@@ -376,6 +378,32 @@ describe('ticket MCP tools', () => {
         content: [{ type: 'paragraph', content: [{ type: 'text', text: 'internal' }] }],
       },
     })
+  })
+
+  it('reply_to_ticket passes fileIds through as attachment refs the service resolves', async () => {
+    mockSendMessage.mockResolvedValue({
+      message: { id: 'm_1', ticketId: 'ticket_1', createdAt: '2026-07-04T00:02:00.000Z' },
+    })
+    await collect(teamAuth).get('reply_to_ticket')!({
+      ticketId: 'ticket_1',
+      content: 'See attached',
+      fileIds: ['file_1', 'file_2'],
+    })
+    const [, input] = mockSendMessage.mock.calls[0]
+    expect(input.attachments).toEqual([{ fileId: 'file_1' }, { fileId: 'file_2' }])
+  })
+
+  it('add_ticket_note passes fileIds through as attachment refs the service resolves', async () => {
+    mockAddNote.mockResolvedValue({
+      message: { id: 'm_2', ticketId: 'ticket_1', createdAt: '2026-07-04T00:03:00.000Z' },
+    })
+    await collect(teamAuth).get('add_ticket_note')!({
+      ticketId: 'ticket_1',
+      content: 'internal',
+      fileIds: ['file_3'],
+    })
+    const [, input] = mockAddNote.mock.calls[0]
+    expect(input.attachments).toEqual([{ fileId: 'file_3' }])
   })
 
   it('link_ticket links a customer ticket to a tracker and returns the linked ids', async () => {

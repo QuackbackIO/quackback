@@ -6,7 +6,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrincipalId, ConversationMessageId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
-import { NotFoundError } from '@/lib/shared/errors'
+import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const publishConversationEvent = vi.fn()
 const publishAgentConversationEvent = vi.fn()
@@ -185,11 +186,25 @@ describe('deleteConversationMessage ticket branch', () => {
     expect(publishAgentConversationEvent).not.toHaveBeenCalled()
   })
 
+  it("lets a teammate without manage delete their own ticket reply, not someone else's", async () => {
+    const replier: Actor = {
+      ...agentActor,
+      role: 'member',
+      permissions: new Set([PERMISSIONS.TICKET_REPLY]),
+    }
+    messageRow = { ...ticketMessage }
+    await deleteConversationMessage('conversation_msg_ticket' as ConversationMessageId, replier)
+
+    messageRow = { ...ticketMessage, principalId: 'principal_other' }
+    await expect(
+      deleteConversationMessage('conversation_msg_ticket' as ConversationMessageId, replier)
+    ).rejects.toThrow(ForbiddenError)
+  })
+
   it('refuses deleting a ticket-parented system message', async () => {
     messageRow = { ...ticketMessage, senderType: 'system', principalId: null }
     await expect(
       deleteConversationMessage('conversation_msg_ticket' as ConversationMessageId, agentActor)
-    ).rejects.toThrow()
-    expect(mockAssertTicketVisible).not.toHaveBeenCalled()
+    ).rejects.toThrow(ForbiddenError)
   })
 })

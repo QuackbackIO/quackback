@@ -15,6 +15,8 @@ import {
 import { toUuid, type PostId, type PostVoteId, type PrincipalId } from '@quackback/ids'
 import { relatedPostIdsSql } from './post.merge-ids'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { notTestPrincipal } from '@/lib/server/test-data'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import {
   levelFromFlags,
   type SubscriptionLevel,
@@ -53,6 +55,7 @@ export async function listPostVoters(
   // person who voted on both the canonical and a source does not consume two
   // page slots or reappear on the next cursor page.
   const conditions = [
+    notTestPrincipal(postVotes.principalId),
     sql`${postVotes.id} IN (
       SELECT DISTINCT ON (v.principal_id) v.id
       FROM ${postVotes} v
@@ -79,6 +82,9 @@ export async function listPostVoters(
       displayName: principal.displayName,
       email: user.email,
       avatarUrl: principal.avatarUrl,
+      avatarKey: principal.avatarKey,
+      userImage: user.image,
+      userImageKey: user.imageKey,
       principalType: principal.type,
       sourceType: postVotes.sourceType,
       sourceExternalUrl: postVotes.sourceExternalUrl,
@@ -126,6 +132,9 @@ type VoterRow = {
   displayName: string | null
   email: string | null
   avatarUrl: string | null
+  avatarKey: string | null
+  userImage: string | null
+  userImageKey: string | null
   principalType: string
   sourceType: string | null
   sourceExternalUrl: string | null
@@ -141,7 +150,14 @@ function mapVoterRow(row: VoterRow): VoterInfo {
     principalId: row.principalId,
     displayName: isAnonymous ? null : row.displayName,
     email: realEmail(row.email),
-    avatarUrl: isAnonymous ? null : row.avatarUrl,
+    avatarUrl: isAnonymous
+      ? null
+      : resolveUserAvatarUrl({
+          userImage: row.userImage,
+          userImageKey: row.userImageKey,
+          principalAvatarUrl: row.avatarUrl,
+          principalAvatarKey: row.avatarKey,
+        }),
     isAnonymous,
     sourceType: row.sourceType,
     sourceExternalUrl: row.sourceExternalUrl,

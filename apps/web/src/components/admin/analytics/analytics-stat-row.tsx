@@ -16,16 +16,26 @@ export interface AnalyticsStatProps {
    * takes precedence when both are set (snapshot stats never carry a delta).
    */
   caption?: string
+  /** Quiet type for a value that is a placeholder (for example "No data"), not a figure. */
+  muted?: boolean
 }
 
 /** A single headline stat, styled to match the Overview metric tiles
- *  (uppercase label, large tabular number) but static — these report, they
+ *  (sentence-case label, large tabular number) but static: these report, they
  *  don't drive a chart, so there's no hover/active affordance. */
-function AnalyticsStat({ label, value, suffix, delta, caption }: AnalyticsStatProps) {
+function AnalyticsStat({ label, value, suffix, delta, caption, muted }: AnalyticsStatProps) {
   return (
     <div className="px-5 py-4">
-      <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="flex items-baseline gap-1 text-2xl leading-none font-bold tracking-tight tabular-nums sm:text-3xl">
+      <p className="mb-2 text-[13px] text-muted-foreground">{label}</p>
+      <p
+        data-muted={muted ? 'true' : undefined}
+        className={cn(
+          'flex min-h-7 items-end gap-1 tabular-nums sm:min-h-[30px]',
+          muted
+            ? 'text-base leading-none font-medium text-muted-foreground sm:text-lg'
+            : 'text-2xl leading-none font-bold tracking-tight sm:text-3xl'
+        )}
+      >
         {value}
         {suffix && <span className="text-base font-medium text-muted-foreground">{suffix}</span>}
       </p>

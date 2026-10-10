@@ -566,7 +566,7 @@ test.describe('Public Post List', () => {
       await filterButton.click()
 
       // The checkbox for "open" status should be checked
-      const openCheckbox = page.locator('button[role="checkbox"][data-state="checked"]')
+      const openCheckbox = page.locator('[role="checkbox"][data-checked]')
       await expect(openCheckbox.first()).toBeVisible()
     })
 

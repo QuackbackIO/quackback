@@ -60,6 +60,8 @@ import type { CustomFieldValues } from '@/lib/shared/db-types'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
 import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
+import { isTestCustomer, notTestPrincipal } from '@/lib/server/test-data'
+import { resolveTestFeedbackActor } from '@/lib/server/test-customer-feedback'
 
 const log = logger.child({ component: 'posts' })
 
@@ -108,19 +110,22 @@ export async function createPost(
 
   // Tier-limit gate (no-op in OSS — getTierLimits short-circuits to OSS_TIER_LIMITS
   // which has maxPosts: null, so enforceCountLimit returns immediately).
+  // A test customer's idea is test data: it never counts toward a plan limit.
+  const testIdea = await isTestCustomer(author.principalId)
   const limits = await getTierLimits()
-  await enforceCountLimit({
-    limit: limits.maxPosts,
-    name: 'maxPosts',
-    friendly: 'posts',
-    currentCount: async () => {
-      const [row] = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(posts)
-        .where(isNull(posts.deletedAt))
-      return row?.count ?? 0
-    },
-  })
+  if (!testIdea)
+    await enforceCountLimit({
+      limit: limits.maxPosts,
+      name: 'maxPosts',
+      friendly: 'posts',
+      currentCount: async () => {
+        const [row] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(posts)
+          .where(and(isNull(posts.deletedAt), notTestPrincipal(posts.principalId)))
+        return row?.count ?? 0
+      },
+    })
 
   // Validate board exists and get status in parallel.
   // The deletedAt filter here is load-bearing: rehostExternalImages (below) uploads
@@ -163,8 +168,11 @@ export async function createPost(
   // requireApproval category land in 'pending' instead of 'published'.
   // Team always bypasses.
   const portalConfig = await getPortalConfig()
+  const createActor = author.actor?.testFeedback
+    ? await resolveTestFeedbackActor(author.actor)
+    : (author.actor ?? ANONYMOUS_ACTOR)
   const createDecision = canCreatePost(
-    author.actor ?? ANONYMOUS_ACTOR,
+    createActor,
     { access: board.access },
     portalConfig.moderationDefault.requireApproval
   )
@@ -220,8 +228,11 @@ export async function createPost(
     if (!lockedBoard) {
       throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${input.boardId} not found`)
     }
+    const lockedActor = createActor.testFeedback
+      ? await resolveTestFeedbackActor(createActor, tx)
+      : createActor
     const lockedDecision = canCreatePost(
-      author.actor ?? ANONYMOUS_ACTOR,
+      lockedActor,
       { access: lockedBoard.access },
       portalConfig.moderationDefault.requireApproval
     )
@@ -229,7 +240,7 @@ export async function createPost(
       throw new ValidationError('POST_CREATE_DENIED', lockedDecision.reason)
     }
     moderationState = lockedDecision.requiresApproval ? 'pending' : 'published'
-    const actor = author.actor ?? ANONYMOUS_ACTOR
+    const actor = lockedActor
     holdReason = isTeamActor(actor)
       ? null
       : contentHoldReason(portalConfig.moderationDefault, contentJson, `${title}\n${content}`)
@@ -295,9 +306,11 @@ export async function createPost(
   // AI auto-tagging: evaluate the post against every tag carrying an AI
   // prompt. Fire-and-forget like the embedding regen in updatePost — the
   // service degrades to a no-op on any AI failure and never blocks creation.
-  import('./post.autotag')
-    .then(({ autoTagPost }) => autoTagPost(post.id, post.title, post.content ?? ''))
-    .catch((err) => log.error({ err, post_id: post.id }, 'ai auto-tag failed'))
+  // A test idea spends no AI tokens.
+  if (!testIdea)
+    import('./post.autotag')
+      .then(({ autoTagPost }) => autoTagPost(post.id, post.title, post.content ?? ''))
+      .catch((err) => log.error({ err, post_id: post.id }, 'ai auto-tag failed'))
 
   if (!options?.skipDispatch) {
     // Auto-subscribe the author to their own post. Runs even when held for

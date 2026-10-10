@@ -1,9 +1,9 @@
 /**
- * Tests for the device-fingerprint tracker. Two-phase API (isDeviceUnseen →
- * markDeviceSeen | forgetDevice) so notification failures can roll back the
- * claim and re-fire on the next sign-in.
+ * Tests for the known-device tracker. `isDeviceUnseen` claims; on
+ * notification failure the caller `forgetDevice`s so the next sign-in
+ * re-fires. Members are cookie ids under v3.
  *
- * The tracker's subject is that two-phase protocol, so the set primitives it
+ * The tracker's subject is that protocol, so the set primitives it
  * delegates to (`kv/pg-kv.ts`) are stubbed here. Their own guarantees — one
  * statement per claim, and the workspace discriminator on every row — are proved
  * against a real database in `kv/__tests__/pg-kv-semantics.db.test.ts` and
@@ -11,76 +11,90 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockClaim = vi.fn()
-const mockTouch = vi.fn()
+const mockClaimCounted = vi.fn()
+const mockMemberTouch = vi.fn()
 const mockRemove = vi.fn()
 
 vi.mock('@/lib/server/kv/pg-kv', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/kv/pg-kv')>()),
-  kvSetMemberClaim: mockClaim,
-  kvSetTouch: mockTouch,
+  kvSetMemberClaimCounted: mockClaimCounted,
+  kvSetMemberTouch: mockMemberTouch,
   kvSetMemberRemove: mockRemove,
 }))
 
-const { computeDeviceFingerprint, isDeviceUnseen, markDeviceSeen, forgetDevice } =
+const { formatSignInDevice, isDeviceUnseen, forgetDevice } =
   await import('../signin-device-tracker')
+
+const CHROME_WIN_129 =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
+const CHROME_WIN_130 =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+const FIREFOX_WIN =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0'
+const CHROME_IOS =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/129.0.6668.69 Mobile/15E148 Safari/604.1'
 
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('computeDeviceFingerprint', () => {
-  it('truncates IPv4 to /24 before hashing', () => {
-    const a = computeDeviceFingerprint('Mozilla/5.0', '203.0.113.42')
-    const b = computeDeviceFingerprint('Mozilla/5.0', '203.0.113.99')
-    expect(a).toBe(b)
+describe('formatSignInDevice', () => {
+  it('strips browser versions so an auto-update stays the same line', () => {
+    expect(formatSignInDevice(CHROME_WIN_129)).toBe('Chrome on Windows')
+    expect(formatSignInDevice(CHROME_WIN_130)).toBe('Chrome on Windows')
   })
 
-  it('differs on UA change', () => {
-    const a = computeDeviceFingerprint('Mozilla/5.0', '203.0.113.42')
-    const b = computeDeviceFingerprint('Different/5.0', '203.0.113.42')
-    expect(a).not.toBe(b)
+  it('differs across browser families', () => {
+    expect(formatSignInDevice(FIREFOX_WIN)).toBe('Firefox on Windows')
+    expect(formatSignInDevice(CHROME_WIN_129)).not.toBe(formatSignInDevice(FIREFOX_WIN))
   })
 
-  it('differs on /24 change', () => {
-    expect(computeDeviceFingerprint('UA', '203.0.113.42')).not.toBe(
-      computeDeviceFingerprint('UA', '203.0.114.42')
-    )
+  it('differs across OS / platform', () => {
+    expect(formatSignInDevice(CHROME_IOS)).toMatch(/Chrome on iOS/i)
+    expect(formatSignInDevice(CHROME_WIN_129)).not.toBe(formatSignInDevice(CHROME_IOS))
   })
 
-  it('hashes IPv6 whole (no truncation)', () => {
-    expect(computeDeviceFingerprint('UA', '2001:db8::1')).not.toBe(
-      computeDeviceFingerprint('UA', '2001:db8::2')
-    )
-  })
-
-  it('returns 32-char hex', () => {
-    expect(computeDeviceFingerprint('UA', '203.0.113.42')).toMatch(/^[0-9a-f]{32}$/)
+  it('collapses empty and unparseable UAs onto one line', () => {
+    expect(formatSignInDevice('')).toBe('Unknown device')
+    expect(formatSignInDevice('   ')).toBe('Unknown device')
+    expect(formatSignInDevice('???')).toBe('Unknown device')
   })
 })
 
 describe('isDeviceUnseen', () => {
-  it('returns true when the claim takes the member', async () => {
-    mockClaim.mockResolvedValueOnce(true)
+  it('returns false for the first recorded device (silent seed)', async () => {
+    mockClaimCounted.mockResolvedValueOnce({ claimed: true, liveCount: 1 })
+    expect(await isDeviceUnseen('user_abc', 'fp')).toBe(false)
+  })
+
+  it('returns true when the claim takes an additional member', async () => {
+    mockClaimCounted.mockResolvedValueOnce({ claimed: true, liveCount: 2 })
     expect(await isDeviceUnseen('user_abc', 'fp')).toBe(true)
   })
 
   it('returns false when the member was already present', async () => {
-    mockClaim.mockResolvedValueOnce(false)
+    mockClaimCounted.mockResolvedValueOnce({ claimed: false, liveCount: 2 })
     expect(await isDeviceUnseen('user_abc', 'fp')).toBe(false)
+    expect(mockMemberTouch).toHaveBeenCalledWith('user:devices:v3:user_abc', 'fp', 7_776_000)
   })
 
-  it('claims the fingerprint under the user set key with the 90-day TTL', async () => {
-    mockClaim.mockResolvedValueOnce(true)
+  it('does not slide TTL on a first-device silent seed', async () => {
+    mockClaimCounted.mockResolvedValueOnce({ claimed: true, liveCount: 1 })
+    expect(await isDeviceUnseen('user_abc', 'fp')).toBe(false)
+    expect(mockMemberTouch).not.toHaveBeenCalled()
+  })
+
+  it('claims the cookie id under the v3 user set key with the 90-day TTL', async () => {
+    mockClaimCounted.mockResolvedValueOnce({ claimed: true, liveCount: 2 })
     await isDeviceUnseen('user_abc', 'fp')
-    // One call, so the claim and the expiry cannot separate: a caller that
-    // crashes before markDeviceSeen still leaves an expiring member.
-    expect(mockClaim).toHaveBeenCalledTimes(1)
-    expect(mockClaim).toHaveBeenCalledWith('user:devices:user_abc', 'fp', 7_776_000)
+    expect(mockClaimCounted).toHaveBeenCalledTimes(1)
+    expect(mockClaimCounted).toHaveBeenCalledWith('user:devices:v3:user_abc', 'fp', 7_776_000)
   })
 
-  it('atomic across concurrent first-sights — only one caller gets true', async () => {
-    mockClaim.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+  it('atomic across concurrent first-sights — only one caller gets a claim', async () => {
+    mockClaimCounted
+      .mockResolvedValueOnce({ claimed: true, liveCount: 2 })
+      .mockResolvedValueOnce({ claimed: false, liveCount: 2 })
     const [a, b] = await Promise.all([
       isDeviceUnseen('user_abc', 'fp'),
       isDeviceUnseen('user_abc', 'fp'),
@@ -89,29 +103,16 @@ describe('isDeviceUnseen', () => {
   })
 
   it('fails closed on a store error (returns false, no notification spam)', async () => {
-    mockClaim.mockRejectedValueOnce(new Error('store down'))
+    mockClaimCounted.mockRejectedValueOnce(new Error('store down'))
     expect(await isDeviceUnseen('user_abc', 'fp')).toBe(false)
   })
 })
 
-describe('markDeviceSeen', () => {
-  it('slides the 90-day TTL forward', async () => {
-    mockTouch.mockResolvedValueOnce(undefined)
-    await markDeviceSeen('user_abc')
-    expect(mockTouch).toHaveBeenCalledWith('user:devices:user_abc', 7_776_000)
-  })
-
-  it('swallows store errors', async () => {
-    mockTouch.mockRejectedValueOnce(new Error('store down'))
-    await expect(markDeviceSeen('user_abc')).resolves.toBeUndefined()
-  })
-})
-
 describe('forgetDevice', () => {
-  it('removes the fingerprint from the user set', async () => {
+  it('removes the cookie id from the user set', async () => {
     mockRemove.mockResolvedValueOnce(undefined)
     await forgetDevice('user_abc', 'fp')
-    expect(mockRemove).toHaveBeenCalledWith('user:devices:user_abc', 'fp')
+    expect(mockRemove).toHaveBeenCalledWith('user:devices:v3:user_abc', 'fp')
   })
 
   it('swallows store errors', async () => {

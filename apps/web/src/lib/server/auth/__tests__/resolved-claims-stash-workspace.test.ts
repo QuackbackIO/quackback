@@ -23,29 +23,38 @@ import { withWorkspace } from '@/lib/server/__tests__/workspace-scope'
 const PROVIDER = 'google'
 const SUBJECT = '110248495921238986420'
 
+/** One resolved sign-in: its claims and the resolver's profile decisions. */
+function signIn(claims: Record<string, unknown>) {
+  return { claims, profile: { generatedNames: [] } }
+}
+
 describe('the same identity signing into two workspaces', () => {
   it('does not hand workspace B the claims resolved for workspace A', () => {
     withWorkspace('workspace-alpha', () =>
-      stashResolvedClaims(PROVIDER, SUBJECT, { groups: ['alpha-admins'] })
+      stashResolvedClaims(PROVIDER, SUBJECT, signIn({ groups: ['alpha-admins'] }))
     )
 
     expect(withWorkspace('workspace-bravo', () => takeResolvedClaims(PROVIDER, SUBJECT))).toBeNull()
     // …and alpha's own entry is still there, so the isolation is not just
     // "everything is empty".
-    expect(withWorkspace('workspace-alpha', () => takeResolvedClaims(PROVIDER, SUBJECT))).toEqual({
-      groups: ['alpha-admins'],
-    })
+    expect(withWorkspace('workspace-alpha', () => takeResolvedClaims(PROVIDER, SUBJECT))).toEqual(
+      signIn({
+        groups: ['alpha-admins'],
+      })
+    )
   })
 
   it('does not hand workspace A the claims resolved for workspace B', () => {
     withWorkspace('workspace-bravo', () =>
-      stashResolvedClaims(PROVIDER, SUBJECT, { groups: ['bravo-admins'] })
+      stashResolvedClaims(PROVIDER, SUBJECT, signIn({ groups: ['bravo-admins'] }))
     )
 
     expect(withWorkspace('workspace-alpha', () => takeResolvedClaims(PROVIDER, SUBJECT))).toBeNull()
-    expect(withWorkspace('workspace-bravo', () => takeResolvedClaims(PROVIDER, SUBJECT))).toEqual({
-      groups: ['bravo-admins'],
-    })
+    expect(withWorkspace('workspace-bravo', () => takeResolvedClaims(PROVIDER, SUBJECT))).toEqual(
+      signIn({
+        groups: ['bravo-admins'],
+      })
+    )
   })
 
   it('keeps both entries alive at once — a second stash does not overwrite the first', () => {
@@ -53,23 +62,27 @@ describe('the same identity signing into two workspaces', () => {
     // Map the second `set` replaces the first and only one workspace can be
     // wrong; the pair below shows both survive independently.
     withWorkspace('workspace-alpha', () =>
-      stashResolvedClaims(PROVIDER, SUBJECT, { role: 'admin' })
+      stashResolvedClaims(PROVIDER, SUBJECT, signIn({ role: 'admin' }))
     )
     withWorkspace('workspace-bravo', () =>
-      stashResolvedClaims(PROVIDER, SUBJECT, { role: 'viewer' })
+      stashResolvedClaims(PROVIDER, SUBJECT, signIn({ role: 'viewer' }))
     )
 
-    expect(withWorkspace('workspace-alpha', () => takeResolvedClaims(PROVIDER, SUBJECT))).toEqual({
-      role: 'admin',
-    })
-    expect(withWorkspace('workspace-bravo', () => takeResolvedClaims(PROVIDER, SUBJECT))).toEqual({
-      role: 'viewer',
-    })
+    expect(withWorkspace('workspace-alpha', () => takeResolvedClaims(PROVIDER, SUBJECT))).toEqual(
+      signIn({
+        role: 'admin',
+      })
+    )
+    expect(withWorkspace('workspace-bravo', () => takeResolvedClaims(PROVIDER, SUBJECT))).toEqual(
+      signIn({
+        role: 'viewer',
+      })
+    )
   })
 
   it('is take-once within a workspace', () => {
     withWorkspace('workspace-alpha', () =>
-      stashResolvedClaims(PROVIDER, SUBJECT, { role: 'admin' })
+      stashResolvedClaims(PROVIDER, SUBJECT, signIn({ role: 'admin' }))
     )
 
     expect(
@@ -79,13 +92,24 @@ describe('the same identity signing into two workspaces', () => {
   })
 
   it('still works with no workspace scope, for a self-hosted install', () => {
-    stashResolvedClaims(PROVIDER, SUBJECT, { role: 'admin' })
-    expect(takeResolvedClaims(PROVIDER, SUBJECT)).toEqual({ role: 'admin' })
+    stashResolvedClaims(PROVIDER, SUBJECT, signIn({ role: 'admin' }))
+    expect(takeResolvedClaims(PROVIDER, SUBJECT)).toEqual(signIn({ role: 'admin' }))
+  })
+
+  it('carries the profile decisions with the claims', () => {
+    const resolved = {
+      claims: { picture: 'https://cdn.example.com/a' },
+      profile: { name: 'Ada', image: 'https://cdn.example.com/a', generatedNames: ['ada'] },
+    }
+    withWorkspace('workspace-alpha', () => stashResolvedClaims(PROVIDER, SUBJECT, resolved))
+    expect(withWorkspace('workspace-alpha', () => takeResolvedClaims(PROVIDER, SUBJECT))).toEqual(
+      resolved
+    )
   })
 
   it('does not let an unscoped stash be drained by a workspace, or the reverse', () => {
-    stashResolvedClaims(PROVIDER, SUBJECT, { role: 'self-hosted' })
+    stashResolvedClaims(PROVIDER, SUBJECT, signIn({ role: 'self-hosted' }))
     expect(withWorkspace('workspace-alpha', () => takeResolvedClaims(PROVIDER, SUBJECT))).toBeNull()
-    expect(takeResolvedClaims(PROVIDER, SUBJECT)).toEqual({ role: 'self-hosted' })
+    expect(takeResolvedClaims(PROVIDER, SUBJECT)).toEqual(signIn({ role: 'self-hosted' }))
   })
 })

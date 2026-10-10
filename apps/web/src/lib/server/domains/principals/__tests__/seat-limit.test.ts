@@ -3,7 +3,6 @@ import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
 const hoisted = vi.hoisted(() => ({
   countSeatUsage: vi.fn(),
-  getCloudConfig: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
@@ -14,23 +13,27 @@ vi.mock('../seat-usage', () => ({
   countSeatUsage: () => hoisted.countSeatUsage(),
 }))
 
-vi.mock('@/lib/server/domains/settings/cloud/cloud.service', () => ({
-  getCloudConfig: () => hoisted.getCloudConfig(),
-}))
-
 import { enforceSeatLimit } from '../seat-limit'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
+import type { SeatExecutor } from '../seat-usage'
+
+function lockingExecutor(forUpdate: () => Promise<unknown>): SeatExecutor {
+  return {
+    select: () => ({
+      from: () => ({
+        limit: () => ({
+          for: forUpdate,
+        }),
+      }),
+    }),
+  } as unknown as SeatExecutor
+}
 
 describe('enforceSeatLimit', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     hoisted.countSeatUsage.mockResolvedValue({ members: 0, pendingInvites: 0, used: 0 })
-    hoisted.getCloudConfig.mockResolvedValue({
-      enabled: false,
-      plan: null,
-      trialActive: false,
-    })
   })
 
   it('does nothing when maxTeamSeats is null (OSS default)', async () => {
@@ -51,29 +54,11 @@ describe('enforceSeatLimit', () => {
     await expect(enforceSeatLimit()).rejects.toBeInstanceOf(TierLimitError)
   })
 
-  it('uses seat-specific copy on a paid plan', async () => {
-    vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxTeamSeats: 10 })
-    hoisted.countSeatUsage.mockResolvedValue({ members: 8, pendingInvites: 2, used: 10 })
-    hoisted.getCloudConfig.mockResolvedValue({
-      enabled: true,
-      plan: 'pro',
-      trialActive: false,
-    })
+  it('uses upgrade copy at the cap', async () => {
+    vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxTeamSeats: 5 })
+    hoisted.countSeatUsage.mockResolvedValue({ members: 5, pendingInvites: 0, used: 5 })
     await expect(enforceSeatLimit()).rejects.toThrow(
-      'All 10 seats are in use. Add a seat to invite more.'
-    )
-  })
-
-  it('keeps the upgrade sentence on Free', async () => {
-    vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxTeamSeats: 1 })
-    hoisted.countSeatUsage.mockResolvedValue({ members: 1, pendingInvites: 0, used: 1 })
-    hoisted.getCloudConfig.mockResolvedValue({
-      enabled: true,
-      plan: 'free',
-      trialActive: false,
-    })
-    await expect(enforceSeatLimit()).rejects.toThrow(
-      "You've reached your plan's team seats limit (1). Upgrade to add more."
+      "You've reached your plan's team seats limit (5). Upgrade to add more."
     )
   })
 
@@ -89,5 +74,15 @@ describe('enforceSeatLimit', () => {
     await expect(enforceSeatLimit({ convertingInvite: true })).rejects.toBeInstanceOf(
       TierLimitError
     )
+  })
+
+  it('takes the settings-row lock when an executor is passed', async () => {
+    vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxTeamSeats: 10 })
+    hoisted.countSeatUsage.mockResolvedValue({ members: 4, pendingInvites: 1, used: 5 })
+    const forUpdate = vi.fn(async () => [{ id: 'set_1' }])
+    await expect(
+      enforceSeatLimit({ executor: lockingExecutor(forUpdate) })
+    ).resolves.toBeUndefined()
+    expect(forUpdate).toHaveBeenCalledOnce()
   })
 })

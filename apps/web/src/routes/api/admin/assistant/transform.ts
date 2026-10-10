@@ -30,7 +30,11 @@ import { toServerSentEventsResponse } from '@tanstack/ai'
 import { z } from 'zod'
 import { runCopilotTransform } from '@/lib/server/domains/assistant'
 import { gateCopilotAguiRequest } from '@/lib/server/domains/assistant/copilot-gate'
-import { aguiThreadMessages, streamSynthesisToWire } from '@/lib/server/domains/assistant/agui'
+import {
+  aguiThreadMessages,
+  streamSynthesisToWire,
+  withSseKeepalive,
+} from '@/lib/server/domains/assistant/agui'
 import { withAssistantItemRef } from '@/lib/server/domains/assistant/item-ref.schema'
 import { errorResponse } from '@/lib/server/domains/api/responses'
 import { logger } from '@/lib/server/logger'
@@ -76,24 +80,28 @@ export async function handleTransform({ request }: { request: Request }): Promis
     return errorResponse('INVALID_REQUEST', 'Source text is required', 400)
   }
 
-  return toServerSentEventsResponse(
-    streamSynthesisToWire({
-      wire: { threadId: agui.threadId, runId: agui.runId },
-      run: (wireSink) =>
-        runCopilotTransform({
-          transform: parsed.transform,
-          text: source.content,
-          principalId: auth.principal.id,
-          language: parsed.language,
-          signal: request.signal,
-          wireSink,
-        }),
-      buildFinalPayload: (result): TransformFinalPayload => ({ text: result.text }),
-      mapError: (err) => {
-        log.error({ err }, 'copilot transform failed')
-        return { code: 'TRANSFORM_FAILED', message: 'Transform failed' }
-      },
-    })
+  // A turn can say nothing for longer than the server's idle timeout while a
+  // model or tool step runs, so silence is filled with SSE comments.
+  return withSseKeepalive(
+    toServerSentEventsResponse(
+      streamSynthesisToWire({
+        wire: { threadId: agui.threadId, runId: agui.runId },
+        run: (wireSink) =>
+          runCopilotTransform({
+            transform: parsed.transform,
+            text: source.content,
+            principalId: auth.principal.id,
+            language: parsed.language,
+            signal: request.signal,
+            wireSink,
+          }),
+        buildFinalPayload: (result): TransformFinalPayload => ({ text: result.text }),
+        mapError: (err) => {
+          log.error({ err }, 'copilot transform failed')
+          return { code: 'TRANSFORM_FAILED', message: 'Transform failed' }
+        },
+      })
+    )
   )
 }
 

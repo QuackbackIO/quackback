@@ -144,6 +144,7 @@ export function buildTransformSystemPrompts(
     '- Preserve the meaning and every fact already in the text. NEVER add facts, claims, numbers, or details that are not already present in it.',
     '- Keep any inline formatting already present (citation markers like [1], bullet or numbered lists, **bold**) unless the task above specifically requires removing it.',
     '- Reply with the rewritten text only: no preamble, no commentary, no surrounding quotation marks.',
+    '- Do not add em dashes or en dashes as punctuation. Use a comma, a period, a colon or parentheses instead.',
     'Respond with ONLY a single JSON object of this exact shape: {"text": string}. Put the rewritten text inside "text".',
     'Example output:',
     '{"text": "Thanks for flagging this! I\'ve refunded the duplicate charge, and you\'ll see it back on your card within 3-5 business days."}',

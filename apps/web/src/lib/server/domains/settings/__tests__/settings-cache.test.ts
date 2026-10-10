@@ -37,12 +37,26 @@ const mockReturning = vi.fn()
 type SettingsTx = {
   query: { settings: { findFirst: (...args: unknown[]) => unknown } }
   update: (...args: unknown[]) => unknown
+  select: () => unknown
 }
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const tx: SettingsTx = {
     query: { settings: { findFirst: (...args: unknown[]) => mockFindFirst(...args) } },
     update: (...args: unknown[]) => mockUpdate(...args),
+    // The read a read-modify-write takes under the row lock: the same stored
+    // row. Only the locking form is faked, so an unlocked read fails here.
+    select: () => ({
+      from: () => ({
+        limit: () => ({
+          for: async (strength: string) => {
+            if (strength !== 'update') throw new Error(`unexpected lock: ${strength}`)
+            const row = await mockFindFirst()
+            return row ? [row] : []
+          },
+        }),
+      }),
+    }),
   }
   return {
     // Spread the real db module so tables/operators stay current; override only what this suite drives.
@@ -56,6 +70,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
       update: (...args: unknown[]) => mockUpdate(...args),
       select: () => ({
         from: () => ({
+          where: () => Promise.resolve([]),
           limit: () => Promise.resolve([]),
           orderBy: () => Promise.resolve([]),
         }),
@@ -144,7 +159,8 @@ const {
   saveHeaderLogoKey,
   deleteHeaderLogoKey,
 } = await import('../settings.media')
-const { updateWidgetConfig, regenerateWidgetSecret } = await import('../settings.widget')
+const { updateWidgetConfig, regenerateWidgetSecret, ensureWidgetSecret } =
+  await import('../settings.widget')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -274,6 +290,7 @@ describe('getWorkspaceSettings', () => {
     const result = await getWorkspaceSettings()
 
     expect(result).not.toBeNull()
+    expect(result).not.toHaveProperty('visualTheme')
     expect(mockFindFirst).toHaveBeenCalled()
     expect(mockCacheSet).toHaveBeenCalledWith(
       'settings:workspace',
@@ -401,6 +418,41 @@ describe('settings write functions invalidate cache', () => {
   it('regenerateWidgetSecret invalidates cache', async () => {
     await regenerateWidgetSecret()
     expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+  })
+})
+
+describe('ensureWidgetSecret', () => {
+  it('returns an existing secret without writing or invalidating', async () => {
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ widgetSecret: 'wgt_existing' }))
+    await expect(ensureWidgetSecret()).resolves.toBe('wgt_existing')
+    expect(mockUpdate).not.toHaveBeenCalled()
+    expect(mockCacheDel).not.toHaveBeenCalled()
+  })
+
+  it('mints when missing and invalidates cache', async () => {
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ widgetSecret: null }))
+    let stored: string | undefined
+    mockSet.mockImplementation((payload: { widgetSecret?: string }) => {
+      stored = payload.widgetSecret
+      return { where: mockWhere }
+    })
+    mockReturning.mockImplementation(() => Promise.resolve([{ widgetSecret: stored }]))
+
+    const secret = await ensureWidgetSecret()
+    expect(secret).toMatch(/^wgt_[a-f0-9]{64}$/)
+    expect(secret).toBe(stored)
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+  })
+
+  it('returns the winner when the insert loses the race', async () => {
+    const existing = `wgt_${'b'.repeat(64)}`
+    mockFindFirst
+      .mockResolvedValueOnce(makeSettingsRow({ widgetSecret: null }))
+      .mockResolvedValueOnce(makeSettingsRow({ widgetSecret: existing }))
+    mockReturning.mockResolvedValue([])
+
+    await expect(ensureWidgetSecret()).resolves.toBe(existing)
+    expect(mockCacheDel).not.toHaveBeenCalled()
   })
 })
 

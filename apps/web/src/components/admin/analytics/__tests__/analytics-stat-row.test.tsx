@@ -48,4 +48,17 @@ describe('<AnalyticsStatRow>', () => {
     expect(screen.getByText(/\+12%/)).toBeInTheDocument()
     expect(screen.queryByText('current')).toBeNull()
   })
+
+  it('sets a placeholder value in quiet type', () => {
+    render(
+      <AnalyticsStatRow
+        stats={[
+          { label: 'CSAT', value: 'No data', muted: true },
+          { label: 'Responses', value: '2' },
+        ]}
+      />
+    )
+    expect(screen.getByText('No data')).toHaveAttribute('data-muted', 'true')
+    expect(screen.getByText('2')).not.toHaveAttribute('data-muted')
+  })
 })

@@ -1,21 +1,22 @@
-import { createFileRoute, useNavigate, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
-import { KeyIcon, BoltIcon, CommandLineIcon } from '@heroicons/react/24/solid'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { ApiKeysSettings } from '@/components/admin/settings/api-keys/api-keys-settings'
-import { ApiUsageGuide } from '@/components/admin/settings/api-keys/api-usage-guide'
+import { ApiReferenceCard } from '@/components/admin/settings/api-keys/api-reference-card'
 import { WebhooksSettings } from '@/components/admin/settings/webhooks/webhooks-settings'
 import { WebhookVerificationGuide } from '@/components/admin/settings/webhooks/webhook-verification-guide'
 import { McpServerSettings } from '@/components/admin/settings/mcp/mcp-server-settings'
 import { McpSetupGuide } from '@/components/admin/settings/mcp/mcp-setup-guide'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { readBatch } from '@/lib/client/queries/read-batch'
+import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const searchSchema = z.object({
   tab: z.enum(['keys', 'webhooks', 'mcp']).optional(),
@@ -24,20 +25,22 @@ const searchSchema = z.object({
 type ApiTab = 'keys' | 'webhooks' | 'mcp'
 
 export const Route = createFileRoute('/admin/settings/developers')({
+  head: adminPageHead('Developers settings'),
   validateSearch: searchSchema,
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.API_KEY_MANAGE)
 
     const { queryClient } = context
     // All three tabs are preloaded so switching tabs never round-trips
-    // for data — every payload is small and admin-only.
+    // for data: every payload is small and admin-only.
     const { listEntitlementsFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const ensure = readBatch(queryClient)
     const [, entitlements] = await Promise.all([
       Promise.all([
-        queryClient.ensureQueryData(adminQueries.apiKeys()),
-        queryClient.ensureQueryData(adminQueries.webhooks()),
-        queryClient.ensureQueryData(settingsQueries.developerConfig()),
+        ensure(adminQueries.apiKeys()),
+        ensure(adminQueries.webhooks()),
+        ensure(settingsQueries.developerConfig()),
       ]),
       listEntitlementsFn(),
       ensureBillingCatalogue(queryClient, context.billingEnabled),
@@ -57,22 +60,13 @@ function ApiPage() {
   const webhooksQuery = useSuspenseQuery(adminQueries.webhooks())
   const developerConfigQuery = useSuspenseQuery(settingsQueries.developerConfig())
 
-  const { baseUrl } = useRouteContext({ from: '__root__' })
+  const baseUrl = useBaseUrl()
   const { webhooksEntitled, mcpEntitled } = Route.useLoaderData()
   const apiBaseUrl = baseUrl ? `${baseUrl}/api/v1` : '/api/v1'
   const mcpEndpointUrl = baseUrl ? `${baseUrl}/api/mcp` : '/api/mcp'
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
-      </div>
-      <PageHeader
-        icon={CommandLineIcon}
-        title="Developers"
-        description="API keys, webhooks, and the MCP server for programmatic integrations."
-      />
-
+    <SettingsPage page="/admin/settings/developers">
       <Tabs
         value={tab}
         onValueChange={(next) => {
@@ -88,45 +82,23 @@ function ApiPage() {
         className="space-y-6"
       >
         <TabsList>
-          <TabsTrigger value="keys">
-            <KeyIcon />
-            Keys
-          </TabsTrigger>
-          <TabsTrigger value="webhooks">
-            <BoltIcon />
-            Webhooks
-          </TabsTrigger>
-          <TabsTrigger value="mcp">
-            <CommandLineIcon />
-            MCP
-          </TabsTrigger>
+          <TabsTrigger value="keys">Keys</TabsTrigger>
+          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
+          <TabsTrigger value="mcp">MCP</TabsTrigger>
         </TabsList>
 
         <TabsContent value="keys" className="space-y-6">
-          <SettingsCard
-            title="API Keys"
-            description="Create and manage API keys to authenticate with the Quackback REST API. Keys are shown only once when created."
-          >
-            <ApiKeysSettings apiKeys={apiKeysQuery.data} />
-          </SettingsCard>
-          <ApiUsageGuide apiBaseUrl={apiBaseUrl} />
+          <ApiKeysSettings apiKeys={apiKeysQuery.data} />
+          <ApiReferenceCard apiBaseUrl={apiBaseUrl} />
         </TabsContent>
 
         <TabsContent value="webhooks" className="space-y-6">
-          <SettingsCard
-            title="Configured Webhooks"
-            description="Webhooks receive HTTP POST requests when events happen in your workspace."
-          >
-            <WebhooksSettings webhooks={webhooksQuery.data} entitled={webhooksEntitled} />
-          </SettingsCard>
+          <WebhooksSettings webhooks={webhooksQuery.data} entitled={webhooksEntitled} />
           <WebhookVerificationGuide />
         </TabsContent>
 
         <TabsContent value="mcp" className="space-y-6">
-          <SettingsCard
-            title="MCP Server"
-            description="Enable or disable the MCP endpoint for AI integrations."
-          >
+          <SettingsCard>
             <McpServerSettings
               entitled={mcpEntitled}
               initialEnabled={developerConfigQuery.data.mcpEnabled}
@@ -138,6 +110,6 @@ function ApiPage() {
           <McpSetupGuide endpointUrl={mcpEndpointUrl} />
         </TabsContent>
       </Tabs>
-    </div>
+    </SettingsPage>
   )
 }

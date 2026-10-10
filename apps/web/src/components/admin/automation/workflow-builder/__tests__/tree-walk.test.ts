@@ -134,7 +134,7 @@ describe('walkStepList — no fork', () => {
     )
     expect(capped.trigger.sections).toEqual([
       { label: 'Channels', chips: [{ label: 'All channels' }] },
-      { label: 'Frequency cap', chips: [{ label: 'At most 3 times per person' }] },
+      { label: 'Frequency cap', chips: [{ label: 'At most 3 times per user' }] },
     ])
 
     const unlimited = walkStepList(baseInput(tree, { triggerFrequencyCap: { type: 'unlimited' } }))

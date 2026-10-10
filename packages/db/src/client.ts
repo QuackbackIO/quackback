@@ -1,3 +1,4 @@
+import type { Logger } from 'drizzle-orm'
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import * as schema from './schema'
@@ -11,6 +12,8 @@ export interface CreateDbOptions {
   prepare?: boolean
   /** Close idle connections after this many seconds (default: 20). */
   idleTimeout?: number
+  /** Sees every statement Drizzle sends (the app counts them per request). */
+  logger?: Logger
 }
 
 /**
@@ -22,8 +25,13 @@ export function createDb(connectionString: string, options?: CreateDbOptions): D
     max: options?.max ?? 10,
     prepare: options?.prepare ?? true,
     idle_timeout: options?.idleTimeout ?? 20,
+    // postgres-js prints every server NOTICE to the console by default, and
+    // idempotent DDL (`CREATE TABLE IF NOT EXISTS` for page_views partitions at
+    // boot) emits one per skipped object. Errors still throw; notices carry
+    // nothing an operator acts on.
+    onnotice: () => {},
   })
-  return drizzle(sql, { schema })
+  return drizzle(sql, { schema, logger: options?.logger })
 }
 
 /**
@@ -35,8 +43,8 @@ export function createDb(connectionString: string, options?: CreateDbOptions): D
  * the pool. Building the handle at the call site and wrapping it here keeps the
  * schema wiring in one place, which is the part that must not be duplicated.
  */
-export function createDbFromSql(sql: postgres.Sql): Database {
-  return drizzle(sql, { schema })
+export function createDbFromSql(sql: postgres.Sql, options?: { logger?: Logger }): Database {
+  return drizzle(sql, { schema, logger: options?.logger })
 }
 
 /**

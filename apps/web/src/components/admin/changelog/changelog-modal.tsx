@@ -1,14 +1,12 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { ModalFooter } from '@/components/shared/modal-footer'
-import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { Loader2 } from 'lucide-react'
 import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { ModalHeader } from '@/components/shared/modal-header'
-import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { updateChangelogSchema } from '@/lib/shared/schemas/changelog'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { useUpdateChangelog } from '@/lib/client/mutations/changelog'
@@ -20,7 +18,6 @@ import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
 import { toPublishState, type PublishState } from '@/lib/shared/schemas/changelog'
-import { Route } from '@/routes/admin/changelog'
 import {
   type ChangelogId,
   type PostId,
@@ -28,17 +25,14 @@ import {
   type SegmentId,
 } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
-
-interface ChangelogModalProps {
-  entryId: string | undefined
-}
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 
 interface ChangelogModalContentProps {
   entryId: ChangelogId
   onClose: () => void
 }
 
-function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps) {
+export function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps) {
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
   const [categoryIds, setCategoryIds] = useState<ChangelogCategoryId[]>([])
@@ -91,9 +85,9 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
   }, [entry, form, hasInitialized])
 
   const handleContentChange = useCallback(
-    (json: JSONContent, _html: string, markdown: string) => {
-      setContentJson(json)
-      form.setValue('content', markdown, { shouldValidate: true })
+    (document: EditorDocument) => {
+      setContentJson(document.json())
+      form.setValue('content', document.markdown(), { shouldValidate: false, shouldDirty: true })
     },
     [form]
   )
@@ -162,11 +156,11 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
     }
     switch (publishState.type) {
       case 'draft':
-        return 'Save Draft'
+        return 'Save draft'
       case 'scheduled':
-        return 'Save Schedule'
+        return 'Save schedule'
       case 'published':
-        return 'Update & Publish'
+        return 'Update and publish'
     }
   }
 
@@ -184,7 +178,7 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
         {/* Header */}
         <ModalHeader
           section="Changelog"
-          title={entry?.title || 'Edit Entry'}
+          title={entry?.title || 'Edit entry'}
           onClose={onClose}
           viewUrl={entry?.status === 'published' ? `/changelog/${entryId}` : null}
         />
@@ -192,7 +186,7 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
         {/* Main content area - 2 column layout on desktop */}
         <div className="flex flex-1 min-h-0">
           {/* Left: Content editor */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ChangelogFormFields
               form={form}
               contentJson={contentJson}
@@ -241,7 +235,7 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
             </SheetTrigger>
             <SheetContent side="bottom" className="h-[70vh]">
               <SheetHeader>
-                <SheetTitle>Entry Settings</SheetTitle>
+                <SheetTitle>Entry settings</SheetTitle>
               </SheetHeader>
               <div className="py-4 overflow-y-auto">
                 <ChangelogMetadataSidebarContent
@@ -269,27 +263,5 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
         </ModalFooter>
       </form>
     </Form>
-  )
-}
-
-export function ChangelogModal({ entryId: urlEntryId }: ChangelogModalProps) {
-  const search = Route.useSearch()
-  const { open, validatedId, close } = useUrlModal<ChangelogId>({
-    urlId: urlEntryId,
-    idPrefix: 'changelog',
-    searchParam: 'entry',
-    route: '/admin/changelog',
-    search,
-  })
-
-  return (
-    <UrlModalShell
-      open={open}
-      onOpenChange={(o) => !o && close()}
-      srTitle="Edit changelog entry"
-      hasValidId={!!validatedId}
-    >
-      {validatedId && <ChangelogModalContent entryId={validatedId} onClose={close} />}
-    </UrlModalShell>
   )
 }

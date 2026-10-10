@@ -1251,7 +1251,7 @@ describe('person/company attribute condition fields', () => {
         op: 'contains',
         value: '@acme.com',
       }
-      expect(conditionSummary(condition)).toBe('Person email contains @acme.com')
+      expect(conditionSummary(condition)).toBe('User email contains @acme.com')
     })
   })
 
@@ -1337,6 +1337,17 @@ describe('snooze action: relative duration', () => {
     expect(actionSummary({ type: 'snooze', untilIso: '2026-08-01T09:00:00.000Z' })).toMatch(
       /^Snooze until /
     )
+  })
+
+  it("formats a legacy absolute snooze with the labels' date formatter", () => {
+    const untilIso = '2026-08-01T09:00:00.000Z'
+    const formatDate = (date: unknown, options?: Intl.DateTimeFormatOptions) =>
+      `${String(date)} as ${JSON.stringify(options)}`
+    expect(actionSummary({ type: 'snooze', untilIso }, { formatDate })).toBe(
+      `Snooze until ${untilIso} as {"dateStyle":"medium","timeStyle":"short"}`
+    )
+    // Without one, the format the server and the hydrating browser share.
+    expect(actionSummary({ type: 'snooze', untilIso })).toBe('Snooze until Aug 1, 2026, 9:00 AM')
   })
 
   it('flags a zero-duration relative snooze as an issue; a legacy value never is', () => {
@@ -2018,7 +2029,7 @@ describe('audienceUnreachableFieldWarning', () => {
 
   it('warns when a message.* rule is on a trigger whose event never carries a message', () => {
     expect(audienceUnreachableFieldWarning('conversation.created', messageRule)).toMatch(
-      /never carries one — it will never match/
+      /never carries one, so it will never match/
     )
   })
 

@@ -9,11 +9,13 @@
  *    genericOAuth runs with `pkce: true`, so the test flow mints a
  *    verifier/challenge pair to mirror that exactly.
  *
- *    The redirect_uri matches the provider's own production callback
- *    (`/api/auth/oauth2/callback/<registrationId>`) so admins register
- *    exactly one URL with their IdP. The auth catch-all intercepts test
- *    sign-ins by looking up `sso-test:<state>` in the KV store before handing
- *    off to Better-Auth — see `sso-test-callback.ts`.
+ *    The redirect_uri is the one production sign-in sends for this
+ *    provider (legacy `/api/auth/oauth2/callback/<registrationId>` or
+ *    current `/api/auth/callback/<registrationId>`, see oidc-redirect.ts),
+ *    so admins register exactly one URL with their IdP. The auth
+ *    catch-all intercepts test sign-ins by looking up `sso-test:<state>`
+ *    in the KV store before handing off to Better Auth — see
+ *    `sso-test-callback.ts`.
  *
  *  - getSsoTestResultFn: polls the `sso-test:result:<testId>` key
  *    written by the callback handler and returns the diagnostic
@@ -25,23 +27,29 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { oidcRedirectStyleFrom, oidcRedirectUri } from '@/lib/shared/oidc-redirect'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
+import type { ProfileOutcome } from '@/lib/shared/sso-profile-outcome'
+import type { SsoTestCaptureV2 } from '@/lib/shared/sso-test-capture'
 import type { JsonValue } from '@/lib/server/audit/log'
 import { authorizeRequestFor } from '@/lib/shared/oidc-request'
 import {
   allowsMissingEmail,
-  identitySourcesFor,
-  profileClaimFor,
+  claimMappingFor,
+  identityMappingFor,
+  type IdentityProviderClaimMapping,
+  type ProviderIdentityMapping,
 } from '@/lib/shared/oidc-claim-mapping'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
-import type { IdentityMapping } from '@/lib/server/auth/resolve-identity'
 
 const TTL_SECONDS = 600
 
 type TestSession = {
   testId: string
   state: string
-  nonce: string
+  /** Absent when the provider is set to not use a nonce: none is sent, so
+   *  none is expected back. */
+  nonce?: string
   /** The provider registrationId that initiated this test. */
   registrationId: string
   /** Mirrors the provider's placeholder-address setting so the callback can
@@ -68,7 +76,9 @@ type TestSession = {
   /** The prompt sent, replayed into a configuration-error hint. */
   requestedPrompt?: string
   /** Identity sources and claim paths — the same mapping production uses. */
-  identityMapping?: IdentityMapping
+  identityMapping?: ProviderIdentityMapping
+  /** Full mapping snapshotted at start. Pre-deploy sessions may omit this. */
+  claimMapping?: IdentityProviderClaimMapping
   /** The provider's `detailsChangedAt` at test-start. The callback only stamps
    *  `lastSuccessfulTestAt` when this still matches — so a mid-test edit to the
    *  provider can't let a stale test unlock enforcement for the new config. */
@@ -154,14 +164,16 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     }
 
     const { config } = await import('@/lib/server/config')
-    // Use the provider's own production callback so admins register exactly
-    // one redirect URI with their IdP. The catch-all dispatches test vs prod
-    // by looking up the OAuth `state` in the KV store (miss → fall through to
-    // Better-Auth), so the same URL handles both flows.
-    const redirectUri = `${config.baseUrl.replace(/\/$/, '')}/api/auth/oauth2/callback/${data.registrationId}`
+    // Same path Better Auth sends on sign-in, so the test and production
+    // share one redirect URI. The catch-all dispatches test vs prod by
+    // looking up the OAuth `state` in the KV store (miss → fall through).
+    const redirectUri = oidcRedirectUri(
+      config.baseUrl,
+      data.registrationId,
+      oidcRedirectStyleFrom(provider.redirectStyle)
+    )
     const testId = `ssotest_${randomBytes(15).toString('base64url')}`
     const state = randomBytes(32).toString('base64url')
-    const nonce = randomBytes(32).toString('base64url')
     // PKCE (RFC 7636, S256) — mirrors production now that genericOAuth
     // runs with pkce: true. OAuth 2.1 IdPs reject authorize requests
     // without a code_challenge; IdPs without PKCE support ignore it.
@@ -169,6 +181,13 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     // The SAME builder production reads. Assembling a different request here is
     // exactly how a passing test came to vouch for a sign-in that fails.
     const request = authorizeRequestFor(provider)
+    // Sign-in can bind a nonce only for a discovery provider whose document
+    // names the key set and issuer to verify the ID token with, so only then is
+    // there anything to learn. It is sent even when the setting is off: the
+    // test decides the setting, and has to see an echo that sign-in, having
+    // stopped sending a nonce, never would.
+    const canBindNonce = Boolean(provider.discoveryUrl && endpoints.jwksUri && endpoints.issuer)
+    const nonce = canBindNonce ? randomBytes(32).toString('base64url') : undefined
     const requestedScopes = request.scopes
     const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
 
@@ -191,12 +210,8 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       requestedScopes,
       tokenAuth: request.tokenAuth,
       requestedPrompt: request.prompt,
-      identityMapping: {
-        sources: identitySourcesFor(provider.claimMapping),
-        idClaim: profileClaimFor(provider.claimMapping, 'id'),
-        emailClaim: profileClaimFor(provider.claimMapping, 'email'),
-        nameClaim: profileClaimFor(provider.claimMapping, 'name'),
-      },
+      identityMapping: identityMappingFor(provider.claimMapping),
+      claimMapping: claimMappingFor(provider.claimMapping),
       adminUserId: user.id,
       startedAt: Date.now(),
       detailsChangedAt: provider.detailsChangedAt,
@@ -219,7 +234,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       scope: requestedScopes.join(' '),
       ...(request.prompt ? { prompt: request.prompt } : {}),
       state,
-      nonce,
+      ...(nonce ? { nonce } : {}),
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
     })
@@ -262,8 +277,11 @@ export type SsoTestDiagnostic = {
           id: string
           email?: string
           name?: string
-          sources: Partial<Record<'id' | 'email' | 'name', string>>
+          image?: string
+          sources: Partial<Record<'id' | 'email' | 'name' | 'image', string>>
         }
+        mappingOutcome?: ProfileOutcome
+        capture?: SsoTestCaptureV2
       }
     | {
         ok: false
@@ -271,13 +289,14 @@ export type SsoTestDiagnostic = {
         errorCode?: string
         hint: string
         steps: DiagnosticStep[]
+        mappingOutcome?: ProfileOutcome
+        capture?: SsoTestCaptureV2
+        allClaims?: Record<string, JsonValue>
       }
   /**
-   * Set when result.ok and the IdP-returned `email` claim
-   * case-insensitively matches the admin who started the test.
-   * When true, `principal.last_sso_sign_in_at` has been updated
-   * for that admin and the per-domain SSO enforcement bootstrap
-   * gate is satisfied for the standard 7-day window.
+   * Informational only. True when the IdP-returned email matches the admin
+   * who started the test. It does not write `principal.last_sso_sign_in_at`
+   * and is not a bootstrap or enforcement gate.
    */
   identityMatched?: boolean
 }

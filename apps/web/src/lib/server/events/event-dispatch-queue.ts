@@ -17,7 +17,7 @@ import { SINGLE_WORKSPACE_KEY } from '@/lib/server/workspaces/after-commit'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { enqueueHookJobsWithIds } from './process'
 import { hydrateEvent, MAX_DEPTH, MAX_STRICT_RESOLVE_ATTEMPTS } from './outbox'
-import { resolveTargets } from './resolvers/registry'
+import { registerAllResolvers, resolveTargets } from './resolvers'
 import { toLegacyEvent } from './to-legacy-event'
 import crypto from 'crypto'
 import type { HookTarget } from './hook-types'
@@ -131,6 +131,13 @@ export async function runEventDispatch(
   job: ClaimedJob,
   deps: EventDispatchDeps = {}
 ): Promise<void> {
+  // The job runner imports this handler directly, so it never passes through
+  // the legacy `getHookTargets()` adapter that also initializes the resolver
+  // registry. Register the production sinks here before using the default
+  // resolver; otherwise a fresh worker sees an empty registry, publishes the
+  // event with zero targets, and silently drops every outbound delivery.
+  if (!deps.resolve) registerAllResolvers()
+
   const resolve = deps.resolve ?? resolveTargets
   const enqueue = deps.enqueue ?? enqueueHookJobsWithIds
 

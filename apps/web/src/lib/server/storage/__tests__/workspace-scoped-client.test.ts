@@ -219,6 +219,26 @@ describe('a key that would escape never reaches a command', () => {
     expect(presigned, `${label}: a command was presigned anyway`).toHaveLength(0)
   }
 
+  it('presigns a read with a forced type, or as a named download', async () => {
+    await withWorkspace('workspace-alpha', () =>
+      generatePresignedGetUrl(PRIVATE_KEY, 60, undefined, 'application/pdf')
+    )
+    await withWorkspace('workspace-alpha', () =>
+      generatePresignedGetUrl(PRIVATE_KEY, 60, 'contract.pdf')
+    )
+    await withWorkspace('workspace-alpha', () =>
+      generatePresignedGetUrl(PRIVATE_KEY, 60, 'Résumé "v2".pdf')
+    )
+    expect(presigned[0]).toMatchObject({ ResponseContentType: 'application/pdf' })
+    expect(presigned[0]).not.toHaveProperty('ResponseContentDisposition')
+    expect(presigned[1]).toMatchObject({
+      ResponseContentDisposition: `attachment; filename="contract.pdf"; filename*=UTF-8''contract.pdf`,
+    })
+    expect(presigned[2]).toMatchObject({
+      ResponseContentDisposition: `attachment; filename="R_sum_ _v2_.pdf"; filename*=UTF-8''R%C3%A9sum%C3%A9%20%22v2%22.pdf`,
+    })
+  })
+
   it('refuses a traversal on the write path', async () => {
     await neverReachesTheBucket('upload', () =>
       withWorkspace('workspace-alpha', () => uploadObject('../../escape.png', BYTES, 'image/png'))
@@ -396,11 +416,27 @@ describe('the module exports no way to address the bucket', () => {
     expect(nullary.length).toBeGreaterThan(0)
 
     for (const [name, fn] of nullary) {
-      const result = withWorkspace('workspace-alpha', () => (fn as () => unknown)())
+      // Awaited, so an async export is judged by what it resolves to. A
+      // rejection is a refusal, which hands back nothing.
+      const result = await withWorkspace('workspace-alpha', async () => {
+        try {
+          return await (fn as () => unknown)()
+        } catch {
+          return undefined
+        }
+      })
       if (result && typeof result === 'object') {
         expect(result, `${name} returns a bucket`).not.toHaveProperty('bucket')
       }
     }
+  })
+
+  it('refuses the relocation bucket root inside a workspace scope', async () => {
+    const { openLegacyRelocationBucket, LegacyRelocationRefused } = await import('../s3')
+    await expect(
+      withWorkspace('workspace-alpha', () => openLegacyRelocationBucket())
+    ).rejects.toBeInstanceOf(LegacyRelocationRefused)
+    expect(sent).toHaveLength(0)
   })
 })
 

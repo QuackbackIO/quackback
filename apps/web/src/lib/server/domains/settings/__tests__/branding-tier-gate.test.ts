@@ -3,12 +3,14 @@ import { InternalError } from '@/lib/shared/errors'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { OSS_TIER_LIMITS } from '../tier-limits.types'
 
-const hoisted = vi.hoisted(() => ({
-  mockRequireSettings: vi.fn(),
-  mockDbUpdate: vi.fn(() => ({
-    set: () => ({ where: vi.fn() }),
-  })),
-}))
+const hoisted = vi.hoisted(() => {
+  const mockDbSet = vi.fn((_values: Record<string, unknown>) => ({ where: vi.fn() }))
+  return {
+    mockRequireSettings: vi.fn(),
+    mockDbSet,
+    mockDbUpdate: vi.fn(() => ({ set: mockDbSet })),
+  }
+})
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -66,6 +68,17 @@ describe('updateBrandingConfig — customColors gate', () => {
       features: { ...OSS_TIER_LIMITS.features, customColors: false },
     })
     await expect(updateBrandingConfig({ preset: 'default' })).resolves.toBeDefined()
+  })
+
+  it('stores a page-saved config it does not model as it was sent', async () => {
+    vi.mocked(getTierLimits).mockResolvedValue(OSS_TIER_LIMITS)
+    const config = {
+      preset: 'retired-preset',
+      light: { primary: 'color-mix(in oklch, white 40%, black)', radius: '0' },
+      dark: { primary: 'var(--brand)', legacyToken: 'lab(52% 40 59)' },
+    }
+    await expect(updateBrandingConfig(config)).resolves.toEqual(config)
+    expect(hoisted.mockDbSet).toHaveBeenCalledWith({ brandingConfig: JSON.stringify(config) })
   })
 })
 

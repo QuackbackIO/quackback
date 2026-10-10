@@ -22,6 +22,9 @@ import { computeStatus } from './changelog.service'
 import { getCategoriesForEntries, categoryGateAllows } from './changelog-category.service'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
+import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
+import { notTestPrincipal } from '@/lib/server/test-data'
+import { resignStoredAssetUrl } from '@/lib/server/storage/s3'
 
 const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
 
@@ -133,7 +136,9 @@ export async function getPublicChangelogById(
         isNull(posts.deletedAt),
         eq(posts.moderationState, 'published'),
         isNull(boards.deletedAt),
-        sql`${boards.access}->>'view' = 'anonymous'`
+        sql`${boards.access}->>'view' = 'anonymous'`,
+        // 5. A test customer's idea is never public.
+        notTestPrincipal(posts.principalId)
       )
     )
 
@@ -156,9 +161,11 @@ export async function getPublicChangelogById(
     id: entry.id,
     title: entry.title,
     content: entry.content,
-    contentJson: entry.contentJson,
+    contentJson: contentJsonForClient(entry.contentJson),
     publishedAt: entry.displayDate ?? entry.publishedAt,
-    featuredImageUrl: entry.featuredImageUrl,
+    featuredImageUrl: entry.featuredImageUrl
+      ? resignStoredAssetUrl(entry.featuredImageUrl)
+      : entry.featuredImageUrl,
     categories: categories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
     linkedPosts: linkedPostRows.map((lp) => ({
       id: lp.postId,
@@ -204,11 +211,14 @@ export async function listPublicChangelogs(
       ? (cursorEntry.displayDate ?? cursorEntry.publishedAt)
       : null
     if (cursorEffective) {
+      // `effectiveDisplayDate` is an expression, not a column, so Drizzle has
+      // no column type to encode a Date with: bind the timestamp as a string.
+      const cursorAt = sql`${cursorEffective.toISOString()}::timestamptz`
       conditions.push(
         or(
-          lt(effectiveDisplayDate, cursorEffective),
+          sql`${effectiveDisplayDate} < ${cursorAt}`,
           and(
-            sql`${effectiveDisplayDate} = ${cursorEffective}`,
+            sql`${effectiveDisplayDate} = ${cursorAt}`,
             lt(changelogEntries.id, cursor as ChangelogId)
           )
         )!
@@ -296,9 +306,11 @@ export async function listPublicChangelogs(
         id: entry.id,
         title: entry.title,
         content: entry.content,
-        contentJson: entry.contentJson,
+        contentJson: contentJsonForClient(entry.contentJson),
         publishedAt: entry.displayDate ?? entry.publishedAt!,
-        featuredImageUrl: entry.featuredImageUrl,
+        featuredImageUrl: entry.featuredImageUrl
+          ? resignStoredAssetUrl(entry.featuredImageUrl)
+          : entry.featuredImageUrl,
         categories: entryCategories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
         linkedPosts: entryLinkedPosts.map((lp) => ({
           id: lp.postId,

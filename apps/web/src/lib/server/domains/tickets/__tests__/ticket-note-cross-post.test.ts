@@ -51,6 +51,7 @@ vi.mock('@/lib/server/config', () => ({
 const realtime = vi.hoisted(() => ({
   publishTicketEvent: vi.fn(),
   publishConversationEvent: vi.fn(),
+  publishConversationMessage: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
   publishTyping: vi.fn(),

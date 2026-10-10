@@ -31,7 +31,7 @@ const suffix = () => `${Date.now().toString(36)}-${Math.random().toString(36).sl
 
 async function seed(
   role: 'admin' | 'member' | 'user',
-  type: 'user' | 'anonymous' | 'service',
+  type: 'user' | 'anonymous' | 'service' | 'support',
   email: string | null
 ) {
   const userId = createId('user') as UserId
@@ -62,12 +62,14 @@ describe.skipIf(!fixture.available)('listTeamSeatEmails predicate', () => {
     await seed('admin', 'user', '   ')
     await seed('admin', 'user', null)
     await seed('admin', 'service', null)
+    await seed('admin', 'support', `support-${tag}@quackback.io`)
 
     const emails = await listTeamSeatEmails()
     expect(emails).toContain(`admin-${tag}@acme.test`)
     expect(emails).toContain(`member-${tag}@acme.test`)
     expect(emails).not.toContain(`voter-${tag}@public.test`)
     expect(emails).not.toContain(`temp-${tag}@anon.invalid`)
+    expect(emails).not.toContain(`support-${tag}@quackback.io`)
     expect(emails.filter((e) => e.includes(tag)).sort()).toEqual(
       [`admin-${tag}@acme.test`, `member-${tag}@acme.test`].sort()
     )

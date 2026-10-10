@@ -3,9 +3,10 @@
  *
  * EnvCredentialSource is the cloud path: shared OAuth-app credentials arrive as
  * INTEGRATION_<PROVIDER>_<FIELD> env (projected from OpenBao via ESO). It reports an
- * integration as configured only when EVERY field the provider declares is present
- * (fail closed), matching the DB write validation. Pure (env in, record out), so it
- * is tested with real code and injected env / known types / required fields.
+ * integration as configured only when every *required* field the provider declares
+ * is present (fail closed), matching the DB write validation. Optional fields may
+ * be absent. Pure (env in, record out), so it is tested with real code and injected
+ * env / known types / required / declared fields.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -112,6 +113,43 @@ describe('EnvCredentialSource', () => {
         INTEGRATION_SLACK_SIGNING_SECRET: 'sig',
       }).get('slack')
     ).toBeNull()
+  })
+
+  it('get() includes an optional field when present and stays configured without it', async () => {
+    const required = async () => ['clientId', 'clientSecret']
+    const declared = async () => ['clientId', 'clientSecret', 'instanceUrl']
+    const known = async () => ['gitlab']
+
+    const withUrl = new EnvCredentialSource(
+      {
+        INTEGRATION_GITLAB_CLIENT_ID: 'id',
+        INTEGRATION_GITLAB_CLIENT_SECRET: 'sec',
+        INTEGRATION_GITLAB_INSTANCE_URL: 'https://gitlab.example.com',
+      },
+      known,
+      required,
+      declared
+    )
+    expect(await withUrl.get('gitlab')).toEqual({
+      clientId: 'id',
+      clientSecret: 'sec',
+      instanceUrl: 'https://gitlab.example.com',
+    })
+
+    const withoutUrl = new EnvCredentialSource(
+      {
+        INTEGRATION_GITLAB_CLIENT_ID: 'id',
+        INTEGRATION_GITLAB_CLIENT_SECRET: 'sec',
+      },
+      known,
+      required,
+      declared
+    )
+    expect(await withoutUrl.get('gitlab')).toEqual({
+      clientId: 'id',
+      clientSecret: 'sec',
+    })
+    expect(await withoutUrl.has('gitlab')).toBe(true)
   })
 
   it('get() returns only declared fields, dropping undeclared INTEGRATION_ vars', async () => {

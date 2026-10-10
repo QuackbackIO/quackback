@@ -8,10 +8,10 @@ import {
   ArrowLeftIcon,
   PencilIcon,
 } from '@heroicons/react/24/outline'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar } from '@/components/ui/avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
-import { cn, getInitials } from '@/lib/shared/utils'
+import { cn } from '@/lib/shared/utils'
 import { adminQueries } from '@/lib/client/queries/admin'
 import type { TeamMember } from '@/lib/shared/types'
 
@@ -238,12 +238,12 @@ export function AuthorSelector({
             'transition-all duration-150 text-[13px]'
           )}
         >
-          <Avatar className="h-5 w-5 shrink-0">
-            {selectedMember?.image && (
-              <AvatarImage src={selectedMember.image} alt={displayName || ''} />
-            )}
-            <AvatarFallback className="text-xs">{getInitials(displayName)}</AvatarFallback>
-          </Avatar>
+          <Avatar
+            className="h-5 w-5 shrink-0"
+            src={selectedMember?.image}
+            name={displayName}
+            fallbackClassName="text-xs"
+          />
           <span className="truncate font-medium text-foreground">{displayName}</span>
           {isNew && (
             <Badge
@@ -301,14 +301,12 @@ export function AuthorSelector({
                         }}
                         className="flex items-center gap-2 min-w-0 flex-1 text-left"
                       >
-                        <Avatar className="h-5 w-5 shrink-0">
-                          {member.image && (
-                            <AvatarImage src={member.image} alt={member.name || ''} />
-                          )}
-                          <AvatarFallback className="text-xs">
-                            {getInitials(member.name)}
-                          </AvatarFallback>
-                        </Avatar>
+                        <Avatar
+                          className="h-5 w-5 shrink-0"
+                          src={member.image}
+                          name={member.name}
+                          fallbackClassName="text-xs"
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="font-medium truncate flex items-center gap-1.5">
                             {member.name || 'Unnamed'}

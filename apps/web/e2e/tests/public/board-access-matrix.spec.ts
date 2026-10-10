@@ -314,7 +314,7 @@ async function feedShowsPost(page: Page, boardSlug: string, title: string): Prom
  *  unique text (a post title, or a comment's body). Posts and comments render as
  *  <li>s in the same queue, each carrying its own Approve/Reject buttons. */
 async function queueRow(adminPage: Page, uniqueText: string) {
-  await adminPage.goto('/admin/moderation')
+  await adminPage.goto('/admin/feedback/moderation')
   await adminPage.waitForLoadState('networkidle')
   return adminPage.locator('li').filter({ hasText: uniqueText }).first()
 }
@@ -327,6 +327,8 @@ async function submitComment(page: Page, board: { slug: string; postId: string }
     .locator('form')
     .filter({ has: page.getByTestId('comment-form-editor') })
     .first()
+  // The composer mounts its editor once pointed at or focused.
+  await form.getByRole('textbox', { name: /write a comment/i }).click()
   const editor = form.locator('[contenteditable="true"]').first()
   await editor.click()
   await editor.pressSequentially(text) // TipTap editor — type rather than fill

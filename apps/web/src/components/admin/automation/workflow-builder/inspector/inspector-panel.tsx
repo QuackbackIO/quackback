@@ -7,7 +7,7 @@
  */
 import type { ComponentType } from 'react'
 import { BoltIcon, ClockIcon, FunnelIcon, PlusIcon, ShareIcon } from '@heroicons/react/24/outline'
-import { ACTION_ICONS, BLOCK_ICONS, GATE_TINT, STEP_TINT } from '../step-visuals'
+import { ACTION_ICONS, BLOCK_ICONS, GATE_TINT, STEP_TINT, TONE_TILE } from '../step-visuals'
 import type { BuilderSelection } from '../types'
 import type { TriggerSettingsDraft } from '../use-workflow-builder'
 import { ActionEditor } from './action-editor'
@@ -169,7 +169,7 @@ export function InspectorPanel({
     const header = (
       <InspectorHeader
         icon={BLOCK_ICONS[step.kind]}
-        tint="bg-pink-500/10 text-pink-700 dark:text-pink-300"
+        tint={TONE_TILE.pink}
         title={BLOCK_STEP_LABELS[step.kind]}
         subtitle="Message"
       />
@@ -177,9 +177,7 @@ export function InspectorPanel({
     const body = (
       <div className="space-y-2.5 p-3">
         {issue && (
-          <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-500">
-            {issue}
-          </p>
+          <p className="rounded-md bg-warning/10 px-2.5 py-1.5 text-xs text-warning">{issue}</p>
         )}
         {step.kind === 'message' && (
           <MessageEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
@@ -229,9 +227,7 @@ export function InspectorPanel({
       />
       <div className="space-y-2.5 p-3">
         {issue && (
-          <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-500">
-            {issue}
-          </p>
+          <p className="rounded-md bg-warning/10 px-2.5 py-1.5 text-xs text-warning">{issue}</p>
         )}
         <ActionEditor
           action={step.action}

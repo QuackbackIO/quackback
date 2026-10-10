@@ -1,11 +1,12 @@
+import { deliveryError, httpDeliveryFailure } from '@/lib/server/integrations/sync/outcomes'
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Jira hook handler.
  * Creates Jira issues when feedback events occur.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { buildJiraIssueBody } from '@/integrations/jira/server/message'
 import { logger } from '@/lib/server/logger'
 
@@ -35,55 +36,20 @@ export interface JiraConfig {
   rootUrl: string
 }
 
-async function jiraApi(
-  method: string,
-  url: string,
-  accessToken: string,
-  body?: unknown
-): Promise<Response> {
-  const response = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
-
-  if (!response.ok) {
-    const status = response.status
-    if (status === 401) throw Object.assign(new Error('Unauthorized'), { status })
-    if (status === 429) throw Object.assign(new Error('Rate limited'), { status })
-    if (status >= 500) throw Object.assign(new Error(`Server error ${status}`), { status })
-    throw Object.assign(new Error(`HTTP ${status}`), { status })
-  }
-
-  return response
-}
-
-export const jiraHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
+export const jiraHook: IntegrationHook = {
+  async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId } = target as JiraTarget
     const { accessToken, cloudId, siteUrl, issueTypeId, rootUrl } = config as JiraConfig
 
     if (event.type !== 'post.created') {
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     if (!cloudId) {
-      return {
-        success: false,
-        error: 'Jira cloud ID is missing from integration config',
-        shouldRetry: false,
-      }
+      return { state: 'failed', errorCode: 'provider_failed' }
     }
     if (!accessToken) {
-      return {
-        success: false,
-        error: 'Jira access token is missing',
-        shouldRetry: false,
-      }
+      return { state: 'failed', errorCode: 'provider_failed' }
     }
 
     const parsed = parseJiraChannelId(channelId)
@@ -105,37 +71,29 @@ export const jiraHook: HookHandler = {
 
     try {
       const apiUrl = `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue`
-      const response = await jiraApi('POST', apiUrl, accessToken, issueBody)
+      const response = await integrationFetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(issueBody),
+      })
+      if (!response.ok) return httpDeliveryFailure(response)
       const result = (await response.json()) as { id?: string; key?: string; self?: string }
 
       if (!result.key) {
-        return { success: false, error: 'No issue key returned', shouldRetry: false }
+        return { state: 'uncertain', errorCode: 'outcome_unknown' }
       }
 
       const issueUrl = siteUrl
         ? `${siteUrl}/browse/${result.key}`
         : `https://api.atlassian.com/ex/jira/${cloudId}/browse/${result.key}`
       log.info({ issue_key: result.key }, 'issue created')
-      return { success: true, externalId: result.key, externalUrl: issueUrl }
+      return { state: 'succeeded', result: { externalId: result.key, externalUrl: issueUrl } }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      const status = (error as { status?: number }).status
-
-      if (status === 401) {
-        return {
-          success: false,
-          error: 'Authentication failed. Please reconnect Jira.',
-          shouldRetry: false,
-          // Jira tokens expire ~hourly; let the worker refresh + retry once.
-          authExpired: true,
-        }
-      }
-
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: isRetryableError(error),
-      }
+      return deliveryError(error)
     }
   },
 }

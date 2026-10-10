@@ -47,6 +47,7 @@ export const LOCALE_TO_REGCONFIG: Record<string, string> = {
   es: 'spanish',
   ar: 'arabic',
   ru: 'russian',
+  nl: 'dutch',
   'pt-br': 'portuguese',
   'zh-cn': 'simple',
   'zh-tw': 'simple',
@@ -96,12 +97,15 @@ export const helpCenterCategories = pgTable(
     // isPublic=false (team-only). Articles inherit their category's gate.
     segmentIds: jsonb('segment_ids').$type<string[]>().notNull().default([]),
     position: integer('position').default(0).notNull(),
+    /** Public numeric id used in `/hc/{locale}/collections/{urlId}-{slug}`. */
+    urlId: integer('url_id').generatedByDefaultAsIdentity().notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
     uniqueIndex('kb_categories_slug_idx').on(table.slug),
+    uniqueIndex('kb_categories_url_id_idx').on(table.urlId),
     index('kb_categories_position_idx').on(table.position),
     index('kb_categories_deleted_at_idx').on(table.deletedAt),
     index('kb_categories_parent_id_idx').on(table.parentId),
@@ -115,7 +119,7 @@ export const helpCenterCategories = pgTable(
 export const helpCenterArticles = pgTable(
   'kb_articles',
   {
-    id: typeIdWithDefault('kb_article')('id').primaryKey(),
+    id: typeIdWithDefault('article')('id').primaryKey(),
     categoryId: typeIdColumn('kb_category')('category_id')
       .notNull()
       .references(() => helpCenterCategories.id, { onDelete: 'cascade' }),
@@ -135,6 +139,8 @@ export const helpCenterArticles = pgTable(
     viewCount: integer('view_count').default(0).notNull(),
     helpfulCount: integer('helpful_count').default(0).notNull(),
     notHelpfulCount: integer('not_helpful_count').default(0).notNull(),
+    /** Public numeric id used in `/hc/{locale}/articles/{urlId}-{slug}`. */
+    urlId: integer('url_id').generatedByDefaultAsIdentity().notNull(),
     searchVector: tsvector('search_vector').generatedAlwaysAs(
       sql`setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(content, '')), 'B')`
     ),
@@ -147,6 +153,7 @@ export const helpCenterArticles = pgTable(
   },
   (table) => [
     uniqueIndex('kb_articles_slug_idx').on(table.slug),
+    uniqueIndex('kb_articles_url_id_idx').on(table.urlId),
     index('kb_articles_principal_id_idx').on(table.principalId),
     index('kb_articles_published_at_idx').on(table.publishedAt),
     index('kb_articles_deleted_at_idx').on(table.deletedAt),
@@ -167,7 +174,7 @@ export const helpCenterArticleFeedback = pgTable(
   'kb_article_feedback',
   {
     id: typeIdWithDefault('kb_article_feedback')('id').primaryKey(),
-    articleId: typeIdColumn('kb_article')('article_id')
+    articleId: typeIdColumn('article')('article_id')
       .notNull()
       .references(() => helpCenterArticles.id, { onDelete: 'cascade' }),
     principalId: typeIdColumnNullable('principal')('principal_id').references(() => principal.id, {
@@ -259,7 +266,7 @@ export const helpCenterArticleTranslations = pgTable(
   'kb_article_translations',
   {
     id: typeIdWithDefault('kb_article_translation')('id').primaryKey(),
-    articleId: typeIdColumn('kb_article')('article_id')
+    articleId: typeIdColumn('article')('article_id')
       .notNull()
       .references(() => helpCenterArticles.id, { onDelete: 'cascade' }),
     locale: text('locale').notNull(),

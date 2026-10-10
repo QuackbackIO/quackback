@@ -30,6 +30,12 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: hoisted.mockGetTierLimits,
 }))
 
+// The save path SSRF-validates url:true fields; this suite has none, but
+// keep it off real DNS the same way the auth-provider tier gate does.
+vi.mock('@/lib/server/content/ssrf-guard', () => ({
+  checkUrlSafety: vi.fn(async () => ({ safe: true, address: '93.184.216.34', family: 4 })),
+}))
+
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
 import { savePlatformCredentialsFn } from '../platform-credentials'
 

@@ -85,14 +85,7 @@ export function DestinationPicker({
           <ChevronUpDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0"
-        align="start"
-        onOpenAutoFocus={(e) => {
-          e.preventDefault()
-          inputRef.current?.focus()
-        }}
-      >
+      <PopoverContent className="w-(--anchor-width) p-0" align="start" initialFocus={inputRef}>
         <div className="flex items-center gap-2 border-b px-3 py-2">
           <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input

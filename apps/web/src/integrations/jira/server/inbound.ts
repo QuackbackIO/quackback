@@ -25,6 +25,7 @@ async function verifyHs256Jwt(token: string, secret: string): Promise<boolean> {
 }
 
 export const jiraInboundHandler: InboundWebhookHandler = {
+  statusMode: 'review',
   async verifySignature(request: Request): Promise<true | Response> {
     const raw = request.headers.get('Authorization')
     const token = raw?.startsWith('Bearer ') ? raw.slice('Bearer '.length).trim() : ''

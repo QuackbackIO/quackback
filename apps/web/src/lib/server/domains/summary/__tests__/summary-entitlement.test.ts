@@ -30,6 +30,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 
 vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   enforceAiTokenBudget: hoisted.mockEnforceAiTokenBudget,
+  aiBudgetAvailable: async () => true,
 }))
 
 vi.mock('@/lib/server/config', () => ({
@@ -68,7 +69,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   isNull: vi.fn(),
 }))
 
-import { generateAndSavePostSummary } from '../summary.service'
+import { generateAndSavePostSummary, refreshStaleSummaries } from '../summary.service'
 
 const POST_ID = 'post_x' as PostId
 
@@ -107,10 +108,10 @@ describe('generateAndSavePostSummary — plan gate', () => {
     expect(refusal).toBeInstanceOf(EntitlementRequiredError)
     const error = refusal as EntitlementRequiredError
     expect(error.entitlement).toBe('aiInsights')
-    expect(error.requiredPlanName).toBe('Growth')
+    expect(error.requiredPlanName).toBe('Pro')
     expect(error.statusCode).toBe(402)
     expect(error.message).toBe(
-      'AI insights are a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
+      'AI insights are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
     )
     // No model call, no spend, nothing written.
     expect(hoisted.mockChat).not.toHaveBeenCalled()
@@ -121,7 +122,7 @@ describe('generateAndSavePostSummary — plan gate', () => {
   })
 
   it('summarises the post on a plan that includes it', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
     await expect(generateAndSavePostSummary(POST_ID)).resolves.toBeUndefined()
     expect(hoisted.mockChat).toHaveBeenCalledOnce()
     expect(hoisted.mockUpdate).toHaveBeenCalledOnce()
@@ -133,9 +134,31 @@ describe('generateAndSavePostSummary — plan gate', () => {
     await expect(generateAndSavePostSummary(POST_ID)).resolves.toBeUndefined()
     expect(hoisted.mockChat).toHaveBeenCalledOnce()
 
-    withCloud(storedCloud('scale', { aiInsights: false }))
+    withCloud(storedCloud('enterprise', { aiInsights: false }))
     await expect(generateAndSavePostSummary(POST_ID)).rejects.toBeInstanceOf(
       EntitlementRequiredError
     )
+  })
+})
+
+describe('refreshStaleSummaries — plan gate', () => {
+  it('does not query for stale posts on a plan without the entitlement', async () => {
+    withCloud(storedCloud('free'))
+    const { db } = await import('@/lib/server/db')
+    const select = vi.spyOn(db, 'select')
+    await expect(refreshStaleSummaries()).resolves.toBeUndefined()
+    // The whole sweep is skipped: no batch read, no per-post refusal loop.
+    expect(select).not.toHaveBeenCalled()
+    expect(hoisted.mockChat).not.toHaveBeenCalled()
+  })
+
+  it('still reaches the stale-post read on a plan that includes it', async () => {
+    withCloud(storedCloud('pro'))
+    const { db } = await import('@/lib/server/db')
+    const select = vi.spyOn(db, 'select')
+    // The stub `db` cannot carry the full batch query; getting as far as the
+    // read is the assertion, so the downstream failure is deliberately ignored.
+    await refreshStaleSummaries().catch(() => {})
+    expect(select).toHaveBeenCalled()
   })
 })

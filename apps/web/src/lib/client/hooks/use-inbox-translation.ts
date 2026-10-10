@@ -17,7 +17,7 @@ import {
   setInboxTranslationEnabledFn,
   dismissInboxTranslationSuggestionFn,
 } from '@/lib/server/functions/conversation'
-import { getMyLanguagePreferenceFn } from '@/lib/server/functions/teammate-preferences'
+import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
 import type {
   AgentConversationMessageDTO,
   ConversationTranslationStateDTO,
@@ -70,6 +70,9 @@ export interface UseInboxTranslationResult {
    *  translation doesn't apply (inactive, a note, a rich message, or —
    *  for an incoming message — not translated yet). */
   translationFor: (message: AgentConversationMessageDTO) => MessageTranslationDisplay | undefined
+  /** One-line notice when translation is running past the AI allowance
+   *  (it keeps working and counting); null otherwise. */
+  overAllowanceNotice: string | null
 }
 
 export function useInboxTranslation({
@@ -85,10 +88,8 @@ export function useInboxTranslation({
   const [showOriginalIds, setShowOriginalIds] = useState<ReadonlySet<string>>(() => new Set())
 
   const { data: myLanguagePreference } = useQuery({
-    queryKey: ['teammate', 'language-preference'],
-    queryFn: () => getMyLanguagePreferenceFn().then((r) => r.language),
+    ...conversationPanelQueries.languagePreference(),
     enabled: enabledFlag,
-    staleTime: 5 * 60_000,
   })
   // An explicit translation preference wins. Without one, compare against the
   // admin's effective locale, which is resolved from the browser's
@@ -163,7 +164,7 @@ export function useInboxTranslation({
       const onToggleOriginal = () => toggleOriginal(message.id)
 
       if (message.senderType === 'visitor') {
-        const fetched = translationsQuery.data?.[message.id]
+        const fetched = translationsQuery.data?.translations[message.id]
         if (!fetched) return undefined
         return {
           label: `Translated from ${languageDisplayName(fetched.sourceLocale ?? detectedForDisplay ?? '')}`,
@@ -194,7 +195,16 @@ export function useInboxTranslation({
     ]
   )
 
+  const overAllowanceNotice =
+    enabledFlag && translationState?.enabled && translationsQuery.data?.overAllowance
+      ? intl.formatMessage({
+          id: 'admin.inbox.translationOverAllowance',
+          defaultMessage: 'Your AI allowance is used up. Translation keeps working.',
+        })
+      : null
+
   return {
+    overAllowanceNotice,
     showSuggestionBanner,
     detectedLanguageLabel: detectedForDisplay ? languageDisplayName(detectedForDisplay) : '',
     dismissSuggestion: () => dismissMutation.mutate(),

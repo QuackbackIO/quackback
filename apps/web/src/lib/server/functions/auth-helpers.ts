@@ -6,19 +6,27 @@
 
 import type { UserId, PrincipalId, WorkspaceId } from '@quackback/ids'
 import type { Role } from '@/lib/server/auth'
-import { auth } from '@/lib/server/auth'
+import { toSessionScope, sessionRole, type SessionScope } from '@/lib/shared/roles'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import { db, principal, eq, type PermissionKey } from '@/lib/server/db'
+import type { PermissionKey } from '@/lib/server/db'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
-import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 import { requireSettingsCached } from '@/lib/server/domains/settings/settings.helpers'
-import { memoizePerRequest } from './auth-request-cache'
+import {
+  getRequestPermissions,
+  getRequestPrincipal,
+  getRequestSession,
+  IDENTITY_MEMO_PREFIX,
+  rememberRequestPrincipal,
+  type RequestSession,
+} from '@/lib/server/auth/request-session'
+import { memoizePerRequest } from '@/lib/server/request-memo'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-helpers' })
 
-// Type alias for session result
-type SessionResult = Awaited<ReturnType<typeof auth.api.getSession>>
+export type RequireAuthOptions = {
+  permission?: PermissionKey
+}
 
 /**
  * Quick check if the request has a session cookie.
@@ -45,39 +53,33 @@ export function hasAuthCredentials(): boolean {
 }
 
 /**
- * Get session directly from better-auth (not through server function).
- * This avoids nested server function call issues.
+ * The request's session, read directly (not through a server function, which
+ * would nest) and shared with every other identity read in the request.
  */
-async function getSessionDirect(): Promise<SessionResult | null> {
-  // Memoized per request: the same better-auth session lookup would otherwise
-  // repeat for every requireAuth/getOptionalAuth call in the request.
-  return memoizePerRequest('session', async () => {
-    try {
-      return await auth.api.getSession({ headers: getRequestHeaders() })
-    } catch (error) {
-      log.error({ err: error }, 'get session failed')
-      return null
-    }
-  })
+async function getSessionDirect(): Promise<RequestSession | null> {
+  try {
+    return await getRequestSession()
+  } catch (error) {
+    log.error({ err: error }, 'get session failed')
+    return null
+  }
 }
 
 /**
- * The workspace settings row, served from the Redis-cached workspace-settings blob
- * (a single Redis GET when warm) and additionally memoized per request. This is
- * the auth-helper READ path only — never a read-modify-write, which must keep
- * using the uncached settings read so a write is never based on a cached row.
- * Returns null when unconfigured (getOptionalAuth's public surfaces treat that
- * as "no auth" rather than an error).
+ * The workspace settings row, served from the cached workspace-settings blob,
+ * which is itself read once per request. This is the auth-helper READ path
+ * only, never a read-modify-write, which must keep using the uncached
+ * settings read so a write is never based on a cached row. Returns null when
+ * unconfigured (getOptionalAuth's public surfaces treat that as "no auth"
+ * rather than an error).
  */
 async function getAuthSettings() {
-  return memoizePerRequest('settings', async () => {
-    try {
-      return await requireSettingsCached()
-    } catch (error) {
-      log.error({ err: error }, 'auth settings read failed')
-      return null
-    }
-  })
+  try {
+    return await requireSettingsCached()
+  } catch (error) {
+    log.error({ err: error }, 'auth settings read failed')
+    return null
+  }
 }
 
 export type { Role }
@@ -107,51 +109,51 @@ export interface AuthContext {
    * be narrower than the preset, and a fallback would silently widen.
    */
   permissions: PermissionKey[]
+  /** Session audience; only 'dashboard' may carry permissions. */
+  scope: SessionScope
 }
 
 /**
- * Require authentication, optionally gated on a permission.
+ * Site authentication (dashboard + portal cookies). Widget Bearers are denied;
+ * widget surfaces use `requireWidgetAuth` instead.
  *
- * `{ permission }` checks the caller's resolved permission set (their role's
- * preset bundle). Bare `requireAuth()` requires only a valid principal. The
- * legacy `{ roles }` form was retired at the Phase C completion gate.
- *
- * @example
- * const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
- * const anyAuth = await requireAuth()
+ * `{ permission }` is dashboard-only (unchanged).
  */
-export async function requireAuth(options?: { permission?: PermissionKey }): Promise<AuthContext> {
+export async function requireAuth(options?: RequireAuthOptions): Promise<AuthContext> {
   log.debug({ permission: options?.permission }, 'require auth')
   const session = await getSessionDirect()
   if (!session?.user) {
     throw new Error('Authentication required')
   }
   const userId = session.user.id as UserId
+  const scope = toSessionScope(session.session.scope)
+  if (scope === 'widget') {
+    throw new Error('Access denied: Widget sessions cannot access this resource')
+  }
 
   const appSettings = await getAuthSettings()
   if (!appSettings) {
     throw new Error('Workspace not configured')
   }
 
-  // Memoized per request keyed on user: the principal read + permission join
-  // is identical for every requireAuth call in the request.
-  const { principalRecord, resolvedPermissions } = await memoizePerRequest(
-    `principal:${userId}`,
-    async () => {
-      const record = await db.query.principal.findFirst({
-        where: eq(principal.userId, userId),
-      })
-      if (!record) {
-        throw new Error('Access denied: Not a team member')
-      }
-      const perms = await permissionsForPrincipal(record.id, record.role as Role)
-      return { principalRecord: record, resolvedPermissions: perms }
-    }
-  )
+  // Both reads are shared with every other identity read in the request.
+  const principalRecord = await getRequestPrincipal(userId)
+  if (!principalRecord) {
+    throw new Error('Access denied: Not a team member')
+  }
+  const resolvedPermissions = await getRequestPermissions(principalRecord)
 
-  const role = principalRecord.role as Role
+  const role: Role = sessionRole(principalRecord.role as Role, scope)
+  // Non-dashboard audiences never carry team authority downstream.
+  const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []
 
-  if (options?.permission && !resolvedPermissions.has(options.permission)) {
+  if (options?.permission && scope !== 'dashboard') {
+    throw new Error(
+      `Access denied: Requires permission '${options.permission}' on a dashboard session`
+    )
+  }
+
+  if (options?.permission && !permissions.includes(options.permission)) {
     throw new Error(
       `Access denied: Requires permission '${options.permission}', role ${role} lacks it`
     )
@@ -172,10 +174,11 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
     },
     principal: {
       id: principalRecord.id as PrincipalId,
-      role: principalRecord.role as Role,
+      role,
       type: principalRecord.type,
     },
-    permissions: [...resolvedPermissions],
+    permissions,
+    scope,
   }
 }
 
@@ -184,6 +187,13 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
 // without this module's auth-stack import graph); re-exported here so the
 // vocabulary and its matcher still travel together for existing importers.
 export { isAuthDenialError } from './auth-errors'
+
+/** Cloud/admin lifecycle mutations: widget and portal sessions cannot act as owner. */
+export function assertDashboardScope(auth: Pick<AuthContext, 'scope'>): void {
+  if (auth.scope !== 'dashboard') {
+    throw new Error('Access denied: Requires a dashboard session')
+  }
+}
 
 /**
  * Assert the authenticated caller holds a permission, throwing the same
@@ -195,9 +205,12 @@ export { isAuthDenialError } from './auth-errors'
  * fallback, which could be wider than a custom role's actual grant.
  */
 export function assertPermission(
-  auth: Pick<AuthContext, 'permissions' | 'principal'>,
+  auth: Pick<AuthContext, 'permissions' | 'principal' | 'scope'>,
   permission: PermissionKey
 ): void {
+  if (auth.scope !== 'dashboard') {
+    throw new Error(`Access denied: Requires permission '${permission}' on a dashboard session`)
+  }
   if (!auth.permissions.includes(permission)) {
     throw new Error(
       `Access denied: Requires permission '${permission}', role ${auth.principal.role} lacks it`
@@ -219,38 +232,45 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     return null
   }
   const userId = session.user.id as UserId
+  const scope = toSessionScope(session.session.scope)
+  if (scope === 'widget') {
+    return null
+  }
 
   const appSettings = await getAuthSettings()
   if (!appSettings) {
     return null
   }
 
-  // Memoized per request (distinct key from requireAuth: this path lazily
-  // creates the principal and skips the permission join for end users).
-  const { principalRecord, resolvedPermissions } = await memoizePerRequest(
-    `optionalPrincipal:${userId}`,
-    async () => {
-      // Resolve (or lazily create) the caller's principal. The factory is
-      // read-first and race-safe against a concurrent first-touch.
+  // Resolve (or lazily create) the caller's principal. The read is shared
+  // with the rest of the request; the create runs once per request and the
+  // factory is race-safe against a concurrent first-touch.
+  const principalRecord =
+    (await getRequestPrincipal(userId)) ??
+    (await memoizePerRequest(`${IDENTITY_MEMO_PREFIX}ensure-principal:${userId}`, async () => {
       const { principal: record } = await ensurePrincipalForUser({
         userId,
         role: 'user',
         displayName: session.user.name,
         avatarUrl: session.user.image ?? null,
       })
+      rememberRequestPrincipal(record)
+      return record
+    }))
 
-      // Same assignment-derived resolution as requireAuth, so portal/public
-      // surfaces that gate on the optional context honour custom roles too.
-      // End users (role 'user') never carry workspace assignments — the role
-      // reconcile and seed heal enforce that — so the dominant portal case
-      // skips the join instead of paying a guaranteed-empty DB read.
-      const perms =
-        record.role === 'user'
-          ? new Set<PermissionKey>()
-          : await permissionsForPrincipal(record.id as PrincipalId, record.role as Role)
-      return { principalRecord: record, resolvedPermissions: perms }
-    }
-  )
+  // Same assignment-derived resolution as requireAuth, so portal/public
+  // surfaces that gate on the optional context honour custom roles too.
+  // End users (role 'user') never carry workspace assignments (the role
+  // reconcile and seed heal enforce that), so the dominant portal case
+  // skips the join instead of paying a guaranteed-empty DB read.
+  const resolvedPermissions: ReadonlySet<PermissionKey> =
+    principalRecord.role === 'user'
+      ? new Set<PermissionKey>()
+      : await getRequestPermissions(principalRecord)
+
+  const role: Role = sessionRole(principalRecord.role as Role, scope)
+  // Non-dashboard audiences never carry team authority downstream.
+  const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []
 
   return {
     settings: {
@@ -267,10 +287,11 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     },
     principal: {
       id: principalRecord.id as PrincipalId,
-      role: principalRecord.role as Role,
+      role,
       type: principalRecord.type,
     },
-    permissions: [...resolvedPermissions],
+    permissions,
+    scope,
   }
 }
 
@@ -283,14 +304,16 @@ import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 
 /**
- * Preserve all three principal types. Collapsing 'anonymous' onto 'user'
+ * Preserve known principal types. Collapsing 'anonymous' onto 'user'
  * is a security bug: a Better Auth anonymous session would satisfy
  * audience.kind='authenticated' and dodge the workspace requireApproval='anonymous'
- * moderation gate.
+ * moderation gate. Collapsing 'support' onto 'user' would put Cloud support
+ * back on people lists (`isIdentifiedHuman`).
  */
 export function normalizePrincipalType(raw: string | null | undefined): PrincipalType {
   if (raw === 'service') return 'service'
   if (raw === 'anonymous') return 'anonymous'
+  if (raw === 'support') return 'support'
   return 'user'
 }
 
@@ -305,11 +328,14 @@ export function normalizePrincipalType(raw: string | null | undefined): Principa
 export async function policyActorFromAuth(auth: AuthContext | null): Promise<Actor> {
   if (!auth) return ANONYMOUS_ACTOR
   const segmentIds = await segmentIdsForPrincipal(auth.principal.id)
-  return {
+  const actor: Actor = {
     principalId: auth.principal.id,
     role: auth.principal.role,
     principalType: normalizePrincipalType(auth.principal.type),
     segmentIds,
     permissions: new Set(auth.permissions),
   }
+  if (actor.principalType !== 'anonymous') return actor
+  const { resolveTestFeedbackActor } = await import('@/lib/server/test-customer-feedback')
+  return resolveTestFeedbackActor(actor)
 }

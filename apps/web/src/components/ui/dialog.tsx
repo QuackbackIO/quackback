@@ -1,34 +1,81 @@
 import * as React from 'react'
-import * as DialogPrimitive from '@radix-ui/react-dialog'
+import { useOptionalIntl } from './use-optional-intl'
+import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 
+import { asChildRender, overlayTriggerProps } from '@/components/ui/as-child'
+import {
+  OverlayOpenedContext,
+  useOverlayOpened,
+  useOverlayOpenedRoot,
+} from '@/components/ui/overlay-opened'
 import { cn } from '@/lib/shared/utils'
 
-function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+function Dialog({ open, defaultOpen, onOpenChange, ...props }: DialogPrimitive.Root.Props) {
+  const opened = useOverlayOpenedRoot(open, defaultOpen, onOpenChange)
+  return (
+    <OverlayOpenedContext.Provider value={opened.value}>
+      <DialogPrimitive.Root
+        data-slot="dialog"
+        open={open}
+        defaultOpen={defaultOpen}
+        onOpenChange={opened.onOpenChange}
+        {...props}
+      />
+    </OverlayOpenedContext.Provider>
+  )
 }
 
-function DialogTrigger(props: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
-  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
+function DialogTrigger({
+  asChild,
+  children,
+  render,
+  nativeButton,
+  ...props
+}: DialogPrimitive.Trigger.Props & { asChild?: boolean }) {
+  const composed = asChildRender(asChild, children, render)
+  return (
+    <DialogPrimitive.Trigger
+      data-slot="dialog-trigger"
+      {...props}
+      nativeButton={composed.render ? composed.nativeButton : nativeButton}
+      {...overlayTriggerProps(composed)}
+    >
+      {composed.children}
+    </DialogPrimitive.Trigger>
+  )
 }
 
-function DialogPortal(props: React.ComponentProps<typeof DialogPrimitive.Portal>) {
+function DialogPortal(props: DialogPrimitive.Portal.Props) {
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
 }
 
-function DialogClose(props: React.ComponentProps<typeof DialogPrimitive.Close>) {
-  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
+function DialogClose({
+  asChild,
+  children,
+  render,
+  nativeButton,
+  ...props
+}: DialogPrimitive.Close.Props & { asChild?: boolean }) {
+  const composed = asChildRender(asChild, children, render)
+  return (
+    <DialogPrimitive.Close
+      data-slot="dialog-close"
+      {...props}
+      nativeButton={composed.render ? composed.nativeButton : nativeButton}
+      {...overlayTriggerProps(composed)}
+    >
+      {composed.children}
+    </DialogPrimitive.Close>
+  )
 }
 
-function DialogOverlay({
-  className,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
+function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {
   return (
-    <DialogPrimitive.Overlay
+    <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50',
+        'data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 fixed inset-0 z-50 bg-black/60',
         className
       )}
       {...props}
@@ -42,20 +89,24 @@ function DialogContent({
   showCloseButton = true,
   instant = false,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+}: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
   instant?: boolean
 }) {
+  // Nothing to portal until the dialog first opens.
+  const opened = useOverlayOpened()
+  const intl = useOptionalIntl()
+  if (!opened) return null
   return (
-    <DialogPortal data-slot="dialog-portal">
+    <DialogPrimitive.Portal data-slot="dialog-portal">
       <DialogOverlay className={instant ? '!animate-none !duration-0' : undefined} />
-      <DialogPrimitive.Content
+      <DialogPrimitive.Popup
         aria-describedby={undefined}
         data-slot="dialog-content"
         className={cn(
-          'bg-background fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 [border-radius:var(--radius)] border p-6 shadow-lg outline-none',
+          'bg-background fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-panel border border-border p-6 shadow-md outline-none',
           !instant &&
-            'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 duration-200',
+            'data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 duration-200',
           className
         )}
         {...props}
@@ -64,14 +115,16 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="ring-offset-background focus:ring-ring data-open:bg-accent data-open:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XMarkIcon />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">
+              {intl.formatMessage({ id: 'ui.close', defaultMessage: 'Close' })}
+            </span>
           </DialogPrimitive.Close>
         )}
-      </DialogPrimitive.Content>
-    </DialogPortal>
+      </DialogPrimitive.Popup>
+    </DialogPrimitive.Portal>
   )
 }
 
@@ -95,11 +148,11 @@ function DialogFooter({ className, ...props }: React.ComponentProps<'div'>) {
   )
 }
 
-function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
+function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn('text-lg leading-none font-semibold', className)}
+      className={cn('text-lg leading-none font-semibold tracking-[-0.02em]', className)}
       {...props}
     />
   )
@@ -107,16 +160,25 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
 
 function DialogDescription({
   className,
+  asChild,
+  children,
+  render,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Description>) {
+}: DialogPrimitive.Description.Props & { asChild?: boolean }) {
+  const composed = asChildRender(asChild, children, render)
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
       className={cn('text-muted-foreground text-sm', className)}
       {...props}
-    />
+      render={composed.render}
+    >
+      {composed.children}
+    </DialogPrimitive.Description>
   )
 }
+
+DialogTrigger.displayName = 'DialogTrigger'
 
 export {
   Dialog,

@@ -11,22 +11,39 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IDENTITY_FAILURE_CODES, KEY_CUSTODY_FAILURE_CODES } from '../fingerprint'
 
 const acquireScopeForHost = vi.fn()
+const noteWorkspaceActivity = vi.fn(() => Promise.resolve())
 
 vi.mock('@/lib/server/workspaces/resolver', () => ({ acquireScopeForHost }))
+vi.mock('../activity', async (importOriginal) => ({
+  // The real predicate decides which requests count; only the write is mocked.
+  isActivitySignal: (await importOriginal<typeof import('../activity')>()).isActivitySignal,
+  noteWorkspaceActivity,
+}))
 
 const silentLog = { warn: vi.fn(), error: vi.fn(), info: vi.fn() }
 
 async function serve(
   host: string | null,
-  options: { url?: string; method?: string } = {}
+  options: { url?: string; method?: string; headers?: Record<string, string> } = {}
 ): Promise<Response | string> {
   const { resolveWorkspaceAndContinue } = await import('../request-scope')
   const request = new Request(options.url ?? 'http://example.com/anything', {
     method: options.method,
     headers: host === null ? {} : { host },
   })
+  // happy-dom's `Request` drops forbidden headers (`cookie`), so extra headers
+  // are layered over the real ones rather than passed through the constructor.
+  const extra = Object.fromEntries(
+    Object.entries(options.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v])
+  )
+  const headers = {
+    get: (name: string) => extra[name.toLowerCase()] ?? request.headers.get(name),
+  }
   return resolveWorkspaceAndContinue({
-    request,
+    request: new Proxy(request, {
+      // Receiver must be the real Request: its accessors read internal slots.
+      get: (target, prop) => (prop === 'headers' ? headers : Reflect.get(target, prop, target)),
+    }),
     next: async () => 'served the workspace',
     log: silentLog as never,
   }) as Promise<Response | string>
@@ -62,7 +79,10 @@ describe('resolveWorkspaceAndContinue', () => {
     const { resolveWorkspaceAndContinue } = await import('../request-scope')
     const seen: unknown[] = []
     const result = await resolveWorkspaceAndContinue({
-      request: new Request('http://example.com/', { headers: { host: 't1.localhost' } }),
+      request: new Request('http://example.com/', {
+        method: 'POST',
+        headers: { host: 't1.localhost' },
+      }),
       next: async () => {
         seen.push(getScopedDatabase())
         return 'served'
@@ -73,6 +93,50 @@ describe('resolveWorkspaceAndContinue', () => {
     expect(result).toBe('served')
     // The scope must be live INSIDE next(), which is the only place it matters.
     expect(seen).toEqual([handle])
+    // A served mutation keeps the workspace out of dormancy.
+    expect(noteWorkspaceActivity).toHaveBeenCalledWith('inst_a')
+  })
+
+  it('does not stamp activity for a refusal or a fleet path', async () => {
+    acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'nope.localhost' })
+    await serve('nope.localhost', { method: 'POST' })
+    await serve('t1.localhost', { url: 'http://example.com/api/health', method: 'POST' })
+    expect(noteWorkspaceActivity).not.toHaveBeenCalled()
+  })
+
+  describe('which served requests count as activity', () => {
+    const okScope = async () => {
+      const { createWorkspaceScope } = await import('../workspace-context')
+      acquireScopeForHost.mockResolvedValue({
+        kind: 'ok',
+        scope: createWorkspaceScope({
+          workspace: { workspaceKey: 'inst_a' },
+          db: {},
+          sql: {},
+          origin: 'request',
+          secrets: { secretKey: 'd'.repeat(64), storage: null, storageProblem: 'not read here' },
+        } as never),
+      })
+    }
+
+    it('serves an anonymous GET without stamping — crawlers must not wake a workspace', async () => {
+      await okScope()
+      expect(await serve('t1.localhost', { url: 'http://example.com/.env' })).toBe(
+        'served the workspace'
+      )
+      expect(await serve('t1.localhost', { url: 'http://example.com/', method: 'HEAD' })).toBe(
+        'served the workspace'
+      )
+      expect(noteWorkspaceActivity).not.toHaveBeenCalled()
+    })
+
+    it('stamps for a mutation, a session cookie, or a bearer token', async () => {
+      await okScope()
+      await serve('t1.localhost', { method: 'POST' })
+      await serve('t1.localhost', { headers: { cookie: 'a=1; better-auth.session_token=x' } })
+      await serve('t1.localhost', { headers: { authorization: 'Bearer qb_widget' } })
+      expect(noteWorkspaceActivity).toHaveBeenCalledTimes(3)
+    })
   })
 
   it('resolves a third-party custom host from a signed customer-host header on a trusted origin', async () => {
@@ -187,7 +251,9 @@ describe('resolveWorkspaceAndContinue', () => {
     }
   )
 
-  it('403s a suspended workspace and names the reason', async () => {
+  it('503s a paused workspace and never names the reason to the visitor', async () => {
+    // The visitor is the workspace's customer. A billing or moderation reason
+    // is the control plane's business, not theirs to read.
     acquireScopeForHost.mockResolvedValue({
       kind: 'suspended',
       workspaceKey: 'inst_a',
@@ -195,8 +261,58 @@ describe('resolveWorkspaceAndContinue', () => {
       reason: 'nonpayment',
     })
     const res = (await serve('t1.localhost')) as Response
-    expect(res.status).toBe(403)
-    expect(await res.text()).toContain('nonpayment')
+    expect(res.status).toBe(503)
+    expect(res.headers.get('retry-after')).toBe('3600')
+    const body = await res.text()
+    expect(body).toBe('This workspace is paused')
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(body).not.toContain('nonpayment')
+  })
+
+  it('404s a workspace that was deleted and is in its restore window', async () => {
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'suspended',
+      workspaceKey: 'inst_a',
+      hostname: 't1.localhost',
+      reason: 'deleted',
+    })
+    const res = (await serve('t1.localhost')) as Response
+    expect(res.status).toBe(404)
+    expect(await res.text()).not.toContain('deleted)')
+  })
+
+  it('serves a browser the branded page, with the host escaped and no reason', async () => {
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'suspended',
+      workspaceKey: 'inst_a',
+      hostname: '<img src=x onerror=alert(1)>.example.com',
+      reason: 'deleted',
+    })
+    const res = (await serve('t1.localhost', {
+      headers: { accept: 'text/html,application/xhtml+xml', 'sec-fetch-dest': 'document' },
+    })) as Response
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toContain('text/html')
+    expect(res.headers.get('content-security-policy')).toContain("default-src 'none'")
+    const html = await res.text()
+    expect(html).toContain('This workspace isn&#39;t available')
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;')
+    expect(html).not.toContain('<img src=x')
+    expect(html).toContain('Powered by Quackback')
+  })
+
+  it('answers a JSON client with a stable code and no reason', async () => {
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'suspended',
+      workspaceKey: 'inst_a',
+      hostname: 't1.localhost',
+      reason: 'trial_ended',
+    })
+    const res = (await serve('t1.localhost', {
+      headers: { accept: 'application/json' },
+    })) as Response
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: { code: 'workspace_unavailable', state: 'paused' } })
   })
 
   it('410s a workspace being deleted', async () => {
@@ -405,6 +521,8 @@ describe('resolveWorkspaceAndContinue', () => {
       { kind: 'unknown_host', hostname: 'x.example.com' },
       { kind: 'redirect', workspaceKey: 'a', hostname: 'x', location: 'https://y.example.com' },
       { kind: 'deleting', workspaceKey: 'a', hostname: 'x' },
+      { kind: 'suspended', workspaceKey: 'a', hostname: 'x', reason: 'deleted' },
+      { kind: 'suspended', workspaceKey: 'a', hostname: 'x', reason: 'admin' },
       { kind: 'invalid', workspaceKey: 'a', hostname: 'x', problems: [] },
       { kind: 'refused', workspaceKey: 'a', code: 'c', detail: 'd' },
     ]) {
@@ -414,28 +532,31 @@ describe('resolveWorkspaceAndContinue', () => {
     }
   })
 
-  it.each(['/api/health', '/api/health/live', '/api/health/ready'])(
-    'serves %s without resolving a workspace at all',
-    async (path) => {
-      // The platform hits these every couple of seconds, and on a wildcard
-      // domain they arrive on a workspace hostname like everything else. Resolving
-      // a workspace would open a pool and therefore WAKE A SUSPENDED COMPUTE, once
-      // per probe, forever — silently destroying the idle-cost model that pool
-      // eviction exists to protect. There is no functional symptom, which is
-      // why it needs a test rather than an observation.
-      acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'x' })
-      const { resolveWorkspaceAndContinue } = await import('../request-scope')
-      const result = await resolveWorkspaceAndContinue({
-        request: new Request(`http://example.com${path}`, {
-          headers: { host: 't1.localhost' },
-        }),
-        next: async () => 'probed',
-        log: silentLog as never,
-      })
-      expect(result).toBe('probed')
-      expect(acquireScopeForHost).not.toHaveBeenCalled()
-    }
-  )
+  it.each([
+    '/api/health',
+    '/api/health/live',
+    '/api/health/ready',
+    '/api/internal/job-wake',
+    '/api/internal/job-wake/',
+  ])('serves %s without resolving a workspace at all', async (path) => {
+    // The platform hits these every couple of seconds, and on a wildcard
+    // domain they arrive on a workspace hostname like everything else. Resolving
+    // a workspace would open a pool and therefore WAKE A SUSPENDED COMPUTE, once
+    // per probe, forever — silently destroying the idle-cost model that pool
+    // eviction exists to protect. There is no functional symptom, which is
+    // why it needs a test rather than an observation.
+    acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'x' })
+    const { resolveWorkspaceAndContinue } = await import('../request-scope')
+    const result = await resolveWorkspaceAndContinue({
+      request: new Request(`http://example.com${path}`, {
+        headers: { host: 't1.localhost' },
+      }),
+      next: async () => 'probed',
+      log: silentLog as never,
+    })
+    expect(result).toBe('probed')
+    expect(acquireScopeForHost).not.toHaveBeenCalled()
+  })
 
   it('does NOT skip a path that merely starts like a health path', async () => {
     // A prefix match here would exempt `/api/healthcheck-for-workspace` — and an

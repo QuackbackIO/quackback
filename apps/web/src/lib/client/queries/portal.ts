@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query'
+import { queryOptions, useQuery, type QueryClient } from '@tanstack/react-query'
 import type { PrincipalId, RoadmapId, PostStatusId, BoardId } from '@quackback/ids'
 import type { RespondedFilter } from '@/lib/shared/types/filters'
 import {
@@ -13,6 +13,51 @@ import {
 } from '@/lib/server/functions/portal'
 
 /**
+ * Query families whose payload depends on who the viewer is: the tag catalog
+ * hides internal tags from non-team viewers; portal data, the infinite feed
+ * (`publicPostsKeys`, see use-portal-posts-query), post lists and post detail
+ * embed that filtered catalog; public roadmap results honour the same guard
+ * for caller-supplied tag filters; and the roadmap catalog's `baseFilter` has
+ * internal tag ids redacted for non-team viewers. The board list holds only
+ * the boards the viewer's segments and role can see. Notifications belong to the
+ * signed-in viewer outright, and the portal loader reads the bell's unread
+ * count back through `ensureQueryData`.
+ */
+export const VIEWER_SCOPED_PORTAL_QUERY_KEYS: readonly (readonly string[])[] = [
+  ['portal', 'tags'],
+  ['portal', 'boards'],
+  ['portal', 'data'],
+  ['portal', 'posts'],
+  ['portal', 'post'],
+  ['portal', 'roadmaps'],
+  ['portal', 'roadmapPosts'],
+  ['publicPosts'],
+  ['notifications'],
+]
+
+/**
+ * Remove every viewer-scoped portal cache entry on an auth transition, so a
+ * team member signing out does not keep seeing internal tags and a team member
+ * signing in gains them.
+ *
+ * This must *remove*, not invalidate or reset: `invalidateQueries` keeps the
+ * data and route loaders read it back through `ensureQueryData` without
+ * waiting for a refetch; `resetQueries` restores a query's `initialData`, and
+ * the feed (`usePublicPosts`) seeds its pages from the SSR payload that way, so
+ * a reset would put the team-scoped page straight back. `removeQueries` drops
+ * the entries outright. Callers follow up with `router.invalidate()`, which
+ * re-runs loaders and re-renders observers so they rebuild against fresh
+ * queries as the new viewer.
+ *
+ * Call from every portal sign-out control and sign-in success handler.
+ */
+export function removeViewerScopedPortalQueries(queryClient: QueryClient): void {
+  for (const queryKey of VIEWER_SCOPED_PORTAL_QUERY_KEYS) {
+    queryClient.removeQueries({ queryKey })
+  }
+}
+
+/**
  * Query options factory for portal/public routes.
  * Uses server functions (createServerFn) to keep database code server-only.
  * These are used with ensureQueryData() in loaders and useSuspenseQuery() in components.
@@ -21,7 +66,10 @@ export const portalQueries = {
   /**
    * Combined portal data fetch - all data in a single server call.
    * This is the optimized entry point for the portal page.
-   * Vote status is only shown for authenticated users (via userId -> principalId).
+   *
+   * `userId` is the viewer's id and only keys the cache, so two viewers never
+   * share an entry. It is not sent: the server reads the viewer, and so whose
+   * votes to return, from the session.
    */
   portalData: (params: {
     boardSlug?: string
@@ -53,7 +101,8 @@ export const portalQueries = {
         params.segmentIds,
       ],
       queryFn: async () => {
-        const data = await fetchPortalData({ data: params })
+        const { userId: _cacheKeyOnly, ...input } = params
+        const data = await fetchPortalData({ data: input })
         // Deserialize dates and cast branded types from server response
         return {
           ...data,
@@ -145,3 +194,28 @@ export const portalQueries = {
       staleTime: 60 * 1000, // 1 minute
     }),
 }
+
+/**
+ * Seeds the shared status-list cache from data the feed already fetched, so
+ * a post-detail navigation right after reuses it (ensureQueryData resolves
+ * from cache) instead of a second round trip for the same statuses. Mirrors
+ * useVotedPosts, which seeds the voted-post-ids cache from
+ * portalData.votedPostIds the same way.
+ *
+ * This has to be an initialData-seeded query read during render, not a
+ * queryFn side effect (e.g. calling setQueryData inside portalData's own
+ * queryFn): the portal home loader fires portalData as a fire-and-forget
+ * prefetch so the first byte flushes immediately, and the SSR response can
+ * dehydrate before that prefetch's promise resolves. A query written by
+ * setQueryData never gets its own promise, so the dehydration stream (which
+ * only forwards queries it sees resolve) drops it, and the client then finds no
+ * cached statuses and fetches them again anyway. Reading it through a
+ * component with initialData works because the component itself, and thus
+ * this hook, re-runs during client hydration with the already-dehydrated
+ * portalData in hand.
+ */
+export function useSeedPortalStatusesCache(statuses: PortalStatuses): void {
+  useQuery({ ...portalQueries.statuses(), initialData: statuses })
+}
+
+type PortalStatuses = Awaited<ReturnType<typeof fetchPublicStatuses>>

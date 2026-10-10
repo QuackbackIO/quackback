@@ -18,7 +18,14 @@ import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vites
 import { createId, type PrincipalId, type UserId, type ConversationId } from '@quackback/ids'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { conversations, slaEvents, user, principal, eq } from '@/lib/server/db'
+import {
+  conversationMessages,
+  conversations,
+  slaEvents,
+  user,
+  principal,
+  eq,
+} from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -136,7 +143,7 @@ describe.skipIf(!fixture.available)('SLA stamp concurrency (real DB, rolled back
     expect(kinds.filter((k) => k.startsWith('first_response'))).toHaveLength(1)
   })
 
-  it('a settle racing a re-arm lands one consistent cycle state and exactly one settle event', async () => {
+  it('a settle racing a re-arm never settles the new cycle with the older reply, and logs the older cycle once', async () => {
     const conversationId = await seedConversation()
     const policy = await createSlaPolicy({
       name: 'FR+NR',
@@ -147,26 +154,55 @@ describe.skipIf(!fixture.available)('SLA stamp concurrency (real DB, rolled back
     await recordFirstResponse(conversationId, new Date('2026-01-05T10:30:00Z'))
     await rearmNextResponse(conversationId, new Date('2026-01-05T10:40:00Z')) // NRT due 12:40
 
-    // An agent reply (settles the armed cycle) races a fresh customer ping
-    // (re-arms a new cycle). The re-arm pins the due it replaces, so it
-    // always lands; the settle merges only its own outcome field. Whichever
-    // order Postgres serializes them, the stamp ends in one of the two
-    // consistent interleavings — never a torn mix — and exactly one
-    // next_response event exists.
+    // The conversation's messages: the customer at 10:40, the agent's reply at
+    // 11:40, and the customer again at 11:50.
+    const [visitor] = await testDb
+      .select({ id: conversations.visitorPrincipalId })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+    const agentUser = createId('user') as UserId
+    const agent = createId('principal') as PrincipalId
+    await testDb.insert(user).values({ id: agentUser, name: `Agent-${suffix()}` })
+    await testDb
+      .insert(principal)
+      .values({ id: agent, userId: agentUser, role: 'member', type: 'user', createdAt: new Date() })
+    await testDb.insert(conversationMessages).values(
+      [
+        ['visitor', visitor.id, '10:40'],
+        ['agent', agent, '11:40'],
+        ['visitor', visitor.id, '11:50'],
+      ].map(([senderType, principalId, hhmm]) => ({
+        conversationId,
+        principalId: principalId as PrincipalId,
+        senderType: senderType as 'visitor' | 'agent',
+        content: `${senderType} at ${hhmm}`,
+        createdAt: new Date(`2026-01-05T${hhmm}:00Z`),
+      }))
+    )
+
+    // The 11:40 reply's settle races the 11:50 message's re-arm. Whichever
+    // Postgres serializes first, the reply answered the 10:40 message, not the
+    // 11:50 one: the new cycle (due 13:50) is left unanswered, and the 10:40
+    // cycle's met is logged exactly once. (If the re-arm lands first, the
+    // settle misses its pin, reloads, sees a cycle opened after its reply, and
+    // logs the older cycle from the messages instead of settling.)
     await Promise.all([
       recordNextResponse(conversationId, new Date('2026-01-05T11:40:00Z')),
-      rearmNextResponse(conversationId, new Date('2026-01-05T11:50:00Z')), // new cycle, due 13:50
+      rearmNextResponse(conversationId, new Date('2026-01-05T11:50:00Z')),
     ])
 
     const applied = await loadSlaApplied(conversationId)
     expect(applied?.nextResponseDueAt).toBe('2026-01-05T13:50:00.000Z')
-    // Consistent outcomes: re-arm landed last (cycle cleared) or the settle
-    // landed last (the fresh cycle shows the reply). No other mix is legal.
-    expect([null, '2026-01-05T11:40:00.000Z']).toContainEqual(applied?.nextResponseAt ?? null)
+    expect(applied?.nextResponseAt ?? null).toBeNull()
 
     const nrt = (await eventsFor(conversationId)).filter((e) => e.kind.startsWith('next_response'))
-    expect(nrt).toHaveLength(1)
-    expect(nrt[0].kind).toBe('next_response_met')
+    expect(nrt.map((e) => ({ kind: e.kind, dueAt: e.meta.dueAt, at: e.meta.at }))).toEqual([
+      {
+        kind: 'next_response_met',
+        dueAt: '2026-01-05T12:40:00.000Z',
+        at: '2026-01-05T11:40:00.000Z',
+      },
+    ])
   })
 
   it('a sweep claim racing a settle records exactly one breach', async () => {

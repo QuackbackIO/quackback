@@ -1,0 +1,71 @@
+/*
+ * The PDF text layer: transparent text laid exactly over the drawn page, so
+ * selection, copy and find highlights line up with the glyphs. Adapted from
+ * the stylesheet that ships with pdf.js; `TextLayer` sets the per-run
+ * variables (--font-height, --scale-x, --rotate, --min-font-size), the page
+ * sets --total-scale-factor.
+ */
+.qb-pdf-text {
+  color-scheme: only light;
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  text-align: initial;
+  letter-spacing: normal;
+  word-spacing: normal;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 0;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.qb-pdf-text :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.qb-pdf-text > :not(.markedContent),
+.qb-pdf-text .markedContent span:not(.markedContent, .qb-pdf-hit) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.qb-pdf-text .markedContent {
+  display: contents;
+}
+
+.qb-pdf-text ::selection {
+  background: color-mix(in srgb, AccentColor, transparent 50%);
+  color: transparent;
+}
+
+.qb-pdf-text br::selection {
+  background: transparent;
+}
+
+/* A find match inside a text run. */
+.qb-pdf-text .qb-pdf-hit {
+  position: static;
+  margin: -1px;
+  padding: 1px;
+  border-radius: 3px;
+  background-color: rgb(250 204 21 / 0.45);
+}
+
+.qb-pdf-text .qb-pdf-hit[data-active] {
+  background-color: rgb(234 88 12 / 0.45);
+}

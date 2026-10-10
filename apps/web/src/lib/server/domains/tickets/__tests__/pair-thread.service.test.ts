@@ -70,13 +70,21 @@ function seedClock(start = '2026-07-01T00:00:00Z') {
   return () => new Date((t += 60_000))
 }
 
-async function seedPrincipal(): Promise<PrincipalId> {
+async function seedPrincipal(names?: {
+  accountName: string
+  publicName: string
+}): Promise<PrincipalId> {
   const userId = createId('user') as UserId
   const principalId = createId('principal') as PrincipalId
-  await testDb.insert(user).values({ id: userId, name: `U-${suffix()}` })
-  await testDb
-    .insert(principal)
-    .values({ id: principalId, userId, role: 'member', type: 'user', createdAt: new Date() })
+  await testDb.insert(user).values({ id: userId, name: names?.accountName ?? `U-${suffix()}` })
+  await testDb.insert(principal).values({
+    id: principalId,
+    userId,
+    displayName: names?.publicName,
+    role: 'member',
+    type: 'user',
+    createdAt: new Date(),
+  })
   return principalId
 }
 
@@ -130,6 +138,42 @@ describe.skipIf(!fixture.available)('pair-thread union loader (real DB, rolled b
   beforeEach(fixture.begin)
   afterEach(fixture.rollback)
   afterAll(fixture.close)
+
+  it.each([false, true])(
+    'keeps name preference independent of internal notes (all=%s)',
+    async (all) => {
+      const next = seedClock()
+      const author = await seedPrincipal({ accountName: 'Ada Lovelace', publicName: 'Support Ada' })
+      const ticketId = await seedTicket()
+      const conversationId = await seedConversation()
+      await linkPair(ticketId, conversationId)
+      const ticketMessage = await post({ ticketId }, 'Ticket reply', { at: next(), author })
+      const conversationMessage = await post({ conversationId }, 'Chat reply', {
+        at: next(),
+        author,
+      })
+      await post({ ticketId }, 'Private ticket note', { at: next(), author, internal: true })
+      await post({ conversationId }, 'Private chat note', { at: next(), author, internal: true })
+
+      const agent = await listTicketMessages(ticketId, {
+        all,
+        includeInternal: false,
+        preferAccountName: true,
+      })
+      expect(agent.messages.map((m) => m.id)).toEqual([ticketMessage, conversationMessage])
+      expect(agent.messages.map((m) => m.author?.displayName)).toEqual([
+        'Ada Lovelace',
+        'Ada Lovelace',
+      ])
+
+      const requester = await listTicketMessages(ticketId, { all, includeInternal: false })
+      expect(requester.messages.map((m) => m.id)).toEqual([ticketMessage, conversationMessage])
+      expect(requester.messages.map((m) => m.author?.displayName)).toEqual([
+        'Support Ada',
+        'Support Ada',
+      ])
+    }
+  )
 
   it('resolves the pair only for a CUSTOMER-ticket link (1:1, 0214)', async () => {
     const standalone = await seedTicket()

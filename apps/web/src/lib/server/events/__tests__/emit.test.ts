@@ -171,6 +171,69 @@ describe('emit()', () => {
     expect(getExecuteRows(jobs).length).toBeGreaterThan(0)
   })
 
+  it('queues a job per reaction queue in the same tx, only for a type that has reactions', async () => {
+    const reactedDef: EventDefinition<{ ticketId: string }> = {
+      ...plainDef,
+      type: 'ticket.status_changed',
+      entity: 'ticket',
+      payload: z.object({ ticketId: z.string() }),
+    }
+    const reactionJobsFor = async (eventId: string) =>
+      getExecuteRows<{ queue: string; dedupe_key: string }>(
+        await db.execute(sql`
+          SELECT queue, dedupe_key FROM job_queue
+          WHERE queue IN ('event-reactions', 'event-summaries')
+            AND payload->>'eventId' = ${eventId}
+          ORDER BY queue
+        `)
+      )
+
+    const reactedEntity = createId('ticket')
+    const reactedId = await db.transaction((tx) =>
+      emit(tx, reactedDef, {
+        payload: { ticketId: reactedEntity },
+        actor: { type: 'service' },
+        entityId: reactedEntity,
+      })
+    )
+    // The ordered reactions and the close summary each get their own job.
+    expect(await reactionJobsFor(reactedId)).toEqual([
+      { queue: 'event-reactions', dedupe_key: `event-reactions:${reactedId}` },
+      { queue: 'event-summaries', dedupe_key: `event-summaries:${reactedId}` },
+    ])
+
+    const plainEntity = createId('post')
+    const plainId = await db.transaction((tx) =>
+      emit(tx, plainDef, {
+        payload: { postId: plainEntity },
+        actor: { type: 'service' },
+        entityId: plainEntity,
+      })
+    )
+    expect(await reactionJobsFor(plainId)).toEqual([])
+
+    let rolledBackId = ''
+    await expect(
+      db.transaction(async (tx) => {
+        rolledBackId = await emit(tx, reactedDef, {
+          payload: { ticketId: createId('ticket') },
+          actor: { type: 'service' },
+          entityId: reactedEntity,
+        })
+        throw new Error('abort the tx')
+      })
+    ).rejects.toThrow('abort the tx')
+    expect(await reactionJobsFor(rolledBackId)).toEqual([])
+
+    // Committed to the shared database: leave no reaction job for another
+    // suite's drain to claim.
+    await db.execute(sql`
+      DELETE FROM job_queue
+      WHERE queue IN ('event-reactions', 'event-summaries')
+        AND payload->>'eventId' IN (${reactedId}, ${plainId})
+    `)
+  })
+
   it('rejects a payload that fails the catalogue zod schema', async () => {
     const entityId = createId('post')
     await expect(

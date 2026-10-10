@@ -1,5 +1,4 @@
 import type { IntegrationDefinition, IntegrationCatalogEntry, IntegrationCapability } from './types'
-import type { HookHandler } from '../events/hook-types'
 import { slackIntegration } from '@/integrations/slack/server'
 import { discordIntegration } from '@/integrations/discord/server'
 import { linearIntegration } from '@/integrations/linear/server'
@@ -66,9 +65,8 @@ export function listIntegrationTypes(): string[] {
 /**
  * Capability badges derived from the definition's slots, flavored by the
  * catalog category (taxonomy, not a capability claim) — so the catalog
- * cannot advertise what a provider does not implement (IF WO-4). Providers
- * with no capability slots yet (enrichment-only: zendesk/intercom/hubspot)
- * fall back to their hand-written copy until the context capability lands.
+ * cannot advertise what a provider does not implement. Lookup providers
+ * use their context capability to describe on-demand customer details.
  */
 function deriveCapabilities(i: IntegrationDefinition): IntegrationCapability[] {
   const name = i.catalog.name
@@ -95,32 +93,49 @@ function deriveCapabilities(i: IntegrationDefinition): IntegrationCapability[] {
         })
         break
       default:
-        // support_crm hooks are enrichment lookups, not deliveries.
         caps.push({
-          label: 'Customer context',
-          description: `Look up customer details in ${name} when feedback arrives`,
+          label: 'Event delivery',
+          description: `Send subscribed events to ${name}`,
         })
     }
   }
 
   if (i.inbound && i.webhookRegistration) {
     caps.push({
-      label: 'Two-way status sync',
-      description: `Status changes in ${name} update linked feedback in Quackback`,
+      label:
+        i.inbound.statusMode === 'automatic' ? 'Receive status updates' : 'Review status updates',
+      description:
+        i.inbound.statusMode === 'automatic'
+          ? `Verified status changes in ${name} update linked feedback in Quackback`
+          : `Status changes from ${name} appear in Sync history for manual review`,
     })
   }
 
-  if (i.issues) {
+  if (i.listExternalStatuses) {
+    caps.push({
+      label: 'Review outbound status changes',
+      description: `Review mapped Quackback status changes before applying them in ${name}`,
+    })
+  }
+
+  if (i.issues?.parseRef || i.issues?.inspect) {
     caps.push({
       label: 'Link existing items',
       description: `Link posts and tickets to existing ${name} items`,
     })
   }
 
-  if (i.archive) {
+  if (i.linkedItems) {
     caps.push({
-      label: 'Clean up on delete',
-      description: `Close or archive linked ${name} items when feedback is deleted`,
+      label: 'Review cleanup on delete',
+      description: `Review linked ${name} items for closing or archiving when feedback is deleted`,
+    })
+  }
+
+  if (i.context) {
+    caps.push({
+      label: 'Customer context',
+      description: `Look up customer details in ${name} on demand`,
     })
   }
 
@@ -135,23 +150,25 @@ function deriveCapabilities(i: IntegrationDefinition): IntegrationCapability[] {
 }
 
 export async function getIntegrationCatalog(): Promise<IntegrationCatalogEntry[]> {
-  const { getConfiguredIntegrationTypes } =
+  const { getConfiguredIntegrationTypes, arePlatformCredentialsManaged } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const configuredTypes = await getConfiguredIntegrationTypes()
-  return Array.from(registry.values()).map((i) => {
-    const derived = deriveCapabilities(i)
-    return {
-      ...i.catalog,
-      capabilities: derived.length > 0 ? derived : (i.catalog.capabilities ?? []),
-      available: i.platformCredentials.length === 0 || configuredTypes.has(i.id),
-      configurable: i.platformCredentials.length > 0,
-      platformCredentialFields: i.platformCredentials,
-    }
-  })
-}
-
-export function getIntegrationHook(type: string): HookHandler | undefined {
-  return registry.get(type)?.hook
+  return Promise.all(
+    Array.from(registry.values()).map(async (i) => {
+      const derived = deriveCapabilities(i)
+      const managed = await arePlatformCredentialsManaged(i.id)
+      const hasPlatformApp =
+        i.platformCredentials.length === 0 || configuredTypes.has(i.id) || managed
+      return {
+        ...i.catalog,
+        capabilities: derived.length > 0 ? derived : (i.catalog.capabilities ?? []),
+        available: hasPlatformApp,
+        managed,
+        configurable: i.platformCredentials.length > 0,
+        platformCredentialFields: i.platformCredentials,
+      }
+    })
+  )
 }
 
 export function getIntegrationInbound(type: string) {

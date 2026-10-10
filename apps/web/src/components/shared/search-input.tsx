@@ -6,12 +6,14 @@ interface SearchInputProps {
   value: string
   onChange: (value: string) => void
   placeholder?: string
+  /** Accessible name; defaults to the placeholder */
+  'aria-label'?: string
   /** HTML data attribute for keyboard focus targeting */
   'data-search-input'?: boolean
 }
 
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(function SearchInput(
-  { value, onChange, placeholder = 'Search...', ...props },
+  { value, onChange, placeholder = 'Search...', 'aria-label': ariaLabel, ...props },
   ref
 ) {
   return (
@@ -21,9 +23,10 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
         ref={ref}
         type="text"
         placeholder={placeholder}
+        aria-label={ariaLabel ?? placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="pl-8 pr-8 h-8 text-sm bg-muted/30 border-border/50"
+        className="pl-8 pr-8 h-8 text-sm border-border/50"
         {...props}
       />
       {value && (

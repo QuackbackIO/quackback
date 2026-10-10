@@ -14,21 +14,21 @@ describe('after-commit signaling', () => {
 
   it('delivers immediately when no transaction is open', () => {
     const seen: string[] = []
-    onDurableWorkCommitted((key) => seen.push(key))
+    onDurableWorkCommitted((work) => seen.push(work.workspaceKey))
     noteDurableWork('ws_a')
     expect(seen).toEqual(['ws_a'])
   })
 
   it('does not deliver an uncommitted note outside a frame', () => {
     const seen: string[] = []
-    onDurableWorkCommitted((key) => seen.push(key))
+    onDurableWorkCommitted((work) => seen.push(work.workspaceKey))
     noteDurableWork('ws_a', { committed: false })
     expect(seen).toEqual([])
   })
 
   it('delivers only after the outer frame resolves', async () => {
     const seen: string[] = []
-    onDurableWorkCommitted((key) => seen.push(key))
+    onDurableWorkCommitted((work) => seen.push(work.workspaceKey))
 
     await runInAfterCommitFrame(async () => {
       noteDurableWork('ws_a')
@@ -40,7 +40,7 @@ describe('after-commit signaling', () => {
 
   it('discards pending keys when the frame throws', async () => {
     const seen: string[] = []
-    onDurableWorkCommitted((key) => seen.push(key))
+    onDurableWorkCommitted((work) => seen.push(work.workspaceKey))
 
     await expect(
       runInAfterCommitFrame(async () => {
@@ -54,7 +54,7 @@ describe('after-commit signaling', () => {
 
   it('coalesces the same workspace to one delivery per commit', async () => {
     const seen: string[] = []
-    onDurableWorkCommitted((key) => seen.push(key))
+    onDurableWorkCommitted((work) => seen.push(work.workspaceKey))
 
     await runInAfterCommitFrame(async () => {
       noteDurableWork('ws_a')
@@ -67,7 +67,7 @@ describe('after-commit signaling', () => {
 
   it('discards keys recorded in a nested frame that throws', async () => {
     const seen: string[] = []
-    onDurableWorkCommitted((key) => seen.push(key))
+    onDurableWorkCommitted((work) => seen.push(work.workspaceKey))
 
     await runInAfterCommitFrame(async () => {
       noteDurableWork('outer')
@@ -84,7 +84,7 @@ describe('after-commit signaling', () => {
 
   it('keeps nested keys when the inner frame succeeds', async () => {
     const seen: string[] = []
-    onDurableWorkCommitted((key) => seen.push(key))
+    onDurableWorkCommitted((work) => seen.push(work.workspaceKey))
 
     await runInAfterCommitFrame(async () => {
       noteDurableWork('outer')
@@ -99,7 +99,7 @@ describe('after-commit signaling', () => {
 
   it('wrapDbTransaction flushes after the wrapped promise resolves', async () => {
     const seen: string[] = []
-    onDurableWorkCommitted((key) => seen.push(key))
+    onDurableWorkCommitted((work) => seen.push(work.workspaceKey))
 
     const original = async (fn: () => Promise<string>) => {
       noteDurableWork('ws_tx')
@@ -113,7 +113,7 @@ describe('after-commit signaling', () => {
 
   it('wrapDbTransaction discards on rejection', async () => {
     const seen: string[] = []
-    onDurableWorkCommitted((key) => seen.push(key))
+    onDurableWorkCommitted((work) => seen.push(work.workspaceKey))
 
     const original = async () => {
       noteDurableWork('ws_tx')
@@ -128,9 +128,22 @@ describe('after-commit signaling', () => {
     onDurableWorkCommitted(() => {
       throw new Error('sink')
     })
-    onDurableWorkCommitted((key) => seen.push(key))
+    onDurableWorkCommitted((work) => seen.push(work.workspaceKey))
 
     noteDurableWork('ws_a')
     expect(seen).toEqual(['ws_a'])
+  })
+
+  it('coalesces job ids per workspace on the same commit', async () => {
+    const seen: Array<{ workspaceKey: string; jobIds: string[] }> = []
+    onDurableWorkCommitted((work) => seen.push(work))
+
+    await runInAfterCommitFrame(async () => {
+      noteDurableWork('ws_a', { jobId: 'job_1' })
+      noteDurableWork('ws_a', { jobId: 'job_2' })
+      noteDurableWork('ws_a', { jobId: 'job_1' })
+    })
+
+    expect(seen).toEqual([{ workspaceKey: 'ws_a', jobIds: ['job_1', 'job_2'] }])
   })
 })

@@ -34,7 +34,8 @@ export function WarningBox({
 
   return (
     <div
-      className={cn('flex items-start gap-3 rounded-lg border p-4', styles.container, className)}
+      data-slot="warning-box"
+      className={cn('flex items-start gap-3 rounded-field border p-4', styles.container, className)}
     >
       <Icon className={cn('h-5 w-5 shrink-0 mt-0.5', styles.icon)} />
       <div className="text-sm">

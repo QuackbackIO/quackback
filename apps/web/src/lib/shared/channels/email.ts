@@ -9,4 +9,6 @@ export const emailDescriptor: ChannelDescriptor = {
   reopenOnReply: 'always',
   accountRoles: ['inbound', 'sending'],
   richText: 'full',
+  addressing: 'email',
+  closeSurface: 'mailbox',
 }

@@ -28,7 +28,7 @@ import { ArticlePerformanceTable } from '../article-performance-table'
 
 const ROWS = [
   {
-    id: 'kb_article_1',
+    id: 'article_1',
     slug: 'getting-started',
     title: 'Getting started',
     status: 'published' as const,
@@ -38,7 +38,7 @@ const ROWS = [
     notHelpfulCount: 10,
   },
   {
-    id: 'kb_article_2',
+    id: 'article_2',
     slug: 'billing-faq',
     title: 'Billing FAQ',
     status: 'published' as const,
@@ -48,7 +48,7 @@ const ROWS = [
     notHelpfulCount: 20,
   },
   {
-    id: 'kb_article_3',
+    id: 'article_3',
     slug: 'api-keys',
     title: 'API keys',
     status: 'draft' as const,
@@ -99,7 +99,7 @@ describe('ArticlePerformanceTable', () => {
 
   it('omits the worst-reacted callout when no article has received any votes', async () => {
     hoisted.listArticlePerformanceFn.mockResolvedValue([
-      { ...ROWS[2], id: 'kb_article_4', title: 'Untouched article' },
+      { ...ROWS[2], id: 'article_4', title: 'Untouched article' },
     ])
     renderWithClient(<ArticlePerformanceTable />)
 

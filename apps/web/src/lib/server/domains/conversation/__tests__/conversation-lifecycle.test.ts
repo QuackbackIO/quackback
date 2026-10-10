@@ -48,6 +48,11 @@ describe('applyVisitorReopenStatus', () => {
   it('SF3: a matched blockReply on an ALREADY-closed conversation leaves it closed (post-close CSAT/button flow)', () => {
     expect(applyVisitorReopenStatus('closed', true)).toBe('closed')
   })
+
+  it('never-reopen channels stay closed on an ordinary visitor message', () => {
+    expect(applyVisitorReopenStatus('closed', false, 'never')).toBe('closed')
+    expect(applyVisitorReopenStatus('snoozed', false, 'never')).toBe('open')
+  })
 })
 
 describe('applyAgentReopenStatus', () => {
@@ -56,6 +61,11 @@ describe('applyAgentReopenStatus', () => {
     // An agent reply is "send and stay snoozed" — only a customer or the timer wakes it.
     expect(applyAgentReopenStatus('snoozed')).toBe('snoozed')
     expect(applyAgentReopenStatus('open')).toBe('open')
+  })
+
+  it('never-reopen channels stay closed on an agent reply', () => {
+    expect(applyAgentReopenStatus('closed', 'never')).toBe('closed')
+    expect(applyAgentReopenStatus('snoozed', 'never')).toBe('snoozed')
   })
 })
 

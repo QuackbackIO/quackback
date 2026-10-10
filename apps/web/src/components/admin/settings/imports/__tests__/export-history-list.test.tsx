@@ -7,8 +7,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ExportHistoryList, formatBytes, summarizeEntityCounts } from '../export-history-list'
-import { ExportWorkspaceAction } from '../export-workspace-action'
+
+const { history } = vi.hoisted(() => ({ history: { runs: [] as unknown[] } }))
+vi.mock('@/lib/server/functions/data-runs', () => ({
+  listExportRunsFn: vi.fn(async () => history.runs),
+  listImportRunsFn: vi.fn(async () => []),
+}))
+
+const { ExportHistoryList, formatBytes, summarizeEntityCounts } =
+  await import('../export-history-list')
+const { ExportWorkspaceAction } = await import('../export-workspace-action')
 
 function renderWithClient(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -31,19 +39,16 @@ function urlOf(input: RequestInfo | URL): string {
   return typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
 }
 
-function stubFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response>) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      return Promise.resolve(handler(urlOf(input), init))
-    })
-  )
+/** The export history the server answers with. */
+function serveRuns(runs: unknown[]) {
+  history.runs = runs
 }
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
 beforeEach(() => {
+  history.runs = []
   vi.stubGlobal('fetch', vi.fn())
 })
 afterEach(() => {
@@ -65,54 +70,47 @@ describe('summarizeEntityCounts', () => {
     )
   })
 
-  it('renders an em dash for empty counts', () => {
-    expect(summarizeEntityCounts({})).toBe('—')
+  it('renders a hyphen for empty counts', () => {
+    expect(summarizeEntityCounts({})).toBe('-')
   })
 })
 
 describe('<ExportHistoryList>', () => {
   it('shows the empty state when there are no runs', async () => {
-    stubFetch(() => jsonResponse({ runs: [] }))
+    serveRuns([])
     renderWithClient(<ExportHistoryList />)
     expect(await screen.findByText('No exports yet')).toBeTruthy()
   })
 
   it('renders a completed run with size, contents, and a download link', async () => {
-    stubFetch(() => jsonResponse({ runs: [completedRun] }))
+    serveRuns([completedRun])
     renderWithClient(<ExportHistoryList />)
 
     expect(await screen.findByText('4.0 MB')).toBeTruthy()
     expect(screen.getByText(/1,204 posts/)).toBeTruthy()
-    expect(screen.getByText('Completed')).toBeTruthy()
+    expect(screen.getByText('Completed').className).toContain('text-muted-foreground')
+    expect(screen.getByText('Completed').getAttribute('data-slot')).not.toBe('badge')
     const link = screen.getByRole('link', { name: /ZIP/ })
     expect(link.getAttribute('href')).toBe('/api/export/runs/export_run_1/download')
   })
 
   it('shows Expired instead of a link past expires_at', async () => {
-    stubFetch(() =>
-      jsonResponse({
-        runs: [{ ...completedRun, expiresAt: new Date(Date.now() - 1000).toISOString() }],
-      })
-    )
+    serveRuns([{ ...completedRun, expiresAt: new Date(Date.now() - 1000).toISOString() }])
     renderWithClient(<ExportHistoryList />)
     expect(await screen.findByText('Expired')).toBeTruthy()
     expect(screen.queryByRole('link')).toBeNull()
   })
 
   it('shows the error message for a failed run', async () => {
-    stubFetch(() =>
-      jsonResponse({
-        runs: [
-          {
-            ...completedRun,
-            status: 'failed',
-            error: 'S3 unreachable',
-            entityCounts: null,
-            sizeBytes: null,
-          },
-        ],
-      })
-    )
+    serveRuns([
+      {
+        ...completedRun,
+        status: 'failed',
+        error: 'S3 unreachable',
+        entityCounts: null,
+        sizeBytes: null,
+      },
+    ])
     renderWithClient(<ExportHistoryList />)
     expect(await screen.findByText('S3 unreachable')).toBeTruthy()
     expect(screen.getByText('Failed')).toBeTruthy()
@@ -125,12 +123,12 @@ describe('<ExportWorkspaceAction>', () => {
       if (urlOf(input) === '/api/export/workspace' && init?.method === 'POST') {
         return Promise.resolve(jsonResponse({ runId: 'export_run_new' }, 202))
       }
-      return Promise.resolve(jsonResponse({ runs: [] }))
+      return Promise.resolve(jsonResponse({}, 404))
     })
     vi.stubGlobal('fetch', fetchMock)
 
     renderWithClient(<ExportWorkspaceAction />)
-    const button = await screen.findByRole('button', { name: /Export workspace data/ })
+    const button = await screen.findByRole('button', { name: /^Export$/ })
     fireEvent.click(button)
 
     await waitFor(() => {
@@ -144,11 +142,7 @@ describe('<ExportWorkspaceAction>', () => {
   })
 
   it('is disabled and shows progress while a run is in flight', async () => {
-    stubFetch(() =>
-      jsonResponse({
-        runs: [{ ...completedRun, status: 'running', entityCounts: null, sizeBytes: null }],
-      })
-    )
+    serveRuns([{ ...completedRun, status: 'running', entityCounts: null, sizeBytes: null }])
     renderWithClient(<ExportWorkspaceAction />)
     const button = await screen.findByRole('button', { name: /Exporting…/ })
     expect((button as HTMLButtonElement).disabled).toBe(true)

@@ -18,7 +18,7 @@ export function explainAuthorizeError(
   const desc = description ? ` ${description}` : ''
   const sent = requestedScopes?.length ? ` (${requestedScopes.join(' ')})` : ''
   const promptHint = requestedPrompt
-    ? ` This request also sent prompt=${requestedPrompt}. Some providers answer a prompt they do not implement with exactly this error and name nothing — if the failure persists, change the sign-in prompt on this provider (Re-authenticate and Ask for consent are the most widely supported) or turn it off.`
+    ? ` This request also sent prompt=${requestedPrompt}. Some providers answer a prompt they do not implement with exactly this error and name nothing. If the failure persists, set this provider's sign-in prompt to "Don't send a prompt".`
     : ''
   switch (code) {
     case 'invalid_request':

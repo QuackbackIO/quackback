@@ -1,9 +1,9 @@
 /**
  * Hook system types.
  *
- * Hooks are triggered when events occur. Each hook type (Slack, Email, Discord,
- * Webhook, Linear, etc.) implements the same interface. The orchestration layer
- * decides WHICH hooks to trigger, handlers decide HOW to deliver.
+ * Built-in event handlers use HookHandler. Integration providers use the
+ * explicit IntegrationHook outcome contract in integrations/sync/outcomes.
+ * Both share event inputs; the respective queues own delivery orchestration.
  */
 
 import type { EventData } from './types'
@@ -24,13 +24,6 @@ export interface HookResult {
   error?: string
   /** Whether this error is retryable (network issues, rate limits) */
   shouldRetry?: boolean
-  /**
-   * The provider's API rejected the stored access token (401). When the
-   * target config carries an integrationId, the worker refreshes the token
-   * via the provider's refreshToken capability and retries the hook ONCE
-   * (WO-13 outbound-path refresh).
-   */
-  authExpired?: boolean
 }
 
 /**
@@ -50,25 +43,19 @@ export interface HookRunContext {
   /** BullMQ job ID for the dispatch. May be undefined for ad-hoc test
    *  callers; handlers must treat that case as "no dedup, just run". */
   jobId?: string
+  /**
+   * True when the queue will not run this job again if this attempt fails, so
+   * a handler can tell an expected, retried failure (a warning) from the one
+   * that loses the delivery (an error). Undefined for ad-hoc callers, which
+   * handlers treat as final.
+   */
+  finalAttempt?: boolean
 }
 
 /**
  * Hook handler interface.
  *
- * Each hook type (Slack, Discord, Email, Webhook, etc.) implements this interface.
- * The `run` method is called once per target.
- *
- * @example
- * ```typescript
- * export const slackHook: HookHandler = {
- *   async run(event, target, config) {
- *     const { channelId } = target
- *     const { accessToken } = config
- *     // ... send to Slack
- *     return { success: true, externalId: result.ts }
- *   }
- * }
- * ```
+ * Built-in hooks (email, notification, webhook, workflow) run once per target.
  */
 export interface HookHandler {
   /**

@@ -37,7 +37,7 @@ function occurrences(value: string, needle: string): number {
 
 describe('assistant production system prompt', () => {
   it('uses the production prompt version', () => {
-    expect(ASSISTANT_PROMPT_VERSION).toBe('support-agent-v4')
+    expect(ASSISTANT_PROMPT_VERSION).toBe('support-agent-v7')
   })
 
   it('returns every optional block in the normative order', () => {
@@ -103,6 +103,14 @@ describe('assistant production system prompt', () => {
         textAudience: 'customer',
       }),
       copilot_qa: expect.objectContaining({
+        customerVoice: false,
+        contentAudience: 'team',
+        writeToolPolicy: 'propose',
+        pipelineStep: 'assistant',
+        inabilitySemantics: 'cannot_answer',
+        textAudience: 'teammate',
+      }),
+      workspace_assistant: expect.objectContaining({
         customerVoice: false,
         contentAudience: 'team',
         writeToolPolicy: 'propose',
@@ -348,12 +356,35 @@ describe('assistant production system prompt', () => {
     }
   })
 
-  it('states that an empty citations array is the correct shape for uncitable turns', () => {
+  it('reserves [n] citations for search-style grounding, not tool lists that already have urls', () => {
     for (const role of ['customer_support', 'copilot_qa'] as const) {
       const prompt = joined({ role })
-      expect(prompt).toContain('An empty citations array is correct and expected')
-      expect(prompt).toContain('not\n  citable sources')
+      expect(prompt).toContain('Use the citations array and [n] markers for help-center')
+      expect(prompt).toContain('leave citations empty')
+      expect(prompt).toContain('# Reply formatting')
+      expect(prompt).toContain('language of the latest user or teammate message')
+      expect(prompt).not.toContain('# Slack surface')
     }
+  })
+
+  it('embeds Slack reply-formatting rules in the platform policy', () => {
+    const slack = joined({ role: 'workspace_assistant', surface: 'slack' })
+    const other = joined({ role: 'workspace_assistant' })
+    expect(slack).toContain('# Slack surface')
+    expect(slack).toContain('standard markdown, not Slack mrkdwn')
+    expect(slack).toContain('[title](url) copied verbatim')
+    expect(slack).toContain('latest teammate message only')
+    expect(slack).toContain('When to speak')
+    expect(slack).toContain('"listen":"leave"')
+    expect(other).not.toContain('# Slack surface')
+  })
+
+  it('tells the workspace assistant that me/I/my is the asking teammate for every lookup', () => {
+    const prompt = joined({ role: 'workspace_assistant' })
+    expect(prompt).toContain("asking teammate's name, email, role, and principal id")
+    expect(prompt).toContain('Treat "me", "I", "my", and "myself" as this teammate')
+    expect(prompt).toContain('including "posts created by me"')
+    expect(joined()).not.toContain('Treat "me", "I", "my", and "myself"')
   })
 
   it('injects the board catalogue only when capture_feedback is assembled', () => {
@@ -380,5 +411,48 @@ describe('assistant production system prompt', () => {
     // Board names are workspace data on a trusted structural line: escaped.
     expect(withTool).toContain('General &lt;Feedback&gt;')
     expect(occurrences(withTool, '</workspace_board_catalogue>')).toBe(1)
+  })
+})
+
+describe('knowledge search guidance per role', () => {
+  const GENERIC = 'Search for product, pricing, policy, capability, or procedure questions'
+  it('keys the generic search line to Home knowledge search, not the entity search', () => {
+    const home = joined({
+      role: 'workspace_assistant',
+      surface: 'workspace',
+      agentKind: 'copilot',
+      tools: [
+        { name: 'search', promptGuidance: 'Find workspace entities by name.' },
+        { name: 'search_knowledge', promptGuidance: 'Search knowledge.' },
+      ],
+    })
+    expect(home).toContain(`- search_knowledge: ${GENERIC}`)
+    expect(home).not.toContain(`- search: ${GENERIC}`)
+  })
+  it('keeps the line on search for Slack and Quinn', () => {
+    for (const overrides of [
+      { role: 'workspace_assistant' as const, surface: 'slack' as const },
+      { role: 'customer_support' as const },
+    ]) {
+      const text = joined({
+        ...overrides,
+        tools: [{ name: 'search', promptGuidance: 'Search knowledge.' }],
+      })
+      expect(text).toContain(`- search: ${GENERIC}`)
+    }
+  })
+})
+
+describe('dash-free replies', () => {
+  it('tells Quinn and Copilot never to write em dashes', () => {
+    for (const overrides of [
+      {},
+      { role: 'workspace_assistant' as const, agentKind: 'copilot' as const },
+      { role: 'copilot_qa' as const },
+    ]) {
+      expect(joined(overrides)).toContain(
+        'Never use em dashes or en dashes as punctuation in a reply'
+      )
+    }
   })
 })

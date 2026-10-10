@@ -15,10 +15,15 @@ test.describe('Admin Moderation Settings', () => {
   })
 
   test('page loads and shows moderation heading', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Moderation' })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { level: 1, name: 'Feedback & Roadmaps' })).toBeVisible({
+      timeout: 10000,
+    })
     await expect(
-      page.getByText('Approval rules and content review for incoming posts and comments.')
-    ).toBeVisible({ timeout: 10000 })
+      page
+        .getByRole('navigation', { name: 'Feedback & Roadmaps' })
+        .getByRole('link', { name: 'Moderation' })
+    ).toHaveAttribute('aria-current', 'page')
+    await expect(page.getByRole('link', { name: /open queue/i })).toBeVisible({ timeout: 10000 })
   })
 
   test('does not show the anonymous-access card (moved to Portal access)', async ({ page }) => {
@@ -26,20 +31,16 @@ test.describe('Admin Moderation Settings', () => {
     await expect(page.getByRole('switch', { name: 'Allow anonymous interaction' })).toHaveCount(0)
   })
 
-  test('shows Approval rules card with per-axis approval switches', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Approval rules' })).toBeVisible({
+  test('shows Approval card with per-axis approval switches', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Approval' })).toBeVisible({
       timeout: 10000,
     })
-    await expect(
-      page.getByRole('switch', { name: 'Require approval for anonymous posts' })
-    ).toBeVisible()
-    await expect(
-      page.getByRole('switch', { name: 'Require approval for signed-in posts' })
-    ).toBeVisible()
+    await expect(page.getByRole('switch', { name: 'Anonymous posts' })).toBeVisible()
+    await expect(page.getByRole('switch', { name: 'Signed-in posts' })).toBeVisible()
   })
 
-  test('page shows the approval-rules and content-review cards', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Approval rules' })).toBeVisible({
+  test('page shows the approval and content-review cards', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Approval' })).toBeVisible({
       timeout: 10000,
     })
     await expect(page.getByRole('heading', { name: 'Content review' })).toBeVisible()

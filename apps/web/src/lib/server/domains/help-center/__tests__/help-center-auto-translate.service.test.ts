@@ -43,6 +43,18 @@ vi.mock('../help-center.article.service', () => ({
 vi.mock('../help-center-translations.service', () => ({
   upsertArticleTranslation: (...args: unknown[]) => mockUpsertArticleTranslation(...args),
 }))
+const budget = vi.hoisted(() => ({
+  exhausted: false,
+  windowEnd: new Date('2026-12-01T00:00:00.000Z'),
+}))
+vi.mock('@/lib/server/domains/ai/ai-budget', () => ({
+  getAiBudgetStatus: async () => ({
+    cap: 1000,
+    used: budget.exhausted ? 1000 : 10,
+    exhausted: budget.exhausted,
+    window: { kind: 'month', start: new Date('2026-11-01T00:00:00.000Z'), end: budget.windowEnd },
+  }),
+}))
 vi.mock('../help-center-translate-queue', () => ({
   enqueueHelpCenterTranslateJob: (...args: unknown[]) => mockEnqueueHelpCenterTranslateJob(...args),
 }))
@@ -52,6 +64,7 @@ const { buildTranslationPrompt, translateArticleForLocale, queueAutoTranslateOnP
 
 beforeEach(() => {
   vi.clearAllMocks()
+  budget.exhausted = false
   mockConfig.openaiApiKey = 'test-key'
   mockConfig.openaiBaseUrl = 'http://localhost:9999/v1'
   mockGetChatModel.mockReturnValue('gpt-test')
@@ -112,11 +125,36 @@ describe('buildTranslationPrompt', () => {
 })
 
 describe('translateArticleForLocale', () => {
+  it('pauses before calling the model when the AI allowance is used up', async () => {
+    budget.exhausted = true
+    mockGetHelpCenterConfig.mockResolvedValue({ autoTranslate: { protectedTerms: [] } })
+    mockGetArticleById.mockResolvedValue({ title: 'Refunds', description: null, content: 'x' })
+    mockChat.mockResolvedValue({ title: 'T', content: 'C' })
+
+    const result = await translateArticleForLocale('article_1' as KbArticleId, 'de')
+
+    expect(result).toEqual({ pausedUntil: budget.windowEnd })
+    expect(mockChat).not.toHaveBeenCalled()
+    expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
+  })
+
+  it('translates normally while allowance remains', async () => {
+    mockGetHelpCenterConfig.mockResolvedValue({ autoTranslate: { protectedTerms: [] } })
+    mockGetArticleById.mockResolvedValue({ title: 'Refunds', description: null, content: 'x' })
+    mockChat.mockResolvedValue({ title: 'T', content: 'C' })
+
+    const result = await translateArticleForLocale('article_1' as KbArticleId, 'de')
+
+    expect(result).toBeUndefined()
+    expect(mockChat).toHaveBeenCalledOnce()
+    expect(mockUpsertArticleTranslation).toHaveBeenCalledOnce()
+  })
+
   it('no-ops silently when AI is not configured', async () => {
     mockConfig.openaiApiKey = undefined
     mockGetChatModel.mockReturnValue(null)
 
-    await translateArticleForLocale('kb_article_1' as KbArticleId, 'de')
+    await translateArticleForLocale('article_1' as KbArticleId, 'de')
 
     expect(mockGetArticleById).not.toHaveBeenCalled()
     expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
@@ -137,16 +175,17 @@ describe('translateArticleForLocale', () => {
       content: 'Kontaktieren Sie den Quackback-Support.',
     })
 
-    await translateArticleForLocale('kb_article_1' as KbArticleId, 'de')
+    await translateArticleForLocale('article_1' as KbArticleId, 'de')
 
     expect(mockUpsertArticleTranslation).toHaveBeenCalledWith(
       expect.objectContaining({
-        articleId: 'kb_article_1',
+        articleId: 'article_1',
         locale: 'de',
         title: 'Rückerstattungen',
         description: 'Wie man eine bekommt',
         content: 'Kontaktieren Sie den Quackback-Support.',
-      })
+      }),
+      { source: 'auto' }
     )
   })
 
@@ -159,7 +198,7 @@ describe('translateArticleForLocale', () => {
     mockChat.mockRejectedValue(new Error('response did not match schema'))
 
     await expect(
-      translateArticleForLocale('kb_article_1' as KbArticleId, 'de')
+      translateArticleForLocale('article_1' as KbArticleId, 'de')
     ).resolves.toBeUndefined()
     expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
   })
@@ -171,7 +210,7 @@ describe('translateArticleForLocale', () => {
     mockChat.mockResolvedValue({ title: '', content: '' })
 
     await expect(
-      translateArticleForLocale('kb_article_1' as KbArticleId, 'de')
+      translateArticleForLocale('article_1' as KbArticleId, 'de')
     ).resolves.toBeUndefined()
     expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
   })
@@ -184,7 +223,7 @@ describe('queueAutoTranslateOnPublish', () => {
       locales: { additional: ['de', 'fr'] },
     })
 
-    await queueAutoTranslateOnPublish({ id: 'kb_article_1' } as never)
+    await queueAutoTranslateOnPublish({ id: 'article_1' } as never)
 
     expect(mockEnqueueHelpCenterTranslateJob).not.toHaveBeenCalled()
   })
@@ -195,7 +234,7 @@ describe('queueAutoTranslateOnPublish', () => {
       locales: { additional: [] },
     })
 
-    await queueAutoTranslateOnPublish({ id: 'kb_article_1' } as never)
+    await queueAutoTranslateOnPublish({ id: 'article_1' } as never)
 
     expect(mockEnqueueHelpCenterTranslateJob).not.toHaveBeenCalled()
   })
@@ -206,17 +245,17 @@ describe('queueAutoTranslateOnPublish', () => {
       locales: { additional: ['de', 'fr'] },
     })
 
-    await queueAutoTranslateOnPublish({ id: 'kb_article_1' } as never)
+    await queueAutoTranslateOnPublish({ id: 'article_1' } as never)
 
     expect(mockEnqueueHelpCenterTranslateJob).toHaveBeenCalledTimes(2)
     expect(mockEnqueueHelpCenterTranslateJob).toHaveBeenCalledWith({
       type: 'translate-article',
-      articleId: 'kb_article_1',
+      articleId: 'article_1',
       locale: 'de',
     })
     expect(mockEnqueueHelpCenterTranslateJob).toHaveBeenCalledWith({
       type: 'translate-article',
-      articleId: 'kb_article_1',
+      articleId: 'article_1',
       locale: 'fr',
     })
   })
@@ -224,8 +263,6 @@ describe('queueAutoTranslateOnPublish', () => {
   it('swallows enqueue errors rather than throwing (never blocks publish)', async () => {
     mockGetHelpCenterConfig.mockRejectedValue(new Error('settings unavailable'))
 
-    await expect(
-      queueAutoTranslateOnPublish({ id: 'kb_article_1' } as never)
-    ).resolves.toBeUndefined()
+    await expect(queueAutoTranslateOnPublish({ id: 'article_1' } as never)).resolves.toBeUndefined()
   })
 })

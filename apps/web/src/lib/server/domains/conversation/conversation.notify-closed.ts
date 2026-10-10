@@ -56,15 +56,6 @@ export async function notifyConversationClosed(opts: {
     const ctx = await buildHookContext()
     if (!ctx) return
 
-    const { emailBudgetAvailable } = await import('@/lib/server/domains/settings/tier-enforce')
-    if (!(await emailBudgetAvailable())) {
-      log.warn(
-        { conversation_id: opts.conversationId },
-        'email budget exhausted; close mail skipped'
-      )
-      return
-    }
-
     const { isPortalSupportEnabled } =
       await import('@/lib/server/domains/settings/settings.support')
     const ctaUrl = visitorConversationLink(

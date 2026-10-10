@@ -6,8 +6,9 @@
  * payload against the catalogue definition, INSERTs one `events` row on the
  * passed transaction (so the event commits atomically with the mutation), writes
  * an `audit_log` row in the same transaction when the definition opts in, and
- * inserts an `event-dispatch` job_queue row in that same transaction. The
- * job_queue trigger NOTIFYs on commit. Leftover unpublished rows may still
+ * inserts an `event-dispatch` job_queue row in that same transaction, plus a
+ * row per reaction queue for a type that has reactions (`event-reactions.ts`).
+ * The job_queue trigger NOTIFYs on commit. Leftover unpublished rows may still
  * carry `dispatch_owner = relay`; job-worker / scheduler start converts them.
  */
 import { db, events, auditLog, type Database, type Transaction } from '@/lib/server/db'
@@ -15,8 +16,10 @@ import { createId, type EvtId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 import { enqueueJob } from '@/lib/server/jobs/job-queue'
 import { EVENT_DISPATCH_QUEUE } from './event-dispatch-queue'
+import { reactionQueuesFor } from './event-reactions'
 import type { EventDefinition } from './catalogue/define'
 import type { DomainEvent, EventActorType, EventContext } from './envelope'
+import { isTestEvent } from './test-event'
 
 const log = logger.child({ component: 'emit' })
 
@@ -46,6 +49,7 @@ export async function emit<P>(
   // Validate the payload against the catalogue schema. A bad payload is a
   // programming error — throw synchronously inside the tx so it rolls back.
   const payload = def.payload.parse(input.payload)
+  const test = await isTestEvent({ entityId: input.entityId, payload, actorId: input.actor.id }, tx)
 
   const eventId = createId('event')
   const context: EventContext = { depth: 0, ...input.context }
@@ -62,6 +66,7 @@ export async function emit<P>(
     schemaVersion: def.version,
     dedupeKey: input.dedupeKey ?? null,
     dispatchOwner: 'job',
+    ...(test ? { publishedAt: new Date() } : {}),
   })
 
   // Compliance audit rows are written in the SAME transaction when the
@@ -81,6 +86,9 @@ export async function emit<P>(
     })
   }
 
+  // Test events retain their workspace audit trail without delivery or reactions.
+  if (test) return eventId
+
   // Same transaction as the event (and audit) row. Rollback leaves no
   // dispatch job. The job_queue wake trigger fires only if this commits.
   await enqueueJob({
@@ -90,6 +98,17 @@ export async function emit<P>(
     maxAttempts: 10,
     executor: tx,
   })
+  // The reactions ride their own jobs, so they never wait on outbound delivery
+  // and a crash after the event is published cannot lose them.
+  for (const queue of reactionQueuesFor(def.type)) {
+    await enqueueJob({
+      queue,
+      payload: { eventId },
+      dedupeKey: `${queue}:${eventId}`,
+      maxAttempts: 3,
+      executor: tx,
+    })
+  }
 
   return eventId
 }

@@ -51,7 +51,7 @@ describe('sdk', () => {
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     expect(document.querySelector('button[aria-label="Open feedback widget"]')).not.toBeNull()
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).not.toBeNull()
+    expect(document.querySelector('iframe.quackback-widget-iframe')).not.toBeNull()
   })
 
   it('init with { launcher: false } does not create a button', () => {
@@ -87,7 +87,7 @@ describe('sdk', () => {
     sdk.dispatch('init', { instanceUrl: ORIGIN })
     expect(() => sdk.dispatch('init', { instanceUrl: 'not a url' })).toThrow()
     // The good first instance is untouched.
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).not.toBeNull()
+    expect(document.querySelector('iframe.quackback-widget-iframe')).not.toBeNull()
   })
 
   it('init defaults identity to anonymous once iframe is ready', () => {
@@ -144,6 +144,28 @@ describe('sdk', () => {
     spy.mockRestore()
   })
 
+  it('keeps the closed panel out of the tab order and names the frame', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const iframe = document.querySelector('iframe.quackback-widget-iframe') as HTMLIFrameElement
+    const panel = iframe.parentElement as HTMLElement
+    expect(iframe.title).toBe('Help')
+    expect(panel.inert).toBe(true)
+    sdk.dispatch('open')
+    expect(panel.inert).toBe(false)
+    sdk.dispatch('close')
+    expect(panel.inert).toBe(true)
+  })
+
+  it('names the frame in the visitor language', () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, locale: 'de' })
+    expect(
+      (document.querySelector('iframe.quackback-widget-iframe') as HTMLIFrameElement).title
+    ).toBe('Hilfe')
+  })
+
   it('isOpen tracks panel state', () => {
     stubIframe()
     const sdk = createSDK()
@@ -197,6 +219,19 @@ describe('sdk', () => {
     sdk.dispatch('open', { postId: 'post_01h' })
     expect(postMessage).toHaveBeenCalledWith(
       { type: 'quackback:open', data: { postId: 'post_01h' } },
+      ORIGIN
+    )
+    sdk.dispatch('open', {
+      view: 'new-post',
+      title: 'Bug:',
+      body: 'steps',
+      board: 'bug-reports',
+    })
+    expect(postMessage).toHaveBeenLastCalledWith(
+      {
+        type: 'quackback:open',
+        data: { view: 'new-post', title: 'Bug:', body: 'steps', board: 'bug-reports' },
+      },
       ORIGIN
     )
     spy.mockRestore()
@@ -293,12 +328,12 @@ describe('sdk', () => {
     )
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).toBeNull()
+    expect(document.querySelector('iframe.quackback-widget-iframe')).toBeNull()
     sdk.dispatch('open')
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).not.toBeNull()
+    expect(document.querySelector('iframe.quackback-widget-iframe')).not.toBeNull()
     // The idle slot firing later must not create a second panel.
     idleCb?.()
-    expect(document.querySelectorAll('iframe[title="Feedback Widget"]')).toHaveLength(1)
+    expect(document.querySelectorAll('iframe.quackback-widget-iframe')).toHaveLength(1)
   })
 
   it('launcher reveals via fallback timer if config fetch never resolves', async () => {
@@ -371,9 +406,9 @@ describe('sdk', () => {
     stubIframe()
     const sdk = createSDK()
     sdk.dispatch('init', { instanceUrl: ORIGIN })
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).not.toBeNull()
+    expect(document.querySelector('iframe.quackback-widget-iframe')).not.toBeNull()
     sdk.dispatch('destroy')
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).toBeNull()
+    expect(document.querySelector('iframe.quackback-widget-iframe')).toBeNull()
     expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
   })
 

@@ -28,7 +28,13 @@ import {
   type ReactNode,
 } from 'react'
 import { useServerFn } from '@tanstack/react-start'
-import { ArrowPathIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  MinusCircleIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -49,7 +55,7 @@ import {
   type WireResult,
   type SsoTestState,
 } from './sso-test-state'
-import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
+import { isV2Capture, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 
 export type { SsoTestCapture }
 
@@ -75,13 +81,21 @@ interface OpenOptions {
    *  to `'sso'` for the legacy single-provider gate prompts (Enable /
    *  Require-SSO), which have no per-provider context. */
   registrationId?: string
+  /** An optional next step offered on the result view once the test passes
+   *  (e.g. "Enable sign-in" for a provider that is still off). Unlike
+   *  `onSuccess` it is a button, not an auto-apply: the admin chooses. */
+  successAction?: { label: string; run: () => void | Promise<void>; doneMessage: string }
 }
+
+export type SsoTestSuccessAction = NonNullable<OpenOptions['successAction']>
 
 interface SsoTestSignInContextValue {
   open: (opts?: OpenOptions) => void
   /** The most recent successful test sign-in, tagged with the provider it ran
    *  against so a consumer only uses claims from a test of THAT provider. */
   lastSuccess: SsoTestCapture | null
+  /** Latest usable diagnostic capture, including mapping failures. */
+  lastCapture: SsoTestCapture | null
 }
 
 const SsoTestSignInContext = createContext<SsoTestSignInContextValue | null>(null)
@@ -98,13 +112,16 @@ export function useSsoTestSignIn(): SsoTestSignInContextValue {
 export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
   const startTest = useServerFn(startSsoTestFn)
   const pollResult = useServerFn(getSsoTestResultFn)
+  const queryClient = useQueryClient()
   const [state, dispatch] = useReducer(ssoTestReducer, initialSsoTestState)
   const [applying, setApplying] = useState(false)
   const [lastSuccess, setLastSuccess] = useState<SsoTestCapture | null>(null)
+  const [lastCapture, setLastCapture] = useState<SsoTestCapture | null>(null)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const onSuccessRef = useRef<OnSuccess | null>(null)
   const successMessageRef = useRef<string | null>(null)
+  const [successAction, setSuccessAction] = useState<SsoTestSuccessAction | null>(null)
   // Default to 'sso' for legacy gate prompts (Enable / Require-SSO) that
   // open the modal without per-provider context.
   const registrationIdRef = useRef<string>('sso')
@@ -167,7 +184,17 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
       clearPoll()
       clearPopup()
       dispatch({ type: 'resolved', result, identityMatched })
-      if (result.ok) {
+      // The server stamped lastSuccessfulTestAt / lastTestCapture on the row;
+      // the Connection summary reads those, so refetch rather than show the
+      // previous test's time next to this one's result.
+      void queryClient.invalidateQueries({ queryKey: ['settings', 'identityProviders'] })
+      const capture = 'capture' in result ? result.capture : undefined
+      if (capture) {
+        setLastCapture(capture)
+        if (!isV2Capture(capture) || capture.outcome === 'success') {
+          setLastSuccess(capture)
+        }
+      } else if (result.ok) {
         setLastSuccess({
           registrationId: registrationIdRef.current,
           capturedAt: new Date().toISOString(),
@@ -179,10 +206,12 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
           },
           claims: result.allClaims ?? {},
         })
+      }
+      if (result.ok) {
         void runAutoApply()
       }
     },
-    [clearPoll, clearPopup, runAutoApply]
+    [clearPoll, clearPopup, runAutoApply, queryClient]
   )
 
   // postMessage listener — origin + source checks keep stray messages
@@ -212,6 +241,7 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
     clearPopup()
     onSuccessRef.current = null
     successMessageRef.current = null
+    setSuccessAction(null)
     dispatch({ type: 'close' })
   }, [clearPoll, clearPopup])
 
@@ -219,8 +249,25 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
     onSuccessRef.current = opts?.onSuccess ?? null
     successMessageRef.current = opts?.successMessage ?? null
     registrationIdRef.current = opts?.registrationId ?? 'sso'
+    setSuccessAction(opts?.successAction ?? null)
     dispatch({ type: 'open', reason: opts?.reason })
   }, [])
+
+  const runSuccessAction = useCallback(async () => {
+    if (!successAction) return
+    setApplying(true)
+    try {
+      await successAction.run()
+      dispatch({ type: 'applied', message: successAction.doneMessage })
+    } catch (err) {
+      dispatch({
+        type: 'failed',
+        error: err instanceof Error ? err.message : 'Could not apply the change.',
+      })
+    } finally {
+      setApplying(false)
+    }
+  }, [successAction])
 
   const handleStart = useCallback(async () => {
     dispatch({ type: 'start' })
@@ -278,11 +325,13 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
   }, [startTest, pollResult, trackPopup, clearPoll, clearPopup, resolveTest])
 
   return (
-    <SsoTestSignInContext.Provider value={{ open, lastSuccess }}>
+    <SsoTestSignInContext.Provider value={{ open, lastSuccess, lastCapture }}>
       {children}
       <SsoTestSignInModal
         state={state}
         applying={applying}
+        successAction={successAction}
+        onSuccessAction={() => void runSuccessAction()}
         onStart={handleStart}
         onClose={handleClose}
       />
@@ -293,11 +342,15 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
 function SsoTestSignInModal({
   state,
   applying,
+  successAction,
+  onSuccessAction,
   onStart,
   onClose,
 }: {
   state: ReturnType<typeof ssoTestReducer>
   applying: boolean
+  successAction: SsoTestSuccessAction | null
+  onSuccessAction: () => void
   onStart: () => void
   onClose: () => void
 }) {
@@ -333,6 +386,8 @@ function SsoTestSignInModal({
             applying={applying}
             hasResultOrError={!!(result || error)}
             applied={appliedMessage !== null}
+            successAction={result?.ok && appliedMessage === null ? successAction : null}
+            onSuccessAction={onSuccessAction}
             onStart={onStart}
             onClose={onClose}
           />
@@ -373,7 +428,7 @@ function ModalBody({
   return (
     <div className="space-y-3">
       {appliedMessage ? (
-        <div className="flex items-center gap-2 rounded-md border border-green-500/30 bg-green-500/10 p-2.5 text-sm font-medium text-green-700">
+        <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/10 p-2.5 text-sm font-medium text-success">
           <CheckCircleIcon className="h-4 w-4 shrink-0" />
           {appliedMessage}
         </div>
@@ -388,6 +443,8 @@ function ModalFooter({
   applying,
   hasResultOrError,
   applied,
+  successAction,
+  onSuccessAction,
   onStart,
   onClose,
 }: {
@@ -397,6 +454,9 @@ function ModalFooter({
   /** A gate action was applied — the test passed AND its action ran, so
    *  there's nothing left to retry. Close is the only move. */
   applied: boolean
+  /** Offered only on a passing result that has not yet been acted on. */
+  successAction: SsoTestSuccessAction | null
+  onSuccessAction: () => void
   onStart: () => void
   onClose: () => void
 }) {
@@ -425,8 +485,13 @@ function ModalFooter({
         Close
       </Button>
       {hasResultOrError && !applying && !applied && (
-        <Button size="sm" onClick={onStart}>
+        <Button size="sm" variant={successAction ? 'outline' : 'default'} onClick={onStart}>
           Try again
+        </Button>
+      )}
+      {successAction && !applied && (
+        <Button size="sm" onClick={onSuccessAction} disabled={applying}>
+          {applying ? 'Applying…' : successAction.label}
         </Button>
       )}
     </>
@@ -507,14 +572,16 @@ function StepList({ steps }: { steps: WireResult['steps'] }) {
     <ul className="space-y-1 text-xs">
       {steps.map((s, i) => (
         <li key={i} className="flex items-start gap-2">
-          {s.ok ? (
-            <CheckCircleIcon className="h-3.5 w-3.5 text-green-600 mt-0.5 shrink-0" />
+          {s.severity === 'info' ? (
+            <MinusCircleIcon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+          ) : s.ok ? (
+            <CheckCircleIcon className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
           ) : (
             <ExclamationTriangleIcon className="h-3.5 w-3.5 text-destructive mt-0.5 shrink-0" />
           )}
-          <span>
+          <span className={s.severity === 'info' ? 'text-muted-foreground' : undefined}>
             <span className="font-medium">{s.label}</span>
-            {s.detail && <span className="text-muted-foreground"> — {s.detail}</span>}
+            {s.detail && <span className="text-muted-foreground">: {s.detail}</span>}
           </span>
         </li>
       ))}
@@ -531,8 +598,8 @@ function TestResultPanel({
 }) {
   if (result.ok) {
     return (
-      <div className="rounded-md border border-green-500/30 bg-green-500/5 p-3 space-y-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-green-700">
+      <div className="rounded-md border border-success/30 bg-success/5 p-3 space-y-2">
+        <div className="flex items-center gap-2 text-sm font-medium text-success">
           <CheckCircleIcon className="h-4 w-4" />
           Sign-in works
         </div>

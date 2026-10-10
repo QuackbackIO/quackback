@@ -74,6 +74,36 @@ export function setSupportSurfaces(enabled: boolean = true): void {
   runScript('set-support-surfaces.ts', [enabled ? 'on' : 'off'], 'set support surfaces')
 }
 
+/** Switch Copilot on Home on or off, and bust the cached workspace settings. */
+export function setCopilotHome(enabled: boolean = true): void {
+  runScript('set-copilot-home.ts', [enabled ? 'on' : 'off'], 'set Copilot on Home')
+}
+
+/** Whether the e2e server's environment configures a chat model for Copilot. */
+export function isCopilotModelConfigured(): boolean {
+  return JSON.parse(runScript('check-model.ts', [], 'check the model configuration')).configured
+}
+
+/** Enable (or disable) widget Help/Changelog/Messages tabs plus product flags. */
+export function setWidgetSurfaces(enabled: boolean = true): void {
+  runScript('set-widget-surfaces.ts', [enabled ? 'on' : 'off'], 'set widget surfaces')
+}
+
+export interface SeededWidgetIdentified {
+  customerEmail: string
+  articleSlug: string
+  articleTitle: string
+  ticketTitle: string
+  csatSubject: string
+}
+
+/** Customer user, published article, ticket, and CSAT conversation for identified widget e2e. */
+export function seedWidgetIdentified(): SeededWidgetIdentified {
+  return JSON.parse(
+    runScript('seed-widget-identified.ts', [], 'seed widget identified')
+  ) as SeededWidgetIdentified
+}
+
 export interface SeededConversation {
   /** TypeID string (conversation_...) used in /admin/inbox?c= and /support/ URLs. */
   conversationId: string
@@ -81,6 +111,8 @@ export interface SeededConversation {
   subject: string
   /** The two visitor messages, oldest first. */
   messages: [string, string]
+  /** Present when seeded with `{ legacyImage: true }`. */
+  legacyImageName: string | null
 }
 
 /**
@@ -88,8 +120,16 @@ export interface SeededConversation {
  * email the visitor is a fresh anonymous principal; with an email the
  * conversation is owned by that user's principal (for portal /support specs).
  */
-export function seedConversation(subject: string, visitorEmail?: string): SeededConversation {
-  const args = visitorEmail ? [subject, visitorEmail] : [subject]
+export function seedConversation(
+  subject: string,
+  visitorEmail?: string,
+  opts?: { legacyImage?: boolean }
+): SeededConversation {
+  const args = [
+    subject,
+    ...(visitorEmail ? [visitorEmail] : []),
+    ...(opts?.legacyImage ? ['--legacy-image'] : []),
+  ]
   return JSON.parse(
     runScript('seed-conversation.ts', args, 'seed conversation')
   ) as SeededConversation

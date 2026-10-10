@@ -17,18 +17,15 @@ test.describe('Admin Notifications Page', () => {
     })
   })
 
-  test('shows notification bell icon in header', async ({ page }) => {
-    // The page header wraps the h1 with a bell icon badge
-    const header = page.locator('div').filter({ hasText: /^Notifications$/ }).first()
-    await expect(header).toBeVisible({ timeout: 10000 })
+  test('shows the All and Unread tabs under the header', async ({ page }) => {
+    await expect(page.getByRole('tab', { name: 'All' })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('tab', { name: 'Unread' })).toBeVisible()
   })
 
-  test('shows summary line below heading', async ({ page }) => {
-    // Shows one of: "No notifications", "X unread of Y", or "X notifications — all caught up"
-    const summary = page.getByText(
-      /no notifications|unread of|notifications — all caught up/i
-    )
-    await expect(summary.first()).toBeVisible({ timeout: 10000 })
+  test('shows a Mark all as read button', async ({ page }) => {
+    await expect(page.getByRole('button', { name: 'Mark all as read' })).toBeVisible({
+      timeout: 10000,
+    })
   })
 })
 
@@ -53,9 +50,7 @@ test.describe('Admin Notifications — Empty State', () => {
   test('empty state includes description text', async ({ page }) => {
     await expect(page.locator('[class*="animate-spin"]')).toBeHidden({ timeout: 10000 })
 
-    const description = page.getByText(
-      /you'll see notifications here|status changes|subscribed/i
-    )
+    const description = page.getByText(/you'll see notifications here|status changes|subscribed/i)
     if ((await description.count()) > 0) {
       await expect(description.first()).toBeVisible()
     }
@@ -150,17 +145,17 @@ test.describe('Admin Notifications — Mark All as Read', () => {
     }
   })
 
-  test('"Mark all as read" button is not shown when all notifications are read', async ({
+  test('"Mark all as read" button is disabled when all notifications are read', async ({
     page,
   }) => {
     await expect(page.locator('[class*="animate-spin"]')).toBeHidden({ timeout: 10000 })
 
-    // If there are no unread notifications, the button should not render
+    // If there are no unread notifications, the button stays visible but disabled
     const hasUnread = (await page.locator('[class*="border-l-primary"]').count()) > 0
     const markAllBtn = page.getByRole('button', { name: 'Mark all as read' })
 
     if (!hasUnread) {
-      await expect(markAllBtn).toBeHidden()
+      await expect(markAllBtn).toBeDisabled()
     }
   })
 
@@ -169,18 +164,14 @@ test.describe('Admin Notifications — Mark All as Read', () => {
 
     const markAllBtn = page.getByRole('button', { name: 'Mark all as read' })
 
-    if ((await markAllBtn.count()) > 0) {
+    // The button stays rendered but disabled with nothing unread, so only click it when enabled
+    if (await markAllBtn.isEnabled()) {
       await markAllBtn.click()
 
       // Button becomes disabled while mutation is pending
-      // After mutation completes, unread count should be 0 so button disappears
+      // After mutation completes, unread count should be 0 so the button is disabled
       await page.waitForLoadState('networkidle')
-
-      // Summary line should now say "all caught up" or "No notifications"
-      const caughtUp = page.getByText(/all caught up|no notifications/i)
-      if ((await caughtUp.count()) > 0) {
-        await expect(caughtUp.first()).toBeVisible({ timeout: 10000 })
-      }
+      await expect(markAllBtn).toBeDisabled({ timeout: 10000 })
     }
   })
 })

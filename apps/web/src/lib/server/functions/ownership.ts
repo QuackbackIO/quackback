@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
-import { requireAuth } from './auth-helpers'
+import { assertDashboardScope, requireAuth } from './auth-helpers'
 import { ControlPlaneUnavailableError } from '@/lib/server/control-plane/client'
 
 const FREE_WORKSPACE_OWNER_CAP = 'free_workspace_owner_cap'
@@ -13,7 +13,8 @@ async function cloudBillingOn(): Promise<boolean> {
 }
 
 export const getCloudOwnerEmailFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth()
+  const auth = await requireAuth()
+  assertDashboardScope(auth)
   if (!(await cloudBillingOn())) return null
   try {
     const { fetchWorkspaceOwnerEmail } = await import('@/lib/server/control-plane/client')
@@ -28,6 +29,7 @@ export const transferWorkspaceOwnershipFn = createServerFn({ method: 'POST' })
   .validator(z.object({ toEmail: z.string().trim().email() }).strict())
   .handler(async ({ data }) => {
     const auth = await requireAuth()
+    assertDashboardScope(auth)
     if (!(await cloudBillingOn())) {
       throw new Error('Cloud workspace actions are not available')
     }
@@ -62,6 +64,7 @@ export const leaveCloudWorkspaceFn = createServerFn({ method: 'POST' })
   .validator(z.object({}).strict())
   .handler(async () => {
     const auth = await requireAuth()
+    assertDashboardScope(auth)
     if (!(await cloudBillingOn())) {
       throw new Error('Cloud workspace actions are not available')
     }

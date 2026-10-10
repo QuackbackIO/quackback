@@ -1730,6 +1730,202 @@
       "when": 1785700000027,
       "tag": "0269_messenger_ai_default_on",
       "breakpoints": true
+    },
+    {
+      "idx": 247,
+      "version": "7",
+      "when": 1785700000028,
+      "tag": "0270_github_channel",
+      "breakpoints": true
+    },
+    {
+      "idx": 248,
+      "version": "7",
+      "when": 1785700000029,
+      "tag": "0271_widget_installed_sdk_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 249,
+      "version": "7",
+      "when": 1785700000030,
+      "tag": "0272_kb_url_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 250,
+      "version": "7",
+      "when": 1785700000031,
+      "tag": "0273_identity_provider_logo_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "7",
+      "when": 1788566400000,
+      "tag": "0274_slack_agent_gateway",
+      "breakpoints": true
+    },
+    {
+      "idx": 252,
+      "version": "7",
+      "when": 1788732000000,
+      "tag": "0275_slack_thread_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "7",
+      "when": 1788818400000,
+      "tag": "0276_post_tags_is_public",
+      "breakpoints": true
+    },
+    {
+      "idx": 254,
+      "version": "7",
+      "when": 1788991200000,
+      "tag": "0277_widget_chat_to_messenger",
+      "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "7",
+      "when": 1789030800000,
+      "tag": "0278_two_factor_lockout",
+      "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "7",
+      "when": 1789117200000,
+      "tag": "0279_better_auth_17",
+      "breakpoints": true
+    },
+    {
+      "idx": 257,
+      "version": "7",
+      "when": 1789166954246,
+      "tag": "0280_widget_session_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "7",
+      "when": 1789386800000,
+      "tag": "0281_workspace_experiments",
+      "breakpoints": true
+    },
+    {
+      "idx": 259,
+      "version": "7",
+      "when": 1789596900000,
+      "tag": "0282_refined_visual_theme_visible",
+      "breakpoints": true
+    },
+    {
+      "idx": 260,
+      "version": "7",
+      "when": 1789642200000,
+      "tag": "0283_refined_visual_theme_default_on",
+      "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "7",
+      "when": 1789987200000,
+      "tag": "0284_integration_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "7",
+      "when": 1789987200001,
+      "tag": "0285_integration_link_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 263,
+      "version": "7",
+      "when": 1789987200002,
+      "tag": "0286_integration_sync_privacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 264,
+      "version": "7",
+      "when": 1789987200003,
+      "tag": "0287_conversation_message_edited_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 265,
+      "version": "7",
+      "when": 1789987200004,
+      "tag": "0288_kb_translations_dutch_search",
+      "breakpoints": true
+    },
+    {
+      "idx": 266,
+      "version": "7",
+      "when": 1789987200005,
+      "tag": "0289_identity_provider_id_token_nonce",
+      "breakpoints": true
+    },
+    {
+      "idx": 267,
+      "version": "7",
+      "when": 1789987200006,
+      "tag": "0290_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "7",
+      "when": 1789987200007,
+      "tag": "0291_legacy_surface_switches",
+      "breakpoints": true
+    },
+    {
+      "idx": 269,
+      "version": "7",
+      "when": 1789987200008,
+      "tag": "0292_account_profile_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "7",
+      "when": 1790956573567,
+      "tag": "0293_test_customer",
+      "breakpoints": true
+    },
+    {
+      "idx": 271,
+      "version": "7",
+      "when": 1790986500000,
+      "tag": "0294_workspace_copilot",
+      "breakpoints": true
+    },
+    {
+      "idx": 272,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0295_website_branding_existing_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 273,
+      "version": "7",
+      "when": 1791000100000,
+      "tag": "0296_validate_workspace_copilot_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 274,
+      "version": "7",
+      "when": 1791000200000,
+      "tag": "0297_onboarding_emails",
+      "breakpoints": true
     }
   ]
 }

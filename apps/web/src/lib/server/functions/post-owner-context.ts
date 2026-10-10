@@ -33,7 +33,7 @@ export interface OwnerRef {
 
 const postIdSchema = z.object({ postId: z.string() })
 
-function toOwnerRef(m: TeamMember): OwnerRef {
+export function toOwnerRef(m: TeamMember): OwnerRef {
   return { principalId: m.id, name: m.name ?? m.email ?? '', avatarUrl: m.image ?? null }
 }
 

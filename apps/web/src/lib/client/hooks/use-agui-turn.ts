@@ -18,12 +18,12 @@
  *   means on every Quackback client; a bare RUN_FINISHED never is.
  * - `onError`: a terminal RUN_ERROR frame, or a transport failure. HTTP
  *   non-2xx bodies keep their server-shaped message (tier limits, flag gates)
- *   via the fetch wrapper below, exactly as `extractHttpErrorMessage` did.
+ *   via `aguiFetchClient`, which rewrites the envelope into a RUN_ERROR frame.
  */
 import { useCallback, useMemo, useRef } from 'react'
 import { useChat, fetchServerSentEvents } from '@tanstack/ai-react'
 import { parsePartialJSON, type StreamChunk } from '@tanstack/ai'
-import { extractHttpErrorMessage } from '@/lib/client/utils/http-error'
+import { aguiFetchClient } from '@/lib/client/utils/agui-fetch'
 import type { AssistantActivityStatus } from '@/lib/shared/conversation/types'
 
 const ACTIVITY_STATUSES: ReadonlySet<AssistantActivityStatus> = new Set([
@@ -51,17 +51,11 @@ export interface StartAguiTurnOptions {
   handlers: AguiTurnHandlers
 }
 
-/** Non-2xx responses carry the API error envelope (tier limits, flag gates);
- *  surface that message on the thrown error so `onError` shows the server's
- *  words, not a generic transport failure. */
-const assistantFetch: typeof fetch = Object.assign(
-  async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const res = await fetch(input, init)
-    if (!res.ok) throw new Error(await extractHttpErrorMessage(res))
-    return res
-  },
-  { preconnect: fetch.preconnect }
-)
+/** Non-2xx envelopes become a synthetic RUN_ERROR SSE frame (same wrapper
+ *  `runAguiTurn` uses). Throwing from fetchClient is wrong on AI 0.52+: the
+ *  adapter wraps any rejection as StreamReadError ("Stream response body
+ *  read failed") and the server's message is lost. */
+const assistantFetch = aguiFetchClient()
 
 export function useAguiTurn(options: { url: string; textField?: string }) {
   const textField = options.textField ?? 'text'

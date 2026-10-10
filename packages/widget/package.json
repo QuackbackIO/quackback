@@ -1,6 +1,6 @@
 {
   "name": "@quackback/widget",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "license": "AGPL-3.0",
   "description": "Official SDK for the Quackback feedback widget. Embed Quackback in your app.",
   "type": "module",
@@ -10,15 +10,21 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
-      "development": "./src/index.ts"
+      "require": "./dist/index.cjs"
     },
     "./react": {
       "types": "./dist/react/index.d.ts",
+      "development": "./src/react/index.ts",
       "import": "./dist/react/index.js",
-      "require": "./dist/react/index.cjs",
-      "development": "./src/react/index.ts"
+      "require": "./dist/react/index.cjs"
+    },
+    "./version": {
+      "types": "./dist/version.d.ts",
+      "development": "./src/version.ts",
+      "import": "./dist/version.js",
+      "require": "./dist/version.cjs"
     },
     "./browser.js": "./dist/browser.js"
   },
@@ -43,13 +49,13 @@
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",
-    "@testing-library/react": "^16.3.2",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
-    "happy-dom": "^20.11.2",
-    "react-dom": "^19.2.8",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "happy-dom": "^20.14.5",
+    "react-dom": "^19.3.0",
     "tsup": "^8.5.1",
-    "react": "^19.2.8"
+    "react": "^19.3.0"
   },
   "repository": {
     "type": "git",

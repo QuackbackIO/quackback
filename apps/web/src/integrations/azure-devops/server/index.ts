@@ -1,5 +1,5 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { closeAzureDevOpsWorkItem } from '@/integrations/azure-devops/server/archive'
 import { fetchAzureDevOpsStatuses } from '@/integrations/azure-devops/server/statuses'
 import { azureDevOpsHook } from '@/integrations/azure-devops/server/hook'
 import { azureDevOpsInboundHandler } from '@/integrations/azure-devops/server/inbound'
@@ -9,12 +9,13 @@ import { azureDevOpsCatalog } from '@/integrations/azure-devops/server/catalog'
 
 export const azureDevOpsIntegration: IntegrationDefinition = {
   id: 'azure_devops',
+  destination: channelDestination(['organizationName', 'projectId']),
   catalog: azureDevOpsCatalog,
   // No OAuth — Azure DevOps uses Personal Access Tokens
   hook: azureDevOpsHook,
   inbound: azureDevOpsInboundHandler,
   issues: azureDevOpsIssues,
-  archive: closeAzureDevOpsWorkItem,
+  linkedItems: true,
   webhookRegistration: 'manual',
   listExternalStatuses: fetchAzureDevOpsStatuses,
   destinations: {

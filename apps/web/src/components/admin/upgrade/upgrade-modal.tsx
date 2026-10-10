@@ -19,7 +19,7 @@ export function UpgradeModal(props: {
   const description = props.description ?? describeEntitlementUpgrade(props.entitlement!)
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className="max-w-md sm:max-w-md">
+      <DialogContent className="max-w-lg sm:max-w-lg">
         <DialogHeader className="sr-only">
           <DialogTitle>{description.headline}</DialogTitle>
           <DialogDescription>{description.body}</DialogDescription>
@@ -28,6 +28,7 @@ export function UpgradeModal(props: {
           description={description}
           onDismiss={() => props.onOpenChange(false)}
           dismissLabel="Maybe later"
+          className="[&>div:first-child]:pr-6"
         />
       </DialogContent>
     </Dialog>

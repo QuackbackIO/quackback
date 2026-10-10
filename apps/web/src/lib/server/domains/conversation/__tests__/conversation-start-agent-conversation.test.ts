@@ -36,6 +36,7 @@ vi.mock('../conversation.notify', () => notify)
 
 const publish = vi.hoisted(() => ({
   publishConversationEvent: vi.fn(),
+  publishConversationMessage: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
 }))
@@ -72,6 +73,14 @@ vi.mock('../conversation.query', () => ({
     displayName: null,
     avatarUrl: null,
   })),
+  resolveAuthorAudiences: vi.fn(async (a: { principalId: string; displayName?: string | null }) => {
+    const author = {
+      principalId: a.principalId,
+      displayName: a.displayName ?? null,
+      avatarUrl: null,
+    }
+    return { publicAuthor: author, supportAuthor: author }
+  }),
   loadAuthors: vi.fn(async () => new Map()),
 }))
 
@@ -283,9 +292,13 @@ describe('startAgentConversation happy path', () => {
     )
 
     expect(publish.publishConversationUpdate).toHaveBeenCalledTimes(1)
-    expect(publish.publishConversationEvent).toHaveBeenCalledWith(
+    expect(publish.publishConversationMessage).toHaveBeenCalledWith(
       'conversation_outbound',
-      expect.objectContaining({ kind: 'message' })
+      expect.objectContaining({
+        visitor: expect.anything(),
+        agent: expect.anything(),
+      }),
+      { conversationUpdated: true }
     )
     expect(emit.emitConversationCreated).toHaveBeenCalledTimes(1)
     expect(emit.emitMessageCreated).toHaveBeenCalledTimes(1)
@@ -308,6 +321,31 @@ describe('startAgentConversation happy path', () => {
     )
     // Outbound conversations never notify the team of a "visitor message".
     expect(notify.notifyVisitorMessage).not.toHaveBeenCalled()
+  })
+
+  it('emails an attachment name when the opening message has no text', async () => {
+    await startAgentConversation(
+      {
+        targetPrincipalId,
+        content: '',
+        attachments: [
+          {
+            url: '/api/storage/chat-images/shot.png',
+            name: 'shot.png',
+            contentType: 'image/png',
+            size: 10,
+          },
+        ],
+      },
+      agent,
+      agentActor
+    )
+
+    expect(notify.notifyConversationStarted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'shot.png',
+      })
+    )
   })
 
   it('passes the FULL content and contentJson to the notify layer (not a truncated preview)', async () => {

@@ -5,6 +5,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 export interface ZendeskOAuthState {
   type: 'zendesk_oauth'
@@ -40,7 +41,8 @@ export const getZendeskConnectUrl = createServerFn({ method: 'POST' })
     const { hasPlatformCredentials } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
     if (!(await hasPlatformCredentials('zendesk'))) {
-      throw new Error(
+      throw new ValidationError(
+        'PLATFORM_CREDENTIALS_NOT_CONFIGURED',
         'Zendesk platform credentials not configured. Configure them in integration settings first.'
       )
     }
@@ -64,7 +66,7 @@ export const searchZendeskUserFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
     const { searchZendeskUser } = await import('@/integrations/zendesk/server/context')
 
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_VIEW })
@@ -77,12 +79,13 @@ export const searchZendeskUserFn = createServerFn({ method: 'POST' })
       throw new Error('Zendesk not connected')
     }
 
-    const cfg = (integration.config ?? {}) as ZendeskIntegrationConfig
+    const auth = await getIntegrationAuth(integration.id)
+    const cfg = auth.config as ZendeskIntegrationConfig
     const subdomain = cfg.subdomain
     if (!subdomain) {
       throw new Error('Zendesk subdomain not configured')
     }
 
-    const secrets = decryptSecrets<{ accessToken: string }>(integration.secrets)
+    const secrets = { accessToken: auth.accessToken }
     return searchZendeskUser(secrets.accessToken, subdomain, data.email)
   })

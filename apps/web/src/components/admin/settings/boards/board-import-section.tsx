@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import { ArrowsRightLeftIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 
 // boardId is unused for now: the hub's uploader doesn't yet accept a
 // preselected board via URL. Kept on the props contract so the wizard can
@@ -9,22 +9,19 @@ interface BoardImportSectionProps {
   boardId: string
 }
 
-/**
- * Deep link into the Imports & exports hub (§I1). The board-scoped uploader
- * used to live here; imports now run through the hub's async pipeline.
- */
+/** Deep link into the Imports & exports hub, where imports run. */
 export function BoardImportSection(_props: BoardImportSectionProps) {
   return (
-    <div className="rounded-lg border border-dashed border-border/50 p-6 text-center space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Import a CSV of posts into this board from the Imports &amp; exports hub.
-      </p>
-      <Button asChild>
-        <Link to="/admin/settings/imports">
-          <ArrowsRightLeftIcon className="size-4" />
-          Go to Imports &amp; exports
-        </Link>
-      </Button>
-    </div>
+    <SettingRows>
+      <SettingRow
+        label="Import posts"
+        description="Bring posts into this board from a CSV file."
+        control={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/admin/settings/imports">Go to Imports &amp; exports</Link>
+          </Button>
+        }
+      />
+    </SettingRows>
   )
 }

@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -9,6 +10,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { buttonVariants } from '@/components/ui/button'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
 import { cn } from '@/lib/shared/utils'
 import { WarningBox } from './warning-box'
 
@@ -22,6 +24,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string
   variant?: 'default' | 'destructive'
   isPending?: boolean
+  /** Holds the confirm action back until `children` (a typed name, say) is satisfied. */
+  confirmDisabled?: boolean
   onConfirm: () => void | Promise<void>
   children?: React.ReactNode
 }
@@ -36,11 +40,32 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   variant = 'default',
   isPending,
+  confirmDisabled,
   onConfirm,
   children,
 }: ConfirmDialogProps) {
+  const startedRef = useRef(false)
+  const [started, setStarted] = useState(false)
+  const busy = Boolean(isPending) || started
+  // Mounted from the first open on (it has no trigger of its own), so the
+  // confirm dialogs a list keeps per row cost nothing until one is asked for.
+  const mounted = useOpenedOnce(open)
+
+  function resetStarted() {
+    startedRef.current = false
+    setStarted(false)
+  }
+
+  if (!mounted) return null
+
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) resetStarted()
+        onOpenChange(next)
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
@@ -65,10 +90,27 @@ export function ConfirmDialog({
         )}
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogCancel disabled={busy}>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction
-            onClick={onConfirm}
-            disabled={isPending}
+            onClick={(event) => {
+              if (busy || startedRef.current) {
+                event.preventDefault()
+                return
+              }
+              let result: void | Promise<void>
+              try {
+                result = onConfirm()
+              } catch {
+                return
+              }
+              if (result && typeof result.then === 'function') {
+                event.preventDefault()
+                startedRef.current = true
+                setStarted(true)
+                void result.catch(() => undefined).finally(resetStarted)
+              }
+            }}
+            disabled={busy || confirmDisabled}
             className={cn(variant === 'destructive' && buttonVariants({ variant: 'destructive' }))}
           >
             {confirmLabel}

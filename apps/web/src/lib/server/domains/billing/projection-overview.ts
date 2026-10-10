@@ -1,5 +1,11 @@
+import type { AiBudgetWindow } from '@/lib/server/domains/ai/ai-budget'
 import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
-import { PLAN_CATALOGUE, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
+import {
+  PLAN_CATALOGUE,
+  canonicalPlanId,
+  isPlanId,
+  type PlanId,
+} from '@/lib/server/domains/settings/cloud/cloud.types'
 import type { BillingCatalogue, CataloguePlanId } from '@/lib/server/control-plane/client'
 import { isTrialEnded } from '@/lib/shared/billing/trial-state'
 
@@ -8,12 +14,20 @@ export type BillingSeatsOverview = {
   pending: number
   members: number
   purchased: number | null
+  /** Plan/enforcement cap. Null means unlimited. */
+  limit?: number | null
 }
 
 export type BillingAiOverview = {
   includedCents: number
   usedCents: number
   extraCents: number
+  /**
+   * When the AI allowance resets, if that is not the start of the next
+   * calendar month (a trial's allowance runs to the trial end). Null means
+   * the monthly reset shown for the other meters applies.
+   */
+  resetsAt: string | null
 }
 
 export interface BillingProjectionOverview {
@@ -40,20 +54,22 @@ export function composeAiUsage(input: {
   tokenCap: number | null
   includedCents: number
   blendedCentsPerMTok: number
+  window?: AiBudgetWindow
 }): BillingAiOverview {
   const rate = input.blendedCentsPerMTok
   const usedCents = rate > 0 ? Math.round((input.usedTokens * rate) / 1_000_000) : 0
   const includedTokens = rate > 0 ? (input.includedCents * 1_000_000) / rate : 0
   const extraTokens = input.tokenCap != null ? Math.max(0, input.tokenCap - includedTokens) : 0
   const extraCents = rate > 0 ? Math.round((extraTokens * rate) / 1_000_000) : 0
-  return { includedCents: input.includedCents, usedCents, extraCents }
+  const resetsAt = input.window?.kind === 'trial' ? input.window.end.toISOString() : null
+  return { includedCents: input.includedCents, usedCents, extraCents, resetsAt }
 }
 
 export function catalogueAiIncludedCents(
   catalogue: BillingCatalogue | null,
   plan: PlanId
 ): number | null {
-  const value = catalogue?.aiIncludedCentsPerMonth?.[plan as CataloguePlanId]
+  const value = catalogue?.aiIncludedCentsPerMonth?.[canonicalPlanId(plan) as CataloguePlanId]
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
@@ -61,7 +77,8 @@ export function catalogueAiIncludedCents(
  * Purchased seats are the billed projection quantity, not the operator
  * tier_limits overlay that getTierLimits() applies for enforcement.
  * Free, trial, workspace-billed, and missing billedPer (grandfathered /
- * catalogue unavailable) stay null so Add seats cannot target an overlay.
+ * catalogue unavailable) stay null so a workspace plan is never treated as
+ * a purchased-seat overlay.
  */
 /** lastTrialPlanId is catalogue history. Only surface it while a product
  *  trial is running or in the 7-day ended window; a paid workspace must
@@ -103,17 +120,21 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
 
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
-  const { aiTokensThisMonth } = await import('@/lib/server/domains/ai/usage-counter')
+  const { aiBudgetWindow } = await import('@/lib/server/domains/ai/ai-budget')
+  const { aiTokensInWindow } = await import('@/lib/server/domains/ai/usage-counter')
+  const aiWindow = aiBudgetWindow(cloud)
 
   const [limits, seats, usedTokens, catalogue, planLimitsMaxTeamSeats] = await Promise.all([
     getTierLimits(),
     countSeatUsage(),
-    aiTokensThisMonth(),
+    aiTokensInWindow(aiWindow.start, aiWindow.end),
     loadCatalogue(),
     projectedPlanLimitsMaxTeamSeats(),
   ])
 
-  const billedPer = catalogue?.plans.find((plan) => plan.id === cloud.plan)?.billedPer
+  const billedPer = catalogue?.plans.find(
+    (plan) => canonicalPlanId(plan.id) === cloud.plan
+  )?.billedPer
   const purchased = purchasedSeatsFromProjection({
     billedPer,
     plan: cloud.plan,
@@ -129,6 +150,7 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
           tokenCap: limits.aiTokensPerMonth,
           includedCents,
           blendedCentsPerMTok: blended,
+          window: aiWindow,
         })
       : null
 
@@ -138,7 +160,8 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
     trialExpiresAt: cloud.trialExpiresAt,
     status: cloud.subscriptionStatus,
   })
-  const lastTrialPlanId = catalogue?.lastTrialPlanId ?? null
+  const lastRaw = catalogue?.lastTrialPlanId ? canonicalPlanId(catalogue.lastTrialPlanId) : null
+  const lastTrialPlanId = lastRaw && lastRaw !== 'free' && isPlanId(lastRaw) ? lastRaw : null
   const trialPlanId = trialPlanIdForOverview({
     trialActive: cloud.trialActive,
     trialEnded,
@@ -159,7 +182,7 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
     cancellationAt: cloud.cancellationAt,
     canUpgrade: cloud.canUpgrade,
     canManageBilling: cloud.canManageBilling,
-    purchasablePlans: (['growth', 'pro', 'scale'] as const).map((id) => ({
+    purchasablePlans: (['pro', 'business', 'enterprise'] as const).map((id) => ({
       id,
       name: PLAN_CATALOGUE[id].name,
     })),
@@ -168,10 +191,19 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
       pending: seats.pendingInvites,
       members: seats.members,
       purchased,
+      limit: limits.maxTeamSeats,
     },
     ai,
     hideBranding: cloud.entitlements.hideBranding === true,
   }
+}
+
+export async function catalogueBilledPer(
+  planId: PlanId | null | undefined
+): Promise<'seat' | 'workspace' | undefined> {
+  if (!planId) return undefined
+  const catalogue = await loadCatalogue()
+  return catalogue?.plans.find((plan) => canonicalPlanId(plan.id) === planId)?.billedPer
 }
 
 async function loadCatalogue(): Promise<BillingCatalogue | null> {

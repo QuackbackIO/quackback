@@ -14,8 +14,9 @@ import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 import { DomainException } from '@/lib/shared/errors'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
-import type { TiptapContent } from '@/lib/server/db'
+import type { ConversationAttachment, TiptapContent } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
+import { hasApiScope } from '@/lib/server/domains/api-keys/api-key-scopes'
 import type { McpAuthContext, McpScope } from '../types'
 
 // ============================================================================
@@ -56,6 +57,33 @@ export function errorResult(err: unknown): CallToolResult {
 // Cursor codecs
 // ============================================================================
 
+/** Parse an ISO datetime or a relative window (`7d`, `this_month`) into a Date. */
+export function parseFlexibleDate(value?: string): Date | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const iso = Date.parse(trimmed)
+  if (!Number.isNaN(iso)) return new Date(iso)
+  const rel = trimmed.toLowerCase().replace(/\s+/g, '_')
+  const now = new Date()
+  if (rel === 'today') {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  }
+  if (rel === 'this_week') {
+    const day = now.getUTCDay() || 7
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day + 1))
+  }
+  if (rel === 'this_month') {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+  }
+  const match = rel.match(/^(\d+)(_)?(d|day|days|h|hr|hour|hours)$/)
+  if (!match) return undefined
+  const amount = Number(match[1])
+  const unit = match[3]
+  const ms = unit.startsWith('h') ? amount * 60 * 60 * 1000 : amount * 24 * 60 * 60 * 1000
+  return new Date(now.getTime() - ms)
+}
+
 /** Encode a search cursor with entity type to prevent cross-entity misuse. */
 export function encodeSearchCursor(entity: string, value: number | string): string {
   return Buffer.from(JSON.stringify({ entity, value })).toString('base64url')
@@ -78,7 +106,7 @@ export function decodeSearchCursor(cursor?: string): { entity: string; value: nu
 
 /** Return an error if the token is missing a required scope. */
 export function requireScope(auth: McpAuthContext, scope: McpScope): CallToolResult | null {
-  if (auth.scopes.includes(scope)) return null
+  if (hasApiScope(auth.scopes, scope)) return null
   return {
     isError: true,
     content: [{ type: 'text', text: `Error: Insufficient scope. Required: ${scope}` }],
@@ -99,6 +127,14 @@ export function requireTeamRole(auth: McpAuthContext): CallToolResult | null {
   }
 }
 
+/** Feature flags a tool can require before its scope/role guards run. */
+type ToolFeature = 'helpCenter' | 'copilotHome'
+
+const FEATURE_DENIALS: Record<ToolFeature, string> = {
+  helpCenter: 'Error: Help center is not enabled. Enable it in Settings → General.',
+  copilotHome: 'Error: Settings tools follow Copilot on Home. Turn it on in Settings → Labs.',
+}
+
 /** Return an error if the help center feature is disabled. */
 export async function requireHelpCenter(): Promise<CallToolResult | null> {
   if (await isFeatureEnabled('helpCenter')) return null
@@ -107,7 +143,7 @@ export async function requireHelpCenter(): Promise<CallToolResult | null> {
     content: [
       {
         type: 'text',
-        text: 'Error: Help center is not enabled. Enable it in Settings → General.',
+        text: FEATURE_DENIALS.helpCenter,
       },
     ],
   }
@@ -117,8 +153,11 @@ export async function requireHelpCenter(): Promise<CallToolResult | null> {
 // Tool registration
 // ============================================================================
 
-/** Feature flags a tool can require before its scope/role guards run. */
-type ToolFeature = 'helpCenter'
+async function requireFeature(feature: ToolFeature): Promise<CallToolResult | null> {
+  if (feature === 'helpCenter') return requireHelpCenter()
+  if (await isFeatureEnabled(feature)) return null
+  return { isError: true, content: [{ type: 'text', text: FEATURE_DENIALS[feature] }] }
+}
 
 export interface ToolDef<TArgs> {
   name: string
@@ -153,8 +192,7 @@ export function registerTool<TArgs>(
 ): void {
   const wrapped = (async (args: TArgs): Promise<CallToolResult> => {
     if (def.feature) {
-      // Single-value ToolFeature union today; every flagged tool is helpCenter.
-      const denied = await requireHelpCenter()
+      const denied = await requireFeature(def.feature)
       if (denied) return denied
     }
     if (def.scope) {
@@ -183,6 +221,21 @@ export function registerTool<TArgs>(
 /** Build the agent-author object used by the conversation write tools (reply, suggest, share). */
 export function agentFromMcpAuth(auth: McpAuthContext) {
   return { principalId: auth.principalId, displayName: auth.name, email: auth.email }
+}
+
+/**
+ * Turn the `fileIds` a reply/note tool was called with into the attachment
+ * refs `resolveAttachments` expects. Only `fileId` is filled in — the service
+ * rebuilds url/name/contentType/size from the stored row, so nothing else on
+ * this ref is trusted. Undefined (not an empty array) when there are none, so
+ * a caller that forwards this straight into a service input leaves that
+ * field absent rather than an empty list.
+ */
+export function attachmentsFromFileIds(
+  fileIds: string[] | undefined
+): ConversationAttachment[] | undefined {
+  if (!fileIds || fileIds.length === 0) return undefined
+  return fileIds.map((fileId) => ({ fileId })) as ConversationAttachment[]
 }
 
 // ============================================================================

@@ -1,11 +1,12 @@
+import { deliveryError, httpDeliveryFailure } from '@/lib/server/integrations/sync/outcomes'
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Notion hook handler.
  * Creates database items in Notion when events occur.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { buildNotionPage } from '@/integrations/notion/server/message'
 import { logger } from '@/lib/server/logger'
 
@@ -23,10 +24,10 @@ export interface NotionConfig {
   rootUrl: string
 }
 
-export const notionHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
+export const notionHook: IntegrationHook = {
+  async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     if (event.type !== 'post.created') {
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     const { channelId: databaseId } = target as NotionTarget
@@ -37,7 +38,7 @@ export const notionHook: HookHandler = {
     const { title, blocks } = buildNotionPage(event, rootUrl)
 
     try {
-      const response = await fetch(`${NOTION_API}/pages`, {
+      const response = await integrationFetch(`${NOTION_API}/pages`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -56,51 +57,24 @@ export const notionHook: HookHandler = {
       })
 
       if (!response.ok) {
-        const errorBody = await response.text()
-        const status = response.status
-
-        if (status === 401 || status === 403) {
-          log.error({ status, body: errorBody }, 'auth error')
-          return {
-            success: false,
-            error: `Authentication failed (${status}). Please reconnect Notion.`,
-            shouldRetry: false,
-          }
-        }
-
-        if (status === 429) {
-          log.warn({ status, body: errorBody }, 'rate limited')
-          return { success: false, error: 'Rate limited', shouldRetry: true }
-        }
-
-        log.error({ status, body: errorBody }, 'api error')
-        return {
-          success: false,
-          error: `Notion API error: ${status}`,
-          shouldRetry: status >= 500,
-        }
+        return httpDeliveryFailure(response)
       }
 
       const data = (await response.json()) as { id: string; url: string }
       log.info({ page_id: data.id }, 'created page')
 
-      return { success: true, externalId: data.id, externalUrl: data.url }
+      return { state: 'succeeded', result: { externalId: data.id, externalUrl: data.url } }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       log.error({ err: error }, 'exception')
 
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: isRetryableError(error),
-      }
+      return deliveryError(error)
     }
   },
 
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken } = config as NotionConfig
     try {
-      const response = await fetch(`${NOTION_API}/users/me`, {
+      const response = await integrationFetch(`${NOTION_API}/users/me`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Notion-Version': NOTION_VERSION,

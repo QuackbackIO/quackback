@@ -1,11 +1,11 @@
+import { deliveryError } from '@/lib/server/integrations/sync/outcomes'
 /**
  * GitHub hook handler.
  * Creates GitHub issues when feedback events occur.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { buildGitHubIssueBody } from '@/integrations/github/server/message'
 import { githubIssues } from '@/integrations/github/server/issues'
 import { logger } from '@/lib/server/logger'
@@ -21,14 +21,14 @@ export interface GitHubConfig {
   rootUrl: string
 }
 
-export const githubHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
+export const githubHook: IntegrationHook = {
+  async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId: ownerRepo } = target as GitHubTarget
     const { accessToken, rootUrl } = config as GitHubConfig
 
     // Only create issues for new feedback
     if (event.type !== 'post.created') {
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     log.debug({ event_type: event.type, repo: ownerRepo }, 'creating issue')
@@ -37,7 +37,7 @@ export const githubHook: HookHandler = {
 
     try {
       // The capability owns the API call + error classification; this hook
-      // maps its thrown errors back onto the HookResult retry contract.
+      // returns the same explicit delivery outcome as every provider.
       const created = await githubIssues.create!({
         auth: { channelId: ownerRepo, accessToken },
         title,
@@ -46,20 +46,15 @@ export const githubHook: HookHandler = {
 
       log.info({ issue_ref: created.externalDisplayId, repo: ownerRepo }, 'issue created')
       return {
-        success: true,
-        externalId: created.externalId,
-        externalDisplayId: created.externalDisplayId,
-        externalUrl: created.externalUrl ?? undefined,
+        state: 'succeeded',
+        result: {
+          externalId: created.externalId,
+          externalDisplayId: created.externalDisplayId,
+          externalUrl: created.externalUrl ?? undefined,
+        },
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      const retryable = (error as { retryable?: boolean }).retryable
-
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: retryable ?? isRetryableError(error),
-      }
+      return deliveryError(error)
     }
   },
 }

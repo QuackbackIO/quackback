@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { Spinner } from '@/components/shared/spinner'
-import { useRouter, useRouteContext } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
@@ -31,6 +31,8 @@ import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation
 import type { PublicPostListItem } from '@/lib/shared/types'
 import { cn } from '@/lib/shared/utils'
 import type { PostId, PostStatusId } from '@quackback/ids'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
+import { shownName } from '@/lib/shared/greeting-name'
 
 interface FeedbackContainerProps {
   workspaceName: string
@@ -75,7 +77,7 @@ export function FeedbackContainer({
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const router = useRouter()
-  const { session } = useRouteContext({ from: '__root__' })
+  const session = useSessionContext()
   const { filters, setFilters, clearFilters, activeFilterCount } = usePublicFilters()
   const queryClient = useQueryClient()
   const { can } = usePortalPermissions()
@@ -95,7 +97,7 @@ export function FeedbackContainer({
   const [listKey, setListKey] = useState(filterKey)
 
   const effectiveUser = session?.user
-    ? { name: session.user.name, email: session.user.email }
+    ? { name: shownName(session.user.name, session.user.email), email: session.user.email }
     : user
   // A real (non-anonymous) signed-in user. Drives the vote button's authz vs
   // authn copy: a denied real user sees "no access"; a denied anonymous / no-
@@ -239,6 +241,9 @@ export function FeedbackContainer({
 
   const currentBoardInfo = activeBoard ? boards.find((b) => b.slug === activeBoard) : boards[0]
   const boardIdForCreate = currentBoardInfo?.id || defaultBoardId
+  // A selected board is page context (sidebar / ?board=), not a filter the
+  // submit form or chip row should switch away from.
+  const boardLocked = Boolean(activeBoard)
 
   function handlePostCreated(postId: string): void {
     setTimeout(() => {
@@ -330,6 +335,7 @@ export function FeedbackContainer({
             user={effectiveUser}
             boardPermissions={boardPermissions}
             onPostCreated={handlePostCreated}
+            boardLocked={boardLocked}
           />
 
           <FeedbackToolbar
@@ -345,6 +351,7 @@ export function FeedbackContainer({
                 statuses={statuses}
                 tags={tags}
                 boards={boards}
+                boardLocked={boardLocked}
               />
             }
           />
@@ -356,6 +363,7 @@ export function FeedbackContainer({
               statuses={statuses}
               tags={tags}
               boards={boards}
+              boardLocked={boardLocked}
             />
           </div>
 
@@ -401,7 +409,7 @@ export function FeedbackContainer({
                   {posts.map((post, index) => (
                     <div
                       key={post.id}
-                      className="bg-card border border-border/40 rounded-lg overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
+                      className="bg-card border border-border/40 rounded-lg shadow-sm overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
                       style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
                     >
                       <PostCard

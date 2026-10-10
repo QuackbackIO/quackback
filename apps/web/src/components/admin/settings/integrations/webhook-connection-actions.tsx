@@ -101,7 +101,7 @@ export function WebhookConnectionActions({
   return (
     <>
       {showSuccess && (
-        <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-600 dark:text-green-400">
+        <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
           <CheckCircleIcon className="h-4 w-4" />
           <span>Webhook saved and verified!</span>
         </div>

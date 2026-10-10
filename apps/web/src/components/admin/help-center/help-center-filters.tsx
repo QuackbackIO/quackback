@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { cn } from '@/lib/shared/utils'
+import { BookOpenIcon, ChartBarIcon, TrashIcon } from '@heroicons/react/16/solid'
+import { PaneAddButton } from '@/components/shared/pane-add-button'
 import { FilterSection } from '@/components/shared/filter-section'
 import { FilterList } from '@/components/admin/feedback/single-select-filter-list'
 import { HelpCenterCategoryTree, type CategoryActions } from './help-center-category-tree'
@@ -19,11 +20,11 @@ interface HelpCenterFiltersProps {
   onShowPerformanceChange?: (showPerformance: boolean | undefined) => void
 }
 
-const ARTICLE_STATUSES = [
-  { id: 'all', name: 'All', color: undefined },
+const ARTICLE_STATUSES: Array<{ id: HelpCenterStatusFilter; name: string; color?: string }> = [
+  { id: 'all', name: 'All' },
   { id: 'draft', name: 'Draft', color: '#6b7280' },
   { id: 'published', name: 'Published', color: '#22c55e' },
-] as const
+]
 
 export function HelpCenterFiltersPanel({
   status,
@@ -41,40 +42,29 @@ export function HelpCenterFiltersPanel({
   return (
     <div className="space-y-0">
       <FilterSection title="Status">
-        <div className="space-y-1" role="listbox" aria-label="Status filter">
-          {ARTICLE_STATUSES.map((item) => {
-            const isSelected = status === item.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                onClick={() => onStatusChange(item.id as HelpCenterStatusFilter)}
-                className={cn(
-                  'w-full text-left px-2.5 py-1.5 rounded-md text-[13px] font-normal transition-colors',
-                  isSelected
-                    ? 'bg-muted text-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+        <FilterList
+          items={ARTICLE_STATUSES}
+          selectedIds={[status]}
+          onSelect={(id) => onStatusChange(id as HelpCenterStatusFilter)}
+          renderItem={(item) => (
+            <span className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+                {item.color ? (
+                  <span className="size-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                ) : (
+                  <BookOpenIcon className="size-4" />
                 )}
-              >
-                <span className="flex items-center gap-2">
-                  {item.color && (
-                    <span
-                      className="h-2 w-2 rounded-full shrink-0"
-                      style={{ backgroundColor: item.color }}
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="truncate">{item.name}</span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
+              </span>
+              <span className="truncate">{item.name}</span>
+            </span>
+          )}
+        />
       </FilterSection>
 
-      <FilterSection title="Categories">
+      <FilterSection
+        title="Categories"
+        action={<PaneAddButton label="New category" onClick={() => categoryActions.onNew(null)} />}
+      >
         <HelpCenterCategoryTree
           categories={categories}
           selectedId={selectedCategoryId}
@@ -86,8 +76,8 @@ export function HelpCenterFiltersPanel({
       <FilterSection title="Other">
         <FilterList
           items={[
-            { id: 'performance', name: 'Article performance' },
-            { id: 'deleted', name: 'Deleted items' },
+            { id: 'performance', name: 'Article performance', icon: ChartBarIcon },
+            { id: 'deleted', name: 'Deleted items', icon: TrashIcon },
           ]}
           selectedIds={[
             ...(showPerformance ? ['performance'] : []),

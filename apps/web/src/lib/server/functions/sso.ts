@@ -28,6 +28,9 @@ import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { diffProviderAudit } from '@/lib/server/auth/idp-audit-diff'
+import { applyClaimMappingEdits } from '@/lib/shared/sso-claim-mapping-edit'
+import { PROFILE_FIELDS, isRoleRuleRoleId } from '@/lib/shared/oidc-claim-mapping'
+import { OIDC_REDIRECT_STYLES } from '@/lib/shared/oidc-redirect'
 import { requireAuth } from './auth-helpers'
 
 const verifiedDomainId = z.string().regex(/^domain_/) as z.ZodType<`domain_${string}`>
@@ -156,36 +159,67 @@ const identityProviderId = z.string().regex(/^idp_/) as z.ZodType<IdentityProvid
 
 const idpRole = z.enum(['admin', 'member', 'user'])
 
+/** A role rule. `roleId` grants a workspace role and rides the member tier only;
+ *  whether the saver may grant it is checked in the service. */
+const roleRuleFields = {
+  whenContains: z.string(),
+  role: idpRole,
+  roleId: z.string().refine(isRoleRuleRoleId, { message: 'Invalid role id.' }).optional(),
+}
+const customRoleOnMemberTier = {
+  check: (rule: { role: string; roleId?: string }) =>
+    rule.roleId === undefined || rule.role === 'member',
+  message: 'A workspace role can only be granted on the member tier.',
+}
+const roleRuleSchema = z
+  .object(roleRuleFields)
+  .refine(customRoleOnMemberTier.check, { message: customRoleOnMemberTier.message })
+
 /** Mirror of `IdentityProviderClaimMapping`, section by section. */
 const claimRoleSchema = z.object({
   claimPath: z.string(),
-  rules: z.array(z.object({ whenContains: z.string(), role: idpRole })),
+  rules: z.array(
+    z
+      .object(roleRuleFields)
+      .passthrough()
+      .refine(customRoleOnMemberTier.check, { message: customRoleOnMemberTier.message })
+  ),
   syncOnEverySignIn: z.boolean().optional(),
 })
 
-const claimMappingSchema = z.object({
-  profile: z
-    .object({
-      sources: z.array(z.enum(['idToken', 'userinfo', 'accessTokenJwt'])).optional(),
-      claims: z
-        .object({
-          id: z.string().optional(),
-          email: z.string().optional(),
-          name: z.string().optional(),
-        })
-        .optional(),
-      allowMissingEmail: z.boolean().optional(),
-    })
-    .optional(),
-  role: claimRoleSchema.optional(),
-  attributes: z
-    .object({
-      map: z.array(z.object({ claimPath: z.string(), attributeKey: z.string() })).optional(),
-      overrideExisting: z.boolean().optional(),
-      syncOnSignIn: z.boolean().optional(),
-    })
-    .optional(),
-})
+const claimMappingSchema = z
+  .object({
+    profile: z
+      .object({
+        sources: z.array(z.enum(['idToken', 'userinfo', 'accessTokenJwt'])).optional(),
+        claims: z
+          .object({
+            id: z.string().optional(),
+            email: z.string().optional(),
+            name: z.string().optional(),
+            username: z.string().optional(),
+            image: z.string().optional(),
+          })
+          .passthrough()
+          .optional(),
+        allowMissingEmail: z.boolean().optional(),
+        syncOnSignIn: z.boolean().optional(),
+      })
+      .passthrough()
+      .optional(),
+    role: claimRoleSchema.passthrough().optional(),
+    attributes: z
+      .object({
+        map: z
+          .array(z.object({ claimPath: z.string(), attributeKey: z.string() }).passthrough())
+          .optional(),
+        overrideExisting: z.boolean().optional(),
+        syncOnSignIn: z.boolean().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough()
 
 /**
  * Identity-provider registrationIds are restricted to the generated `oidc_`
@@ -220,11 +254,14 @@ const upsertIdentityProviderInput = z.object({
   scopes: z.string().max(512).nullable().optional(),
   prompt: z.string().max(64).nullable().optional(),
   tokenEndpointAuthMethod: z.string().max(32).nullable().optional(),
+  idTokenNonce: z.string().max(16).nullable().optional(),
   enabled: z.boolean().optional(),
   autoCreateUsers: z.boolean().optional(),
   autoProvisionRole: idpRole.nullable().optional(),
   claimMapping: claimMappingSchema.nullable().optional(),
   showButton: z.boolean().optional(),
+  acknowledgeIdentifierChange: z.boolean().optional(),
+  acknowledgeAdminRules: z.boolean().optional(),
 })
 
 /** Read-only listing of every identity provider with its linked domains. */
@@ -248,6 +285,7 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
 
     const { listIdentityProviders, upsertIdentityProvider } =
       await import('@/lib/server/domains/settings/identity-providers.service')
+    const { roleRuleGrantCheck } = await import('@/lib/server/domains/roles/role.rule-grants')
     const existing = await listIdentityProviders()
     const prior = data.id
       ? existing.find((p) => p.id === data.id)
@@ -298,7 +336,114 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
         after,
         headers: getRequestHeaders(),
       },
-      async () => upsertIdentityProvider(data)
+      async () =>
+        upsertIdentityProvider({
+          ...data,
+          checkRoleGrants: roleRuleGrantCheck(auth.permissions),
+        })
+    )
+  })
+
+const profileField = z.enum(PROFILE_FIELDS)
+
+const claimMappingOperationSchema = z.discriminatedUnion('op', [
+  z.object({
+    op: z.literal('setProfileClaim'),
+    field: profileField,
+    path: z.string(),
+  }),
+  z.object({ op: z.literal('resetProfileClaim'), field: profileField }),
+  z.object({ op: z.literal('setProfileSync'), syncOnSignIn: z.boolean() }),
+  z.object({
+    op: z.literal('setSources'),
+    sources: z.array(z.enum(['idToken', 'userinfo', 'accessTokenJwt'])),
+  }),
+  z.object({ op: z.literal('resetSources') }),
+  z.object({ op: z.literal('setAllowMissingEmail'), allow: z.boolean() }),
+  z.object({ op: z.literal('setRolePath'), claimPath: z.string() }),
+  z.object({
+    op: z.literal('insertRoleRule'),
+    index: z.number().int().nonnegative(),
+    rule: roleRuleSchema,
+  }),
+  z.object({
+    op: z.literal('editRoleRule'),
+    index: z.number().int().nonnegative(),
+    rule: roleRuleSchema,
+  }),
+  z.object({ op: z.literal('removeRoleRule'), index: z.number().int().nonnegative() }),
+  z.object({
+    op: z.literal('reorderRoleRule'),
+    from: z.number().int().nonnegative(),
+    to: z.number().int().nonnegative(),
+  }),
+  z.object({ op: z.literal('setRoleSync'), syncOnEverySignIn: z.boolean() }),
+  z.object({ op: z.literal('removeRole') }),
+  z.object({
+    op: z.literal('insertPeopleMapping'),
+    index: z.number().int().nonnegative(),
+    entry: z.object({ claimPath: z.string(), attributeKey: z.string() }),
+  }),
+  z.object({
+    op: z.literal('editPeopleMapping'),
+    index: z.number().int().nonnegative(),
+    entry: z.object({ claimPath: z.string(), attributeKey: z.string() }),
+  }),
+  z.object({ op: z.literal('removePeopleMapping'), index: z.number().int().nonnegative() }),
+  z.object({
+    op: z.literal('setPeopleFlags'),
+    overrideExisting: z.boolean().optional(),
+    syncOnSignIn: z.boolean().optional(),
+  }),
+])
+
+const saveClaimMappingInput = z.object({
+  id: identityProviderId,
+  expectedClaimMapping: z.unknown(),
+  operations: z.array(claimMappingOperationSchema),
+  acknowledgeIdentifierChange: z.boolean().optional(),
+  acknowledgeAdminRules: z.boolean().optional(),
+})
+
+export const saveIdentityProviderClaimMappingFn = createServerFn({ method: 'POST' })
+  .validator(saveClaimMappingInput)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+    await requireEntitlement('sso')
+
+    const { listIdentityProviders, saveIdentityProviderClaimMapping } =
+      await import('@/lib/server/domains/settings/identity-providers.service')
+    const { roleRuleGrantCheck } = await import('@/lib/server/domains/roles/role.rule-grants')
+    const existing = await listIdentityProviders()
+    const prior = existing.find((p) => p.id === data.id)
+    if (!prior) {
+      throw new ValidationError('IDP_NOT_FOUND', 'Identity provider not found.')
+    }
+
+    const nextMapping = applyClaimMappingEdits(prior.claimMapping, data.operations)
+    const { before, after } = diffProviderAudit(prior, {
+      ...prior,
+      claimMapping: nextMapping as typeof prior.claimMapping,
+    })
+
+    return withAuditEvent(
+      {
+        event: 'idp.updated',
+        actor: actorFromAuth(auth),
+        target: { type: 'identity_provider', id: data.id },
+        before,
+        after,
+        headers: getRequestHeaders(),
+      },
+      async () =>
+        saveIdentityProviderClaimMapping(data.id, {
+          expectedClaimMapping: data.expectedClaimMapping,
+          operations: data.operations,
+          acknowledgeIdentifierChange: data.acknowledgeIdentifierChange,
+          acknowledgeAdminRules: data.acknowledgeAdminRules,
+          checkRoleGrants: roleRuleGrantCheck(auth.permissions),
+        })
     )
   })
 
@@ -337,6 +482,97 @@ export const deleteIdentityProviderFn = createServerFn({ method: 'POST' })
           await import('@/lib/server/domains/settings/identity-providers.service')
         await deleteIdentityProvider(data.id)
         return { success: true }
+      }
+    )
+  })
+
+const setRedirectStyleInput = z.object({
+  id: identityProviderId,
+  style: z.enum(OIDC_REDIRECT_STYLES),
+})
+
+/**
+ * Switch which callback URL a provider sends as its redirect URI. Existing
+ * providers keep the legacy URL their IdP already has until an admin moves
+ * them, after registering the new one at the IdP.
+ */
+export const setIdentityProviderRedirectStyleFn = createServerFn({ method: 'POST' })
+  .validator(setRedirectStyleInput)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const { listIdentityProviders, setIdentityProviderRedirectStyle } =
+      await import('@/lib/server/domains/settings/identity-providers.service')
+    const prior = (await listIdentityProviders()).find((p) => p.id === data.id)
+    if (!prior) {
+      throw new ValidationError('IDP_NOT_FOUND', 'Identity provider not found.')
+    }
+
+    return withAuditEvent(
+      {
+        event: 'idp.updated',
+        actor: actorFromAuth(auth),
+        target: { type: 'identity_provider', id: prior.id },
+        before: { redirectStyle: prior.redirectStyle },
+        after: { redirectStyle: data.style },
+        headers: getRequestHeaders(),
+      },
+      async () => {
+        const saved = await setIdentityProviderRedirectStyle(prior.id, data.style)
+        if (!saved) throw new ValidationError('IDP_NOT_FOUND', 'Identity provider not found.')
+        return saved
+      }
+    )
+  })
+
+const saveIdentityProviderLogoInput = z.object({
+  providerId: identityProviderId,
+  key: z.string().min(1).max(512),
+})
+
+/**
+ * Persist the S3 key of a freshly-uploaded provider logo. The client PUTs the
+ * image to the presigned URL from `getIdentityProviderLogoUploadUrlFn` first,
+ * then calls this with the returned key. The service deletes any prior object.
+ */
+export const saveIdentityProviderLogoFn = createServerFn({ method: 'POST' })
+  .validator(saveIdentityProviderLogoInput)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    return withAuditEvent(
+      {
+        event: 'idp.updated',
+        actor: actorFromAuth(auth),
+        target: { type: 'identity_provider', id: data.providerId },
+        after: { logo: 'set' },
+        headers: getRequestHeaders(),
+      },
+      async () => {
+        const { saveIdentityProviderLogoKey } =
+          await import('@/lib/server/domains/settings/identity-provider-logo.service')
+        return saveIdentityProviderLogoKey(data.providerId, data.key)
+      }
+    )
+  })
+
+const deleteIdentityProviderLogoInput = z.object({ providerId: identityProviderId })
+
+/** Remove a provider's logo (S3 object + key). */
+export const deleteIdentityProviderLogoFn = createServerFn({ method: 'POST' })
+  .validator(deleteIdentityProviderLogoInput)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    return withAuditEvent(
+      {
+        event: 'idp.updated',
+        actor: actorFromAuth(auth),
+        target: { type: 'identity_provider', id: data.providerId },
+        after: { logo: 'cleared' },
+        headers: getRequestHeaders(),
+      },
+      async () => {
+        const { deleteIdentityProviderLogoKey } =
+          await import('@/lib/server/domains/settings/identity-provider-logo.service')
+        return deleteIdentityProviderLogoKey(data.providerId)
       }
     )
   })
@@ -612,4 +848,18 @@ export const getProviderAccountCountFn = createServerFn({ method: 'GET' })
     const { countProviderAccounts } =
       await import('@/lib/server/domains/settings/identity-provider-accounts')
     return { count: await countProviderAccounts(data.id) }
+  })
+
+/**
+ * The teammates who sign in through this provider and whether each holds
+ * admin-level access, so the role rules can warn before a change that could
+ * lock every admin out.
+ */
+export const listProviderAdminsFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ providerId: identityProviderId }))
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const { listProviderAdmins } =
+      await import('@/lib/server/domains/settings/identity-provider-accounts')
+    return listProviderAdmins(data.providerId, auth.principal.id)
   })

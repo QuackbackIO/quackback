@@ -176,7 +176,20 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
       'Publication state of the article. Nothing is dispatched off it, so a rewind changes what is visible in the help center and nothing else.',
   },
 
+  {
+    column: schema.integrationSyncOperations.dispatchedAt,
+    policy: 'preserve',
+    reason:
+      'Evidence of a possibly applied remote change, read by lease recovery and retry fencing. Clearing it would permit duplicate writes. Restores must keep integration workers paused and quarantine pending operations before resuming, since no snapshot can recover evidence written after it.',
+  },
+
   // -- preserve: settling would cause the worse failure ---------------------
+  {
+    column: schema.onboardingEmails.sentAt,
+    policy: 'preserve',
+    reason:
+      'The dedupe fact is the ROW, not the stamp: a setup email is never sent twice because its (principal, kind) row exists. Nothing reads sent_at. A rewind that loses a row can re-send at most one setup email, and only inside the 14-day launch window; no column policy can repair a missing row.',
+  },
   {
     column: schema.hookDeliveries.processedAt,
     policy: 'preserve',

@@ -58,7 +58,7 @@ function TicketPicker({
           options.map((t) => (
             <DropdownMenuItem
               key={t.id}
-              onSelect={() => onPick(t.id)}
+              onClick={() => onPick(t.id)}
               className="flex-col items-start gap-0.5"
             >
               <TicketLabel ticket={t} />

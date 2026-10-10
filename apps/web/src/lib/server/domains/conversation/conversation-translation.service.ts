@@ -65,6 +65,8 @@ import {
   structuredOutputProviderOptions,
 } from '@/lib/server/domains/ai/config'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
+import { getAiBudgetStatus } from '@/lib/server/domains/ai/ai-budget'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { ValidationError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { canActAsAgent } from '@/lib/server/policy/conversation'
@@ -83,6 +85,7 @@ import {
 // translation API surface from.
 import { conversationToDTO, translationStateFrom } from './conversation.query'
 import { publishConversationUpdate } from '@/lib/server/realtime/conversation-channels'
+import { isTestCustomer } from '@/lib/server/test-data'
 import { logger } from '@/lib/server/logger'
 
 export { translationStateFrom }
@@ -165,6 +168,41 @@ Example output:
   return { system, user }
 }
 
+/** Allowance windows this process has already warned about, per workspace. */
+const overAllowanceWarned = new WorkspaceKeyedCache<true>(1_000)
+
+/**
+ * Whether the workspace is past its AI allowance. Inbox translation is never
+ * blocked by the allowance (a conversation must stay readable), but it is
+ * still counted, so the teammate sees a notice and the log gets one warning
+ * per workspace per allowance window. A failed read answers false: the
+ * notice is advisory and must never stand in the way of a translation.
+ */
+export async function inboxTranslationOverAllowance(): Promise<boolean> {
+  let status: Awaited<ReturnType<typeof getAiBudgetStatus>>
+  try {
+    status = await getAiBudgetStatus()
+  } catch (err) {
+    log.warn({ err }, 'inbox translation: AI allowance check failed')
+    return false
+  }
+  if (!status.exhausted) return false
+  const windowKey = status.window.start.toISOString()
+  if (!overAllowanceWarned.has(windowKey)) {
+    overAllowanceWarned.set(windowKey, true)
+    log.warn(
+      {
+        used: status.used,
+        cap: status.cap,
+        window_kind: status.window.kind,
+        window_start: windowKey,
+      },
+      'inbox translation running past the AI allowance'
+    )
+  }
+  return true
+}
+
 /** Raw chat call shared by detection + both translate directions, so all
  *  three go through the identical AI-config/usage-logging path (matching the
  *  help-center-auto-translate precedent). Returns null when AI isn't
@@ -184,9 +222,17 @@ async function callInboxTranslationModel<T>(
   const model = getChatModel('inboxTranslation')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return null
 
+  // Counted, never blocked: see inboxTranslationOverAllowance.
+  await inboxTranslationOverAllowance()
+
   // chat() can't infer the structured-output type through the generic
   // `z.ZodType<T>` (it resolves to `unknown`), so assert the validated result
   // back to T — the schema the caller passed IS the T contract.
+  const usage = createUsageLoggingMiddleware({
+    pipelineStep: PIPELINE_STEP,
+    model,
+    metadata: { stage, ...metadata },
+  })
   const result = await chat({
     adapter: openaiCompatibleText(model, {
       baseURL: config.openaiBaseUrl!,
@@ -197,14 +243,11 @@ async function callInboxTranslationModel<T>(
     outputSchema,
     stream: false,
     modelOptions: { ...structuredOutputProviderOptions() },
-    middleware: [
-      createUsageLoggingMiddleware({
-        pipelineStep: PIPELINE_STEP,
-        model,
-        metadata: { stage, ...metadata },
-      }),
-    ],
+    middleware: [usage],
   })
+  // The over-allowance flag is read right after these calls; wait for this
+  // call's usage row so a call that crosses the cap is counted.
+  await usage.settled()
   return result as T
 }
 
@@ -232,6 +275,8 @@ export async function maybeDetectCustomerLanguage(
 ): Promise<Conversation> {
   if (conversation.detectedCustomerLanguage) return conversation
   try {
+    // A teammate's test thread spends no AI tokens.
+    if (await isTestCustomer(conversation.visitorPrincipalId)) return conversation
     const rows = await db
       .select({ content: conversationMessages.content })
       .from(conversationMessages)
@@ -527,7 +572,7 @@ export async function setInboxTranslationEnabled(
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
   return updated
 }
 
@@ -547,7 +592,7 @@ export async function dismissInboxTranslationSuggestion(
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
   return updated
 }
 

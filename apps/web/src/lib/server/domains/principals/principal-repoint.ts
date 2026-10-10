@@ -26,7 +26,9 @@
  * deleteAnonymousIdentity.
  */
 import { toUuid, type PrincipalId } from '@quackback/ids'
+import { forgetRequestSegmentIds } from '@/lib/server/auth/request-session'
 import {
+  slackUserLinks,
   postVotes,
   postCommentReactions,
   postComments,
@@ -36,6 +38,7 @@ import {
   postActivity,
   conversations,
   conversationMessages,
+  files,
   conversationParticipants,
   conversationSummaries,
   postSubscriptions,
@@ -71,6 +74,8 @@ export interface RepointOptions {
    * path, which has no meaningful source name; the fixup is skipped.
    */
   displayNames?: { from: string; to: string }
+  /** Do not copy blocked_at / blocked_by onto a teammate target. */
+  skipBlockTransfer?: boolean
 }
 
 interface RepointContext extends RepointOptions {
@@ -170,14 +175,20 @@ function collisionRepoint(
  * column is still NULL (user wins, source fills gaps). A source with no value
  * writes NULL over the target's NULL — a no-op.
  */
-function fillIfEmpty(column: string, description: string): RepointStep {
+function fillIfEmpty(
+  column: string,
+  description: string,
+  opts?: { skipWhen?: (ctx: RepointContext) => boolean }
+): RepointStep {
   const key = columnKey(column)
   const dbTable = principal as RepointTable
   return {
     table: 'principal',
     columns: [column],
     description,
-    async run(tx, { from, to }) {
+    async run(tx, ctx) {
+      if (opts?.skipWhen?.(ctx)) return
+      const { from, to } = ctx
       // The SET pulls the source value via a correlated subquery (a raw uuid,
       // so no TypeID mapping); the IS NULL guard makes a populated target match
       // zero rows.
@@ -200,6 +211,12 @@ function fillIfEmpty(column: string, description: string): RepointStep {
  *   CASCADE tables would silently lose rows.
  */
 export const REPOINT_STEPS: RepointStep[] = [
+  simpleRepoint(
+    'slack_user_links',
+    slackUserLinks,
+    'principal_id',
+    'Preserve Slack identity links when a principal is absorbed; uniqueness is on Slack team and user, not principal.'
+  ),
   collisionRepoint(
     'post_votes',
     postVotes,
@@ -276,6 +293,12 @@ export const REPOINT_STEPS: RepointStep[] = [
     'principal_id',
     'Message authorship. ON DELETE RESTRICT, same as conversations.'
   ),
+  simpleRepoint(
+    'files',
+    files,
+    'uploaded_by_id',
+    'File uploader. A visitor who identifies mid-compose can still send the files they uploaded anonymously, and sent files keep their sender.'
+  ),
   collisionRepoint(
     'conversation_participants',
     conversationParticipants,
@@ -339,6 +362,7 @@ export const REPOINT_STEPS: RepointStep[] = [
         .set({ principalId: to })
         .where(and(eq(userSegments.principalId, from), ne(userSegments.addedBy, 'dynamic')))
       await tx.delete(userSegments).where(eq(userSegments.principalId, from))
+      forgetRequestSegmentIds()
     },
   },
   collisionRepoint(
@@ -404,11 +428,13 @@ export const REPOINT_STEPS: RepointStep[] = [
   // company_id), never REPOINT_EXEMPTIONS entries.
   fillIfEmpty(
     'blocked_at',
-    'Attribute consolidation, not a re-point: a blocked source blocks the target when the target is not already blocked (user wins). Stops a merged visitor from shedding a block by identifying.'
+    'Attribute consolidation, not a re-point: a blocked source blocks the target when the target is not already blocked (user wins). Stops a merged visitor from shedding a block by identifying. Skipped when the target is a teammate (team members cannot be blocked).',
+    { skipWhen: (ctx) => ctx.skipBlockTransfer === true }
   ),
   fillIfEmpty(
     'blocked_by_principal_id',
-    'Attribute consolidation, not a re-point: the blocking team actor moves with blocked_at so the audit trail survives the merge (only filled when the target was not itself blocked).'
+    'Attribute consolidation, not a re-point: the blocking team actor moves with blocked_at so the audit trail survives the merge (only filled when the target was not itself blocked). Skipped when the target is a teammate.',
+    { skipWhen: (ctx) => ctx.skipBlockTransfer === true }
   ),
   collisionRepoint(
     'changelog_subscriptions',
@@ -436,6 +462,12 @@ export const REPOINT_STEPS: RepointStep[] = [
  * merge source.
  */
 export const REPOINT_EXEMPTIONS: Record<string, string> = {
+  'workspace_assistant_threads.owner_principal_id':
+    'Private Copilot threads belong to authenticated team users with copilot.use; anonymous visitor merges cannot own them.',
+  'integration_sync_actions.principal_id':
+    'Integration recovery requires INTEGRATION_MANAGE; anonymous principals cannot own these immutable action receipts.',
+  'onboarding_emails.principal_id':
+    'Setup emails go only to teammates; an anonymous merge source never received one.',
   // Team/agent actor columns (anonymous principals can never occupy them)
   'tickets.assignee_principal_id':
     'ticket assignees are team members; the merge source is anonymous',

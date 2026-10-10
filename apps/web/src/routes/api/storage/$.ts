@@ -2,6 +2,13 @@ import { createFileRoute } from '@tanstack/react-router'
 import { readBodyWithLimit } from '@/lib/server/utils/read-body'
 import { logger } from '@/lib/server/logger'
 import { currentWorkspaceNamespace } from '@/lib/server/workspaces/workspace-keyed'
+import {
+  cleanDownloadName,
+  downloadFileName,
+  downloadHeaders,
+  redirectPolicy,
+  servedFileHeaders,
+} from '@/lib/server/storage/serve-policy'
 
 const log = logger.child({ component: 'storage' })
 
@@ -67,9 +74,12 @@ export function createProxyCache(opts: ProxyCacheOptions) {
   }
 }
 
+/** Logos are typically < 50 KB; anything past this is streamed, never cached. */
+const PROXY_CACHE_MAX_ENTRY_BYTES = 1 * 1024 * 1024
+
 const proxyCache = createProxyCache({
   ttlMs: 60 * 60 * 1000, // 1 hour
-  maxEntryBytes: 1 * 1024 * 1024, // logos are typically < 50 KB; skip outliers
+  maxEntryBytes: PROXY_CACHE_MAX_ENTRY_BYTES,
   maxTotalBytes: 32 * 1024 * 1024,
 })
 
@@ -97,6 +107,11 @@ function isNotFound(error: unknown): boolean {
   return e?.name === 'NoSuchKey' || e?.name === 'NotFound' || e?.$metadata?.httpStatusCode === 404
 }
 
+function isRangeNotSatisfiable(error: unknown): boolean {
+  const e = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } }
+  return e?.name === 'InvalidRange' || e?.$metadata?.httpStatusCode === 416
+}
+
 const KEY_PREFIX = '/api/storage/'
 
 /**
@@ -121,6 +136,42 @@ function extractKey(url: URL): string | null {
     return null
   }
   return key && !key.includes('..') ? key : null
+}
+
+/** How long a browser may keep a proxied private file. */
+const PRIVATE_MAX_AGE_SECONDS = 3600
+
+/**
+ * How long a redirect's presigned URL stays valid. The redirect marks public
+ * keys cacheable for a day, so the URL outlives cached copies with a 2x
+ * margin; an expiring link's URL never outlives the link.
+ */
+const PRESIGN_SECONDS = 172_800
+
+/**
+ * Per-client budget for the bucket lookups a token-less private link can
+ * cause. A link whose answer is cached spends none of it, so real old links
+ * keep working; past the budget a made-up key gets the ordinary 403 without
+ * reaching the object store. Fails open with the shared limiter, so a store
+ * outage degrades to the bounded caches rather than to refusing old links.
+ */
+const LEGACY_LOOKUPS_PER_MINUTE = 30
+
+async function mayAskBucketFor(request: Request): Promise<boolean> {
+  const [{ getClientIp }, { incrementBucket }] = await Promise.all([
+    import('@/lib/server/domains/api/rate-limit'),
+    import('@/lib/server/utils/rate-bucket'),
+  ])
+  const { count } = await incrementBucket({
+    key: `storage:legacy-lookup:${getClientIp(request)}`,
+    windowSeconds: 60,
+  })
+  return count === null || count <= LEGACY_LOOKUPS_PER_MINUTE
+}
+
+function isSingleByteRange(value: string): boolean {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(value)
+  return !!match && (match[1] !== '' || match[2] !== '')
 }
 
 export async function handleProxyUpload({ request }: { request: Request }): Promise<Response> {
@@ -176,6 +227,66 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
   return new Response(null, { status: 200 })
 }
 
+interface UserContentCors {
+  /** A separate user-content origin is configured, so responses vary on Origin. */
+  active: boolean
+  /** The origin granted read access to this response, if the request came from it. */
+  allowOrigin: string | null
+}
+
+/**
+ * CORS for the file viewer when files are served from a separate origin
+ * (`USER_CONTENT_URL`). The app then fetches bytes cross-origin, so exactly the
+ * app's origin may read them. No credentials: the read capability is in the
+ * URL, and no cookie belongs on this host.
+ */
+async function userContentCors(
+  request: Request,
+  config: { baseUrl: string }
+): Promise<UserContentCors> {
+  const { userContentOrigin } = await import('@/lib/server/storage/asset-url')
+  if (!userContentOrigin()) return { active: false, allowOrigin: null }
+  const appOrigin = new URL(config.baseUrl).origin
+  return {
+    active: true,
+    allowOrigin: request.headers.get('origin') === appOrigin ? appOrigin : null,
+  }
+}
+
+function withUserContentCors(response: Response, cors: UserContentCors): Response {
+  if (!cors.active) return response
+  response.headers.append('Vary', 'Origin')
+  if (cors.allowOrigin) {
+    response.headers.set('Access-Control-Allow-Origin', cors.allowOrigin)
+    response.headers.set(
+      'Access-Control-Expose-Headers',
+      'Content-Range, Content-Length, Accept-Ranges'
+    )
+  }
+  return response
+}
+
+/**
+ * OPTIONS /api/storage/*
+ *
+ * The preflight a cross-origin Range request may need when files are served
+ * from a separate origin. Grants nothing to any other origin, or when no
+ * separate origin is configured.
+ */
+export async function handleStorageOptions({ request }: { request: Request }): Promise<Response> {
+  const { config } = await import('@/lib/server/config')
+  const cors = await userContentCors(request, config)
+  const headers = new Headers()
+  if (cors.active) headers.set('Vary', 'Origin')
+  if (cors.allowOrigin) {
+    headers.set('Access-Control-Allow-Origin', cors.allowOrigin)
+    headers.set('Access-Control-Allow-Methods', 'GET, HEAD')
+    headers.set('Access-Control-Allow-Headers', 'Range')
+    headers.set('Access-Control-Max-Age', '86400')
+  }
+  return new Response(null, { status: 204, headers })
+}
+
 /**
  * GET /api/storage/*
  * Serve files from S3 storage.
@@ -185,14 +296,33 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
  *
  * Otherwise, redirects to a presigned S3 URL (302) so the browser fetches
  * directly from S3 — no bytes are proxied through the server.
+ *
+ * Every answer, refusals included, carries the user-content CORS grant when
+ * one applies, so the viewer can tell a refusal from a network failure.
+ *
+ * Download mode (`?download=1`, optionally `&filename=<name>`) answers as an
+ * attachment whatever the type, under the name asked for (made safe for a
+ * header) or the key's own. It rides on a read capability and never stands
+ * in for one, so a public key, which needs none, ignores it.
  */
 export async function handleStorageGet({ request }: { request: Request }): Promise<Response> {
+  const { config } = await import('@/lib/server/config')
+  const [response, cors] = await Promise.all([
+    serveStorageGet(request),
+    userContentCors(request, config),
+  ])
+  return withUserContentCors(response, cors)
+}
+
+async function serveStorageGet(request: Request): Promise<Response> {
   const {
     isS3Usable,
     generatePresignedGetUrl,
     getS3Object,
     getStorageSigningSecret,
     isPublicStorageKey,
+    isPreNamespaceObject,
+    hasExpiringReadToken,
     StorageUnavailableError,
     verifyStorageReadToken,
   } = await import('@/lib/server/storage/s3')
@@ -217,38 +347,100 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
     return Response.json({ error: 'Invalid storage key' }, { status: 400 })
   }
 
+  const exp = url.searchParams.get('exp')
+  const readToken = url.searchParams.get('read')
+  // A link with no token at all may predate read tokens; `isPreNamespaceObject`
+  // says when that is provably so. A wrong token is never given that chance.
   if (
     !isPublicStorageKey(key) &&
-    !verifyStorageReadToken(getStorageSigningSecret(), key, url.searchParams.get('read'))
+    !verifyStorageReadToken(getStorageSigningSecret(), key, readToken, exp) &&
+    !(readToken === null && (await isPreNamespaceObject(key, () => mayAskBucketFor(request))))
   ) {
     return Response.json({ error: 'Invalid storage read token' }, { status: 403 })
   }
 
-  // Force proxy for email embeds (?email=1) since email clients don't follow redirects
-  const forceProxy = url.searchParams.has('email')
+  // A private response is cached for an hour, and never past the moment an
+  // expiring link stops granting access: the cache must not outlive the
+  // capability that fetched it. The verifier above has already checked `exp`.
+  const linkSecondsLeft = hasExpiringReadToken(key)
+    ? Math.max(0, Math.floor((Number(exp) - Date.now()) / 1000))
+    : Infinity
+  const privateMaxAge = Math.min(PRIVATE_MAX_AGE_SECONDS, linkSecondsLeft)
+  const presignSeconds = Math.max(1, Math.min(PRESIGN_SECONDS, linkSecondsLeft))
+
+  const downloadName =
+    url.searchParams.get('download') === '1' && !isPublicStorageKey(key)
+      ? (cleanDownloadName(url.searchParams.get('filename')) ?? downloadFileName(key))
+      : null
+  const fileHeaders = (contentType: string) =>
+    downloadName ? downloadHeaders(downloadName) : servedFileHeaders(key, contentType)
+  const cacheControl = isPublicStorageKey(key)
+    ? 'public, max-age=31536000, immutable'
+    : `private, max-age=${privateMaxAge}, immutable`
+
+  // Force proxy for email embeds (?email=1), since email clients don't follow
+  // redirects, and for the file viewer's fetch (?proxy=1), since a script
+  // cannot read a cross-origin redirect target the bucket has no CORS grant for.
+  const forceProxy = url.searchParams.has('email') || url.searchParams.has('proxy')
+  const requestedRange = request.headers.get('range')
+  if (requestedRange && !isSingleByteRange(requestedRange)) {
+    return new Response(null, { status: 416, headers: { 'Accept-Ranges': 'bytes' } })
+  }
 
   try {
     if (config.s3Proxy || forceProxy) {
-      const cached = proxyCache.get(proxyCacheKey(key))
+      const cached = requestedRange ? undefined : proxyCache.get(proxyCacheKey(key))
       if (cached) {
+        const isVideo = cached.contentType.startsWith('video/')
         return new Response(cached.data, {
           status: 200,
           headers: {
             'Content-Type': cached.contentType,
-            'Cache-Control': isPublicStorageKey(key)
-              ? 'public, max-age=31536000, immutable'
-              : 'private, max-age=3600, immutable',
+            ...(isVideo
+              ? {
+                  'Accept-Ranges': 'bytes',
+                  'Content-Length': String(cached.data.byteLength),
+                }
+              : {}),
+            'Cache-Control': cacheControl,
             // The key namespace is per-bucket and the bucket is the workspace
             // boundary, so the same path can name a different object per host.
             Vary: 'Host',
             // Stored Content-Types originate from upload requests — never
             // let a browser second-guess them on a same-origin response.
             'X-Content-Type-Options': 'nosniff',
+            // Anything a browser could run is a download here, never a page.
+            ...fileHeaders(cached.contentType),
           },
         })
       }
 
-      const { body, contentType } = await getS3Object(key)
+      const object = requestedRange
+        ? await getS3Object(key, requestedRange)
+        : await getS3Object(key)
+      const { body, contentType, contentLength, contentRange, acceptRanges } = object
+
+      // Video must stay streaming and byte-range aware. Buffering the whole
+      // object before answering makes playback wait for the complete upload and
+      // prevents seeking on self-hosted deployments that enable S3_PROXY. A file
+      // too large to cache streams too: buffering a 25 MB attachment only to
+      // send it on holds the whole file in memory for no benefit.
+      const tooLargeToCache =
+        contentLength !== undefined && contentLength > PROXY_CACHE_MAX_ENTRY_BYTES
+      if (contentType.startsWith('video/') || requestedRange || tooLargeToCache) {
+        const headers = new Headers({
+          'Content-Type': contentType,
+          'Cache-Control': cacheControl,
+          Vary: 'Host',
+          'X-Content-Type-Options': 'nosniff',
+          'Accept-Ranges': acceptRanges || 'bytes',
+          ...fileHeaders(contentType),
+        })
+        if (contentLength !== undefined) headers.set('Content-Length', String(contentLength))
+        if (contentRange) headers.set('Content-Range', contentRange)
+        return new Response(body, { status: contentRange ? 206 : 200, headers })
+      }
+
       const data = await new Response(body).arrayBuffer()
 
       proxyCache.set(proxyCacheKey(key), data, contentType)
@@ -257,16 +449,27 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
         status: 200,
         headers: {
           'Content-Type': contentType,
-          'Cache-Control': isPublicStorageKey(key)
-            ? 'public, max-age=31536000, immutable'
-            : 'private, max-age=3600, immutable',
+          'Cache-Control': cacheControl,
           Vary: 'Host',
           'X-Content-Type-Options': 'nosniff',
+          ...fileHeaders(contentType),
         },
       })
     }
 
-    const presignedUrl = await generatePresignedGetUrl(key)
+    // The redirect does not see the stored type, so the presigned URL either
+    // forces the type its extension names (raster image, audio, video, PDF) or
+    // makes the file a download. Download mode makes any file one.
+    const policy = redirectPolicy(key)
+    const inlineType = 'inlineType' in policy ? policy.inlineType : undefined
+    const presignedName =
+      downloadName ?? ('downloadName' in policy ? policy.downloadName : undefined)
+    const presignedUrl = await generatePresignedGetUrl(
+      key,
+      presignSeconds,
+      presignedName,
+      inlineType
+    )
 
     return new Response(null, {
       status: 302,
@@ -293,6 +496,9 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
     if (isNotFound(error)) {
       return Response.json({ error: 'Not found' }, { status: 404 })
     }
+    if (isRangeNotSatisfiable(error)) {
+      return new Response(null, { status: 416, headers: { 'Accept-Ranges': 'bytes' } })
+    }
     log.error({ err: error }, 'storage object serve failed')
     return Response.json({ error: 'Failed to resolve storage URL' }, { status: 500 })
   }
@@ -311,6 +517,8 @@ export const Route = createFileRoute('/api/storage/$')({
       PUT: handleProxyUpload,
 
       GET: handleStorageGet,
+
+      OPTIONS: handleStorageOptions,
     },
   },
 })

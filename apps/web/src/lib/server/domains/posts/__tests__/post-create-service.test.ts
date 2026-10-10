@@ -39,8 +39,9 @@ const txLockedBoardRows: { value: Array<{ deletedAt: Date | null; access?: unkno
   value: [{ deletedAt: null, access: LOCKED_ANON_ACCESS }],
 }
 
-vi.mock('@/lib/server/db', async () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
+  const { notTestPrincipal } = await importOriginal<typeof import('@/lib/server/db')>()
 
   function chain(label: string) {
     const c: Record<string, unknown> = {}
@@ -91,6 +92,11 @@ vi.mock('@/lib/server/db', async () => {
         postStatuses: {
           findFirst: vi.fn().mockResolvedValue({ id: 'post_status_open', name: 'Open' }),
         },
+        principal: {
+          findFirst: vi
+            .fn()
+            .mockResolvedValue({ testOwnerPrincipalId: null, type: 'user', role: 'user' }),
+        },
       },
       transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
         // Default: SELECT ... FOR UPDATE on the board returns a live (non-deleted)
@@ -122,9 +128,11 @@ vi.mock('@/lib/server/db', async () => {
     postStatuses: { id: 'status_id' },
     postTagAssignments: { __name: 'postTagAssignments' },
     postVotes: { __name: 'post_votes' },
+    principal: { id: 'principal_id' },
     eq: vi.fn(),
     and: vi.fn((...args: unknown[]) => args),
     sql: realSql,
+    notTestPrincipal,
   }
 })
 

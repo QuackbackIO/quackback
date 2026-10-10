@@ -1,5 +1,6 @@
 import type { PrincipalId } from '@quackback/ids'
 import type { ConversationStatus, ConversationEndReason } from '@/lib/shared/conversation/types'
+import type { ChannelReopenOnReply } from '@/lib/shared/channels'
 
 /**
  * Conversation status transitions, kept pure so they're unit-tested directly.
@@ -25,9 +26,11 @@ import type { ConversationStatus, ConversationEndReason } from '@/lib/shared/con
  */
 export function applyVisitorReopenStatus(
   priorStatus: ConversationStatus,
-  hasMatchedBlockReply: boolean
+  hasMatchedBlockReply: boolean,
+  reopenOnReply: ChannelReopenOnReply = 'always'
 ): ConversationStatus {
   if (priorStatus === 'closed' && hasMatchedBlockReply) return 'closed'
+  if (priorStatus === 'closed' && reopenOnReply === 'never') return 'closed'
   return 'open'
 }
 
@@ -37,8 +40,12 @@ export function applyVisitorReopenStatus(
  * deliberate reply does not re-queue it), leaving the snooze timer or an
  * explicit reopen to bring it back.
  */
-export function applyAgentReopenStatus(current: ConversationStatus): ConversationStatus {
-  return current === 'closed' ? 'open' : current
+export function applyAgentReopenStatus(
+  current: ConversationStatus,
+  reopenOnReply: ChannelReopenOnReply = 'always'
+): ConversationStatus {
+  if (current !== 'closed') return current
+  return reopenOnReply === 'never' ? 'closed' : 'open'
 }
 
 /**

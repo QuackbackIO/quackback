@@ -1,6 +1,16 @@
-import { useCallback, useEffect, useMemo, memo, useRef, useState } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  memo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react'
+import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
-import { Squares2X2Icon, PencilIcon } from '@heroicons/react/24/solid'
+import { Squares2X2Icon, PencilIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import {
   LightBulbIcon,
   MagnifyingGlassIcon,
@@ -8,8 +18,8 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { m, AnimatePresence } from 'framer-motion'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useIntl, FormattedMessage } from 'react-intl'
 import {
   Select,
@@ -18,16 +28,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { listPublicPostsFn } from '@/lib/server/functions/public-posts'
+import { widgetListPublicPostsFn } from '@/lib/server/functions/widget/posts'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
+import { WidgetPostListSkeleton } from './widget-skeletons'
+import {
+  widgetQueryKeys,
+  widgetQueryKeySameSession,
+  INITIAL_SESSION_VERSION,
+} from '@/lib/client/hooks/use-widget-vote'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { cn } from '@/lib/shared/utils'
 import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import type { PostId } from '@quackback/ids'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
-import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
+import {
+  LazyRichTextEditor,
+  RichTextEditorPlaceholder,
+} from '@/components/ui/lazy-rich-text-editor'
+import { useWidgetMediaUpload, WidgetSessionError } from './use-widget-image-upload'
 import type { JSONContent } from '@tiptap/react'
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
+import {
+  composeBodyFromPlainText,
+  resolveComposeBoardId,
+  shouldClearInvisibleBoardFilter,
+  shouldResetComposeBoard,
+  shouldReapplyComposeBoard,
+  type WidgetComposeRequest,
+} from './widget-compose'
+import { shownName } from '@/lib/shared/greeting-name'
 
 interface WidgetPost {
   id: string
@@ -76,6 +107,15 @@ export interface WidgetHomeProps {
    */
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
   defaultBoard?: string
+  /** SDK `?board=` / `defaultBoard` — seed the Popular Ideas filter. */
+  initialBoardSlug?: string
+  /**
+   * Board slugs from the current session's capability fetch. `null` while that
+   * query has no data yet — do not treat the anonymous SSR fallback as final.
+   */
+  confirmedBoardSlugs?: string[] | null
+  /** Programmatic `open({ view: 'new-post' })` — expand and prefill. */
+  composeRequest?: WidgetComposeRequest | null
   onPostSelect?: (postId: string) => void
   onPostCreated?: (post: {
     id: string
@@ -90,7 +130,32 @@ interface SearchResult {
   posts: WidgetPost[]
 }
 
+const SIMILAR_SEARCH_CACHE_LIMIT = 40
+let similarSearchCacheVersion = INITIAL_SESSION_VERSION
 const similarSearchCache = new Map<string, SearchResult>()
+
+function similarSearchCacheFor(sessionVersion: number) {
+  if (similarSearchCacheVersion !== sessionVersion) {
+    similarSearchCache.clear()
+    similarSearchCacheVersion = sessionVersion
+  }
+  return similarSearchCache
+}
+
+function similarSearchCacheGet(sessionVersion: number, q: string): SearchResult | undefined {
+  return similarSearchCacheFor(sessionVersion).get(q)
+}
+
+function similarSearchCacheSet(sessionVersion: number, q: string, result: SearchResult) {
+  const cache = similarSearchCacheFor(sessionVersion)
+  if (cache.has(q)) cache.delete(q)
+  cache.set(q, result)
+  while (cache.size > SIMILAR_SEARCH_CACHE_LIMIT) {
+    const oldest = cache.keys().next().value
+    if (oldest === undefined) break
+    cache.delete(oldest)
+  }
+}
 
 // ── Shared post row used in both similar-posts and popular-ideas lists ──
 
@@ -119,11 +184,17 @@ const WidgetPostRow = memo(
   }) {
     const status = post.statusId ? (statusMap.get(post.statusId) ?? null) : null
     return (
+      // Two sibling controls, never nested: a button-role ancestor would make
+      // the vote button presentational to assistive tech. The open button's
+      // ::after is stretched over the row so the whole row stays the tap
+      // target; the vote button sits above it.
       <div
-        className={`w-full overflow-hidden flex items-center gap-2 rounded-lg hover:bg-muted/30 transition-colors cursor-pointer ${compact ? 'px-1.5 py-1' : 'px-2 py-1.5'}`}
-        onClick={onSelect}
+        className={cn(
+          'relative w-full overflow-hidden flex items-center gap-2 rounded-lg hover:bg-muted/30 transition-colors',
+          compact ? 'px-1.5 py-1' : 'px-2 py-1.5'
+        )}
       >
-        <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+        <div className="relative z-10 shrink-0">
           <WidgetVoteButton
             postId={post.id as PostId}
             voteCount={post.voteCount}
@@ -143,7 +214,15 @@ const WidgetPostRow = memo(
             onAuthRequired={!canVote ? onAuthRequired : undefined}
           />
         </div>
-        <div className="flex-1 min-w-0">
+        <button
+          type="button"
+          onClick={onSelect}
+          className={cn(
+            'flex-1 min-w-0 text-start cursor-pointer outline-none',
+            'after:absolute after:inset-0 after:rounded-lg',
+            'focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring/50'
+          )}
+        >
           <div className="flex items-center gap-1.5">
             {status && (
               <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground">
@@ -160,13 +239,26 @@ const WidgetPostRow = memo(
                 {post.board.name}
               </span>
             )}
+            {post.commentCount > 0 && (
+              <span className="ms-auto inline-flex items-center gap-0.5 text-[11px] text-muted-foreground/60 tabular-nums">
+                <ChatBubbleLeftIcon className="h-2.5 w-2.5 text-muted-foreground/40" aria-hidden />
+                <span aria-hidden>{post.commentCount}</span>
+                <span className="sr-only">
+                  <FormattedMessage
+                    id="widget.home.row.comments"
+                    defaultMessage="{count, plural, one {# comment} other {# comments}}"
+                    values={{ count: post.commentCount }}
+                  />
+                </span>
+              </span>
+            )}
           </div>
           <p
             className={`font-medium text-foreground line-clamp-1 ${compact ? 'text-xs' : 'text-sm'}`}
           >
             {post.title}
           </p>
-        </div>
+        </button>
       </div>
     )
   },
@@ -179,6 +271,170 @@ const WidgetPostRow = memo(
     prev.noAccessReason === next.noAccessReason
 )
 
+/**
+ * The title as typed, held outside React state: the field and the similar-ideas
+ * search read it as it changes, and the composer reads it when it acts on
+ * it, so a keystroke renders the field and the search, not the composer.
+ */
+type TitleStore = ValueStore<string>
+
+const createTitleStore = (): TitleStore => createValueStore('')
+
+function TitleInput({
+  title,
+  inputRef,
+  expanded,
+  onType,
+  onFocus,
+}: {
+  title: TitleStore
+  inputRef: RefObject<HTMLInputElement | null>
+  expanded: boolean
+  onType: (value: string) => void
+  onFocus: () => void
+}) {
+  const intl = useIntl()
+  const value = useStoreValue(title)
+  return (
+    <m.input
+      ref={inputRef}
+      type="text"
+      placeholder={intl.formatMessage({
+        id: 'widget.home.input.placeholder',
+        defaultMessage: "What's your idea?",
+      })}
+      value={value}
+      aria-label={intl.formatMessage({
+        id: 'widget.home.input.label',
+        defaultMessage: 'Feedback title',
+      })}
+      onChange={(e) => {
+        title.set(e.target.value)
+        onType(e.target.value)
+      }}
+      onFocus={onFocus}
+      className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary"
+      initial={false}
+      animate={{
+        fontSize: expanded ? '1rem' : '0.875rem',
+        fontWeight: expanded ? 600 : 400,
+      }}
+      transition={{ duration: 0.2 }}
+    />
+  )
+}
+
+/**
+ * Ideas like the one being written, searched once the title's typing pauses.
+ * A later keystroke cancels a search still waiting or in flight.
+ */
+function SimilarIdeas({
+  title,
+  sessionVersion,
+  statusMap,
+  rowCanVote,
+  ensureSessionThen,
+  noAccessReason,
+  onAuthRequired,
+  onPostSelect,
+}: {
+  title: TitleStore
+  sessionVersion: number
+  statusMap: Map<string, StatusInfo>
+  rowCanVote: (boardId: string | undefined) => boolean
+  ensureSessionThen: (callback: () => void | Promise<void>) => Promise<void>
+  noAccessReason?: string
+  onAuthRequired: (postId: string) => void
+  onPostSelect?: (postId: string) => void
+}) {
+  const value = useStoreValue(title)
+  const [similarPostResults, setSimilarPostResults] = useState<SearchResult | null>(null)
+  const [isSimilarSearching, setIsSimilarSearching] = useState(false)
+  const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  useEffect(() => {
+    if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
+    const q = value.trim()
+    if (!q) {
+      setSimilarPostResults(null)
+      setIsSimilarSearching(false)
+      return
+    }
+    const cached = similarSearchCacheGet(sessionVersion, q)
+    if (cached) {
+      setSimilarPostResults(cached)
+      setIsSimilarSearching(false)
+      return
+    }
+    // Drop the previous identity's hits before the new request lands.
+    setSimilarPostResults(null)
+    setIsSimilarSearching(true)
+    const controller = new AbortController()
+    similarDebounceRef.current = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ q, limit: '5' })
+        const res = await fetch(`/api/widget/search?${params}`, {
+          signal: controller.signal,
+          headers: getWidgetAuthHeaders(),
+        })
+        if (!res.ok) {
+          setSimilarPostResults({ posts: [] })
+          return
+        }
+        const json = await res.json()
+        const result: SearchResult = { posts: json.data?.posts ?? [] }
+        similarSearchCacheSet(sessionVersion, q, result)
+        setSimilarPostResults(result)
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        setSimilarPostResults({ posts: [] })
+      } finally {
+        setIsSimilarSearching(false)
+      }
+    }, 300)
+    return () => {
+      if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
+      controller.abort()
+    }
+  }, [value, sessionVersion])
+
+  return (
+    <AnimatePresence>
+      {!isSimilarSearching && similarPostResults && similarPostResults.posts.length > 0 && (
+        <m.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.15, ease: 'easeOut' }}
+          className="overflow-hidden"
+        >
+          <div className="px-3 pb-2">
+            <p className="text-[11px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
+              <LightBulbIcon className="w-3 h-3" />
+              <FormattedMessage id="widget.home.similar.heading" defaultMessage="Similar ideas" />
+            </p>
+            <div className="space-y-0.5">
+              {similarPostResults.posts.slice(0, 3).map((post) => (
+                <WidgetPostRow
+                  key={post.id}
+                  post={post}
+                  statusMap={statusMap}
+                  compact
+                  canVote={rowCanVote(post.board?.id)}
+                  ensureSessionThen={ensureSessionThen}
+                  noAccessReason={noAccessReason}
+                  onAuthRequired={() => onAuthRequired(post.id)}
+                  onSelect={() => onPostSelect?.(post.id)}
+                />
+              ))}
+            </div>
+          </div>
+        </m.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 // ── Main component ──
 
 export function WidgetHomeAnimated({
@@ -188,6 +444,9 @@ export function WidgetHomeAnimated({
   boards,
   boardPermissions,
   defaultBoard,
+  initialBoardSlug,
+  confirmedBoardSlugs,
+  composeRequest,
   onPostSelect,
   onPostCreated,
 }: WidgetHomeProps) {
@@ -200,28 +459,89 @@ export function WidgetHomeAnimated({
     user,
     emitEvent,
     metadata,
+    getSessionVersion,
+    sessionVersion,
   } = useWidgetAuth()
-  const { upload: uploadImage } = useWidgetImageUpload()
+  const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const [title, setTitle] = useState('')
+  const [title] = useState(createTitleStore)
+  // Submit waits for a title; this changes when the first character arrives
+  // or the last one goes, not with every keystroke.
+  const hasTitle = useStoreValue(title, (value) => value.trim() !== '')
   const [expanded, setExpanded] = useState(false)
-  const [selectedBoardId, setSelectedBoardId] = useState(() => {
-    if (defaultBoard) {
-      const match = boards.find((b) => b.slug === defaultBoard)
-      if (match) return match.id
-    }
-    // Single board: auto-select (selector is hidden anyway). Multiple boards with no
-    // default: leave empty so the user is prompted to pick one.
-    if (boards.length === 1) return boards[0].id
-    return ''
-  })
-  const [contentJson, setContentJson] = useState<JSONContent | null>(null)
-  const [contentHtml, setContentHtml] = useState('')
-  const handleEditorChange = useCallback((json: JSONContent, html: string) => {
-    setContentJson(json)
-    setContentHtml(html)
+  const [selectedBoardId, setSelectedBoardId] = useState(() =>
+    resolveComposeBoardId(boards, undefined, defaultBoard)
+  )
+  const composeBoardDirtyRef = useRef(false)
+  const handleComposeBoardChange = useCallback((id: string) => {
+    composeBoardDirtyRef.current = true
+    setSelectedBoardId(id)
   }, [])
+  // The details as written. Typing keeps them here rather than in state, so a
+  // keystroke never re-renders the composer around the editor; the post reads
+  // them (serialized once) when it is submitted. Only the open composer's
+  // editor writes them: a closing one is still on screen while it animates
+  // out. `editorContent` is what the editor is handed as its value, which only
+  // a host prefill sets.
+  const detailsRef = useRef<Pick<EditorDocument, 'json' | 'html'> | null>(null)
+  const [editorContent, setEditorContent] = useState<JSONContent | null>(null)
+  const expandedRef = useRef(expanded)
+  expandedRef.current = expanded
+  const handleEditorChange = useCallback((document: EditorDocument) => {
+    if (expandedRef.current) detailsRef.current = document
+  }, [])
+
+  // Host `open({ view: 'new-post' })` lands here. Nonce (not title/board) is
+  // the trigger so a second identical command still expands and reapplies.
+  useEffect(() => {
+    if (!composeRequest) return
+    composeBoardDirtyRef.current = false
+    setExpanded(true)
+    if (composeRequest.title) title.set(composeRequest.title)
+    if (composeRequest.body) {
+      const next = composeBodyFromPlainText(composeRequest.body)
+      detailsRef.current = { json: () => next.json, html: () => next.html }
+      setEditorContent(next.json)
+    }
+    setSelectedBoardId(resolveComposeBoardId(boards, composeRequest.boardSlug, defaultBoard))
+    inputRef.current?.focus({ preventScroll: true })
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- nonce is the command identity
+  }, [composeRequest?.nonce])
+
+  // Identify can grow the visitor-visible list (members-only slugs). Re-apply
+  // a requested slug only when it just appeared — not when the visitor already
+  // picked another board after open().
+  const visibleBoardSlugs = useMemo(() => new Set(boards.map((b) => b.slug)), [boards])
+  const prevVisibleBoardSlugsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const next = visibleBoardSlugs
+    const prev = prevVisibleBoardSlugsRef.current
+    prevVisibleBoardSlugsRef.current = next
+    const slug = composeRequest?.boardSlug
+    if (!shouldReapplyComposeBoard(slug, prev, next, composeBoardDirtyRef.current)) return
+    const match = boards.find((b) => b.slug === slug)
+    if (match) setSelectedBoardId(match.id)
+  }, [visibleBoardSlugs, boards, composeRequest?.boardSlug, composeRequest?.nonce])
+
+  // After identify/logout the live list is authoritative. Keep a stale
+  // members-only selection through the anonymous first paint (identify may
+  // grant it). Once this session's fetch lands, fill an empty selection or
+  // replace one the visitor can no longer see. Honour open({ board }) unless
+  // the visitor has since picked a board themselves.
+  useEffect(() => {
+    if (sessionVersion === INITIAL_SESSION_VERSION) return
+    if (!shouldResetComposeBoard(selectedBoardId, boards, confirmedBoardSlugs)) return
+    const requestedSlug = composeBoardDirtyRef.current ? undefined : composeRequest?.boardSlug
+    setSelectedBoardId(resolveComposeBoardId(boards, requestedSlug, defaultBoard))
+  }, [
+    sessionVersion,
+    selectedBoardId,
+    boards,
+    confirmedBoardSlugs,
+    defaultBoard,
+    composeRequest?.boardSlug,
+  ])
 
   // Per-board capability, server-computed for the request actor. The widget
   // route refetches boardPermissions with the Bearer identity (keyed on
@@ -244,10 +564,37 @@ export function WidgetHomeAnimated({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [similarPostResults, setSimilarPostResults] = useState<SearchResult | null>(null)
-  const [isSimilarSearching, setIsSimilarSearching] = useState(false)
-  const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
-  const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(null)
+  // The editor swallows onImageUpload rejections, so a failed session mint
+  // would otherwise look like the attach did nothing (GH #464). Other upload
+  // failures (type/size/server) keep their existing behaviour.
+  const handleUploadStart = useCallback(() => setError(null), [])
+  const handleUploadError = useCallback(
+    (err: Error) => {
+      if (!(err instanceof WidgetSessionError)) return
+      setError(
+        intl.formatMessage({
+          id: 'widget.home.form.errorSession',
+          defaultMessage: 'Could not create session. Please try again.',
+        })
+      )
+    },
+    [intl]
+  )
+  const { upload: uploadMedia } = useWidgetMediaUpload({
+    onStart: handleUploadStart,
+    onError: handleUploadError,
+  })
+
+  const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(
+    () => initialBoardSlug ?? null
+  )
+  // After identify/logout the live board list is authoritative. Keep the SDK
+  // `?board=` filter through the anonymous first paint (identify may grant it).
+  useEffect(() => {
+    if (sessionVersion === INITIAL_SESSION_VERSION) return
+    if (!shouldClearInvisibleBoardFilter(activeBoardSlug, confirmedBoardSlugs)) return
+    setActiveBoardSlug(null)
+  }, [sessionVersion, activeBoardSlug, confirmedBoardSlugs])
   const pills = usePillsScroll()
   const [popularSearch, setPopularSearch] = useState('')
   const [debouncedPopularSearch, setDebouncedPopularSearch] = useState('')
@@ -265,23 +612,26 @@ export function WidgetHomeAnimated({
     isFetchingNextPage,
     isFetching: isFetchingPosts,
   } = useInfiniteQuery({
-    queryKey: ['widget', 'posts', 'popular', 'top', activeBoardSlug ?? 'all'],
+    queryKey: widgetQueryKeys.popularPosts.list(activeBoardSlug, sessionVersion),
     queryFn: async ({ pageParam }) => {
-      const page = await listPublicPostsFn({
+      const page = await widgetListPublicPostsFn({
         data: {
           sort: 'top',
           page: pageParam,
           limit: 20,
           boardSlug: activeBoardSlug ?? undefined,
         },
+        headers: getWidgetAuthHeaders(),
       })
       return { ...page, items: page.items.map(toWidgetPost) }
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
-    // Only seed from SSR data on the initial unfiltered view
+    // Seed from SSR only on the anonymous first paint for the same board
+    // filter the loader used (`?board=` or All). Identify re-keys this
+    // query so members-only boards refetch with the Bearer actor.
     initialData:
-      activeBoardSlug === null
+      activeBoardSlug === (initialBoardSlug ?? null) && sessionVersion === INITIAL_SESSION_VERSION
         ? {
             pages: [{ items: initialPosts, total: undefined, hasMore: initialHasMore }],
             pageParams: [1],
@@ -301,17 +651,37 @@ export function WidgetHomeAnimated({
   })
 
   // Search query for popular ideas — replaces infinite list when active
-  const { data: popularSearchData, isFetching: isPopularSearchFetching } = useQuery({
-    queryKey: ['widget', 'search', 'popular', debouncedPopularSearch, activeBoardSlug ?? 'all'],
+  const {
+    data: popularSearchData,
+    isFetching: isPopularSearchFetching,
+    isPlaceholderData: isPopularSearchStale,
+  } = useQuery({
+    queryKey: widgetQueryKeys.popularSearch.query(
+      debouncedPopularSearch,
+      activeBoardSlug,
+      sessionVersion
+    ),
     queryFn: async () => {
       const params = new URLSearchParams({ q: debouncedPopularSearch, limit: '20' })
       if (activeBoardSlug) params.set('board', activeBoardSlug)
-      const res = await fetch(`/api/widget/search?${params}`)
+      const res = await fetch(`/api/widget/search?${params}`, {
+        headers: getWidgetAuthHeaders(),
+      })
       const json = await res.json()
       return { posts: (json.data?.posts ?? []) as WidgetPost[] }
     },
     enabled: debouncedPopularSearch.length > 0,
+    // Refining a query keeps the previous hits on screen (dimmed) instead of
+    // blinking the list empty between keystrokes. Drop them when the session
+    // changes so a later identity never sees the previous visitor's titles.
+    placeholderData: (prev, prevQuery) =>
+      widgetQueryKeySameSession(prevQuery?.queryKey, sessionVersion) ? prev : undefined,
   })
+  // Typed-but-unsettled (debounce window), or fetching, or showing hits that
+  // belong to the previous query.
+  const popularSearchPending =
+    isPopularSearchFetching || isPopularSearchStale || popularSearch !== debouncedPopularSearch
+  const popularSearchPosts = popularSearchData?.posts ?? []
 
   const handleAuthRequired = useCallback(
     (postId: string) => {
@@ -334,43 +704,6 @@ export function WidgetHomeAnimated({
       })
     : undefined
 
-  useEffect(() => {
-    if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
-    const q = title.trim()
-    if (!q) {
-      setSimilarPostResults(null)
-      setIsSimilarSearching(false)
-      return
-    }
-    const cached = similarSearchCache.get(q)
-    if (cached) {
-      setSimilarPostResults(cached)
-      setIsSimilarSearching(false)
-      return
-    }
-    setIsSimilarSearching(true)
-    const controller = new AbortController()
-    similarDebounceRef.current = setTimeout(async () => {
-      try {
-        const params = new URLSearchParams({ q, limit: '5' })
-        const res = await fetch(`/api/widget/search?${params}`, { signal: controller.signal })
-        const json = await res.json()
-        const result: SearchResult = { posts: json.data?.posts ?? [] }
-        similarSearchCache.set(q, result)
-        setSimilarPostResults(result)
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return
-        setSimilarPostResults({ posts: [] })
-      } finally {
-        setIsSimilarSearching(false)
-      }
-    }, 300)
-    return () => {
-      if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
-      controller.abort()
-    }
-  }, [title])
-
   // Debounce popular ideas search
   useEffect(() => {
     if (popularSearchDebounceRef.current) clearTimeout(popularSearchDebounceRef.current)
@@ -392,15 +725,16 @@ export function WidgetHomeAnimated({
 
   function collapseForm() {
     setExpanded(false)
-    setTitle('')
-    setContentJson(null)
-    setContentHtml('')
+    title.set('')
+    detailsRef.current = null
+    setEditorContent(null)
     setError(null)
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!title.trim() || !selectedBoardId || isSubmitting) return
+    const typedTitle = title.get()
+    if (!typedTitle.trim() || !selectedBoardId || isSubmitting) return
 
     setIsSubmitting(true)
     setError(null)
@@ -442,19 +776,25 @@ export function WidgetHomeAnimated({
         }
       }
 
-      const [{ getWidgetAuthHeaders }, { createPublicPostFn }] = await Promise.all([
+      const [{ getWidgetAuthHeaders }, { widgetCreatePublicPostFn }] = await Promise.all([
         import('@/lib/client/widget-auth'),
-        import('@/lib/server/functions/public-posts'),
+        import('@/lib/server/functions/widget/posts'),
       ])
-      const result = await createPublicPostFn({
+      // Headers and session version are captured together: the vote the
+      // server casts belongs to whichever principal made this request, even
+      // if the host identifies or clears the visitor while it is in flight.
+      const headers = getWidgetAuthHeaders()
+      const votedPostsKey = widgetQueryKeys.votedPosts.bySession(getSessionVersion())
+      const details = detailsRef.current
+      const result = await widgetCreatePublicPostFn({
         data: {
           boardId: selectedBoardId,
-          title: title.trim(),
-          content: contentHtml.trim(),
-          contentJson: (contentJson ?? undefined) as TiptapContent | undefined,
+          title: typedTitle.trim(),
+          content: (details?.html() ?? '').trim(),
+          contentJson: details?.json() as TiptapContent | undefined,
           metadata: metadata ?? undefined,
         },
-        headers: getWidgetAuthHeaders(),
+        headers,
       })
 
       emitEvent('post:created', {
@@ -464,10 +804,24 @@ export function WidgetHomeAnimated({
         statusId: result.statusId ?? null,
       })
 
+      // The server auto-upvotes the author; reflect that immediately so the
+      // success card shows a cast vote instead of an inviting empty 0 — a
+      // click on that would silently remove the server's vote. The seed is
+      // written explicitly (when this submit minted the first session there
+      // are no rows yet, so no query for the key exists to update) and then
+      // invalidated: the refetch replaces it with the server's complete set,
+      // so a visitor whose earlier votes were not cached yet does not see
+      // them vanish for the stale window, and a fetch that started before
+      // the post existed is cancelled rather than landing over the seed.
+      queryClient.setQueryData<Set<string>>(
+        votedPostsKey,
+        (old) => new Set([...(old ?? []), result.id])
+      )
+      void queryClient.invalidateQueries({ queryKey: votedPostsKey })
       onPostCreated?.({
         id: result.id,
         title: result.title,
-        voteCount: 0,
+        voteCount: Math.max(result.voteCount ?? 0, 1),
         statusId: result.statusId ?? null,
         board: result.board,
       })
@@ -485,13 +839,13 @@ export function WidgetHomeAnimated({
     }
   }
 
-  const canSubmitForm = title.trim() && selectedBoardId && canPost
+  const canSubmitForm = hasTitle && selectedBoardId && canPost
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
         <div className="w-full px-3 pt-2 pb-3">
-          <motion.div
+          <m.div
             className="rounded-lg border border-border bg-card overflow-hidden"
             initial={false}
             animate={{
@@ -502,8 +856,8 @@ export function WidgetHomeAnimated({
             transition={{ duration: 0.2 }}
           >
             <AnimatePresence>
-              {expanded && boards.length > 1 && (
-                <motion.div
+              {expanded && boards.length > 0 && (
+                <m.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
@@ -517,10 +871,10 @@ export function WidgetHomeAnimated({
                         defaultMessage="Posting to"
                       />
                     </span>
-                    <Select value={selectedBoardId} onValueChange={setSelectedBoardId}>
+                    <Select value={selectedBoardId} onValueChange={handleComposeBoardChange}>
                       <SelectTrigger
                         size="xs"
-                        className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
+                        className="border-0 font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
                       >
                         <SelectValue
                           placeholder={intl.formatMessage({
@@ -531,21 +885,21 @@ export function WidgetHomeAnimated({
                       </SelectTrigger>
                       <SelectContent align="start">
                         {boards.map((b) => (
-                          <SelectItem key={b.id} value={b.id} className="py-1">
+                          <SelectItem key={b.id} value={b.id}>
                             {b.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
 
             <div className="flex items-center gap-2.5 px-3 py-2.5">
               <AnimatePresence>
                 {!expanded && (
-                  <motion.div
+                  <m.div
                     initial={false}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8, width: 0, marginRight: -10 }}
@@ -553,121 +907,80 @@ export function WidgetHomeAnimated({
                     className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center"
                   >
                     <PencilIcon className="w-3.5 h-3.5 text-primary" />
-                  </motion.div>
+                  </m.div>
                 )}
               </AnimatePresence>
 
-              <motion.input
-                ref={inputRef}
-                type="text"
-                placeholder={intl.formatMessage({
-                  id: 'widget.home.input.placeholder',
-                  defaultMessage: "What's your idea?",
-                })}
-                value={title}
-                aria-label={intl.formatMessage({
-                  id: 'widget.home.input.label',
-                  defaultMessage: 'Feedback title',
-                })}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setTitle(val)
+              <TitleInput
+                title={title}
+                inputRef={inputRef}
+                expanded={expanded}
+                onType={(val) => {
                   if (val && !expanded) setExpanded(true)
-                  if (!val && expanded && !contentHtml.trim()) setExpanded(false)
+                  if (!val && expanded && !detailsRef.current?.html().trim()) setExpanded(false)
                 }}
                 onFocus={() => {
-                  if (title && !expanded) setExpanded(true)
+                  if (title.get() && !expanded) setExpanded(true)
                 }}
-                className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary focus-visible:ring-2 focus-visible:ring-ring/50"
-                initial={false}
-                animate={{
-                  fontSize: expanded ? '1rem' : '0.875rem',
-                  fontWeight: expanded ? 600 : 400,
-                }}
-                transition={{ duration: 0.2 }}
               />
             </div>
 
             <AnimatePresence>
               {expanded && (
-                <motion.div
+                <m.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
                   className="overflow-hidden"
                 >
-                  <motion.div
+                  <m.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.2, delay: 0.1 }}
                     className="px-3 pb-2"
                   >
-                    <RichTextEditor
-                      value={contentJson || ''}
-                      onChange={handleEditorChange}
-                      placeholder={intl.formatMessage({
-                        id: 'widget.home.input.details',
-                        defaultMessage: 'Add more details...',
-                      })}
-                      minHeight="80px"
-                      borderless
-                      features={{
-                        headings: true,
-                        codeBlocks: true,
-                        taskLists: true,
-                        blockquotes: true,
-                        dividers: true,
-                        tables: true,
-                        images: true,
-                        embeds: true,
-                        quackbackEmbeds: true,
-                        bubbleMenu: true,
-                        slashMenu: true,
-                      }}
-                      onImageUpload={uploadImage}
-                      className="text-sm"
-                    />
-                  </motion.div>
+                    <Suspense fallback={<RichTextEditorPlaceholder minHeight="80px" />}>
+                      <LazyRichTextEditor
+                        value={editorContent || ''}
+                        onDocumentChange={handleEditorChange}
+                        placeholder={intl.formatMessage({
+                          id: 'widget.home.input.details',
+                          defaultMessage: 'Add more details...',
+                        })}
+                        minHeight="80px"
+                        borderless
+                        features={{
+                          headings: true,
+                          codeBlocks: true,
+                          taskLists: true,
+                          blockquotes: true,
+                          dividers: true,
+                          tables: true,
+                          images: true,
+                          videos: true,
+                          embeds: true,
+                          quackbackEmbeds: true,
+                          bubbleMenu: true,
+                          slashMenu: true,
+                        }}
+                        onImageUpload={uploadMedia}
+                        onVideoUpload={uploadMedia}
+                        className="text-sm"
+                      />
+                    </Suspense>
+                  </m.div>
 
-                  <AnimatePresence>
-                    {!isSimilarSearching &&
-                      similarPostResults &&
-                      similarPostResults.posts.length > 0 && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.15, ease: 'easeOut' }}
-                          className="overflow-hidden"
-                        >
-                          <div className="px-3 pb-2">
-                            <p className="text-[11px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
-                              <LightBulbIcon className="w-3 h-3" />
-                              <FormattedMessage
-                                id="widget.home.similar.heading"
-                                defaultMessage="Similar ideas"
-                              />
-                            </p>
-                            <div className="space-y-0.5">
-                              {similarPostResults.posts.slice(0, 3).map((post) => (
-                                <WidgetPostRow
-                                  key={post.id}
-                                  post={post}
-                                  statusMap={statusMap}
-                                  compact
-                                  canVote={rowCanVote(post.board?.id)}
-                                  ensureSessionThen={ensureSessionThen}
-                                  noAccessReason={voteNoAccessReason}
-                                  onAuthRequired={() => handleAuthRequired(post.id)}
-                                  onSelect={() => onPostSelect?.(post.id)}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        </motion.div>
-                      )}
-                  </AnimatePresence>
+                  <SimilarIdeas
+                    title={title}
+                    sessionVersion={sessionVersion}
+                    statusMap={statusMap}
+                    rowCanVote={rowCanVote}
+                    ensureSessionThen={ensureSessionThen}
+                    noAccessReason={voteNoAccessReason}
+                    onAuthRequired={handleAuthRequired}
+                    onPostSelect={onPostSelect}
+                  />
 
                   {error && (
                     <div className="px-3 pb-2">
@@ -677,7 +990,7 @@ export function WidgetHomeAnimated({
                     </div>
                   )}
 
-                  <motion.div
+                  <m.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.2, delay: 0.15 }}
@@ -690,6 +1003,13 @@ export function WidgetHomeAnimated({
                             id="widget.home.posting.noAccess"
                             defaultMessage="You don't have access to post on this board"
                           />
+                        ) : boards.length > 0 && !selectedBoardId ? (
+                          // Submit is disabled until a board is picked; say so
+                          // rather than leaving a dead button unexplained.
+                          <FormattedMessage
+                            id="widget.home.posting.chooseBoard"
+                            defaultMessage="Choose a board to post"
+                          />
                         ) : user ? (
                           <FormattedMessage
                             id="widget.home.posting.postingAs"
@@ -697,7 +1017,7 @@ export function WidgetHomeAnimated({
                             values={{
                               name: (
                                 <span className="font-medium text-foreground">
-                                  {user.name || user.email}
+                                  {shownName(user.name, user.email)}
                                 </span>
                               ),
                             }}
@@ -741,11 +1061,11 @@ export function WidgetHomeAnimated({
                         </button>
                       </div>
                     </div>
-                  </motion.div>
-                </motion.div>
+                  </m.div>
+                </m.div>
               )}
             </AnimatePresence>
-          </motion.div>
+          </m.div>
 
           {/* Popular ideas */}
           <div className="mt-2">
@@ -760,6 +1080,13 @@ export function WidgetHomeAnimated({
                     onChange={(e) => setPopularSearch(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') e.preventDefault()
+                      if (e.key === 'Escape') {
+                        // Own the first Escape (the shell closes the widget on
+                        // an unhandled one): clear or close the search instead.
+                        e.preventDefault()
+                        if (popularSearch) setPopularSearch('')
+                        else setPopularSearchOpen(false)
+                      }
                     }}
                     placeholder={intl.formatMessage({
                       id: 'widget.home.popular.search.placeholder',
@@ -769,7 +1096,7 @@ export function WidgetHomeAnimated({
                       id: 'widget.home.popular.search.label',
                       defaultMessage: 'Search popular ideas',
                     })}
-                    className="flex-1 min-w-0 h-5 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    className="flex-1 min-w-0 h-5 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none"
                   />
                   <button
                     type="button"
@@ -794,7 +1121,7 @@ export function WidgetHomeAnimated({
                   <button
                     type="button"
                     onClick={() => setPopularSearchOpen(true)}
-                    className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                    className="flex size-6 items-center justify-center rounded-md text-muted-foreground/70 hover:bg-muted/50 hover:text-foreground transition-colors"
                     aria-label={intl.formatMessage({
                       id: 'widget.home.popular.search.aria',
                       defaultMessage: 'Search ideas',
@@ -812,6 +1139,20 @@ export function WidgetHomeAnimated({
                   ref={pills.ref}
                   className="flex gap-1 overflow-x-auto scrollbar-none px-1 pb-0.5"
                 >
+                  {/* Explicit "All" (matching the changelog filter) — re-tapping
+                      the active board to clear it was undiscoverable. */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveBoardSlug(null)}
+                    aria-pressed={activeBoardSlug === null}
+                    className={`rounded-full text-xs px-2 py-0.5 whitespace-nowrap transition-colors shrink-0 ${
+                      activeBoardSlug === null
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <FormattedMessage id="widget.home.boards.all" defaultMessage="All" />
+                  </button>
                   {boards.map((board) => (
                     <button
                       key={board.id}
@@ -819,6 +1160,7 @@ export function WidgetHomeAnimated({
                       onClick={() =>
                         setActiveBoardSlug(activeBoardSlug === board.slug ? null : board.slug)
                       }
+                      aria-pressed={activeBoardSlug === board.slug}
                       className={`rounded-full text-xs px-2 py-0.5 whitespace-nowrap transition-colors shrink-0 ${
                         activeBoardSlug === board.slug
                           ? 'bg-primary text-primary-foreground'
@@ -860,71 +1202,61 @@ export function WidgetHomeAnimated({
 
             {debouncedPopularSearch.length > 0 && (
               <>
-                {(isPopularSearchFetching || popularSearch !== debouncedPopularSearch) && (
-                  <div className="flex justify-center py-4">
-                    <span className="text-xs text-muted-foreground/50">
+                {popularSearchPending && popularSearchPosts.length === 0 && (
+                  <WidgetPostListSkeleton count={4} />
+                )}
+                {!popularSearchPending && popularSearchPosts.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-8 text-center animate-in fade-in duration-200 motion-reduce:animate-none">
+                    <MagnifyingGlassIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                    <p className="text-sm font-medium text-muted-foreground/70">
                       <FormattedMessage
-                        id="widget.home.popular.search.searching"
-                        defaultMessage="Searching..."
+                        id="widget.home.popular.search.noResults"
+                        defaultMessage="No ideas found"
                       />
-                    </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground/50 mt-0.5">
+                      <FormattedMessage
+                        id="widget.home.popular.search.noResultsHint"
+                        defaultMessage="Try a different search term"
+                      />
+                    </p>
                   </div>
                 )}
-                {!isPopularSearchFetching &&
-                  popularSearch === debouncedPopularSearch &&
-                  (popularSearchData?.posts.length ?? 0) === 0 && (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <MagnifyingGlassIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                      <p className="text-sm font-medium text-muted-foreground/70">
-                        <FormattedMessage
-                          id="widget.home.popular.search.noResults"
-                          defaultMessage="No ideas found"
-                        />
-                      </p>
-                      <p className="text-xs text-muted-foreground/50 mt-0.5">
-                        <FormattedMessage
-                          id="widget.home.popular.search.noResultsHint"
-                          defaultMessage="Try a different search term"
-                        />
-                      </p>
-                    </div>
-                  )}
-                {!isPopularSearchFetching &&
-                  popularSearch === debouncedPopularSearch &&
-                  (popularSearchData?.posts.length ?? 0) > 0 && (
-                    <div className="space-y-0.5">
-                      {popularSearchData!.posts.map((post) => (
-                        <WidgetPostRow
-                          key={post.id}
-                          post={post}
-                          statusMap={statusMap}
-                          showBoard
-                          canVote={rowCanVote(post.board?.id)}
-                          ensureSessionThen={ensureSessionThen}
-                          noAccessReason={voteNoAccessReason}
-                          onAuthRequired={() => handleAuthRequired(post.id)}
-                          onSelect={() => onPostSelect?.(post.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
+                {popularSearchPosts.length > 0 && (
+                  <div
+                    className={cn(
+                      'space-y-0.5 transition-opacity duration-200',
+                      popularSearchPending && 'opacity-50'
+                    )}
+                    aria-busy={popularSearchPending || undefined}
+                  >
+                    {popularSearchPosts.map((post) => (
+                      <WidgetPostRow
+                        key={post.id}
+                        post={post}
+                        statusMap={statusMap}
+                        showBoard
+                        canVote={rowCanVote(post.board?.id)}
+                        ensureSessionThen={ensureSessionThen}
+                        noAccessReason={voteNoAccessReason}
+                        onAuthRequired={() => handleAuthRequired(post.id)}
+                        onSelect={() => onPostSelect?.(post.id)}
+                      />
+                    ))}
+                  </div>
+                )}
               </>
             )}
 
             {debouncedPopularSearch.length === 0 && (
               <>
+                {/* Board-pill switch: the list re-keys, so there is nothing to
+                    keep on screen — rows-shaped skeleton until page 1 lands. */}
                 {isFetchingPosts && !isFetchingNextPage && allPopularPosts.length === 0 && (
-                  <div className="flex justify-center py-4">
-                    <span className="text-xs text-muted-foreground/50">
-                      <FormattedMessage
-                        id="widget.home.popular.loading"
-                        defaultMessage="Loading..."
-                      />
-                    </span>
-                  </div>
+                  <WidgetPostListSkeleton />
                 )}
                 {!isFetchingPosts && allPopularPosts.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="flex flex-col items-center justify-center py-8 text-center animate-in fade-in duration-200 motion-reduce:animate-none">
                     <LightBulbIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
                     <p className="text-sm font-medium text-muted-foreground/70">
                       {activeBoardSlug ? (
@@ -965,14 +1297,9 @@ export function WidgetHomeAnimated({
                       />
                     ))}
                     {hasNextPage && (
-                      <div ref={postsSentinelRef} className="flex justify-center py-2">
+                      <div ref={postsSentinelRef} className="min-h-4">
                         {isFetchingNextPage && (
-                          <span className="text-xs text-muted-foreground/50">
-                            <FormattedMessage
-                              id="widget.home.popular.loading"
-                              defaultMessage="Loading..."
-                            />
-                          </span>
+                          <WidgetPostListSkeleton count={3} fade className="pb-1" />
                         )}
                       </div>
                     )}

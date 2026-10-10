@@ -32,6 +32,7 @@ vi.mock('@/lib/server/config', () => ({
 const realtime = vi.hoisted(() => ({
   publishTicketEvent: vi.fn(),
   publishConversationEvent: vi.fn(),
+  publishConversationMessage: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
   publishTyping: vi.fn(),
@@ -58,10 +59,15 @@ import {
   principal,
   user,
   settings,
+  events,
   eq,
   and,
   isNull,
+  sql,
 } from '@/lib/server/db'
+import { runEventReactions } from '@/lib/server/events/event-reactions-queue'
+import { createSlaPolicy } from '@/lib/server/domains/sla/sla-policy.service'
+import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import {
   appendInboundTicketReply,
@@ -169,6 +175,32 @@ async function seedTicket(input: {
 async function readTicketRow(id: TicketId) {
   const [row] = await testDb.select().from(tickets).where(eq(tickets.id, id)).limit(1)
   return row
+}
+
+/** Run the event-reactions jobs queued for a ticket's events, as the job worker would. */
+async function runTicketReactionJobs(ticketId: TicketId): Promise<number> {
+  const result = await testDb.execute(sql`
+    SELECT j.job_id, j.payload FROM job_queue j
+    JOIN ${events} e ON e.event_id = j.payload->>'eventId'
+    WHERE j.queue = 'event-reactions' AND e.entity_id = ${ticketId}
+  `)
+  const jobs = getExecuteRows<{ job_id: string; payload: Record<string, unknown> }>(result)
+  for (const job of jobs) {
+    await runEventReactions({
+      id: '1',
+      jobId: job.job_id,
+      queue: 'event-reactions',
+      dedupeKey: null,
+      payload: job.payload,
+      workspaceKey: null,
+      attempts: 1,
+      maxAttempts: 5,
+      leaseToken: 'test',
+      lockedUntil: new Date(),
+      runAt: new Date(),
+    })
+  }
+  return jobs.length
 }
 
 /** The category of the ticket's current status (the reopen may land on any of
@@ -309,10 +341,23 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
       contentJson,
       attachments,
     })
-    expect(message.attachments).toHaveLength(1)
-    const images = (message.contentJson?.content ?? []).filter((n) => n.type === 'resizableImage')
-    // External host neutralized; own-storage src kept (visitor images are
-    // trusted-origin only).
+    // Read-time lift moves the surviving own-storage image onto attachments.
+    expect(message.attachments).toHaveLength(2)
+    expect(message.attachments.map((a) => a.url)).toEqual([
+      '/api/storage/chat-images/screenshot.png',
+      '/api/storage/portal-images/mine.png',
+    ])
+    expect((message.contentJson?.content ?? []).some((n) => n.type === 'resizableImage')).toBe(
+      false
+    )
+
+    const [row] = await testDb
+      .select({ contentJson: conversationMessages.contentJson })
+      .from(conversationMessages)
+      .where(eq(conversationMessages.id, message.id))
+    const images = (row?.contentJson?.content ?? []).filter((n) => n.type === 'resizableImage')
+    // Stored row still has both nodes: external host neutralized, own-storage
+    // src kept (visitor images are trusted-origin only). No DB rewrite.
     expect(images[0]?.attrs?.src).toBe('')
     expect(images[1]?.attrs?.src).toBe('/api/storage/portal-images/mine.png')
   })
@@ -325,6 +370,12 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     // Paused 2h ago with 1h of resolve clock left at the pause.
     const pausedAt = new Date(Date.now() - 2 * 3_600_000)
     const dueAt = new Date(Date.now() - 3_600_000)
+    // The resume logs a clock event against the policy, so it must exist.
+    const policy = await createSlaPolicy({
+      name: 'VIP',
+      timeToResolveTargetSecs: 3_600,
+      pauseOnPending: true,
+    })
     await testDb.insert(tickets).values({
       id: ticketId,
       title: 'T',
@@ -332,7 +383,7 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
       type: 'customer',
       requesterPrincipalId: me,
       slaApplied: {
-        policyId: 'sla_policy_x',
+        policyId: policy.id,
         policyName: 'VIP',
         appliedAt: pausedAt.toISOString(),
         timeToResolveDueAt: dueAt.toISOString(),
@@ -343,19 +394,16 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     await appendInboundTicketReply(ticketId, me, { content: 'here is the info' })
     expect(await currentStatusCategory(ticketId)).toBe('open')
     // The reopen emits ticket.status_changed like any other status move, so
-    // the resume rides that event's SLA hook (fire-and-forget through the
-    // dispatch pipeline): pausedAt cleared, deadline shifted by the paused span.
-    await vi.waitFor(
-      async () => {
-        const stamp = (await readTicketRow(ticketId)).slaApplied as { pausedAt?: string | null }
-        expect(stamp.pausedAt ?? null).toBeNull()
-      },
-      { timeout: 5000 }
-    )
+    // the resume rides that event's SLA reaction, queued as an event-reactions
+    // job: pausedAt cleared, deadline shifted by the paused span.
+    await vi.waitFor(async () => expect(await runTicketReactionJobs(ticketId)).toBe(1), {
+      timeout: 5000,
+    })
     const stamp = (await readTicketRow(ticketId)).slaApplied as {
       pausedAt?: string | null
       timeToResolveDueAt: string
     }
+    expect(stamp.pausedAt ?? null).toBeNull()
     const expected = dueAt.getTime() + (Date.now() - pausedAt.getTime())
     expect(Math.abs(new Date(stamp.timeToResolveDueAt).getTime() - expected)).toBeLessThan(60_000)
   })

@@ -1,8 +1,12 @@
-import { CUSTOM_ATTR_PREFIX, COMPANY_ATTR_PREFIX } from '@/components/admin/segments/segment-form'
 import type { RuleCondition } from '@/components/admin/segments/segment-form'
 import type { UserAttributeItem } from '@/lib/client/hooks/use-user-attributes-queries'
 import type { CompanyAttributeItem } from '@/lib/client/hooks/use-company-attributes-queries'
 import type { SegmentCondition } from '@/lib/shared/db-types'
+
+// Here rather than in the segment form, so the users page can read and write
+// rules without loading the form itself.
+export const CUSTOM_ATTR_PREFIX = '__custom__'
+export const COMPANY_ATTR_PREFIX = '__company_attr__'
 
 export const SEGMENT_COLORS = [
   '#6366f1',

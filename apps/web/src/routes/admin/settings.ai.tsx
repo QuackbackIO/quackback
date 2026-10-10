@@ -1,8 +1,9 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
+import { redirectMoved } from '@/lib/shared/moved-route'
+import { adminPageHead } from '@/lib/client/admin-head'
 
-/** Retired path: AI & Automation lives at /admin/automation. */
+/** Retired path: this page lives under Settings. */
 export const Route = createFileRoute('/admin/settings/ai')({
-  beforeLoad: () => {
-    throw redirect({ to: '/admin/automation/agent', replace: true })
-  },
+  head: adminPageHead('AI settings'),
+  beforeLoad: ({ location }) => redirectMoved('/admin/settings/agent', location),
 })

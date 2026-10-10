@@ -3,9 +3,18 @@
 import { useEffect } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { SettingsNav } from '@/components/admin/settings/settings-nav'
-import { PageHeader } from '@/components/shared/page-header'
-import { Cog6ToothIcon } from '@heroicons/react/24/solid'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
+import {
+  useBillingEnabled,
+  useCloudEnabled,
+  useFeatureFlags,
+} from '@/lib/client/hooks/use-root-context'
+import { usePermissions } from '@/lib/client/use-permissions'
+import {
+  buildNavSections,
+  firstSettingsPath,
+} from '@/components/admin/settings/settings-nav-sections'
 
 export const Route = createFileRoute('/admin/settings/')({
   component: SettingsIndexPage,
@@ -14,18 +23,28 @@ export const Route = createFileRoute('/admin/settings/')({
 function SettingsIndexPage() {
   const navigate = useNavigate()
   const isDesktop = useMediaQuery('(min-width: 1024px)')
+  const flags = useFeatureFlags()
+  const billingEnabled = useBillingEnabled()
+  const cloudEnabled = useCloudEnabled()
+  const permissions = usePermissions()
 
-  // On desktop, redirect to General since the sidebar handles navigation
+  // On desktop the sidebar handles navigation, so open the first page this
+  // viewer may open (General for anyone who holds settings.manage).
   useEffect(() => {
     if (isDesktop) {
-      navigate({ to: '/admin/settings/general', replace: true })
+      const to = firstSettingsPath(
+        buildNavSections(flags, billingEnabled, cloudEnabled),
+        permissions
+      )
+      navigate({ to, replace: true })
     }
-  }, [isDesktop, navigate])
+  }, [isDesktop, navigate, flags, billingEnabled, cloudEnabled, permissions])
 
   return (
     <div className="lg:hidden">
-      <PageHeader icon={Cog6ToothIcon} title="Settings" className="mb-6" />
-      <SettingsNav />
+      <SettingsPage title="Settings" backLink={false}>
+        <SettingsNav />
+      </SettingsPage>
     </div>
   )
 }

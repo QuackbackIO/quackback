@@ -4,10 +4,10 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/components/admin/upgrade', () => ({
-  UpgradeNotice: () => <p>Custom domains are a Growth feature. Upgrade to Growth to enable it.</p>,
+  UpgradeNotice: () => <p>Custom domains are a Pro feature. Upgrade to Pro to enable it.</p>,
 }))
 
-const { DomainsCard, QuackbackUrlCard } = await import('../settings.domains')
+const { DomainsCard, QuackbackUrlCard } = await import('@/components/admin/settings/domains-cards')
 
 const PENDING = {
   hostname: 'feedback.acme.test',
@@ -34,7 +34,7 @@ describe('domains card', () => {
         onRemove={vi.fn()}
       />
     )
-    expect(screen.getByText(/Custom domains are a Growth feature/)).toBeInTheDocument()
+    expect(screen.getByText(/Custom domains are a Pro feature/)).toBeInTheDocument()
     expect(screen.queryByLabelText('Hostname')).not.toBeInTheDocument()
   })
 

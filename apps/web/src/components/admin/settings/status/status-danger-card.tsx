@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useClearStatusHistory } from '@/lib/client/mutations/status'
@@ -27,30 +28,25 @@ export function StatusDangerCard() {
   }
 
   return (
-    <SettingsCard title="Danger zone" description="These actions can't be undone." variant="danger">
-      <div className="flex items-center justify-between gap-4 py-1">
-        <div className="pr-4">
-          <div className="text-sm font-medium">Clear incident history</div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Deletes all resolved incidents, updates, and uptime history. Components stay.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-destructive border-destructive/30"
-          onClick={() => setConfirmOpen(true)}
-        >
-          Clear history
-        </Button>
-      </div>
+    <SettingsCard title="Danger zone" variant="danger">
+      <SettingRows>
+        <SettingRow
+          label="Clear incident history"
+          description="Deletes resolved incidents, their updates and uptime history"
+          control={
+            <Button variant="outline-destructive" size="sm" onClick={() => setConfirmOpen(true)}>
+              Clear history
+            </Button>
+          }
+        />
+      </SettingRows>
 
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title="Clear incident history?"
+        title="Delete incident history?"
         description="This permanently deletes every resolved incident, its updates, and all uptime history. Your components and any open incident are kept. This cannot be undone."
-        confirmLabel="Clear history"
+        confirmLabel="Delete incident history"
         variant="destructive"
         isPending={clearHistory.isPending}
         onConfirm={handleConfirm}

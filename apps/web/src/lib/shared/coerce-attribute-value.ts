@@ -14,6 +14,11 @@ export function coerceAttributeValue(value: unknown, type: UserAttributeType): u
   if (value === null || value === undefined) return undefined
   switch (type) {
     case 'string':
+      // Join arrays to text (`String(['a','b'])` → `a,b`). An array of
+      // objects would stringify as `[object Object]`; refuse that.
+      if (Array.isArray(value) && value.some((v) => v !== null && typeof v === 'object')) {
+        return undefined
+      }
       return String(value)
     case 'number':
     case 'currency': {

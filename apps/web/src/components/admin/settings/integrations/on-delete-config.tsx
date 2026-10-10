@@ -1,6 +1,6 @@
 'use client'
 
-import { Label } from '@/components/ui/label'
+import { SettingRow } from '@/components/admin/settings/setting-row'
 import { Switch } from '@/components/ui/switch'
 import { useUpdateIntegration } from '@/lib/client/mutations'
 import {
@@ -38,25 +38,22 @@ export function OnDeleteConfig({
 
   return (
     <div className="space-y-2 border-t border-border/50 pt-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Label htmlFor="on-delete-toggle" className="text-base font-medium">
-            On post delete
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            {action} linked issues when a post is deleted
-          </p>
-        </div>
-        <Switch
-          id="on-delete-toggle"
-          checked={isChecked}
-          onCheckedChange={handleToggle}
-          disabled={saving || !enabled}
-        />
-      </div>
+      <SettingRow
+        label="On post delete"
+        htmlFor="on-delete-toggle"
+        description="Review linked issues when a post is deleted"
+        control={
+          <Switch
+            id="on-delete-toggle"
+            checked={isChecked}
+            onCheckedChange={handleToggle}
+            disabled={saving || !enabled}
+          />
+        }
+      />
       <p className="text-xs text-muted-foreground">
-        When enabled, the delete confirmation dialog will pre-check the option to{' '}
-        {action.toLowerCase()} linked {name} issues.
+        When enabled, the delete dialog selects linked {name} issues for review in Sync history.
+        Open each issue on {name} to {action.toLowerCase()} it.
       </p>
     </div>
   )

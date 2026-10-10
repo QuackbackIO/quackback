@@ -31,37 +31,64 @@ type ThemeColorBase = Omit<
 >
 
 /**
- * Palette used for any variable a theme leaves out. These are the values
- * globals.css already ships as the un-branded defaults, so filling a gap emits
+ * Palette used for any variable a theme leaves out. globals.css
+ * ships these same values as the un-branded defaults, so filling a gap emits
  * the value the page would otherwise have inherited. The `default` preset is
  * built from these same constants, which keeps the two from drifting apart.
  */
 export const DEFAULT_LIGHT_BASE: ThemeColorBase = {
   primary: 'oklch(0.886 0.176 86)',
-  background: 'oklch(1 0 0)',
-  foreground: 'oklch(0.145 0 0)',
-  card: 'oklch(1 0 0)',
-  muted: 'oklch(0.97 0 0)',
-  mutedForeground: 'oklch(0.556 0 0)',
-  border: 'oklch(0.922 0 0)',
+  background: '#ffffff',
+  foreground: '#0a0a0a',
+  card: '#ffffff',
+  muted: '#f5f5f5',
+  mutedForeground: '#525252',
+  border: '#d4d4d4',
   destructive: 'oklch(0.577 0.245 27)',
-  success: 'oklch(0.696 0.149 163)',
+  success: 'oklch(0.49 0.115 165.6)',
 }
 
 export const DEFAULT_DARK_BASE: ThemeColorBase = {
   primary: 'oklch(0.886 0.176 86)',
-  background: 'oklch(0.145 0 0)',
-  foreground: 'oklch(0.985 0 0)',
-  card: 'oklch(0.17 0 0)',
-  muted: 'oklch(0.269 0 0)',
-  mutedForeground: 'oklch(0.708 0 0)',
-  border: 'oklch(0.269 0 0)',
-  destructive: 'oklch(0.396 0.141 25)',
+  background: '#0a0a0a',
+  foreground: '#fafafa',
+  card: '#0f0f0f',
+  muted: '#222222',
+  mutedForeground: '#a1a1a1',
+  border: '#262626',
+  destructive: 'oklch(0.70 0.19 25)',
   success: 'oklch(0.696 0.149 163)',
 }
 
+/**
+ * The font an unbranded page renders in: globals.css's --font-sans, led by the
+ * Inter it self-hosts (@fontsource-variable/inter names it "Inter Variable").
+ */
+export const DEFAULT_FONT_SANS = '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif'
+
+/** The corner radius globals.css ships. */
+export const DEFAULT_RADIUS = '0.5rem'
+
+function basePalette(mode: 'light' | 'dark'): ThemeColorBase {
+  return mode === 'light' ? DEFAULT_LIGHT_BASE : DEFAULT_DARK_BASE
+}
+
+/**
+ * The theme an unbranded workspace renders, as the variables a saved theme
+ * holds: the palette, radius and font a visitor sees before anything is
+ * customised. The branding editor starts from it, so saving a theme nobody
+ * touched stores what visitors already see.
+ */
+export function unbrandedTheme(mode: 'light' | 'dark'): MinimalThemeVariables {
+  return {
+    ...basePalette(mode),
+    fontSans: DEFAULT_FONT_SANS,
+    radius: DEFAULT_RADIUS,
+  }
+}
+
 /** Every variable a theme may carry. Anything else on the object is derived. */
-const MINIMAL_KEYS = [
+export const MINIMAL_THEME_VARIABLE_KEYS = [
   'primary',
   'background',
   'foreground',
@@ -92,36 +119,37 @@ function resolveMinimal(
   minimal: Partial<MinimalThemeVariables>,
   mode: 'light' | 'dark'
 ): MinimalThemeVariables {
-  const resolved: MinimalThemeVariables = {
-    ...(mode === 'light' ? DEFAULT_LIGHT_BASE : DEFAULT_DARK_BASE),
-  }
-  for (const key of MINIMAL_KEYS) {
+  const resolved: MinimalThemeVariables = { ...basePalette(mode) }
+  for (const key of MINIMAL_THEME_VARIABLE_KEYS) {
     const value = minimal[key]
     if (typeof value === 'string' && value.trim() !== '') resolved[key] = value
+  }
+  if (!(typeof minimal.radius === 'string' && minimal.radius.trim())) {
+    resolved.radius = DEFAULT_RADIUS
   }
   return resolved
 }
 
 const LIGHT_SHADOWS = {
-  shadow2xs: '0 1px oklch(0 0 0 / 0.05)',
-  shadowXs: '0 1px 2px 0 oklch(0 0 0 / 0.05)',
-  shadowSm: '0 1px 3px 0 oklch(0 0 0 / 0.1), 0 1px 2px -1px oklch(0 0 0 / 0.1)',
-  shadow: '0 1px 3px 0 oklch(0 0 0 / 0.1), 0 1px 2px -1px oklch(0 0 0 / 0.1)',
-  shadowMd: '0 4px 6px -1px oklch(0 0 0 / 0.1), 0 2px 4px -2px oklch(0 0 0 / 0.1)',
-  shadowLg: '0 10px 15px -3px oklch(0 0 0 / 0.1), 0 4px 6px -4px oklch(0 0 0 / 0.1)',
-  shadowXl: '0 20px 25px -5px oklch(0 0 0 / 0.1), 0 8px 10px -6px oklch(0 0 0 / 0.1)',
-  shadow2xl: '0 25px 50px -12px oklch(0 0 0 / 0.25)',
+  shadow2xs: '0 0 0 0 transparent',
+  shadowXs: '0 0 0 0 transparent',
+  shadowSm: '0 0 0 1px oklch(0 0 0 / 0.04)',
+  shadow: '0 0 0 1px oklch(0 0 0 / 0.06)',
+  shadowMd: '0 4px 16px oklch(0 0 0 / 0.08)',
+  shadowLg: '0 8px 24px oklch(0 0 0 / 0.1)',
+  shadowXl: '0 12px 32px oklch(0 0 0 / 0.12)',
+  shadow2xl: '0 16px 40px oklch(0 0 0 / 0.16)',
 }
 
 const DARK_SHADOWS = {
-  shadow2xs: '0 1px oklch(0 0 0 / 0.15)',
-  shadowXs: '0 1px 2px 0 oklch(0 0 0 / 0.15)',
-  shadowSm: '0 1px 3px 0 oklch(0 0 0 / 0.25), 0 1px 2px -1px oklch(0 0 0 / 0.25)',
-  shadow: '0 1px 3px 0 oklch(0 0 0 / 0.25), 0 1px 2px -1px oklch(0 0 0 / 0.25)',
-  shadowMd: '0 4px 6px -1px oklch(0 0 0 / 0.25), 0 2px 4px -2px oklch(0 0 0 / 0.25)',
-  shadowLg: '0 10px 15px -3px oklch(0 0 0 / 0.25), 0 4px 6px -4px oklch(0 0 0 / 0.25)',
-  shadowXl: '0 20px 25px -5px oklch(0 0 0 / 0.25), 0 8px 10px -6px oklch(0 0 0 / 0.25)',
-  shadow2xl: '0 25px 50px -12px oklch(0 0 0 / 0.5)',
+  shadow2xs: '0 0 0 0 transparent',
+  shadowXs: '0 0 0 0 transparent',
+  shadowSm: '0 0 0 1px oklch(1 0 0 / 0.06)',
+  shadow: '0 0 0 1px oklch(1 0 0 / 0.08)',
+  shadowMd: '0 8px 24px oklch(0 0 0 / 0.4)',
+  shadowLg: '0 12px 32px oklch(0 0 0 / 0.5)',
+  shadowXl: '0 16px 40px oklch(0 0 0 / 0.55)',
+  shadow2xl: '0 20px 48px oklch(0 0 0 / 0.6)',
 }
 
 export function parseOklch(oklch: string): { l: number; c: number; h: number } | null {
@@ -144,6 +172,16 @@ export function computeContrastForeground(bgOklch: string): string {
   const parsed = parseOklch(bgOklch)
   if (!parsed) return 'oklch(0.985 0 0)'
   return parsed.l > 0.6 ? 'oklch(0.145 0 0)' : 'oklch(0.985 0 0)'
+}
+
+/** Gold-as-fill stays bright; on light surfaces, type/icons step down in
+ *  lightness only. Keep chroma/hue so it still reads yellow, not olive. */
+export function computeAccentInk(primary: string, mode: 'light' | 'dark'): string {
+  if (mode === 'dark') return primary
+  const parsed = parseOklch(primary)
+  if (!parsed) return primary
+  if (parsed.l <= 0.75) return primary
+  return formatOklch(0.72, parsed.c, parsed.h)
 }
 
 export function generateChartColors(primary: string): [string, string, string, string, string] {
@@ -183,10 +221,12 @@ export function expandTheme(
   const shadows = options.mode === 'light' ? LIGHT_SHADOWS : DARK_SHADOWS
   const primaryForeground = computeContrastForeground(minimal.primary)
   const destructiveForeground = computeContrastForeground(minimal.destructive)
+  const accentInk = computeAccentInk(minimal.primary, options.mode)
   const charts = generateChartColors(minimal.primary)
 
   return {
     primary: minimal.primary,
+    accentInk,
     background: minimal.background,
     foreground: minimal.foreground,
     card: minimal.card,
@@ -196,7 +236,9 @@ export function expandTheme(
     destructive: minimal.destructive,
     success: minimal.success,
     primaryForeground,
-    ring: minimal.ring ?? minimal.primary,
+    // Focus stays neutral. A ring that only repeats the brand colour is the
+    // default this replaced, not a choice, so it reads as unset.
+    ring: minimal.ring && minimal.ring !== minimal.primary ? minimal.ring : minimal.mutedForeground,
     cardForeground: minimal.foreground,
     popover: minimal.card,
     popoverForeground: minimal.foreground,
@@ -234,7 +276,7 @@ export function extractMinimal(vars: ThemeVariables): Partial<MinimalThemeVariab
     border: vars.border,
     destructive: vars.destructive,
     success: vars.success,
-    ring: vars.ring !== vars.primary ? vars.ring : undefined,
+    ring: vars.ring !== vars.mutedForeground ? vars.ring : undefined,
     fontSans: vars.fontSans,
     radius: vars.radius,
     // Only include secondary/accent if they differ from muted

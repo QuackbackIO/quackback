@@ -12,8 +12,19 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
+import { Editor } from '@tiptap/core'
+import { generateContentHTML } from '@/lib/shared/content-html'
 import type { EditorFeatures } from '../rich-text-editor'
-import { buildExtensions, generateContentHTML, hasActiveSuggestion } from '../rich-text-editor'
+import {
+  buildExtensions,
+  hasActiveSuggestion,
+  markdownFromEditor,
+  plaintextFromTiptapJson,
+  resolveEditorMediaKind,
+  seedMarkdownFallback,
+  stopEnterFromReachingParentForm,
+} from '../rich-text-editor'
+import { COMMENT_EDITOR_FEATURES } from '@/components/public/comment-editor-features'
 
 // Full widget feature set (worst-case for duplicates)
 const WIDGET_FEATURES: EditorFeatures = {
@@ -24,10 +35,42 @@ const WIDGET_FEATURES: EditorFeatures = {
   dividers: true,
   tables: true,
   images: true,
+  videos: true,
   embeds: true,
   bubbleMenu: true,
   slashMenu: true,
 }
+
+describe('resolveEditorMediaKind', () => {
+  it('accepts screenshots as images when image uploads are enabled', () => {
+    expect(resolveEditorMediaKind({ name: 'Screenshot.png', type: 'image/png' }, true, true)).toBe(
+      'image'
+    )
+  })
+
+  it('accepts MOV and M4V drops when the browser omits a useful MIME type', () => {
+    expect(resolveEditorMediaKind({ name: 'recording.mov', type: '' }, true, true)).toBe('video')
+    expect(
+      resolveEditorMediaKind(
+        { name: 'recording.m4v', type: 'application/octet-stream' },
+        true,
+        true
+      )
+    ).toBe('video')
+  })
+
+  it('rejects unsupported video containers and disabled media kinds', () => {
+    expect(
+      resolveEditorMediaKind({ name: 'recording.avi', type: 'video/x-msvideo' }, true, true)
+    ).toBe(null)
+    expect(
+      resolveEditorMediaKind({ name: 'recording.mov', type: 'video/quicktime' }, true, false)
+    ).toBe(null)
+    expect(resolveEditorMediaKind({ name: 'Screenshot.png', type: 'image/png' }, false, true)).toBe(
+      null
+    )
+  })
+})
 
 describe('buildExtensions', () => {
   it('contains no duplicate extension names (full widget feature set)', () => {
@@ -83,6 +126,42 @@ describe('buildExtensions', () => {
     expect(withoutNames).toContain('image')
   })
 
+  it('always includes the native video node for saved-content compatibility', () => {
+    const names = buildExtensions({ videos: false }, { placeholder: '' }).map(
+      (extension) => (extension as { name: string }).name
+    )
+    expect(names).toContain('video')
+  })
+
+  it('does not materialize 0×0 or 500×500 on a stored image that omitted dimensions', () => {
+    const editor = new Editor({
+      extensions: buildExtensions(
+        { images: true, slashMenu: false, emojiPicker: false, mentions: false },
+        { placeholder: '' }
+      ),
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'image', attrs: { src: 'https://cdn.example.com/wide.png' } }],
+          },
+        ],
+      },
+    })
+    try {
+      const img = editor.getJSON().content?.[0]?.content?.[0] as
+        | { type?: string; attrs?: { src?: string; width?: number | null; height?: number | null } }
+        | undefined
+      expect(img?.type).toBe('image')
+      expect(img?.attrs?.src).toBe('https://cdn.example.com/wide.png')
+      expect(img?.attrs?.width).toBeNull()
+      expect(img?.attrs?.height).toBeNull()
+    } finally {
+      editor.destroy()
+    }
+  })
+
   it('includes slashCommands extension by default', () => {
     const exts = buildExtensions({}, { placeholder: '' })
     const names = exts.map((e) => (e as { name: string }).name)
@@ -107,6 +186,30 @@ describe('buildExtensions', () => {
     expect(names).not.toContain('emoji')
   })
 
+  it('persists attrs.emoji on an emoji node so read-only HTML can skip the dataset', () => {
+    const editor = new Editor({
+      extensions: buildExtensions({ slashMenu: false, mentions: false }, { placeholder: '' }),
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'emoji', attrs: { name: 'crossed_fingers', emoji: '🤞' } }],
+          },
+        ],
+      },
+    })
+    try {
+      const node = editor.getJSON().content?.[0]?.content?.[0] as
+        { type?: string; attrs?: { name?: string; emoji?: string } } | undefined
+      expect(node?.type).toBe('emoji')
+      expect(node?.attrs?.name).toBe('crossed_fingers')
+      expect(node?.attrs?.emoji).toBe('🤞')
+    } finally {
+      editor.destroy()
+    }
+  })
+
   it('omits enterAsHardBreak by default (document-style Enter)', () => {
     const exts = buildExtensions({}, { placeholder: '' })
     const names = exts.map((e) => (e as { name: string }).name)
@@ -117,6 +220,14 @@ describe('buildExtensions', () => {
     const exts = buildExtensions({ enterAsHardBreak: true }, { placeholder: '' })
     const names = exts.map((e) => (e as { name: string }).name)
     expect(names).toContain('enterAsHardBreak')
+  })
+
+  it('COMMENT_EDITOR_FEATURES registers enterAsHardBreak (plain Enter is a newline)', () => {
+    const names = buildExtensions(COMMENT_EDITOR_FEATURES, { placeholder: '' }).map(
+      (e) => (e as { name: string }).name
+    )
+    expect(names).toContain('enterAsHardBreak')
+    expect(names).not.toContain('submitOnEnter')
   })
 
   // P2.1 — mentions feature flag (default TRUE; undefined must mean enabled so
@@ -255,6 +366,23 @@ describe('submitOnEnter (onSubmit)', () => {
     expect(consumed).toBe(false) // let the popover's own onKeyDown pick the item
   })
 
+  it('Mod-Enter fires onSubmit (Slack-style send) and consumes the key', () => {
+    const onSubmit = vi.fn()
+    const { editor, setHardBreak } = makeMockEditor()
+    const consumed = handlersFor(editor, onSubmit)['Mod-Enter']()
+    expect(onSubmit).toHaveBeenCalledOnce()
+    expect(consumed).toBe(true)
+    expect(setHardBreak).not.toHaveBeenCalled()
+  })
+
+  it('yields Mod-Enter to an active suggestion popover instead of submitting', () => {
+    const onSubmit = vi.fn()
+    const { editor } = makeMockEditor({ suggestion: true })
+    const consumed = handlersFor(editor, onSubmit)['Mod-Enter']()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(consumed).toBe(false)
+  })
+
   it('wins over enterAsHardBreak via a higher extension priority', () => {
     // TipTap tries same-key bindings in descending priority order and stops at
     // the first returning true, so submitOnEnter must outrank enterAsHardBreak.
@@ -273,37 +401,145 @@ describe('submitOnEnter (onSubmit)', () => {
   })
 })
 
-describe('markdown serialization optimization', () => {
-  it('skips markdown serialization when onChange has arity < 3', () => {
-    const getMarkdown = vi.fn(() => '# hello')
-    const getJSON = vi.fn(() => ({ type: 'doc', content: [] }))
-    const getHTML = vi.fn(() => '<p></p>')
-    const mockEditor = { getMarkdown, getJSON, getHTML }
+describe('stopEnterFromReachingParentForm', () => {
+  function keyEvent(key: string, mods: { metaKey?: boolean; ctrlKey?: boolean } = {}) {
+    return {
+      key,
+      metaKey: !!mods.metaKey,
+      ctrlKey: !!mods.ctrlKey,
+      stopPropagation: vi.fn(),
+    } as unknown as KeyboardEvent
+  }
 
-    // Simulate the onUpdate logic
-    function runOnUpdate(
-      editor: typeof mockEditor,
-      onChange: ((...args: unknown[]) => void) | undefined
-    ) {
-      if (!onChange) return
-      const json = editor.getJSON()
-      const html = editor.getHTML()
-      const markdown = onChange.length >= 3 ? (editor.getMarkdown?.() ?? '') : ''
-      onChange(json, html, markdown)
+  it('stops plain Enter so a parent form cannot implicitly submit', () => {
+    const event = keyEvent('Enter')
+    expect(stopEnterFromReachingParentForm(event)).toBe(false)
+    expect(event.stopPropagation).toHaveBeenCalledOnce()
+  })
+
+  it('stops Shift+Enter the same way (newline, not submit)', () => {
+    const event = {
+      key: 'Enter',
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: true,
+      stopPropagation: vi.fn(),
+    } as unknown as KeyboardEvent
+    expect(stopEnterFromReachingParentForm(event)).toBe(false)
+    expect(event.stopPropagation).toHaveBeenCalledOnce()
+  })
+
+  it('leaves Cmd/Ctrl+Enter alone for wrapper keyboard-submit handlers', () => {
+    const meta = keyEvent('Enter', { metaKey: true })
+    const ctrl = keyEvent('Enter', { ctrlKey: true })
+    expect(stopEnterFromReachingParentForm(meta)).toBe(false)
+    expect(stopEnterFromReachingParentForm(ctrl)).toBe(false)
+    expect(meta.stopPropagation).not.toHaveBeenCalled()
+    expect(ctrl.stopPropagation).not.toHaveBeenCalled()
+  })
+
+  it('ignores keys other than Enter', () => {
+    const event = keyEvent('Escape')
+    expect(stopEnterFromReachingParentForm(event)).toBe(false)
+    expect(event.stopPropagation).not.toHaveBeenCalled()
+  })
+})
+
+describe('markdownFromEditor fallbacks', () => {
+  it('returns empty markdown when the serializer throws with no prior value', () => {
+    const editor = {
+      getMarkdown: () => {
+        throw new Error('unknown node')
+      },
     }
+    expect(markdownFromEditor(editor)).toBe('')
+  })
 
-    // 2-arg onChange (widget/portal) — should NOT call getMarkdown
-    const twoArgCallback = vi.fn((_json: unknown, _html: unknown) => {})
-    runOnUpdate(mockEditor, twoArgCallback)
-    expect(getMarkdown).not.toHaveBeenCalled()
-    expect(twoArgCallback).toHaveBeenCalledWith(expect.any(Object), expect.any(String), '')
+  it('keeps the last successful markdown when the serializer throws', () => {
+    const editor = {
+      getMarkdown: () => {
+        throw new Error('unknown node')
+      },
+    }
+    expect(markdownFromEditor(editor, '- GIF per link')).toBe('- GIF per link')
+  })
 
-    // 3-arg onChange (changelog) — SHOULD call getMarkdown
-    getMarkdown.mockClear()
-    const threeArgCallback = vi.fn((_json: unknown, _html: unknown, _md: unknown) => {})
-    runOnUpdate(mockEditor, threeArgCallback)
-    expect(getMarkdown).toHaveBeenCalledOnce()
-    expect(threeArgCallback).toHaveBeenCalledWith(expect.any(Object), expect.any(String), '# hello')
+  it('projects current JSON text when the serializer throws mid-edit', () => {
+    const editor = {
+      getMarkdown: () => {
+        throw new Error('unknown node')
+      },
+    }
+    const json = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'new edit' }],
+        },
+      ],
+    }
+    expect(markdownFromEditor(editor, 'old markdown', json)).toBe('new edit')
+  })
+
+  it('seeds markdown fallback from JSON text when the serializer has not run', () => {
+    const json = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Existing comment' }],
+        },
+      ],
+    }
+    expect(plaintextFromTiptapJson(json)).toBe('Existing comment')
+    expect(seedMarkdownFallback(json)).toBe('Existing comment')
+    expect(seedMarkdownFallback('already markdown')).toBe('already markdown')
+  })
+
+  it('keeps newlines between blocks in the plaintext fallback', () => {
+    const json = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'First' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Second' }] },
+      ],
+    }
+    expect(plaintextFromTiptapJson(json)).toBe('First\nSecond')
+  })
+
+  it('keeps newlines between paragraphs nested in a blockquote', () => {
+    const json = {
+      type: 'doc',
+      content: [
+        {
+          type: 'blockquote',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'First' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'Second' }] },
+          ],
+        },
+      ],
+    }
+    expect(plaintextFromTiptapJson(json)).toBe('First\nSecond')
+  })
+
+  it('keeps JSON plaintext when initial getMarkdown throws', () => {
+    const json = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Existing comment' }],
+        },
+      ],
+    }
+    const editor = {
+      getMarkdown: () => {
+        throw new Error('unknown node')
+      },
+    }
+    expect(seedMarkdownFallback(json, editor)).toBe('Existing comment')
   })
 })
 
@@ -432,39 +668,5 @@ describe('generateContentHTML — quackbackEmbed nodes', () => {
     })
     expect(html).not.toContain('<script>')
     expect(html).toContain('&lt;script&gt;')
-  })
-})
-
-describe('generateContentHTML — chatImage nodes', () => {
-  it('serializes a valid chatImage to a bounded img with src + alt', () => {
-    const html = generateContentHTML({
-      type: 'doc',
-      content: [
-        {
-          type: 'chatImage',
-          attrs: { src: 'https://example.com/photo.png', alt: 'A screenshot' },
-        },
-      ],
-    })
-    expect(html).toContain('<img')
-    expect(html).toContain('src="https://example.com/photo.png"')
-    expect(html).toContain('alt="A screenshot"')
-    expect(html).toContain('class="max-w-xs rounded-md"')
-  })
-
-  it('renders nothing for a chatImage with no src', () => {
-    const html = generateContentHTML({
-      type: 'doc',
-      content: [{ type: 'chatImage', attrs: { alt: 'orphan' } }],
-    })
-    expect(html).not.toContain('<img')
-  })
-
-  it('renders nothing for a chatImage with an unsafe src', () => {
-    const html = generateContentHTML({
-      type: 'doc',
-      content: [{ type: 'chatImage', attrs: { src: 'javascript:alert(1)' } }],
-    })
-    expect(html).not.toContain('<img')
   })
 })

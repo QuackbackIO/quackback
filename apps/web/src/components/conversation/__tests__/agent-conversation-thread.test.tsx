@@ -17,13 +17,51 @@
  */
 import { createRef } from 'react'
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { act, render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import {
+  act,
+  render as rtlRender,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+function render(node: React.ReactNode) {
+  return rtlRender(
+    <IntlProvider locale="en-US" messages={{}}>
+      {node}
+    </IntlProvider>
+  )
+}
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import type { ConversationDTO, AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
 import type { LinkedTicketSummary } from '@/lib/shared/inbox/items'
 
 afterEach(cleanup)
+
+// The composer seams the typing tests drive: the stub editor publishes the
+// latest onChange it was handed, the typing sender is one spy for every
+// render, and the AI-actions stub counts how often the thread re-rendered.
+const composerProbe = vi.hoisted(() => ({
+  onChange: null as null | ((json: unknown, html: string, markdown: string) => void),
+  sendTyping: (() => {}) as () => void,
+  threadRenders: 0,
+  markRead: null as null | { readThrough?: string | null; onMarked?: () => void },
+}))
+
+// Holds the thread request open, and records what asked for the reads that
+// ride with it in the meantime.
+const threadProbe = vi.hoisted(() => ({
+  gate: null as null | Promise<void>,
+  linkFetches: 0,
+  translationEnabled: [] as boolean[],
+  overAllowanceNotice: null as string | null,
+  panelOnChanged: [] as unknown[],
+  remeasure: () => {},
+}))
 
 const routeContextState = {
   session: { user: { name: 'Agent Smith' } },
@@ -34,37 +72,49 @@ const routeContextState = {
   permissions: ['ticket.view', 'ticket.set_status'] as string[],
 }
 vi.mock('@tanstack/react-router', () => ({
-  useRouteContext: () => routeContextState,
+  useRouteContext: (opts?: { select?: (context: typeof routeContextState) => unknown }) =>
+    opts?.select ? opts.select(routeContextState) : routeContextState,
 }))
 
 // The virtualized viewport + its supporting hooks are replaced with a plain
 // list render — this test asserts on rendered rows, not scroll/virtualization.
-vi.mock('../thread', () => ({
-  ThreadViewport: ({
-    rows,
-    renderRow,
-  }: {
-    rows: { key: string }[]
-    renderRow: (r: unknown) => unknown
-  }) => (
-    <div data-testid="thread-viewport">
-      {rows.map((r) => (
-        <div key={r.key}>{renderRow(r) as React.ReactNode}</div>
-      ))}
-    </div>
-  ),
-  useThreadVirtualizer: () => ({
-    getTotalSize: () => 0,
-    getVirtualItems: () => [],
-    scrollToIndex: vi.fn(),
-    scrollToEnd: vi.fn(),
-    isAtEnd: () => true,
-    measureElement: () => {},
-  }),
-  useOlderMessages: () => ({ loadingOlder: false, loadOlder: vi.fn() }),
-  useMarkReadOnIncoming: () => {},
-  useTypingSender: () => vi.fn(),
-}))
+// The virtualizer stub keeps the real one's habit of re-rendering whatever
+// calls it (measurements and scrolling do), triggered by `remeasure`.
+vi.mock('../thread', async () => {
+  const { useState } = await import('react')
+  return {
+    ThreadViewport: ({
+      rows,
+      renderRow,
+    }: {
+      rows: { key: string }[]
+      renderRow: (r: unknown) => unknown
+    }) => (
+      <div data-testid="thread-viewport">
+        {rows.map((r) => (
+          <div key={r.key}>{renderRow(r) as React.ReactNode}</div>
+        ))}
+      </div>
+    ),
+    useThreadVirtualizer: () => {
+      const [, setMeasured] = useState(0)
+      threadProbe.remeasure = () => setMeasured((n) => n + 1)
+      return {
+        getTotalSize: () => 0,
+        getVirtualItems: () => [],
+        scrollToIndex: vi.fn(),
+        scrollToEnd: vi.fn(),
+        isAtEnd: () => true,
+        measureElement: () => {},
+      }
+    },
+    useOlderMessages: () => ({ loadingOlder: false, loadOlder: vi.fn() }),
+    useMarkReadOnIncoming: (args: { readThrough?: string | null; onMarked?: () => void }) => {
+      composerProbe.markRead = args
+    },
+    useTypingSender: () => composerProbe.sendTyping,
+  }
+})
 
 vi.mock('../message-bubble', () => ({
   AgentMessageBubble: ({ message }: { message: AgentConversationMessageDTO }) => (
@@ -79,26 +129,68 @@ vi.mock('../macro-picker', () => ({
   ),
 }))
 vi.mock('../composer-ai-actions', () => ({
-  ComposerAiActions: ({ activeMode }: { activeMode: string }) => (
-    <div data-testid="composer-ai-actions" data-active-mode={activeMode} />
-  ),
+  ComposerAiActions: ({ activeMode }: { activeMode: string }) => {
+    composerProbe.threadRenders++
+    return <div data-testid="composer-ai-actions" data-active-mode={activeMode} />
+  },
 }))
+// Renders of the header's triage controls and tags row, by name.
+const headerRenders = vi.hoisted(() => ({ counts: {} as Record<string, number> }))
+const countRender = (name: string) => {
+  headerRenders.counts[name] = (headerRenders.counts[name] ?? 0) + 1
+}
 vi.mock('@/components/admin/conversation/priority-control', () => ({
-  PriorityControl: () => null,
+  PriorityControl: () => {
+    countRender('priority')
+    return <span data-testid="priority-control" />
+  },
 }))
 vi.mock('@/components/admin/conversation/assignee-control', () => ({
-  AssigneeControl: () => null,
+  AssigneeControl: () => {
+    countRender('assignee')
+    return null
+  },
 }))
 vi.mock('@/components/admin/conversation/channel-badge', () => ({ ChannelBadge: () => null }))
 vi.mock('@/components/admin/conversation/sla-chip', () => ({ SlaChip: () => null }))
 vi.mock('@/components/admin/conversation/conversation-tags-editor', () => ({
-  ConversationTagsEditor: () => null,
+  ConversationTagsEditor: () => {
+    countRender('tags')
+    return null
+  },
 }))
-vi.mock('@/components/admin/conversation/status-control', () => ({ StatusControl: () => null }))
+vi.mock('@/components/admin/conversation/status-control', () => ({
+  StatusControl: () => {
+    countRender('status')
+    return null
+  },
+}))
+// The detail panel renders whenever the thread does, so it doubles as the
+// thread's render counter. The editor stub hands out its latest onChange.
+const composer = vi.hoisted(() => ({
+  threadRenders: 0,
+  onChange: null as ((json: unknown, html: string, markdown: string) => void) | null,
+}))
 vi.mock('@/components/admin/inbox/inbox-detail-panel', () => ({
-  InboxDetailPanel: ({ openCopilotToken }: { openCopilotToken?: number }) => (
-    <div data-testid="inbox-detail-panel" data-open-copilot-token={openCopilotToken} />
-  ),
+  InboxDetailPanel: ({
+    openCopilotToken,
+    onChanged,
+    visible,
+  }: {
+    openCopilotToken?: number
+    onChanged?: () => void
+    visible?: boolean
+  }) => {
+    threadProbe.panelOnChanged.push(onChanged)
+    composer.threadRenders++
+    return (
+      <div
+        data-testid="inbox-detail-panel"
+        data-open-copilot-token={openCopilotToken}
+        data-visible={String(visible)}
+      />
+    )
+  },
 }))
 vi.mock('@/components/admin/inbox/create-ticket-dialog', () => ({
   CreateTicketDialog: () => null,
@@ -146,15 +238,26 @@ vi.mock('@/components/ui/rich-text-editor', async () => {
     RichTextEditor: ({
       placeholder,
       editorRef,
+      onDocumentChange,
     }: {
       placeholder?: string
-      editorRef?: React.RefObject<{ focus: () => void } | null>
+      editorRef?: React.RefObject<{ focus: () => void; clear?: () => void } | null>
+      onDocumentChange?: (document: { json(): unknown; html(): string; markdown(): string }) => void
     }) => {
+      // The tests type as (json, html, markdown); the composer reads a document.
+      const onChange = onDocumentChange
+        ? (json: unknown, html: string, markdown: string) =>
+            onDocumentChange({ json: () => json, html: () => html, markdown: () => markdown })
+        : null
+      composerProbe.onChange = onChange
       const areaRef = useRef<HTMLTextAreaElement>(null)
-      useImperativeHandle(editorRef, () => ({ focus: () => areaRef.current?.focus() }))
+      composer.onChange = onChange
+      useImperativeHandle(editorRef, () => ({
+        focus: () => areaRef.current?.focus(),
+        clear: () => {},
+      }))
       return <textarea ref={areaRef} data-testid="editor" placeholder={placeholder} readOnly />
     },
-    RichTextContent: () => null,
   }
 })
 vi.mock('@/components/shared/composer-attachment-tray', () => ({
@@ -172,28 +275,37 @@ vi.mock('@/components/shared/empty-state', () => ({
 vi.mock('@/components/ui/avatar', () => ({ Avatar: () => null }))
 
 vi.mock('@/lib/client/hooks/use-inbox-translation', () => ({
-  useInboxTranslation: () => ({
-    translationFor: () => undefined,
-    showSuggestionBanner: false,
-    enabled: false,
-    togglePending: false,
-    toggleEnabled: vi.fn(),
-    dismissSuggestion: vi.fn(),
-    activateFromSuggestion: vi.fn(),
-    detectedLanguageLabel: '',
-  }),
+  useInboxTranslation: ({ enabledFlag }: { enabledFlag: boolean }) => {
+    threadProbe.translationEnabled.push(enabledFlag)
+    return {
+      translationFor: () => undefined,
+      showSuggestionBanner: false,
+      enabled: false,
+      togglePending: false,
+      toggleEnabled: vi.fn(),
+      dismissSuggestion: vi.fn(),
+      activateFromSuggestion: vi.fn(),
+      detectedLanguageLabel: '',
+      overAllowanceNotice: threadProbe.overAllowanceNotice,
+    }
+  },
 }))
 vi.mock('@/lib/client/hooks/use-copilot-insert', () => ({ useCopilotInsert: () => vi.fn() }))
-vi.mock('@/lib/client/hooks/use-image-upload', () => ({
-  useImageUpload: () => ({ upload: vi.fn() }),
+vi.mock('@/lib/client/hooks/use-file-upload', () => ({
+  useAgentFileUpload: () => ({ upload: vi.fn() }),
 }))
+const addFiles = vi.fn()
 vi.mock('@/lib/client/hooks/use-conversation-composer-attachments', () => ({
   useConversationComposerAttachments: () => ({
-    pending: [],
-    addFiles: vi.fn(),
+    items: [],
+    attachments: [],
+    addFiles,
     remove: vi.fn(),
+    retry: vi.fn(),
     clear: vi.fn(),
+    restore: vi.fn(),
     uploading: false,
+    hasErrors: false,
   }),
 }))
 
@@ -319,7 +431,10 @@ vi.mock('@/lib/client/queries/inbox', async (importOriginal) => ({
     }),
     conversationTicketLink: (id: string) => ({
       queryKey: ['conversation-ticket-link', id],
-      queryFn: () => Promise.resolve(mockTicketLink.value),
+      queryFn: () => {
+        threadProbe.linkFetches++
+        return Promise.resolve(mockTicketLink.value)
+      },
     }),
   },
   ticketQueries: {
@@ -337,12 +452,14 @@ vi.mock('@/lib/client/queries/conversation-inbox', () => ({
   conversationInboxQueries: {
     thread: (id: string) => ({
       queryKey: ['conv-thread', id],
-      queryFn: () =>
-        Promise.resolve({
+      queryFn: async () => {
+        if (threadProbe.gate) await threadProbe.gate
+        return {
           hasMore: false,
           conversation: makeConversation({ id: id as ConversationDTO['id'] }),
           messages: [] as AgentConversationMessageDTO[],
-        }),
+        }
+      },
     }),
   },
 }))
@@ -391,7 +508,10 @@ function makeConversation(overrides: Partial<ConversationDTO> = {}): Conversatio
   }
 }
 
-function renderThread(item: { kind: 'conversation' | 'ticket'; id: string }) {
+function renderThread(
+  item: { kind: 'conversation' | 'ticket'; id: string },
+  extra: { detailPanelShown?: boolean; replyFirst?: boolean } = {}
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -404,6 +524,7 @@ function renderThread(item: { kind: 'conversation' | 'ticket'; id: string }) {
         onOpenPost={vi.fn()}
         isVisitorTyping={false}
         isOtherAgentTyping={false}
+        {...extra}
       />
     </QueryClientProvider>
   )
@@ -463,7 +584,7 @@ describe('AgentConversationThread — ticket capability wiring', () => {
       </QueryClientProvider>
     )
     const trigger = await screen.findByRole('button', { name: 'Reply' })
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+    fireEvent.click(trigger)
     expect(await screen.findByRole('menuitemradio', { name: 'Note' })).toBeInTheDocument()
   })
 
@@ -506,10 +627,46 @@ describe('AgentConversationThread — conversation kind unaffected', () => {
   it('still renders the conversation detail panel and the Reply/Note switcher', async () => {
     renderThread({ kind: 'conversation', id: 'conversation_1' })
     const trigger = await screen.findByRole('button', { name: 'Reply' })
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+    fireEvent.click(trigger)
     expect(await screen.findByRole('menuitemradio', { name: 'Note' })).toBeInTheDocument()
     expect(screen.getByTestId('inbox-detail-panel')).toBeInTheDocument()
     expect(screen.getByTestId('composer-ai-actions')).toHaveAttribute('data-active-mode', 'reply')
+  })
+})
+
+describe('AgentConversationThread: reply first (the Try Messenger sheet)', () => {
+  it('keeps Close filled and the send button an icon in the inbox', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    expect((await screen.findByRole('button', { name: 'Close' })).className).toContain('bg-primary')
+    expect(screen.getByRole('button', { name: 'Send reply' }).textContent).toBe('')
+  })
+
+  it('makes the reply the primary action and quiets Close', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' }, { replyFirst: true })
+    const close = await screen.findByRole('button', { name: 'Close' })
+    expect(close.className).not.toContain('bg-primary')
+    const send = screen.getByRole('button', { name: 'Send reply' })
+    expect(send.textContent).toBe('Send')
+    expect(send.className).toContain('bg-primary')
+  })
+})
+
+describe('AgentConversationThread: details toggle below the inline panel width', () => {
+  it('offers a Details button that opens the details content in a sheet', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' }, { detailPanelShown: false })
+    const toggle = await screen.findByRole('button', { name: 'Details' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(toggle)
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByTestId('inbox-detail-panel')).toHaveAttribute('data-visible', 'true')
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('has no Details button where the panel is inline', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' }, { detailPanelShown: true })
+    await screen.findByRole('button', { name: 'Snooze' })
+    expect(screen.queryByRole('button', { name: 'Details' })).toBeNull()
   })
 })
 
@@ -724,6 +881,35 @@ describe('AgentConversationThread — composer focus handle', () => {
     expect(screen.getByTestId('editor').closest('[data-inbox-composer]')).not.toBeNull()
   })
 
+  // The editor inside is borderless, so the box is the only place focus shows.
+  // Both modes keep a cue, and it is neutral: never the brand or note amber.
+  it('shows a neutral focus cue on the composer box in reply and note mode', async () => {
+    const composerRef = renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
+    const focusClasses = () =>
+      (screen.getByTestId('editor').closest('[data-inbox-composer]') as HTMLElement).className
+        .split(/\s+/)
+        .filter((c) => c.startsWith('focus-within:'))
+
+    await screen.findByTestId('editor')
+    expect(focusClasses().some((c) => c.includes('-ring'))).toBe(true)
+
+    act(() => composerRef.current?.focusComposer('note'))
+    expect(focusClasses().some((c) => c.includes('-ring'))).toBe(true)
+    expect(focusClasses().some((c) => /amber|primary/.test(c))).toBe(false)
+  })
+
+  it('pasting an image on the composer stages the attachment tray, not an inline node', async () => {
+    renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
+    const editor = await screen.findByTestId('editor')
+    const box = editor.closest('[data-inbox-composer]')
+    expect(box).not.toBeNull()
+    const file = new File([new Uint8Array([1, 2, 3])], 'shot.png', { type: 'image/png' })
+    fireEvent.paste(box as HTMLElement, {
+      clipboardData: { files: [file], items: [] },
+    })
+    expect(addFiles).toHaveBeenCalledWith([file])
+  })
+
   it('focusComposer("reply") focuses the reply editor already showing, leaving the mode alone', async () => {
     const composerRef = renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
     await screen.findByTestId('editor')
@@ -819,5 +1005,271 @@ describe('AgentConversationThread — composer focus handle', () => {
     act(() => composerRef.current?.openMacros())
 
     expect(screen.queryByTestId('macro-picker')).not.toBeInTheDocument()
+  })
+})
+
+describe('AgentConversationThread: typing signal', () => {
+  const blankDoc = { type: 'doc', content: [{ type: 'paragraph' }] }
+  const docWith = (text: string) => ({
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+  })
+
+  it('an update that leaves the blank composer blank neither signals typing nor re-renders', async () => {
+    const sendTyping = vi.fn()
+    composerProbe.sendTyping = sendTyping
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('editor')
+    await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
+    const rendersBefore = composerProbe.threadRenders
+
+    // What an editor reports when it mounts or toggles editable on an empty doc.
+    act(() => composerProbe.onChange?.(blankDoc, '<p></p>', ''))
+
+    expect(sendTyping).not.toHaveBeenCalled()
+    expect(composerProbe.threadRenders).toBe(rendersBefore)
+  })
+
+  it('typing into the reply composer still signals typing', async () => {
+    const sendTyping = vi.fn()
+    composerProbe.sendTyping = sendTyping
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('editor')
+    await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
+
+    act(() => composerProbe.onChange?.(docWith('H'), '<p>H</p>', 'H'))
+
+    expect(sendTyping).toHaveBeenCalledTimes(1)
+  })
+
+  it('clearing a typed reply back to blank updates the draft', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('editor')
+    await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
+    const send = () => screen.getByRole('button', { name: 'Send reply' })
+
+    act(() => composerProbe.onChange?.(docWith('Hi'), '<p>Hi</p>', 'Hi'))
+    expect(send()).not.toBeDisabled()
+    act(() => composerProbe.onChange?.(blankDoc, '<p></p>', ''))
+    expect(send()).toBeDisabled()
+  })
+})
+
+describe('AgentConversationThread: marking read', () => {
+  it("reads through the conversation's own agent watermark", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['conv-thread', 'conversation_read'], {
+      hasMore: false,
+      conversation: makeConversation({
+        id: 'conversation_read' as ConversationDTO['id'],
+        agentLastReadAt: '2026-07-02T10:00:00.000Z',
+      }),
+      messages: [makeMessage({ conversationId: 'conversation_read' as never })],
+    })
+    render(
+      <QueryClientProvider client={client}>
+        <AgentConversationThread
+          item={{ kind: 'conversation', id: 'conversation_read' } as never}
+          targetMessageId={null}
+          onChanged={vi.fn()}
+          onBack={vi.fn()}
+          onSelectItem={vi.fn()}
+          onOpenPost={vi.fn()}
+          isVisitorTyping={false}
+          isOtherAgentTyping={false}
+        />
+      </QueryClientProvider>
+    )
+    await screen.findByTestId('editor')
+    expect(composerProbe.markRead?.readThrough).toBe('2026-07-02T10:00:00.000Z')
+  })
+
+  it('clears the row in the cached inbox lists after a read instead of refreshing the inbox', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const listKey = ['admin', 'inbox', 'conversations', 'view:mine', 'open', 'all', '']
+    client.setQueryData(listKey, {
+      conversations: [
+        makeConversation({ id: 'conversation_read' as ConversationDTO['id'], unreadCount: 3 }),
+      ],
+      hasMore: false,
+      nextCursor: null,
+    })
+    const onChanged = vi.fn()
+    render(
+      <QueryClientProvider client={client}>
+        <AgentConversationThread
+          item={{ kind: 'conversation', id: 'conversation_read' } as never}
+          targetMessageId={null}
+          onChanged={onChanged}
+          onBack={vi.fn()}
+          onSelectItem={vi.fn()}
+          onOpenPost={vi.fn()}
+          isVisitorTyping={false}
+          isOtherAgentTyping={false}
+        />
+      </QueryClientProvider>
+    )
+    await screen.findByTestId('editor')
+
+    act(() => composerProbe.markRead?.onMarked?.())
+
+    expect(onChanged).not.toHaveBeenCalled()
+    const list = client.getQueryData<{ conversations: ConversationDTO[] }>(listKey)
+    expect(list?.conversations[0].unreadCount).toBe(0)
+  })
+})
+
+describe('AgentConversationThread: reads that ride with the thread', () => {
+  it('asks for the ticket link and the translation preference only once the thread has loaded', async () => {
+    let open!: () => void
+    threadProbe.gate = new Promise<void>((resolve) => (open = resolve))
+    threadProbe.linkFetches = 0
+    threadProbe.translationEnabled = []
+    renderThread({ kind: 'conversation', id: 'conversation_gated' })
+
+    // The thread request loads both and seeds them, so while it is in
+    // flight neither asks on its own.
+    await new Promise((r) => setTimeout(r, 20))
+    expect(threadProbe.linkFetches).toBe(0)
+    expect(threadProbe.translationEnabled.length).toBeGreaterThan(0)
+    expect(threadProbe.translationEnabled.every((on) => !on)).toBe(true)
+
+    act(() => open())
+    await screen.findByTestId('editor')
+    expect(threadProbe.translationEnabled.at(-1)).toBe(true)
+    threadProbe.gate = null
+  })
+})
+
+describe('AgentConversationThread: inbox translation past the AI allowance', () => {
+  it('shows the notice above the composer, and nothing when there is none', async () => {
+    threadProbe.overAllowanceNotice = 'Your AI allowance is used up. Translation keeps working.'
+    renderThread({ kind: 'conversation', id: 'conversation_over_allowance' })
+    expect(
+      await screen.findByText('Your AI allowance is used up. Translation keeps working.')
+    ).toBeTruthy()
+    cleanup()
+
+    threadProbe.overAllowanceNotice = null
+    renderThread({ kind: 'conversation', id: 'conversation_within_allowance' })
+    await screen.findByTestId('editor')
+    expect(screen.queryByText(/AI allowance/)).toBeNull()
+  })
+})
+
+describe('AgentConversationThread: stable props for memoized children', () => {
+  it('hands the detail panel the same refresh handler across thread re-renders', async () => {
+    threadProbe.panelOnChanged = []
+    renderThread({ kind: 'conversation', id: 'conversation_stable' })
+    await screen.findByTestId('inbox-detail-panel')
+    await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
+    const rendersBefore = threadProbe.panelOnChanged.length
+
+    // The first character re-renders the thread: the reply becomes sendable.
+    act(() =>
+      composerProbe.onChange?.(
+        { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hi' }] }] },
+        '<p>Hi</p>',
+        'Hi'
+      )
+    )
+
+    expect(threadProbe.panelOnChanged.length).toBeGreaterThan(rendersBefore)
+    expect(new Set(threadProbe.panelOnChanged.slice(rendersBefore - 1)).size).toBe(1)
+  })
+})
+
+describe('AgentConversationThread: virtualizer re-renders', () => {
+  it('re-renders the message list, not the rest of the thread, when the list is measured', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_measured' })
+    await screen.findByTestId('thread-viewport')
+    await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
+    const rendersBefore = composerProbe.threadRenders
+
+    act(() => threadProbe.remeasure())
+    act(() => threadProbe.remeasure())
+
+    expect(composerProbe.threadRenders).toBe(rendersBefore)
+  })
+})
+
+describe('AgentConversationThread: triage controls beside the detail panel', () => {
+  it('leaves the header copies out where the detail panel shows them', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_wide' }, { detailPanelShown: true })
+    const panel = await screen.findByTestId('inbox-detail-panel')
+
+    expect(screen.queryByTestId('priority-control')).not.toBeInTheDocument()
+    expect(panel).toHaveAttribute('data-visible', 'true')
+  })
+
+  it('keeps them in the header where the detail panel does not show', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_narrow' })
+    const panel = await screen.findByTestId('inbox-detail-panel')
+
+    expect(screen.getByTestId('priority-control')).toBeInTheDocument()
+    expect(panel).toHaveAttribute('data-visible', 'false')
+  })
+})
+
+describe('AgentConversationThread composer typing', () => {
+  const doc = (text: string) => ({
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+  })
+  /** Feed the composer one character at a time, as the editor does. */
+  const type = (from: string, to: string) => {
+    for (let i = from.length + 1; i <= to.length; i++) {
+      act(() => composer.onChange!(doc(to.slice(0, i)), '', to.slice(0, i)))
+    }
+  }
+
+  it('re-renders the thread when the reply becomes sendable, not per keystroke', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('inbox-detail-panel')
+    const send = screen.getByRole('button', { name: 'Send reply' })
+    expect(send).toBeDisabled()
+
+    type('', 'H')
+    expect(send).toBeEnabled()
+
+    composer.threadRenders = 0
+    type('H', 'Hello there')
+    expect(composer.threadRenders).toBe(0)
+  })
+
+  it('keeps the header controls out of the render the first character causes', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('inbox-detail-panel')
+    expect(Object.keys(headerRenders.counts).sort()).toEqual([
+      'assignee',
+      'priority',
+      'status',
+      'tags',
+    ])
+    const before = { ...headerRenders.counts }
+    composer.threadRenders = 0
+
+    type('', 'H')
+
+    // The thread did re-render (the reply became sendable) ...
+    expect(composer.threadRenders).toBeGreaterThan(0)
+    // ... and the header controls did not.
+    expect(headerRenders.counts).toEqual(before)
+  })
+
+  it('sends the reply as typed and empties the composer', async () => {
+    const { sendAgentMessageFn } = await import('@/lib/server/functions/conversation')
+    vi.mocked(sendAgentMessageFn).mockResolvedValue({} as never)
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('inbox-detail-panel')
+
+    type('', 'Hello there')
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' }))
+
+    await waitFor(() => expect(sendAgentMessageFn).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(sendAgentMessageFn).mock.calls[0]![0]).toMatchObject({
+      data: { content: 'Hello there', contentJson: doc('Hello there') },
+    })
+    expect(screen.getByRole('button', { name: 'Send reply' })).toBeDisabled()
   })
 })

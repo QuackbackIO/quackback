@@ -45,7 +45,7 @@ import type {
 import type { PrincipalId, ChannelAccountId, ConversationId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
-import { validateAttachments } from '@/lib/server/messages/message-core'
+import { resolveAttachments, linkFilesToMessage } from '@/lib/server/domains/files/files.service'
 import {
   createPrincipal,
   ensurePrincipalForUser,
@@ -57,6 +57,7 @@ import {
   type ParsedInboundEmail,
 } from './conversation.email-inbound'
 import type { ConversationAuthorInput } from './conversation.types'
+import { activeTestOwnerOf, isTestCustomer } from '@/lib/server/test-data'
 import { emitConversationCreated, emitMessageCreated } from './conversation.webhooks'
 
 export interface ColdInboundResolution {
@@ -196,13 +197,22 @@ export async function createEmailConversation(input: {
   const safeContentJson = contentJson
     ? sanitizeTiptapContent(contentJson, { restrictImagesToTrustedOrigins: true })
     : null
-  const attachments = validateAttachments(input.attachments)
+  // The attachments were stored by the inbound pipeline as this sender's files.
+  const attachments = await resolveAttachments(input.attachments, {
+    principalId,
+    canAttachAnyFile: false,
+  })
   const now = new Date()
   const { conversation, message } = await db.transaction(async (tx) => {
+    // A test customer's thread goes to the teammate trying it out, and keeps
+    // no sender address: replies reach only that teammate.
+    const testOwner = await activeTestOwnerOf(principalId, tx)
+    const isTest = testOwner !== null || (await isTestCustomer(principalId, tx))
     const [created] = await tx
       .insert(conversations)
       .values({
         visitorPrincipalId: principalId,
+        ...(testOwner ? { assignedAgentPrincipalId: testOwner } : {}),
         channel: 'email',
         source: 'email',
         channelAccountId,
@@ -225,7 +235,7 @@ export async function createEmailConversation(input: {
               spamReason: quarantine.cause,
             }
           : {}),
-        visitorEmail: normalizeSenderAddress(parsed.from),
+        visitorEmail: isTest ? null : normalizeSenderAddress(parsed.from),
         customAttributes: unverified ? { unverifiedSender: true } : {},
       })
       .returning()
@@ -247,6 +257,7 @@ export async function createEmailConversation(input: {
         metadata: { source: 'email', emailMessageId: inboundDedupeKey(parsed) ?? undefined },
       })
       .returning()
+    await linkFilesToMessage(tx, attachments, inserted!.id)
     return { conversation: created, message: inserted }
   })
 

@@ -1,34 +1,72 @@
 import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
+import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
+import { widgetResolvePublicArticleRefFn } from '@/lib/server/functions/widget/help'
+import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { appendWidgetOtt } from './build-portal-url'
+import { hcArticlePath } from '@/lib/shared/help-center-url'
+import { widgetQueryKeys, widgetQueryKeyEquals } from '@/lib/client/hooks/use-widget-vote'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
+import { WidgetArticleFooter } from './widget-article-footer'
 import { sendToHost } from '@/lib/client/widget-bridge'
+import { WidgetArticleSkeleton } from './widget-skeletons'
+import { useWidgetAuth } from './widget-auth-provider'
 
 interface WidgetHelpDetailProps {
-  articleSlug: string
+  /** `article_` / `kb_article_` TypeID or public slug — same as `open({ articleId })`. */
+  articleRef: string
+  /** Tapping the category eyebrow browses the rest of that collection. */
+  onCategorySelect?: (categoryId: string, categoryName: string) => void
+  /** "Still stuck?" exit ramp — opens a new conversation. Omitted when the
+   *  visitor can't start one (messenger off, or tickets-only). */
+  onAskQuestion?: () => void
 }
 
-export function WidgetHelpDetail({ articleSlug }: WidgetHelpDetailProps) {
-  const { data: article, isLoading } = useQuery(publicHelpCenterQueries.articleBySlug(articleSlug))
+export function WidgetHelpDetail({
+  articleRef,
+  onCategorySelect,
+  onAskQuestion,
+}: WidgetHelpDetailProps) {
+  const { isIdentified, canPortalHandoff, sessionVersion } = useWidgetAuth()
+  const { locale } = useIntl()
+  const { data: article, isLoading } = useQuery({
+    queryKey: widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion, locale),
+    queryFn: () =>
+      widgetResolvePublicArticleRefFn({
+        data: { ref: articleRef, locale },
+        headers: getWidgetAuthHeaders(),
+      }),
+    placeholderData: (prev, prevQuery) =>
+      widgetQueryKeyEquals(
+        widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion, locale),
+        prevQuery?.queryKey
+      )
+        ? prev
+        : undefined,
+    staleTime: 30 * 1000,
+  })
 
-  const handleViewOnPortal = useCallback(() => {
+  const handleViewOnPortal = useCallback(async () => {
     if (!article) return
-    const url = `${window.location.origin}/hc/articles/${article.category.slug}/${article.slug}`
+    const ott = isIdentified && canPortalHandoff ? await generateOneTimeToken() : null
+    const url = appendWidgetOtt(
+      `${window.location.origin}${hcArticlePath({
+        locale: article.resolvedLocale,
+        urlId: article.urlId,
+        slug: article.slug,
+      })}`,
+      isIdentified && canPortalHandoff,
+      ott
+    )
     sendToHost({ type: 'quackback:navigate', url })
-  }, [article])
+  }, [article, isIdentified, canPortalHandoff])
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-10">
-        <div className="text-sm text-muted-foreground">
-          <FormattedMessage id="widget.helpDetail.loading" defaultMessage="Loading..." />
-        </div>
-      </div>
-    )
+    return <WidgetArticleSkeleton />
   }
 
   if (!article) {
@@ -41,14 +79,31 @@ export function WidgetHelpDetail({ articleSlug }: WidgetHelpDetailProps) {
     )
   }
 
+  const eyebrowClass = 'text-[11px] text-muted-foreground/60 uppercase tracking-wide'
+
   return (
     <div className="flex flex-col h-full">
       <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0">
         {/* Readable column when the host panel expands for long-form content. */}
         <div className="mx-auto w-full max-w-2xl px-4 py-3">
-          <span className="text-[11px] text-muted-foreground/60 uppercase tracking-wide">
-            {article.category.name}
-          </span>
+          {onCategorySelect ? (
+            <button
+              type="button"
+              onClick={() => onCategorySelect(article.category.id, article.category.name)}
+              className={`${eyebrowClass} -ms-1 inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition-colors hover:bg-muted/40 hover:text-muted-foreground`}
+            >
+              {article.category.name}
+              <ChevronRightIcon className="size-3 rtl:rotate-180" aria-hidden />
+              <span className="sr-only">
+                <FormattedMessage
+                  id="widget.helpDetail.browseCategory"
+                  defaultMessage="Browse this collection"
+                />
+              </span>
+            </button>
+          ) : (
+            <span className={eyebrowClass}>{article.category.name}</span>
+          )}
           <WidgetPortalTitle title={article.title} onClick={handleViewOnPortal} />
 
           <div className="mt-3">
@@ -63,6 +118,8 @@ export function WidgetHelpDetail({ articleSlug }: WidgetHelpDetailProps) {
               </p>
             )}
           </div>
+
+          <WidgetArticleFooter articleId={article.id} onAskQuestion={onAskQuestion} />
         </div>
       </ScrollArea>
     </div>

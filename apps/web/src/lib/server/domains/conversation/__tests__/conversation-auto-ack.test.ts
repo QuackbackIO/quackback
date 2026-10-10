@@ -144,7 +144,7 @@ describe('maybeSendColdInboundAck', () => {
     expect(hoisted.sendConversationAutoAckEmail).not.toHaveBeenCalled()
   })
 
-  it('skips send when the monthly email budget is exhausted', async () => {
+  it('still sends when the monthly broadcast budget is exhausted', async () => {
     hoisted.enforceEmailBudget.mockRejectedValueOnce(
       new TierLimitError({ limit: 'emailsPerMonth', message: 'Email budget exhausted' })
     )
@@ -154,8 +154,8 @@ describe('maybeSendColdInboundAck', () => {
         conversationId,
         conversationSubject: 'Help',
       })
-    ).resolves.toBe('skipped')
-    expect(hoisted.sendConversationAutoAckEmail).not.toHaveBeenCalled()
+    ).resolves.toBe('sent')
+    expect(hoisted.sendConversationAutoAckEmail).toHaveBeenCalled()
   })
 
   it('sends with conversationId and records the outbound id', async () => {

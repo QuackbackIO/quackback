@@ -7,6 +7,7 @@
  */
 export {
   cancelJob,
+  claimById,
   claimJobs,
   completeJob,
   enqueueJob,
@@ -17,6 +18,7 @@ export {
   isMissingJobQueue,
   jobQueueDepth,
   jobWorkerId,
+  peekRunnableJob,
   pruneTerminalJobs,
   reapExpiredLeases,
   JobQueueMissingError,
@@ -54,6 +56,8 @@ export {
   createScheduleState,
   dispatchPass,
   drainOnce,
+  startClaimedJob,
+  startJobsById,
   poolSize,
   primeJobHandlers,
   resetJobHandlers,
@@ -78,4 +82,13 @@ export {
   type ParsedCron,
 } from './cron'
 
-export { getJobWorkerStatus, startJobWorker, stopJobWorker, type JobWorkerStatus } from './worker'
+export {
+  getJobWorkerStatus,
+  handleJobWake,
+  isJobWorkerRunning,
+  startJobWorker,
+  stopJobWorker,
+  wakeWorkspace,
+  type JobWakeRequest,
+  type JobWorkerStatus,
+} from './worker'

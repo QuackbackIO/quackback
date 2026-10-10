@@ -275,6 +275,70 @@ export function streamSynthesisToWire<T>(options: {
   return queue.stream()
 }
 
+/** SSE comment interval so an idle synthesis wait cannot look dead to the edge. */
+export const SSE_KEEPALIVE_INTERVAL_MS = 2_000
+
+const SSE_KEEPALIVE_FRAME = new TextEncoder().encode(': keepalive\n\n')
+
+/**
+ * Wrap an SSE Response so silence longer than {@link SSE_KEEPALIVE_INTERVAL_MS}
+ * still sends bytes. Ask AI buffers model chunks until the attempt commits;
+ * DeepSeek v4 Flash can think for several seconds first, and the public edge
+ * closes an idle event-stream before RUN_FINISHED.
+ */
+export function withSseKeepalive(
+  res: Response,
+  intervalMs: number = SSE_KEEPALIVE_INTERVAL_MS
+): Response {
+  const src = res.body
+  if (!src) return res
+  const reader = src.getReader()
+  let timer: ReturnType<typeof setInterval> | null = null
+  let stopped = false
+  const stop = () => {
+    if (stopped) return
+    stopped = true
+    if (timer !== null) {
+      clearInterval(timer)
+      timer = null
+    }
+  }
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      timer = setInterval(() => {
+        try {
+          controller.enqueue(SSE_KEEPALIVE_FRAME)
+        } catch {
+          stop()
+        }
+      }, intervalMs)
+      void (async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            if (value) controller.enqueue(value)
+          }
+          controller.close()
+        } catch (err) {
+          controller.error(err)
+        } finally {
+          stop()
+        }
+      })()
+    },
+    cancel() {
+      stop()
+      void reader.cancel()
+    },
+  })
+  return new Response(stream, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: res.headers,
+  })
+}
+
 export function createChunkQueue(): ChunkQueue {
   const buffered: StreamChunk[] = []
   let done = false

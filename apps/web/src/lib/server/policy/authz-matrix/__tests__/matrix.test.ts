@@ -96,6 +96,44 @@ describe('API-route channel reachability', () => {
   })
 })
 
+describe('workspace Copilot session route', () => {
+  it('requires a teammate session with Copilot permission and excludes API keys', () => {
+    const route = surfaces.find(
+      (surface) => surface.file === 'routes/api/admin/assistant/workspace.ts'
+    )!
+    expect(route.channel).toBe('session-route')
+    expect(route.authz).toEqual({ type: 'permission', permission: 'copilot.use' })
+    expect(evaluate(byId('admin'), route)).toBe('allow')
+    expect(evaluate(byId('member'), route)).toBe('allow')
+    expect(evaluate(byId('portal_user'), route)).toBe('deny')
+    expect(evaluate(byId('full_api_key'), route)).toBe('n/a')
+  })
+})
+
+describe('automatic website branding authorization', () => {
+  it('requires current settings management before lookup, private status, an offer answer or Undo', () => {
+    const brandingOnly = {
+      ...byId('admin'),
+      permissions: new Set<PermissionKey>(['settings.branding']),
+    }
+    for (const name of [
+      'startAutomaticWebsiteBrandingFn',
+      'getAutomaticWebsiteBrandingStatusFn',
+      'undoAutomaticWebsiteBrandingFn',
+      'acceptWebsiteBrandingOfferFn',
+      'declineWebsiteBrandingOfferFn',
+    ]) {
+      const surface = surfaces.find(
+        (item) => item.file === 'lib/server/functions/website-branding.ts' && item.surface === name
+      )
+      expect(surface, name).toBeDefined()
+      expect(evaluate(byId('admin'), surface!), name).toBe('allow')
+      expect(evaluate(brandingOnly, surface!), name).toBe('deny')
+      expect(evaluate(byId('portal_user'), surface!), name).toBe('deny')
+    }
+  })
+})
+
 describe('API key scope enforcement (owner permissions ∩ key scopes)', () => {
   it('a read-only scoped key is denied every write tool a full key passes', () => {
     const writeTools = tools.filter((t) => t.scopes.every((s) => s.startsWith('write:')))

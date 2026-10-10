@@ -1,12 +1,12 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import { ArrowPathIcon, EnvelopeIcon, KeyIcon, ShieldCheckIcon } from '@heroicons/react/24/solid'
+import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { MethodRow } from '@/components/admin/settings/auth-shared/method-row'
 import { OAuthProviderGrid } from '@/components/admin/settings/auth-shared/oauth-provider-grid'
 import { AuthProviderCredentialsDialog } from '@/components/admin/settings/portal-auth/auth-provider-credentials-dialog'
+import { SettingRows } from '@/components/admin/settings/setting-row'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { AUTOSAVE } from '@/lib/client/autosave'
 import { WarningBox } from '@/components/shared/warning-box'
 import { IdentityProvidersSection } from '@/components/admin/settings/security/identity-providers/provider-list'
 import { countEnabledAuthMethods } from '@/components/admin/settings/security/auth-method-count'
@@ -15,6 +15,8 @@ import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { updateAuthConfigFn } from '@/lib/server/functions/settings'
 import type { AuthConfig } from '@/lib/shared/types/settings'
+
+type AuthConfigPatch = NonNullable<Parameters<typeof updateAuthConfigFn>[0]>['data']
 
 interface SignInProvidersTabProps {
   /** Team-side auth config from settings.authConfig. */
@@ -45,7 +47,6 @@ export function SignInProvidersTab({
   const router = useRouter()
   const queryClient = useQueryClient()
   const [isPending, startTransition] = useTransition()
-  const [saving, setSaving] = useState(false)
 
   // ---------- Unified state ----------
   // Seed from authConfig.oauth only. isSignInMethodEnabled applies the correct
@@ -99,19 +100,31 @@ export function SignInProvidersTab({
   const noAuthEnabled = enabledMethodCount === 0
 
   // ---------- Save ----------
+  // Every toggle is one autosave mutation against authConfig: the header shows
+  // its status and a failure runs the caller's revert and shows the one toast.
+  // The server's refusals (last sign-in method, recovery codes required) are rules
+  // the admin can act on, so the toast names them.
+  const persist = useMutation({
+    meta: { ...AUTOSAVE, showServerMessage: true },
+    mutationFn: ({ patch }: { patch: AuthConfigPatch; revert: () => void }) =>
+      updateAuthConfigFn({ data: patch }),
+    onSuccess: (updated) => {
+      setTeamAuthConfig(updated)
+      void queryClient.invalidateQueries({ queryKey: ['settings', 'authConfig'] })
+      startTransition(() => router.invalidate())
+    },
+    onError: (_error, { revert }) => revert(),
+  })
+
   /**
-   * Toggling password / magic link writes to authConfig.oauth — the single
+   * Toggling password / magic link writes to authConfig.oauth, the single
    * unified config for both portal and team sign-in. Disabling password while
    * 2FA enforcement is on cascades 2FA off in the same save so team members
    * aren't locked out (TOTP enrolls on top of a password).
    */
-  const saveBuiltin = async (key: 'password' | 'magicLink', value: boolean) => {
-    setSaving(true)
+  const saveBuiltin = (key: 'password' | 'magicLink', value: boolean) => {
     const prevTeam = teamAuthConfig
     const prevOauth = oauthState
-    // Disabling password while 2FA enforcement is on would lock team members
-    // out (TOTP enrols on top of a password), so cascade 2FA off in the same
-    // atomic save instead of blocking the toggle.
     const cascadeDisable2FA = key === 'password' && !value && twoFactorRequired
     setOauthState((p) => ({ ...p, [key]: value }))
     setTeamAuthConfig((p) => ({
@@ -119,74 +132,48 @@ export function SignInProvidersTab({
       oauth: { ...(p.oauth ?? {}), [key]: value },
       ...(cascadeDisable2FA && { twoFactor: { ...(p.twoFactor ?? {}), required: false } }),
     }))
-    try {
-      const updated = await updateAuthConfigFn({
-        data: {
-          oauth: { [key]: value },
-          ...(cascadeDisable2FA && { twoFactor: { required: false } }),
-        },
-      })
-      setTeamAuthConfig(updated)
-      void queryClient.invalidateQueries({ queryKey: ['settings', 'authConfig'] })
-      startTransition(() => router.invalidate())
-    } catch (err) {
-      // Revert local state to match what the server (now) reflects.
-      setOauthState(prevOauth)
-      setTeamAuthConfig(prevTeam)
-      toast.error(err instanceof Error ? err.message : 'Could not save settings.')
-    } finally {
-      setSaving(false)
-    }
+    persist.mutate({
+      patch: {
+        oauth: { [key]: value },
+        ...(cascadeDisable2FA && { twoFactor: { required: false } }),
+      },
+      revert: () => {
+        setOauthState(prevOauth)
+        setTeamAuthConfig(prevTeam)
+      },
+    })
   }
 
   /**
-   * Toggling a social provider writes to authConfig.oauth — the single
-   * unified config that gates the provider on both the portal and team
-   * sign-in surfaces.
+   * Toggling a social provider writes to authConfig.oauth, the single unified
+   * config that gates the provider on both the portal and team sign-in
+   * surfaces.
    */
-  const saveOauthProvider = async (providerId: string, checked: boolean) => {
-    setSaving(true)
+  const saveOauthProvider = (providerId: string, checked: boolean) => {
     const prevTeam = teamAuthConfig
     const prevOauth = oauthState
     // Use an updater so concurrent toggles on other providers don't
     // get clobbered by a stale closure capture.
     setOauthState((p) => ({ ...p, [providerId]: checked }))
     setTeamAuthConfig((p) => ({ ...p, oauth: { ...(p.oauth ?? {}), [providerId]: checked } }))
-    try {
-      const updated = await updateAuthConfigFn({ data: { oauth: { [providerId]: checked } } })
-      setTeamAuthConfig(updated)
-      void queryClient.invalidateQueries({ queryKey: ['settings', 'authConfig'] })
-      startTransition(() => router.invalidate())
-    } catch (err) {
-      // Updater form so the revert doesn't clobber unrelated provider
-      // toggles that landed between the optimistic update and now.
-      setOauthState((p) => ({ ...p, [providerId]: prevOauth[providerId] }))
-      setTeamAuthConfig(prevTeam)
-      toast.error(err instanceof Error ? err.message : 'Could not save settings.')
-    } finally {
-      setSaving(false)
-    }
+    persist.mutate({
+      patch: { oauth: { [providerId]: checked } },
+      revert: () => {
+        // Updater form so the revert doesn't clobber unrelated provider
+        // toggles that landed between the optimistic update and now.
+        setOauthState((p) => ({ ...p, [providerId]: prevOauth[providerId] }))
+        setTeamAuthConfig(prevTeam)
+      },
+    })
   }
 
-  // ---------- 2FA requirement (child of Password) ----------
   /**
    * Require-2FA is a team-side policy that builds on top of password
    * sign-in. Only writes to auth config (no portal side), and is
    * disabled when password is off (TOTP enrollment requires a password).
    */
-  const saveTwoFactor = async (checked: boolean) => {
-    setSaving(true)
-    try {
-      const updated = await updateAuthConfigFn({ data: { twoFactor: { required: checked } } })
-      setTeamAuthConfig(updated)
-      void queryClient.invalidateQueries({ queryKey: ['settings', 'authConfig'] })
-      startTransition(() => router.invalidate())
-      toast.success('Authentication settings saved.')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not save settings.')
-    } finally {
-      setSaving(false)
-    }
+  const saveTwoFactor = (checked: boolean) => {
+    persist.mutate({ patch: { twoFactor: { required: checked } }, revert: () => {} })
   }
 
   // ---------- Credentials dialog (shared across all providers) ----------
@@ -209,7 +196,7 @@ export function SignInProvidersTab({
     })
   }
 
-  const busy = saving || isPending
+  const busy = persist.isPending || isPending
 
   return (
     <div className="space-y-6">
@@ -223,50 +210,44 @@ export function SignInProvidersTab({
 
       {/* Card 1: Built-in (password + magic link). Single toggle per row;
           writes to authConfig.oauth for both portal and team sign-in. */}
-      <SettingsCard
-        title="Email"
-        description="Built-in sign-in for users."
-        contentClassName="space-y-4"
-      >
-        <MethodRow
-          icon={KeyIcon}
-          label="Password"
-          description="Sign in with email and password."
-          checked={passwordEnabled}
-          onCheckedChange={(v) => void saveBuiltin('password', v)}
-          disabled={busy || isLastMethod('password')}
-        />
-        {/* Nested under Password: 2FA enforcement builds on top of the password
-            (TOTP enrols over it). The left rule + indent mark it as a child
-            setting of the Password row, not a peer. */}
-        <div className="ml-5 space-y-4 border-l-2 border-border/60 pl-5">
+      <SettingsCard title="Email" description="Built-in sign-in for users.">
+        <SettingRows>
           <MethodRow
-            compact
-            muted={!passwordEnabled}
-            icon={ShieldCheckIcon}
-            label="Require two-factor authentication"
-            description={
-              passwordEnabled
-                ? 'Users must enter a code from their authenticator app after their password.'
-                : 'Turn on Password sign-in to require a second factor.'
-            }
-            checked={twoFactorRequired}
-            onCheckedChange={(v) => void saveTwoFactor(v)}
-            disabled={busy || !passwordEnabled}
+            label="Password"
+            description="Sign in with email and password."
+            checked={passwordEnabled}
+            onCheckedChange={(v) => saveBuiltin('password', v)}
+            disabled={busy || isLastMethod('password')}
           />
-        </div>
-        <MethodRow
-          icon={EnvelopeIcon}
-          label="Email magic link"
-          description={
-            emailConfigured
-              ? 'One-click link or 6-digit code by email.'
-              : 'Configure SMTP or Amazon SES to enable email delivery.'
-          }
-          checked={magicLinkEnabled}
-          onCheckedChange={(v) => void saveBuiltin('magicLink', v)}
-          disabled={busy || !emailConfigured || isLastMethod('magicLink')}
-        />
+          {/* Nested under Password: 2FA enforcement builds on top of the password
+              (TOTP enrols over it). The left rule and indent mark it as a child
+              setting of the Password row, not a peer. */}
+          <div className="ml-1 border-l-2 border-border/60 pl-4">
+            <MethodRow
+              muted={!passwordEnabled}
+              label="Require two-factor authentication"
+              description={
+                passwordEnabled
+                  ? 'Users must enter a code from their authenticator app after their password.'
+                  : 'Turn on Password sign-in to require a second factor.'
+              }
+              checked={twoFactorRequired}
+              onCheckedChange={(v) => saveTwoFactor(v)}
+              disabled={busy || !passwordEnabled}
+            />
+          </div>
+          <MethodRow
+            label="Email magic link"
+            description={
+              emailConfigured
+                ? 'One-click link or 6-digit code by email.'
+                : 'Configure SMTP, Amazon SES or Resend to enable email delivery.'
+            }
+            checked={magicLinkEnabled}
+            onCheckedChange={(v) => saveBuiltin('magicLink', v)}
+            disabled={busy || !emailConfigured || isLastMethod('magicLink')}
+          />
+        </SettingRows>
       </SettingsCard>
 
       {/* Card 2: Social sign-in. Configure credentials once; the toggle
@@ -280,7 +261,7 @@ export function SignInProvidersTab({
           credentialStatus={credentialStatus}
           isLastMethod={isLastMethod}
           saving={busy}
-          onToggle={(id, checked) => void saveOauthProvider(id, checked)}
+          onToggle={(id, checked) => saveOauthProvider(id, checked)}
           onConfigure={openConfigDialog}
           excludeProviderIds={['custom-oidc']}
         />
@@ -295,13 +276,6 @@ export function SignInProvidersTab({
         tierEnabled={customOidcProviderTier}
         enabledMethodCount={enabledMethodCount}
       />
-
-      {busy && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <ArrowPathIcon className="h-4 w-4 animate-spin" />
-          <span>Saving…</span>
-        </div>
-      )}
 
       {configDialog && (
         <AuthProviderCredentialsDialog

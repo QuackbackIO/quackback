@@ -17,7 +17,7 @@ import { auth } from '@/lib/server/auth'
 import { db, principal, user, eq, and, inArray, sql } from '@/lib/server/db'
 import type { Role } from '@/lib/shared/roles'
 import { incrementBucket } from '@/lib/server/utils/rate-bucket'
-import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 
 const MENTION_ELIGIBLE_ROLES = ['admin', 'member', 'user'] as const
 // `?scope=team` narrows to teammates only (no visitors), for contexts where a
@@ -37,23 +37,6 @@ interface SuggestRow {
 // Same fallback chain as /api/v1/users/:id/card so the picker and the
 // hover card agree on what avatar to show for stale principal rows
 // whose `avatar_*` columns drifted from the linked user record.
-function resolveSuggestAvatar(opts: {
-  principalAvatarKey: string | null
-  principalAvatarUrl: string | null
-  userImageKey: string | null | undefined
-  userImage: string | null | undefined
-}): string | null {
-  if (opts.principalAvatarKey) {
-    const s3Url = getPublicUrlOrNull(opts.principalAvatarKey)
-    if (s3Url) return s3Url
-  }
-  if (opts.principalAvatarUrl) return opts.principalAvatarUrl
-  if (opts.userImageKey) {
-    const s3Url = getPublicUrlOrNull(opts.userImageKey)
-    if (s3Url) return s3Url
-  }
-  return opts.userImage ?? null
-}
 
 export async function handleMentionSuggest({ request }: { request: Request }): Promise<Response> {
   const session = await auth.api.getSession({ headers: request.headers })
@@ -117,11 +100,11 @@ export async function handleMentionSuggest({ request }: { request: Request }): P
   const result: SuggestRow[] = rows.map((r) => ({
     principalId: r.id,
     displayName: r.displayName,
-    avatarUrl: resolveSuggestAvatar({
-      principalAvatarKey: r.avatarKey,
-      principalAvatarUrl: r.avatarUrl,
-      userImageKey: r.userImageKey,
+    avatarUrl: resolveUserAvatarUrl({
       userImage: r.userImage,
+      userImageKey: r.userImageKey,
+      principalAvatarUrl: r.avatarUrl,
+      principalAvatarKey: r.avatarKey,
     }),
     role: r.role as Role,
   }))

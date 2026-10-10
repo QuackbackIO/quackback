@@ -78,7 +78,7 @@ export interface ImportPreviewRow {
   board: string | null
   /** Resolved status name, or null when the row falls back to the default status */
   status: string | null
-  /** Author email/name, or "Imported user" when unattributed */
+  /** Author email or author name from the CSV. Rows with neither are skipped. */
   author: string
   /** True when this author does not exist yet and would be created on commit */
   isNewAuthor: boolean

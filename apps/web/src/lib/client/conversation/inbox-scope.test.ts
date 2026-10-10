@@ -17,6 +17,7 @@ import {
   isTicketInboxView,
   ticketTypeForView,
   inboxNavKey,
+  inboxScopeHasRefinements,
   type InboxNavItem,
 } from './inbox-scope'
 import { registerChannelDescriptor, unregisterChannelDescriptor } from '@/lib/shared/channels'
@@ -79,7 +80,7 @@ describe('inboxNavKey', () => {
 })
 
 describe('buildListParams', () => {
-  const view = (v: 'mine' | 'unassigned' | 'all' | 'mentions' | 'spam'): InboxNavItem => ({
+  const view = (v: 'mine' | 'unassigned' | 'all' | 'mentions' | 'spam' | 'test'): InboxNavItem => ({
     kind: 'view',
     view: v,
   })
@@ -113,6 +114,13 @@ describe('buildListParams', () => {
     expect(buildListParams(view('spam'), 'open', 'high', 'junk')).toEqual({
       view: 'spam',
       search: 'junk',
+    })
+  })
+
+  it('maps the test view to a self-contained feed across every status', () => {
+    expect(buildListParams(view('test'), 'open', 'high', 'hi')).toEqual({
+      view: 'test',
+      search: 'hi',
     })
   })
 
@@ -582,5 +590,25 @@ describe('buildInboxListParams', () => {
     expect(result.kinds).toEqual(['ticket'])
     expect(result.ticketType).toBe('customer')
     expect(result.facet).toBe('open')
+  })
+})
+
+describe('inboxScopeHasRefinements', () => {
+  it('is true for the queue, label, segment and team scopes', () => {
+    expect(inboxScopeHasRefinements({ kind: 'view', view: 'all' })).toBe(true)
+    expect(inboxScopeHasRefinements({ kind: 'tag', tagId })).toBe(true)
+    expect(inboxScopeHasRefinements({ kind: 'segment', segmentId: segId })).toBe(true)
+  })
+
+  it('is false for custom views and the self-contained feeds', () => {
+    expect(
+      inboxScopeHasRefinements({
+        kind: 'custom',
+        viewId: 'conversation_view_v' as ConversationViewId,
+      })
+    ).toBe(false)
+    for (const view of ['mentions', 'spam', 'created_by_me', 'test'] as const) {
+      expect(inboxScopeHasRefinements({ kind: 'view', view })).toBe(false)
+    }
   })
 })

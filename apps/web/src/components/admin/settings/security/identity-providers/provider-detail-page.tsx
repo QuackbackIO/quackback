@@ -1,66 +1,59 @@
 /**
- * Identity provider detail — one page per provider, stacked cards, one save
- * each.
+ * Identity provider detail — one page per provider, four sections.
  *
- * This replaced a dialog with three tabs. The dialog had two structural
- * problems a page fixes rather than rearranges: `enabled` was readable but not
- * settable here, so an admin could configure a provider, test it, save, close,
- * and still have nobody able to sign in; and everything shared a single Save,
- * so a domain change and a claim-mapping change were the same commit even
- * though they carry very different risk.
+ * Connection: is it working. Sign-in & access: who is sent here. Profile:
+ * what is read about them. Roles: which role they get. Each section saves only
+ * its own fields; a domain change and a claim-mapping change carry very
+ * different risk and are never the same commit.
  *
- * The header therefore carries the enabled toggle as a real control alongside
- * the status the admin needs to read the provider at a glance, and each card
- * below persists only its own fields.
+ * The header carries Enabled as a real control. Configuring, testing and
+ * saving a provider nobody can actually use was the most reachable dead end
+ * in the old dialog. The same completion step is offered inside a passing
+ * connection test, so setup reads connect → test → enable.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { CheckCircleIcon, ClockIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid'
+import { ExclamationTriangleIcon } from '@heroicons/react/24/solid'
 import type { IdentityProviderId } from '@quackback/ids'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { BackLink } from '@/components/ui/back-link'
-import { TimeAgo } from '@/components/ui/time-ago'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { IdpLogo } from '@/components/icons/idp-provider-icons'
-import { MENU_ROW } from '@/components/ui/menu'
-import { cn } from '@/lib/shared/utils'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { inferIdpKind, IDP_KIND_NAMES } from '../idp-shortcuts'
 import { countEnabledAuthMethods } from '../auth-method-count'
 import { SsoTestSignInProvider } from '../sso/use-sso-test-sign-in'
-import { AccountsCard } from './accounts-card'
-import { ClaimMappingCard } from './claim-mapping-card'
 import { ConnectionCard } from './connection-card'
-import { DangerCard } from './danger-card'
+import { ProviderMenu } from './provider-menu'
+import { RolesCard } from './roles-card'
+import { RolesDraftProvider } from './roles-draft-context'
 import { SignInCard } from './sign-in-card'
-import {
-  getConnectionTestState,
-  identityMappingIssue,
-  isOnlyWorkingMethod,
-  SIGN_IN_TAB,
-} from './provider-shared'
+import { UserDetailsCard } from './user-details-card'
+import { isOnlyWorkingMethod } from './only-working-method'
+import { identityMappingIssue, SSO_CRUMBS } from './provider-shared'
+import { useConnectionTest } from './use-connection-test'
 import { useProviderSave } from './use-provider-save'
 
-const SECTIONS = [
-  { id: 'connection', label: 'Connection' },
-  { id: 'signin', label: 'Sign-in' },
-  { id: 'accounts', label: 'Accounts' },
-  { id: 'mapping', label: 'Claim mapping' },
-  { id: 'danger', label: 'Remove' },
-] as const
-
-export function ProviderDetailPage({ providerId }: { providerId: IdentityProviderId }) {
+export function ProviderDetailPage({
+  providerId,
+  autoTest = false,
+  onAutoTestConsumed,
+}: {
+  providerId: IdentityProviderId
+  /** Open the connection test on arrival — set by "Save and test". */
+  autoTest?: boolean
+  onAutoTestConsumed?: () => void
+}) {
   const providers = useSuspenseQuery(settingsQueries.identityProviders()).data ?? []
   const provider = providers.find((p) => p.id === providerId) ?? null
 
   if (!provider) {
     return (
-      <div className="max-w-3xl space-y-6">
-        <BackLink {...SIGN_IN_TAB}>Sign-in</BackLink>
+      <SettingsPage title="Identity provider" crumbs={SSO_CRUMBS}>
         <p className="text-sm text-muted-foreground">Identity provider not found.</p>
-      </div>
+      </SettingsPage>
     )
   }
 
@@ -69,38 +62,61 @@ export function ProviderDetailPage({ providerId }: { providerId: IdentityProvide
     // the connection test and the claim-path suggestions share one modal and
     // one "last successful test" result.
     <SsoTestSignInProvider>
-      <ProviderDetailBody provider={provider} />
+      {/* The Roles card's unsaved draft reaches the Profile card's preview. */}
+      <RolesDraftProvider>
+        <ProviderDetailBody
+          provider={provider}
+          autoTest={autoTest}
+          onAutoTestConsumed={onAutoTestConsumed}
+        />
+      </RolesDraftProvider>
     </SsoTestSignInProvider>
   )
 }
 
-function ProviderDetailBody({ provider }: { provider: IdentityProvider }) {
+function ProviderDetailBody({
+  provider,
+  autoTest,
+  onAutoTestConsumed,
+}: {
+  provider: IdentityProvider
+  autoTest: boolean
+  onAutoTestConsumed?: () => void
+}) {
   const enabledMethodCount = useEnabledMethodCount()
   const isOnlyMethod = isOnlyWorkingMethod(provider, enabledMethodCount)
+  useAutoTest(provider, autoTest, onAutoTestConsumed)
 
   return (
-    <div className="max-w-5xl space-y-6">
-      <BackLink {...SIGN_IN_TAB}>Sign-in</BackLink>
-      <ProviderHeader provider={provider} isOnlyMethod={isOnlyMethod} />
-      <div className="flex gap-8">
-        <SectionNav />
-        <div className="min-w-0 flex-1 space-y-6">
-          <ConnectionCard provider={provider} />
-          <SignInCard provider={provider} />
-          <AccountsCard provider={provider} />
-          <ClaimMappingCard provider={provider} />
-          <DangerCard provider={provider} isOnlyMethod={isOnlyMethod} />
-        </div>
-      </div>
-    </div>
+    <ProviderPageShell provider={provider} isOnlyMethod={isOnlyMethod}>
+      <ConnectionCard provider={provider} />
+      <SignInCard provider={provider} />
+      <UserDetailsCard provider={provider} />
+      <RolesCard provider={provider} />
+    </ProviderPageShell>
   )
+}
+
+/** Runs the connection test once when the page is opened with `?test=1`,
+ *  then asks the route to drop the flag so a reload does not re-open it. */
+function useAutoTest(provider: IdentityProvider, autoTest: boolean, consumed?: () => void) {
+  const { openTest } = useConnectionTest(provider)
+  // The ref, not the dependency list, guards the single run: `openTest` is
+  // rebuilt every render and must not re-trigger the test.
+  const fired = useRef(false)
+  useEffect(() => {
+    if (!autoTest || fired.current) return
+    fired.current = true
+    openTest()
+    consumed?.()
+  }, [autoTest, openTest, consumed])
 }
 
 /**
  * Working sign-in methods across every surface. The "keep at least one method
  * enabled" guard spans built-in email, social OAuth and the identity_provider
- * table, so the enable toggle and the Remove control both need the whole count,
- * not just this provider's state.
+ * table, so the enable toggle and Remove both need the whole count, not just
+ * this provider's state.
  */
 function useEnabledMethodCount(): number {
   const providers = useSuspenseQuery(settingsQueries.identityProviders()).data ?? []
@@ -114,12 +130,14 @@ function useEnabledMethodCount(): number {
   })
 }
 
-function ProviderHeader({
+function ProviderPageShell({
   provider,
   isOnlyMethod,
+  children,
 }: {
   provider: IdentityProvider
   isOnlyMethod: boolean
+  children: React.ReactNode
 }) {
   const { saving, save } = useProviderSave(provider)
   const [enabled, setEnabled] = useState(provider.enabled)
@@ -131,140 +149,62 @@ function ProviderHeader({
 
   const toggle = async (checked: boolean) => {
     setEnabled(checked)
-    const ok = await save(
-      { enabled: checked },
-      checked ? 'Provider enabled.' : 'Provider disabled.'
-    )
+    const ok = await save({ enabled: checked }, checked ? 'Sign-in enabled.' : 'Sign-in disabled.')
     if (!ok) setEnabled(!checked)
   }
 
+  const badges = (!provider.configured || mappingIssue) && (
+    <>
+      {!provider.configured && (
+        <Badge size="sm" variant="outline">
+          No client secret
+        </Badge>
+      )}
+      {mappingIssue && (
+        <Badge size="sm" variant="warning">
+          <ExclamationTriangleIcon />
+          {mappingIssue}
+        </Badge>
+      )}
+    </>
+  )
+
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div className="flex min-w-0 items-start gap-3">
-        <IdpLogo kind={kind} className="mt-0.5 h-9 w-9 shrink-0" iconClassName="h-5 w-5" />
-        <div className="min-w-0 space-y-1.5">
-          <h1 className="truncate text-lg font-semibold">{provider.label}</h1>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge size="sm" shape="pill" variant={enabled ? 'default' : 'outline'}>
-              {enabled ? 'Enabled' : 'Disabled'}
-            </Badge>
-            <Badge size="sm" shape="pill" variant="subtle">
-              {IDP_KIND_NAMES[kind]} · OpenID Connect
-            </Badge>
-            <TestStatePill provider={provider} />
-            {mappingIssue && (
-              <Badge
-                size="sm"
-                shape="pill"
-                variant="outline"
-                className="border-amber-500/40 text-amber-700 dark:text-amber-400"
-              >
-                <ExclamationTriangleIcon />
-                {mappingIssue}
-              </Badge>
-            )}
+    <SettingsPage
+      title={provider.label}
+      description={IDP_KIND_NAMES[kind]}
+      crumbs={SSO_CRUMBS}
+      logo={
+        provider.logoUrl ? (
+          <img
+            src={provider.logoUrl}
+            alt=""
+            className="h-9 w-9 shrink-0 rounded-lg border border-border object-cover"
+          />
+        ) : (
+          <IdpLogo kind={kind} className="h-9 w-9 shrink-0" iconClassName="h-5 w-5" />
+        )
+      }
+      badge={badges || undefined}
+      actions={
+        <>
+          <div
+            className="flex items-center gap-2 text-sm"
+            title={isOnlyMethod ? 'At least one sign-in method must stay enabled.' : undefined}
+          >
+            <span className="text-muted-foreground">{enabled ? 'On' : 'Off'}</span>
+            <Switch
+              checked={enabled}
+              onCheckedChange={(v) => void toggle(v)}
+              disabled={saving || isOnlyMethod}
+              aria-label={`Enable ${provider.label}`}
+            />
           </div>
-        </div>
-      </div>
-
-      {/* Enabled is a real control here, not a read-out. Configuring, testing
-          and saving a provider nobody can actually use was the most reachable
-          dead end in the dialog. */}
-      <label
-        className="flex shrink-0 items-center gap-2 text-sm"
-        title={isOnlyMethod ? 'At least one sign-in method must stay enabled.' : undefined}
-      >
-        <span className="text-muted-foreground">Enabled</span>
-        <Switch
-          checked={enabled}
-          onCheckedChange={(v) => void toggle(v)}
-          disabled={saving || isOnlyMethod}
-          aria-label={`Enable ${provider.label}`}
-        />
-      </label>
-    </div>
-  )
-}
-
-/** Connection-test freshness as a pill. An enabled provider with no saved
- *  secret registers nothing, so that outranks the test state. */
-function TestStatePill({ provider }: { provider: IdentityProvider }) {
-  if (!provider.configured) {
-    return (
-      <Badge size="sm" shape="pill" variant="outline">
-        No client secret
-      </Badge>
-    )
-  }
-  const state = getConnectionTestState(provider)
-  if (state.kind === 'verified') {
-    return (
-      <Badge
-        size="sm"
-        shape="pill"
-        variant="outline"
-        className="border-green-500/40 text-green-700 dark:text-green-400"
-      >
-        <CheckCircleIcon />
-        Tested <TimeAgo date={state.testedAt} />
-      </Badge>
-    )
-  }
-  if (state.kind === 'stale') {
-    return (
-      <Badge
-        size="sm"
-        shape="pill"
-        variant="outline"
-        className="border-amber-500/40 text-amber-700 dark:text-amber-400"
-      >
-        <ClockIcon />
-        Re-test needed
-      </Badge>
-    )
-  }
-  return (
-    <Badge size="sm" shape="pill" variant="outline">
-      Not tested
-    </Badge>
-  )
-}
-
-/**
- * Anchored section nav. Plain in-page links rather than a scroll spy: every
- * section is mounted, so the browser's own anchor behaviour is enough and
- * there is no observer state to fall out of sync with the page.
- */
-function SectionNav() {
-  const [active, setActive] = useState<string>(SECTIONS[0].id)
-
-  useEffect(() => {
-    const sync = () => setActive(window.location.hash.slice(1) || SECTIONS[0].id)
-    sync()
-    window.addEventListener('hashchange', sync)
-    return () => window.removeEventListener('hashchange', sync)
-  }, [])
-
-  return (
-    <nav aria-label="Provider settings" className="hidden w-40 shrink-0 lg:block">
-      <ul className="sticky top-6 space-y-0.5">
-        {SECTIONS.map((s) => (
-          <li key={s.id}>
-            <a
-              href={`#${s.id}`}
-              onClick={() => setActive(s.id)}
-              aria-current={active === s.id ? 'true' : undefined}
-              className={cn(
-                MENU_ROW,
-                'hover:bg-muted/60 hover:text-foreground',
-                active === s.id ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground'
-              )}
-            >
-              {s.label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </nav>
+          <ProviderMenu provider={provider} isOnlyMethod={isOnlyMethod} />
+        </>
+      }
+    >
+      {children}
+    </SettingsPage>
   )
 }

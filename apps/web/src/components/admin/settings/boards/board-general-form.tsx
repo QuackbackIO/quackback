@@ -2,9 +2,7 @@ import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { updateBoardSchema, type UpdateBoardInput } from '@/lib/shared/schemas/boards'
 import { Input } from '@/components/ui/input'
-import { FormError } from '@/components/shared/form-error'
 import { Textarea } from '@/components/ui/textarea'
-import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
@@ -13,6 +11,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { useNavigate } from '@tanstack/react-router'
 import { useUpdateBoard } from '@/lib/client/mutations'
 import type { BoardId } from '@quackback/ids'
 
@@ -29,6 +28,7 @@ interface BoardGeneralFormProps {
 
 export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
   const mutation = useUpdateBoard()
+  const navigate = useNavigate()
 
   const form = useForm<UpdateBoardInput>({
     resolver: standardSchemaResolver(updateBoardSchema),
@@ -38,25 +38,45 @@ export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
     },
   })
 
+  // Name and description save when a field loses focus (or on Enter), so a
+  // rename never changes the URL while it is still being typed.
   function onSubmit(data: UpdateBoardInput) {
-    mutation.mutate({
-      id: board.id,
-      name: data.name,
-      description: data.description,
-    })
+    mutation.mutate(
+      {
+        id: board.id,
+        name: data.name,
+        description: data.description,
+      },
+      {
+        onSuccess: (updated) => {
+          if (updated.slug !== board.slug) {
+            void navigate({
+              to: '/admin/settings/boards/$slug',
+              params: { slug: updated.slug },
+              search: {},
+              replace: true,
+            })
+          }
+        },
+      }
+    )
   }
+
+  const saveIfChanged = form.handleSubmit((data) => {
+    if (data.name !== board.name || (data.description ?? '') !== (board.description ?? '')) {
+      onSubmit(data)
+    }
+  })
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {mutation.isError && <FormError message={mutation.error?.message ?? 'An error occurred'} />}
-
+      <form onSubmit={saveIfChanged} onBlur={() => void saveIfChanged()} className="space-y-6">
         <FormField
           control={form.control}
           name="name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Board name</FormLabel>
+              <FormLabel>Name</FormLabel>
               <FormControl>
                 <Input {...field} />
               </FormControl>
@@ -78,12 +98,6 @@ export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
             </FormItem>
           )}
         />
-
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving...' : 'Save changes'}
-          </Button>
-        </div>
       </form>
     </Form>
   )

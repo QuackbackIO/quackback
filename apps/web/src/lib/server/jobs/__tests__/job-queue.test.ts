@@ -54,6 +54,7 @@ import {
 
 import {
   cancelJob,
+  claimById,
   claimJobs,
   completeJob,
   enqueueJob,
@@ -62,6 +63,7 @@ import {
   findJobByDedupeKey,
   heartbeatJob,
   jobQueueDepth,
+  peekRunnableJob,
   pruneTerminalJobs,
   reapExpiredLeases,
   type ClaimedJob,
@@ -83,7 +85,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   signaled.length = 0
-  unsubCommit = onDurableWorkCommitted((key) => signaled.push(key))
+  unsubCommit = onDurableWorkCommitted((work) => signaled.push(work.workspaceKey))
 })
 
 afterEach(() => {
@@ -129,8 +131,10 @@ describe('enqueue', () => {
     // stay spent — otherwise a scheduler restart re-runs the slot it already ran.
     const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
     await completeJob(job)
+    signaled.length = 0
     const third = await enqueueJob({ queue: q, dedupeKey: 'slot-1' })
     expect(third.inserted).toBe(false)
+    expect(signaled).toEqual([])
     expect(await rowsFor(q)).toHaveLength(1)
   })
 
@@ -164,6 +168,37 @@ describe('claim', () => {
     const q = queue('delayed')
     await enqueueJob({ queue: q, runAt: new Date(Date.now() + 60_000) })
     expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
+  })
+
+  it('claimById takes a due row and misses future or already-claimed ones', async () => {
+    const q = queue('by-id')
+    currentWorkspaceKey = 'ws_by_id'
+    const due = await enqueueJob({ queue: q, maxAttempts: 3 })
+    const later = await enqueueJob({
+      queue: q,
+      runAt: new Date(Date.now() + 60_000),
+      maxAttempts: 3,
+    })
+    expect(await peekRunnableJob(due.jobId)).toEqual({ queue: q })
+    expect(await peekRunnableJob(later.jobId)).toBeNull()
+
+    const claimed = await claimById(due.jobId, LEASE)
+    expect(claimed?.jobId).toBe(due.jobId)
+    expect(claimed?.attempts).toBe(1)
+    expect(claimed?.runAt).toBeInstanceOf(Date)
+    expect(await claimById(due.jobId, LEASE)).toBeNull()
+    expect(await claimById(later.jobId, LEASE)).toBeNull()
+    expect(await peekRunnableJob(due.jobId)).toBeNull()
+  })
+
+  it('claimById does not overtake an older runnable row on the same queue', async () => {
+    const q = queue('by-id-fifo')
+    const older = await enqueueJob({ queue: q, runAt: new Date(Date.now() - 2_000) })
+    const newer = await enqueueJob({ queue: q, runAt: new Date(Date.now() - 1_000) })
+
+    expect(await claimById(newer.jobId, LEASE)).toBeNull()
+    const claimed = await claimById(older.jobId, LEASE)
+    expect(claimed?.jobId).toBe(older.jobId)
   })
 
   it('skips a row another claimer is holding rather than blocking behind it', async () => {
@@ -331,6 +366,19 @@ describe('the reaper and the no-retry flag', () => {
 })
 
 describe('the fencing token', () => {
+  it('scrubs Slack payloads on completion without letting a stale lease erase input', async () => {
+    const q = queue('slack-payload')
+    await enqueueJob({ queue: q, payload: { encryptedPayload: 'ciphertext' }, maxAttempts: 3 })
+    const [ghost] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    await expireLease(q)
+    await reapExpiredLeases()
+    const [heir] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    expect(await completeJob({ ...ghost, queue: 'slack-hook' })).toBe(false)
+    expect((await rowsFor(q))[0].payload).toEqual({ encryptedPayload: 'ciphertext' })
+    expect(await completeJob({ ...heir, queue: 'slack-hook' })).toBe(true)
+    expect((await rowsFor(q))[0].payload).toEqual({})
+  })
+
   it('stops a reaped owner from recording a result over its successor', async () => {
     const q = queue('fencing')
     await enqueueJob({ queue: q, maxAttempts: 3 })
@@ -688,6 +736,27 @@ describe('per-queue retention', () => {
 
     const rows = await rowsFor(q)
     expect(rows.map((r) => r.status)).toEqual(['failed'])
+  })
+
+  it('keeps a row past the shortest window but inside its own longer one', async () => {
+    // The index-usable floor is the shortest retention anywhere; it must only
+    // ever narrow the scan, never decide the outcome for a queue kept longer.
+    const short = queue('retention-floor-short')
+    const long = queue('retention-floor-long')
+    for (const q of [short, long]) {
+      await enqueueJob({ queue: q, dedupeKey: 'done' })
+      const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+      await completeJob(job)
+    }
+    await testSql()`
+      UPDATE job_queue SET finished_at = now() - interval '3 days'
+      WHERE queue IN (${short}, ${long})
+    `
+    // Default one day is the floor; the long queue keeps successes thirty.
+    await pruneTerminalJobs(86_400_000, { [long]: { succeeded: 30 * 86_400_000 } })
+
+    expect(await rowsFor(short)).toHaveLength(0)
+    expect((await rowsFor(long)).map((r) => r.status)).toEqual(['succeeded'])
   })
 })
 

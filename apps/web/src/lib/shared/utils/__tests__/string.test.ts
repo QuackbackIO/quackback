@@ -12,10 +12,10 @@ import {
   truncate,
   formatStatus,
   getStatusEmoji,
-  slugify,
   contentPreview,
   safeEmail,
 } from '../string'
+import { slugify } from '../slugify'
 
 describe('getInitials', () => {
   it('returns initials from two-word name', () => {
@@ -28,6 +28,11 @@ describe('getInitials', () => {
 
   it('limits to 2 characters for long names', () => {
     expect(getInitials('John Michael Doe')).toBe('JM')
+  })
+
+  it('keeps an emoji whole instead of splitting its surrogate pair', () => {
+    expect(getInitials('🦆 Duck')).toBe('🦆D')
+    expect(getInitials('🦆')).toBe('🦆')
   })
 
   it('uppercases lowercase input', () => {

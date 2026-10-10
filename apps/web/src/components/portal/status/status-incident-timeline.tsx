@@ -20,16 +20,21 @@ interface StatusIncidentTimelineProps {
   className?: string
 }
 
-function formatTimestamp(iso: string, compact: boolean): string {
+function formatTimestamp(iso: string, compact: boolean, locale: string): string {
   const date = new Date(iso)
-  const time = date.toLocaleTimeString('en-US', {
+  const time = date.toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
     timeZone: 'UTC',
   })
   if (compact) return `${time} UTC`
-  const day = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const day = date.toLocaleDateString(locale, {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
   return `${day} · ${time} UTC`
 }
 
@@ -64,7 +69,7 @@ export function StatusIncidentTimeline({
               </span>
               <span className="min-w-0 flex-1 text-muted-foreground">{update.body}</span>
               <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground/70">
-                {formatTimestamp(update.createdAt, true)}
+                {formatTimestamp(update.createdAt, true, intl.locale)}
               </span>
             </div>
           )
@@ -90,7 +95,7 @@ export function StatusIncidentTimeline({
                   {intl.formatMessage(LIFECYCLE_LABEL[update.status])}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {formatTimestamp(update.createdAt, false)}
+                  {formatTimestamp(update.createdAt, false, intl.locale)}
                 </span>
               </div>
               <p className="mt-1 max-w-[72ch] text-sm text-foreground/90">{update.body}</p>

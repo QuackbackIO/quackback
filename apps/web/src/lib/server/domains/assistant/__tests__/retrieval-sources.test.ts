@@ -72,6 +72,15 @@ vi.mock('../web-sources-retrieval', () => ({
   },
 }))
 
+// The member-scoped workspace conversation source; records what it was built with.
+const mockWorkspaceConversationSource = vi.fn()
+vi.mock('../workspace-retrieval', () => ({
+  workspaceConversationSource: (...args: unknown[]) => {
+    mockWorkspaceConversationSource(...args)
+    return { sourceType: 'summary', retrieve: async () => [] }
+  },
+}))
+
 import {
   retrieveKnowledge,
   resolveKnowledgeSources,
@@ -81,6 +90,8 @@ import {
   KNOWLEDGE_SNIPPET_CHARS,
 } from '../retrieval-sources'
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { Actor } from '@/lib/server/policy/types'
 
 /** Every retrieval source enabled — the config-v3 snapshot standing in for the
  *  old flag-on bundle. */
@@ -97,10 +108,76 @@ beforeEach(() => {
   mockWebSourcesRetrieve.mockResolvedValue([])
 })
 
+describe('workspace search reads each source only as far as its own permission', () => {
+  const member = (permissions: string[] = []): Actor => ({
+    principalId: 'principal_member' as never,
+    principalType: 'user',
+    role: 'member',
+    segmentIds: new Set(),
+    permissions: new Set(permissions) as Actor['permissions'],
+  })
+  const enabledSources = new Set<AssistantCitationType>(['article', 'post', 'changelog', 'ticket'])
+  async function ceilings(actor?: Actor) {
+    mockRetrieveKbArticles.mockResolvedValue([])
+    mockPostsRetrieve.mockResolvedValue([])
+    await retrieveKnowledge('Acme pricing', 'team', {
+      workspaceSearch: true,
+      actor,
+      enabledSources,
+    })
+    return {
+      article: mockRetrieveKbArticles.mock.calls.at(-1)?.[1]?.audience,
+      post: mockPostsRetrieve.mock.calls.at(-1)?.[1],
+      changelog: mockChangelogRetrieve.mock.calls.at(-1)?.[1],
+      ticket: mockTicketsRetrieve.mock.calls.length,
+    }
+  }
+  it('keeps private articles, private posts, drafts and tickets from a teammate without access', async () => {
+    expect(await ceilings(member())).toEqual({
+      article: 'public',
+      post: 'public',
+      changelog: 'public',
+      ticket: 0,
+    })
+  })
+  it('fails closed without an actor', async () => {
+    expect(await ceilings()).toEqual({
+      article: 'public',
+      post: 'public',
+      changelog: 'public',
+      ticket: 0,
+    })
+  })
+  it('reads team content for a teammate holding each permission', async () => {
+    expect(
+      await ceilings(
+        member([
+          PERMISSIONS.HELP_CENTER_MANAGE,
+          PERMISSIONS.POST_VIEW_PRIVATE,
+          PERMISSIONS.CHANGELOG_VIEW_DRAFT,
+          PERMISSIONS.TICKET_VIEW_ALL,
+        ])
+      )
+    ).toEqual({ article: 'team', post: 'team', changelog: 'team', ticket: 1 })
+  })
+  it('includes internal notes only for a teammate allowed to read them', async () => {
+    const summary = new Set<AssistantCitationType>(['summary'])
+    const actor = member([PERMISSIONS.CONVERSATION_VIEW])
+    await resolveKnowledgeSources(summary, true, true, false, actor)
+    expect(mockWorkspaceConversationSource).toHaveBeenLastCalledWith(false, false, actor)
+    mockWorkspaceConversationSource.mockClear()
+    expect(await resolveKnowledgeSources(summary, true, true, true, actor)).toEqual([])
+    expect(mockWorkspaceConversationSource).not.toHaveBeenCalled()
+    const noteReader = member([PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.CONVERSATION_NOTE])
+    await resolveKnowledgeSources(summary, true, true, false, noteReader)
+    expect(mockWorkspaceConversationSource).toHaveBeenLastCalledWith(true, false, noteReader)
+  })
+})
+
 describe('kbKnowledgeSource', () => {
   it('maps a retrieved article onto a RetrievedItem with an article citation', async () => {
     mockRetrieveKbArticles.mockResolvedValue([
-      makeKbArticle('kb_article_1', { content: 'X'.repeat(5000), score: 0.87 }),
+      makeKbArticle('article_1', { content: 'X'.repeat(5000), score: 0.87 }),
     ])
 
     const items = await kbKnowledgeSource.retrieve('reset password', 'public', {
@@ -110,9 +187,9 @@ describe('kbKnowledgeSource', () => {
     expect(mockRetrieveKbArticles).toHaveBeenCalledWith('reset password', { audience: 'public' })
     expect(items).toHaveLength(1)
     expect(items[0]).toEqual({
-      id: 'kb_article_1',
+      id: 'article_1',
       sourceType: 'article',
-      title: 'Title kb_article_1',
+      title: 'Title article_1',
       excerpt: 'X'.repeat(KNOWLEDGE_SNIPPET_CHARS),
       score: 0.87,
       // The row's own updated_at, ISO-encoded for the copilot freshness line —
@@ -121,9 +198,9 @@ describe('kbKnowledgeSource', () => {
       updatedAt: '2026-06-01T00:00:00.000Z',
       citation: {
         type: 'article',
-        id: 'kb_article_1',
-        title: 'Title kb_article_1',
-        url: '/hc/articles/general/slug-kb_article_1',
+        id: 'article_1',
+        title: 'Title article_1',
+        url: '/hc/en/articles/1-slug-article_1',
       },
     })
   })
@@ -198,6 +275,39 @@ describe('resolveAssistantKnowledgeSnapshot', () => {
     expect(snap.status).toBe(true)
   })
 
+  it('compiles every configured workspace source without reading the customer-facing map', () => {
+    const config = structuredClone(DEFAULT_ASSISTANT_CONFIG)
+    config.agents.agent.knowledge.helpCenter = false
+    const snapshot = resolveAssistantKnowledgeSnapshot('workspace', config, 'team')
+    expect([...snapshot.sources].sort()).toEqual([...ASSISTANT_CITATION_TYPES].sort())
+    expect(snapshot.internalNotes).toBe(true)
+    expect(snapshot.pastConversations).toBe(true)
+    config.agents.workspace.knowledge.documents = false
+    config.agents.workspace.knowledge.pastConversations = false
+    config.agents.workspace.knowledge.internalNotes = false
+    const narrowed = resolveAssistantKnowledgeSnapshot('workspace', config, 'team')
+    expect(narrowed.sources.has('document')).toBe(false)
+    expect(narrowed.sources.has('summary')).toBe(false)
+    expect(narrowed.sources.has('article')).toBe(true)
+  })
+
+  it('keeps enabled Copilot internal-note retrieval when workspace chat disables conversation history', () => {
+    const config = structuredClone(DEFAULT_ASSISTANT_CONFIG)
+    config.agents.copilot.knowledge.pastConversations = false
+    config.agents.copilot.knowledge.internalNotes = true
+    const workspace = resolveAssistantKnowledgeSnapshot('copilot', config, 'team', true)
+    expect(workspace.sources.has('summary')).toBe(true)
+    expect(workspace.internalNotes).toBe(true)
+    expect(workspace.pastConversations).toBe(false)
+    expect(
+      resolveAssistantKnowledgeSnapshot('copilot', config, 'team').sources.has('summary')
+    ).toBe(false)
+    config.agents.copilot.knowledge.internalNotes = false
+    expect(
+      resolveAssistantKnowledgeSnapshot('copilot', config, 'team', true).sources.has('summary')
+    ).toBe(false)
+  })
+
   it('a Copilot with every source off still gets snippets at the team ceiling (and web sources everywhere)', () => {
     const config = structuredClone(DEFAULT_ASSISTANT_CONFIG)
     config.agents.copilot.knowledge = {
@@ -217,6 +327,12 @@ describe('resolveAssistantKnowledgeSnapshot', () => {
 })
 
 describe('describeEnabledKnowledgeSources', () => {
+  it('describes workspace-wide conversation grounding without inventing a current customer', () => {
+    const text = describeEnabledKnowledgeSources(new Set(['article', 'summary']), true)
+    expect(text).toContain('help center articles')
+    expect(text).toContain('workspace conversations')
+    expect(text).not.toContain("this customer's")
+  })
   it('enumerates enabled sources in citation-vocabulary order', () => {
     const text = describeEnabledKnowledgeSources(new Set(['article', 'changelog']))
     expect(text).toContain('help center articles')
@@ -262,7 +378,7 @@ describe('resolveKnowledgeSources', () => {
 
 describe('retrieveKnowledge', () => {
   it('consults only the knowledge base when no enabled set is passed (KB-only default)', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('kb_article_1', { score: 0.9 })])
+    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('article_1', { score: 0.9 })])
 
     const items = await retrieveKnowledge('q', 'public')
 
@@ -404,7 +520,7 @@ describe('retrieveKnowledge', () => {
   })
 
   it('sourceTypes undefined consults every registered source (default, unchanged)', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('kb_article_1', { score: 0.5 })])
+    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('article_1', { score: 0.5 })])
     mockPostsRetrieve.mockResolvedValue([])
     mockSnippetsRetrieve.mockResolvedValue([])
     mockConversationSummariesRetrieve.mockResolvedValue([])
@@ -420,7 +536,7 @@ describe('retrieveKnowledge', () => {
   })
 
   it('sourceTypes narrows to the given subset, skipping every other registered source', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('kb_article_1', { score: 0.5 })])
+    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('article_1', { score: 0.5 })])
     mockSnippetsRetrieve.mockResolvedValue([
       {
         id: 'assistant_snippet_1',
@@ -447,7 +563,7 @@ describe('retrieveKnowledge', () => {
   it('cannot re-enable an unregistered source: sourceTypes only narrows what the snapshot already registered', async () => {
     // Only the knowledge base is enabled, even though the request asks for
     // posts too — narrowing can drop, never add.
-    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('kb_article_1', { score: 0.5 })])
+    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('article_1', { score: 0.5 })])
 
     const items = await retrieveKnowledge('q', 'public', {
       enabledSources: new Set(['article']),
@@ -455,7 +571,7 @@ describe('retrieveKnowledge', () => {
     })
 
     expect(mockPostsRetrieve).not.toHaveBeenCalled()
-    expect(items.map((i) => i.id)).toEqual(['kb_article_1'])
+    expect(items.map((i) => i.id)).toEqual(['article_1'])
   })
 
   it('forwards customerPrincipalId and conversationId to every source (only the summaries source reads them)', async () => {

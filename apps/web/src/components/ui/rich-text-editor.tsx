@@ -1,11 +1,13 @@
 import {
   useEditor,
+  useEditorState,
   EditorContent,
   ReactRenderer,
   type Editor,
   type JSONContent,
 } from '@tiptap/react'
-import { BubbleMenu } from '@tiptap/react/menus'
+import { BubbleMenu, type BubbleMenuProps } from '@tiptap/react/menus'
+import { redoDepth, undoDepth } from '@tiptap/pm/history'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
@@ -20,12 +22,14 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
-import { Emoji } from '@tiptap/extension-emoji'
 import { MentionExtension } from './mention-extension'
+import { createSuggestionPopup, createSuggestionPositioner } from './suggestion-popup'
+import { applySuggestionListKey } from './suggestion-list-keys'
+import { HighlightQuery, emojiSuggestionLabel } from './highlight-query'
 import { QuackbackEmbed } from './quackback-embed-extension'
-import { ConversationImage } from './conversation-image-node'
+import { UploadedVideo } from './uploaded-video-node'
 import { Markdown } from '@tiptap/markdown'
-import { Extension } from '@tiptap/core'
+import { Extension, getHTMLFromFragment } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import { createLowlight } from 'lowlight'
@@ -57,20 +61,21 @@ import {
   useImperativeHandle,
   useRef,
 } from 'react'
-import { computePosition, flip, shift, offset } from '@floating-ui/dom'
 import { cn } from '@/lib/shared/utils'
-// The read-only JSON→HTML serializer now lives in a browser-free shared module
-// so server-side consumers (e.g. outbound conversation email) can import it
-// without pulling in React/tiptap-react. Re-exported below for existing callers.
-import { generateContentHTML } from '@/lib/shared/content-html'
-// The emoji dataset + shortcode lookup live in their own module so read-only
-// surfaces don't statically bundle it; the editor's `:` picker is fine to pay
-// the cost since the editor chunk is already lazy-loaded on compose surfaces.
-import { defaultEmojis, lookupEmoji, type EmojiItem } from '@/lib/shared/content-emoji'
-// Read-only rendering (RichTextContent / isRichTextContent) lives in a sibling
-// module with only light deps. Re-exported below for backward compatibility;
-// read-only consumers should import from '@/components/ui/rich-text-content'.
-import { RichTextContent, isRichTextContent } from './rich-text-content'
+import { resolveVideoMimeType, VIDEO_FILE_ACCEPT } from '@/lib/shared/storage-config'
+import { resizableImageInsertAttrs } from '@/lib/client/resizable-image-insert-attrs'
+// The emoji dataset + shortcode lookup live in their own module, which the
+// emoji node loads when an editor first needs it (see ./emoji-node).
+import type { EmojiItem } from '@/lib/shared/content-emoji'
+import { EmojiNode, loadEmojiData } from './emoji-node'
+import {
+  MAX_EMOJI_SUGGESTIONS,
+  POPULAR_EMOJI_SHORTCODES,
+  readRecentEmojis,
+  recommendEmojiItems,
+  recordRecentEmoji,
+} from '@/lib/shared/emoji-recommendations'
+import { RichTextEditorEmptyState } from './lazy-rich-text-editor'
 import {
   Bold,
   Italic,
@@ -99,6 +104,7 @@ import {
   Copy,
   Expand,
   Link2,
+  Video as VideoIcon,
 } from 'lucide-react'
 import {
   ArrowUturnLeftIcon,
@@ -177,11 +183,12 @@ export function buildExtensions(
   options: {
     placeholder: string
     onImageUpload?: (file: File) => Promise<string>
+    onVideoUpload?: (file: File) => Promise<string>
     /** When set, Enter submits (chat-send) instead of splitting the block. */
     onSubmit?: () => void
   }
 ) {
-  const { placeholder, onImageUpload, onSubmit } = options
+  const { placeholder, onImageUpload, onVideoUpload, onSubmit } = options
   return [
     StarterKit.configure({
       heading: features.headings ? { levels: [1, 2, 3] } : false,
@@ -200,8 +207,32 @@ export function buildExtensions(
         class: 'text-primary underline',
       },
     }),
-    // Always register so the schema can parse image nodes in existing content
-    ResizableImage.configure({
+    // Always register so the schema can parse image nodes in existing content.
+    // Width/height default to null (not the extension's 500×500, and not 0): a
+    // stored post/changelog image that omitted dims must keep its natural box.
+    // New inserts still get a measured box from `resizableImageInsertAttrs`.
+    ResizableImage.extend({
+      addAttributes() {
+        const parent = this.parent?.() ?? {}
+        const keepRatio = parent['data-keep-ratio']
+        return {
+          ...parent,
+          width: { ...parent.width, default: null },
+          height: { ...parent.height, default: null },
+          'data-keep-ratio': {
+            ...keepRatio,
+            renderHTML(attributes: { width?: number | null; 'data-keep-ratio'?: boolean }) {
+              if (!attributes['data-keep-ratio']) return {}
+              const width = Number(attributes.width)
+              if (Number.isFinite(width) && width > 0) {
+                return { style: `max-width: ${width}px`, 'data-keep-ratio': 'true' }
+              }
+              return { 'data-keep-ratio': 'true' }
+            },
+          },
+        }
+      },
+    }).configure({
       HTMLAttributes: {
         class: 'max-w-full h-auto rounded-lg',
       },
@@ -210,10 +241,9 @@ export function buildExtensions(
     // Always register so saved embed nodes round-trip in any editor; paste rules
     // only fire when quackbackEmbeds is enabled for this editor.
     QuackbackEmbed.configure({ enablePaste: !!features.quackbackEmbeds }),
-    // Always register so legacy inline conversation images (the `chatImage` node
-    // authored by the retired hand-rolled composers) still parse in the editor
-    // schema and round-trip. New images author as resizableImage.
-    ConversationImage,
+    // Always register so previously saved native videos remain editable even
+    // when uploads are disabled for the current viewer.
+    UploadedVideo,
     ...(features.codeBlocks
       ? [
           CodeBlockLowlight.configure({
@@ -272,7 +302,9 @@ export function buildExtensions(
           }),
         ]
       : []),
-    ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
+    ...(features.slashMenu !== false
+      ? [createSlashCommands(features, onImageUpload, onVideoUpload)]
+      : []),
     ...(features.emojiPicker !== false ? [createEmojiExtension()] : []),
     // Enter-key bindings, highest precedence first. createSubmitOnEnter registers
     // at a higher priority than createEnterAsHardBreak (see the factory below), so
@@ -336,6 +368,11 @@ function createSubmitOnEnter(onSubmit: () => void) {
           onSubmit()
           return true
         },
+        'Mod-Enter': () => {
+          if (hasActiveSuggestion(this.editor)) return false
+          onSubmit()
+          return true
+        },
         'Shift-Enter': () => this.editor.commands.setHardBreak(),
         'Alt-Enter': () => this.editor.commands.setHardBreak(),
       }
@@ -348,6 +385,19 @@ function createSubmitOnEnter(onSubmit: () => void) {
 // every plugin generically rather than importing each PluginKey because
 // MentionExtension constructs an anonymous key per instance and isn't reachable
 // from here. Non-object states are skipped — those are unrelated plugins.
+/**
+ * Stop Enter (and Shift+Enter) bubbling out of the editor so a parent <form>
+ * cannot treat it as implicit submit. Cmd/Ctrl+Enter is left alone — comment
+ * composers listen for that chord in capture on the wrapper. Returns false so
+ * TipTap keymaps still insert the break / split the block / send (onSubmit).
+ */
+export function stopEnterFromReachingParentForm(event: KeyboardEvent): boolean {
+  if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey) {
+    event.stopPropagation()
+  }
+  return false
+}
+
 export function hasActiveSuggestion(editor: Pick<Editor, 'state'>): boolean {
   for (const plugin of editor.state.plugins) {
     const state = plugin.getState(editor.state) as { active?: unknown } | null | undefined
@@ -367,6 +417,133 @@ export function withLiveEditor(editor: Editor | null, run: (editor: Editor) => v
   if (editor && !editor.isDestroyed) run(editor)
 }
 
+/**
+ * Markdown for an edited document. Catch serializer failures so a custom
+ * node can't prevent JSON from reaching the form — otherwise changelog create
+ * submits an empty `content` string and the server rejects with
+ * "Content is required" while the editor still shows a body.
+ *
+ * On throw, project plaintext from the current JSON (so the markdown
+ * mirror matches this edit) and only then fall back to the last successful
+ * serialization so comment composers that gate send on trim() don't go empty.
+ */
+export function markdownFromEditor(
+  editor: { getMarkdown?: () => string },
+  fallback = '',
+  json?: unknown
+): string {
+  try {
+    return editor.getMarkdown?.() ?? ''
+  } catch {
+    return plaintextFromTiptapJson(json) || fallback
+  }
+}
+
+const PLAINTEXT_BLOCKS = new Set(['paragraph', 'heading', 'codeBlock'])
+
+/** Text from a TipTap JSON doc, with newlines between blocks. Used when
+ *  getMarkdown() throws so the markdown mirror still matches this edit. */
+export function plaintextFromTiptapJson(doc: unknown): string {
+  if (!doc || typeof doc !== 'object') return ''
+
+  const inlineText = (node: { type?: string; text?: string; content?: unknown[] }): string => {
+    if (node.type === 'text') return node.text ?? ''
+    if (node.type === 'hardBreak') return '\n'
+    if (!Array.isArray(node.content)) return ''
+    return node.content
+      .map((child) => (child && typeof child === 'object' ? inlineText(child as typeof node) : ''))
+      .join('')
+  }
+
+  const blocks: string[] = []
+  const walk = (node: { type?: string; content?: unknown[] }) => {
+    if (node.type && PLAINTEXT_BLOCKS.has(node.type)) {
+      const text = inlineText(node).trim()
+      if (text) blocks.push(text)
+      return
+    }
+    if (!Array.isArray(node.content)) return
+    for (const child of node.content) {
+      if (child && typeof child === 'object') walk(child as typeof node)
+    }
+  }
+  walk(doc as { type?: string; content?: unknown[] })
+  return blocks.join('\n')
+}
+
+/**
+ * The document after an edit, serialized on demand. Nothing is serialized
+ * until a format is read, and each format at most once, so a host can keep the
+ * latest document while it is written and serialize it once, when it is sent.
+ * A later read still returns the document as it was at this edit.
+ */
+export interface EditorDocument {
+  json(): JSONContent
+  html(): string
+  /** Markdown, with markdownFromEditor's fallbacks when the serializer throws. */
+  markdown(): string
+}
+
+/**
+ * An EditorDocument for the editor's current document. `markdownFallback` is
+ * what markdownFromEditor falls back on; `onSerialize` hears the JSON and the
+ * markdown the first time each is serialized.
+ */
+function editorDocument(
+  editor: Pick<Editor, 'state' | 'schema' | 'markdown'>,
+  {
+    markdownFallback = () => '',
+    onSerialize,
+  }: {
+    markdownFallback?: () => string
+    onSerialize?: (format: 'json' | 'markdown', value: JSONContent | string) => void
+  } = {}
+): EditorDocument {
+  // A ProseMirror document is immutable, so this one stays the edit's own.
+  const { doc } = editor.state
+  const { schema, markdown: markdownManager } = editor
+  let json: JSONContent | undefined
+  let html: string | undefined
+  let markdown: string | undefined
+  const snapshot: EditorDocument = {
+    json() {
+      if (json === undefined) {
+        json = doc.toJSON() as JSONContent
+        onSerialize?.('json', json)
+      }
+      return json
+    },
+    html() {
+      html ??= getHTMLFromFragment(doc.content, schema)
+      return html
+    },
+    markdown() {
+      if (markdown === undefined) {
+        const serializer = markdownManager
+          ? { getMarkdown: () => markdownManager.serialize(snapshot.json()) }
+          : {}
+        markdown = markdownFromEditor(serializer, markdownFallback(), snapshot.json())
+        onSerialize?.('markdown', markdown)
+      }
+      return markdown
+    },
+  }
+  return snapshot
+}
+
+export function seedMarkdownFallback(
+  value: string | JSONContent | undefined | null,
+  editor?: { getMarkdown?: () => string }
+): string {
+  const fromValue = typeof value === 'string' ? value : plaintextFromTiptapJson(value)
+  if (!editor) return fromValue
+  try {
+    return editor.getMarkdown?.() || fromValue
+  } catch {
+    return fromValue
+  }
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -380,6 +557,8 @@ export interface EditorFeatures {
   headings?: boolean
   /** Enable image paste/drop/button with upload support */
   images?: boolean
+  /** Enable native MP4/WebM/MOV/M4V upload and inline playback. */
+  videos?: boolean
   /** Enable syntax-highlighted code blocks */
   codeBlocks?: boolean
   /** Enable floating bubble menu on text selection (default: true) */
@@ -432,7 +611,8 @@ interface SlashMenuItem {
 
 function getSlashMenuItems(
   features: EditorFeatures,
-  onImageUpload?: (file: File) => Promise<string>
+  onImageUpload?: (file: File) => Promise<string>,
+  onVideoUpload?: (file: File) => Promise<string>
 ): SlashMenuItem[] {
   const items: SlashMenuItem[] = [
     // Text group - always available
@@ -581,8 +761,7 @@ function getSlashMenuItems(
           if (!file) return
           try {
             const src = await onImageUpload(file)
-            // Use setResizableImage for the resizable image extension
-            editor.commands.setResizableImage({ src, 'data-keep-ratio': true })
+            editor.commands.setResizableImage(await resizableImageInsertAttrs(src, file))
           } catch (error) {
             console.error('Failed to upload image:', error)
             const { toast } = await import('sonner')
@@ -592,6 +771,46 @@ function getSlashMenuItems(
         input.click()
       },
       aliases: ['img', 'picture'],
+      group: 'advanced',
+    })
+  }
+
+  if (features.videos && onVideoUpload) {
+    items.push({
+      title: 'Video',
+      description: 'Upload an MP4, WebM, MOV, or M4V video',
+      icon: <VideoIcon className="size-4" />,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run()
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = VIDEO_FILE_ACCEPT
+        input.onchange = async () => {
+          const file = input.files?.[0]
+          if (!file) return
+          try {
+            const src = await onVideoUpload(file)
+            editor
+              .chain()
+              .focus()
+              .insertContent({
+                type: 'video',
+                attrs: {
+                  src,
+                  mimeType: resolveVideoMimeType(file.type, file.name) ?? file.type,
+                  title: file.name,
+                },
+              })
+              .run()
+          } catch (error) {
+            console.error('Failed to upload video:', error)
+            const { toast } = await import('sonner')
+            toast.error("Couldn't upload video. Try again.")
+          }
+        }
+        input.click()
+      },
+      aliases: ['recording', 'mp4', 'webm', 'mov', 'm4v', 'quicktime'],
       group: 'advanced',
     })
   }
@@ -672,18 +891,27 @@ interface SlashMenuListRef {
 interface SlashMenuListProps {
   items: SlashMenuItem[]
   command: (item: SlashMenuItem) => void
+  query?: string
 }
 
-const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
-  ({ items, command }, ref) => {
+export const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
+  ({ items, command, query = '' }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0)
     const containerRef = useRef<HTMLDivElement>(null)
+    const selectedRef = useRef(0)
+    const itemsRef = useRef(items)
+    const commandRef = useRef(command)
+    itemsRef.current = items
+    commandRef.current = command
 
     const selectItem = (index: number) => {
-      const item = items[index]
-      if (item) {
-        command(item)
-      }
+      const item = itemsRef.current[index]
+      if (item) commandRef.current(item)
+    }
+
+    const updateSelected = (index: number) => {
+      selectedRef.current = index
+      setSelectedIndex(index)
     }
 
     // Scroll selected item into view
@@ -700,33 +928,25 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
 
     // Reset selection when items change
     useEffect(() => {
-      setSelectedIndex(0)
+      updateSelected(0)
     }, [items])
 
-    useImperativeHandle(ref, () => ({
-      onKeyDown: ({ event }) => {
-        if (event.key === 'ArrowUp') {
-          const newIndex = (selectedIndex - 1 + items.length) % items.length
-          setSelectedIndex(newIndex)
-          scrollToSelected(newIndex)
-          return true
-        }
-
-        if (event.key === 'ArrowDown') {
-          const newIndex = (selectedIndex + 1) % items.length
-          setSelectedIndex(newIndex)
-          scrollToSelected(newIndex)
-          return true
-        }
-
-        if (event.key === 'Enter') {
-          selectItem(selectedIndex)
-          return true
-        }
-
-        return false
-      },
-    }))
+    useImperativeHandle(
+      ref,
+      () => ({
+        onKeyDown: ({ event }) =>
+          applySuggestionListKey(event, {
+            items: itemsRef.current,
+            selected: selectedRef.current,
+            onMove: (index) => {
+              updateSelected(index)
+              scrollToSelected(index)
+            },
+            onConfirm: (item) => commandRef.current(item),
+          }),
+      }),
+      [scrollToSelected]
+    )
 
     if (items.length === 0) {
       return (
@@ -787,7 +1007,9 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
                       <span className="flex size-6 shrink-0 items-center justify-center rounded border bg-background text-xs">
                         {item.icon}
                       </span>
-                      <span className="truncate font-medium">{item.title}</span>
+                      <span className="truncate font-medium">
+                        <HighlightQuery text={item.title} query={query} />
+                      </span>
                     </button>
                   )
                 })}
@@ -804,12 +1026,13 @@ SlashMenuList.displayName = 'SlashMenuList'
 // Create the slash commands extension
 function createSlashCommands(
   features: EditorFeatures,
-  onImageUpload?: (file: File) => Promise<string>
+  onImageUpload?: (file: File) => Promise<string>,
+  onVideoUpload?: (file: File) => Promise<string>
 ) {
   // Compute once per extension instance. Since buildExtensions() is wrapped in
   // useMemo, this only re-runs when features or onImageUpload actually changes —
   // NOT on every keystroke.
-  const allItems = getSlashMenuItems(features, onImageUpload)
+  const allItems = getSlashMenuItems(features, onImageUpload, onVideoUpload)
 
   return Extension.create({
     name: 'slashCommands',
@@ -847,29 +1070,7 @@ function createSlashCommands(
           render: () => {
             let component: ReactRenderer<SlashMenuListRef> | null = null
             let floatingEl: HTMLDivElement | null = null
-
-            const updatePosition = async (clientRect: (() => DOMRect | null) | null) => {
-              if (!floatingEl || !clientRect) return
-
-              const rect = clientRect()
-              if (!rect) return
-
-              // Create a virtual element for floating-ui
-              const virtualEl = {
-                getBoundingClientRect: () => rect,
-              }
-
-              const { x, y } = await computePosition(virtualEl, floatingEl, {
-                strategy: 'fixed',
-                placement: 'bottom-start',
-                middleware: [offset(8), flip(), shift({ padding: 8 })],
-              })
-
-              Object.assign(floatingEl.style, {
-                left: `${x}px`,
-                top: `${y}px`,
-              })
-            }
+            const positioner = createSuggestionPositioner()
 
             return {
               onStart: (props: SuggestionProps<SlashMenuItem>) => {
@@ -877,27 +1078,26 @@ function createSlashCommands(
                   props: {
                     items: props.items,
                     command: (item: SlashMenuItem) => props.command(item),
+                    query: props.query,
                   },
                   editor: props.editor,
                 })
 
                 // Create container element
-                floatingEl = document.createElement('div')
-                floatingEl.style.position = 'fixed'
-                floatingEl.style.zIndex = '50'
-                floatingEl.style.pointerEvents = 'auto'
+                floatingEl = createSuggestionPopup()
                 floatingEl.appendChild(component.element)
                 document.body.appendChild(floatingEl)
 
-                updatePosition(props.clientRect ?? null)
+                positioner.attach(floatingEl, props.clientRect ?? null)
               },
 
               onUpdate: (props: SuggestionProps<SlashMenuItem>) => {
                 component?.updateProps({
                   items: props.items,
                   command: (item: SlashMenuItem) => props.command(item),
+                  query: props.query,
                 })
-                updatePosition(props.clientRect ?? null)
+                if (floatingEl) positioner.attach(floatingEl, props.clientRect ?? null)
               },
 
               onKeyDown: (props: { event: KeyboardEvent }) => {
@@ -909,6 +1109,7 @@ function createSlashCommands(
               },
 
               onExit: () => {
+                positioner.detach()
                 if (floatingEl) {
                   floatingEl.remove()
                   floatingEl = null
@@ -934,62 +1135,65 @@ interface EmojiSuggestionListRef {
 interface EmojiSuggestionListProps {
   items: EmojiItem[]
   command: (item: EmojiItem) => void
+  /** Leading items that are recents (bare `:` only). 0 hides section labels. */
+  recentCount?: number
+  /** Typed text after `:`; highlighted Slack-style in each shortcode. */
+  query?: string
 }
 
-const MAX_EMOJI_RESULTS = 12
-
-// Curated shortcodes shown the moment the user types `:`. Picked for the
-// long tail of comment reactions (joy, agreement, celebration). Ordering
-// here is the ordering in the dropdown.
-const DEFAULT_EMOJI_SHORTCODES = [
-  'smile',
-  'joy',
-  'heart_eyes',
-  'thinking',
-  'rolling_on_the_floor_laughing',
-  'face_with_tears_of_joy',
-  'thumbsup',
-  'thumbsdown',
-  'heart',
-  'fire',
-  'tada',
-  'rocket',
-] as const
-
-function filterEmojiItems(query: string): EmojiItem[] {
-  const lower = query.trim().toLowerCase()
-  if (!lower) {
-    // Bare `:` opens the picker with a small curated set so users can pick
-    // without typing a shortcode. Falls back to defaultEmojis order if a
-    // curated shortcode isn't in the bundled set.
-    const defaults: EmojiItem[] = []
-    for (const shortcode of DEFAULT_EMOJI_SHORTCODES) {
-      const found = lookupEmoji(shortcode)
-      if (found) defaults.push(found)
-    }
-    return defaults
-  }
-  const matches: EmojiItem[] = []
-  for (const item of defaultEmojis) {
-    if (!item.emoji) continue
-    const hitsShortcode = item.shortcodes.some((s) => s.toLowerCase().includes(lower))
-    const hitsTag = item.tags?.some((t) => t.toLowerCase().includes(lower)) ?? false
-    if (hitsShortcode || hitsTag) {
-      matches.push(item)
-      if (matches.length >= MAX_EMOJI_RESULTS) break
-    }
-  }
-  return matches
+function filterEmojiItems(
+  query: string,
+  { lookupEmoji, defaultEmojis }: Awaited<ReturnType<typeof loadEmojiData>>
+): EmojiItem[] {
+  return recommendEmojiItems(query, {
+    recents: readRecentEmojis(),
+    popularShortcodes: POPULAR_EMOJI_SHORTCODES,
+    lookup: lookupEmoji,
+    catalog: defaultEmojis,
+    max: MAX_EMOJI_SUGGESTIONS,
+  })
 }
 
-const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionListProps>(
-  ({ items, command }, ref) => {
+function rememberAndInsertEmoji(item: EmojiItem, command: (item: EmojiItem) => void): void {
+  if (item.emoji) recordRecentEmoji(item.emoji)
+  command(item)
+}
+
+function emojiSuggestionProps(props: SuggestionProps<EmojiItem>): EmojiSuggestionListProps {
+  const recents = readRecentEmojis()
+  let recentCount = 0
+  if (!props.query.trim()) {
+    for (const item of props.items) {
+      if (item.emoji && recents.includes(item.emoji)) recentCount++
+      else break
+    }
+  }
+  return {
+    items: props.items,
+    command: (item: EmojiItem) => rememberAndInsertEmoji(item, props.command),
+    recentCount,
+    query: props.query,
+  }
+}
+
+export const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionListProps>(
+  ({ items, command, recentCount = 0, query = '' }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0)
     const containerRef = useRef<HTMLDivElement>(null)
+    const selectedRef = useRef(0)
+    const itemsRef = useRef(items)
+    const commandRef = useRef(command)
+    itemsRef.current = items
+    commandRef.current = command
 
     const selectItem = (index: number) => {
-      const item = items[index]
-      if (item) command(item)
+      const item = itemsRef.current[index]
+      if (item) commandRef.current(item)
+    }
+
+    const updateSelected = (index: number) => {
+      selectedRef.current = index
+      setSelectedIndex(index)
     }
 
     const scrollToSelected = useCallback((index: number) => {
@@ -1003,30 +1207,25 @@ const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionLi
     }, [])
 
     useEffect(() => {
-      setSelectedIndex(0)
+      updateSelected(0)
     }, [items])
 
-    useImperativeHandle(ref, () => ({
-      onKeyDown: ({ event }) => {
-        if (event.key === 'ArrowUp') {
-          const next = (selectedIndex - 1 + items.length) % items.length
-          setSelectedIndex(next)
-          scrollToSelected(next)
-          return true
-        }
-        if (event.key === 'ArrowDown') {
-          const next = (selectedIndex + 1) % items.length
-          setSelectedIndex(next)
-          scrollToSelected(next)
-          return true
-        }
-        if (event.key === 'Enter') {
-          selectItem(selectedIndex)
-          return true
-        }
-        return false
-      },
-    }))
+    useImperativeHandle(
+      ref,
+      () => ({
+        onKeyDown: ({ event }) =>
+          applySuggestionListKey(event, {
+            items: itemsRef.current,
+            selected: selectedRef.current,
+            onMove: (index) => {
+              updateSelected(index)
+              scrollToSelected(index)
+            },
+            onConfirm: (item) => commandRef.current(item),
+          }),
+      }),
+      [scrollToSelected]
+    )
 
     if (items.length === 0) return null
 
@@ -1038,26 +1237,38 @@ const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionLi
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div ref={containerRef} className="p-0.5">
-          {items.map((item, index) => (
-            <button
-              key={item.name}
-              type="button"
-              className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs',
-                'hover:bg-accent focus:bg-accent focus:outline-none',
-                index === selectedIndex && 'bg-accent'
-              )}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                selectItem(index)
-              }}
-              onMouseDown={(e) => e.preventDefault()}
-            >
-              <span className="text-base leading-none">{item.emoji}</span>
-              <span className="truncate text-muted-foreground">:{item.shortcodes[0]}:</span>
-            </button>
-          ))}
+          {items.map((item, index) => {
+            const label = emojiSuggestionLabel(item, query)
+            return (
+              <div key={item.name}>
+                {recentCount > 0 && index === 0 && (
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Recent</div>
+                )}
+                {recentCount > 0 && index === recentCount && (
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Popular</div>
+                )}
+                <button
+                  type="button"
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs',
+                    'hover:bg-accent focus:bg-accent focus:outline-none',
+                    index === selectedIndex && 'bg-accent'
+                  )}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    selectItem(index)
+                  }}
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  <span className="text-base leading-none">{item.emoji}</span>
+                  <span className="truncate text-muted-foreground" data-emoji-shortcode={label}>
+                    :<HighlightQuery text={label} query={query} />:
+                  </span>
+                </button>
+              </div>
+            )
+          })}
         </div>
       </div>
     )
@@ -1068,50 +1279,33 @@ EmojiSuggestionList.displayName = 'EmojiSuggestionList'
 /** The `:`-triggered inline emoji picker, shared with the conversation composers so
  *  reply + note get the same emoji UX as posts. */
 export function createEmojiExtension() {
-  return Emoji.configure({
+  return EmojiNode.configure({
     enableEmoticons: true,
     suggestion: {
-      items: ({ query }) => filterEmojiItems(query),
+      items: async ({ query }) => filterEmojiItems(query, await loadEmojiData()),
       allow: ({ editor }) => !editor.isActive('codeBlock'),
       render: () => {
         let component: ReactRenderer<EmojiSuggestionListRef> | null = null
         let floatingEl: HTMLDivElement | null = null
-
-        const updatePosition = async (clientRect: (() => DOMRect | null) | null) => {
-          if (!floatingEl || !clientRect) return
-          const rect = clientRect()
-          if (!rect) return
-          const virtualEl = { getBoundingClientRect: () => rect }
-          const { x, y } = await computePosition(virtualEl, floatingEl, {
-            strategy: 'fixed',
-            placement: 'bottom-start',
-            middleware: [offset(8), flip(), shift({ padding: 8 })],
-          })
-          Object.assign(floatingEl.style, { left: `${x}px`, top: `${y}px` })
-        }
+        const positioner = createSuggestionPositioner()
 
         return {
           onStart: (props: SuggestionProps<EmojiItem>) => {
             if (props.items.length === 0) return
             component = new ReactRenderer(EmojiSuggestionList, {
-              props: {
-                items: props.items,
-                command: (item: EmojiItem) => props.command(item),
-              },
+              props: emojiSuggestionProps(props),
               editor: props.editor,
             })
-            floatingEl = document.createElement('div')
-            floatingEl.style.position = 'fixed'
-            floatingEl.style.zIndex = '50'
-            floatingEl.style.pointerEvents = 'auto'
+            floatingEl = createSuggestionPopup()
             floatingEl.appendChild(component.element)
             document.body.appendChild(floatingEl)
-            updatePosition(props.clientRect ?? null)
+            positioner.attach(floatingEl, props.clientRect ?? null)
           },
           onUpdate: (props: SuggestionProps<EmojiItem>) => {
             // No matches → tear down so a bare `:` doesn't leave a stale
             // dropdown floating.
             if (props.items.length === 0) {
+              positioner.detach()
               if (floatingEl) {
                 floatingEl.remove()
                 floatingEl = null
@@ -1122,31 +1316,23 @@ export function createEmojiExtension() {
             }
             if (!component) {
               component = new ReactRenderer(EmojiSuggestionList, {
-                props: {
-                  items: props.items,
-                  command: (item: EmojiItem) => props.command(item),
-                },
+                props: emojiSuggestionProps(props),
                 editor: props.editor,
               })
-              floatingEl = document.createElement('div')
-              floatingEl.style.position = 'fixed'
-              floatingEl.style.zIndex = '50'
-              floatingEl.style.pointerEvents = 'auto'
+              floatingEl = createSuggestionPopup()
               floatingEl.appendChild(component.element)
               document.body.appendChild(floatingEl)
             } else {
-              component.updateProps({
-                items: props.items,
-                command: (item: EmojiItem) => props.command(item),
-              })
+              component.updateProps(emojiSuggestionProps(props))
             }
-            updatePosition(props.clientRect ?? null)
+            if (floatingEl) positioner.attach(floatingEl, props.clientRect ?? null)
           },
           onKeyDown: (props: { event: KeyboardEvent }) => {
             if (props.event.key === 'Escape') return true
             return component?.ref?.onKeyDown(props) ?? false
           },
           onExit: () => {
+            positioner.detach()
             if (floatingEl) {
               floatingEl.remove()
               floatingEl = null
@@ -1169,15 +1355,25 @@ export function createEmojiExtension() {
 export interface RichTextEditorHandle {
   /** Focus the editing surface, placing the cursor at `position` (default 'end'). */
   focus: (position?: 'start' | 'end' | number) => void
+  /** Empty the document in place. Unlike a key-remount clear, the ProseMirror
+   * node survives, so focus never leaves the editing surface. */
+  clear: () => void
 }
 
 interface RichTextEditorProps {
   value?: string | JSONContent
-  onChange?: (json: JSONContent, html: string, markdown: string) => void
+  /**
+   * Called after every edit with the document, serialized only when read, so
+   * a host pays for a format when it reads it: on send, after a pause, or for
+   * a value it shows.
+   */
+  onDocumentChange?: (document: EditorDocument) => void
   placeholder?: string
   className?: string
   disabled?: boolean
   minHeight?: string
+  /** Stretch the writing surface to fill a flex parent (modal body). */
+  fill?: boolean
   borderless?: boolean
   /** Where the formatting toolbar sits relative to the content area.
    * - 'top': classic bordered strip above the editor (filled, muted bg)
@@ -1194,6 +1390,8 @@ interface RichTextEditorProps {
   features?: EditorFeatures
   /** Callback for uploading images. Returns the public URL of the uploaded image. */
   onImageUpload?: (file: File) => Promise<string>
+  /** Callback for uploading an MP4/WebM/MOV/M4V recording. */
+  onVideoUpload?: (file: File) => Promise<string>
   /** When set, Enter submits (chat-send) instead of splitting the block and
    * Shift+Enter / Alt+Enter insert a line break. Yields to an open
    * slash/mention/emoji popover. MUST be a stable callback (wrap churning state
@@ -1212,16 +1410,18 @@ interface RichTextEditorProps {
 
 function RichTextEditorBase({
   value,
-  onChange,
+  onDocumentChange,
   placeholder = 'Write something...',
   className,
   disabled = false,
   minHeight = '120px',
+  fill = false,
   borderless = false,
   toolbarPosition = borderless ? 'none' : 'bottom',
   autofocus = false,
   features = {},
   onImageUpload,
+  onVideoUpload,
   onSubmit,
   editorRef,
 }: RichTextEditorProps) {
@@ -1231,7 +1431,7 @@ function RichTextEditorBase({
   // Rebuilding the array on every render causes setOptions→transaction→onUpdate
   // on every keystroke, resulting in 300–400 ms input violations.
   const extensions = useMemo(
-    () => buildExtensions(features, { placeholder, onImageUpload, onSubmit }),
+    () => buildExtensions(features, { placeholder, onImageUpload, onVideoUpload, onSubmit }),
 
     [
       features.headings,
@@ -1239,6 +1439,7 @@ function RichTextEditorBase({
       features.blockquotes,
       features.dividers,
       features.images,
+      features.videos,
       features.taskLists,
       features.tables,
       features.embeds,
@@ -1248,6 +1449,7 @@ function RichTextEditorBase({
       features.enterAsHardBreak,
       features.mentions,
       onImageUpload,
+      onVideoUpload,
       onSubmit,
       placeholder,
     ]
@@ -1265,11 +1467,27 @@ function RichTextEditorBase({
         ),
         style: `--editor-min-height: ${minHeight}`,
       },
-      handleDrop: features.images && onImageUpload ? handleImageDrop(onImageUpload) : undefined,
-      handlePaste: features.images && onImageUpload ? handleImagePaste(onImageUpload) : undefined,
+      handleDrop:
+        (features.images && onImageUpload) || (features.videos && onVideoUpload)
+          ? handleMediaDrop(
+              features.images ? onImageUpload : undefined,
+              features.videos ? onVideoUpload : undefined
+            )
+          : undefined,
+      handlePaste:
+        (features.images && onImageUpload) || (features.videos && onVideoUpload)
+          ? handleMediaPaste(
+              features.images ? onImageUpload : undefined,
+              features.videos ? onVideoUpload : undefined
+            )
+          : undefined,
+      handleDOMEvents: {
+        keydown: (_view: import('@tiptap/pm/view').EditorView, event: KeyboardEvent) =>
+          stopEnterFromReachingParentForm(event),
+      },
     }),
 
-    [features.images, onImageUpload, borderless, minHeight]
+    [features.images, features.videos, onImageUpload, onVideoUpload, borderless, minHeight]
   )
 
   // Stores the last JSON emitted by onUpdate so the value-sync useEffect can
@@ -1284,6 +1502,14 @@ function RichTextEditorBase({
   // markdown serialization is "", which without this guard would round-trip
   // back through clearContent() and erase the heading they just created.
   const lastEmittedMarkdownRef = useRef<string | null>(null)
+  // Last markdown that actually serialized. Distinct from the sync sentinel
+  // above, which is cleared after a controlled-value round trip; comment
+  // composers need this if a later getMarkdown() throw would otherwise emit ''.
+  const lastSuccessfulMarkdownRef = useRef(seedMarkdownFallback(value))
+  // The latest edit's document. Only its reads count as what the editor
+  // emitted, for the guards above; a host reading an older document later (on
+  // send) changes nothing.
+  const latestDocumentRef = useRef<EditorDocument | null>(null)
 
   // Stable initial content reference — passed once to useEditor so TipTap v3's
   // compareOptions never sees a reference change on `content` and never calls
@@ -1301,17 +1527,27 @@ function RichTextEditorBase({
     content: initialContentRef.current,
     autofocus,
     editable: !disabled,
+    onCreate: ({ editor }) => {
+      lastSuccessfulMarkdownRef.current = seedMarkdownFallback(initialContentRef.current, editor)
+    },
     onUpdate: ({ editor }) => {
-      if (!onChange) return
-      const json = editor.getJSON()
-      lastEmittedJsonRef.current = json
-      const html = editor.getHTML()
-      // Only serialize to markdown when the caller declares a 3rd parameter.
-      // Callers that only need json+html (widget, portal) skip the expensive
-      // recursive tree-walk that @tiptap/markdown does on every keystroke.
-      const markdown = onChange.length >= 3 ? (editor.getMarkdown?.() ?? '') : ''
-      lastEmittedMarkdownRef.current = markdown
-      onChange(json, html, markdown)
+      if (!onDocumentChange) return
+      const edited = editorDocument(editor, {
+        markdownFallback: () => lastSuccessfulMarkdownRef.current,
+        onSerialize: (format, serialized) => {
+          if (latestDocumentRef.current !== edited) return
+          if (format === 'json') {
+            lastEmittedJsonRef.current = serialized
+          } else {
+            lastEmittedMarkdownRef.current = serialized as string
+            lastSuccessfulMarkdownRef.current = serialized as string
+          }
+        },
+      })
+      latestDocumentRef.current = edited
+      lastEmittedJsonRef.current = null
+      lastEmittedMarkdownRef.current = null
+      onDocumentChange(edited)
     },
     editorProps,
   })
@@ -1324,14 +1560,26 @@ function RichTextEditorBase({
     () => ({
       focus: (position: 'start' | 'end' | number = 'end') =>
         withLiveEditor(editor, (live) => live.commands.focus(position)),
+      clear: () => withLiveEditor(editor, (live) => live.commands.clearContent()),
     }),
     [editor]
   )
+
+  // The editor instance the value-sync below last ran for.
+  const syncedEditorRef = useRef<Editor | null>(null)
 
   // Sync external value changes into the editor.
   // Skipped when the value is the exact object/string we just emitted via onUpdate.
   useEffect(() => {
     if (!editor) return
+
+    // A new editor was created from this very value. Applying it again would
+    // only re-normalize the document (the trailing paragraph, attribute
+    // defaults), leave a step to undo and hand the host an update it did not
+    // cause.
+    const firstSync = syncedEditorRef.current !== editor
+    syncedEditorRef.current = editor
+    if (firstSync && value === initialContentRef.current) return
 
     if (value === lastEmittedJsonRef.current) {
       lastEmittedJsonRef.current = null
@@ -1370,20 +1618,102 @@ function RichTextEditorBase({
     }
   }, [value, editor])
 
-  // Update editable state
+  // Update editable state. Editability is not a change to the document, so
+  // it emits no update (which would reach the host as an onDocumentChange).
   useEffect(() => {
-    if (editor) {
-      editor.setEditable(!disabled)
+    if (editor && editor.isEditable !== !disabled) {
+      editor.setEditable(!disabled, false)
     }
   }, [disabled, editor])
 
+  if (!editor) {
+    // Reserve the editor's eventual size, toolbar row included, so the
+    // surrounding layout doesn't jump when TipTap finishes mounting. Keeping
+    // immediatelyRender=false preserves SSR safety.
+    return (
+      <RichTextEditorEmptyState
+        placeholder={placeholder}
+        className={className}
+        disabled={disabled}
+        minHeight={minHeight}
+        fill={fill}
+        borderless={borderless}
+        toolbarPosition={toolbarPosition}
+        aria-hidden="true"
+      />
+    )
+  }
+
+  return (
+    <EditorChrome
+      editor={editor}
+      className={className}
+      disabled={disabled}
+      fill={fill}
+      borderless={borderless}
+      toolbarPosition={toolbarPosition}
+      features={features}
+      onImageUpload={onImageUpload}
+      onVideoUpload={onVideoUpload}
+    />
+  )
+}
+
+// Held at module scope: TipTap's BubbleMenu dispatches a transaction to update
+// its plugin whenever `options` or `shouldShow` changes identity.
+const BUBBLE_MENU_OPTIONS = { strategy: 'fixed', placement: 'top' } as const
+
+const showFormattingBubble: BubbleMenuProps['shouldShow'] = ({ editor, state }) => {
+  // Don't show in code blocks or tables
+  if (editor.isActive('codeBlock')) return false
+  if (editor.isActive('table')) return false
+  // Only show when text is selected
+  const { from, to } = state.selection
+  return from !== to
+}
+
+const showTableBubble: BubbleMenuProps['shouldShow'] = ({ editor }) => editor.isActive('table')
+
+const showImageBubble: BubbleMenuProps['shouldShow'] = ({ editor }) =>
+  editor.isActive('resizableImage')
+
+interface EditorChromeProps {
+  editor: Editor
+  className?: string
+  disabled: boolean
+  fill: boolean
+  borderless: boolean
+  toolbarPosition: 'top' | 'none' | 'bottom'
+  features: EditorFeatures
+  onImageUpload?: (file: File) => Promise<string>
+  onVideoUpload?: (file: File) => Promise<string>
+}
+
+/**
+ * The writing surface and everything around it: the toolbar, the bubble menus
+ * and the image context menu. None of it takes the document as a prop, so a
+ * controlled host that re-renders on every keystroke (a new value and often a
+ * new onDocumentChange) stops at RichTextEditorBase. The toolbar and menus follow the
+ * selection through their own useEditorState subscriptions instead.
+ */
+const EditorChrome = memo(function EditorChrome({
+  editor,
+  className,
+  disabled,
+  fill,
+  borderless,
+  toolbarPosition,
+  features,
+  onImageUpload,
+  onVideoUpload,
+}: EditorChromeProps) {
   // Image context menu state - stores the src of the right-clicked image
   const [contextMenuImageSrc, setContextMenuImageSrc] = useState<string | null>(null)
 
   // Handle right-click - check if it's on an image and store the src
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      if (!editor || !features.images) {
+      if (!features.images) {
         setContextMenuImageSrc(null)
         return
       }
@@ -1400,7 +1730,7 @@ function RichTextEditorBase({
         setContextMenuImageSrc(null)
       }
     },
-    [editor, features.images]
+    [features.images]
   )
 
   // Use shared image actions hook for context menu
@@ -1424,42 +1754,19 @@ function RichTextEditorBase({
     }
   }, [])
 
-  if (!editor) {
-    // Reserve the editor's eventual height + placeholder so the surrounding
-    // layout (toolbar footer, card border) doesn't jump when TipTap finishes
-    // mounting. Keeping immediatelyRender=false preserves SSR safety.
-    return (
-      <div
-        className={cn(
-          !borderless && 'overflow-hidden rounded-md border border-input bg-background',
-          disabled && 'opacity-50 cursor-not-allowed',
-          className
-        )}
-        aria-hidden="true"
-      >
-        <div
-          className={cn(
-            'prose prose-sm prose-neutral dark:prose-invert max-w-none',
-            'min-h-[var(--editor-min-height)]',
-            borderless ? 'py-0' : 'px-3 py-2',
-            'text-muted-foreground'
-          )}
-          style={{ '--editor-min-height': minHeight } as React.CSSProperties}
-        >
-          {placeholder ?? ' '}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild disabled={!features.images}>
+      {/* No `disabled` here: Base UI disables pointer events for the whole
+          trigger subtree, which would make the editor itself unclickable.
+          The image menu can't open without images anyway — handleContextMenu
+          clears the src unless features.images is on. */}
+      <ContextMenuTrigger asChild>
         <div
           ref={containerRef}
           className={cn(
             !borderless && 'overflow-hidden rounded-md border border-input bg-background',
             disabled && 'opacity-50 cursor-not-allowed',
+            fill && 'flex h-full min-h-0 flex-col',
             className
           )}
           onContextMenu={handleContextMenu}
@@ -1470,11 +1777,15 @@ function RichTextEditorBase({
               disabled={disabled}
               features={features}
               onImageUpload={onImageUpload}
+              onVideoUpload={onVideoUpload}
               variant="top"
             />
           )}
 
-          <EditorContent editor={editor} />
+          <EditorContent
+            editor={editor}
+            className={cn(fill && 'min-h-0 flex-1 overflow-y-auto [&_.tiptap]:min-h-full')}
+          />
 
           {toolbarPosition === 'bottom' && (
             <MenuBar
@@ -1482,6 +1793,7 @@ function RichTextEditorBase({
               disabled={disabled}
               features={features}
               onImageUpload={onImageUpload}
+              onVideoUpload={onVideoUpload}
               variant="bottom"
               borderless={borderless}
             />
@@ -1520,18 +1832,8 @@ function RichTextEditorBase({
           editor={editor}
           appendTo={getBubbleMenuContainer}
           ref={bubbleMenuRef}
-          options={{
-            strategy: 'fixed',
-            placement: 'top',
-          }}
-          shouldShow={({ editor, state }) => {
-            // Don't show in code blocks or tables
-            if (editor.isActive('codeBlock')) return false
-            if (editor.isActive('table')) return false
-            // Only show when text is selected
-            const { from, to } = state.selection
-            return from !== to
-          }}
+          options={BUBBLE_MENU_OPTIONS}
+          shouldShow={showFormattingBubble}
         >
           <BubbleMenuContent editor={editor} disabled={disabled} />
         </BubbleMenu>
@@ -1542,13 +1844,8 @@ function RichTextEditorBase({
           editor={editor}
           appendTo={getBubbleMenuContainer}
           ref={bubbleMenuRef}
-          options={{
-            strategy: 'fixed',
-            placement: 'top',
-          }}
-          shouldShow={({ editor }) => {
-            return editor.isActive('table')
-          }}
+          options={BUBBLE_MENU_OPTIONS}
+          shouldShow={showTableBubble}
         >
           <TableToolbar editor={editor} disabled={disabled} />
         </BubbleMenu>
@@ -1559,19 +1856,53 @@ function RichTextEditorBase({
           editor={editor}
           appendTo={getBubbleMenuContainer}
           ref={bubbleMenuRef}
-          options={{
-            strategy: 'fixed',
-            placement: 'top',
-          }}
-          shouldShow={({ editor }) => {
-            return editor.isActive('resizableImage')
-          }}
+          options={BUBBLE_MENU_OPTIONS}
+          shouldShow={showImageBubble}
         >
           <ImageToolbar editor={editor} disabled={disabled} />
         </BubbleMenu>
       )}
     </ContextMenu>
   )
+}, sameChromeProps)
+
+function sameChromeProps(prev: EditorChromeProps, next: EditorChromeProps): boolean {
+  return (
+    prev.editor === next.editor &&
+    prev.className === next.className &&
+    prev.disabled === next.disabled &&
+    prev.fill === next.fill &&
+    prev.borderless === next.borderless &&
+    prev.toolbarPosition === next.toolbarPosition &&
+    prev.onImageUpload === next.onImageUpload &&
+    prev.onVideoUpload === next.onVideoUpload &&
+    sameFeatures(prev.features, next.features)
+  )
+}
+
+// Every feature flag, so a comparison can never miss one added later.
+const FEATURE_FLAGS: Record<keyof EditorFeatures, true> = {
+  headings: true,
+  images: true,
+  videos: true,
+  codeBlocks: true,
+  bubbleMenu: true,
+  slashMenu: true,
+  taskLists: true,
+  blockquotes: true,
+  tables: true,
+  dividers: true,
+  embeds: true,
+  quackbackEmbeds: true,
+  emojiPicker: true,
+  enterAsHardBreak: true,
+  mentions: true,
+}
+const FEATURE_KEYS = Object.keys(FEATURE_FLAGS) as (keyof EditorFeatures)[]
+
+/** Feature sets compared flag by flag, so callers may pass inline objects. */
+function sameFeatures(prev: EditorFeatures = {}, next: EditorFeatures = {}): boolean {
+  return FEATURE_KEYS.every((key) => prev[key] === next[key])
 }
 
 // Skip re-render when individual feature flags and all other props are unchanged.
@@ -1580,47 +1911,51 @@ function RichTextEditorBase({
 export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
   if (
     prev.value !== next.value ||
-    prev.onChange !== next.onChange ||
+    prev.onDocumentChange !== next.onDocumentChange ||
     prev.onImageUpload !== next.onImageUpload ||
+    prev.onVideoUpload !== next.onVideoUpload ||
     prev.onSubmit !== next.onSubmit ||
     prev.disabled !== next.disabled ||
     prev.placeholder !== next.placeholder ||
     prev.minHeight !== next.minHeight ||
+    prev.fill !== next.fill ||
     prev.borderless !== next.borderless ||
     prev.toolbarPosition !== next.toolbarPosition ||
     prev.className !== next.className ||
     prev.editorRef !== next.editorRef
   )
     return false
-  const pf = prev.features ?? {}
-  const nf = next.features ?? {}
-  return (
-    pf.headings === nf.headings &&
-    pf.codeBlocks === nf.codeBlocks &&
-    pf.blockquotes === nf.blockquotes &&
-    pf.dividers === nf.dividers &&
-    pf.images === nf.images &&
-    pf.taskLists === nf.taskLists &&
-    pf.tables === nf.tables &&
-    pf.embeds === nf.embeds &&
-    pf.quackbackEmbeds === nf.quackbackEmbeds &&
-    pf.slashMenu === nf.slashMenu &&
-    pf.emojiPicker === nf.emojiPicker &&
-    pf.enterAsHardBreak === nf.enterAsHardBreak &&
-    pf.mentions === nf.mentions &&
-    pf.bubbleMenu === nf.bubbleMenu
-  )
+  return sameFeatures(prev.features, next.features)
 })
 
 // ============================================================================
-// Image Handling
+// Uploaded media handling
 // ============================================================================
 
+type EditorMediaKind = 'image' | 'video'
+
 /**
- * Handle image drop events in the editor.
+ * Resolve a dropped or pasted file through the same rules as the media picker.
+ * Some desktop browsers leave QuickTime/M4V MIME types empty (or use
+ * application/octet-stream), so video detection must also consider the file
+ * extension instead of relying on `type.startsWith('video/')` alone.
  */
-function handleImageDrop(
-  onImageUpload: (file: File) => Promise<string>
+export function resolveEditorMediaKind(
+  file: Pick<File, 'name' | 'type'>,
+  allowImage: boolean,
+  allowVideo: boolean
+): EditorMediaKind | null {
+  if (allowImage && file.type.startsWith('image/')) return 'image'
+  if (allowVideo && resolveVideoMimeType(file.type, file.name)) return 'video'
+  return null
+}
+
+/**
+ * Handle image/video drop events in the editor.
+ */
+function handleMediaDrop(
+  onImageUpload?: (file: File) => Promise<string>,
+  onVideoUpload?: (file: File) => Promise<string>
 ): (
   view: import('@tiptap/pm/view').EditorView,
   event: DragEvent,
@@ -1632,11 +1967,14 @@ function handleImageDrop(
       return false
     }
 
-    const images = Array.from(event.dataTransfer.files).filter((file) =>
-      file.type.startsWith('image/')
-    )
+    const files = Array.from(event.dataTransfer.files)
+      .map((file) => ({
+        file,
+        kind: resolveEditorMediaKind(file, !!onImageUpload, !!onVideoUpload),
+      }))
+      .filter((entry): entry is { file: File; kind: EditorMediaKind } => entry.kind !== null)
 
-    if (images.length === 0) {
+    if (files.length === 0) {
       return false
     }
 
@@ -1645,21 +1983,32 @@ function handleImageDrop(
     const { schema } = view.state
     const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY })
 
-    images.forEach((image) => {
-      onImageUpload(image)
-        .then((src) => {
-          // Use resizableImage node type for resizable images
-          const nodeType = schema.nodes.resizableImage || schema.nodes.image
-          const node = nodeType?.create({ src, 'data-keep-ratio': true })
+    files.forEach(({ file, kind }) => {
+      const isVideo = kind === 'video'
+      const upload = isVideo ? onVideoUpload : onImageUpload
+      if (!upload) return
+      upload(file)
+        .then(async (src) => {
+          const nodeType = isVideo
+            ? schema.nodes.video
+            : schema.nodes.resizableImage || schema.nodes.image
+          const attrs = isVideo
+            ? {
+                src,
+                mimeType: resolveVideoMimeType(file.type, file.name) ?? file.type,
+                title: file.name,
+              }
+            : await resizableImageInsertAttrs(src, file)
+          const node = nodeType?.create(attrs)
           if (node && coordinates) {
             const transaction = view.state.tr.insert(coordinates.pos, node)
             view.dispatch(transaction)
           }
         })
         .catch((err) => {
-          console.error('[RichTextEditor] Image drop upload failed:', err)
+          console.error('[RichTextEditor] Media drop upload failed:', err)
           void import('sonner').then(({ toast }) =>
-            toast.error("Couldn't upload image. Try again.")
+            toast.error(`Couldn't upload ${isVideo ? 'video' : 'image'}. Try again.`)
           )
         })
     })
@@ -1669,40 +2018,56 @@ function handleImageDrop(
 }
 
 /**
- * Handle image paste events in the editor.
+ * Handle image/video paste events in the editor.
  */
-function handleImagePaste(
-  onImageUpload: (file: File) => Promise<string>
+function handleMediaPaste(
+  onImageUpload?: (file: File) => Promise<string>,
+  onVideoUpload?: (file: File) => Promise<string>
 ): (view: import('@tiptap/pm/view').EditorView, event: ClipboardEvent, slice: unknown) => boolean {
   return (view, event) => {
-    const items = Array.from(event.clipboardData?.items ?? [])
-    const images = items.filter((item) => item.type.startsWith('image/'))
+    const media = Array.from(event.clipboardData?.items ?? [])
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null)
+      .map((file) => ({
+        file,
+        kind: resolveEditorMediaKind(file, !!onImageUpload, !!onVideoUpload),
+      }))
+      .filter((entry): entry is { file: File; kind: EditorMediaKind } => entry.kind !== null)
 
-    if (images.length === 0) {
+    if (media.length === 0) {
       return false
     }
 
     event.preventDefault()
 
-    images.forEach((item) => {
-      const file = item.getAsFile()
-      if (!file) return
+    media.forEach(({ file, kind }) => {
+      const isVideo = kind === 'video'
+      const upload = isVideo ? onVideoUpload : onImageUpload
+      if (!upload) return
 
-      onImageUpload(file)
-        .then((src) => {
+      upload(file)
+        .then(async (src) => {
           const { schema } = view.state
-          // Use resizableImage node type for resizable images
-          const nodeType = schema.nodes.resizableImage || schema.nodes.image
-          const node = nodeType?.create({ src, 'data-keep-ratio': true })
+          const nodeType = isVideo
+            ? schema.nodes.video
+            : schema.nodes.resizableImage || schema.nodes.image
+          const attrs = isVideo
+            ? {
+                src,
+                mimeType: resolveVideoMimeType(file.type, file.name) ?? file.type,
+                title: file.name,
+              }
+            : await resizableImageInsertAttrs(src, file)
+          const node = nodeType?.create(attrs)
           if (node) {
             const transaction = view.state.tr.replaceSelectionWith(node)
             view.dispatch(transaction)
           }
         })
         .catch((err) => {
-          console.error('[RichTextEditor] Image paste upload failed:', err)
+          console.error('[RichTextEditor] Media paste upload failed:', err)
           void import('sonner').then(({ toast }) =>
-            toast.error("Couldn't upload image. Try again.")
+            toast.error(`Couldn't upload ${isVideo ? 'video' : 'image'}. Try again.`)
           )
         })
     })
@@ -1716,7 +2081,9 @@ function handleImagePaste(
 // ============================================================================
 
 interface ToolbarButtonProps {
-  icon: React.ReactNode
+  /** Drawn at size-4. A component rather than an element, so a memoized
+   * button can compare it across renders. */
+  icon: React.ComponentType<{ className?: string }>
   onClick: () => void
   disabled: boolean
   isActive?: boolean
@@ -1727,8 +2094,12 @@ interface ToolbarButtonProps {
   variant?: 'default' | 'quiet'
 }
 
-function ToolbarButton({
-  icon,
+/**
+ * Memoized: a toolbar re-renders when any state it shows changes, and with
+ * stable onClick handlers only the buttons whose own state changed follow it.
+ */
+const ToolbarButton = memo(function ToolbarButton({
+  icon: Icon,
   onClick,
   disabled,
   isActive,
@@ -1755,10 +2126,10 @@ function ToolbarButton({
       title={title}
       aria-label={ariaLabel || title}
     >
-      {icon}
+      <Icon className="size-4" />
     </Button>
   )
-}
+})
 
 function ToolbarDivider() {
   return <div className="w-px h-4 bg-border mx-1" />
@@ -1773,58 +2144,100 @@ interface BubbleMenuContentProps {
   disabled: boolean
 }
 
+const selectBubbleMarks = ({ editor: e }: { editor: Editor }) => ({
+  bold: e.isActive('bold'),
+  italic: e.isActive('italic'),
+  underline: e.isActive('underline'),
+  strike: e.isActive('strike'),
+  code: e.isActive('code'),
+  link: e.isActive('link'),
+})
+
+/**
+ * The toolbar and bubble menu commands, created once per editor so the
+ * memoized buttons that run them keep the same onClick across renders.
+ */
+function useToolbarCommands(editor: Editor) {
+  return useMemo(
+    () => ({
+      bold: () => editor.chain().focus().toggleBold().run(),
+      italic: () => editor.chain().focus().toggleItalic().run(),
+      underline: () => editor.chain().focus().toggleUnderline().run(),
+      strike: () => editor.chain().focus().toggleStrike().run(),
+      code: () => editor.chain().focus().toggleCode().run(),
+      heading1: () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+      heading2: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+      heading3: () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+      bulletList: () => editor.chain().focus().toggleBulletList().run(),
+      orderedList: () => editor.chain().focus().toggleOrderedList().run(),
+      codeBlock: () => editor.chain().focus().toggleCodeBlock().run(),
+      undo: () => editor.chain().focus().undo().run(),
+      redo: () => editor.chain().focus().redo().run(),
+    }),
+    [editor]
+  )
+}
+
 function BubbleMenuContent({ editor, disabled }: BubbleMenuContentProps) {
+  // Same subscription as MenuBar: re-renders only when a mark it shows flips.
+  const active = useEditorState({ editor, selector: selectBubbleMarks })
+  const commands = useToolbarCommands(editor)
   return (
     <div className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-md">
       <ToolbarButton
-        icon={<Bold className="size-4" />}
-        onClick={() => editor.chain().focus().toggleBold().run()}
+        icon={Bold}
+        onClick={commands.bold}
         disabled={disabled}
-        isActive={editor.isActive('bold')}
+        isActive={active.bold}
         title="Bold (Cmd+B)"
       />
       <ToolbarButton
-        icon={<Italic className="size-4" />}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
+        icon={Italic}
+        onClick={commands.italic}
         disabled={disabled}
-        isActive={editor.isActive('italic')}
+        isActive={active.italic}
         title="Italic (Cmd+I)"
       />
       <ToolbarButton
-        icon={<UnderlineIcon className="size-4" />}
-        onClick={() => editor.chain().focus().toggleUnderline().run()}
+        icon={UnderlineIcon}
+        onClick={commands.underline}
         disabled={disabled}
-        isActive={editor.isActive('underline')}
+        isActive={active.underline}
         title="Underline (Cmd+U)"
       />
       <ToolbarButton
-        icon={<Strikethrough className="size-4" />}
-        onClick={() => editor.chain().focus().toggleStrike().run()}
+        icon={Strikethrough}
+        onClick={commands.strike}
         disabled={disabled}
-        isActive={editor.isActive('strike')}
+        isActive={active.strike}
         title="Strikethrough (Cmd+Shift+S)"
       />
       <ToolbarDivider />
       <ToolbarButton
-        icon={<Code className="size-4" />}
-        onClick={() => editor.chain().focus().toggleCode().run()}
+        icon={Code}
+        onClick={commands.code}
         disabled={disabled}
-        isActive={editor.isActive('code')}
+        isActive={active.code}
         title="Inline Code (Cmd+E)"
       />
-      <LinkButton editor={editor} disabled={disabled} />
+      <LinkButton editor={editor} disabled={disabled} isActive={active.link} />
       <ToolbarDivider />
       <HeadingDropdown editor={editor} disabled={disabled} />
     </div>
   )
 }
 
-function LinkButton({ editor, disabled }: { editor: Editor; disabled: boolean }) {
+function LinkButton({
+  editor,
+  disabled,
+  isActive,
+}: {
+  editor: Editor
+  disabled: boolean
+  isActive: boolean
+}) {
   const [isOpen, setIsOpen] = useState(false)
   const [url, setUrl] = useState('')
-
-  const currentUrl = editor.getAttributes('link').href as string | undefined
-  const isActive = editor.isActive('link')
 
   const applyLink = () => {
     if (!url.trim()) {
@@ -1846,7 +2259,7 @@ function LinkButton({ editor, disabled }: { editor: Editor; disabled: boolean })
           className={cn('h-7 w-7 p-0', isActive && 'bg-muted')}
           disabled={disabled}
           onClick={() => {
-            setUrl(currentUrl || '')
+            setUrl((editor.getAttributes('link').href as string | undefined) || '')
             setIsOpen(true)
           }}
           title="Insert Link"
@@ -1892,16 +2305,16 @@ function LinkButton({ editor, disabled }: { editor: Editor; disabled: boolean })
   )
 }
 
-function HeadingDropdown({ editor, disabled }: { editor: Editor; disabled: boolean }) {
-  // Determine current block type
-  const getCurrentBlockType = () => {
-    if (editor.isActive('heading', { level: 1 })) return 'H1'
-    if (editor.isActive('heading', { level: 2 })) return 'H2'
-    if (editor.isActive('heading', { level: 3 })) return 'H3'
-    return 'Text'
-  }
+/** The block type under the selection, as the bubble menu names it. */
+const selectBlockType = ({ editor: e }: { editor: Editor }) => {
+  if (e.isActive('heading', { level: 1 })) return 'H1'
+  if (e.isActive('heading', { level: 2 })) return 'H2'
+  if (e.isActive('heading', { level: 3 })) return 'H3'
+  return 'Text'
+}
 
-  const currentType = getCurrentBlockType()
+function HeadingDropdown({ editor, disabled }: { editor: Editor; disabled: boolean }) {
+  const currentType = useEditorState({ editor, selector: selectBlockType })
 
   const blockTypes = [
     { label: 'Text', value: 'paragraph', icon: <Type className="size-4" /> },
@@ -1973,14 +2386,14 @@ function TableToolbar({ editor, disabled }: TableToolbarProps) {
     <div className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-md">
       {/* Add row above */}
       <ToolbarButton
-        icon={<ArrowUp className="size-4" />}
+        icon={ArrowUp}
         onClick={() => editor.chain().focus().addRowBefore().run()}
         disabled={disabled}
         title="Add row above"
       />
       {/* Add row below */}
       <ToolbarButton
-        icon={<ArrowDown className="size-4" />}
+        icon={ArrowDown}
         onClick={() => editor.chain().focus().addRowAfter().run()}
         disabled={disabled}
         title="Add row below"
@@ -1988,14 +2401,14 @@ function TableToolbar({ editor, disabled }: TableToolbarProps) {
       <ToolbarDivider />
       {/* Add column left */}
       <ToolbarButton
-        icon={<ArrowLeft className="size-4" />}
+        icon={ArrowLeft}
         onClick={() => editor.chain().focus().addColumnBefore().run()}
         disabled={disabled}
         title="Add column left"
       />
       {/* Add column right */}
       <ToolbarButton
-        icon={<ArrowRight className="size-4" />}
+        icon={ArrowRight}
         onClick={() => editor.chain().focus().addColumnAfter().run()}
         disabled={disabled}
         title="Add column right"
@@ -2114,9 +2527,11 @@ interface ImageToolbarProps {
   disabled: boolean
 }
 
+const selectImageSrc = ({ editor: e }: { editor: Editor }) =>
+  e.getAttributes('resizableImage').src as string | undefined
+
 function ImageToolbar({ editor, disabled }: ImageToolbarProps) {
-  const attrs = editor.getAttributes('resizableImage')
-  const src = attrs.src as string | undefined
+  const src = useEditorState({ editor, selector: selectImageSrc })
 
   const { viewImage, downloadImage, copyImage, copyLink, deleteImage } = useImageActions({
     src,
@@ -2130,28 +2545,28 @@ function ImageToolbar({ editor, disabled }: ImageToolbarProps) {
       aria-label="Image options"
     >
       <ToolbarButton
-        icon={<Expand className="size-4" />}
+        icon={Expand}
         onClick={viewImage}
         disabled={disabled}
         title="View image"
         aria-label="View image in new tab"
       />
       <ToolbarButton
-        icon={<Download className="size-4" />}
+        icon={Download}
         onClick={downloadImage}
         disabled={disabled}
         title="Download"
         aria-label="Download image"
       />
       <ToolbarButton
-        icon={<Copy className="size-4" />}
+        icon={Copy}
         onClick={copyImage}
         disabled={disabled}
         title="Copy to clipboard"
         aria-label="Copy image to clipboard"
       />
       <ToolbarButton
-        icon={<Link2 className="size-4" />}
+        icon={Link2}
         onClick={copyLink}
         disabled={disabled}
         title="Copy link"
@@ -2159,7 +2574,7 @@ function ImageToolbar({ editor, disabled }: ImageToolbarProps) {
       />
       <ToolbarDivider />
       <ToolbarButton
-        icon={<Trash2 className="size-4" />}
+        icon={Trash2}
         onClick={deleteImage}
         disabled={disabled}
         title="Delete"
@@ -2178,6 +2593,7 @@ interface MenuBarProps {
   disabled: boolean
   features?: EditorFeatures
   onImageUpload?: (file: File) => Promise<string>
+  onVideoUpload?: (file: File) => Promise<string>
   /** 'top' is the classic bordered strip; 'bottom' is a quiet transparent row
    * of ghost icon buttons rendered below the content. Both render the same
    * feature-gated button set. */
@@ -2188,17 +2604,42 @@ interface MenuBarProps {
   borderless?: boolean
 }
 
+/**
+ * What the fixed toolbar shows: the active marks and blocks, and whether there
+ * is anything to undo or redo. The history depth answers the same question as
+ * `editor.can().undo()` without building the full command chain, which this
+ * selector would otherwise do on every transaction.
+ */
+const selectToolbarState = ({ editor: e }: { editor: Editor }) => ({
+  bold: e.isActive('bold'),
+  italic: e.isActive('italic'),
+  link: e.isActive('link'),
+  bulletList: e.isActive('bulletList'),
+  orderedList: e.isActive('orderedList'),
+  codeBlock: e.isActive('codeBlock'),
+  heading1: e.isActive('heading', { level: 1 }),
+  heading2: e.isActive('heading', { level: 2 }),
+  heading3: e.isActive('heading', { level: 3 }),
+  canUndo: undoDepth(e.state) > 0,
+  canRedo: redoDepth(e.state) > 0,
+})
+
 function MenuBar({
   editor,
   disabled,
   features = {},
   onImageUpload,
+  onVideoUpload,
   variant = 'top',
   borderless = false,
 }: MenuBarProps) {
   const isBottom = variant === 'bottom'
   // Muted ghost buttons on the transparent bottom row; filled active-state on top.
   const btn = isBottom ? ('quiet' as const) : ('default' as const)
+  // Subscribe to the marks/nodes the toolbar reflects so it re-renders only
+  // when one of them changes, never merely because a character was typed.
+  const active = useEditorState({ editor, selector: selectToolbarState })
+  const commands = useToolbarCommands(editor)
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href
     let url = window.prompt('URL', previousUrl)
@@ -2229,8 +2670,7 @@ function MenuBar({
 
       try {
         const src = await onImageUpload(file)
-        // Use setResizableImage for resizable images
-        editor.commands.setResizableImage({ src, 'data-keep-ratio': true })
+        editor.commands.setResizableImage(await resizableImageInsertAttrs(src, file))
       } catch (error) {
         console.error('Failed to upload image:', error)
         const { toast } = await import('sonner')
@@ -2240,8 +2680,37 @@ function MenuBar({
     input.click()
   }, [editor, onImageUpload])
 
-  const canUndo = editor.can().chain().focus().undo().run()
-  const canRedo = editor.can().chain().focus().redo().run()
+  const insertVideo = useCallback(() => {
+    if (!onVideoUpload) return
+
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = VIDEO_FILE_ACCEPT
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      try {
+        const src = await onVideoUpload(file)
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: 'video',
+            attrs: {
+              src,
+              mimeType: resolveVideoMimeType(file.type, file.name) ?? file.type,
+              title: file.name,
+            },
+          })
+          .run()
+      } catch (error) {
+        console.error('Failed to upload video:', error)
+        const { toast } = await import('sonner')
+        toast.error("Couldn't upload video. Try again.")
+      }
+    }
+    input.click()
+  }, [editor, onVideoUpload])
 
   return (
     <div
@@ -2260,26 +2729,26 @@ function MenuBar({
         <>
           <ToolbarButton
             variant={btn}
-            icon={<Heading1 className="size-4" />}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+            icon={Heading1}
+            onClick={commands.heading1}
             disabled={disabled}
-            isActive={editor.isActive('heading', { level: 1 })}
+            isActive={active.heading1}
             title="Heading 1"
           />
           <ToolbarButton
             variant={btn}
-            icon={<Heading2 className="size-4" />}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            icon={Heading2}
+            onClick={commands.heading2}
             disabled={disabled}
-            isActive={editor.isActive('heading', { level: 2 })}
+            isActive={active.heading2}
             title="Heading 2"
           />
           <ToolbarButton
             variant={btn}
-            icon={<Heading3 className="size-4" />}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            icon={Heading3}
+            onClick={commands.heading3}
             disabled={disabled}
-            isActive={editor.isActive('heading', { level: 3 })}
+            isActive={active.heading3}
             title="Heading 3"
           />
           <ToolbarDivider />
@@ -2289,18 +2758,18 @@ function MenuBar({
       {/* Basic formatting */}
       <ToolbarButton
         variant={btn}
-        icon={<Bold className="size-4" />}
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        disabled={disabled || !editor.can().chain().focus().toggleBold().run()}
-        isActive={editor.isActive('bold')}
+        icon={Bold}
+        onClick={commands.bold}
+        disabled={disabled}
+        isActive={active.bold}
         title="Bold"
       />
       <ToolbarButton
         variant={btn}
-        icon={<Italic className="size-4" />}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        disabled={disabled || !editor.can().chain().focus().toggleItalic().run()}
-        isActive={editor.isActive('italic')}
+        icon={Italic}
+        onClick={commands.italic}
+        disabled={disabled}
+        isActive={active.italic}
         title="Italic"
       />
       <ToolbarDivider />
@@ -2308,18 +2777,18 @@ function MenuBar({
       {/* Lists */}
       <ToolbarButton
         variant={btn}
-        icon={<ListBulletIcon className="size-4" />}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        icon={ListBulletIcon}
+        onClick={commands.bulletList}
         disabled={disabled}
-        isActive={editor.isActive('bulletList')}
+        isActive={active.bulletList}
         title="Bullet List"
       />
       <ToolbarButton
         variant={btn}
-        icon={<ListOrdered className="size-4" />}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        icon={ListOrdered}
+        onClick={commands.orderedList}
         disabled={disabled}
-        isActive={editor.isActive('orderedList')}
+        isActive={active.orderedList}
         title="Ordered List"
       />
       <ToolbarDivider />
@@ -2327,10 +2796,10 @@ function MenuBar({
       {/* Link */}
       <ToolbarButton
         variant={btn}
-        icon={<LinkIcon className="size-4" />}
+        icon={LinkIcon}
         onClick={setLink}
         disabled={disabled}
-        isActive={editor.isActive('link')}
+        isActive={active.link}
         title="Insert Link"
       />
 
@@ -2338,10 +2807,10 @@ function MenuBar({
       {features.codeBlocks && (
         <ToolbarButton
           variant={btn}
-          icon={<Code2 className="size-4" />}
-          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+          icon={Code2}
+          onClick={commands.codeBlock}
           disabled={disabled}
-          isActive={editor.isActive('codeBlock')}
+          isActive={active.codeBlock}
           title="Code Block"
         />
       )}
@@ -2350,10 +2819,20 @@ function MenuBar({
       {features.images && onImageUpload && (
         <ToolbarButton
           variant={btn}
-          icon={<ImagePlus className="size-4" />}
+          icon={ImagePlus}
           onClick={insertImage}
           disabled={disabled}
           title="Insert Image"
+        />
+      )}
+
+      {features.videos && onVideoUpload && (
+        <ToolbarButton
+          variant={btn}
+          icon={VideoIcon}
+          onClick={insertVideo}
+          disabled={disabled}
+          title="Insert Video"
         />
       )}
 
@@ -2364,32 +2843,18 @@ function MenuBar({
       {/* Undo/Redo */}
       <ToolbarButton
         variant={btn}
-        icon={<ArrowUturnLeftIcon className="size-4" />}
-        onClick={() => editor.chain().focus().undo().run()}
-        disabled={disabled || !canUndo}
+        icon={ArrowUturnLeftIcon}
+        onClick={commands.undo}
+        disabled={disabled || !active.canUndo}
         title="Undo"
       />
       <ToolbarButton
         variant={btn}
-        icon={<ArrowUturnRightIcon className="size-4" />}
-        onClick={() => editor.chain().focus().redo().run()}
-        disabled={disabled || !canRedo}
+        icon={ArrowUturnRightIcon}
+        onClick={commands.redo}
+        disabled={disabled || !active.canRedo}
         title="Redo"
       />
     </div>
   )
 }
-
-// ============================================================================
-// Read-only rendering (re-exports)
-// ============================================================================
-
-// The read-only renderer now lives in a sibling module with only light deps so
-// portal reading surfaces don't pull in this editor chunk. These re-exports keep
-// existing importers of this module working; NEW read-only consumers should
-// import from '@/components/ui/rich-text-content' directly.
-//
-// `generateContentHTML` (the JSON→HTML serializer) is defined in the browser-free
-// shared module `@/lib/shared/content-html`; re-exported here for existing callers.
-export { generateContentHTML }
-export { RichTextContent, isRichTextContent }

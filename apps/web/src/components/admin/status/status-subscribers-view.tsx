@@ -5,10 +5,11 @@ import {
   ArrowUpTrayIcon,
   DocumentTextIcon,
   ExclamationCircleIcon,
-  PlusIcon,
   UsersIcon,
 } from '@heroicons/react/24/outline'
 import { Badge } from '@/components/ui/badge'
+import { useFormatNumber } from '@/components/ui/format-number'
+import { AnalyticsStatRow } from '@/components/admin/analytics/analytics-stat-row'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,6 +17,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
+import { NewButton } from '@/components/shared/new-button'
+import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { TimeAgo } from '@/components/ui/time-ago'
 import {
   Dialog,
@@ -104,16 +107,15 @@ function downloadCsv(rows: ExportRow[]): void {
   URL.revokeObjectURL(url)
 }
 
-function CountTile({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex-1 rounded-xl border border-border/50 bg-card px-4 py-3">
-      <div className="text-2xl font-semibold tabular-nums">{value.toLocaleString()}</div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-    </div>
-  )
+/** Only the non-default sources get a badge; a self-serve subscription is the normal case. */
+const SOURCE_LABELS: Record<string, string> = {
+  auto: 'Automatic',
+  admin: 'Added by admin',
+  csv_import: 'CSV import',
 }
 
 export function StatusSubscribersView() {
+  const formatNumber = useFormatNumber()
   const [debouncedSearch, setDebouncedSearch] = useState<string | undefined>(undefined)
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: debouncedSearch,
@@ -153,29 +155,34 @@ export function StatusSubscribersView() {
   }
 
   return (
-    <div className="max-w-3xl w-full flex flex-col flex-1 min-h-0">
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5 flex items-center gap-2 border-b border-border/40">
-        <h2 className="text-sm font-semibold px-1">Subscribers</h2>
-        <Input
-          value={searchValue}
-          onChange={(e) => setSearchValue(e.target.value)}
-          placeholder="Search by name or email…"
-          className="h-8 w-56 text-sm bg-muted/30 border-border/50"
-        />
-        <div className="flex items-center gap-2 ml-auto">
-          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
-            <ArrowUpTrayIcon className="h-4 w-4 mr-1.5" />
-            {exporting ? 'Exporting…' : 'Export CSV'}
-          </Button>
-          <AddSubscribersDialog />
-        </div>
-      </div>
+    <div className="max-w-5xl w-full flex flex-col flex-1 min-h-0">
+      <AdminListHeader
+        searchValue={searchValue}
+        onSearchChange={setSearchValue}
+        searchPlaceholder="Search subscribers..."
+        action={
+          <>
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+              <ArrowUpTrayIcon className="h-4 w-4" />
+              {exporting ? 'Exporting…' : 'Export CSV'}
+            </Button>
+            <AddSubscribersDialog />
+          </>
+        }
+      />
 
-      <div className="p-4 space-y-4">
-        <div className="flex gap-3">
-          <CountTile label="Total subscribers" value={countsQuery.data?.total ?? 0} />
-          <CountTile label="Active" value={countsQuery.data?.active ?? 0} />
-          <CountTile label="Unsubscribed" value={countsQuery.data?.unsubscribed ?? 0} />
+      <div className="p-3 space-y-3">
+        <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
+          <AnalyticsStatRow
+            stats={[
+              { label: 'Total', value: formatNumber(countsQuery.data?.total ?? 0) },
+              { label: 'Active', value: formatNumber(countsQuery.data?.active ?? 0) },
+              {
+                label: 'Unsubscribed',
+                value: formatNumber(countsQuery.data?.unsubscribed ?? 0),
+              },
+            ]}
+          />
         </div>
 
         {isLoading ? (
@@ -191,7 +198,7 @@ export function StatusSubscribersView() {
             className="h-48"
           />
         ) : (
-          <div className="rounded-xl overflow-hidden border border-border/50 bg-card shadow-sm divide-y divide-border/50">
+          <div className="overflow-hidden border-y border-t-transparent border-border/50 divide-y divide-border/50">
             {items.map((sub) => (
               <div key={sub.id} className="flex items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
@@ -202,22 +209,24 @@ export function StatusSubscribersView() {
                     <div className="text-xs text-muted-foreground truncate">{sub.email}</div>
                   )}
                 </div>
-                <Badge variant="outline" size="sm" className="capitalize">
-                  {sub.scope === 'components'
-                    ? `${sub.componentIds.length} service${sub.componentIds.length === 1 ? '' : 's'}`
-                    : 'Whole page'}
-                </Badge>
-                <Badge variant="outline" size="sm" className="capitalize">
-                  {sub.source.replace('_', ' ')}
-                </Badge>
-                <div className="text-xs text-muted-foreground w-32 text-right shrink-0">
+                {sub.scope === 'components' && (
+                  <Badge variant="outline" size="sm">
+                    {`${sub.componentIds.length} service${sub.componentIds.length === 1 ? '' : 's'}`}
+                  </Badge>
+                )}
+                {SOURCE_LABELS[sub.source] && (
+                  <Badge variant="outline" size="sm">
+                    {SOURCE_LABELS[sub.source]}
+                  </Badge>
+                )}
+                <div className="text-xs text-muted-foreground text-right shrink-0 whitespace-nowrap">
                   {sub.unsubscribedAt ? (
                     <span>
-                      Unsubscribed <TimeAgo date={sub.unsubscribedAt} />
+                      Unsubscribed <TimeAgo date={sub.unsubscribedAt} locale="en" />
                     </span>
                   ) : (
                     <span>
-                      Subscribed <TimeAgo date={sub.createdAt} />
+                      Subscribed <TimeAgo date={sub.createdAt} locale="en" />
                     </span>
                   )}
                 </div>
@@ -253,14 +262,11 @@ function AddSubscribersDialog() {
   return (
     <Dialog open={open} onOpenChange={(o) => setOpen(o)}>
       <DialogTrigger asChild>
-        <Button size="sm">
-          <PlusIcon className="h-4 w-4 mr-1.5" />
-          Add subscribers
-        </Button>
+        <NewButton noun="subscriber" />
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Add subscribers</DialogTitle>
+          <DialogTitle>New subscriber</DialogTitle>
           <DialogDescription>
             Subscribe existing accounts to status updates. Emails without a matching account are
             skipped; no new accounts are created.
@@ -408,6 +414,7 @@ function CsvImportTab({ onDone }: { onDone: () => void }) {
             checked={consentChecked}
             onCheckedChange={(checked) => setConsentChecked(checked === true)}
             className="mt-0.5"
+            data-in-label
           />
           <span>
             I confirm every person on this list has agreed to receive email from us, and I am not

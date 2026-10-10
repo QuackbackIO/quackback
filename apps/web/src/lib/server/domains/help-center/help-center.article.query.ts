@@ -3,6 +3,7 @@ import {
   helpCenterCategories,
   helpCenterArticles,
   principal,
+  user,
   eq,
   and,
   isNull,
@@ -29,6 +30,10 @@ import {
   publicCategoryExistsCondition,
   RANKED_SEARCH_POOL,
 } from './help-center-search.service'
+import {
+  loadAuthors,
+  resolveUserAvatarUrl,
+} from '@/lib/server/domains/principals/principal-display'
 
 /**
  * Who a list query serves. `team` (default) is the admin/MCP/REST surface:
@@ -38,6 +43,8 @@ import {
  */
 export interface ArticleListScope {
   audience?: 'team' | 'public'
+  /** Keyword search avoids provider calls for instant navigation. */
+  searchMode?: 'hybrid' | 'keyword'
   viewer?: Actor
 }
 
@@ -50,6 +57,7 @@ export interface ArticleListScope {
 // preview of `content`.
 const LIST_COLUMNS = {
   id: true,
+  urlId: true,
   categoryId: true,
   slug: true,
   title: true,
@@ -90,7 +98,7 @@ export async function listArticles(
   // The trash view keeps the plain keyword filter below: soft-deleted rows
   // are excluded from ranking by design.
   const searchTerm = search?.trim()
-  if (searchTerm && !showDeleted) {
+  if (searchTerm && !showDeleted && scope.searchMode !== 'keyword') {
     return listArticlesRanked(searchTerm, { categoryId, status, cursor, limit, audience, viewer })
   }
 
@@ -247,37 +255,35 @@ async function resolveArticleRelations(
     ...new Set(items.map((a) => a.principalId).filter(Boolean)),
   ] as PrincipalId[]
 
-  const [categories, principals] = await Promise.all([
+  const [categories, authors] = await Promise.all([
     categoryIds.length > 0
       ? db.query.helpCenterCategories.findMany({
           where: inArray(helpCenterCategories.id, categoryIds),
-          columns: { id: true, slug: true, name: true },
+          columns: { id: true, urlId: true, slug: true, name: true },
         })
       : [],
-    principalIds.length > 0
-      ? db.query.principal.findMany({
-          where: inArray(principal.id, principalIds),
-          columns: { id: true, displayName: true, avatarUrl: true },
-        })
-      : [],
+    loadAuthors(principalIds),
   ])
 
   const categoryMap = new Map(categories.map((c) => [c.id, c]))
-  const authorMap = new Map(principals.map((p) => [p.id, p]))
 
   return items.map((article) => {
     const cat = categoryMap.get(article.categoryId)
-    const author = article.principalId ? authorMap.get(article.principalId) : null
+    const author = article.principalId ? authors.get(article.principalId) : null
     return {
       ...article,
       // contentJson is omitted from the list query for performance — consumers
       // that need the full JSON (e.g. article detail page) call getArticleById.
       contentJson: null,
       category: cat
-        ? { id: cat.id as KbCategoryId, slug: cat.slug, name: cat.name }
-        : { id: article.categoryId as KbCategoryId, slug: '', name: 'Unknown' },
+        ? { id: cat.id as KbCategoryId, urlId: cat.urlId, slug: cat.slug, name: cat.name }
+        : { id: article.categoryId as KbCategoryId, urlId: 0, slug: '', name: 'Unknown' },
       author: author?.displayName
-        ? { id: author.id as PrincipalId, name: author.displayName, avatarUrl: author.avatarUrl }
+        ? {
+            id: author.principalId as PrincipalId,
+            name: author.displayName,
+            avatarUrl: author.avatarUrl,
+          }
         : null,
     }
   })
@@ -303,9 +309,10 @@ export async function listPublicArticlesForCategory(
   // non-deleted on the category side too. Without the join, an admin
   // marking a category private only hid it from the public nav; direct
   // category-id article lookups still returned the children.
-  return db
+  const rows = await db
     .select({
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       description: helpCenterArticles.description,
@@ -314,10 +321,14 @@ export async function listPublicArticlesForCategory(
       readingTimeMinutes: sql<number>`GREATEST(1, ROUND(length(${helpCenterArticles.content}) / 1200.0))`,
       authorName: principal.displayName,
       authorAvatarUrl: principal.avatarUrl,
+      authorAvatarKey: principal.avatarKey,
+      authorUserImage: user.image,
+      authorUserImageKey: user.imageKey,
     })
     .from(helpCenterArticles)
     .innerJoin(helpCenterCategories, eq(helpCenterCategories.id, helpCenterArticles.categoryId))
     .leftJoin(principal, eq(principal.id, helpCenterArticles.principalId))
+    .leftJoin(user, eq(user.id, principal.userId))
     .where(
       and(
         eq(helpCenterArticles.categoryId, categoryId as KbCategoryId),
@@ -325,6 +336,18 @@ export async function listPublicArticlesForCategory(
       )
     )
     .orderBy(asc(helpCenterArticles.position), asc(helpCenterArticles.publishedAt))
+
+  return rows.map(
+    ({ authorAvatarKey, authorUserImage, authorUserImageKey, authorAvatarUrl, ...rest }) => ({
+      ...rest,
+      authorAvatarUrl: resolveUserAvatarUrl({
+        userImage: authorUserImage,
+        userImageKey: authorUserImageKey,
+        principalAvatarUrl: authorAvatarUrl,
+        principalAvatarKey: authorAvatarKey,
+      }),
+    })
+  )
 }
 
 /** Per-category cap for the batched category-articles load. Category pages
@@ -359,6 +382,7 @@ export async function listPublicArticlesForCategories(
     .select({
       categoryId: helpCenterArticles.categoryId,
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       description: helpCenterArticles.description,
@@ -370,6 +394,9 @@ export async function listPublicArticlesForCategories(
         ),
       authorName: principal.displayName,
       authorAvatarUrl: principal.avatarUrl,
+      authorAvatarKey: principal.avatarKey,
+      authorUserImage: user.image,
+      authorUserImageKey: user.imageKey,
       rn: sql<number>`ROW_NUMBER() OVER (
         PARTITION BY ${helpCenterArticles.categoryId}
         ORDER BY ${helpCenterArticles.position} ASC, ${helpCenterArticles.publishedAt} ASC
@@ -378,6 +405,7 @@ export async function listPublicArticlesForCategories(
     .from(helpCenterArticles)
     .innerJoin(helpCenterCategories, eq(helpCenterCategories.id, helpCenterArticles.categoryId))
     .leftJoin(principal, eq(principal.id, helpCenterArticles.principalId))
+    .leftJoin(user, eq(user.id, principal.userId))
     .where(
       and(
         inArray(helpCenterArticles.categoryId, categoryIds as KbCategoryId[]),
@@ -390,6 +418,7 @@ export async function listPublicArticlesForCategories(
     .select({
       categoryId: ranked.categoryId,
       id: ranked.id,
+      urlId: ranked.urlId,
       slug: ranked.slug,
       title: ranked.title,
       description: ranked.description,
@@ -398,16 +427,27 @@ export async function listPublicArticlesForCategories(
       readingTimeMinutes: ranked.readingTimeMinutes,
       authorName: ranked.authorName,
       authorAvatarUrl: ranked.authorAvatarUrl,
+      authorAvatarKey: ranked.authorAvatarKey,
+      authorUserImage: ranked.authorUserImage,
+      authorUserImageKey: ranked.authorUserImageKey,
     })
     .from(ranked)
     .where(sql`${ranked.rn} <= ${CATEGORY_ARTICLES_CAP}`)
     .orderBy(asc(ranked.categoryId), asc(ranked.position), asc(ranked.publishedAt))
 
   for (const row of rows) {
-    const { categoryId, ...article } = row
+    const { categoryId, authorAvatarKey, authorUserImage, authorUserImageKey, ...article } = row
     if (!categoryId) continue
     const list = grouped.get(categoryId) ?? []
-    list.push(article as PublicCategoryArticle)
+    list.push({
+      ...article,
+      authorAvatarUrl: resolveUserAvatarUrl({
+        userImage: authorUserImage,
+        userImageKey: authorUserImageKey,
+        principalAvatarUrl: article.authorAvatarUrl,
+        principalAvatarKey: authorAvatarKey,
+      }),
+    } as PublicCategoryArticle)
     grouped.set(categoryId, list)
   }
   return grouped
@@ -422,6 +462,7 @@ export async function listPopularPublicArticles(limit: number, viewer: Actor = A
   return db
     .select({
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       categorySlug: helpCenterCategories.slug,
@@ -432,40 +473,4 @@ export async function listPopularPublicArticles(limit: number, viewer: Actor = A
     .where(and(...helpCenterVisibilityConditions('public', viewer)))
     .orderBy(desc(helpCenterArticles.viewCount), desc(helpCenterArticles.publishedAt))
     .limit(limit)
-}
-
-export async function listPublicCategoryEditors(): Promise<
-  Record<string, Array<{ name: string; avatarUrl: string | null }>>
-> {
-  const rows = await db
-    .select({
-      categoryId: helpCenterArticles.categoryId,
-      principalId: helpCenterArticles.principalId,
-      displayName: principal.displayName,
-      avatarUrl: principal.avatarUrl,
-    })
-    .from(helpCenterArticles)
-    .innerJoin(principal, eq(principal.id, helpCenterArticles.principalId))
-    .where(
-      and(
-        isNotNull(helpCenterArticles.publishedAt),
-        isNull(helpCenterArticles.deletedAt),
-        inArray(principal.role, ['admin', 'member'])
-      )
-    )
-    .orderBy(asc(helpCenterArticles.categoryId), desc(helpCenterArticles.publishedAt))
-
-  const result: Record<string, Array<{ name: string; avatarUrl: string | null }>> = {}
-  const seen = new Set<string>()
-  for (const row of rows) {
-    const catId = row.categoryId as string
-    const key = `${catId}:${row.principalId}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    if (!result[catId]) result[catId] = []
-    if (result[catId].length < 3 && row.displayName) {
-      result[catId].push({ name: row.displayName, avatarUrl: row.avatarUrl })
-    }
-  }
-  return result
 }

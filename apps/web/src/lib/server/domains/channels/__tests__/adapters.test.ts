@@ -4,7 +4,7 @@ import { getChannelAdapter, listChannelAdapters } from '../index'
 describe('channel adapters', () => {
   it('registers one adapter per descriptor id', () => {
     const ids = listChannelAdapters().map((a) => a.id)
-    expect(ids).toEqual(['messenger', 'email'])
+    expect(ids).toEqual(['messenger', 'email', 'github'])
     expect(getChannelAdapter('email')?.deliverLifecycleEvent).toEqual(expect.any(Function))
     expect(getChannelAdapter('messenger')?.deliverCsatRequest).toEqual(expect.any(Function))
   })

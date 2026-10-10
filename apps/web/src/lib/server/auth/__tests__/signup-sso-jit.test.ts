@@ -63,6 +63,11 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 vi.mock('@/lib/server/domains/principals/bootstrap-admin', () => ({
   findHumanAdmin: (...a: unknown[]) => hoisted.findHumanAdmin(...a),
   isOpenToBootstrapClaim: (...a: unknown[]) => hoisted.isOpenToBootstrapClaim(...a),
+  // Setup still open; a finished install is covered against real Postgres.
+  isSetupOpenToClaim: async () => true,
+  // Nobody has claimed setup by creating an account; that claim is covered
+  // against real Postgres.
+  findSetupClaimant: async () => undefined,
 }))
 
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
@@ -96,12 +101,16 @@ function makeProvider(overrides: Partial<IdentityProvider> = {}): IdentityProvid
     scopes: null,
     prompt: null,
     tokenEndpointAuthMethod: null,
+    idTokenNonce: null,
     enabled: true,
     configured: true,
     autoCreateUsers: true,
     autoProvisionRole: 'member',
     claimMapping: null,
+    redirectStyle: 'current',
     showButton: false,
+    logoKey: null,
+    logoUrl: null,
     detailsChangedAt: null,
     lastSuccessfulTestAt: null,
     lastTestCapture: null,
@@ -158,6 +167,12 @@ describe('an IdP configured to create users, on its own callback', () => {
   it('lets the employee through', async () => {
     expect(
       await creationAllowed(EMPLOYEE, { path: OIDC_CALLBACK, params: { providerId: 'acme-idp' } })
+    ).toBe(true)
+  })
+
+  it('lets the employee through on the 1.7 social callback path', async () => {
+    expect(
+      await creationAllowed(EMPLOYEE, { path: '/callback/:id', params: { id: 'acme-idp' } })
     ).toBe(true)
   })
 

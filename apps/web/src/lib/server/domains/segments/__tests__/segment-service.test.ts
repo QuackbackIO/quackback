@@ -8,6 +8,16 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   // Spread the real db module so tables/operators stay current; override only what this suite drives.
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
+    transaction: vi.fn(async (fn) =>
+      fn({
+        execute: vi.fn(async () => []),
+        query: { segments: { findFirst: (...args: unknown[]) => mockFindFirst(...args) } },
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({ where: (...args: unknown[]) => mockDeleteReturning(...args) })),
+        })),
+        delete: vi.fn(() => ({ where: vi.fn(async () => undefined) })),
+      })
+    ),
     query: {
       segments: {
         findFirst: (...args: unknown[]) => mockFindFirst(...args),
@@ -73,7 +83,8 @@ describe('evaluateDynamicSegment', () => {
     expect(mockNotifyUserSyncIntegrations).toHaveBeenCalledWith(
       'Enterprise',
       [],
-      ['principal_a', 'principal_b']
+      ['principal_a', 'principal_b'],
+      expect.objectContaining({ segmentId: 'segment_test123', executor: expect.any(Object) })
     )
   })
 })

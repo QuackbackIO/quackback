@@ -56,7 +56,7 @@ export function RoadmapColumn({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
-            <CardTitle className="text-base font-semibold">
+            <CardTitle className="text-base">
               {icon && (
                 <span className="me-1.5" aria-hidden>
                   {icon}

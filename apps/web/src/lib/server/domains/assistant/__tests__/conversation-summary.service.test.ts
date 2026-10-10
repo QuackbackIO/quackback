@@ -80,7 +80,27 @@ vi.mock('@/lib/server/logger', () => ({
   },
 }))
 
+// The binding to the triggering close runs against the real database in
+// close-summary.test.ts; here it always holds, and the write goes to this
+// suite's db double.
+vi.mock('../close-summary', () => ({
+  isCurrentClose: async () => true,
+  upToClose: <T>(messages: T[]) => messages,
+  writeForCurrentClose: async (
+    _entity: unknown,
+    _id: unknown,
+    _close: unknown,
+    _signal: unknown,
+    write: (tx: unknown) => Promise<void>
+  ) => {
+    await write((await import('@/lib/server/db')).db)
+    return true
+  },
+}))
+
 import { summarizeConversationOnClose } from '../conversation-summary.service'
+
+const CLOSE = { eventId: 'event_close_1', at: new Date('2026-01-01T01:00:00Z') }
 
 const CONVERSATION_ID = 'conversation_1' as ConversationId
 const VISITOR_PRINCIPAL_ID = 'principal_visitor_1' as PrincipalId
@@ -126,7 +146,7 @@ beforeEach(() => {
 
 describe('summarizeConversationOnClose', () => {
   it('writes a summary and its embedding for the closed conversation', async () => {
-    await summarizeConversationOnClose(CONVERSATION_ID)
+    await summarizeConversationOnClose(CONVERSATION_ID, CLOSE)
 
     expect(mockChat).toHaveBeenCalledOnce()
     const call = mockChat.mock.calls[0][0] as {
@@ -139,7 +159,8 @@ describe('summarizeConversationOnClose', () => {
 
     expect(mockGenerateEmbedding).toHaveBeenCalledWith(
       'Customer was double-charged for their March invoice; refunded the duplicate.',
-      expect.objectContaining({ pipelineStep: expect.any(String) })
+      expect.objectContaining({ pipelineStep: expect.any(String) }),
+      { signal: undefined }
     )
 
     expect(mockInsertValues).toHaveBeenCalledWith(
@@ -158,7 +179,7 @@ describe('summarizeConversationOnClose', () => {
   it('is a no-op when the AI client is not configured', async () => {
     mockConfig.openaiApiKey = undefined
 
-    await summarizeConversationOnClose(CONVERSATION_ID)
+    await summarizeConversationOnClose(CONVERSATION_ID, CLOSE)
 
     expect(mockLoadConversationThread).not.toHaveBeenCalled()
     expect(mockChat).not.toHaveBeenCalled()
@@ -168,16 +189,42 @@ describe('summarizeConversationOnClose', () => {
   it('is a no-op when the summary chat model is not configured', async () => {
     mockGetChatModel.mockReturnValue(null)
 
-    await summarizeConversationOnClose(CONVERSATION_ID)
+    await summarizeConversationOnClose(CONVERSATION_ID, CLOSE)
 
     expect(mockLoadConversationThread).not.toHaveBeenCalled()
     expect(mockInsertValues).not.toHaveBeenCalled()
   })
 
+  it(
+    'an aborted signal cancels the in-flight provider call and writes nothing',
+    { timeout: 2_000 },
+    async () => {
+      // The provider honours the controller it is given, as fetch does.
+      let callStarted!: () => void
+      const started = new Promise<void>((resolve) => (callStarted = resolve))
+      mockChat.mockImplementation(({ abortController }: { abortController?: AbortController }) => {
+        callStarted()
+        return new Promise((_, reject) => {
+          const signal = abortController?.signal
+          if (signal?.aborted) reject(signal.reason)
+          signal?.addEventListener('abort', () => reject(signal.reason))
+        })
+      })
+      const deadline = new AbortController()
+
+      const run = summarizeConversationOnClose(CONVERSATION_ID, CLOSE, { signal: deadline.signal })
+      await started
+      deadline.abort(new Error('event reactions passed their deadline'))
+
+      await expect(run).resolves.toBeUndefined()
+      expect(mockInsertValues).not.toHaveBeenCalled()
+    }
+  )
+
   it('never throws when the model call fails', async () => {
     mockChat.mockRejectedValue(new Error('upstream unavailable'))
 
-    await expect(summarizeConversationOnClose(CONVERSATION_ID)).resolves.toBeUndefined()
+    await expect(summarizeConversationOnClose(CONVERSATION_ID, CLOSE)).resolves.toBeUndefined()
 
     expect(mockInsertValues).not.toHaveBeenCalled()
     expect(mockLogError).toHaveBeenCalled()
@@ -188,7 +235,7 @@ describe('summarizeConversationOnClose', () => {
     // response; the outer best-effort catch logs and swallows it.
     mockChat.mockRejectedValue(new Error('response did not match schema'))
 
-    await expect(summarizeConversationOnClose(CONVERSATION_ID)).resolves.toBeUndefined()
+    await expect(summarizeConversationOnClose(CONVERSATION_ID, CLOSE)).resolves.toBeUndefined()
 
     expect(mockInsertValues).not.toHaveBeenCalled()
     expect(mockLogError).toHaveBeenCalled()
@@ -197,7 +244,7 @@ describe('summarizeConversationOnClose', () => {
   it('never throws when the DB write fails', async () => {
     mockOnConflictDoUpdate.mockRejectedValueOnce(new Error('db unavailable'))
 
-    await expect(summarizeConversationOnClose(CONVERSATION_ID)).resolves.toBeUndefined()
+    await expect(summarizeConversationOnClose(CONVERSATION_ID, CLOSE)).resolves.toBeUndefined()
 
     expect(mockLogError).toHaveBeenCalled()
   })
@@ -207,7 +254,7 @@ describe('summarizeConversationOnClose', () => {
       msg({ senderType: 'system', content: 'chat_ended' }),
     ])
 
-    await summarizeConversationOnClose(CONVERSATION_ID)
+    await summarizeConversationOnClose(CONVERSATION_ID, CLOSE)
 
     expect(mockChat).not.toHaveBeenCalled()
     expect(mockInsertValues).not.toHaveBeenCalled()
@@ -216,7 +263,7 @@ describe('summarizeConversationOnClose', () => {
   it('does nothing when the conversation row cannot be found', async () => {
     mockConversationFindFirst.mockResolvedValue(undefined)
 
-    await summarizeConversationOnClose(CONVERSATION_ID)
+    await summarizeConversationOnClose(CONVERSATION_ID, CLOSE)
 
     expect(mockChat).not.toHaveBeenCalled()
     expect(mockInsertValues).not.toHaveBeenCalled()
@@ -226,19 +273,18 @@ describe('summarizeConversationOnClose', () => {
     // The leak boundary is the persisted summary: unlike the copilot grounding
     // block, this path must never pass includeInternal, so a note is filtered
     // out in SQL and never reaches the summarizer or the retrievable summary.
-    await summarizeConversationOnClose(CONVERSATION_ID)
+    await summarizeConversationOnClose(CONVERSATION_ID, CLOSE)
 
     expect(mockLoadConversationThread).toHaveBeenCalledWith(CONVERSATION_ID)
     const optsArg = mockLoadConversationThread.mock.calls[0]?.[1] as
-      | { includeInternal?: boolean }
-      | undefined
+      { includeInternal?: boolean } | undefined
     expect(optsArg?.includeInternal).not.toBe(true)
   })
 
   it('still saves the summary text when embedding generation is unavailable', async () => {
     mockGenerateEmbedding.mockResolvedValue(null)
 
-    await summarizeConversationOnClose(CONVERSATION_ID)
+    await summarizeConversationOnClose(CONVERSATION_ID, CLOSE)
 
     expect(mockInsertValues).toHaveBeenCalledWith(
       expect.objectContaining({

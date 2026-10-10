@@ -42,6 +42,17 @@ describe('scanSourceFile — gate authorization extraction', () => {
     })
   })
 
+  it('treats requireWidgetAuth() as bare', () => {
+    expect(
+      authzOf(
+        'lib/server/functions/widget/x.ts',
+        `export const fn = h(async () => { await requireWidgetAuth() })`
+      )
+    ).toEqual({
+      kind: 'bare',
+    })
+  })
+
   it('reads a string-literal permission', () => {
     expect(
       authzOf(
@@ -249,6 +260,32 @@ describe('scanMcpTools — tool authorization extraction', () => {
     ])
   })
 
+  it('derives scopes from a destination map only when its selected entry is guarded', () => {
+    const definition = `
+      const DESTINATIONS = { feedback: { scope: 'read:feedback' }, settings: { scope: 'read:settings' } } as const
+      registerTool(server, auth, { name: 'navigate', teamOnly: true, handler: ({ destination }) => {
+        const entry = DESTINATIONS[destination]
+        const denied = requireScope(auth, entry.scope)
+        if (denied) return denied
+        return entry
+      } })`
+    expect(scanMcpTools('lib/server/mcp/tools/navigation.ts', definition)).toEqual([
+      { name: 'navigate', scopes: ['read:feedback', 'read:settings'], teamOnly: true },
+    ])
+    expect(
+      scanMcpTools(
+        'lib/server/mcp/tools/navigation.ts',
+        definition.replace('requireScope(auth, entry.scope)', 'undefined')
+      )
+    ).toEqual([{ name: 'navigate', scopes: [], teamOnly: true }])
+    expect(
+      scanMcpTools(
+        'lib/server/mcp/tools/navigation.ts',
+        definition.replace("scope: 'read:settings'", "scope: 'write:settings'")
+      )[0].scopes
+    ).toEqual(['read:feedback', 'write:settings'])
+  })
+
   it('still reads the legacy server.tool(name, …) shape with in-handler guards', () => {
     const tools = scanMcpTools(
       'lib/server/mcp/tools.ts',
@@ -265,9 +302,9 @@ describe('scanMcpTools — tool authorization extraction', () => {
 })
 
 describe('scanAllMcpTools — live tool modules', () => {
-  it('finds all 38 tools across the tool modules, each with at least one scope', () => {
+  it('finds all 43 tools across the tool modules, each with at least one scope', () => {
     const tools = scanAllMcpTools(SRC_ROOT)
-    expect(tools).toHaveLength(38)
+    expect(tools).toHaveLength(43)
     expect(tools.filter((t) => t.scopes.length === 0)).toEqual([])
   })
 })

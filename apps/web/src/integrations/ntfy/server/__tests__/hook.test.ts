@@ -48,7 +48,7 @@ describe('ntfyHook', () => {
       { accessToken: '', rootUrl: ROOT }
     )
 
-    expect(result.success).toBe(true)
+    expect(result.state).toBe('succeeded')
     expect(mockSafeFetch).toHaveBeenCalledWith(
       'https://ntfy.sh/',
       expect.objectContaining({
@@ -81,48 +81,47 @@ describe('ntfyHook', () => {
     expect(headersWithoutToken['Authorization']).toBeUndefined()
   })
 
-  it('maps 429 and 500 to shouldRetry:true', async () => {
+  it('retries rate limits but preserves uncertainty on server errors', async () => {
     for (const status of [429, 500, 503]) {
-      mockSafeFetch.mockResolvedValueOnce({ ok: false, status })
+      mockSafeFetch.mockResolvedValueOnce(new Response(null, { status }))
       const result = await ntfyHook.run(
         makeEvent(),
         { channelId: 'https://ntfy.sh/mytopic' },
         { accessToken: '', rootUrl: ROOT }
       )
-      expect(result.shouldRetry).toBe(true)
+      expect(result.state).toBe(status === 429 ? 'retry_wait' : 'uncertain')
     }
   })
 
-  it('maps 400 and 401 to shouldRetry:false', async () => {
+  it('classifies confirmed invalid and authentication rejections', async () => {
     for (const status of [400, 401, 403]) {
-      mockSafeFetch.mockResolvedValueOnce({ ok: false, status })
+      mockSafeFetch.mockResolvedValueOnce(new Response(null, { status }))
       const result = await ntfyHook.run(
         makeEvent(),
         { channelId: 'https://ntfy.sh/mytopic' },
         { accessToken: '', rootUrl: ROOT }
       )
-      expect(result.shouldRetry).toBe(false)
+      expect(result.state).toBe(status === 400 ? 'failed' : 'auth_required')
     }
   })
 
-  it('returns success:false shouldRetry:false for an invalid URL', async () => {
+  it('rejects an invalid URL without sending', async () => {
     const result = await ntfyHook.run(
       makeEvent(),
       { channelId: 'not-a-url' },
       { accessToken: '', rootUrl: ROOT }
     )
-    expect(result.success).toBe(false)
-    expect(result.shouldRetry).toBe(false)
+    expect(result.state).toBe('failed')
     expect(mockSafeFetch).not.toHaveBeenCalled()
   })
 
-  it('returns success:true for an unhandled event type (null payload)', async () => {
+  it('skips an unhandled event type without sending', async () => {
     const result = await ntfyHook.run(
       makeEvent('post.deleted'),
       { channelId: 'https://ntfy.sh/mytopic' },
       { accessToken: '', rootUrl: ROOT }
     )
-    expect(result.success).toBe(true)
+    expect(result.state).toBe('succeeded')
     expect(mockSafeFetch).not.toHaveBeenCalled()
   })
 })

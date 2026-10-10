@@ -12,6 +12,9 @@ import { assessMergeCandidates, determineDirection } from './merge-assessment.se
 import { createMergeSuggestion, expireStaleMergeSuggestions } from './merge-suggestion.service'
 import { logger } from '@/lib/server/logger'
 import { withWorkspaceSweepReentrancyGuard } from '@/lib/server/sweep-lock'
+import { aiBudgetAvailable } from '@/lib/server/domains/settings/tier-enforce'
+import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
+import { isTestCustomer, notTestPrincipal } from '@/lib/server/test-data'
 import type { PostId } from '@quackback/ids'
 
 const log = logger.child({ component: 'merge-check' })
@@ -38,6 +41,7 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
       deletedAt: true,
       canonicalPostId: true,
       embedding: true,
+      principalId: true,
     },
   })
 
@@ -45,6 +49,8 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
   if (!post || post.deletedAt || post.canonicalPostId || !post.embedding) {
     return
   }
+  // A test customer's idea is never assessed against real feedback.
+  if (await isTestCustomer(post.principalId)) return
 
   // Bail early if AI is not configured — skip the candidate search entirely
   const model = getChatModel('merge')
@@ -125,6 +131,16 @@ export async function sweepMergeSuggestions(): Promise<void> {
 }
 
 async function _doSweep(): Promise<void> {
+  // A workspace whose plan has no AI (or whose budget is spent) can only fail
+  // every check, and failed rows stay stale, so it would re-fail the same
+  // posts every sweep. Ask once up front instead.
+  // Expiring old suggestions needs no AI, so it still runs.
+  if (!(await aiBudgetAvailable())) {
+    log.debug('merge sweep skipped: ai budget unavailable')
+    await expireStaleSuggestions()
+    return
+  }
+
   // Failed rows stay stale (mergeCheckedAt is only stamped on success), so
   // without an attempted-set the DB query keeps returning the same top-of-
   // order batch every iteration. See #180 for the runaway-loop story this
@@ -133,6 +149,7 @@ async function _doSweep(): Promise<void> {
   let totalProcessed = 0
   let totalFailed = 0
   let consecutiveEmptyBatches = 0
+  let stoppedByBudget = false
 
   while (true) {
     const stalePosts = await db
@@ -144,6 +161,7 @@ async function _doSweep(): Promise<void> {
           isNull(posts.canonicalPostId),
           isNotNull(posts.embedding),
           isNull(posts.mergeCheckedAt),
+          notTestPrincipal(posts.principalId),
           attempted.size > 0 ? notInArray(posts.id, [...attempted]) : undefined
         )
       )
@@ -170,10 +188,21 @@ async function _doSweep(): Promise<void> {
         // backoff before surfacing the error here.
         await new Promise((resolve) => setTimeout(resolve, SWEEP_POST_DELAY_MS))
       } catch (err) {
+        // The budget ran out mid-run: every remaining check would be refused
+        // the same way, so stop instead of logging an error per post.
+        if (err instanceof TierLimitError) {
+          log.info(
+            { total_processed: totalProcessed, limit: err.limit },
+            'merge sweep stopped: ai budget exhausted'
+          )
+          stoppedByBudget = true
+          break
+        }
         totalFailed++
         log.error({ err, post_id: id }, 'failed to check post')
       }
     }
+    if (stoppedByBudget) break
 
     // Two consecutive zero-success batches almost always means a systemic
     // problem (bad model id, revoked key, upstream down). One alone can just
@@ -199,13 +228,17 @@ async function _doSweep(): Promise<void> {
   }
 
   // Expire old suggestions
-  const expired = await expireStaleMergeSuggestions()
-  if (expired > 0) {
-    log.info({ expired_count: expired }, 'expired stale suggestions')
-  }
+  await expireStaleSuggestions()
 
   if (totalProcessed > 0) {
     log.info({ total_processed: totalProcessed, total_failed: totalFailed }, 'sweep complete')
+  }
+}
+
+async function expireStaleSuggestions(): Promise<void> {
+  const expired = await expireStaleMergeSuggestions()
+  if (expired > 0) {
+    log.info({ expired_count: expired }, 'expired stale suggestions')
   }
 }
 

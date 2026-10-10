@@ -13,6 +13,7 @@ import type {
 } from '@/lib/server/integrations/inbound-types'
 
 export const linearInboundHandler: InboundWebhookHandler = {
+  statusMode: 'automatic',
   async verifySignature(request: Request, body: string, secret: string): Promise<true | Response> {
     const signature = request.headers.get('Linear-Signature')
     if (!signature) {
@@ -48,6 +49,8 @@ export const linearInboundHandler: InboundWebhookHandler = {
     if (!stateName) return null
 
     return {
+      destinationId: payload.data.teamId,
+      occurredAt: payload.data.updatedAt,
       externalId: payload.data.id,
       externalStatus: stateName,
       eventType: 'issue.state_changed',

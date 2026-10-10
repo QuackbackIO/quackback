@@ -14,7 +14,7 @@ vi.mock('@/lib/server/functions/settings', () => ({
 
 vi.mock('@/components/admin/upgrade', () => ({
   UpgradeModal: ({ open }: { open: boolean }) =>
-    open ? <p>The MCP server is a Growth feature. Upgrade to Growth to enable it.</p> : null,
+    open ? <p>The MCP server is a Pro feature. Upgrade to Pro to enable it.</p> : null,
 }))
 
 const { McpServerSettings } = await import('../mcp-server-settings')
@@ -28,29 +28,27 @@ describe('McpServerSettings enable lock', () => {
         initialDynamicRegistrationEnabled
       />
     )
-    fireEvent.click(screen.getByLabelText('Enable MCP Server'))
-    expect(screen.getByText(/The MCP server is a Growth feature/)).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('MCP server'))
+    expect(screen.getByText(/The MCP server is a Pro feature/)).toBeTruthy()
     expect(save).not.toHaveBeenCalled()
-    expect((screen.getByLabelText('Enable MCP Server') as HTMLButtonElement).dataset.state).toBe(
-      'unchecked'
-    )
+    expect(screen.getByLabelText('MCP server')).toHaveAttribute('aria-checked', 'false')
   })
 
   it('saves when the plan includes MCP', async () => {
     render(<McpServerSettings entitled initialEnabled={false} initialDynamicRegistrationEnabled />)
-    fireEvent.click(screen.getByLabelText('Enable MCP Server'))
+    fireEvent.click(screen.getByLabelText('MCP server'))
     await waitFor(() => {
       expect(save).toHaveBeenCalledWith({ data: { mcpEnabled: true } })
     })
-    expect(screen.queryByText(/The MCP server is a Growth feature/)).toBeNull()
+    expect(screen.queryByText(/The MCP server is a Pro feature/)).toBeNull()
   })
 
   it('still allows turning MCP off when locked', async () => {
     render(<McpServerSettings entitled={false} initialEnabled initialDynamicRegistrationEnabled />)
-    fireEvent.click(screen.getByLabelText('Enable MCP Server'))
+    fireEvent.click(screen.getByLabelText('MCP server'))
     await waitFor(() => {
       expect(save).toHaveBeenCalledWith({ data: { mcpEnabled: false } })
     })
-    expect(screen.queryByText(/The MCP server is a Growth feature/)).toBeNull()
+    expect(screen.queryByText(/The MCP server is a Pro feature/)).toBeNull()
   })
 })

@@ -26,6 +26,30 @@ vi.mock('@/lib/server/domains/channel-accounts/outbound-identity', () => ({
   permittedSendingIdentity: (from: string | null) => permittedSendingIdentity(from),
 }))
 
+const { emailBudgetAvailable } = vi.hoisted(() => ({
+  emailBudgetAvailable: vi.fn(async () => true),
+}))
+vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
+  emailBudgetAvailable: () => emailBudgetAvailable(),
+}))
+
+/**
+ * The `email` child logger, observed: the real logger with only this handler's
+ * warn and error spied, so the level a failed send is reported at is readable.
+ */
+const emailLog = vi.hoisted(() => ({ warn: vi.fn(), error: vi.fn() }))
+vi.mock('@/lib/server/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/logger')>()
+  const realChild = actual.logger.child.bind(actual.logger)
+  const logger = Object.create(actual.logger)
+  logger.child = (bindings: Record<string, unknown>) => {
+    const child = realChild(bindings)
+    if (bindings.component !== 'email') return child
+    return Object.assign(Object.create(child), { warn: emailLog.warn, error: emailLog.error })
+  }
+  return { ...actual, logger }
+})
+
 // Threading helpers are pure but read env-derived domains; force a known domain
 // so the created-root Message-ID assertion is deterministic.
 vi.stubEnv('EMAIL_FROM', 'Support <support@acme.test>')
@@ -36,6 +60,7 @@ import { emailHook } from '../handlers/email'
 // moment the shape changes, which is how the classification regression this
 // guards against went unnoticed.
 import { SesEmailError } from '@quackback/email/ses'
+import { currentEmailIdempotencyKey } from '@quackback/email/idempotency'
 import {
   sendStatusChangeEmail,
   sendNewCommentEmail,
@@ -97,6 +122,44 @@ const baseConfig = {
 } satisfies EmailConfig
 
 describe('emailHook', () => {
+  beforeEach(() => {
+    emailBudgetAvailable.mockReset()
+    emailBudgetAvailable.mockResolvedValue(true)
+  })
+
+  describe('idempotency', () => {
+    // The key a provider dedupes on, read from inside the send exactly as the
+    // transport reads it.
+    async function keyFor(jobId: string | undefined): Promise<string | undefined> {
+      let seen: string | undefined
+      mockStatusChangeEmail.mockImplementationOnce(async () => {
+        seen = currentEmailIdempotencyKey()
+        return { sent: true }
+      })
+      await emailHook.run(
+        statusChangedEvent,
+        baseTarget,
+        { ...baseConfig, previousStatus: 'open', newStatus: 'in_progress' },
+        jobId === undefined ? undefined : { jobId }
+      )
+      return seen
+    }
+
+    it('sends the same key on every attempt of one hook job, and a new one per job', async () => {
+      const first = await keyFor('evt-1:email:user@example.com')
+      const retry = await keyFor('evt-1:email:user@example.com')
+      const other = await keyFor('evt-2:email:user@example.com')
+      expect(first).toMatch(/^qb-[0-9a-f]{64}$/)
+      expect(retry).toBe(first)
+      expect(other).toMatch(/^qb-[0-9a-f]{64}$/)
+      expect(other).not.toBe(first)
+    })
+
+    it('sends no key for a run with no job id', async () => {
+      expect(await keyFor(undefined)).toBeUndefined()
+    })
+  })
+
   describe('when email is configured (sent: true)', () => {
     it('sends status change email and returns success', async () => {
       mockStatusChangeEmail.mockResolvedValue({ sent: true })
@@ -171,6 +234,40 @@ describe('emailHook', () => {
           contentHtml: '<p>Intro</p><p><img src="https://example.com/x.png" alt="Shot" /></p>',
         })
       )
+    })
+
+    it('skips changelog mail when the monthly broadcast budget is exhausted', async () => {
+      mockChangelogPublishedEmail.mockClear()
+      emailBudgetAvailable.mockResolvedValueOnce(false)
+      const changelogPublishedEvent = {
+        id: 'evt-test',
+        type: 'changelog.published',
+        timestamp: new Date().toISOString(),
+        actor: { type: 'user', displayName: 'Test User' },
+      } as EventData
+
+      const result = await emailHook.run(changelogPublishedEvent, baseTarget, {
+        workspaceName: 'TestWorkspace',
+        changelogTitle: 'May Release',
+        changelogUrl: 'https://example.com/changelog/changelog_01',
+      })
+
+      expect(result).toEqual({ success: true })
+      expect(mockChangelogPublishedEmail).not.toHaveBeenCalled()
+    })
+
+    it('still sends feedback status mail when the broadcast budget is exhausted', async () => {
+      emailBudgetAvailable.mockResolvedValueOnce(false)
+      mockStatusChangeEmail.mockResolvedValue({ sent: true })
+
+      const result = await emailHook.run(statusChangedEvent, baseTarget, {
+        ...baseConfig,
+        previousStatus: 'open',
+        newStatus: 'in_progress',
+      })
+
+      expect(result).toEqual({ success: true })
+      expect(mockStatusChangeEmail).toHaveBeenCalled()
     })
   })
 
@@ -263,6 +360,69 @@ describe('emailHook', () => {
       expect(result.success).toBe(false)
       expect(result.error).toBe('Invalid template')
       expect(result.shouldRetry).toBe(false)
+    })
+  })
+
+  /**
+   * A throttled send on a bulk announcement is expected and retried by the
+   * queue. It is a warning until the attempt that ends the job, so an error
+   * line keeps meaning mail that did not go.
+   */
+  describe('log level of a failed send', () => {
+    const statusConfig = { ...baseConfig, previousStatus: 'open', newStatus: 'closed' }
+    const throttled = () =>
+      new SesEmailError(
+        'SES email send failed: Maximum sending rate exceeded.',
+        429,
+        'TooManyRequestsException',
+        true
+      )
+
+    beforeEach(() => {
+      emailLog.warn.mockClear()
+      emailLog.error.mockClear()
+    })
+
+    it('warns about a throttled send the queue will try again', async () => {
+      mockStatusChangeEmail.mockRejectedValue(throttled())
+      const result = await emailHook.run(statusChangedEvent, baseTarget, statusConfig, {
+        jobId: 'job-1',
+        finalAttempt: false,
+      })
+      expect(result.shouldRetry).toBe(true)
+      expect(emailLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ event_type: 'post.status_changed' }),
+        'email send failed'
+      )
+      expect(emailLog.error).not.toHaveBeenCalled()
+    })
+
+    it('reports the same failure at error on the last attempt', async () => {
+      mockStatusChangeEmail.mockRejectedValue(throttled())
+      await emailHook.run(statusChangedEvent, baseTarget, statusConfig, {
+        jobId: 'job-1',
+        finalAttempt: true,
+      })
+      expect(emailLog.error).toHaveBeenCalledWith(expect.anything(), 'email send failed')
+      expect(emailLog.warn).not.toHaveBeenCalled()
+    })
+
+    it('reports a failure no retry can fix at error, attempts left or not', async () => {
+      mockStatusChangeEmail.mockRejectedValue(
+        new SesEmailError('SES email send failed: not verified', 400, 'MessageRejected', false)
+      )
+      await emailHook.run(statusChangedEvent, baseTarget, statusConfig, {
+        jobId: 'job-1',
+        finalAttempt: false,
+      })
+      expect(emailLog.error).toHaveBeenCalledWith(expect.anything(), 'email send failed')
+      expect(emailLog.warn).not.toHaveBeenCalled()
+    })
+
+    it('reports at error when the caller cannot say whether another attempt follows', async () => {
+      mockStatusChangeEmail.mockRejectedValue(throttled())
+      await emailHook.run(statusChangedEvent, baseTarget, statusConfig)
+      expect(emailLog.error).toHaveBeenCalledWith(expect.anything(), 'email send failed')
     })
   })
 

@@ -49,11 +49,7 @@ describe('jiraHook', () => {
       { accessToken: 'tok', rootUrl: 'https://app.example.com' }
     )
 
-    expect(result).toEqual({
-      success: false,
-      error: 'Jira cloud ID is missing from integration config',
-      shouldRetry: false,
-    })
+    expect(result).toEqual({ state: 'failed', errorCode: 'provider_failed' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
@@ -75,8 +71,9 @@ describe('jiraHook', () => {
       }
     )
 
-    expect(result.success).toBe(true)
-    expect(result.externalId).toBe('PROJ-1')
+    expect(result.state).toBe('succeeded')
+    if (result.state !== 'succeeded') throw new Error('Expected successful delivery')
+    expect(result.result?.externalId).toBe('PROJ-1')
     expect(fetchMock.mock.calls[0][0]).toBe(
       'https://api.atlassian.com/ex/jira/cloud-1/rest/api/3/issue'
     )
@@ -109,15 +106,7 @@ describe('jiraHook', () => {
   })
 
   it('maps HTTP 401 to reconnect only when cloudId and token are present', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 401,
-        json: async () => ({}),
-        text: async () => 'Unauthorized',
-      })
-    )
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('Unauthorized', { status: 401 })))
 
     const result = await jiraHook.run(
       makePostCreatedEvent(),
@@ -125,12 +114,7 @@ describe('jiraHook', () => {
       { accessToken: 'tok', cloudId: 'cloud-1', rootUrl: 'https://app.example.com' }
     )
 
-    expect(result).toEqual({
-      success: false,
-      error: 'Authentication failed. Please reconnect Jira.',
-      shouldRetry: false,
-      authExpired: true,
-    })
+    expect(result).toEqual({ state: 'auth_required', errorCode: 'authentication' })
   })
 
   it('refuses to call Jira when the access token is missing', async () => {
@@ -143,15 +127,14 @@ describe('jiraHook', () => {
       { cloudId: 'cloud-1', rootUrl: 'https://app.example.com' }
     )
 
-    expect(result.success).toBe(false)
-    expect(result.error).toMatch(/access token/i)
+    expect(result).toEqual({ state: 'failed', errorCode: 'provider_failed' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('skips non post.created events', async () => {
     const event = { type: 'post.status_changed' } as unknown as EventData
     expect(await jiraHook.run(event, { channelId: '10000' }, { cloudId: 'c' })).toEqual({
-      success: true,
+      state: 'succeeded',
     })
   })
 })

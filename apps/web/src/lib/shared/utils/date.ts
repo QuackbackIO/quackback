@@ -30,20 +30,19 @@ export function toIsoStringOrNull(value: Date | string | null | undefined): stri
   return toIsoString(value)
 }
 
-/** Shared month/year formatter (UTC); building an Intl.DateTimeFormat per call is costly. */
-const monthYearFormatter = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  year: 'numeric',
-  timeZone: 'UTC',
-})
+/** Month/year formatters (UTC), one per locale; building an Intl.DateTimeFormat per call is costly. */
+const monthYearFormatters = new Map<string, Intl.DateTimeFormat>()
 
 /**
- * Format a date at month granularity, e.g. "Mar 2027". Used for post ETAs,
- * which are stored as the first of the target month; formatting in UTC keeps
- * the month stable regardless of the viewer's timezone. Returns null for an
- * absent or unparseable value.
+ * Format a date at month granularity in `locale`, e.g. "Mar 2027" or
+ * "mar 2027". Used for post ETAs, which are stored as the first of the target
+ * month; formatting in UTC keeps the month stable regardless of the viewer's
+ * timezone. Returns null for an absent or unparseable value.
  */
-export function formatMonthYear(value: Date | string | null | undefined): string | null {
+export function formatMonthYear(
+  value: Date | string | null | undefined,
+  locale = 'en-US'
+): string | null {
   if (value == null) {
     return null
   }
@@ -51,7 +50,48 @@ export function formatMonthYear(value: Date | string | null | undefined): string
   if (Number.isNaN(date.getTime())) {
     return null
   }
-  return monthYearFormatter.format(date)
+  let formatter = monthYearFormatters.get(locale)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, {
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    })
+    monthYearFormatters.set(locale, formatter)
+  }
+  return formatter.format(date)
+}
+
+/**
+ * A date-only value ("2026-10-01", or the date as written at the start of an
+ * ISO timestamp) as the UTC midnight that names it. Formatted with
+ * `timeZone: 'UTC'`, it reads as that day for every viewer, where parsing the
+ * string as a moment would land on the day before for anyone west of UTC.
+ * Null when the value does not start with a real calendar date.
+ */
+export function parseCalendarDate(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (!match) return null
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  const date = new Date(Date.UTC(year, month - 1, day))
+  const real =
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  return real ? date : null
+}
+
+/**
+ * A calendar date for display, e.g. "Oct 1, 2026": the same day for every
+ * viewer, on the server and in the browser alike. Null when the value is not a
+ * calendar date (see parseCalendarDate).
+ */
+export function formatCalendarDate(
+  value: string,
+  options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' },
+  locale = 'en-US'
+): string | null {
+  const date = parseCalendarDate(value)
+  if (!date) return null
+  return new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }).format(date)
 }
 
 /**

@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { DocumentTextIcon } from '@heroicons/react/24/outline'
+import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { StatusSelect } from '@/components/shared/sidebar-primitives'
@@ -16,7 +17,6 @@ import {
 } from '@/lib/client/queries/status'
 import {
   COMPONENT_STATUS_OPTIONS,
-  LIFECYCLE_COLORS,
   LIFECYCLE_LABELS,
   defaultAffectedStatus,
   type StatusComponentStatus,
@@ -162,16 +162,30 @@ export function TemplatePickerButton({
   )
 }
 
-/** The uppercase colored lifecycle label used by list rows, overview cards,
- *  and the editor timeline header. */
+const LIFECYCLE_VARIANT: Record<StatusIncidentLifecycle, 'success' | 'warning' | 'secondary'> = {
+  investigating: 'warning',
+  identified: 'warning',
+  monitoring: 'warning',
+  resolved: 'secondary',
+  scheduled: 'secondary',
+  in_progress: 'warning',
+  verifying: 'warning',
+  completed: 'secondary',
+}
+
+/**
+ * The sentence-case lifecycle badge used by list rows and overview cards. A
+ * finished incident or maintenance window is the normal end state, so it reads
+ * as muted text instead of a badge.
+ */
 export function LifecycleBadge({ status }: { status: StatusIncidentLifecycle }) {
+  if (status === 'resolved' || status === 'completed') {
+    return <span className="text-xs text-muted-foreground">{LIFECYCLE_LABELS[status]}</span>
+  }
   return (
-    <span
-      className="font-semibold uppercase tracking-wide text-[11px]"
-      style={{ color: LIFECYCLE_COLORS[status] }}
-    >
+    <Badge variant={LIFECYCLE_VARIANT[status]} size="sm">
       {LIFECYCLE_LABELS[status]}
-    </span>
+    </Badge>
   )
 }
 

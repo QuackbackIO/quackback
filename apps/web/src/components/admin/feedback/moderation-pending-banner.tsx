@@ -17,7 +17,7 @@ export function ModerationPendingBanner() {
         <ShieldCheckIcon className="h-4 w-4 text-primary shrink-0" />
         <span className="text-foreground">{label}</span>
         <Link
-          to="/admin/moderation"
+          to="/admin/feedback/moderation"
           className="ml-auto inline-flex items-center gap-1 text-primary hover:underline font-medium"
         >
           Review

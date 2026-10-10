@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from '@tanstack/react-router'
 import { useSuspenseQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
@@ -17,6 +17,7 @@ import { RoadmapSidebar } from './roadmap-sidebar'
 import { RoadmapColumn } from './roadmap-column'
 import { RoadmapCardOverlay } from './roadmap-card'
 import { RoadmapFiltersBar } from './roadmap/roadmap-filters-bar'
+import { PageHeader } from '@/components/shared/page-header'
 import { EmptyState } from '@/components/shared/empty-state'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useRoadmapDateBuckets } from '@/lib/client/hooks/use-roadmaps-query'
@@ -28,7 +29,22 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import { Route } from '@/routes/admin/roadmap'
 import type { RoadmapViewPost, RoadmapPostsListResult } from '@/lib/shared/types'
+import { Link } from '@tanstack/react-router'
+import { FormattedMessage, useIntl } from 'react-intl'
+import { Button } from '@/components/ui/button'
+import { NewButton } from '@/components/shared/new-button'
 import type { PostStatusId, PostId, RoadmapId } from '@quackback/ids'
+
+/**
+ * Renders into document.body once mounted. The board renders on the server
+ * when its roadmaps arrive with the page, and there is no body to portal into
+ * there; the drag overlay only matters once someone drags.
+ */
+function BodyPortal({ children }: { children: ReactNode }) {
+  const [body, setBody] = useState<HTMLElement | null>(null)
+  useEffect(() => setBody(document.body), [])
+  return body ? createPortal(children, body) : null
+}
 
 export function RoadmapAdmin() {
   const navigate = useNavigate({ from: Route.fullPath })
@@ -42,8 +58,8 @@ export function RoadmapAdmin() {
   const { data: boards } = useSuspenseQuery(adminQueries.boards())
   const { data: tags } = useSuspenseQuery(adminQueries.tags())
   const { data: segments } = useSegments()
-  const { selectedRoadmapId, setSelectedRoadmap } = useRoadmapSelection()
   const { data: roadmaps } = useRoadmaps()
+  const { selectedRoadmapId, setSelectedRoadmap } = useRoadmapSelection(roadmaps)
   const changeStatus = useChangePostStatusId()
   const setEta = useSetPostEta()
   const queryClient = useQueryClient()
@@ -51,13 +67,6 @@ export function RoadmapAdmin() {
   const handleCardClick = (postId: string) => {
     navigate({ search: { ...search, post: postId } })
   }
-
-  // Auto-select first roadmap
-  useEffect(() => {
-    if (roadmaps?.length && !selectedRoadmapId) {
-      setSelectedRoadmap(roadmaps[0].id)
-    }
-  }, [roadmaps, selectedRoadmapId, setSelectedRoadmap])
 
   const selectedRoadmap = roadmaps?.find((r) => r.id === selectedRoadmapId)
   const { data: dateBuckets = [] } = useRoadmapDateBuckets(
@@ -171,33 +180,52 @@ export function RoadmapAdmin() {
     }
   }
 
+  const intl = useIntl()
+  const [createOpen, setCreateOpen] = useState(false)
+  // Ideas reach the roadmap from Feedback, by their status or ETA.
+  const moveIdeaAction = (
+    <Button asChild size="sm" variant="outline">
+      <Link to="/admin/feedback">
+        <FormattedMessage
+          id="admin.empty.roadmap.action"
+          defaultMessage="Move an idea onto the roadmap"
+        />
+      </Link>
+    </Button>
+  )
+
   return (
     <div className="flex h-full bg-background">
-      <RoadmapSidebar selectedRoadmapId={selectedRoadmapId} onSelectRoadmap={setSelectedRoadmap} />
+      <RoadmapSidebar
+        selectedRoadmapId={selectedRoadmapId}
+        onSelectRoadmap={setSelectedRoadmap}
+        createOpen={createOpen}
+        onCreateOpenChange={setCreateOpen}
+      />
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {selectedRoadmap ? (
           <>
-            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border/50 bg-card/50 space-y-3">
-              <div>
-                <h2 className="text-lg font-semibold">{selectedRoadmap.name}</h2>
-                {selectedRoadmap.description && (
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    {selectedRoadmap.description}
-                  </p>
-                )}
+            <div className="border-b border-border/50">
+              <div className="px-4 pt-3.5 sm:px-6">
+                <PageHeader
+                  title={selectedRoadmap.name}
+                  description={selectedRoadmap.description ?? undefined}
+                />
               </div>
-              <RoadmapFiltersBar
-                filters={filters}
-                onFiltersChange={setFilters}
-                onClearAll={clearFilters}
-                boards={boards}
-                tags={tags}
-                segments={segments}
-                onToggleBoard={toggleBoard}
-                onToggleTag={toggleTag}
-                onToggleSegment={toggleSegment}
-              />
+              <div className="px-1 sm:px-3">
+                <RoadmapFiltersBar
+                  filters={filters}
+                  onFiltersChange={setFilters}
+                  onClearAll={clearFilters}
+                  boards={boards}
+                  tags={tags}
+                  segments={segments}
+                  onToggleBoard={toggleBoard}
+                  onToggleTag={toggleTag}
+                  onToggleSegment={toggleSegment}
+                />
+              </div>
             </div>
 
             <DndContext
@@ -209,9 +237,10 @@ export function RoadmapAdmin() {
               <div className="flex-1 overflow-auto p-4 sm:p-6">
                 <div className="flex items-stretch gap-4 sm:gap-5">
                   {selectedRoadmap.type === 'column' &&
-                    selectedRoadmap.columns.map((column) => (
+                    selectedRoadmap.columns.map((column, index) => (
                       <RoadmapColumn
                         key={column.id}
+                        emptyAction={index === 0 ? moveIdeaAction : undefined}
                         roadmapId={selectedRoadmapId as RoadmapId}
                         columnId={column.id}
                         statusId={column.statusId}
@@ -223,9 +252,10 @@ export function RoadmapAdmin() {
                       />
                     ))}
                   {selectedRoadmap.type === 'date' &&
-                    dateBuckets.map((bucket) => (
+                    dateBuckets.map((bucket, index) => (
                       <RoadmapColumn
                         key={bucket.id}
+                        emptyAction={index === 0 ? moveIdeaAction : undefined}
                         roadmapId={selectedRoadmapId as RoadmapId}
                         columnId={bucket.id}
                         bucketId={bucket.id}
@@ -247,24 +277,37 @@ export function RoadmapAdmin() {
                 </div>
               </div>
 
-              {createPortal(
+              <BodyPortal>
                 <DragOverlay dropAnimation={null}>
                   {activePost && <RoadmapCardOverlay post={activePost} />}
-                </DragOverlay>,
-                document.body
-              )}
+                </DragOverlay>
+              </BodyPortal>
             </DndContext>
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
-            <EmptyState
-              icon={MapIcon}
-              title="No roadmap selected"
-              description="Create or select a roadmap from the sidebar"
-            />
+            {roadmaps?.length === 0 ? (
+              <EmptyState
+                icon={MapIcon}
+                title={intl.formatMessage({
+                  id: 'admin.empty.roadmap.none',
+                  defaultMessage: 'No roadmaps yet',
+                })}
+                action={
+                  <NewButton noun="roadmap" onClick={() => setCreateOpen(true)}>
+                    <FormattedMessage
+                      id="admin.empty.roadmap.create"
+                      defaultMessage="Create a roadmap"
+                    />
+                  </NewButton>
+                }
+              />
+            ) : (
+              <EmptyState icon={MapIcon} title="No roadmap selected" />
+            )}
           </div>
         )}
-      </main>
+      </div>
     </div>
   )
 }

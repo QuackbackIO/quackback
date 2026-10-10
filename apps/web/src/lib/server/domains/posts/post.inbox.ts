@@ -10,6 +10,8 @@ import {
   postStatuses,
   postTagAssignments,
   userSegments,
+  principal,
+  user,
   eq,
   and,
   inArray,
@@ -19,7 +21,10 @@ import {
   isNull,
   isNotNull,
 } from '@/lib/server/db'
+import { postViewFilter } from '@/lib/server/policy/posts'
+import type { Actor } from '@/lib/server/policy/types'
 import { toUuid, type PostId, type PrincipalId } from '@quackback/ids'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import type {
   PostListItem,
   InboxPostListParams,
@@ -66,6 +71,8 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
     tagIds,
     segmentIds,
     ownerId,
+    authorId,
+    authorEmail,
     search,
     dateFrom,
     dateTo,
@@ -74,6 +81,7 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
     responded,
     updatedBefore,
     showDeleted,
+    excludeTest,
   } = params
 
   const conditions = []
@@ -91,6 +99,7 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
 
   // Exclude merged/duplicate posts from inbox listing
   conditions.push(isNull(posts.canonicalPostId))
+  if (excludeTest) conditions.push(notTestPrincipal(posts.principalId))
 
   if (omit !== 'board' && boardIds?.length) {
     conditions.push(inArray(posts.boardId, boardIds))
@@ -112,6 +121,20 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
     conditions.push(sql`${posts.ownerPrincipalId} IS NULL`)
   } else if (ownerId) {
     conditions.push(eq(posts.ownerPrincipalId, ownerId as PrincipalId))
+  }
+
+  if (authorId) {
+    conditions.push(eq(posts.principalId, authorId))
+  } else if (authorEmail) {
+    const email = authorEmail.toLowerCase()
+    conditions.push(
+      sql`exists (
+        select 1 from ${principal}
+        inner join ${user} on ${user.id} = ${principal.userId}
+        where ${principal.id} = ${posts.principalId}
+          and lower(${user.email}) = ${email}
+      )`
+    )
   }
 
   if (search) {
@@ -190,10 +213,14 @@ const priorityScoreSql = sql<number>`
  * @param params - Query parameters including filters, sort, and pagination
  * @returns Result containing inbox post list or an error
  */
-export async function listInboxPosts(params: InboxPostListParams): Promise<InboxPostListResult> {
+export async function listInboxPosts(
+  params: InboxPostListParams,
+  actor?: Actor
+): Promise<InboxPostListResult> {
   const { sort = 'newest', cursor, limit = 20 } = params
 
   const conditions = inboxFilterConditions(params)
+  if (actor) conditions.push(postViewFilter(actor))
 
   // Cursor-based keyset pagination: resolve cursor to sort-field values
   if (cursor) {

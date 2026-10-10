@@ -1,5 +1,5 @@
 {
-  "workspaceVersion": "0.13.2",
+  "workspaceVersion": "0.14.1",
   "ai": {
     "keys": [
       {
@@ -100,6 +100,24 @@
       },
       {
         "key": "AI_REQUIRE_PARAMETERS",
+        "kind": "tristate",
+        "group": "advanced",
+        "sensitive": false
+      },
+      {
+        "key": "AI_REASONING_EXCLUDE",
+        "kind": "tristate",
+        "group": "advanced",
+        "sensitive": false
+      },
+      {
+        "key": "AI_REASONING_EFFORT",
+        "kind": "text",
+        "group": "connection",
+        "sensitive": false
+      },
+      {
+        "key": "AI_COMBINED_TOOLS_AND_SCHEMA",
         "kind": "tristate",
         "group": "advanced",
         "sensitive": false
@@ -244,18 +262,29 @@
       "envPrefix": "INTEGRATION_GITLAB_",
       "fields": [
         {
+          "key": "instanceUrl",
+          "envKey": "INTEGRATION_GITLAB_INSTANCE_URL",
+          "label": "GitLab instance URL",
+          "sensitive": false,
+          "placeholder": "https://gitlab.com",
+          "helpText": "Leave blank to use GitLab.com. For a self-hosted instance, enter the base URL (https://gitlab.example.com).",
+          "required": false,
+          "url": true
+        },
+        {
           "key": "clientId",
           "envKey": "INTEGRATION_GITLAB_CLIENT_ID",
           "label": "Application ID",
           "sensitive": false,
-          "helpUrl": "https://gitlab.com/-/user_settings/applications"
+          "helpText": "Create an OAuth application on your GitLab instance and register the redirect URI shown above.",
+          "helpUrl": "https://docs.gitlab.com/integration/oauth_provider.html"
         },
         {
           "key": "clientSecret",
           "envKey": "INTEGRATION_GITLAB_CLIENT_SECRET",
           "label": "Secret",
           "sensitive": true,
-          "helpUrl": "https://gitlab.com/-/user_settings/applications"
+          "helpUrl": "https://docs.gitlab.com/integration/oauth_provider.html"
         }
       ]
     },

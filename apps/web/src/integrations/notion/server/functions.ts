@@ -4,6 +4,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 export interface NotionOAuthState {
   type: 'notion_oauth'
@@ -33,7 +34,8 @@ export const getNotionConnectUrl = createServerFn({ method: 'GET' }).handler(
     const { hasPlatformCredentials } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
     if (!(await hasPlatformCredentials('notion'))) {
-      throw new Error(
+      throw new ValidationError(
+        'PLATFORM_CREDENTIALS_NOT_CONFIGURED',
         'Notion platform credentials not configured. Configure them in integration settings first.'
       )
     }
@@ -59,7 +61,7 @@ export const fetchNotionDatabasesFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<NotionDatabase[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
     const { listNotionDatabases } = await import('@/integrations/notion/server/databases')
     const { logger } = await import('@/lib/server/logger')
     const log = logger.child({ component: 'notion' })
@@ -79,7 +81,7 @@ export const fetchNotionDatabasesFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('Notion secrets missing')
     }
 
-    const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
+    const secrets = { accessToken: await getValidAccessToken(integration.id) }
     if (!secrets.accessToken) {
       throw new Error('Notion access token missing')
     }

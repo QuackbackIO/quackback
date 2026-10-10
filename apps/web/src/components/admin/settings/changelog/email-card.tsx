@@ -1,6 +1,6 @@
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { CsvImportSection } from './csv-import-section'
 import type { ChangelogSettings } from '@/lib/shared/changelog-settings'
 
@@ -12,55 +12,37 @@ interface EmailCardProps {
 
 export function EmailCard({ settings, onChange, disabled }: EmailCardProps) {
   return (
-    <SettingsCard
-      title="Email"
-      description="Control who gets notified by email when you publish a changelog entry."
-    >
-      <div className="space-y-5">
-        <div className="flex items-center justify-between gap-4 py-1">
-          <div className="pr-4">
-            <Label
-              htmlFor="changelog-auto-subscribe"
-              className="text-sm font-medium cursor-pointer"
-            >
-              Auto-subscribe users
-            </Label>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              New and identified end-users are subscribed to changelog emails automatically. They
-              can unsubscribe from any email at any time.
-            </p>
-          </div>
-          <Switch
-            id="changelog-auto-subscribe"
-            checked={settings.autoSubscribe}
-            onCheckedChange={(checked) => onChange({ autoSubscribe: checked })}
-            disabled={disabled}
-          />
+    <SettingsCard title="Email" description="Who gets emailed when you publish an entry.">
+      <SettingRows>
+        <SettingRow
+          label="Send changelog emails"
+          htmlFor="changelog-emails-enabled"
+          control={
+            <Switch
+              id="changelog-emails-enabled"
+              checked={!settings.emailsDisabled}
+              onCheckedChange={(checked) => onChange({ emailsDisabled: !checked })}
+              disabled={disabled}
+            />
+          }
+        />
+        <SettingRow
+          label="Auto-subscribe users"
+          description="Subscribe new users automatically"
+          htmlFor="changelog-auto-subscribe"
+          control={
+            <Switch
+              id="changelog-auto-subscribe"
+              checked={settings.autoSubscribe}
+              onCheckedChange={(checked) => onChange({ autoSubscribe: checked })}
+              disabled={disabled}
+            />
+          }
+        />
+        <div className="pt-3.5">
+          <CsvImportSection />
         </div>
-
-        <div className="flex items-center justify-between gap-4 py-1">
-          <div className="pr-4">
-            <Label
-              htmlFor="changelog-emails-disabled"
-              className="text-sm font-medium cursor-pointer"
-            >
-              Disable changelog emails
-            </Label>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Turns off every changelog email workspace-wide. The public changelog page and RSS feed
-              are unaffected.
-            </p>
-          </div>
-          <Switch
-            id="changelog-emails-disabled"
-            checked={settings.emailsDisabled}
-            onCheckedChange={(checked) => onChange({ emailsDisabled: checked })}
-            disabled={disabled}
-          />
-        </div>
-
-        <CsvImportSection />
-      </div>
+      </SettingRows>
     </SettingsCard>
   )
 }

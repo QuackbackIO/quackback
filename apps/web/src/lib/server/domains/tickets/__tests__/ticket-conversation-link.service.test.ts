@@ -40,6 +40,7 @@ vi.mock('../ticket.webhooks', () => ({
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishTicketEvent: vi.fn(),
   publishConversationEvent: vi.fn(),
+  publishConversationMessage: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
 }))
 

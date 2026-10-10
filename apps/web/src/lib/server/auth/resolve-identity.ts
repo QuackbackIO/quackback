@@ -10,35 +10,34 @@
  * signed users in successfully while failing the test that gates enforcement.
  * Collapsing them removes that entire class of bug.
  *
- * The cascade is ordered and gap-filling: each source contributes only fields
- * still missing, and an earlier source is never overwritten. That is strictly
- * more capable than all-or-nothing resolution — it can take the subject from
- * the ID token and the address from userinfo, which no previous path could.
+ * Binding rules live in the shared source-aware binder. This module supplies
+ * decoded tokens and lazy userinfo, then adapts the binder result.
  */
 
 import { decodeJwt } from 'jose'
-import { isAffirmativeClaim } from '@/lib/shared/oidc-claim-mapping'
+import {
+  advanceBindingState,
+  bindingComplete,
+  createBindingState,
+  finishBinding,
+  type BindingState,
+  type IdentityMapping,
+} from '@/lib/shared/sso-claim-binder'
+import type { IdentitySource, SourceUnavailableReason } from '@/lib/shared/oidc-claim-mapping'
 
-/** Sources in the order they are consulted. */
-export type IdentitySource = 'idToken' | 'userinfo' | 'accessTokenJwt'
-
-const DEFAULT_SOURCES: IdentitySource[] = ['idToken', 'userinfo']
-
-export interface IdentityMapping {
-  /** Defaults to ID token then userinfo. `accessTokenJwt` is opt-in. */
-  sources?: IdentitySource[]
-  idClaim?: string
-  nameClaim?: string
-  emailClaim?: string
-}
+export type { IdentitySource, IdentityMapping }
 
 export interface ResolvedIdentity {
   id: string
   email?: string
   name?: string
+  /** Avatar URL from the mapped avatar claim (`picture` when unmapped),
+   *  resolved only when `wantImage` is set. Always an absolute `http(s)` URL;
+   *  a mapped claim never falls back to `picture`. */
+  image?: string
   emailVerified: boolean
   /** Which source supplied each field, for the test's provenance report. */
-  sources: Partial<Record<'id' | 'email' | 'name', IdentitySource>>
+  sources: Partial<Record<'id' | 'email' | 'name' | 'image', IdentitySource>>
   /** Every raw claim seen, earlier sources winning. Spread into the profile by
    *  the caller so `mapProfileToUser` still sees what it always did. */
   claims: Record<string, unknown>
@@ -67,20 +66,27 @@ export interface ResolveIdentityArgs {
    * also break every provider currently relying on the old behaviour.
    */
   subjectMismatch?: 'observe' | 'enforce'
-}
-
-/**
- * Resolve a claim path. An exact key match is tried first so namespaced claims
- * like `https://acme.com/email`, whose dots are not separators, still work.
- */
-function resolveClaim(claims: Record<string, unknown>, path: string): unknown {
-  if (path in claims) return claims[path]
-  let current: unknown = claims
-  for (const segment of path.split('.')) {
-    if (current === null || typeof current !== 'object') return undefined
-    current = (current as Record<string, unknown>)[segment]
-  }
-  return current
+  /**
+   * Extra claim paths that must be present in `merged` before the fast path
+   * may skip remaining sources. Production passes mapped attribute and role
+   * paths so a complete ID token still fetches userinfo when those claims
+   * live only there.
+   */
+  requiredClaimPaths?: string[]
+  /**
+   * Walk every configured source even when identity (and required paths) are
+   * already complete. The connection test uses this so the capture shows
+   * everything the IdP can release.
+   */
+  exhaustive?: boolean
+  /**
+   * Also resolve `identity.image` from the `picture` claim (or
+   * `mapping.imageClaim`). Off by default so the fast path still stops before
+   * userinfo once id + email + name are in hand; when on, the cascade keeps
+   * going to a later source for the avatar, which is where a `picture` claim
+   * usually lives for providers that don't put it in the ID token.
+   */
+  wantImage?: boolean
 }
 
 /** Decode a JWT payload without verifying it. Possession is the trust anchor:
@@ -95,10 +101,44 @@ function decodePayload(token: string | undefined): Record<string, unknown> | nul
   }
 }
 
-function asNonEmptyString(value: unknown): string | undefined {
-  if (typeof value === 'string' && value !== '') return value
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
-  return undefined
+function decodeSource(
+  token: string | undefined
+): { claims: Record<string, unknown> } | { unavailable: SourceUnavailableReason } {
+  if (!token) return { unavailable: 'absent' }
+  const payload = decodePayload(token)
+  return payload ? { claims: payload } : { unavailable: 'unreadable' }
+}
+
+function sourcesFrom(state: BindingState): ResolvedIdentity['sources'] {
+  const sources: ResolvedIdentity['sources'] = {}
+  if (state.provenance.id) sources.id = state.provenance.id.source
+  if (state.provenance.email) sources.email = state.provenance.email.source
+  if (state.provenance.name) sources.name = state.provenance.name.source
+  if (state.provenance.image) sources.image = state.provenance.image.source
+  return sources
+}
+
+function toResolveResult(state: BindingState): ResolveResult {
+  const finished = finishBinding(state)
+  if (finished.failed === 'subject_mismatch') {
+    return { ok: false, reason: 'subject_mismatch', claims: finished.acceptedClaims }
+  }
+  if (!finished.identity.id) {
+    return { ok: false, reason: 'no_identity', claims: finished.acceptedClaims }
+  }
+  return {
+    ok: true,
+    identity: {
+      id: finished.identity.id,
+      email: finished.identity.email,
+      name: finished.identity.name,
+      ...(finished.identity.image ? { image: finished.identity.image } : {}),
+      emailVerified: finished.identity.emailVerified,
+      sources: sourcesFrom(finished),
+      claims: finished.acceptedClaims,
+      ...(finished.warnings.length > 0 ? { warnings: finished.warnings } : {}),
+    },
+  }
 }
 
 export async function resolveIdentity({
@@ -106,118 +146,41 @@ export async function resolveIdentity({
   fetchUserInfo,
   mapping,
   subjectMismatch = 'observe',
+  requiredClaimPaths,
+  exhaustive = false,
+  wantImage = false,
 }: ResolveIdentityArgs): Promise<ResolveResult> {
-  const idClaim = mapping?.idClaim ?? 'sub'
-  const nameClaim = mapping?.nameClaim ?? 'name'
-  const emailClaim = mapping?.emailClaim ?? 'email'
-  const sources = mapping?.sources ?? DEFAULT_SOURCES
+  let state = createBindingState({
+    mapping,
+    requiredClaimPaths,
+    wantImage,
+    exhaustive,
+    subjectMismatch,
+  })
 
-  const merged: Record<string, unknown> = {}
-  const found: ResolvedIdentity['sources'] = {}
-  let id: string | undefined
-  let email: string | undefined
-  let name: string | undefined
-  let emailVerified = false
-  const warnings: ResolveWarning[] = []
-
-  const loadSource = async (source: IdentitySource): Promise<Record<string, unknown> | null> => {
-    if (source === 'idToken') return decodePayload(tokens.idToken)
-    if (source === 'accessTokenJwt') return decodePayload(tokens.accessToken)
+  const loadSource = async (
+    source: IdentitySource
+  ): Promise<{ claims: Record<string, unknown> } | { unavailable: SourceUnavailableReason }> => {
+    if (source === 'idToken') return decodeSource(tokens.idToken)
+    if (source === 'accessTokenJwt') return decodeSource(tokens.accessToken)
     try {
-      return await fetchUserInfo()
+      const doc = await fetchUserInfo()
+      return doc ? { claims: doc } : { unavailable: 'absent' }
     } catch {
-      return null
+      return { unavailable: 'fetch_failed' }
     }
   }
 
-  for (const source of sources) {
-    // Fast path: stop before any network call once everything is resolved, so
-    // a compliant provider takes no added latency from the cascade existing.
-    if (id && email && name) break
-
-    const claims = await loadSource(source)
-    if (!claims) continue
-
-    // Reproduce the library's own derivation exactly, or an upgrade re-keys
-    // existing accounts: lookup matches the account identifier first, so a
-    // changed value misses, the email fallback finds the user, and a second
-    // account row appears — or, with no email, the user forks. The `id`
-    // fallback is userinfo-only because that is where the library applies it;
-    // its ID-token path keys on `sub` alone. An explicit idClaim wins over both.
-    const claimedId =
-      asNonEmptyString(resolveClaim(claims, idClaim)) ??
-      (source === 'userinfo' && !mapping?.idClaim
-        ? asNonEmptyString(resolveClaim(claims, 'id'))
-        : undefined)
-
-    // OIDC Core 5.3.2: a userinfo response whose subject differs from the ID
-    // token's must be discarded. Scoped to userinfo deliberately — an access
-    // token is audience-scoped, and with pairwise subjects the same person
-    // legitimately carries a different one there.
-    //
-    // Observed rather than enforced by default. A provider in this state works
-    // TODAY, because the path being replaced discards the ID token and takes
-    // userinfo wholesale; enforcing on the same release as the cascade would
-    // make that a total sign-in outage on an upgrade nobody chose, with no
-    // telemetry to size it first. So the default reproduces today's behaviour
-    // and reports the discrepancy, and a later release flips to enforcing.
-    if (source === 'userinfo' && id && claimedId && claimedId !== id) {
-      if (subjectMismatch === 'enforce') {
-        return { ok: false, reason: 'subject_mismatch', claims: merged }
-      }
-      warnings.push('subject_mismatch')
-      // Legacy behaviour: userinfo wins wholesale, which means its subject is
-      // what keys the account. Anything already taken from the ID token is
-      // cleared so the two are never mixed.
-      id = undefined
-      email = undefined
-      name = undefined
-      emailVerified = false
-      found.id = undefined
-      found.email = undefined
-      found.name = undefined
+  for (const source of state.config.sources) {
+    if (!state.config.exhaustive && bindingComplete(state)) break
+    const loaded = await loadSource(source)
+    if ('unavailable' in loaded) {
+      state = advanceBindingState(state, source, null, loaded.unavailable)
+      continue
     }
-
-    // Earlier sources win: only fill what is still absent.
-    for (const [key, value] of Object.entries(claims)) {
-      if (!(key in merged)) merged[key] = value
-    }
-
-    if (!id && claimedId) {
-      id = claimedId
-      found.id = source
-    }
-    if (!name) {
-      const claimedName = asNonEmptyString(resolveClaim(claims, nameClaim))
-      if (claimedName) {
-        name = claimedName
-        found.name = source
-      }
-    }
-    if (!email) {
-      const claimedEmail = asNonEmptyString(resolveClaim(claims, emailClaim))
-      if (claimedEmail) {
-        email = claimedEmail
-        found.email = source
-        // The verified flag must come from the SAME source as the address; one
-        // asserted in the ID token cannot vouch for a userinfo address.
-        emailVerified = isAffirmativeClaim(resolveClaim(claims, 'email_verified'))
-      }
-    }
+    state = advanceBindingState(state, source, loaded.claims)
+    if (state.failed) break
   }
 
-  if (!id) return { ok: false, reason: 'no_identity', claims: merged }
-
-  return {
-    ok: true,
-    identity: {
-      id,
-      email,
-      name,
-      emailVerified,
-      sources: found,
-      claims: merged,
-      ...(warnings.length > 0 ? { warnings } : {}),
-    },
-  }
+  return toResolveResult(state)
 }

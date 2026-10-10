@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
+  getEnabledOAuthProviders,
   hasAnyPortalAuthMethod,
+  hasDistinctSignup,
   hasRoutableOidcProvider,
   resolveSoleOidcProvider,
 } from '../oauth-buttons'
@@ -91,6 +93,54 @@ describe('hasAnyPortalAuthMethod', () => {
         { registeredAuthProviders: ['google'] }
       )
     ).toBe(false)
+  })
+})
+
+describe('hasDistinctSignup', () => {
+  it('is true by default (password defaults on, signups default open)', () => {
+    expect(hasDistinctSignup({})).toBe(true)
+    expect(hasDistinctSignup({ oauth: {} })).toBe(true)
+  })
+
+  it('is true when password is on and signups are open', () => {
+    expect(hasDistinctSignup({ oauth: { password: true }, openSignup: true })).toBe(true)
+    expect(hasDistinctSignup({ oauth: { password: true } })).toBe(true)
+  })
+
+  it('is false when password sign-in is off (magic-link / SSO create accounts implicitly)', () => {
+    expect(hasDistinctSignup({ oauth: { password: false, magicLink: true } })).toBe(false)
+    expect(hasDistinctSignup({ oauth: { password: false }, openSignup: true })).toBe(false)
+  })
+
+  it('is false when self-service signup is closed, even with password on', () => {
+    expect(hasDistinctSignup({ oauth: { password: true }, openSignup: false })).toBe(false)
+  })
+})
+
+describe('getEnabledOAuthProviders', () => {
+  it('carries the uploaded logo URL onto an OIDC entry', () => {
+    const entries = getEnabledOAuthProviders({}, [
+      { id: 'oidc_okta', name: 'Okta', logoUrl: 'https://cdn.test/okta.png' },
+    ])
+    expect(entries).toEqual([
+      {
+        id: 'oidc_okta',
+        name: 'Okta',
+        type: 'generic-oauth',
+        logoUrl: 'https://cdn.test/okta.png',
+      },
+    ])
+  })
+
+  it('normalises a missing logo to null on the OIDC entry', () => {
+    const [entry] = getEnabledOAuthProviders({}, [{ id: 'oidc_okta', name: 'Okta' }])
+    expect(entry.logoUrl).toBeNull()
+  })
+
+  it('leaves social providers without a logoUrl', () => {
+    const [entry] = getEnabledOAuthProviders({ google: true })
+    expect(entry).toEqual({ id: 'google', name: 'Google', type: 'social' })
+    expect(entry.logoUrl).toBeUndefined()
   })
 })
 

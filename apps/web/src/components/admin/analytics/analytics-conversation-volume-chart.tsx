@@ -8,7 +8,12 @@ import {
 } from '@/components/ui/chart'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { cn } from '@/lib/shared/utils'
-import { CHART_HEIGHT_CLASS, channelColor, channelLabel } from './analytics-constants'
+import {
+  CHART_HEIGHT_CLASS,
+  channelColor,
+  channelLabel,
+  formatBucketDay,
+} from './analytics-constants'
 import type { ConversationVolumeDay } from '@/lib/server/domains/analytics/conversation-volume'
 
 interface AnalyticsConversationVolumeChartProps {
@@ -16,11 +21,6 @@ interface AnalyticsConversationVolumeChartProps {
     channels: string[]
     days: ConversationVolumeDay[]
   }
-}
-
-function formatDate(dateStr: string) {
-  const date = new Date(dateStr + 'T00:00:00')
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 /** New conversations per day as a stacked area per arrival channel. The stack
@@ -59,7 +59,7 @@ export function AnalyticsConversationVolumeChart({
           axisLine={false}
           tickMargin={10}
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-          tickFormatter={formatDate}
+          tickFormatter={formatBucketDay}
         />
         <YAxis
           tickLine={false}
@@ -71,7 +71,9 @@ export function AnalyticsConversationVolumeChart({
           domain={[0, (dataMax: number) => Math.max(dataMax, 4)]}
         />
         <ChartTooltip
-          content={<ChartTooltipContent labelFormatter={(label) => formatDate(String(label))} />}
+          content={
+            <ChartTooltipContent labelFormatter={(label) => formatBucketDay(String(label))} />
+          }
         />
         <ChartLegend content={<ChartLegendContent />} />
         {volume.channels.map((channel) => (

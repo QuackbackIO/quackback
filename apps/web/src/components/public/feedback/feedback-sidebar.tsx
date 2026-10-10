@@ -26,7 +26,7 @@ export function FeedbackSidebar({
             <FormattedMessage id="portal.feedback.sidebar.boards" defaultMessage="Boards" />
           </h2>
           <nav className="space-y-1 px-4 pb-4 max-h-[calc(100vh-16rem)] overflow-y-auto scrollbar-thin">
-            {/* View all posts */}
+            {/* View all ideas */}
             <button
               type="button"
               onClick={() => onBoardChange(undefined)}
@@ -41,7 +41,7 @@ export function FeedbackSidebar({
               <span className="truncate">
                 <FormattedMessage
                   id="portal.feedback.sidebar.viewAllPosts"
-                  defaultMessage="View all posts"
+                  defaultMessage="View all ideas"
                 />
               </span>
             </button>

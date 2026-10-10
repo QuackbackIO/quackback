@@ -1,64 +1,87 @@
 /**
  * User resolution for CSV import.
  *
- * Resolves email addresses to existing member IDs,
- * creating new user+member records when needed.
+ * Resolves CSV authors to principal IDs, creating new user+principal
+ * records when needed. Email is the identity when present; a name with
+ * no email creates a name-only portal contact (same shape as
+ * createPortalUser). Rows with neither are rejected — the importer is
+ * never used as the author.
  *
  * Adapted from scripts/import/core/user-resolver.ts for
  * use within the in-app CSV import flow.
  */
 
-import { db, eq, user, principal } from '@/lib/server/db'
+import { db, eq, and, isNull, sql, asc, user, principal } from '@/lib/server/db'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createPrincipals } from '@/lib/server/domains/principals/principal.factory'
 
 interface PendingUser {
   principalId: PrincipalId
   userId: UserId
-  email: string
+  email: string | null
   name: string
   emailVerified: boolean
 }
 
+function nameCacheKey(name: string): string {
+  return `name:${name.toLowerCase()}`
+}
+
 /**
- * Resolves CSV author emails to member IDs.
+ * Resolves CSV authors to principal IDs.
  *
  * - Caches lookups per instance (create once per import job)
- * - Batches user+member creation via flushPendingCreates()
- * - Case-insensitive email matching
+ * - Batches user+principal creation via flushPendingCreates()
+ * - Case-insensitive email matching; case-insensitive name matching for
+ *   name-only contacts (never matches an identified user by display name)
  */
 export class ImportUserResolver {
   private cache = new Map<string, PrincipalId>()
   private pendingCreates: PendingUser[] = []
 
   /**
-   * Resolve an email to a member ID.
+   * Resolve a CSV author to a principal ID.
    *
-   * If the email has an existing user+member, returns the principalId.
-   * If not, queues a new user+member for creation and returns a pre-generated principalId.
-   * If email is null/empty, returns the fallbackPrincipalId.
+   * Email present: existing user+principal by email, else queue a new
+   * claimable shell (`emailVerified` applies only to that create).
+   * Email empty, name present: existing name-only contact by display
+   * name, else queue a name-only portal person.
+   * Both empty: throws — CSV rows without an author are rejected at
+   * schema validation; callers that might see an empty identity (voters)
+   * must skip before calling this.
    *
-   * `emailVerified` applies only when THIS call queues the creation (default
-   * true: import shells must be claimable via SSO). Existing users (and
-   * already-queued creates) are never flipped — an import row can opt out for
-   * a user it introduces, not one that predates it.
+   * `emailVerified` applies only when THIS call queues an email create
+   * (default true: import shells must be claimable via SSO). Existing
+   * users (and already-queued creates) are never flipped. Name-only
+   * creates are always unverified — there is no address to vouch for.
    */
   async resolve(
     email: string | null | undefined,
     name: string | null | undefined,
-    fallbackPrincipalId: PrincipalId,
     emailVerified = true
   ): Promise<PrincipalId> {
-    if (!email) return fallbackPrincipalId
+    const normalizedEmail = email?.toLowerCase().trim() ?? ''
+    if (normalizedEmail) {
+      return this.resolveByEmail(normalizedEmail, name, emailVerified)
+    }
 
-    const normalizedEmail = email.toLowerCase().trim()
-    if (!normalizedEmail) return fallbackPrincipalId
+    const trimmedName = name?.trim() ?? ''
+    if (trimmedName) {
+      return this.resolveByName(trimmedName)
+    }
 
+    throw new Error('Import author requires a name or email')
+  }
+
+  private async resolveByEmail(
+    normalizedEmail: string,
+    name: string | null | undefined,
+    emailVerified: boolean
+  ): Promise<PrincipalId> {
     if (this.cache.has(normalizedEmail)) {
       return this.cache.get(normalizedEmail)!
     }
 
-    // Look up existing principal by email
     const existing = await db
       .select({ principalId: principal.id })
       .from(user)
@@ -72,7 +95,6 @@ export class ImportUserResolver {
       return principalId
     }
 
-    // Queue for creation
     const userId = createId('user')
     const principalId = createId('principal')
     const displayName = name?.trim() || normalizedEmail.split('@')[0]
@@ -85,6 +107,41 @@ export class ImportUserResolver {
       emailVerified,
     })
     this.cache.set(normalizedEmail, principalId)
+    return principalId
+  }
+
+  private async resolveByName(trimmedName: string): Promise<PrincipalId> {
+    const cacheKey = nameCacheKey(trimmedName)
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey)!
+    }
+
+    const existing = await db
+      .select({ principalId: principal.id })
+      .from(user)
+      .innerJoin(principal, eq(principal.userId, user.id))
+      .where(
+        and(isNull(user.email), sql`lower(${principal.displayName}) = ${trimmedName.toLowerCase()}`)
+      )
+      .orderBy(asc(principal.createdAt))
+      .limit(1)
+
+    if (existing.length > 0) {
+      const principalId = existing[0].principalId as PrincipalId
+      this.cache.set(cacheKey, principalId)
+      return principalId
+    }
+
+    const userId = createId('user')
+    const principalId = createId('principal')
+    this.pendingCreates.push({
+      principalId,
+      userId,
+      email: null,
+      name: trimmedName,
+      emailVerified: false,
+    })
+    this.cache.set(cacheKey, principalId)
     return principalId
   }
 
@@ -116,7 +173,12 @@ export class ImportUserResolver {
 
       // Create principal records (single multi-row insert, no N+1)
       await createPrincipals(
-        chunk.map((u) => ({ id: u.principalId, userId: u.userId, role: 'user' as const }))
+        chunk.map((u) => ({
+          id: u.principalId,
+          userId: u.userId,
+          role: 'user' as const,
+          displayName: u.name,
+        }))
       )
     }
 

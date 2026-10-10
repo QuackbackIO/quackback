@@ -29,6 +29,8 @@ import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
+import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
+import { resignStoredAssetUrl } from '@/lib/server/storage/s3'
 import { changelogBodyHtml } from './changelog-email-body'
 import {
   buildEventActor,
@@ -41,6 +43,7 @@ import { embedChangelogEntryOnPublish } from './changelog-embedding.service'
 import { logger } from '@/lib/server/logger'
 
 import { isSameDay } from 'date-fns'
+import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import type {
   CreateChangelogInput,
   UpdateChangelogInput,
@@ -69,12 +72,17 @@ export async function createChangelog(
 ): Promise<ChangelogEntryWithDetails> {
   // Validate input
   const title = input.title?.trim()
-  const content = input.content?.trim()
+  const markdown = input.content?.trim() ?? ''
+  const sourceJson = input.contentJson ?? null
+  const jsonHasContent = sourceJson != null && !isEmptyTiptapDoc(sourceJson)
 
   if (!title) {
     throw new ValidationError('VALIDATION_ERROR', 'Title is required')
   }
-  if (!content) {
+  // The admin editor stores markdown from TipTap's serializer. That string can
+  // be empty while contentJson still has a body (list-only docs, serializer
+  // skips/throws on custom nodes). Reject only when both projections are empty.
+  if (!markdown && !jsonHasContent) {
     throw new ValidationError('VALIDATION_ERROR', 'Content is required')
   }
   if (title.length > 200) {
@@ -100,7 +108,7 @@ export async function createChangelog(
       : null
 
   // Create the changelog entry
-  const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)
+  const parsedContentJson = jsonHasContent ? sourceJson : markdownToTiptapJson(markdown)
   const contentJson = await rehostExternalImages(parsedContentJson, {
     contentType: 'changelog',
     principalId: author.principalId,
@@ -112,7 +120,7 @@ export async function createChangelog(
       title,
       // Store the markdown projection of the canonical contentJson so every
       // consumer of the `content` column (webhooks, notifications) sees images.
-      content: projectContentJsonToMarkdown(contentJson, content),
+      content: projectContentJsonToMarkdown(contentJson, markdown),
       contentJson,
       principalId: author.principalId,
       publishedAt,
@@ -412,11 +420,13 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     id: entry.id,
     title: entry.title,
     content: entry.content,
-    contentJson: entry.contentJson,
+    contentJson: contentJsonForClient(entry.contentJson),
     principalId: entry.principalId,
     publishedAt: entry.publishedAt,
     displayDate: entry.displayDate,
-    featuredImageUrl: entry.featuredImageUrl,
+    featuredImageUrl: entry.featuredImageUrl
+      ? resignStoredAssetUrl(entry.featuredImageUrl)
+      : entry.featuredImageUrl,
     segmentIds: (entry.segmentIds ?? []) as ChangelogEntryWithDetails['segmentIds'],
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,

@@ -1,16 +1,19 @@
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { authClient } from '@/lib/client/auth-client'
 import { stashSsoAttempt } from '@/lib/client/sso-attempt-stash'
+import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 
 export type OAuthProviderEntry = {
   id: string
   name: string
   type: 'social' | 'generic-oauth'
+  /** Uploaded provider logo (OIDC only); social providers use a bundled icon. */
+  logoUrl?: string | null
 }
 
 /**
  * Get the OAuth redirect URL for a provider.
- * Handles routing between signIn.oauth2 (generic) and signIn.social (built-in).
+ * Better Auth 1.7: generic OIDC and built-in social both use signIn.social.
  *
  * `errorCallbackURL` is always set to the same popup landing: without it,
  * Better-Auth bounces callback failures to its own bare `/api/auth/error`
@@ -27,20 +30,12 @@ export async function getOAuthRedirectUrl(
     providerType: provider.type === 'generic-oauth' ? 'oidc' : 'social',
     callbackUrl: callbackURL,
   })
-  const result =
-    provider.type === 'generic-oauth'
-      ? await authClient.signIn.oauth2({
-          providerId: provider.id,
-          callbackURL,
-          errorCallbackURL: callbackURL,
-          disableRedirect: true,
-        })
-      : await authClient.signIn.social({
-          provider: provider.id,
-          callbackURL,
-          errorCallbackURL: callbackURL,
-          disableRedirect: true,
-        })
+  const result = await authClient.signIn.social({
+    provider: provider.id,
+    callbackURL,
+    errorCallbackURL: callbackURL,
+    disableRedirect: true,
+  })
   return result.data?.url ?? null
 }
 
@@ -69,6 +64,28 @@ export function hasAnyPortalAuthMethod(
   // it still needs the "Log in" entry point.
   if (hasRoutableOidcProvider(opts?.registeredAuthProviders, opts?.oidcProviders)) return true
   return false
+}
+
+/**
+ * Whether a separate "Sign up" entry point is meaningful.
+ *
+ * Sign-up mode only diverges from login mode when password auth is on: it adds a
+ * name field, and — when self-service signup is closed — an upfront "new
+ * accounts are closed" screen. With password off, magic-link and SSO both create
+ * the account implicitly, so the sign-up form is byte-identical to the login
+ * form; and with signups closed there is nothing to sign up for. In both cases
+ * the portal collapses to a single "Log in" entry point.
+ *
+ * The dead-end note for a refused magic-link user (the code step's "not
+ * accepting new accounts" line) is driven by `openSignup`, not by mode, so
+ * collapsing to login mode keeps it.
+ */
+export function hasDistinctSignup(authConfig: {
+  oauth?: Record<string, boolean | undefined>
+  openSignup?: boolean
+}): boolean {
+  const passwordEnabled = authConfig.oauth?.password ?? true
+  return passwordEnabled && authConfig.openSignup !== false
 }
 
 /**
@@ -123,8 +140,9 @@ export function resolveSoleOidcProvider(
 }
 
 /** A public OIDC button from the identity_provider list: `id` is the
- *  provider's registrationId, `name` its display label. */
-export type OidcProviderEntry = { id: string; name: string }
+ *  provider's registrationId, `name` its display label, `logoUrl` its
+ *  uploaded logo (or null). */
+export type OidcProviderEntry = OidcSignInButton
 
 /**
  * Build the portal sign-in button list. Social providers (google/github/…)
@@ -150,7 +168,7 @@ export function getEnabledOAuthProviders(
   }
 
   for (const p of oidcProviders ?? []) {
-    result.push({ id: p.id, name: p.name, type: 'generic-oauth' })
+    result.push({ id: p.id, name: p.name, type: 'generic-oauth', logoUrl: p.logoUrl ?? null })
   }
 
   return result

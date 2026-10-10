@@ -98,7 +98,7 @@ function rowContent(intl: IntlShape, item: TicketActivityItem): RowContent | nul
                 id: 'admin.ticketActivity.teamAssigned',
                 defaultMessage: '{actor} assigned the {name} team',
               },
-              { actor, name: str(m.toTeamName) ?? '—' }
+              { actor, name: str(m.toTeamName) ?? '-' }
             )
           : intl.formatMessage(
               {
@@ -119,7 +119,7 @@ function rowContent(intl: IntlShape, item: TicketActivityItem): RowContent | nul
         label = m.toPrincipalId
           ? intl.formatMessage(
               { id: 'admin.ticketActivity.assigned', defaultMessage: '{actor} assigned {name}' },
-              { actor, name: str(m.toPrincipalName) ?? '—' }
+              { actor, name: str(m.toPrincipalName) ?? '-' }
             )
           : intl.formatMessage(
               {

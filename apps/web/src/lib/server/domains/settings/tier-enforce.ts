@@ -1,5 +1,6 @@
 import { TierLimitError } from '../../errors/tier-limit-error'
-import { aiTokensThisMonth } from '../ai/usage-counter'
+import { getAiBudgetStatus } from '../ai/ai-budget'
+import { aiAllowance, type AiCreditsState } from '@/lib/shared/billing/ai-credits'
 import { getTierLimits } from './tier-limits.service'
 import type { TierFeatureFlags } from './tier-limits.types'
 import { db, emailSendingDomains, isNull, sql, statusComponents } from '@/lib/server/db'
@@ -130,26 +131,47 @@ export async function enforceSendingDomainLimit(
 
 /**
  * Pre-call gate for any LLM-driven AI service. Refuses when the workspace
- * has used up its monthly token budget. Token usage is recorded after
- * each call by withUsageLogging, so this is a "you're already at/over"
- * check — small overruns are possible if many calls fire concurrently.
+ * has used up its token allowance for the current window (the calendar
+ * month, or the whole trial while one is running; see `ai-budget.ts`).
+ * Token usage is recorded after each call by withUsageLogging, so this is a
+ * "you're already at/over" check: small overruns are possible if many calls
+ * fire concurrently.
  *
  * 0 budget blocks AI entirely. Null = unlimited (the OSS default).
  */
 export async function enforceAiTokenBudget(): Promise<void> {
-  const limits = await getTierLimits()
-  if (limits.aiTokensPerMonth === null) return
-  const used = await aiTokensThisMonth()
-  if (used < limits.aiTokensPerMonth) return
+  const status = await getAiBudgetStatus()
+  if (status.cap === null || !status.exhausted) return
+  const period = status.window.kind === 'trial' ? 'this trial' : 'this month'
   throw new TierLimitError({
     limit: 'aiTokensPerMonth',
-    current: used,
-    max: limits.aiTokensPerMonth,
+    current: status.used,
+    max: status.cap,
     message:
-      limits.aiTokensPerMonth === 0
+      status.cap === 0
         ? 'AI features are not included on your plan. Upgrade to enable them.'
-        : `You've used your AI token budget for this month (${used.toLocaleString()} of ${limits.aiTokensPerMonth.toLocaleString()}). Upgrade to increase it.`,
+        : `You've used your AI token budget for ${period} (${status.used.toLocaleString()} of ${status.cap.toLocaleString()}). Upgrade to increase it.`,
   })
+}
+
+/**
+ * Whether AI can run in the current allowance window (the calendar month, or
+ * the whole trial while one runs): no cap, under the cap, none on the plan, or
+ * used up, and when a month's used-up allowance comes back.
+ */
+export async function aiAllowanceNow(): Promise<{
+  credits: AiCreditsState
+  resetsAt: string | null
+  trial: boolean
+}> {
+  const status = await getAiBudgetStatus()
+  return aiAllowance(status.cap, status.used, status.window)
+}
+
+/** True when {@link enforceAiTokenBudget} would not throw. */
+export async function aiBudgetAvailable(): Promise<boolean> {
+  const status = await getAiBudgetStatus()
+  return !status.exhausted
 }
 
 /** True when {@link enforceEmailBudget} would not throw. */

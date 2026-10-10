@@ -280,27 +280,27 @@ export function ListItem({ left, title, meta, action, className }: ListItemProps
   return (
     <div
       className={cn(
-        'group flex items-center gap-2 p-2 rounded-md',
-        'bg-muted/40 border border-border/40 hover:bg-muted/60 transition-colors',
+        'group flex items-start gap-2 rounded-md p-2',
+        'border border-border/40 bg-muted/40 transition-colors hover:bg-muted/60',
         className
       )}
     >
       {left}
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium truncate">{title}</div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-xs font-medium">{title}</div>
         {meta && meta.length > 0 && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <div className="mt-0.5 flex min-w-0 items-center gap-1 overflow-hidden text-xs text-muted-foreground">
             {meta.map((item, i) => (
-              <span key={i} className="contents">
-                {i > 0 && <span>·</span>}
-                {item}
+              <span key={i} className="flex min-w-0 items-center gap-1">
+                {i > 0 && <span className="shrink-0">·</span>}
+                <span className="min-w-0 truncate whitespace-nowrap">{item}</span>
               </span>
             ))}
           </div>
         )}
       </div>
       {action && (
-        <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
           {action}
         </div>
       )}

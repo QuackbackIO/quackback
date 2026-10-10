@@ -15,6 +15,7 @@ import {
   lte,
   gt,
   or,
+  asc,
   desc,
   inArray,
   sql,
@@ -22,6 +23,8 @@ import {
 import type { BoardId, ChangelogId, PrincipalId, PostId, PostStatusId } from '@quackback/ids'
 import { computeStatus } from './changelog.service'
 import { getCategoriesForEntries } from './changelog-category.service'
+import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
+import { resignStoredAssetUrl } from '@/lib/server/storage/s3'
 import type {
   ListChangelogParams,
   ChangelogEntryWithDetails,
@@ -37,11 +40,21 @@ import type {
  * @returns Paginated list of changelog entries
  */
 export async function listChangelogs(params: ListChangelogParams): Promise<ChangelogListResult> {
-  const { status = 'all', cursor, limit = 20 } = params
+  const { status = 'all', cursor, limit = 20, sort = 'newest' } = params
+  const oldestFirst = sort === 'oldest'
   const now = new Date()
+
+  const after = oldestFirst ? gt : lt
+  const direction = oldestFirst ? asc : desc
 
   // Build where conditions - always exclude soft-deleted entries
   const conditions: SQL<unknown>[] = [isNull(changelogEntries.deletedAt)]
+
+  if (params.search?.trim()) {
+    conditions.push(
+      sql`to_tsvector('english', coalesce(${changelogEntries.title}, '') || ' ' || coalesce(${changelogEntries.content}, '')) @@ websearch_to_tsquery('english', ${params.search.trim()})`
+    )
+  }
 
   // Filter by status
   if (status === 'draft') {
@@ -54,7 +67,8 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
     conditions.push(lte(changelogEntries.publishedAt, now))
   }
 
-  // Cursor-based pagination (cursor is the last entry ID)
+  // Cursor-based pagination (cursor is the last entry ID); the keyset walks
+  // the same (createdAt, id) order the page is sorted by, in either direction.
   if (cursor) {
     const cursorEntry = await db.query.changelogEntries.findFirst({
       where: eq(changelogEntries.id, cursor as ChangelogId),
@@ -63,10 +77,10 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
     if (cursorEntry) {
       conditions.push(
         or(
-          lt(changelogEntries.createdAt, cursorEntry.createdAt),
+          after(changelogEntries.createdAt, cursorEntry.createdAt),
           and(
             eq(changelogEntries.createdAt, cursorEntry.createdAt),
-            lt(changelogEntries.id, cursor as ChangelogId)
+            after(changelogEntries.id, cursor as ChangelogId)
           )
         )!
       )
@@ -76,7 +90,7 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
   // Fetch entries
   const entries = await db.query.changelogEntries.findMany({
     where: and(...conditions),
-    orderBy: [desc(changelogEntries.createdAt), desc(changelogEntries.id)],
+    orderBy: [direction(changelogEntries.createdAt), direction(changelogEntries.id)],
     limit: limit + 1, // Fetch one extra to check hasMore
   })
 
@@ -158,11 +172,13 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
       id: entry.id,
       title: entry.title,
       content: entry.content,
-      contentJson: entry.contentJson,
+      contentJson: contentJsonForClient(entry.contentJson),
       principalId: entry.principalId,
       publishedAt: entry.publishedAt,
       displayDate: entry.displayDate,
-      featuredImageUrl: entry.featuredImageUrl,
+      featuredImageUrl: entry.featuredImageUrl
+        ? resignStoredAssetUrl(entry.featuredImageUrl)
+        : entry.featuredImageUrl,
       segmentIds: (entry.segmentIds ?? []) as ChangelogEntryWithDetails['segmentIds'],
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,

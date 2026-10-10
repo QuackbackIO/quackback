@@ -1,5 +1,5 @@
 /**
- * Conversation tags manager (Settings > Conversation data > Tags): the
+ * Conversation tags manager (Settings > Conversations > Tags): the
  * org-wide label taxonomy with total usage counts that click through to the
  * filtered inbox, rename/recolor (propagates everywhere by id), archive/
  * restore, and permanent delete behind archive. Archive and delete are
@@ -9,8 +9,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { PencilIcon, TrashIcon } from '@heroicons/react/24/solid'
-import { ArchiveBoxIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/outline'
+import { TagIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import type { ConversationTagId } from '@quackback/ids'
 import {
@@ -21,6 +20,9 @@ import {
   hardDeleteConversationTagFn,
 } from '@/lib/server/functions/conversation-tags'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { RowDot, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
+import { EmptyState } from '@/components/shared/empty-state'
+import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { ColorPickerGrid } from '@/components/shared/color-picker'
 import { Button } from '@/components/ui/button'
@@ -138,98 +140,64 @@ export function ConversationTagsManager() {
   const archived = (tags ?? []).filter((t) => t.archived)
 
   return (
-    <SettingsCard
-      title="Conversation tags"
-      description="Labels agents apply to conversations. Agents create them inline from the inbox; manage the taxonomy here."
-    >
+    <SettingsCard title="Tags" description="Agents create tags inline from the inbox." flush>
       {!tags || tags.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          No tags yet. Agents create them inline from a conversation.
-        </p>
+        <EmptyState
+          size="compact"
+          icon={TagIcon}
+          title="No tags yet"
+          description="Agents create them inline from a conversation."
+        />
       ) : (
-        <div>
-          {[...live, ...archived].map((tag) => (
-            <div
-              key={tag.id}
-              className={cn(
-                'flex items-center gap-3 border-b border-border/50 py-3 last:border-0',
-                tag.archived && 'opacity-60'
-              )}
-            >
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: tag.color }}
-              />
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                {tag.name}
-                {tag.archived && (
-                  <span className="ml-2 inline-flex items-center rounded border border-border/50 bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                    Archived
-                  </span>
-                )}
-              </span>
-              {tag.archived ? (
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {tag.count} conversation{tag.count === 1 ? '' : 's'}
-                </span>
-              ) : (
-                <Link
-                  to="/admin/inbox"
-                  search={{ tag: tag.id }}
-                  className="shrink-0 text-xs text-muted-foreground hover:text-foreground hover:underline"
-                  title="Open in the inbox"
-                >
-                  {tag.count} conversation{tag.count === 1 ? '' : 's'}
-                </Link>
-              )}
-              <div className="flex shrink-0 items-center gap-1">
-                {tag.archived ? (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => restoreTag.mutate(tag.id)}
-                      title="Restore tag"
-                    >
-                      <ArrowUturnLeftIcon className="h-3.5 w-3.5" /> Restore
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-muted-foreground hover:text-destructive"
-                      onClick={() => setDeleteTarget(tag)}
-                      title="Delete permanently"
-                    >
-                      <TrashIcon className="h-3.5 w-3.5" />
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-muted-foreground hover:text-foreground"
-                      onClick={() => setEditTarget(tag)}
-                      title="Edit tag"
-                    >
-                      <PencilIcon className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-muted-foreground hover:text-destructive"
-                      onClick={() => setArchiveTarget(tag)}
-                      title="Archive tag"
-                    >
-                      <ArchiveBoxIcon className="h-3.5 w-3.5" />
-                    </Button>
-                  </>
-                )}
+        <SettingsList>
+          {[...live, ...archived].map((tag) => {
+            const count = `${tag.count} conversation${tag.count === 1 ? '' : 's'}`
+            return (
+              <div key={tag.id} className={cn(tag.archived && 'opacity-60')}>
+                <SettingsListRow
+                  leading={<RowDot color={tag.color} />}
+                  title={tag.name}
+                  badges={
+                    tag.archived ? (
+                      <Badge size="sm" variant="secondary">
+                        Archived
+                      </Badge>
+                    ) : undefined
+                  }
+                  trailing={
+                    tag.archived ? (
+                      count
+                    ) : (
+                      <Link
+                        to="/admin/inbox"
+                        search={{ tag: tag.id }}
+                        className="hover:text-foreground hover:underline"
+                        title="Open in the inbox"
+                      >
+                        {count}
+                      </Link>
+                    )
+                  }
+                  actions={
+                    tag.archived
+                      ? [
+                          { label: 'Restore', onSelect: () => restoreTag.mutate(tag.id) },
+                          {
+                            label: 'Delete permanently',
+                            destructive: true,
+                            onSelect: () => setDeleteTarget(tag),
+                          },
+                        ]
+                      : [
+                          { label: 'Edit', onSelect: () => setEditTarget(tag) },
+                          { label: 'Archive', onSelect: () => setArchiveTarget(tag) },
+                        ]
+                  }
+                />
               </div>
-            </div>
-          ))}
-        </div>
+            )
+          })}
+        </SettingsList>
       )}
 
       {editTarget && (

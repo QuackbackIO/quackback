@@ -4,9 +4,9 @@
  */
 
 import { WebClient } from '@slack/web-api'
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import { recordDeliveryOutcome } from '@/lib/server/integrations/sync/transport'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { buildSlackMessage } from '@/integrations/slack/server/message'
 import { logger } from '@/lib/server/logger'
 
@@ -51,6 +51,29 @@ function isAuthError(error: unknown): boolean {
   return code !== undefined && AUTH_ERRORS.includes(code)
 }
 
+function slackDeliveryError(error: unknown): DeliveryOutcome {
+  const code = getSlackErrorCode(error)
+  if (isAuthError(error)) return { state: 'auth_required', errorCode: 'authentication' }
+  if (code === 'slack_webapi_rate_limited_error' || code === 'ratelimited') {
+    const seconds = Number((error as { retryAfter?: unknown }).retryAfter)
+    return {
+      state: 'retry_wait',
+      errorCode: 'unavailable',
+      ...(Number.isFinite(seconds) && seconds >= 0
+        ? { retryAfterMs: Math.ceil(seconds * 1000) }
+        : {}),
+    }
+  }
+  // Slack platform errors are explicit rejections; transport/HTTP failures can be ambiguous.
+  if (
+    error &&
+    typeof error === 'object' &&
+    (error as { code?: string }).code === 'slack_webapi_platform_error'
+  )
+    return { state: 'failed', errorCode: 'provider_failed' }
+  return { state: 'uncertain', errorCode: 'outcome_unknown' }
+}
+
 /**
  * Post a message to a channel, auto-joining public channels if needed.
  */
@@ -74,6 +97,7 @@ async function postMessage(
     if (errorCode === 'not_in_channel' || errorCode === 'channel_not_found') {
       log.debug({ channel_id: channelId }, 'attempting to join channel')
       const joinResult = await client.conversations.join({ channel: channelId })
+      if (joinResult.ok) recordDeliveryOutcome({ state: 'succeeded' })
 
       if (!joinResult.ok) {
         log.warn({ channel_id: channelId, join_error: joinResult.error }, 'failed to join channel')
@@ -96,8 +120,8 @@ async function postMessage(
   }
 }
 
-export const slackHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
+export const slackHook: IntegrationHook = {
+  async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId } = target as SlackTarget
     const { accessToken, rootUrl } = config as SlackConfig
 
@@ -106,10 +130,14 @@ export const slackHook: HookHandler = {
     const message = buildSlackMessage(event, rootUrl)
     if (!message) {
       log.debug({ event_type: event.type }, 'event produces no slack message, skipping')
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
-    const client = new WebClient(accessToken)
+    const client = new WebClient(accessToken, {
+      retryConfig: { retries: 0 },
+      timeout: 20_000,
+      rejectRateLimitedCalls: true,
+    })
 
     try {
       const result = await postMessage(client, channelId, message)
@@ -120,30 +148,14 @@ export const slackHook: HookHandler = {
         log.error({ channel_id: channelId, error_code: result.error }, 'failed to post message')
       }
 
-      return {
-        success: result.ok === true,
-        externalId: result.ts,
-        error: result.error,
-      }
+      return result.ok === true
+        ? { state: 'succeeded', result: { externalId: result.ts } }
+        : { state: 'uncertain', errorCode: 'outcome_unknown' }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       const errorCode = getSlackErrorCode(error)
       log.error({ err: error, error_code: errorCode }, 'hook delivery failed')
 
-      // Auth errors should not be retried - they require reconnecting Slack
-      if (isAuthError(error)) {
-        return {
-          success: false,
-          error: `Authentication failed: ${errorCode}. Please reconnect Slack.`,
-          shouldRetry: false,
-        }
-      }
-
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: isRetryableError(error),
-      }
+      return slackDeliveryError(error)
     }
   },
 

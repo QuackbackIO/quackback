@@ -19,11 +19,12 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { NewButton } from '@/components/shared/new-button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { GlobeAltIcon, LockClosedIcon, PlusIcon } from '@heroicons/react/24/solid'
+import { GlobeAltIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import {
   Form,
   FormControl,
@@ -38,14 +39,19 @@ interface CreateBoardDialogProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   trigger?: React.ReactNode
+  redirectOnCreate?: boolean
+  onCreated?: () => void
 }
 
 export function CreateBoardDialog({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   trigger,
+  redirectOnCreate = true,
+  onCreated,
 }: CreateBoardDialogProps = {}) {
   const [internalOpen, setInternalOpen] = useState(false)
+  const isControlled = controlledOpen !== undefined
   const isOpen = controlledOpen ?? internalOpen
   const setIsOpen = controlledOnOpenChange ?? setInternalOpen
   const router = useRouter()
@@ -70,13 +76,17 @@ export function CreateBoardDialog({
       onSuccess: (board) => {
         setIsOpen(false)
         form.reset()
-        // When the admin opted in, deep-link straight to the Access tab
-        // for the new board so they can fine-tune the matrix without
-        // hunting through the boards list.
-        void navigate({
-          to: '/admin/settings/boards',
-          search: customize ? { board: board.slug, tab: 'access' } : { board: board.slug },
-        })
+        onCreated?.()
+        if (redirectOnCreate) {
+          // When the admin opted in, deep-link straight to the Access tab
+          // for the new board so they can fine-tune the matrix without
+          // hunting through the boards list.
+          void navigate({
+            to: '/admin/settings/boards/$slug',
+            params: { slug: board.slug },
+            search: customize ? { tab: 'access' } : {},
+          })
+        }
         setCustomize(false)
         router.invalidate()
       },
@@ -94,19 +104,14 @@ export function CreateBoardDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button>
-            <PlusIcon className="h-4 w-4" />
-            New board
-          </Button>
-        )}
-      </DialogTrigger>
+      {(!isControlled || trigger) && (
+        <DialogTrigger asChild>{trigger ?? <NewButton noun="board" />}</DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-lg">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <DialogHeader>
-              <DialogTitle>Create new board</DialogTitle>
+              <DialogTitle>New board</DialogTitle>
               <DialogDescription>
                 Create a new feedback board to collect ideas from your users.
               </DialogDescription>
@@ -158,14 +163,14 @@ export function CreateBoardDialog({
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <PresetTile
                         active={field.value === 'public'}
-                        label="Public"
+                        label="Everyone"
                         description="Anyone can view. Sign-in for vote, comment, submit."
                         icon={<GlobeAltIcon className="h-3.5 w-3.5" />}
                         onClick={() => field.onChange('public')}
                       />
                       <PresetTile
                         active={field.value === 'private'}
-                        label="Private"
+                        label="Team only"
                         description="Workspace members only. Hidden from the portal."
                         icon={<LockClosedIcon className="h-3.5 w-3.5" />}
                         onClick={() => field.onChange('private')}
@@ -176,17 +181,21 @@ export function CreateBoardDialog({
                 )}
               />
 
-              <Label className="flex items-center gap-2 text-xs font-normal text-muted-foreground cursor-pointer">
+              <div className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
                 <Checkbox
+                  id="customize-access"
                   checked={customize}
                   onCheckedChange={(v) => setCustomize(v === true)}
                   aria-label="Customize access after create"
                 />
-                <span>
+                <Label
+                  htmlFor="customize-access"
+                  className="cursor-pointer text-xs font-normal text-muted-foreground"
+                >
                   Customize access after create
                   <span className="ml-1">open the Access tab to fine-tune.</span>
-                </span>
-              </Label>
+                </Label>
+              </div>
             </div>
 
             <DialogFooter>

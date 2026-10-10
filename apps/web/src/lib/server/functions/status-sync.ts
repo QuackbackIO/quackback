@@ -6,7 +6,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import { db, integrations, eq } from '@/lib/server/db'
-import { decryptSecrets } from '@/lib/server/integrations/encryption'
+import { getIntegrationAuth } from '@/lib/server/integrations/token-refresh'
 import {
   generateWebhookSecret,
   buildWebhookCallbackUrl,
@@ -73,44 +73,47 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
       where: eq(integrations.id, integrationId),
     })
 
-    if (!integration) throw new Error('Integration not found')
+    if (!integration || integration.integrationType !== data.integrationType)
+      throw new Error('Integration not found')
     if (integration.status !== 'active') throw new Error('Integration must be active')
 
-    const secret = generateWebhookSecret()
+    const { getIntegration } = await import('@/lib/server/integrations')
+    const registration = getIntegration(data.integrationType)?.webhookRegistration
+    if (!registration) throw new Error('Status sync is not supported for this integration')
+    let secret = generateWebhookSecret()
     const callbackUrl = buildWebhookCallbackUrl(data.integrationType)
-    const config = (integration.config ?? {}) as Record<string, unknown>
+    const credentials = await getIntegrationAuth(integration.id)
+    const config = credentials.config
 
     let externalWebhookId: string | undefined
 
-    // Decrypt secrets for API calls
-    let accessToken: string | undefined
-    if (integration.secrets) {
-      const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
-      accessToken = secrets.accessToken
-    }
+    const accessToken = credentials.accessToken
 
     // Auto-register webhook for platforms whose definition provides a
     // registration capability; 'manual' providers skip (the UI shows the
     // callback URL instead).
-    if (accessToken) {
+    if (registration !== 'manual') {
+      if (!accessToken) throw new Error('Reconnect the integration before enabling status sync')
       try {
-        const { getIntegration } = await import('@/lib/server/integrations')
-        const registration = getIntegration(data.integrationType)?.webhookRegistration
-        if (registration && registration !== 'manual') {
-          const result = await registration.register({
-            accessToken,
-            config,
-            callbackUrl,
-            secret,
-          })
-          externalWebhookId = result.externalWebhookId
-        }
+        const result = await registration.register({
+          accessToken,
+          config,
+          callbackUrl,
+          secret,
+        })
+        externalWebhookId = result.externalWebhookId
+        secret = result.webhookSecret ?? secret
       } catch (error) {
         log.error(
           { err: error, integration_type: data.integrationType },
           'webhook registration failed'
         )
+        const { recordIntegrationLastError } =
+          await import('@/lib/server/integrations/webhook-registration')
         const raw = error instanceof Error ? error.message : 'Unknown error'
+        await recordIntegrationLastError(integrationId, `Failed to register webhook: ${raw}`).catch(
+          () => {}
+        )
         // Providers reject a second webhook at the same callback URL (Linear:
         // "url not unique"; GitHub: "Hook already exists"). This means a prior
         // status-sync webhook was left registered — surface an actionable
@@ -132,7 +135,7 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
       success: true,
       callbackUrl,
       // For manual platforms, return the URL so the UI can display it
-      isManual: !externalWebhookId && !accessToken,
+      isManual: registration === 'manual',
     }
   })
 
@@ -153,15 +156,31 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
       where: eq(integrations.id, integrationId),
     })
 
-    if (!integration) throw new Error('Integration not found')
+    if (!integration || integration.integrationType !== data.integrationType)
+      throw new Error('Integration not found')
 
-    const config = (integration.config ?? {}) as Record<string, unknown>
+    const credentials = await getIntegrationAuth(integration.id)
+    const config = credentials.config
+    if (data.integrationType === 'github') {
+      const { getLiveGitHubConnectionAccount } =
+        await import('@/lib/server/domains/channel-accounts/github-connection')
+      if (await getLiveGitHubConnectionAccount()) {
+        await db
+          .update(integrations)
+          .set({
+            config: { ...config, statusSyncEnabled: false },
+            updatedAt: new Date(),
+          })
+          .where(eq(integrations.id, integrationId))
+        return { success: true }
+      }
+    }
     const externalWebhookId = config.externalWebhookId as string | undefined
 
     // Clean up external webhook if one was registered
     if (externalWebhookId && integration.secrets) {
       try {
-        const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
+        const secrets = credentials
         if (secrets.accessToken) {
           const { getIntegration } = await import('@/lib/server/integrations')
           const registration = getIntegration(data.integrationType)?.webhookRegistration

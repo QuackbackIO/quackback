@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
+import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,7 +23,6 @@ export function ShortcutConnectionActions({
   const deleteMutation = useDeleteIntegration()
   const [apiToken, setApiToken] = useState('')
   const [saving, setSaving] = useState(false)
-  const [showSuccess, setShowSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false)
 
@@ -34,10 +33,7 @@ export function ShortcutConnectionActions({
     try {
       await saveShortcutTokenFn({ data: { apiToken: apiToken.trim() } })
       setApiToken('')
-      setShowSuccess(true)
       queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
-      const timer = setTimeout(() => setShowSuccess(false), 3000)
-      return () => clearTimeout(timer)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save API token')
     } finally {
@@ -54,13 +50,6 @@ export function ShortcutConnectionActions({
 
   return (
     <>
-      {showSuccess && (
-        <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-600 dark:text-green-400">
-          <CheckCircleIcon className="h-4 w-4" />
-          <span>Connected successfully!</span>
-        </div>
-      )}
-
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}

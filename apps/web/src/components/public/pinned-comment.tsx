@@ -1,9 +1,8 @@
 import { MapPinIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage } from 'react-intl'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
-import { getInitials } from '@/lib/shared/utils/string'
 import { CommentContent } from '@/components/public/comment-content'
 import type { PinnedCommentView } from '@/lib/client/queries/portal-detail'
 
@@ -16,14 +15,12 @@ export function PinnedComment({ comment, workspaceName }: PinnedCommentProps) {
   return (
     <div className="[border-radius:var(--radius)] border border-primary/20 bg-primary/5 p-4">
       <div className="flex items-start gap-3">
-        <Avatar className="h-10 w-10 ring-2 ring-background shadow-md">
-          {comment.avatarUrl && (
-            <AvatarImage src={comment.avatarUrl} alt={comment.authorName || 'Team member'} />
-          )}
-          <AvatarFallback className="text-sm bg-primary/20 text-primary font-semibold">
-            {getInitials(comment.authorName)}
-          </AvatarFallback>
-        </Avatar>
+        <Avatar
+          className="h-10 w-10 ring-2 ring-background shadow-md"
+          src={comment.avatarUrl}
+          name={comment.authorName}
+          fallbackClassName="text-sm bg-primary/20 text-primary font-semibold"
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="text-sm font-semibold text-foreground">

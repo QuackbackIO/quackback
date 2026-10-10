@@ -26,7 +26,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { CSV_TEMPLATE } from '@/lib/shared/schemas/import'
-import type { ImportRunListItem } from './import-history-list'
+import type { ImportRunListItem } from '@/lib/server/functions/data-runs'
 
 type Step = 'idle' | 'reviewing' | 'committing' | 'done' | 'failed'
 
@@ -52,6 +52,25 @@ interface PreviewResponse {
   updatedCount: number
 }
 
+/** The kind of CSV being brought in. Every source follows the same template; the hint says how to map it. */
+const IMPORT_SOURCES = [
+  {
+    value: 'feedback_portal',
+    label: 'Feedback portal CSV',
+    hint: 'Boards, posts, votes and comments from a feedback portal CSV export.',
+  },
+  {
+    value: 'support_suite',
+    label: 'Support suite CSV',
+    hint: 'Help articles and conversation history from a support suite CSV export.',
+  },
+  {
+    value: 'help_center',
+    label: 'Help center CSV',
+    hint: 'Categories and articles from a help center CSV export.',
+  },
+] as const
+
 const IN_FLIGHT_RUN_STATUSES = new Set(['pending', 'dry_run', 'running'])
 
 function downloadTemplate() {
@@ -67,13 +86,14 @@ function downloadTemplate() {
 /**
  * Template-driven CSV import: download the template, fill it in, upload,
  * review the dry-run (counts + what would be auto-created), commit. The
- * server contract is the template itself — no column-mapping step.
+ * server contract is the template itself, with no column-mapping step.
  */
 export function ImportCsv() {
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [step, setStep] = useState<Step>('idle')
   const [file, setFile] = useState<File | null>(null)
+  const [source, setSource] = useState<string>(IMPORT_SOURCES[0].value)
   const [boardId, setBoardId] = useState<string>('')
   const [preview, setPreview] = useState<PreviewResponse | null>(null)
   const [runId, setRunId] = useState<string | null>(null)
@@ -103,6 +123,8 @@ export function ImportCsv() {
     if (step === 'committing' && run && !IN_FLIGHT_RUN_STATUSES.has(run.status)) {
       setStep(run.status === 'completed' ? 'done' : 'failed')
       void queryClient.invalidateQueries({ queryKey: ['import-runs'] })
+      void queryClient.invalidateQueries({ queryKey: adminQueries.boardsForSettings().queryKey })
+      void queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     }
   }, [step, run, queryClient])
 
@@ -170,6 +192,21 @@ export function ImportCsv() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
+        <label>
+          <span className="sr-only">Source</span>
+          <Select value={source} onValueChange={setSource}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {IMPORT_SOURCES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
         <Select value={boardId} onValueChange={setBoardId}>
           <SelectTrigger className="w-[240px]">
             <SelectValue placeholder="Default board (optional)" />
@@ -189,6 +226,12 @@ export function ImportCsv() {
       </div>
 
       {step === 'idle' && (
+        <p className="text-[13px] text-muted-foreground">
+          {IMPORT_SOURCES.find((s) => s.value === source)?.hint}
+        </p>
+      )}
+
+      {step === 'idle' && (
         <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-8 text-center transition-colors hover:bg-muted/40">
           <ArrowUpTrayIcon className="size-6 text-muted-foreground" />
           <span className="text-sm font-medium">
@@ -199,8 +242,8 @@ export function ImportCsv() {
                 : 'Drop your CSV here, or click to browse'}
           </span>
           <span className="text-xs text-muted-foreground">
-            Must use the template columns — title and content are required. Up to 10MB / 10,000
-            rows.
+            Needs title and content columns, up to 10MB and 10,000 rows. Each row needs author_email
+            or author_name. Keep source_id filled to re-run without duplicates.
           </span>
           <input
             ref={fileInputRef}
@@ -267,7 +310,7 @@ function ImportReview({
         </p>
         {creations.length > 0 && (
           <p className="mt-2 text-xs text-muted-foreground">
-            Will create: {creations.join(', ')} — anything not already in your workspace is created
+            Will create: {creations.join(', ')}. Anything not already in your workspace is created
             on import.
           </p>
         )}
@@ -367,14 +410,14 @@ function ImportProgress({
     return (
       <div className="space-y-3 rounded-lg border border-border p-4">
         <div className="flex items-center gap-2">
-          <CheckCircleIcon className="size-5 text-green-600" />
+          <CheckCircleIcon className="size-5 text-success" />
           <p className="text-sm font-medium">Import complete</p>
         </div>
         <p className="text-sm text-muted-foreground">
           {run.totals.created} created
           {run.totals.updated > 0 && `, ${run.totals.updated} updated`}
           {run.totals.skipped > 0 && `, ${run.totals.skipped} skipped`}
-          {run.totals.errors > 0 && ` (${run.totals.errors} row errors — see import history)`}.
+          {run.totals.errors > 0 && ` (${run.totals.errors} row errors, see import history)`}.
         </p>
         <Button variant="outline" size="sm" onClick={onReset}>
           Import another file

@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { z } from 'zod'
 import type { PostId } from '@quackback/ids'
 import type { MergeCandidate } from '../merge-search.service'
 
@@ -113,6 +114,17 @@ describe('merge-assessment.service', () => {
       expect(results[0].candidatePostId).toBe('post_cand1')
       expect(results[0].confidence).toBe(0.9)
       expect(results[0].reasoning).toBe('Both request dark mode')
+    })
+
+    it('sends an output schema OpenAI Structured Outputs accept — no propertyNames (#505)', async () => {
+      mockChat.mockResolvedValueOnce({ results: [] })
+
+      const { assessMergeCandidates } = await import('../merge-assessment.service')
+      await assessMergeCandidates(sourcePost, candidates, 'test-model')
+
+      const call = mockChat.mock.calls.at(-1)?.[0] as { outputSchema: z.ZodType }
+      const jsonSchema = JSON.stringify(z.toJSONSchema(call.outputSchema))
+      expect(jsonSchema).not.toContain('propertyNames')
     })
 
     it('should handle the { results: [...] } JSON shape', async () => {

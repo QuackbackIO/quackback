@@ -40,7 +40,9 @@ function extractTextFromNode(node: TipTapNode | null | undefined): string {
   return ''
 }
 
-export function extractHeadings(contentJson: { type?: string; content?: TipTapNode[] } | null | undefined): TocHeading[] {
+export function extractHeadings(
+  contentJson: { type?: string; content?: TipTapNode[] } | null | undefined
+): TocHeading[] {
   if (!contentJson || !Array.isArray(contentJson.content)) return []
 
   const headings: TocHeading[] = []
@@ -68,6 +70,8 @@ export function extractHeadings(contentJson: { type?: string; content?: TipTapNo
 // =============================================================================
 
 interface ArticleLike {
+  id: string
+  urlId: number
   slug: string
   title: string
 }

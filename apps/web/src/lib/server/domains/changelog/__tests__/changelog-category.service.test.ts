@@ -23,7 +23,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     insert: () => ({
       values: (values: unknown) => {
         mockInsertValues(values)
-        return { returning: () => Promise.resolve([{ ...(values as object), id: 'changelog_category_01new' }]) }
+        return {
+          returning: () =>
+            Promise.resolve([{ ...(values as object), id: 'changelog_category_01new' }]),
+        }
       },
     }),
     update: () => ({
@@ -32,7 +35,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
         return {
           where: (...args: unknown[]) => {
             mockUpdateWhere(...args)
-            return { returning: () => Promise.resolve([{ id: 'changelog_category_01x', ...(values as object) }]) }
+            return {
+              returning: () =>
+                Promise.resolve([{ id: 'changelog_category_01x', ...(values as object) }]),
+            }
           },
         }
       },
@@ -57,7 +63,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 beforeEach(() => {
   vi.clearAllMocks()
   mockCategoryFindFirst.mockResolvedValue(undefined)
-  mockSelectFrom.mockResolvedValue([{ maxPosition: -1 }])
+  mockSelectFrom.mockResolvedValue([{ max: -1 }])
   mockDeleteWhere.mockReturnValue({
     returning: () => Promise.resolve([{ id: 'changelog_category_01x' }]),
   })
@@ -66,7 +72,7 @@ beforeEach(() => {
 describe('createChangelogCategory', () => {
   it('creates a category with the next position and defaults', async () => {
     const { createChangelogCategory } = await import('../changelog-category.service')
-    mockSelectFrom.mockResolvedValueOnce([{ maxPosition: 2 }])
+    mockSelectFrom.mockResolvedValueOnce([{ max: 2 }])
 
     const category = await createChangelogCategory({ name: 'Beta', color: '#123456' })
 
@@ -78,20 +84,23 @@ describe('createChangelogCategory', () => {
 
   it('rejects a duplicate name case-insensitively', async () => {
     const { createChangelogCategory } = await import('../changelog-category.service')
-    mockCategoryFindFirst.mockResolvedValueOnce({ id: 'changelog_category_01existing', name: 'Beta' })
+    mockCategoryFindFirst.mockResolvedValueOnce({
+      id: 'changelog_category_01existing',
+      name: 'Beta',
+    })
 
-    await expect(createChangelogCategory({ name: 'beta', color: '#123456' })).rejects.toBeInstanceOf(
-      ConflictError
-    )
+    await expect(
+      createChangelogCategory({ name: 'beta', color: '#123456' })
+    ).rejects.toBeInstanceOf(ConflictError)
     expect(mockInsertValues).not.toHaveBeenCalled()
   })
 
   it('rejects an invalid hex color', async () => {
     const { createChangelogCategory } = await import('../changelog-category.service')
 
-    await expect(createChangelogCategory({ name: 'Beta', color: 'not-a-color' })).rejects.toBeInstanceOf(
-      ValidationError
-    )
+    await expect(
+      createChangelogCategory({ name: 'Beta', color: 'not-a-color' })
+    ).rejects.toBeInstanceOf(ValidationError)
   })
 
   it('rejects an empty name', async () => {

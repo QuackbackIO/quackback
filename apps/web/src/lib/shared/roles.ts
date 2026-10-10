@@ -9,16 +9,43 @@
  * The product runs two kinds of actor on one principal: teammates who operate
  * the workspace (role 'admin' or 'member') and end-users who use the portal
  * (role 'user'). `type` further separates an identified human ('user') from an
- * anonymous visitor ('anonymous') and a machine ('service'). The two axes share
- * one row, so "is this a teammate?" and "is this an end-user?" must be answered
- * the same way everywhere.
+ * anonymous visitor ('anonymous'), a machine ('service'), and Cloud support
+ * ('support') — a signed-in admin that is not a customer human. The two axes
+ * share one row, so "is this a teammate?" and "is this an end-user?" must be
+ * answered the same way everywhere.
  */
 
 /** Teammate/end-user tier carried on a principal. */
 export type Role = 'admin' | 'member' | 'user'
 
 /** What kind of actor a principal is. */
-export type PrincipalType = 'user' | 'anonymous' | 'service'
+export type PrincipalType = 'user' | 'anonymous' | 'service' | 'support'
+
+/** Session audience. Only 'dashboard' may satisfy team/permission gates. */
+export type SessionScope = 'dashboard' | 'widget' | 'portal'
+
+/**
+ * Request header the portal sets when it mints an anonymous session, so the
+ * session is tagged for the portal rather than the widget. Absent means widget.
+ */
+export const SESSION_AUDIENCE_HEADER = 'x-quackback-session-audience'
+
+/** Normalize a stored scope; unmarked values are dashboard. */
+export function toSessionScope(value: unknown): SessionScope {
+  return value === 'widget' || value === 'portal' ? value : 'dashboard'
+}
+
+/** Widget Bearers cannot mutate the signed-in account. Portal and dashboard may. */
+export function assertNotWidgetScope(scope: SessionScope): void {
+  if (scope === 'widget') {
+    throw new Error('Access denied: Widget sessions cannot update this account')
+  }
+}
+
+/** Team roles only apply to dashboard sessions; every other audience is portal-tier. */
+export function sessionRole(role: Role, scope: SessionScope): Role {
+  return scope === 'dashboard' ? role : 'user'
+}
 
 /** Role privilege order, low to high. Used to compare/escalate roles. */
 export const ROLE_RANK: Record<Role, number> = { user: 0, member: 1, admin: 2 }
@@ -43,7 +70,7 @@ export function isEndUser(role: string | null | undefined): boolean {
   return role === 'user'
 }
 
-/** True for an identified human principal (not an anonymous visitor or a machine). */
+/** True for an identified customer human (not anonymous, machine, or Cloud support). */
 export function isIdentifiedHuman(type: string | null | undefined): boolean {
   return type === 'user'
 }

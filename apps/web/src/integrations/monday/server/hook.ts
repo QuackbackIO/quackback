@@ -1,11 +1,12 @@
+import { deliveryError, httpDeliveryFailure } from '@/lib/server/integrations/sync/outcomes'
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Monday.com hook handler.
  * Creates items in Monday.com when events occur.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { buildMondayItem } from '@/integrations/monday/server/message'
 import { logger } from '@/lib/server/logger'
 
@@ -23,10 +24,10 @@ export interface MondayConfig {
   groupId?: string
 }
 
-export const mondayHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
+export const mondayHook: IntegrationHook = {
+  async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     if (event.type !== 'post.created') {
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     const { channelId: boardId } = target as MondayTarget
@@ -44,7 +45,7 @@ export const mondayHook: HookHandler = {
         }
       }`
 
-      const response = await fetch(MONDAY_API, {
+      const response = await integrationFetch(MONDAY_API, {
         method: 'POST',
         headers: {
           Authorization: accessToken,
@@ -54,29 +55,7 @@ export const mondayHook: HookHandler = {
       })
 
       if (!response.ok) {
-        const errorBody = await response.text()
-        const status = response.status
-
-        if (status === 401 || status === 403) {
-          log.error({ status, body: errorBody }, 'auth error')
-          return {
-            success: false,
-            error: `Authentication failed (${status}). Please reconnect Monday.com.`,
-            shouldRetry: false,
-          }
-        }
-
-        if (status === 429) {
-          log.warn({ status }, 'rate limited')
-          return { success: false, error: 'Rate limited', shouldRetry: true }
-        }
-
-        log.error({ status, body: errorBody }, 'api error')
-        return {
-          success: false,
-          error: `Monday.com API error: ${status}`,
-          shouldRetry: status >= 500,
-        }
+        return httpDeliveryFailure(response)
       }
 
       const data = (await response.json()) as {
@@ -87,17 +66,17 @@ export const mondayHook: HookHandler = {
       if (data.errors?.length) {
         const errorMsg = data.errors[0].message
         log.error({ error_message: errorMsg }, 'graphql error')
-        return { success: false, error: errorMsg, shouldRetry: false }
+        return { state: 'uncertain', errorCode: 'outcome_unknown' }
       }
 
       const itemId = data.data?.create_item?.id
       if (!itemId) {
-        return { success: false, error: 'No item ID returned', shouldRetry: false }
+        return { state: 'uncertain', errorCode: 'outcome_unknown' }
       }
 
       // Add update with description
       if (updateBody) {
-        await fetch(MONDAY_API, {
+        const update = await integrationFetch(MONDAY_API, {
           method: 'POST',
           headers: {
             Authorization: accessToken,
@@ -107,26 +86,28 @@ export const mondayHook: HookHandler = {
             query: `mutation { create_update(item_id: ${itemId}, body: ${JSON.stringify(updateBody)}) { id } }`,
           }),
         })
+        if (!update.ok) return { state: 'uncertain', errorCode: 'outcome_unknown' }
+        const result = (await update.json()) as {
+          data?: { create_update?: { id: string } }
+          errors?: unknown[]
+        }
+        if (result.errors?.length || !result.data?.create_update?.id)
+          return { state: 'uncertain', errorCode: 'outcome_unknown' }
       }
 
       log.info({ item_id: itemId }, 'created item')
-      return { success: true, externalId: itemId }
+      return { state: 'succeeded', result: { externalId: itemId } }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       log.error({ err: error }, 'exception')
 
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: isRetryableError(error),
-      }
+      return deliveryError(error)
     }
   },
 
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken } = config as MondayConfig
     try {
-      const response = await fetch(MONDAY_API, {
+      const response = await integrationFetch(MONDAY_API, {
         method: 'POST',
         headers: {
           Authorization: accessToken,

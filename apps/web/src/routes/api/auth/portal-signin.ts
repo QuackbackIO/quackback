@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { requestEmailSignin } from '@/lib/server/auth/email-signin'
+import { EmailSigninRefusedError, requestEmailSignin } from '@/lib/server/auth/email-signin'
 import { checkMagicLinkSendRateLimit } from '@/lib/server/auth/signin-rate-limit'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { AUTH_BLOCK_MESSAGES } from '@/lib/shared/auth-block-messages'
@@ -60,13 +60,20 @@ function asRateLimited(err: unknown): { retryAfter: string | null } | null {
  * does not. `requestEmailSignin` mints through the endpoint that has no such
  * chain for exactly this reason.
  *
- * **It answers the same way to everyone.** One status, one body, for an address
- * that holds an account, an address somebody invited, and an address the
- * workspace has never heard of. `requestEmailSignin` carries the whole decision
- * and reports nothing back for this handler to branch on; the refusal is
- * delivered to the address itself. A 4xx for the refused case would have been a
- * free, unauthenticated account-existence oracle, and the invitation exemption
- * would have made it an oracle for "invited but not yet joined" as well.
+ * **It answers the same way whether or not an account exists.** One status, one
+ * body, for an address that holds an account, an address somebody invited, and
+ * an address the workspace has never heard of. `requestEmailSignin` carries the
+ * whole decision and reports nothing back for this handler to branch on; the
+ * refusal is delivered to the address itself. A 4xx for the refused case would
+ * have been a free, unauthenticated account-existence oracle, and the
+ * invitation exemption would have made it an oracle for "invited but not yet
+ * joined" as well.
+ *
+ * The one exception is a domain that requires SSO, refused with a 403 by
+ * `EmailSigninRefusedError`. That answer depends only on the domain, which the
+ * sign-in form already routes to its provider for anyone who types it, so it is
+ * the same for every address at the domain. Nothing that depends on an
+ * account may ever be added to that error.
  *
  * Exported so it can be driven directly: a handler that can only be reached
  * through the router is a handler nobody can hold two requests up against.
@@ -106,6 +113,14 @@ export async function handlePortalSignin(request: Request): Promise<Response> {
     await requestEmailSignin({ email, callbackURL })
     return Response.json({ ok: true })
   } catch (err) {
+    // Domain-level, so it says nothing about whether the address holds an
+    // account (see EmailSigninRefusedError).
+    if (err instanceof EmailSigninRefusedError) {
+      return Response.json(
+        { error: AUTH_BLOCK_MESSAGES[err.code], code: err.code },
+        { status: 403 }
+      )
+    }
     // A limiter saying no is an expected answer, not a fault, and it arrives as
     // a thrown `TOO_MANY_REQUESTS` when it is raised anywhere downstream rather
     // than by the check above. Reported as a 500 it loses its `Retry-After`,

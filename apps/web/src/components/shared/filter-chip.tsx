@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { XMarkIcon } from '@heroicons/react/24/solid'
+import { PlusIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/shared/utils'
@@ -163,4 +164,27 @@ export function FilterChip({
   }
 
   return chip
+}
+
+/**
+ * The dashed "+ Filter" control that opens a list's filter menu. It matches the
+ * height and text colour of the other toolbar controls (`SortMenu`, Search).
+ */
+export function FilterAddButton({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof Button>) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className={cn('border-dashed font-normal', className)}
+      {...props}
+    >
+      <PlusIcon className="size-3.5" aria-hidden />
+      {children ?? 'Filter'}
+    </Button>
+  )
 }

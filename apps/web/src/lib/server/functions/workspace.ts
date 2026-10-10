@@ -12,9 +12,11 @@
  * `bun run check:server-fn-manifest` guards the general case.
  */
 
-import type { Role } from '@/lib/shared/roles'
-import { db, principal, eq } from '@/lib/server/db'
+import type { UserId } from '@quackback/ids'
+import { sessionRole, type Role } from '@/lib/shared/roles'
+import { db } from '@/lib/server/db'
 import { getSession } from '@/lib/server/auth/session'
+import { getRequestPrincipal } from '@/lib/server/auth/request-session'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'workspace' })
@@ -43,16 +45,14 @@ export async function getCurrentUserRole(): Promise<Role | null> {
     return null
   }
 
-  const principalRecord = await db.query.principal.findFirst({
-    where: eq(principal.userId, session.user.id),
-  })
+  const principalRecord = await getRequestPrincipal(session.user.id as UserId)
 
   if (!principalRecord) {
     log.debug('no principal')
     return null
   }
   log.debug({ role: principalRecord.role }, 'current user role')
-  return principalRecord.role as Role
+  return sessionRole(principalRecord.role as Role, session.session.scope)
 }
 
 /**
@@ -64,10 +64,13 @@ export async function validateApiWorkspaceAccess() {
     return { success: false as const, error: 'Unauthorized', status: 401 as const }
   }
 
+  // Import/export are team surfaces; a widget/portal audience never qualifies.
+  if (session.session.scope !== 'dashboard') {
+    return { success: false as const, error: 'Forbidden', status: 403 as const }
+  }
+
   const [principalRecord, appSettings] = await Promise.all([
-    db.query.principal.findFirst({
-      where: eq(principal.userId, session.user.id),
-    }),
+    getRequestPrincipal(session.user.id as UserId),
     db.query.settings.findFirst(),
   ])
 

@@ -264,6 +264,18 @@ const cases: Array<{ type: string; run: () => Promise<void> }> = [
       )
     },
   },
+  {
+    type: 'message.updated',
+    run: () => {
+      const c = convRef()
+      return d.dispatchMessageUpdated(
+        actor(),
+        msgData(c.id),
+        c,
+        new Date('2026-01-01').toISOString()
+      )
+    },
+  },
   { type: 'ticket.created', run: () => d.dispatchTicketCreated(actor(), ticketData()) },
   {
     type: 'ticket.status_changed',

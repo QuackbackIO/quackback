@@ -90,8 +90,8 @@ test.describe('Admin Sidebar Navigation', () => {
     await expect(page).toHaveURL(/\/admin\/users/)
   })
 
-  test('View Portal link is present', async ({ page }) => {
-    const portalLink = page.getByRole('link', { name: 'View Portal' })
+  test('View portal link is present', async ({ page }) => {
+    const portalLink = page.getByRole('link', { name: 'View portal' })
     await expect(portalLink.first()).toBeVisible({ timeout: 10000 })
   })
 
@@ -123,26 +123,25 @@ test.describe('Admin Feedback Page (Dashboard Content)', () => {
   })
 
   test('shows sort selector', async ({ page }) => {
-    // The inbox has a sort control (newest/oldest/votes)
-    const sortControl = page
-      .getByRole('combobox')
-      .filter({ hasText: /newest|oldest|votes/i })
+    // The inbox has a sort control (newest/oldest/votes) that changes the order
+    const sortControl = page.getByRole('button', { name: /^Sort: / }).first()
+    await expect(sortControl).toBeVisible({ timeout: 10000 })
+    await expect(sortControl).toHaveText(/Sort: Newest/)
 
-    if ((await sortControl.count()) > 0) {
-      await expect(sortControl.first()).toBeVisible()
-    }
+    await sortControl.click()
+    await page.getByRole('menuitemradio', { name: 'Oldest' }).click()
+    await expect(page.getByRole('button', { name: /^Sort: Oldest/ }).first()).toBeVisible()
   })
 
   test('shows filter controls or boards sidebar', async ({ page }) => {
     // Boards / filter sidebar or floating filter button should be present
     const hasFilterSidebar = (await page.locator('aside').count()) > 1
-    const hasFilterButton =
-      (await page.getByRole('button', { name: /filter/i }).count()) > 0
+    const hasFilterButton = (await page.getByRole('button', { name: /filter/i }).count()) > 0
     expect(hasFilterSidebar || hasFilterButton).toBe(true)
   })
 
   test('feedback link is active in sidebar while on feedback page', async ({ page }) => {
-    // The active nav item gets bg-muted/80 applied via CSS class
+    // The active rail item is marked data-active and pressed into the rail
     // The Feedback link should exist and have an active state
     const feedbackLink = page.getByRole('link', { name: 'Feedback' }).first()
     await expect(feedbackLink).toBeVisible()

@@ -7,6 +7,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { mergePostFn, unmergePostFn } from '@/lib/server/functions/post-merge'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
+import { adminQueries } from '@/lib/client/queries/admin'
 import type { PostId } from '@quackback/ids'
 
 // ============================================================================
@@ -30,6 +31,7 @@ export function useMergePost() {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(canonicalPostId) })
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
       queryClient.invalidateQueries({ queryKey: ['merged-posts', canonicalPostId] })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }
@@ -51,6 +53,7 @@ export function useUnmergePost() {
       })
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
       queryClient.invalidateQueries({ queryKey: ['merged-posts', data.canonicalPost.id as PostId] })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }

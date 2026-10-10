@@ -16,7 +16,8 @@
     "./types": "./src/types.ts",
     "./drizzle/*": "./drizzle/*",
     "./schema-version": "./src/schema-version.ts",
-    "./schema-ops": "./src/schema-ops.ts"
+    "./schema-ops": "./src/schema-ops.ts",
+    "./email/personal-email-domains": "./src/email/personal-email-domains.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
@@ -24,6 +25,7 @@
     "db:migrate": "bun run src/migrate.ts",
     "db:migrate:cli": "drizzle-kit migrate",
     "db:check-drift": "bun scripts/check-drift.ts",
+    "db:permissions": "bun scripts/generate-permissions-mirror.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed": "bun src/seed.ts",
     "db:reset": "bun src/reset.ts",
@@ -37,7 +39,7 @@
   "devDependencies": {
     "@faker-js/faker": "^10.6.0",
     "@types/bcryptjs": "^3.0.0",
-    "@types/bun": "^1.4.0",
+    "@types/bun": "^1.4.2",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10"

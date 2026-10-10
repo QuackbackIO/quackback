@@ -29,6 +29,7 @@ function viewDenyMessage(tier: AccessTier): string {
 
 /** Single-row board read authorization. */
 export function canViewBoard(actor: Actor, board: { access: BoardAccess }): Decision {
+  if (actor.testFeedback?.canView) return allowDecision()
   const access = normalizeBoardAccess(board.access)
   return tierAllows(actor, access.view, access.segments.view)
     ? allowDecision()
@@ -51,7 +52,7 @@ export function canViewBoard(actor: Actor, board: { access: BoardAccess }): Deci
  * (admin-side queries do not use this filter and have their own logic).
  */
 export function boardViewFilter(actor: Actor): SQL {
-  if (isTeamActor(actor)) {
+  if (isTeamActor(actor) || actor.testFeedback?.canView) {
     return sql`${isNull(boards.deletedAt)}`
   }
   const memberIds = Array.from(actor.segmentIds) as string[]

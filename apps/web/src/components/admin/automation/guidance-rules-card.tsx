@@ -3,12 +3,25 @@ import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  PencilSquareIcon,
-  PlusIcon,
-  TrashIcon,
-} from '@heroicons/react/24/solid'
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { Bars3Icon } from '@heroicons/react/24/solid'
+import { NewButton } from '@/components/shared/new-button'
+import { SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { SearchInput } from '@/components/shared/search-input'
@@ -32,6 +45,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { SettingRow } from '@/components/admin/settings/setting-row'
 import { Textarea } from '@/components/ui/textarea'
 import { assistantQueries } from '@/lib/client/queries/assistant'
 import {
@@ -87,6 +101,10 @@ export function GuidanceRulesCard({ agent }: { agent: AssistantAgentKind }) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deletingRule, setDeletingRule] = useState<AssistantGuidanceRule | null>(null)
   const [announcement, setAnnouncement] = useState('')
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
 
   useEffect(() => {
     if (rulesQuery.data) setRules(rulesQuery.data.rules)
@@ -168,17 +186,12 @@ export function GuidanceRulesCard({ agent }: { agent: AssistantAgentKind }) {
     }
   }
 
-  async function move(rule: AssistantGuidanceRule, direction: -1 | 1) {
-    const agentOrder = rules.filter((candidate) => candidate.agent === agent)
-    const index = agentOrder.findIndex((candidate) => candidate.id === rule.id)
-    const target = index + direction
-    if (index < 0 || target < 0 || target >= agentOrder.length) return
+  async function reorder(
+    rule: AssistantGuidanceRule,
+    nextAgentOrder: AssistantGuidanceRule[],
+    target: number
+  ) {
     const previous = rules
-    const nextAgentOrder = [...agentOrder]
-    ;[nextAgentOrder[index], nextAgentOrder[target]] = [
-      nextAgentOrder[target],
-      nextAgentOrder[index],
-    ]
     // Weave the reordered agent rules back into the full list without disturbing
     // the other agent's rows, then persist only this agent's new order.
     let cursor = 0
@@ -238,49 +251,60 @@ export function GuidanceRulesCard({ agent }: { agent: AssistantAgentKind }) {
     }
   }
 
+  const reorderLocked = Boolean(query.trim()) || reorderRules.isPending
+
+  function openNew() {
+    setEditingRule(null)
+    setDialogOpen(true)
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id || query.trim()) return
+    const from = agentRules.findIndex((rule) => rule.id === active.id)
+    const to = agentRules.findIndex((rule) => rule.id === over.id)
+    if (from < 0 || to < 0) return
+    void reorder(agentRules[from], arrayMove(agentRules, from, to), to)
+  }
+
+  const newButtonLabel = intl.formatMessage({
+    id: 'automation.agent.guidance.add',
+    defaultMessage: 'New guidance',
+  })
+
   return (
     <>
       <SettingsCard
+        flush
         title={intl.formatMessage({
           id: 'automation.agent.guidance.title',
           defaultMessage: 'Situational guidance',
         })}
         description={intl.formatMessage({
           id: 'automation.agent.guidance.description',
-          defaultMessage:
-            'Tell the AI agent what to do when a conversation matches a situation. Use this for language the model interprets; use workflow conditions when the same check must be deterministic.',
+          defaultMessage: 'What the agent does when a conversation matches a situation.',
         })}
         action={
-          <Button
-            type="button"
-            size="sm"
-            className="min-h-11 sm:min-h-8"
-            onClick={() => {
-              setEditingRule(null)
-              setDialogOpen(true)
-            }}
-          >
-            <PlusIcon className="size-4" />
-            {intl.formatMessage({
-              id: 'automation.agent.guidance.add',
-              defaultMessage: 'Add guidance',
-            })}
-          </Button>
+          <NewButton noun="guidance" onClick={openNew} className="min-h-11 sm:min-h-8">
+            {newButtonLabel}
+          </NewButton>
         }
       >
-        <div className="space-y-4">
-          {agentRules.length > 0 && (
+        {agentRules.length > 0 && (
+          <div className="px-4 py-3 sm:px-6">
             <SearchInput
               value={query}
               onChange={setQuery}
               placeholder={intl.formatMessage({
                 id: 'automation.agent.guidance.search',
-                defaultMessage: 'Search guidance',
+                defaultMessage: 'Search guidance...',
               })}
             />
-          )}
+          </div>
+        )}
 
-          {agentRules.length === 0 ? (
+        {agentRules.length === 0 ? (
+          <div className="px-4 pb-4 sm:px-6 sm:pb-6">
             <div className="rounded-lg border border-dashed border-border/70 p-5">
               <p className="text-sm font-medium">
                 {intl.formatMessage({
@@ -288,231 +312,93 @@ export function GuidanceRulesCard({ agent }: { agent: AssistantAgentKind }) {
                   defaultMessage: 'Add guidance for a specific situation',
                 })}
               </p>
-              <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {intl.formatMessage({
                   id: 'automation.agent.guidance.emptyDescription',
                   defaultMessage:
-                    'For example, when a customer asks about refunds, explain the 30-day policy before sharing the relevant Help Center article.',
+                    'For example, when a customer asks about refunds, explain the 30-day policy before sharing the relevant help center article.',
                 })}
               </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-4 min-h-11 sm:min-h-8"
-                onClick={() => {
-                  setEditingRule(null)
-                  setDialogOpen(true)
-                }}
-              >
-                {intl.formatMessage({
-                  id: 'automation.agent.guidance.add',
-                  defaultMessage: 'Add guidance',
-                })}
-              </Button>
+              <NewButton noun="guidance" onClick={openNew} className="mt-4 min-h-11 sm:min-h-8">
+                {newButtonLabel}
+              </NewButton>
             </div>
-          ) : filteredRules.length === 0 ? (
-            <p className="py-5 text-center text-sm text-muted-foreground">
-              {intl.formatMessage(
-                {
-                  id: 'automation.agent.guidance.noResults',
-                  defaultMessage: 'No guidance matches “{query}”.',
-                },
-                { query: query.trim() }
-              )}
-            </p>
-          ) : (
-            <div className="divide-y divide-border/60">
-              {filteredRules.map((rule) => {
-                const index = agentRules.findIndex((candidate) => candidate.id === rule.id)
-                const stat = statsQuery.data?.[rule.id]
-                return (
-                  <article key={rule.id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0">
-                    <div className="flex items-start gap-3">
-                      <Switch
-                        checked={rule.enabled}
-                        onCheckedChange={() => void toggleEnabled(rule)}
-                        aria-label={intl.formatMessage(
-                          {
-                            id: 'automation.agent.guidance.enableAria',
-                            defaultMessage: 'Enable {name}',
-                          },
-                          { name: rule.name }
-                        )}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-sm font-medium">{rule.name}</h3>
-                          <Badge variant="outline" size="sm">
-                            {rule.appliesWhen
-                              ? intl.formatMessage({
-                                  id: 'automation.agent.guidance.conditional',
-                                  defaultMessage: 'Conditional',
-                                })
-                              : intl.formatMessage({
-                                  id: 'automation.agent.guidance.alwaysOn',
-                                  defaultMessage: 'Always on',
-                                })}
-                          </Badge>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {rule.appliesWhen ??
-                            intl.formatMessage({
-                              id: 'automation.agent.guidance.everyConversation',
-                              defaultMessage: 'Applies to every eligible customer conversation.',
-                            })}
-                        </p>
-                        <p className="mt-2 line-clamp-2 text-sm">{rule.instruction}</p>
-                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                          <span>
-                            {intl.formatMessage(
-                              {
-                                id: 'automation.agent.guidance.applied',
-                                defaultMessage: 'Applied {count} times',
-                              },
-                              { count: stat?.applied ?? 0 }
-                            )}
-                          </span>
-                          <span>
-                            {stat?.lastAppliedAt
-                              ? intl.formatMessage(
-                                  {
-                                    id: 'automation.agent.guidance.lastApplied',
-                                    defaultMessage: 'Last applied {date}',
-                                  },
-                                  {
-                                    date: intl.formatDate(stat.lastAppliedAt, {
-                                      dateStyle: 'medium',
-                                      timeStyle: 'short',
-                                    }),
-                                  }
-                                )
-                              : intl.formatMessage({
-                                  id: 'automation.agent.guidance.neverApplied',
-                                  defaultMessage: 'Not applied yet',
-                                })}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-end gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-11 sm:size-8"
-                        disabled={index === 0 || reorderRules.isPending || Boolean(query.trim())}
-                        aria-label={intl.formatMessage(
-                          {
-                            id: 'automation.agent.guidance.moveUp',
-                            defaultMessage: 'Move {name} up',
-                          },
-                          { name: rule.name }
-                        )}
-                        onClick={() => void move(rule, -1)}
-                      >
-                        <ArrowUpIcon className="size-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-11 sm:size-8"
-                        disabled={
-                          index === agentRules.length - 1 ||
-                          reorderRules.isPending ||
-                          Boolean(query.trim())
-                        }
-                        aria-label={intl.formatMessage(
-                          {
-                            id: 'automation.agent.guidance.moveDown',
-                            defaultMessage: 'Move {name} down',
-                          },
-                          { name: rule.name }
-                        )}
-                        onClick={() => void move(rule, 1)}
-                      >
-                        <ArrowDownIcon className="size-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-11 sm:size-8"
-                        aria-label={intl.formatMessage(
-                          {
-                            id: 'automation.agent.guidance.editAria',
-                            defaultMessage: 'Edit {name}',
-                          },
-                          { name: rule.name }
-                        )}
-                        onClick={() => {
-                          setEditingRule(rule)
-                          setDialogOpen(true)
-                        }}
-                      >
-                        <PencilSquareIcon className="size-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-11 text-muted-foreground hover:text-destructive sm:size-8"
-                        aria-label={intl.formatMessage(
-                          {
-                            id: 'automation.agent.guidance.deleteAria',
-                            defaultMessage: 'Delete {name}',
-                          },
-                          { name: rule.name }
-                        )}
-                        onClick={() => setDeletingRule(rule)}
-                      >
-                        <TrashIcon className="size-4" />
-                      </Button>
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
-          )}
-
-          <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              {intl.formatMessage(
-                {
-                  id: 'automation.agent.guidance.budget',
-                  defaultMessage: '{used} of {total} characters across enabled guidance',
-                },
-                { used: enabledChars, total: charBudget }
-              )}
-            </span>
-            {query.trim() && (
-              <span>
-                {intl.formatMessage({
-                  id: 'automation.agent.guidance.reorderSearch',
-                  defaultMessage: 'Clear search to change the order.',
-                })}
-              </span>
-            )}
           </div>
-          {statsQuery.isError && (
-            <div className="flex items-center justify-between gap-3">
-              <p role="alert" className="text-xs text-muted-foreground">
-                {intl.formatMessage({
-                  id: 'automation.agent.guidance.statsError',
-                  defaultMessage: 'Application history could not be loaded.',
-                })}
-              </p>
-              <Button variant="ghost" size="sm" onClick={() => void statsQuery.refetch()}>
-                {intl.formatMessage({ id: 'automation.agent.retry', defaultMessage: 'Try again' })}
-              </Button>
-            </div>
-          )}
-          <p className="sr-only" role="status" aria-live="polite">
-            {announcement}
+        ) : filteredRules.length === 0 ? (
+          <p className="px-4 py-5 text-center text-sm text-muted-foreground sm:px-6">
+            {intl.formatMessage(
+              {
+                id: 'automation.agent.guidance.noResults',
+                defaultMessage: 'No guidance matches “{query}”.',
+              },
+              { query: query.trim() }
+            )}
           </p>
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={filteredRules.map((rule) => rule.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <SettingsList className="border-t border-border/50">
+                {filteredRules.map((rule) => (
+                  <SortableGuidanceRow
+                    key={rule.id}
+                    rule={rule}
+                    stat={statsQuery.data?.[rule.id]}
+                    reorderDisabled={reorderLocked}
+                    onToggle={() => void toggleEnabled(rule)}
+                    onEdit={() => {
+                      setEditingRule(rule)
+                      setDialogOpen(true)
+                    }}
+                    onDelete={() => setDeletingRule(rule)}
+                  />
+                ))}
+              </SettingsList>
+            </SortableContext>
+          </DndContext>
+        )}
+
+        <div className="flex flex-col gap-1 border-t border-border/50 px-4 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <span>
+            {intl.formatMessage(
+              {
+                id: 'automation.agent.guidance.budget',
+                defaultMessage: '{used} of {total} characters across enabled guidance',
+              },
+              { used: intl.formatNumber(enabledChars), total: intl.formatNumber(charBudget) }
+            )}
+          </span>
+          {query.trim() && (
+            <span>
+              {intl.formatMessage({
+                id: 'automation.agent.guidance.reorderSearch',
+                defaultMessage: 'Clear search to change the order.',
+              })}
+            </span>
+          )}
         </div>
+        {statsQuery.isError && (
+          <div className="flex items-center justify-between gap-3 px-4 pb-3 sm:px-6">
+            <p role="alert" className="text-xs text-muted-foreground">
+              {intl.formatMessage({
+                id: 'automation.agent.guidance.statsError',
+                defaultMessage: 'Application history could not be loaded.',
+              })}
+            </p>
+            <Button variant="ghost" size="sm" onClick={() => void statsQuery.refetch()}>
+              {intl.formatMessage({ id: 'automation.agent.retry', defaultMessage: 'Try again' })}
+            </Button>
+          </div>
+        )}
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcement}
+        </p>
       </SettingsCard>
 
       <GuidanceRuleDialog
@@ -558,6 +444,126 @@ export function GuidanceRulesCard({ agent }: { agent: AssistantAgentKind }) {
         onConfirm={confirmDelete}
       />
     </>
+  )
+}
+
+function SortableGuidanceRow({
+  rule,
+  stat,
+  reorderDisabled,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  rule: AssistantGuidanceRule
+  stat: { applied: number; lastAppliedAt: Date | string | null } | undefined
+  reorderDisabled: boolean
+  onToggle: () => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const intl = useIntl()
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: rule.id,
+    disabled: reorderDisabled,
+  })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+  const applied = stat?.applied ?? 0
+  const lastApplied = stat?.lastAppliedAt
+    ? intl.formatMessage(
+        { id: 'automation.agent.guidance.lastApplied', defaultMessage: 'Last applied {date}' },
+        { date: intl.formatDate(stat.lastAppliedAt, { dateStyle: 'medium', timeStyle: 'short' }) }
+      )
+    : undefined
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <SettingsListRow
+        grip={
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            disabled={reorderDisabled}
+            aria-label={intl.formatMessage(
+              { id: 'automation.agent.guidance.reorder', defaultMessage: 'Reorder {name}' },
+              { name: rule.name }
+            )}
+            className="touch-none cursor-grab active:cursor-grabbing disabled:cursor-default disabled:opacity-40"
+          >
+            <Bars3Icon className="size-4 text-muted-foreground/70" />
+          </button>
+        }
+        title={rule.name}
+        badges={
+          <Badge variant="outline" size="sm">
+            {rule.appliesWhen
+              ? intl.formatMessage({
+                  id: 'automation.agent.guidance.conditional',
+                  defaultMessage: 'Conditional',
+                })
+              : intl.formatMessage({
+                  id: 'automation.agent.guidance.alwaysOn',
+                  defaultMessage: 'Always on',
+                })}
+          </Badge>
+        }
+        meta={
+          rule.appliesWhen ??
+          intl.formatMessage({
+            id: 'automation.agent.guidance.everyConversation',
+            defaultMessage: 'Applies to every eligible customer conversation.',
+          })
+        }
+        trailing={
+          <>
+            <span className="hidden sm:inline" title={lastApplied}>
+              {applied > 0
+                ? intl.formatMessage(
+                    {
+                      id: 'automation.agent.guidance.applied',
+                      defaultMessage: 'Applied {count, plural, one {# time} other {# times}}',
+                    },
+                    { count: applied }
+                  )
+                : intl.formatMessage({
+                    id: 'automation.agent.guidance.neverApplied',
+                    defaultMessage: 'Not applied yet',
+                  })}
+            </span>
+            <Switch
+              checked={rule.enabled}
+              onCheckedChange={onToggle}
+              aria-label={intl.formatMessage(
+                { id: 'automation.agent.guidance.enableAria', defaultMessage: 'Enable {name}' },
+                { name: rule.name }
+              )}
+            />
+          </>
+        }
+        actions={[
+          {
+            label: intl.formatMessage({
+              id: 'automation.agent.guidance.edit',
+              defaultMessage: 'Edit',
+            }),
+            onSelect: onEdit,
+          },
+          {
+            label: intl.formatMessage({
+              id: 'automation.agent.guidance.delete',
+              defaultMessage: 'Delete',
+            }),
+            onSelect: onDelete,
+            destructive: true,
+          },
+        ]}
+      />
+    </div>
   )
 }
 
@@ -715,7 +721,7 @@ function GuidanceRuleDialog({
                 })
               : intl.formatMessage({
                   id: 'automation.agent.guidance.addTitle',
-                  defaultMessage: 'Add guidance',
+                  defaultMessage: 'New guidance',
                 })}
           </DialogTitle>
         </DialogHeader>
@@ -872,7 +878,7 @@ function GuidanceRuleDialog({
               placeholder={intl.formatMessage({
                 id: 'automation.agent.guidance.instructionPlaceholder',
                 defaultMessage:
-                  'For example: Explain the 30-day refund policy before sharing the relevant Help Center article.',
+                  'For example: Explain the 30-day refund policy before sharing the relevant help center article.',
               })}
               onChange={(event) => setInstruction(event.target.value)}
             />
@@ -905,23 +911,20 @@ function GuidanceRuleDialog({
             )}
           </div>
 
-          <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border p-3">
-            <div>
-              <Label htmlFor="guidance-enabled" className="cursor-pointer">
-                {intl.formatMessage({
-                  id: 'automation.agent.guidance.enabledLabel',
-                  defaultMessage: 'Enabled',
-                })}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {intl.formatMessage({
-                  id: 'automation.agent.guidance.enabledHelp',
-                  defaultMessage: 'Disabled guidance remains saved but is not applied.',
-                })}
-              </p>
-            </div>
-            <Switch id="guidance-enabled" checked={enabled} onCheckedChange={setEnabled} />
-          </div>
+          <SettingRow
+            label={intl.formatMessage({
+              id: 'automation.agent.guidance.enabledLabel',
+              defaultMessage: 'Enabled',
+            })}
+            htmlFor="guidance-enabled"
+            description={intl.formatMessage({
+              id: 'automation.agent.guidance.enabledHelp',
+              defaultMessage: 'Disabled guidance remains saved but is not applied.',
+            })}
+            control={
+              <Switch id="guidance-enabled" checked={enabled} onCheckedChange={setEnabled} />
+            }
+          />
 
           {error && (
             <p role="alert" className="text-sm text-destructive">
@@ -946,7 +949,7 @@ function GuidanceRuleDialog({
                     })
                   : intl.formatMessage({
                       id: 'automation.agent.guidance.addConfirm',
-                      defaultMessage: 'Add guidance',
+                      defaultMessage: 'Create guidance',
                     })}
             </Button>
           </DialogFooter>

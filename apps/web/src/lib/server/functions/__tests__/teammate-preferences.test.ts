@@ -18,6 +18,7 @@ vi.mock('@tanstack/react-start', () => ({
     }),
     handler: (fn: (...args: unknown[]) => unknown) => fn,
   }),
+  createServerOnlyFn: (fn: (...args: unknown[]) => unknown) => fn,
 }))
 
 const mockRequireAuth = vi.fn()
@@ -107,6 +108,7 @@ describe('getMyLanguagePreferenceFn', () => {
     mockRequireAuth.mockResolvedValue({
       user: { id: AUTH_USER_ID },
       principal: { id: 'principal_caller' },
+      scope: 'dashboard',
     })
   })
 
@@ -147,6 +149,7 @@ describe('setMyLanguagePreferenceFn', () => {
     mockRequireAuth.mockResolvedValue({
       user: { id: AUTH_USER_ID },
       principal: { id: 'principal_caller' },
+      scope: 'dashboard',
     })
   })
 
@@ -187,5 +190,16 @@ describe('setMyLanguagePreferenceFn', () => {
     await expect(setMyLanguagePreferenceFn({ data: { language: 'en' } })).rejects.toThrow(
       'Authentication required'
     )
+  })
+
+  it('rejects a widget-scoped session', async () => {
+    mockRequireAuth.mockRejectedValue(
+      new Error('Access denied: Widget sessions cannot access this resource')
+    )
+
+    await expect(setMyLanguagePreferenceFn({ data: { language: 'en' } })).rejects.toThrow(
+      /Widget sessions/
+    )
+    expect(mockSet).not.toHaveBeenCalled()
   })
 })

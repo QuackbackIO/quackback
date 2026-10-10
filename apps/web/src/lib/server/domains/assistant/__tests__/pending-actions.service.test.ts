@@ -102,6 +102,23 @@ describe.skipIf(!fixture.available)('pending-actions.service (real DB, rolled ba
     expect(executed?.executedAt).not.toBeNull()
   })
 
+  it('persists a Slack proposal without creating conversation notes', async () => {
+    const workspaceThreadKey = JSON.stringify(['T', 'C', '123.4'])
+    const proposed = await proposePendingAction({
+      workspaceThreadKey,
+      toolName: 'capture_feedback',
+      args: { title: 'Request' },
+      summary: 'Capture request',
+      originRole: 'workspace_assistant',
+    })
+    expect(proposed.workspaceThreadKey).toBe(workspaceThreadKey)
+    expect(proposed.conversationId).toBeNull()
+    expect(proposed.ticketId).toBeNull()
+    expect(
+      (await decidePendingAction(proposed.id, 'approved', await seedPrincipal()))?.status
+    ).toBe('approved')
+  })
+
   it('persists an explicit proposal origin role', async () => {
     const conversationId = await seedConversation()
 

@@ -7,7 +7,7 @@ const NOW = new Date('2026-08-20T12:00:00.000Z')
 function config(overrides: Partial<CloudConfig> = {}): CloudConfig {
   return {
     enabled: true,
-    plan: 'growth',
+    plan: 'pro',
     entitlements: {},
     subscriptionStatus: null,
     trialStartedAt: '2026-08-06T00:00:00.000Z',
@@ -25,15 +25,15 @@ describe('trialNotice', () => {
   it('keeps See plans until the last three days', () => {
     const notice = trialNotice(config({ trialExpiresAt: '2026-08-30T00:00:00.000Z' }), NOW)
     expect(notice).toMatchObject({
-      label: 'Growth trial',
+      label: 'Pro trial',
       actionLabel: 'See plans',
-      message: expect.stringContaining('continue on Free'),
+      message: expect.stringContaining('pick a paid plan'),
     })
   })
 
   it('switches the action to Continue with the plan in the last three days', () => {
     const notice = trialNotice(config({ trialExpiresAt: '2026-08-21T12:00:00.000Z' }), NOW)
-    expect(notice?.actionLabel).toBe('Continue with Growth')
+    expect(notice?.actionLabel).toBe('Continue with Pro')
   })
 })
 
@@ -45,13 +45,12 @@ describe('trialEndedNotice', () => {
         trialActive: false,
         trialExpiresAt: '2026-08-18T00:00:00.000Z',
       }),
-      { trialPlanName: 'Growth', now: NOW }
+      { trialPlanName: 'Pro', now: NOW }
     )
     expect(notice).toMatchObject({
-      label: 'Growth trial',
-      dismissible: true,
-      actionLabel: 'Continue with Growth',
+      label: 'Pro trial ended',
+      actionLabel: 'Update billing',
     })
-    expect(notice?.message).toMatch(/everything you built is still here/)
+    expect(notice?.message).toMatch(/trial has come to an end/)
   })
 })

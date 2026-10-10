@@ -2,8 +2,7 @@ import { createFileRoute, Navigate, redirect } from '@tanstack/react-router'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ChatBubbleLeftRightIcon, ChevronDownIcon, TicketIcon } from '@heroicons/react/24/solid'
-import { BuildingOffice2Icon } from '@heroicons/react/24/outline'
+import { ChatBubbleLeftRightIcon, TicketIcon } from '@heroicons/react/24/solid'
 import { isValidTypeId } from '@quackback/ids'
 import type {
   ConversationId,
@@ -29,6 +28,7 @@ import type { ComposerMode } from '@/components/conversation/composer-ai-actions
 import {
   agentEventChangesInboxCounts,
   agentEventChangesInboxList,
+  companionRefreshFallback,
   applyAgentThreadEvent,
   applyTicketThreadEvent,
   type AgentThreadCache,
@@ -43,7 +43,7 @@ import {
 import { BulkActionBar, type BulkMenuId } from '@/components/admin/conversation/bulk-action-bar'
 import { InboxCommandBar } from '@/components/admin/conversation/inbox-command-bar'
 import { ShortcutHelpPanel } from '@/components/admin/conversation/shortcut-help-panel'
-import { DETAIL_PANEL_MEDIA_QUERY } from '@/components/admin/inbox/inbox-detail-panel'
+import { DETAIL_PANEL_MEDIA_QUERY } from '@/lib/client/conversation/detail-panel'
 import { useInboxKeyboard } from '@/components/admin/conversation/use-inbox-keyboard'
 import {
   useBulkConversationUpdate,
@@ -68,7 +68,6 @@ import {
 } from '@/lib/client/mutations/inbox'
 import {
   InboxNavSidebar,
-  isInboxView,
   isTicketInboxView as isTicketNavView,
   scopeLabelFor,
   useConversationTagsWithCounts,
@@ -76,13 +75,17 @@ import {
   useInboxTeams,
   useConversationViews,
 } from '@/components/admin/conversation/inbox-nav-sidebar'
+import { conversationAttributeQueries } from '@/lib/client/queries/conversation-attributes'
 import { ConversationViewDialog } from '@/components/admin/conversation/conversation-view-dialog'
 import { RequiredAttributesDialog } from '@/components/admin/conversation/required-attributes-dialog'
 import { CreateTicketDialog } from '@/components/admin/inbox/create-ticket-dialog'
 import { isMissingRequiredAttributesMessage } from '@/lib/shared/conversation/attribute-values'
 import { resolveDefaultClosedStatusId } from '@/lib/shared/tickets'
+import { inboxTeamsQueryOptions } from '@/lib/client/queries/inbox-teams'
 import {
   inboxNavKey,
+  inboxScopeHasRefinements,
+  isInboxView,
   navFromSearch,
   normalizeTriageFacet,
   normalizeInboxChannel,
@@ -94,6 +97,8 @@ import {
   type InboxNavItem,
   type InboxSearch,
 } from '@/lib/client/conversation/inbox-scope'
+import { reconcileCachedThread } from '@/lib/client/conversation/reconcile-cached-thread'
+import { applyConversationReadToLists } from '@/lib/client/conversation/inbox-read'
 import type { Channel } from '@/lib/shared/channels'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries, inboxKeys, ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
@@ -111,176 +116,110 @@ import { useInboxListSource } from '@/lib/client/hooks/use-inbox-list-source'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
 import { useCopilotTabGate } from '@/lib/client/hooks/use-copilot-tab-gate'
 import { EmptyState } from '@/components/shared/empty-state'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/shared/utils'
 import {
   getFirstEnabledAdminProductPath,
   isProductEnabled,
   type FeatureFlags,
 } from '@/lib/shared/types/settings'
+import { useFeatureFlag, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { QuinnViewHeader } from '@/components/admin/conversation/quinn-view-header'
+import { TestViewHeader } from '@/components/admin/conversation/test-view-header'
 
-/** Quinn-view outcome sub-filter. */
-const QUINN_BUCKETS: {
-  value: 'resolved' | 'escalated' | 'pending' | undefined
-  label: string
-}[] = [
-  { value: undefined, label: 'All' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'escalated', label: 'Escalated' },
-  { value: 'resolved', label: 'Resolved' },
-]
-
-function QuinnBucketChips({
-  value,
-  counts,
-  onChange,
-}: {
-  value?: 'resolved' | 'escalated' | 'pending'
-  counts?: { resolved: number; escalated: number; pending: number }
-  onChange: (value?: 'resolved' | 'escalated' | 'pending') => void
-}) {
-  const countFor = (v?: 'resolved' | 'escalated' | 'pending'): number | undefined => {
-    if (!counts) return undefined
-    return v ? counts[v] : counts.resolved + counts.escalated + counts.pending
+// URL is the source of truth for open item + filters (refresh-safe, shareable).
+// `?c=` is the legacy alias for `?i=`, accepted forever.
+function validateInboxSearch(search: Record<string, unknown>): InboxSearch {
+  const rawI = typeof search.i === 'string' ? search.i : undefined
+  const rawC = typeof search.c === 'string' ? search.c : undefined
+  const i =
+    rawI && inboxItemRefFromId(rawI) ? rawI : rawC && inboxItemRefFromId(rawC) ? rawC : undefined
+  return {
+    i,
+    // Only accept a well-formed conversation-message id — a stray `?m=` is harmless
+    // (the thread just won't find it), but validating keeps it tidy.
+    m:
+      typeof search.m === 'string' && isValidTypeId(search.m, 'conversation_msg')
+        ? search.m
+        : undefined,
+    // Allowlist tracks the nav view lists (incl. 'saved' + the Tickets-section
+    // scopes) so deep-links can't silently drop a real view and fall back to
+    // the conversation list.
+    view: isInboxView(search.view) ? search.view : undefined,
+    // Only accept a well-formed conversation-tag id — a malformed `?tag=` would reach a
+    // uuid-backed query and 500 the conversation list.
+    tag:
+      typeof search.tag === 'string' && isValidTypeId(search.tag, 'conversation_tag')
+        ? search.tag
+        : undefined,
+    // Only accept a well-formed segment id — a malformed `?segment=` would reach
+    // a uuid-backed membership subquery and 500 the conversation list.
+    segment:
+      typeof search.segment === 'string' && isValidTypeId(search.segment, 'segment')
+        ? search.segment
+        : undefined,
+    // Per-team inbox scope — validated to a real team id.
+    team:
+      typeof search.team === 'string' && isValidTypeId(search.team, 'team')
+        ? search.team
+        : undefined,
+    // Custom saved view scope — validated to a real conversation-view id.
+    viewId:
+      typeof search.viewId === 'string' && isValidTypeId(search.viewId, 'conversation_view')
+        ? search.viewId
+        : undefined,
+    // Inbox ordering; only a canonical sort is accepted (else the default).
+    sort: isConversationSort(search.sort) ? search.sort : undefined,
+    // The triage facet (open/waiting/closed/all), accepting the legacy
+    // 'snoozed' value as 'waiting'.
+    status: normalizeTriageFacet(search.status),
+    priority: PRIORITY_VALUES.includes(search.priority as ConversationPriority | 'all')
+      ? (search.priority as ConversationPriority | 'all')
+      : undefined,
+    // The tickets-branch registry-type dropdown — only a well-formed
+    // ticket_type id is accepted (a junk value is dropped, never reaching
+    // the uuid-backed ticket query).
+    ttype: coerceTicketTypeId(typeof search.ttype === 'string' ? search.ttype : undefined),
+    // Quinn-view sub-filter by involvement outcome; only the canonical buckets.
+    ai:
+      search.ai === 'resolved' || search.ai === 'escalated' || search.ai === 'pending'
+        ? search.ai
+        : undefined,
+    q:
+      typeof search.q === 'string' && search.q
+        ? search.q
+        : typeof search.q === 'number' && Number.isFinite(search.q)
+          ? String(search.q)
+          : undefined,
+    channel: normalizeInboxChannel(search.channel),
+    // Carries the shared `?post=` modal target (the admin layout mounts the
+    // modal) so clicking an embedded post in a conversation opens it without leaving the
+    // inbox. Validated to a real post id; a junk value is dropped.
+    post:
+      typeof search.post === 'string' && isValidTypeId(search.post, 'post')
+        ? search.post
+        : undefined,
+    // Company refinement (deep-linked from the conversation CompanyCard). Only a
+    // well-formed company id is accepted — a malformed `?company=` would reach a
+    // uuid-backed subquery and 500 the conversation list.
+    company:
+      typeof search.company === 'string' && isValidTypeId(search.company, 'company')
+        ? search.company
+        : undefined,
   }
-  return (
-    <div className="flex flex-wrap gap-1.5 px-3 pb-2 pt-1">
-      {QUINN_BUCKETS.map((b) => {
-        const active = value === b.value
-        const n = countFor(b.value)
-        return (
-          <button
-            key={b.label}
-            type="button"
-            onClick={() => onChange(b.value)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-medium transition-colors',
-              active
-                ? 'bg-primary/15 text-primary'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            )}
-          >
-            {b.label}
-            {n != null && <span className="tabular-nums opacity-70">{n}</span>}
-          </button>
-        )
-      })}
-    </div>
-  )
 }
 
 export const Route = createFileRoute('/admin/inbox')({
-  // `?i=<id>` deep-links the open item (a conversation OR ticket TypeID,
-  // discriminated by prefix — UNIFIED-INBOX-SPEC.md §2.2). `?c=` is the legacy
-  // alias, accepted forever (existing deep links in notification emails,
-  // conversation.convert.ts, conversation.notify.ts) and normalized to `i` here.
-  // `?view=`/`?tag=` deep-link the left-nav scope so it survives a refresh and is
-  // shareable. Everything that defines the current view lives in the URL so a
-  // refresh restores the exact open item + filters, and links are shareable.
-  validateSearch: (search: Record<string, unknown>): InboxSearch => {
-    const rawI = typeof search.i === 'string' ? search.i : undefined
-    const rawC = typeof search.c === 'string' ? search.c : undefined
-    const i =
-      rawI && inboxItemRefFromId(rawI) ? rawI : rawC && inboxItemRefFromId(rawC) ? rawC : undefined
-    return {
-      i,
-      // Only accept a well-formed conversation-message id — a stray `?m=` is harmless
-      // (the thread just won't find it), but validating keeps it tidy.
-      m:
-        typeof search.m === 'string' && isValidTypeId(search.m, 'conversation_msg')
-          ? search.m
-          : undefined,
-      // Allowlist tracks the nav view lists (incl. 'saved' + the Tickets-section
-      // scopes) so deep-links can't silently drop a real view and fall back to
-      // the conversation list.
-      view: isInboxView(search.view) ? search.view : undefined,
-      // Only accept a well-formed conversation-tag id — a malformed `?tag=` would reach a
-      // uuid-backed query and 500 the conversation list.
-      tag:
-        typeof search.tag === 'string' && isValidTypeId(search.tag, 'conversation_tag')
-          ? search.tag
-          : undefined,
-      // Only accept a well-formed segment id — a malformed `?segment=` would reach
-      // a uuid-backed membership subquery and 500 the conversation list.
-      segment:
-        typeof search.segment === 'string' && isValidTypeId(search.segment, 'segment')
-          ? search.segment
-          : undefined,
-      // Per-team inbox scope — validated to a real team id.
-      team:
-        typeof search.team === 'string' && isValidTypeId(search.team, 'team')
-          ? search.team
-          : undefined,
-      // Custom saved view scope — validated to a real conversation-view id.
-      viewId:
-        typeof search.viewId === 'string' && isValidTypeId(search.viewId, 'conversation_view')
-          ? search.viewId
-          : undefined,
-      // Inbox ordering; only a canonical sort is accepted (else the default).
-      sort: isConversationSort(search.sort) ? search.sort : undefined,
-      // The triage facet (open/waiting/closed/all), accepting the legacy
-      // 'snoozed' value as 'waiting'.
-      status: normalizeTriageFacet(search.status),
-      priority: PRIORITY_VALUES.includes(search.priority as ConversationPriority | 'all')
-        ? (search.priority as ConversationPriority | 'all')
-        : undefined,
-      // The tickets-branch registry-type dropdown — only a well-formed
-      // ticket_type id is accepted (a junk value is dropped, never reaching
-      // the uuid-backed ticket query).
-      ttype: coerceTicketTypeId(typeof search.ttype === 'string' ? search.ttype : undefined),
-      // Quinn-view sub-filter by involvement outcome; only the canonical buckets.
-      ai:
-        search.ai === 'resolved' || search.ai === 'escalated' || search.ai === 'pending'
-          ? search.ai
-          : undefined,
-      q: typeof search.q === 'string' && search.q ? search.q : undefined,
-      channel: normalizeInboxChannel(search.channel),
-      // Carries the shared `?post=` modal target (the admin layout mounts the
-      // modal) so clicking an embedded post in a conversation opens it without leaving the
-      // inbox. Validated to a real post id; a junk value is dropped.
-      post:
-        typeof search.post === 'string' && isValidTypeId(search.post, 'post')
-          ? search.post
-          : undefined,
-      // Company refinement (deep-linked from the conversation CompanyCard). Only a
-      // well-formed company id is accepted — a malformed `?company=` would reach a
-      // uuid-backed subquery and 500 the conversation list.
-      company:
-        typeof search.company === 'string' && isValidTypeId(search.company, 'company')
-          ? search.company
-          : undefined,
-    }
-  },
+  validateSearch: validateInboxSearch,
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'support')) {
       throw redirect({ to: getFirstEnabledAdminProductPath(context.settings?.featureFlags) })
     }
   },
-  // Re-run the prefetch when the scope / filters / open item change, so
-  // a client-side navigation re-warms the cache too. ensureQueryData is a no-op
-  // when the data is still fresh, so this doesn't double-fetch.
-  loaderDeps: ({ search }) => ({
-    view: search.view,
-    tag: search.tag,
-    segment: search.segment,
-    team: search.team,
-    viewId: search.viewId,
-    sort: search.sort,
-    status: search.status,
-    priority: search.priority,
-    ttype: search.ttype,
-    ai: search.ai,
-    q: search.q,
-    channel: search.channel,
-    i: search.i,
-    company: search.company,
-  }),
-  loader: async ({ deps, context }) => {
+  // No loaderDeps: runs once for SSR. Filter/selection changes are served by
+  // the component's own queries, so switching conversations never blocks the
+  // outlet behind the pending spinner. First load still awaits list + thread
+  // so the document hydrates instead of racing a fire-and-forget prefetch.
+  loader: async ({ context, location }) => {
     // Auth is enforced by the parent `/admin` guard (admin/member wall) plus
     // each inbox server function's own authz — no per-route RPC guard needed.
     const flags = context.settings?.featureFlags as FeatureFlags | undefined
@@ -290,11 +229,17 @@ export const Route = createFileRoute('/admin/inbox')({
     // conversation affordances hidden.
     if (!flags?.supportInbox && !flags?.supportTickets) return {}
     const { queryClient } = context
-    const nav = navFromSearch(deps)
-    const facet: InboxTriageFacet = deps.status ?? 'open'
-    const priority = deps.priority ?? 'all'
-    const search = (deps.q ?? '').trim()
-    const sort = deps.sort ?? defaultConversationSort(!!search)
+    // No loaderDeps (so filter/selection changes do not remount the outlet),
+    // which also means the loader is not given the validateSearch result.
+    // `location.search` is the raw parsed URL — re-run the same normalizer
+    // so `?q=123` is a string, `?c=` maps onto `i`, and rejected facets
+    // never reach the prefetch queries.
+    const search = validateInboxSearch(location.search as Record<string, unknown>)
+    const nav = navFromSearch(search)
+    const facet: InboxTriageFacet = search.status ?? 'open'
+    const priority = search.priority ?? 'all'
+    const searchTerm = (search.q ?? '').trim()
+    const sort = search.sort ?? defaultConversationSort(!!searchTerm)
     const isSaved = nav.kind === 'view' && nav.view === 'saved'
     // A custom view's list depends on its rule set (loaded client-side from the
     // views list), so — like Saved — it hydrates client-side, not here.
@@ -302,16 +247,12 @@ export const Route = createFileRoute('/admin/inbox')({
     const useUnified = usesUnifiedInboxList(nav)
     // A `?company=` deep link SSR-prefetches the FILTERED list under the same
     // factory key the component reads, so the filtered view hydrates too.
-    const company = deps.company as CompanyId | undefined
+    const company = search.company as CompanyId | undefined
     // Best-effort: a failed prefetch (e.g. a stale `?i=`) must never break the
     // page — each is caught independently and the component's useQuery still
-    // fetches client-side, degrading to today's behavior.
+    // fetches client-side.
     const warm = (p: Promise<unknown>) => p.catch(() => undefined)
-    const ref = deps.i ? inboxItemRefFromId(deps.i) : null
-    // Split (rather than a ternary passed straight into ensureQueryData) so
-    // each branch's distinct TData/queryKey types are inferred independently —
-    // a ternary union of the two queryOptions confuses ensureQueryData's
-    // generic inference.
+    const ref = search.i ? inboxItemRefFromId(search.i) : null
     let listPrefetch: Promise<unknown> | undefined
     if (skipListPrefetch) {
       listPrefetch = undefined
@@ -323,12 +264,12 @@ export const Route = createFileRoute('/admin/inbox')({
               nav,
               facet,
               priority,
-              search,
+              searchTerm,
               company,
               sort,
               undefined,
-              deps.ttype,
-              deps.channel
+              search.ttype,
+              search.channel
             )
           )
         )
@@ -340,21 +281,44 @@ export const Route = createFileRoute('/admin/inbox')({
             nav,
             facetToStatusFilter(facet),
             priority,
-            search,
+            searchTerm,
             company,
             sort,
             undefined,
-            deps.ai,
-            deps.channel
+            search.ai,
+            search.channel
           )
         )
       )
     }
+    // Nav badges, the company and ticket-type pickers, the team roster and
+    // the attribute definitions are read on every load whatever is selected.
+    // Prefetched here, they arrive with the document rather than as one
+    // client round trip (and one more session resolution) each.
+    const showTickets = !!flags?.supportTickets
     await Promise.all([
       listPrefetch,
       warm(queryClient.ensureQueryData(conversationInboxQueries.tagCounts())),
       warm(queryClient.ensureQueryData(conversationInboxQueries.segmentCounts())),
       warm(queryClient.ensureQueryData(conversationInboxQueries.views())),
+      warm(queryClient.ensureQueryData(inboxQueries.counts())),
+      warm(queryClient.ensureQueryData(inboxTeamsQueryOptions())),
+      warm(
+        queryClient.ensureQueryData({
+          queryKey: ['admin', 'companies'],
+          queryFn: () => listCompaniesFn(),
+        })
+      ),
+      warm(queryClient.ensureQueryData(conversationAttributeQueries.live())),
+      // The status catalogue backs every ticket-kind row's badge, not just a
+      // tickets-scoped view, so it's warmed whenever tickets are on at all.
+      showTickets ? warm(queryClient.ensureQueryData(ticketQueries.statuses())) : undefined,
+      // The type registry looks scoped to the tickets filter dropdown, but the
+      // standalone create-ticket dialog (mounted the whole time the page is,
+      // just hidden) reads it unconditionally too. Match that, not the
+      // dropdown's narrower gate, or the dialog's own fetch keeps this a
+      // separate round trip.
+      showTickets ? warm(queryClient.ensureQueryData(ticketQueries.types())) : undefined,
       // Ticket thread prefetch arrives with M3 (ticket SSE); the loader only
       // warms the conversation thread cache for now.
       ref?.kind === 'conversation'
@@ -373,7 +337,7 @@ export const Route = createFileRoute('/admin/inbox')({
  * flag check above the inbox's hooks so they aren't conditionally called.
  */
 function InboxRoute() {
-  const { settings } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   if (!flags?.supportInbox && !flags?.supportTickets) {
     return <Navigate to={getFirstEnabledAdminProductPath(flags)} />
@@ -516,6 +480,9 @@ function InboxPage() {
         segment: item.kind === 'segment' ? item.segmentId : undefined,
         team: item.kind === 'team' ? item.teamId : undefined,
         viewId: item.kind === 'custom' ? item.viewId : undefined,
+        // A scope without refinements has no company control, so the filter
+        // does not follow the agent into it.
+        ...(!inboxScopeHasRefinements(item) && { company: undefined }),
         i: scopeMemory.current.get(inboxNavKey(item)),
         m: undefined,
       }),
@@ -604,12 +571,7 @@ function InboxPage() {
   // as they are for the self-contained Mentions/Spam/Created-by-me feeds.
   const activeView: ConversationViewDTO | undefined =
     nav.kind === 'custom' ? navViews?.find((v) => v.id === nav.viewId) : undefined
-  const showRefinements =
-    nav.kind !== 'custom' &&
-    !(
-      nav.kind === 'view' &&
-      (nav.view === 'mentions' || nav.view === 'spam' || nav.view === 'created_by_me')
-    )
+  const showRefinements = inboxScopeHasRefinements(nav)
   // Ordering: URL sort wins; else a custom view's saved sort; else the list's
   // implicit default (relevance while searching, most-recent otherwise).
   const sort: ConversationSort = urlSort ?? activeView?.sort ?? defaultConversationSort(!!search)
@@ -639,6 +601,10 @@ function InboxPage() {
     queryFn: () => listCompaniesFn(),
     staleTime: 60_000,
   })
+  // A deep link can carry `?company=` into a scope that cannot filter by it.
+  useEffect(() => {
+    if (urlCompany && !showRefinements) updateSearch({ company: undefined })
+  }, [urlCompany, showRefinements, updateSearch])
   // Drop a stale `?company=` (deleted / no longer visible) so the filter never
   // strands the list on an unselectable company — mirrors the tag/segment
   // scope-cleanup effect.
@@ -665,6 +631,12 @@ function InboxPage() {
     void queryClient.invalidateQueries({ queryKey: conversationKeys.agentConversations() })
     void queryClient.invalidateQueries({ queryKey: inboxKeys.items() })
   }, [queryClient])
+  // Refreshes the list should a new message's companion conversation event
+  // never arrive (see companionRefreshFallback).
+  const refreshIfCompanionLost = useMemo(
+    () => companionRefreshFallback(refreshInboxList),
+    [refreshInboxList]
+  )
   const refreshInboxCounts = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: inboxKeys.counts() })
   }, [queryClient])
@@ -672,6 +644,17 @@ function InboxPage() {
     refreshInboxList()
     refreshInboxCounts()
   }, [refreshInboxList, refreshInboxCounts])
+  // SSE reconnect (and a first open after failed attempts) forgoes
+  // Last-Event-ID replay, so list/count invalidation alone leaves
+  // hover-prefetched threads fresh and missing gap events. Mark those
+  // caches stale; the open pane refetches, inactive prefetches refetch
+  // on select.
+  const refreshInboxAfterReconnect = useCallback(() => {
+    refreshInbox()
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'inbox', 'thread'] })
+    void queryClient.invalidateQueries({ queryKey: [...ticketKeys.all(), 'thread'] })
+    void queryClient.invalidateQueries({ queryKey: [...ticketKeys.all(), 'detail'] })
+  }, [queryClient, refreshInbox])
 
   // Track whether the visitor of the selected conversation is currently typing.
   const {
@@ -690,7 +673,6 @@ function InboxPage() {
   // The open conversation/ticket id, or null when the other kind (or nothing)
   // is selected.
   const activeConversationId = selectedRef?.kind === 'conversation' ? selectedRef.id : null
-  const activeTicketId = selectedRef?.kind === 'ticket' ? selectedRef.id : null
 
   // Hoisted above `useInboxListSource` (below) so its connection state can
   // gate that hook's polling-fallback `refetchInterval`s — while the stream
@@ -700,8 +682,9 @@ function InboxPage() {
   const { connected: streamConnected } = useConversationStream({
     enabled: true,
     buildUrl: async () => '/api/chat/stream?scope=inbox',
-    onReconnect: refreshInbox,
+    onReconnect: refreshInboxAfterReconnect,
     onEvent: (evt) => {
+      refreshIfCompanionLost(evt)
       // A ticket's live properties (status/assignee/priority/stage/type) name
       // their own cache keys precisely, so this patches them directly instead
       // of invalidating anything: the detail cache any open thread/panel
@@ -712,11 +695,23 @@ function InboxPage() {
       // membership/order invalidation follows for this event — the patch IS
       // the up-to-date row.
       if (evt.kind === 'ticket_updated') {
+        // Seed the event DTO, then reapply after any in-flight detail prefetch
+        // so its older snapshot cannot overwrite this and stay fresh for 60s.
         queryClient.setQueryData(ticketKeys.detail(evt.ticket.id), evt.ticket)
+        reconcileCachedThread<TicketDTO>(
+          queryClient,
+          ticketKeys.detail(evt.ticket.id),
+          () => evt.ticket
+        )
         patchTicketInInboxLists(queryClient, evt.ticket)
+      } else if (evt.kind === 'read' && evt.side === 'agent') {
+        // An agent-side read moves only the row's unread badge, so the row is
+        // patched in each cached list; a list the patch cannot be sure of
+        // (a watermark moved back, or a fetch in flight) is refetched.
+        applyConversationReadToLists(queryClient, evt.conversationId, evt.at)
       } else if (agentEventChangesInboxList(evt)) {
-        // Every other membership/order/preview-changing event (a new message,
-        // a conversation's status/assignee/tags, an agent-side read move) —
+        // Every membership/order/preview-changing event (a new message, a
+        // conversation's status/assignee/tags, an agent-side read move) —
         // the reducer's own predicate decides, so this can't drift from what
         // the thread-cache reducers already treat as list-affecting.
         refreshInboxList()
@@ -739,20 +734,44 @@ function InboxPage() {
         else if (evt.side === 'agent') onOtherAgentTyping()
       }
 
-      // Everything cache-shaped (message/read/updated/deleted/conversation)
-      // routes through the pure reducer against the open thread's cache — one
-      // branch per kind, since each has its own cache key + reducer.
-      if (activeConversationId) {
-        queryClient.setQueryData(
-          conversationKeys.agentThread(activeConversationId),
-          (prev: AgentThreadCache | undefined) =>
-            applyAgentThreadEvent(prev, evt, activeConversationId)
+      // Thread caches: the open thread and any hover-prefetched (or previously
+      // opened) thread for this event. Unvisited rows stay untouched. Ephemeral
+      // typing / assistant frames have nothing in the cache to patch.
+      const conversationId =
+        evt.kind === 'conversation'
+          ? evt.conversation.id
+          : 'conversationId' in evt
+            ? evt.conversationId
+            : undefined
+      if (
+        conversationId &&
+        evt.kind !== 'typing' &&
+        evt.kind !== 'assistant_activity' &&
+        evt.kind !== 'assistant_delta'
+      ) {
+        reconcileCachedThread<AgentThreadCache>(
+          queryClient,
+          conversationKeys.agentThread(conversationId),
+          (prev) => applyAgentThreadEvent(prev, evt, conversationId)
         )
-      } else if (activeTicketId) {
-        queryClient.setQueryData(
-          ticketKeys.thread(activeTicketId),
-          (prev: TicketThreadCache | undefined) => applyTicketThreadEvent(prev, evt, activeTicketId)
+        // A new message with files invalidates the detail panel's Files
+        // section — same event, no separate read.
+        if (evt.kind === 'message' && evt.message.attachments.length > 0) {
+          void queryClient.invalidateQueries({
+            queryKey: conversationKeys.agentConversationFiles(conversationId),
+          })
+        }
+      } else if (evt.kind === 'ticket_message' || evt.kind === 'ticket_message_updated') {
+        reconcileCachedThread<TicketThreadCache>(
+          queryClient,
+          ticketKeys.thread(evt.ticketId),
+          (prev) => applyTicketThreadEvent(prev, evt, evt.ticketId)
         )
+        if (evt.kind === 'ticket_message' && evt.message.attachments.length > 0) {
+          void queryClient.invalidateQueries({
+            queryKey: conversationKeys.agentConversationFiles(evt.ticketId),
+          })
+        }
       }
     },
   })
@@ -781,6 +800,7 @@ function InboxPage() {
 
   // Quinn-view sub-filter counts (only fetched while that view is open).
   const isQuinnView = nav.kind === 'view' && nav.view === 'quinn'
+  const isTestView = nav.kind === 'view' && nav.view === 'test'
   const { data: assistantCounts } = useQuery({
     ...conversationInboxQueries.assistantCounts(),
     enabled: isQuinnView,
@@ -790,9 +810,7 @@ function InboxPage() {
   // closed-category status for a ticket target (§3.4). Gated on the same flag
   // as the Tickets nav section — mirrors TicketDetail's existing assumption
   // that any agent who can reach a ticket item holds ticket.view.
-  const { settings: routeSettings } = Route.useRouteContext()
-  const showTickets =
-    (routeSettings?.featureFlags as FeatureFlags | undefined)?.supportTickets ?? false
+  const showTickets = useFeatureFlag('supportTickets')
   const { data: ticketStatusList } = useQuery({
     ...ticketQueries.statuses(),
     enabled: showTickets,
@@ -1442,6 +1460,43 @@ function InboxPage() {
     onOpenHelp: () => setHelpOpen(true),
   })
 
+  // The list header's slot: the Quinn view's outcome sub-filter chips
+  // (Resolved/Escalated/Pending). Memoized so opening an item leaves the
+  // (memoized) list header as it was.
+  const listHeaderSlot = useMemo(
+    () =>
+      isQuinnView ? (
+        <QuinnViewHeader
+          value={urlAi}
+          counts={assistantCounts}
+          onChange={(ai) => updateSearch({ ai, i: undefined, m: undefined })}
+        />
+      ) : isTestView ? (
+        <TestViewHeader
+          onDeleted={() => {
+            refreshInbox()
+            setNav({ kind: 'view', view: 'all' })
+          }}
+        />
+      ) : undefined,
+    [isQuinnView, isTestView, urlAi, assistantCounts, updateSearch, refreshInbox, setNav]
+  )
+
+  // The company refinement, offered only when the workspace has companies.
+  // Memoized for the same reason as the header slot.
+  const companyFilter = useMemo(
+    () =>
+      companies && companies.length > 0
+        ? {
+            companies,
+            value: urlCompany,
+            onChange: (id: string | undefined) =>
+              updateSearch({ company: id, i: undefined, m: undefined }),
+          }
+        : undefined,
+    [companies, urlCompany, updateSearch]
+  )
+
   // The floating bar shows for a real multi-selection, or when a value menu was
   // popped for the single open item.
   const bulkBarVisible = hasSelection || (bulkMenu !== null && hasActiveConversation)
@@ -1451,8 +1506,6 @@ function InboxPage() {
       <InboxNavSidebar
         nav={nav}
         onSelect={setNav}
-        search={searchInput}
-        onSearch={setSearchInput}
         onCreateView={openCreateView}
         onEditView={openEditView}
       />
@@ -1480,24 +1533,8 @@ function InboxPage() {
           onSelectNav={setNav}
           scopeLabel={scopeLabel}
           showRefinements={showRefinements}
-          // Quinn view: the outcome sub-filter chips (Resolved/Escalated/
-          // Pending). Otherwise the company picker, shown only when the workspace
-          // has companies to filter by.
-          headerSlot={
-            isQuinnView ? (
-              <QuinnBucketChips
-                value={urlAi}
-                counts={assistantCounts}
-                onChange={(ai) => updateSearch({ ai, i: undefined, m: undefined })}
-              />
-            ) : companies && companies.length > 0 ? (
-              <CompanyInboxFilter
-                companies={companies}
-                value={urlCompany}
-                onChange={(id) => updateSearch({ company: id, i: undefined, m: undefined })}
-              />
-            ) : undefined
-          }
+          headerSlot={listHeaderSlot}
+          companyFilter={companyFilter}
           searchInput={searchInput}
           onSearchInput={setSearchInput}
           facet={facet}
@@ -1534,6 +1571,7 @@ function InboxPage() {
             isOtherAgentTyping={false}
             openCopilotToken={openCopilotToken}
             composerRef={composerHandleRef}
+            detailPanelShown={isDetailPanelViewport}
           />
         ) : selectedRef?.kind === 'conversation' ? (
           <AgentConversationThread
@@ -1549,6 +1587,7 @@ function InboxPage() {
             createTicketToken={createTicketToken}
             openCopilotToken={openCopilotToken}
             composerRef={composerHandleRef}
+            detailPanelShown={isDetailPanelViewport}
           />
         ) : (
           <div className="hidden h-full items-center justify-center md:flex">
@@ -1605,50 +1644,6 @@ function InboxPage() {
         onOpenChange={setHelpOpen}
         copilotAvailable={copilotAvailable}
       />
-    </div>
-  )
-}
-
-/**
- * Compact company filter for the inbox list header: a dropdown over the
- * workspace companies. "All companies" clears the refinement.
- */
-function CompanyInboxFilter({
-  companies,
-  value,
-  onChange,
-}: {
-  companies: { id: string; name: string }[]
-  value: string | undefined
-  onChange: (companyId: string | undefined) => void
-}) {
-  const active = companies.find((co) => co.id === value)
-  return (
-    <div className="flex items-center gap-1.5 border-b border-border/50 px-3 py-2">
-      <BuildingOffice2Icon className="size-3.5 shrink-0 text-muted-foreground" />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label="Filter by company"
-            className={cn(
-              'inline-flex min-w-0 shrink items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
-              value ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'
-            )}
-          >
-            <span className="truncate">{active?.name ?? 'All companies'}</span>
-            <ChevronDownIcon className="size-3.5 shrink-0" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
-          <DropdownMenuItem onClick={() => onChange(undefined)}>All companies</DropdownMenuItem>
-          {companies.map((co) => (
-            <DropdownMenuItem key={co.id} onClick={() => onChange(co.id)}>
-              {co.name}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
     </div>
   )
 }

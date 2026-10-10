@@ -1,33 +1,19 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import {
-  generateId,
-  type InviteId,
-  type UserId,
-  type PrincipalId,
-  type SegmentId,
-} from '@quackback/ids'
+import { type InviteId, type UserId, type PrincipalId, type SegmentId } from '@quackback/ids'
 import type { BoardId, PostTagId, RoleId, UserTagId } from '@quackback/ids'
 import { getSetupState, isOnboardingComplete as checkComplete } from '@/lib/server/db'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
 import { getSession } from '@/lib/server/auth/session'
 import { getSettings } from './workspace'
-import {
-  db,
-  invitation,
-  principal,
-  user,
-  integrations,
-  eq,
-  and,
-  gt,
-  inArray,
-} from '@/lib/server/db'
+import { db, invitation, principal, eq, and, gt } from '@/lib/server/db'
 import {
   findHumanAdmin,
+  findSetupClaimant,
   isOpenToBootstrapClaim,
+  isSetupOpenToClaim,
 } from '@/lib/server/domains/principals/bootstrap-admin'
 import { isAdmin } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -42,6 +28,7 @@ import {
 } from '@/lib/server/domains/principals/principal.service'
 import { listPortalUsers, removePortalUser } from '@/lib/server/domains/users/user.service'
 import { getPortalUserDetail } from '@/lib/server/domains/users/user.detail'
+import type { PortalUserDetail } from '@/lib/server/domains/users/user.types'
 import {
   listSegments,
   createSegment,
@@ -59,13 +46,6 @@ import {
   removeSegmentEvaluationSchedule,
 } from '@/lib/server/events/segment-scheduler'
 import type { CreateSegmentInput, UpdateSegmentInput } from '@/lib/server/domains/segments'
-import {
-  listUserAttributes,
-  createUserAttribute,
-  updateUserAttribute,
-  deleteUserAttribute,
-} from '@/lib/server/domains/user-attributes/user-attribute.service'
-import type { UserAttributeId } from '@quackback/ids'
 import { sendInvitationEmail } from '@quackback/email'
 import { getBaseUrl } from '@/lib/server/config'
 import {
@@ -269,6 +249,7 @@ export const updateMemberRoleFn = createServerFn({ method: 'POST' })
       {
         assignRoleId: data.roleId as RoleId | undefined,
         granterPermissions: auth.permissions,
+        granterRole: auth.principal.role,
       }
     )
 
@@ -333,7 +314,8 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
       data.principalId as PrincipalId,
       auth.principal.id,
       actorFromAuth(auth),
-      getRequestHeaders()
+      getRequestHeaders(),
+      { granterRole: auth.principal.role }
     )
 
     log.info({ principal_id: data.principalId }, 'member removed')
@@ -347,119 +329,19 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
 export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch onboarding status')
   const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
-
-  const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
-  const { boards, helpCenterArticles, isNull } = await import('@/lib/server/db')
-  const { getSetupState } = await import('@/lib/shared/db-types')
-  const { permissionsForLegacyRole } = await import('@/lib/server/policy/permissions')
-  const { resolveFeatureFlags } = await import('@/lib/server/domains/settings/settings.types')
-  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-
-  const [
-    orgBoards,
-    humanMembers,
-    orgSettings,
-    widgetConfig,
-    connectedIntegration,
-    helpArticle,
-    tierLimits,
-  ] = await Promise.all([
-    db.query.boards.findMany({
-      columns: { id: true, slug: true, access: true },
-      where: isNull(boards.deletedAt),
-    }),
-    // Teammates only (admin/member) — portal role=user must not complete "invite"
-    db
-      .select({ id: principal.id })
-      .from(principal)
-      .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member']))),
-    getSettings(),
-    getWidgetConfig(),
-    db.query.integrations.findFirst({
-      columns: { id: true },
-      where: eq(integrations.status, 'connected'),
-    }),
-    db.query.helpCenterArticles.findFirst({
-      columns: { id: true },
-      where: isNull(helpCenterArticles.deletedAt),
-    }),
-    getTierLimits(),
-  ])
-
-  const setupState = getSetupState(orgSettings?.setupState ?? null)
-  const firstWin = await (await import('@/lib/server/activation-wins')).detectFirstWin(setupState)
-  const flags = resolveFeatureFlags(orgSettings?.featureFlags)
-  const permissions = permissionsForLegacyRole(auth.principal.role)
-  const hasBranding = Boolean(orgSettings?.logoKey)
-  const hasWidgetEnabled = widgetConfig.enabled === true
-  // Messenger is "live" when the widget is on and the Messages tab is shown.
-  const hasMessengerEnabled = hasWidgetEnabled && (widgetConfig.tabs?.messenger ?? true)
-  const hasIntegration = Boolean(connectedIntegration)
-  const hasInternalBoard = orgBoards.some((board) => board.access.view === 'team')
-  const publicBoard = orgBoards.find((board) => board.access.view === 'anonymous')
-  const hasPublicBoard = Boolean(publicBoard)
-
-  log.debug(
-    {
-      has_boards: orgBoards.length > 0,
-      member_count: humanMembers.length,
-      has_branding: hasBranding,
-      has_widget: hasWidgetEnabled,
-      has_messenger: hasMessengerEnabled,
-      has_help_article: Boolean(helpArticle),
-      use_case: setupState?.useCase,
-    },
-    'fetch onboarding status'
-  )
-  return {
-    hasBoards: orgBoards.length > 0,
-    hasPublicBoard,
-    publicBoardId: publicBoard?.id ?? null,
-    publicBoardSlug: publicBoard?.slug ?? null,
-    publicBoardPath: publicBoard ? `/?board=${encodeURIComponent(publicBoard.slug)}` : null,
-    publicBoardLinkCopiedAt: setupState?.activationMilestones?.publicBoardLinkCopiedAt ?? null,
-    hasInternalBoard,
-    memberCount: humanMembers.length,
-    hasBranding,
-    hasWidgetInstalled: Boolean(orgSettings?.widgetInstalledFirstSeenAt),
-    widgetOriginHost: orgSettings?.widgetInstalledOriginHost ?? null,
-    hasMessengerEnabled,
-    hasHelpArticle: Boolean(helpArticle),
-    hasIntegration,
-    hasFirstWin: firstWin.reached,
-    firstWinAt: firstWin.reachedAt,
-    useCase: setupState?.useCase ?? null,
-    taskResolutions: setupState?.taskResolutions ?? {},
-    boardCount: orgBoards.length,
-    maxBoards: tierLimits.maxBoards,
-    goalManaged: Boolean(
-      orgSettings &&
-      (orgSettings.managedFieldPaths as string[]).some(
-        (path) => path === 'workspace.useCase' || path === 'workspace'
-      )
-    ),
-    permissions: {
-      settingsManage: permissions.has(PERMISSIONS.SETTINGS_MANAGE),
-      boardManage: permissions.has(PERMISSIONS.BOARD_MANAGE),
-      memberManage: permissions.has(PERMISSIONS.MEMBER_MANAGE),
-      brandingManage: permissions.has(PERMISSIONS.SETTINGS_BRANDING),
-      integrationManage: permissions.has(PERMISSIONS.INTEGRATION_MANAGE),
-      helpCenterManage: permissions.has(PERMISSIONS.HELP_CENTER_MANAGE),
-    },
-    features: {
-      supportInbox: flags.supportInbox,
-      helpCenter: flags.helpCenter,
-      statusPage: flags.statusPage,
-      integrations: tierLimits.features.integrations,
-    },
-  }
+  const { loadLaunchStatus } = await import('@/lib/server/domains/onboarding/launch-status')
+  return loadLaunchStatus({
+    principalId: auth.principal.id,
+    role: auth.principal.role,
+    permissions: auth.permissions,
+  })
 })
 
 /** Save or clear a launch-plan skip. Any incomplete non-milestone task can
- *  be skipped; storage is always `dismissed`. Legacy clients may still send
- *  `deferred`, which is accepted and normalized. */
+ *  be skipped; storage is always `dismissed`, under the workspace's primary
+ *  goal. Legacy clients may still send `deferred`, which is accepted and
+ *  normalized, or an `outcome`, which the stored goal supersedes. */
 const taskResolutionSchema = z.object({
-  outcome: z.enum(['product_feedback', 'customer_support', 'help_center', 'internal']),
   taskId: z.string().min(1),
   resolution: z.enum(['deferred', 'dismissed']).nullable(),
 })
@@ -469,11 +351,10 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ task_id: data.taskId, resolution: data.resolution }, 'set launch task resolution')
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    const { buildLaunchTasks } = await import('@/lib/shared/launch-checklist')
+    const { buildLaunchTasks, withLaunchTaskResolution } =
+      await import('@/lib/shared/launch-checklist')
     const status = await fetchOnboardingStatus()
-    const task = buildLaunchTasks(status, data.outcome).find(
-      (candidate) => candidate.id === data.taskId
-    )
+    const task = buildLaunchTasks(status).find((candidate) => candidate.id === data.taskId)
     if (!task) throw new Error('Unknown launch task')
     if (task.classification === 'first_win' && data.resolution) {
       throw new Error('The milestone cannot be skipped')
@@ -485,29 +366,19 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
     const storedResolution = data.resolution === 'deferred' ? 'dismissed' : data.resolution
 
     const { mutateSetupStateAtomic } = await import('@/lib/server/setup-state')
-    const { state } = await mutateSetupStateAtomic((current) => {
-      if (current.useCase !== data.outcome)
-        throw new Error('Task outcome does not match the workspace goal')
-      const taskResolutions = { ...(current.taskResolutions ?? {}) }
-      const outcomeTasks = { ...(taskResolutions[data.outcome] ?? {}) }
-      if (storedResolution) {
-        outcomeTasks[data.taskId] = {
-          resolution: storedResolution,
-          resolvedAt: new Date().toISOString(),
-        }
-      } else {
-        delete outcomeTasks[data.taskId]
-      }
-      if (Object.keys(outcomeTasks).length > 0) taskResolutions[data.outcome] = outcomeTasks
-      else delete taskResolutions[data.outcome]
-      return {
-        state: {
-          ...current,
-          taskResolutions: Object.keys(taskResolutions).length > 0 ? taskResolutions : undefined,
-        },
-        value: undefined,
-      }
-    })
+    const { state } = await mutateSetupStateAtomic((current) => ({
+      state: {
+        ...current,
+        taskResolutions: withLaunchTaskResolution(
+          current,
+          data.taskId,
+          storedResolution
+            ? { resolution: storedResolution, resolvedAt: new Date().toISOString() }
+            : null
+        ),
+      },
+      value: undefined,
+    }))
 
     log.info({ task_id: data.taskId, resolution: storedResolution }, 'launch task resolution saved')
     return { taskResolutions: state.taskResolutions ?? {} }
@@ -553,13 +424,16 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
 
     const { integrations } = await import('@/lib/server/db')
     const { getIntegration } = await import('@/lib/server/integrations')
-    const { hasPlatformCredentials } =
+    const { hasPlatformCredentials, arePlatformCredentialsManaged } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
 
     const definition = getIntegration(data.type)
     const platformCredentialFields = definition?.platformCredentials ?? []
+    const platformCredentialsManaged = await arePlatformCredentialsManaged(data.type)
     const platformCredentialsConfigured =
-      platformCredentialFields.length === 0 || (await hasPlatformCredentials(data.type))
+      platformCredentialFields.length === 0 ||
+      (await hasPlatformCredentials(data.type)) ||
+      platformCredentialsManaged
 
     const integration = await db.query.integrations.findFirst({
       where: eq(integrations.integrationType, data.type),
@@ -572,8 +446,10 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
       log.debug({ type: data.type }, 'fetch integration by type not found')
       return {
         integration: null,
+        syncHistoryAvailable: false,
         platformCredentialFields,
         platformCredentialsConfigured,
+        platformCredentialsManaged,
       }
     }
 
@@ -615,6 +491,23 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
     }
 
     const notificationChannels = [...channelMap.values()]
+    const { readSyncHealth } = await import('@/lib/server/integrations/sync/health')
+    const {
+      connectionIsDestination,
+      readSlackAssistantEnabled,
+      syncHistoryAvailable,
+      writesLedger,
+    } = await import('@/lib/server/integrations/sync/availability')
+    const syncHealth = await readSyncHealth(integration)
+    const syncHistoryAvailableFlag = syncHistoryAvailable({
+      provider: data.type,
+      status: integration.status,
+      config: integrationConfig,
+      notificationChannels,
+      writesLedger: writesLedger(definition),
+      connectionIsDestination: connectionIsDestination(definition),
+      slackAssistantEnabled: await readSlackAssistantEnabled(data.type),
+    }).available
 
     return {
       integration: {
@@ -628,17 +521,18 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
           enabled: m.enabled,
         })),
         notificationChannels,
-        // Per-integration health telemetry (IF WO-14 columns): last successful
-        // outbound delivery, last inbound webhook, and last recorded error.
+        // Sync outcomes belong to the current installation; connection errors
+        // remain independent of successful or failed deliveries.
         health: {
-          lastOutboundAt: integration.lastOutboundAt?.toISOString() ?? null,
-          lastInboundAt: integration.lastInboundAt?.toISOString() ?? null,
+          ...syncHealth,
           lastError: integration.lastError ?? null,
           lastErrorAt: integration.lastErrorAt?.toISOString() ?? null,
         },
       },
+      syncHistoryAvailable: syncHistoryAvailableFlag,
       platformCredentialFields,
       platformCredentialsConfigured,
+      platformCredentialsManaged,
     }
   })
 
@@ -652,7 +546,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
  * `getRegisteredOidcProviderIds` gate the auth engine and enforcement use
  * (enabled + credentials + `customOidcProvider` tier). It is scoped to `'sso'`
  * specifically because the onboarding button hardcodes
- * `signIn.oauth2({ providerId: 'sso' })`: a true here must mean *that* provider
+ * `signIn.social({ provider: 'sso' })`: a true here must mean *that* provider
  * is callable, not merely that some other (`custom-oidc` / `oidc_*`) provider
  * exists. Reading the registry (not the legacy `authConfig.ssoOidc` blob) means
  * the legacy-config cleanup can run without breaking the button. In practice
@@ -696,9 +590,11 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
       // caller to route. A boolean here would be a fact nobody checked, and the
       // wrong one is the one that lets someone through.
       setupOpenToClaim: null,
+      setupClosedReason: null,
       hasSettings: false,
       setupState: null,
       isOnboardingComplete: false,
+      platformHostname: null,
     }
   }
 
@@ -708,20 +604,39 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
 
   // Whether this caller is shut out of setup: somebody who is not them already
   // holds it. Every account is created with a principal, so presence alone says
-  // nothing — the role does. A caller with no principal on an unclaimed
-  // workspace is the first user and may still claim it at the workspace step.
-  const setupClaimedByOther = !isAdmin(principalRecord?.role) && !!(await findHumanAdmin(db))
+  // nothing; the role does, and on an install still being set up so does which
+  // account claimed it: the first one created, or the one at the address the
+  // operator named. That account is routed to the workspace step and every
+  // other account to the no-access page, the same answer the promoter gives
+  // each of them.
+  const callerIsAdmin = isAdmin(principalRecord?.role)
+  const claimant = callerIsAdmin ? undefined : await findSetupClaimant(db)
+  const setupClaimedByOther =
+    !callerIsAdmin && (!!(await findHumanAdmin(db)) || (!!claimant && claimant.userId !== userId))
 
   // The second half of the same question. A workspace a control plane created
   // reads unclaimed until its owner arrives, and arriving is not how its admin
   // is decided — so a caller who is not already one has nothing to finish here.
   // Reported, never acted on: the promoter decides again under its own lock.
   const setupOpenToClaim = await isOpenToBootstrapClaim(db)
+  // Why a caller who is not already admin cannot claim setup here, matching the
+  // claim screen and the promoter: provisioned first, then a finished setup.
+  // Kept apart from `setupOpenToClaim`, which the workspace step reads as
+  // "created by a control plane"; a finished self-hosted install is not that.
+  const setupClosedReason: 'provisioned' | 'setupComplete' | null = !setupOpenToClaim
+    ? 'provisioned'
+    : !(await isSetupOpenToClaim(db))
+      ? 'setupComplete'
+      : null
 
   // Get settings to check setup state
   const currentSettings = await getSettings()
   const setupState = getSetupState(currentSettings?.setupState ?? null)
   const isOnboardingComplete = checkComplete(setupState)
+  const { parseIdentityProjection } =
+    await import('@/lib/server/domains/settings/cloud/identity-projection')
+  const platformHostname =
+    parseIdentityProjection(currentSettings?.cloudIdentity)?.platformHostname ?? null
 
   log.debug(
     {
@@ -729,6 +644,7 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
       is_complete: isOnboardingComplete,
       claimed_by_other: setupClaimedByOther,
       open_to_claim: setupOpenToClaim,
+      closed_reason: setupClosedReason,
     },
     'check onboarding state'
   )
@@ -742,9 +658,11 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
       : null,
     setupClaimedByOther,
     setupOpenToClaim,
+    setupClosedReason,
     hasSettings: !!currentSettings,
     setupState,
     isOnboardingComplete,
+    platformHostname,
   }
 })
 
@@ -791,6 +709,22 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
     }
   })
 
+/** A portal user's details with their dates serialized for the client. */
+export function serializePortalUserDetail(detail: PortalUserDetail) {
+  return {
+    ...detail,
+    joinedAt: detail.joinedAt.toISOString(),
+    createdAt: detail.createdAt.toISOString(),
+    engagedPosts: detail.engagedPosts.map((post) => ({
+      ...post,
+      createdAt: post.createdAt.toISOString(),
+      engagedAt: post.engagedAt.toISOString(),
+    })),
+  }
+}
+
+export type PortalUserDetailDTO = ReturnType<typeof serializePortalUserDetail>
+
 /**
  * Get a portal user's details.
  */
@@ -800,25 +734,18 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
     log.debug({ principal_id: data.principalId }, 'get portal user')
     await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
 
-    const result = await getPortalUserDetail(data.principalId as PrincipalId)
+    // Teammates stay visible after they join the team from this page.
+    const result = await getPortalUserDetail(data.principalId as PrincipalId, {
+      includeTeammates: true,
+    })
 
-    // Serialize Date fields for client
     if (!result) {
       log.debug({ principal_id: data.principalId }, 'get portal user not found')
       return null
     }
 
     log.debug({ principal_id: data.principalId }, 'get portal user found')
-    return {
-      ...result,
-      joinedAt: result.joinedAt.toISOString(),
-      createdAt: result.createdAt.toISOString(),
-      engagedPosts: result.engagedPosts.map((post) => ({
-        ...post,
-        createdAt: post.createdAt.toISOString(),
-        engagedAt: post.engagedAt.toISOString(),
-      })),
-    }
+    return serializePortalUserDetail(result)
   })
 
 /**
@@ -1022,128 +949,13 @@ export const mergeLeadIntoUserFn = createServerFn({ method: 'POST' })
 // Invitation Operations
 // ============================================
 
-const sendInvitationSchema = z.object({
-  email: z.string().email(),
-  name: z.string().optional(),
-  role: z.enum(['admin', 'member']),
-  // Custom-role grant carried to accept; rides role='member'.
-  roleId: z.string().optional(),
-})
-
 const invitationByIdSchema = z.object({
   // Use plain z.string() for TanStack Start compatibility
   // TypeID validation with .refine() creates ZodEffects which isn't supported in validator
   invitationId: z.string(),
 })
 
-export type SendInvitationInput = z.infer<typeof sendInvitationSchema>
 export type InvitationByIdInput = z.infer<typeof invitationByIdSchema>
-
-/**
- * Send a team invitation
- */
-export const sendInvitationFn = createServerFn({ method: 'POST' })
-  .validator(sendInvitationSchema)
-  .handler(async ({ data }) => {
-    log.info({ role: data.role }, 'send invitation')
-    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
-
-    const email = data.email.toLowerCase()
-
-    // Parallelize invitation and user validation queries
-    const [existingInvitation, existingUser] = await Promise.all([
-      db.query.invitation.findFirst({
-        where: and(
-          eq(invitation.email, email),
-          eq(invitation.status, 'pending'),
-          eq(invitation.kind, 'team')
-        ),
-      }),
-      db.query.user.findFirst({
-        where: eq(user.email, email),
-      }),
-    ])
-
-    if (existingInvitation) {
-      throw new Error('An invitation has already been sent to this email')
-    }
-
-    if (existingUser) {
-      // Check if they already have a team member role (admin or member)
-      const existingPrincipal = await db.query.principal.findFirst({
-        where: eq(principal.userId, existingUser.id),
-      })
-
-      if (existingPrincipal && existingPrincipal.role !== 'user') {
-        throw new Error('A team member with this email already exists')
-      }
-      // Portal users (role='user' or no member record) can be invited to become team members
-    }
-
-    // A custom-role grant rides role='member', never points at the Owner
-    // preset, and is capped by the inviter's own permission set (assignment
-    // is a grant — same ceiling as authoring).
-    if (data.roleId) {
-      if (data.role !== 'member') {
-        throw new Error('Custom role invites use the member role')
-      }
-      const { assertGrantableRole } = await import('@/lib/server/domains/roles/role.grants')
-      await assertGrantableRole(data.roleId as RoleId, auth.permissions)
-    }
-
-    const invitationId = generateId('invite')
-    const expiresAt = new Date(Date.now() + INVITATION_EXPIRY_MS)
-    const now = new Date()
-
-    // Mint the magic link before the insert so the row records its token in
-    // its token set (cancel revokes every token in the set). invitationId is
-    // fixed above, so the callback path is already known.
-    const portalUrl = getBaseUrl()
-    const callbackURL = `/complete-signup/${invitationId}`
-    const minted = await generateInvitationMagicLink(email, callbackURL, portalUrl)
-    const { url: inviteLink, token: magicLinkToken } = minted
-
-    // Seat count and the pending-invite insert share one transaction and a
-    // settings-row lock so two concurrent invites cannot both take the last seat.
-    await db.transaction(async (tx) => {
-      const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
-      await enforceSeatLimit({ executor: tx })
-      await tx.insert(invitation).values({
-        id: invitationId,
-        email,
-        name: data.name || null,
-        role: data.role,
-        roleId: (data.roleId as RoleId | undefined) ?? null,
-        status: 'pending',
-        expiresAt,
-        lastSentAt: now,
-        inviterId: auth.user.id,
-        createdAt: now,
-        magicLinkTokens: [magicLinkToken],
-      })
-    })
-
-    const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-    const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
-    // Sealed class: the invitee has no account yet, so the address the token
-    // was minted for is the only correct recipient.
-    const { sealedRecipient } = await import('@/lib/server/email/recipient')
-    const result = await sendInvitationEmail({
-      to: sealedRecipient(minted),
-      invitedByName: auth.user.name,
-      inviteeName: data.name || undefined,
-      workspaceName: auth.settings.name,
-      inviteLink,
-      logoUrl,
-    })
-
-    log.info({ invitation_id: invitationId, sent: result.sent }, 'invitation sent')
-    return {
-      invitationId,
-      emailSent: result.sent,
-      inviteLink: !result.sent ? inviteLink : undefined,
-    }
-  })
 
 /**
  * Cancel a pending invitation
@@ -1278,6 +1090,9 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         workspaceName: auth.settings.name,
         inviteLink,
         logoUrl,
+        copy: await (
+          await import('@/lib/server/domains/onboarding/onboarding-email-copy')
+        ).invitationCopyForRequest(auth.user.name, invitationRecord.name, auth.settings.name),
       })
     } catch (sendError) {
       // The new link never went out — drop it from the set and revoke it.
@@ -1577,83 +1392,13 @@ export const evaluateAllSegmentsFn = createServerFn({ method: 'POST' }).handler(
 
 // ============================================
 // User Attribute Definitions
+// (moved to ./user-attributes; re-exported here so existing
+// `functions/admin` importers keep working)
 // ============================================
 
-const userAttributeIdSchema = z.object({
-  id: z.string().min(1),
-})
-
-const createUserAttributeSchema = z.object({
-  key: z.string().min(1).max(64),
-  label: z.string().min(1).max(128),
-  description: z.string().max(512).optional(),
-  type: z.enum(['string', 'number', 'boolean', 'date', 'currency']),
-  currencyCode: z
-    .enum(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL'])
-    .optional(),
-  externalKey: z.string().max(256).optional().nullable(),
-})
-
-const updateUserAttributeSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1).max(128).optional(),
-  description: z.string().max(512).optional().nullable(),
-  type: z.enum(['string', 'number', 'boolean', 'date', 'currency']).optional(),
-  currencyCode: z
-    .enum(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL'])
-    .optional()
-    .nullable(),
-  externalKey: z.string().max(256).optional().nullable(),
-})
-
-/**
- * List all user attribute definitions.
- */
-export const listUserAttributesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_VIEW })
-  return listUserAttributes()
-})
-
-/**
- * Create a new user attribute definition.
- */
-export const createUserAttributeFn = createServerFn({ method: 'POST' })
-  .validator(createUserAttributeSchema)
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
-    return createUserAttribute({
-      key: data.key,
-      label: data.label,
-      description: data.description,
-      type: data.type,
-      currencyCode: data.currencyCode,
-      externalKey: data.externalKey,
-    })
-  })
-
-/**
- * Update an existing user attribute definition.
- */
-export const updateUserAttributeFn = createServerFn({ method: 'POST' })
-  .validator(updateUserAttributeSchema)
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
-    return updateUserAttribute(data.id as UserAttributeId, {
-      label: data.label,
-      description: data.description,
-      type: data.type,
-      currencyCode: data.currencyCode,
-      externalKey: data.externalKey,
-    })
-  })
-
-/**
- * Delete a user attribute definition.
- */
-export const deleteUserAttributeFn = createServerFn({ method: 'POST' })
-  .validator(userAttributeIdSchema)
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
-    await deleteUserAttribute(data.id as UserAttributeId)
-    return { deleted: true }
-  })
+export {
+  listUserAttributesFn,
+  createUserAttributeFn,
+  updateUserAttributeFn,
+  deleteUserAttributeFn,
+} from './user-attributes'

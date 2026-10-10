@@ -13,20 +13,30 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { authClient } from '@/lib/client/auth-client'
+import { SESSION_AUDIENCE_HEADER } from '@/lib/shared/roles'
 
 export function useEnsureAnonSession(): () => Promise<boolean> {
   const router = useRouter()
-  const { session } = useRouteContext({ from: '__root__' })
-  const hasSessionRef = useRef(!!session?.user)
+  // Only whether a session exists: the root context is a fresh object on every
+  // navigation, and each post card in a list calls this hook.
+  const hasSession = useRouteContext({
+    from: '__root__',
+    select: (context) => !!context.session?.user,
+  })
+  const hasSessionRef = useRef(hasSession)
 
   useEffect(() => {
-    hasSessionRef.current = !!session?.user
-  }, [session?.user])
+    hasSessionRef.current = hasSession
+  }, [hasSession])
 
   return useCallback(async (): Promise<boolean> => {
     if (hasSessionRef.current) return true
     try {
-      const result = await authClient.signIn.anonymous()
+      // The marker tags the session for the portal; unmarked mints are the
+      // widget's, which site surfaces such as posting and voting refuse.
+      const result = await authClient.signIn.anonymous({
+        fetchOptions: { headers: { [SESSION_AUDIENCE_HEADER]: 'portal' } },
+      })
       if (result.error) {
         console.error('[anon-session] Anonymous sign-in failed:', result.error)
         return false

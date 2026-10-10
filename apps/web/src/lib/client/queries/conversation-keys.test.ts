@@ -58,6 +58,12 @@ describe('conversationKeys parity', () => {
       'assistant-activity',
       convId,
     ])
+    expect(conversationKeys.agentConversationFiles(convId)).toEqual([
+      'admin',
+      'inbox',
+      'files',
+      convId,
+    ])
   })
 
   it('widget list key matches the legacy inline widget key', () => {

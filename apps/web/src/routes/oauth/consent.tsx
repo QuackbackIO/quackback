@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
+import { DomainAccessPicker } from '@/components/domain-access-picker'
 import { Button } from '@/components/ui/button'
-import { API_KEY_SCOPES } from '@/lib/shared/api-key-scopes'
+import { Switch } from '@/components/ui/switch'
+import { domainAccessLevels, scopesFromDomainLevels } from '@/lib/shared/api-key-scopes'
+import {
+  CLIENT_REQUESTED_SCOPE_PARAM,
+  clientRequestedFromConsentSearch,
+  consentGrantScope,
+  defaultSelectedScopes,
+} from '@/lib/shared/mcp-consent-scopes'
 import { ExternalLink, Globe, ShieldCheck } from 'lucide-react'
 
 const searchSchema = z.object({
   client_id: z.string(),
   scope: z.string().optional(),
+  [CLIENT_REQUESTED_SCOPE_PARAM]: z.string().optional(),
   redirect_uri: z.string().optional(),
   state: z.string().optional(),
   response_type: z.string().optional(),
@@ -41,78 +50,6 @@ function isSafeUrl(url: string): boolean {
   }
 }
 
-// ============================================================================
-// Scope grouping
-// ============================================================================
-
-interface ScopeGroup {
-  label: string
-  description: string
-  read: boolean
-  write: boolean
-}
-
-/**
- * Consent copy per scope domain (the part after the colon). The group
- * structure itself — which domains exist and whether each has a read/write
- * half — is derived from the shared API_KEY_SCOPES vocabulary.
- */
-const SCOPE_DOMAIN_COPY: Record<string, { label: string; description: string }> = {
-  feedback: { label: 'Feedback', description: 'Posts, comments, boards, and roadmaps' },
-  changelog: { label: 'Changelog', description: 'Changelog entries and releases' },
-  article: { label: 'Help Center', description: 'Categories and articles' },
-  chat: { label: 'Conversations', description: 'Support inbox conversations and messages' },
-}
-
-function groupScopes(scopes: string[]): ScopeGroup[] {
-  const scopeSet = new Set(scopes)
-  const vocabulary = new Set<string>(API_KEY_SCOPES)
-
-  // Domains in vocabulary order, deduped
-  const domains: string[] = []
-  for (const scope of API_KEY_SCOPES) {
-    const domain = scope.split(':')[1]
-    if (!domains.includes(domain)) domains.push(domain)
-  }
-
-  return domains
-    .map((domain) => {
-      const copy = SCOPE_DOMAIN_COPY[domain] ?? { label: domain, description: '' }
-      // A requested scope only counts when the vocabulary defines it (e.g.
-      // there is no read:changelog, so that group can never show Read).
-      const holds = (scope: string) => vocabulary.has(scope) && scopeSet.has(scope)
-      return {
-        label: copy.label,
-        description: copy.description,
-        read: holds(`read:${domain}`),
-        write: holds(`write:${domain}`),
-      }
-    })
-    .filter((g) => g.read || g.write)
-}
-
-// Identity scopes implicit in signing in. offline_access is intentionally
-// NOT hidden: it issues a refresh token, so the user must see it.
-const HIDDEN_SCOPES = new Set(['openid', 'profile', 'email'])
-
-export interface ConsentScopeView {
-  groups: ScopeGroup[]
-  /** Whether the client asked for offline_access (a refresh token). */
-  offlineAccess: boolean
-}
-
-export function buildScopeView(allScopes: string[]): ConsentScopeView {
-  const visible = allScopes.filter((s) => !HIDDEN_SCOPES.has(s))
-  return {
-    groups: groupScopes(visible),
-    offlineAccess: visible.includes('offline_access'),
-  }
-}
-
-// ============================================================================
-// Client info hook
-// ============================================================================
-
 function useClientInfo(clientId: string) {
   const [client, setClient] = useState<OAuthClientInfo | null>(null)
 
@@ -128,15 +65,16 @@ function useClientInfo(clientId: string) {
   return client
 }
 
-// ============================================================================
-// Component
-// ============================================================================
-
 function ConsentPage() {
   const search = Route.useSearch()
   const client = useClientInfo(search.client_id)
-  const allScopes: string[] = search.scope?.split(' ').filter(Boolean) ?? []
-  const { groups: scopeGroups, offlineAccess } = buildScopeView(allScopes)
+  const clientRequested = clientRequestedFromConsentSearch({
+    requested: search[CLIENT_REQUESTED_SCOPE_PARAM],
+    scope: search.scope,
+  })
+  const defaults = defaultSelectedScopes(clientRequested)
+  const [levels, setLevels] = useState(() => domainAccessLevels(defaults))
+  const [offlineAccess, setOfflineAccess] = useState(() => defaults.includes('offline_access'))
   const [submitting, setSubmitting] = useState<'accept' | 'deny' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -150,19 +88,25 @@ function ConsentPage() {
     }
   })()
 
+  const capabilityScopes = scopesFromDomainLevels(levels)
+  const canAuthorize = capabilityScopes.length > 0
+
   async function handleConsent(accept: boolean) {
     setSubmitting(accept ? 'accept' : 'deny')
     setError(null)
     try {
       const oauthQuery = window.location.search.replace(/^\?/, '')
-
       const response = await fetch('/api/auth/oauth2/consent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           accept,
-          scope: search.scope,
+          scope: accept
+            ? consentGrantScope(
+                offlineAccess ? [...capabilityScopes, 'offline_access'] : capabilityScopes
+              )
+            : search.scope,
           oauth_query: oauthQuery,
         }),
       })
@@ -183,7 +127,6 @@ function ConsentPage() {
     }
   }
 
-  // Loading skeleton
   if (client === null) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -200,11 +143,10 @@ function ConsentPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-8">
-        {/* Header */}
+      <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center text-center gap-1.5">
           <div className="mb-1 flex h-11 w-11 items-center justify-center rounded-full border border-border/50 bg-muted/50">
-            {client.logo_uri ? (
+            {client.logo_uri && isSafeUrl(client.logo_uri) ? (
               <img
                 src={client.logo_uri}
                 alt={clientName}
@@ -238,48 +180,34 @@ function ConsentPage() {
           )}
         </div>
 
-        {/* Permissions */}
-        {(scopeGroups.length > 0 || offlineAccess) && (
+        <div className="space-y-3">
           <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
-            {scopeGroups.map((group, i) => (
-              <div
-                key={group.label}
-                className={`flex items-center justify-between px-4 py-3 ${i > 0 ? 'border-t border-border/30' : ''}`}
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{group.label}</p>
-                  <p className="text-xs text-muted-foreground">{group.description}</p>
-                </div>
-                <div className="flex gap-1.5 shrink-0 ml-4">
-                  {group.read && (
-                    <span className="text-[11px] font-medium text-muted-foreground/80 border border-border/50 rounded-md px-1.5 py-0.5">
-                      Read
-                    </span>
-                  )}
-                  {group.write && (
-                    <span className="text-[11px] font-medium text-muted-foreground/80 border border-border/50 rounded-md px-1.5 py-0.5">
-                      Write
-                    </span>
-                  )}
-                </div>
+            <DomainAccessPicker
+              levels={levels}
+              onChange={setLevels}
+              disabled={submitting !== null}
+            />
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border/30">
+              <div className="min-w-0 pr-4">
+                <p className="text-sm font-medium">Stay signed in</p>
+                <p className="text-xs text-muted-foreground">
+                  Let {clientName} refresh access without asking again
+                </p>
               </div>
-            ))}
-            {offlineAccess && (
-              <div
-                className={`flex items-center justify-between px-4 py-3 ${scopeGroups.length > 0 ? 'border-t border-border/30' : ''}`}
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">Offline access</p>
-                  <p className="text-xs text-muted-foreground">
-                    Keep access when you are offline (refresh token)
-                  </p>
-                </div>
-              </div>
-            )}
+              <Switch
+                checked={offlineAccess}
+                onCheckedChange={setOfflineAccess}
+                disabled={submitting !== null}
+                aria-label="Stay signed in"
+              />
+            </div>
           </div>
-        )}
+          <p className="text-xs text-muted-foreground px-1">
+            Read is on so {clientName} can search and look things up. Read and write includes that
+            lookup. You can add writes now, or when a tool asks later.
+          </p>
+        </div>
 
-        {/* Actions */}
         <div className="space-y-4">
           {error && (
             <div className="rounded-md bg-destructive/10 p-3 text-center text-sm text-destructive">
@@ -300,7 +228,7 @@ function ConsentPage() {
             <Button
               size="lg"
               className="flex-1"
-              disabled={submitting !== null}
+              disabled={submitting !== null || !canAuthorize}
               onClick={() => handleConsent(true)}
             >
               {submitting === 'accept' ? 'Authorizing...' : 'Authorize'}
@@ -312,7 +240,6 @@ function ConsentPage() {
             <p>Revoke any time in account settings</p>
           </div>
 
-          {/* Legal links */}
           {(() => {
             const hasTos = !!client.tos_uri && isSafeUrl(client.tos_uri)
             const hasPolicy = !!client.policy_uri && isSafeUrl(client.policy_uri)

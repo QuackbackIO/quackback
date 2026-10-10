@@ -6,12 +6,12 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { toast } from 'sonner'
 import { UpgradeModal } from '@/components/admin/upgrade'
 import { describePlanUpgrade } from '@/lib/shared/describe-upgrade'
-import { fetchExportRuns } from './export-history-list'
+import { settingsQueries } from '@/lib/client/queries/settings'
 
 const IN_FLIGHT_STATUSES = new Set(['pending', 'running'])
 
 /**
- * The "Export workspace data" action: starts the async export and reflects
+ * The workspace export action: starts the async export and reflects
  * the in-flight run. Shares the ['export-runs'] query cache with the history
  * list, so starting a run here immediately polls/disables everywhere.
  */
@@ -21,8 +21,7 @@ export function ExportWorkspaceAction() {
   const [upgradeOpen, setUpgradeOpen] = useState(false)
 
   const { data: runs } = useQuery({
-    queryKey: ['export-runs'],
-    queryFn: fetchExportRuns,
+    ...settingsQueries.exportRuns(),
     refetchInterval: (query) =>
       query.state.data?.some((r) => IN_FLIGHT_STATUSES.has(r.status)) ? 2000 : false,
   })
@@ -33,7 +32,7 @@ export function ExportWorkspaceAction() {
     try {
       const res = await fetch('/api/export/workspace', { method: 'POST' })
       if (res.status === 202) {
-        toast.success('Export started — it will appear below in a moment.')
+        toast.success('Export started. It will appear below in a moment.')
       } else if (res.status === 409) {
         toast.info('An export is already running.')
       } else if (res.status === 402) {
@@ -55,17 +54,17 @@ export function ExportWorkspaceAction() {
     <div className="flex items-center gap-3">
       <Button onClick={startExport} disabled={isSubmitting || activeRun != null}>
         <ArrowDownTrayIcon className="size-4" />
-        {activeRun ? 'Exporting…' : 'Export workspace data'}
+        {activeRun ? 'Exporting…' : 'Export'}
       </Button>
       {activeRun && (
         <span className="text-sm text-muted-foreground">
-          started <TimeAgo date={activeRun.createdAt} />
+          started <TimeAgo date={activeRun.createdAt} locale="en" />
         </span>
       )}
       <UpgradeModal
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
-        description={describePlanUpgrade('Data export', 'pro')}
+        description={describePlanUpgrade('Data export', 'business')}
       />
     </div>
   )

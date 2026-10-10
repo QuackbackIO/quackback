@@ -17,7 +17,8 @@ export function PreviewToggleButton({
   active: boolean
   disabled?: boolean
   onClick: () => void
-  icon: typeof SunIcon
+  /** Omit for a text-only segment. */
+  icon?: typeof SunIcon
   label: string
   iconOnly?: boolean
 }) {
@@ -33,7 +34,7 @@ export function PreviewToggleButton({
         disabled && 'opacity-40 cursor-not-allowed'
       )}
     >
-      <Icon className="h-3.5 w-3.5" />
+      {Icon && <Icon className="h-3.5 w-3.5" />}
       {!iconOnly && label}
       {iconOnly && <span className="sr-only">{label}</span>}
     </button>

@@ -258,4 +258,60 @@ describe('addAgentNote', () => {
     )
     expect(insertedMessages).toHaveLength(0)
   })
+
+  it('accepts an image-only note the tray can now send', async () => {
+    await addAgentNote(conversationId, '', agent, agentActor, null, [
+      {
+        url: '/api/storage/chat-images/shot.png',
+        name: 'shot.png',
+        contentType: 'image/png',
+        size: 10,
+      },
+    ])
+    expect(insertedMessages[0]).toMatchObject({
+      content: '',
+      isInternal: true,
+      attachments: [
+        {
+          url: '/api/storage/chat-images/shot.png',
+          name: 'shot.png',
+          contentType: 'image/png',
+          size: 10,
+        },
+      ],
+    })
+    // A note's files are agent-only like the note itself: no email path is
+    // even reachable from here, so nothing emails them to the customer.
+    const { notifyAgentReply, notifyVisitorMessage } = await import('../conversation.notify')
+    expect(notifyAgentReply).not.toHaveBeenCalled()
+    expect(notifyVisitorMessage).not.toHaveBeenCalled()
+  })
+
+  it('rejects an image-only note whose attachment URL is not from our storage', async () => {
+    await expect(
+      addAgentNote(conversationId, '', agent, agentActor, null, [
+        {
+          url: 'https://evil.example.com/x.png',
+          name: 'x.png',
+          contentType: 'image/png',
+          size: 10,
+        },
+      ])
+    ).rejects.toBeInstanceOf(ValidationError)
+    expect(insertedMessages).toHaveLength(0)
+  })
+
+  it('rejects an image-only note whose attachment exceeds the size cap', async () => {
+    await expect(
+      addAgentNote(conversationId, '', agent, agentActor, null, [
+        {
+          url: '/api/storage/chat-images/shot.png',
+          name: 'shot.png',
+          contentType: 'image/png',
+          size: 26 * 1024 * 1024,
+        },
+      ])
+    ).rejects.toBeInstanceOf(ValidationError)
+    expect(insertedMessages).toHaveLength(0)
+  })
 })

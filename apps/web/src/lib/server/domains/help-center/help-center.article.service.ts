@@ -14,16 +14,19 @@ import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
-import { slugify } from '@/lib/shared/utils'
+import { slugify } from '@/lib/shared/utils/slugify'
 import { uniqueHelpCenterSlug } from './help-center.slug'
 import { deleteRedirectRulesForTarget } from './help-center-redirect-rules.service'
+import { cancelPendingAutoTranslations } from './help-center-translate-jobs'
 import type {
   HelpCenterArticleWithCategory,
   CreateArticleInput,
   UpdateArticleInput,
 } from './help-center.types'
 import { generateArticleEmbedding } from './help-center-embedding.service'
+import { ensureDefaultHelpCategory } from './help-center.default-category'
 import { helpCenterVisibilityConditions } from './help-center-search.service'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'help-center-articles' })
@@ -38,12 +41,13 @@ export async function resolveArticleWithCategory(
   const [category, authorRecord] = await Promise.all([
     db.query.helpCenterCategories.findFirst({
       where: eq(helpCenterCategories.id, article.categoryId),
-      columns: { id: true, slug: true, name: true },
+      columns: { id: true, urlId: true, slug: true, name: true },
     }),
     article.principalId
       ? db.query.principal.findFirst({
           where: eq(principal.id, article.principalId),
-          columns: { id: true, displayName: true, avatarUrl: true },
+          columns: { id: true, displayName: true, avatarUrl: true, avatarKey: true },
+          with: { user: { columns: { image: true, imageKey: true } } },
         })
       : null,
   ])
@@ -51,13 +55,23 @@ export async function resolveArticleWithCategory(
   return {
     ...article,
     category: category
-      ? { id: category.id as KbCategoryId, slug: category.slug, name: category.name }
-      : { id: article.categoryId as KbCategoryId, slug: '', name: 'Unknown' },
+      ? {
+          id: category.id as KbCategoryId,
+          urlId: category.urlId,
+          slug: category.slug,
+          name: category.name,
+        }
+      : { id: article.categoryId as KbCategoryId, urlId: 0, slug: '', name: 'Unknown' },
     author: authorRecord?.displayName
       ? {
           id: authorRecord.id as PrincipalId,
           name: authorRecord.displayName,
-          avatarUrl: authorRecord.avatarUrl,
+          avatarUrl: resolveUserAvatarUrl({
+            userImage: authorRecord.user?.image,
+            userImageKey: authorRecord.user?.imageKey,
+            principalAvatarUrl: authorRecord.avatarUrl,
+            principalAvatarKey: authorRecord.avatarKey,
+          }),
         }
       : null,
   }
@@ -79,6 +93,42 @@ export async function getArticleBySlug(slug: string): Promise<HelpCenterArticleW
   })
   if (!article) {
     throw new NotFoundError('ARTICLE_NOT_FOUND', `Article with slug "${slug}" not found`)
+  }
+  return resolveArticleWithCategory(article)
+}
+
+export async function getPublicArticleByUrlId(
+  urlId: number,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterArticleWithCategory> {
+  const rows = await db
+    .select({ article: helpCenterArticles })
+    .from(helpCenterArticles)
+    .innerJoin(helpCenterCategories, eq(helpCenterArticles.categoryId, helpCenterCategories.id))
+    .where(
+      and(eq(helpCenterArticles.urlId, urlId), ...helpCenterVisibilityConditions('public', viewer))
+    )
+    .limit(1)
+  const article = rows[0]?.article
+  if (!article) {
+    throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
+  }
+  return resolveArticleWithCategory(article)
+}
+
+export async function getPublicArticleById(
+  id: KbArticleId,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterArticleWithCategory> {
+  const rows = await db
+    .select({ article: helpCenterArticles })
+    .from(helpCenterArticles)
+    .innerJoin(helpCenterCategories, eq(helpCenterArticles.categoryId, helpCenterCategories.id))
+    .where(and(eq(helpCenterArticles.id, id), ...helpCenterVisibilityConditions('public', viewer)))
+    .limit(1)
+  const article = rows[0]?.article
+  if (!article) {
+    throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
   }
   return resolveArticleWithCategory(article)
 }
@@ -170,11 +220,15 @@ export async function createArticle(
     contentType: 'help-center',
     principalId,
   })
+  // No category picked (a first article in an empty help center): file it
+  // under General rather than refusing the save.
+  const categoryId =
+    (input.categoryId?.trim() as KbCategoryId) || (await ensureDefaultHelpCategory())
 
   const [article] = await db
     .insert(helpCenterArticles)
     .values({
-      categoryId: input.categoryId as KbCategoryId,
+      categoryId,
       title,
       // Store the markdown projection of the canonical contentJson so the
       // article list endpoint (which omits contentJson) still serves images.
@@ -312,6 +366,8 @@ export async function deleteArticle(id: KbArticleId): Promise<void> {
   // No DB-level FK on redirect rules (polymorphic target) -- remove any rule
   // pointing at this article explicitly (domains/languages §2).
   await deleteRedirectRulesForTarget('article', id)
+  // Nothing left to translate.
+  await cancelPendingAutoTranslations(id)
 }
 
 export async function restoreArticle(id: KbArticleId): Promise<HelpCenterArticleWithCategory> {

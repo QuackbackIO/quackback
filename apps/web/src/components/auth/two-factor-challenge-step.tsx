@@ -1,20 +1,39 @@
 import { useState } from 'react'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { InputOTP, InputOTPSixSlots } from '@/components/ui/input-otp'
 import { authClient } from '@/lib/client/auth-client'
+import { Spinner } from '@/components/shared/spinner'
+import { AreaMessages } from '@/components/shared/area-messages'
 
-/** Inline TOTP / backup-code challenge for an already-enrolled user, shown
- *  after better-auth returns `twoFactorRedirect` from signIn.email. */
-export function TwoFactorChallengeStep({
-  onComplete,
-  onCancel,
-}: {
+interface TwoFactorChallengeStepProps {
   onComplete: () => void
   onCancel: () => void
-}): React.ReactElement {
+}
+
+/** Inline TOTP / backup-code challenge for an already-enrolled user, shown
+ *  after better-auth returns `twoFactorRedirect` from signIn.email. Its strings
+ *  load with it, since pages leave them out of the catalog they seed. */
+export function TwoFactorChallengeStep(props: TwoFactorChallengeStepProps): React.ReactElement {
+  return (
+    <AreaMessages
+      area="twoFactor"
+      fallback={
+        <div className="flex justify-center py-10">
+          <Spinner />
+        </div>
+      }
+    >
+      <ChallengeStep {...props} />
+    </AreaMessages>
+  )
+}
+
+function ChallengeStep({ onComplete, onCancel }: TwoFactorChallengeStepProps): React.ReactElement {
+  const intl = useIntl()
   const [code, setCode] = useState('')
   const [useBackup, setUseBackup] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -28,10 +47,25 @@ export function TwoFactorChallengeStep({
       const { error: betterErr } = useBackup
         ? await authClient.twoFactor.verifyBackupCode({ code: value })
         : await authClient.twoFactor.verifyTotp({ code: value })
-      if (betterErr) throw new Error(betterErr.message ?? 'Code rejected.')
+      if (betterErr) {
+        throw new Error(
+          betterErr.message ??
+            intl.formatMessage({
+              id: 'portal.auth.twoFactor.codeRejected',
+              defaultMessage: 'Code rejected.',
+            })
+        )
+      }
       onComplete()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Code rejected.')
+      setError(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'portal.auth.twoFactor.codeRejected',
+              defaultMessage: 'Code rejected.',
+            })
+      )
     } finally {
       setPending(false)
     }
@@ -40,9 +74,17 @@ export function TwoFactorChallengeStep({
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        {useBackup
-          ? 'Use one of the one-time backup codes you saved during setup.'
-          : 'Open your authenticator app and enter the 6-digit code.'}
+        {useBackup ? (
+          <FormattedMessage
+            id="portal.auth.twoFactor.backupHint"
+            defaultMessage="Use one of the one-time backup codes you saved during setup."
+          />
+        ) : (
+          <FormattedMessage
+            id="portal.auth.twoFactor.authenticatorHint"
+            defaultMessage="Open your authenticator app and enter the 6-digit code."
+          />
+        )}
       </p>
       <form
         onSubmit={(e) => {
@@ -52,7 +94,14 @@ export function TwoFactorChallengeStep({
         className="space-y-3"
       >
         <Label htmlFor="tf-challenge" className="sr-only">
-          {useBackup ? 'Backup code' : 'Authenticator code'}
+          {useBackup ? (
+            <FormattedMessage id="portal.auth.twoFactor.backupCode" defaultMessage="Backup code" />
+          ) : (
+            <FormattedMessage
+              id="portal.auth.twoFactor.authenticatorCode"
+              defaultMessage="Authenticator code"
+            />
+          )}
         </Label>
         {useBackup ? (
           <Input
@@ -75,7 +124,10 @@ export function TwoFactorChallengeStep({
               disabled={pending}
               autoFocus
               autoComplete="one-time-code"
-              aria-label="Authenticator code"
+              aria-label={intl.formatMessage({
+                id: 'portal.auth.twoFactor.authenticatorCode',
+                defaultMessage: 'Authenticator code',
+              })}
               aria-invalid={!!error || undefined}
             >
               <InputOTPSixSlots />
@@ -89,10 +141,14 @@ export function TwoFactorChallengeStep({
         )}
         <div className="flex gap-2">
           <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
-            Cancel
+            <FormattedMessage id="portal.auth.twoFactor.cancel" defaultMessage="Cancel" />
           </Button>
           <Button type="submit" disabled={pending || !code}>
-            {pending ? 'Verifying…' : 'Continue'}
+            {pending ? (
+              <FormattedMessage id="portal.auth.twoFactor.verifying" defaultMessage="Verifying…" />
+            ) : (
+              <FormattedMessage id="portal.auth.continue" defaultMessage="Continue" />
+            )}
           </Button>
         </div>
       </form>
@@ -105,7 +161,17 @@ export function TwoFactorChallengeStep({
         }}
         className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
       >
-        {useBackup ? 'Use authenticator code instead' : 'Use a backup code instead'}
+        {useBackup ? (
+          <FormattedMessage
+            id="portal.auth.twoFactor.useAuthenticator"
+            defaultMessage="Use authenticator code instead"
+          />
+        ) : (
+          <FormattedMessage
+            id="portal.auth.twoFactor.useBackup"
+            defaultMessage="Use a backup code instead"
+          />
+        )}
       </button>
     </div>
   )

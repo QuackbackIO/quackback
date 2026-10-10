@@ -26,4 +26,14 @@ describe('navigateAfterAuth', () => {
     expect(clientNavigate).toHaveBeenCalled()
     expect(assignSpy).not.toHaveBeenCalled()
   })
+
+  it('keeps the deep link hash the redirect to sign-in carried along', () => {
+    window.history.replaceState(null, '', '/?auth=signin#comments')
+    navigateAfterAuth('/admin/feedback?status=open', vi.fn())
+    expect(assignSpy).toHaveBeenCalledWith('/admin/feedback?status=open#comments')
+    assignSpy.mockClear()
+    navigateAfterAuth('/admin/feedback#own', vi.fn())
+    expect(assignSpy).toHaveBeenCalledWith('/admin/feedback#own')
+    window.history.replaceState(null, '', '/')
+  })
 })

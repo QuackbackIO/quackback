@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { z } from 'zod'
-import { ArrowDownTrayIcon, ArrowPathIcon, DocumentArrowDownIcon } from '@heroicons/react/24/solid'
+import { ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/shared/form-error'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 
 const errorResponseSchema = z.object({
   error: z.string().optional(),
@@ -51,31 +52,29 @@ export function BoardExportSection({ boardId }: BoardExportSectionProps) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="bg-muted/50 rounded-lg p-4">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <DocumentArrowDownIcon className="h-4 w-4" />
-          <span>
-            Includes: title, content, status, tags, author info, vote count, and creation date
-          </span>
-        </div>
-      </div>
-
+    <div>
+      <SettingRows>
+        <SettingRow
+          label="Export posts"
+          description="Download this board's posts as a CSV file."
+          control={
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={isExporting}>
+              {isExporting ? (
+                <>
+                  <ArrowPathIcon className="size-4 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <ArrowDownTrayIcon className="size-4" />
+                  Export CSV
+                </>
+              )}
+            </Button>
+          }
+        />
+      </SettingRows>
       {error && <FormError message={error} />}
-
-      <Button onClick={handleExport} disabled={isExporting}>
-        {isExporting ? (
-          <>
-            <ArrowPathIcon className="size-4 animate-spin" />
-            Exporting...
-          </>
-        ) : (
-          <>
-            <ArrowDownTrayIcon className="size-4" />
-            Export CSV
-          </>
-        )}
-      </Button>
     </div>
   )
 }

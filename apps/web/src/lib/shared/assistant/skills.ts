@@ -15,6 +15,7 @@ export const SKILL_LOADS_PER_TURN = 3
 export const skillAssignmentsSchema = z.object({
   agent: z.boolean(),
   copilot: z.boolean(),
+  workspace: z.boolean().optional(),
 })
 export type SkillAssignments = z.infer<typeof skillAssignmentsSchema>
 

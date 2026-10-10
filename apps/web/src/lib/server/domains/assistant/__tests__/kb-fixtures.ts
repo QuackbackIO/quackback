@@ -6,8 +6,10 @@ export function makeKbArticle(
   id: string,
   overrides: Partial<RetrievedKbArticle> = {}
 ): RetrievedKbArticle {
+  const trailingDigits = id.match(/(\d+)$/)
   return {
     id,
+    urlId: trailingDigits ? Number(trailingDigits[1]) : 1,
     slug: `slug-${id}`,
     title: `Title ${id}`,
     content: `Content of ${id}`,

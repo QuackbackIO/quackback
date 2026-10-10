@@ -50,19 +50,37 @@ export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
       throw new Error(`Unknown integration type: ${data.integrationType}`)
     }
 
-    const requiredFields = definition.platformCredentials
-    for (const field of requiredFields) {
+    for (const field of definition.platformCredentials) {
+      if (field.required === false) continue
       if (!data.credentials[field.key]?.trim()) {
         throw new Error(`${field.label} is required`)
       }
     }
 
-    // Strip any extra keys not defined in platformCredentials
+    // Strip any extra keys not defined in platformCredentials. Optional
+    // fields that are blank are dropped so an omitted instance URL keeps
+    // the gitlab.com default rather than storing an empty string.
     const allowedKeys = new Set(definition.platformCredentials.map((f) => f.key))
     const cleaned: Record<string, string> = {}
     for (const [key, value] of Object.entries(data.credentials)) {
-      if (allowedKeys.has(key)) {
-        cleaned[key] = value.trim()
+      if (!allowedKeys.has(key)) continue
+      const trimmed = value.trim()
+      if (!trimmed) continue
+      cleaned[key] = trimmed
+    }
+
+    // SSRF defense: any URL the server will later fetch (e.g. a self-hosted
+    // GitLab instance) must not resolve to internal infrastructure. Validate
+    // at save so a poisoned URL is never stored — same guard as auth-provider
+    // URL fields.
+    const { checkUrlSafety } = await import('@/lib/server/content/ssrf-guard')
+    for (const field of definition.platformCredentials) {
+      if (!field.url) continue
+      const value = cleaned[field.key]
+      if (!value) continue
+      const verdict = await checkUrlSafety(value)
+      if (!verdict.safe) {
+        throw new Error(`${field.label} must be a valid public URL`)
       }
     }
 
@@ -105,13 +123,26 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
       throw new Error(`Unknown integration type: ${data.integrationType}`)
     }
 
+    const { config } = await import('@/lib/server/config')
+    if (
+      config.platformCredentialsSource === 'control-plane' &&
+      (await arePlatformCredentialsManaged(data.integrationType))
+    ) {
+      const { hasPlatformCredentials } =
+        await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+      return {
+        configured: await hasPlatformCredentials(data.integrationType),
+        fields: null,
+        managed: true,
+      }
+    }
     const credentials = await getPlatformCredentials(data.integrationType)
 
     if (!credentials) {
       return {
         configured: false as const,
         fields: null,
-        managed: arePlatformCredentialsManaged(data.integrationType),
+        managed: await arePlatformCredentialsManaged(data.integrationType),
       }
     }
 
@@ -134,6 +165,6 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
     return {
       configured: true as const,
       fields: masked,
-      managed: arePlatformCredentialsManaged(data.integrationType),
+      managed: await arePlatformCredentialsManaged(data.integrationType),
     }
   })

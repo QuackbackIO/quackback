@@ -8,7 +8,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import { db, integrations, eq } from '@/lib/server/db'
-import { decryptSecrets } from '@/lib/server/integrations/encryption'
+import { withIntegrationReadAuth } from '@/lib/server/integrations/token-refresh'
 import type { ExternalStatusItem } from '@/lib/server/integrations/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
@@ -48,10 +48,7 @@ export const fetchExternalStatusesFn = createServerFn({ method: 'POST' })
       return []
     }
 
-    const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
-    if (!secrets.accessToken) return []
-
-    const config = (integration.config ?? {}) as Record<string, unknown>
-
-    return listExternalStatuses({ accessToken: secrets.accessToken, config })
+    return withIntegrationReadAuth(integration.id, ({ accessToken, config }) =>
+      accessToken ? listExternalStatuses({ accessToken, config }) : Promise.resolve([])
+    )
   })

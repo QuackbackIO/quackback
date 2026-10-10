@@ -7,7 +7,10 @@
  */
 import type { ConversationMessage, ConversationAttachment } from '@/lib/server/db'
 import { ValidationError } from '@/lib/shared/errors'
-import { isTrustedAttachmentUrl } from '@/lib/server/storage/trusted-url'
+import { resignStoredAssetUrl, getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { toUserContentUrl } from '@/lib/server/storage/asset-url'
+import { namesPipelineFile } from '@/lib/server/storage/trusted-url'
+import type { FileFamily } from '@/lib/shared/files/file-types'
 import { truncate } from '@/lib/shared/utils/string'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
@@ -15,41 +18,49 @@ import { tiptapJsonToText, hasTextLeaf } from '@/lib/server/markdown-tiptap'
 import type { PrincipalId } from '@quackback/ids'
 import {
   MAX_CONVERSATION_MESSAGE_LENGTH,
-  MAX_CONVERSATION_ATTACHMENTS,
+  type ConversationAttachment as ClientAttachment,
   type ConversationAuthorDTO,
   type ConversationMessageDTO,
   type MessageSenderType,
 } from '@/lib/shared/conversation/types'
+import { liftInlineImagesToAttachments } from '@/lib/shared/conversation/lift-inline-images'
 
 export const PREVIEW_LENGTH = 120
-const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 
-/** Validate + normalize client-supplied attachments (count, trusted url, size). */
-export function validateAttachments(
-  attachments?: ConversationAttachment[]
-): ConversationAttachment[] {
-  if (!attachments || attachments.length === 0) return []
-  if (attachments.length > MAX_CONVERSATION_ATTACHMENTS) {
-    throw new ValidationError(
-      'VALIDATION_ERROR',
-      `Too many attachments (max ${MAX_CONVERSATION_ATTACHMENTS})`
-    )
+function clientFileUrl(key: string | undefined): string | null {
+  const url = getPublicUrlOrNull(key)
+  return url ? toUserContentUrl(url) : null
+}
+
+/**
+ * The client form of a stored attachment. The URL gets a current read
+ * capability (the stored one may have been minted under an older secret), and
+ * the preview's storage keys become URLs the browser can load. All three load
+ * from the user-content origin when one is configured.
+ */
+export function attachmentForClient(a: ConversationAttachment): ClientAttachment {
+  const { preview, family, ...base } = a
+  const out: ClientAttachment = {
+    ...base,
+    // A pipeline file gets a fresh link only through its id: one named by URL
+    // alone keeps the link it was stored with, which expires.
+    url: toUserContentUrl(
+      a.fileId || !namesPipelineFile(a.url) ? resignStoredAssetUrl(a.url) : a.url
+    ),
+    ...(family ? { family: family as FileFamily } : {}),
   }
-  return attachments.map((a) => {
-    if (!isTrustedAttachmentUrl(a?.url)) {
-      throw new ValidationError('VALIDATION_ERROR', 'Invalid attachment')
-    }
-    const size = Number(a.size)
-    if (!Number.isFinite(size) || size < 0 || size > MAX_ATTACHMENT_BYTES) {
-      throw new ValidationError('VALIDATION_ERROR', 'Attachment too large')
-    }
-    return {
-      url: a.url,
-      name: String(a.name ?? '').slice(0, 255),
-      contentType: String(a.contentType ?? '').slice(0, 128),
-      size,
-    }
-  })
+  if (!preview) return out
+  const { thumbKey, renditionKey, ...rest } = preview
+  const thumbUrl = clientFileUrl(thumbKey)
+  const renditionUrl = clientFileUrl(renditionKey)
+  return {
+    ...out,
+    preview: {
+      ...rest,
+      ...(thumbUrl ? { thumbUrl } : {}),
+      ...(renditionUrl ? { renditionUrl } : {}),
+    },
+  }
 }
 
 /**
@@ -125,6 +136,10 @@ export function toMessageDTO(
   author: ConversationAuthorDTO | null,
   assistantPrincipalId?: PrincipalId | null
 ): ConversationMessageDTO {
+  const { contentJson, attachments } = liftInlineImagesToAttachments(
+    contentJsonForClient(message.contentJson ?? null),
+    (message.attachments ?? []).map(attachmentForClient)
+  )
   return {
     id: message.id,
     conversationId: message.conversationId,
@@ -132,15 +147,26 @@ export function toMessageDTO(
     senderType: message.senderType as MessageSenderType,
     content: message.content,
     createdAt: message.createdAt.toISOString(),
+    editedAt: message.editedAt ? message.editedAt.toISOString() : null,
     author,
-    attachments: message.attachments ?? [],
+    attachments,
     citations: message.citations ?? [],
     isAssistant: assistantPrincipalId != null && message.principalId === assistantPrincipalId,
     isInternal: message.isInternal,
-    contentJson: contentJsonForClient(message.contentJson ?? null),
+    contentJson,
     viaEmail: message.metadata?.source === 'email',
     systemEvent: message.metadata?.systemEvent ?? null,
     block: message.metadata?.block ?? null,
     blockReply: message.metadata?.blockReply ?? null,
+    channelDelivery:
+      message.metadata?.channelDelivery ??
+      (message.senderType === 'agent' && message.metadata?.githubCommentId
+        ? {
+            status: 'sent' as const,
+            channel: 'github' as const,
+            at: message.createdAt.toISOString(),
+            externalId: message.metadata.githubCommentId,
+          }
+        : null),
   }
 }

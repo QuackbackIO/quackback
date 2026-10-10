@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
+import { useMutation, useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
+import { AUTOSAVE } from '@/lib/client/autosave'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,8 +24,13 @@ export function StageLabelsCard() {
   const { data: labels } = useSuspenseQuery(ticketStageLabelsQuery)
   const [drafts, setDrafts] = useState<Record<TicketStage, string>>(labels)
   const [savingStage, setSavingStage] = useState<TicketStage | null>(null)
+  const saveMutation = useMutation({
+    meta: AUTOSAVE,
+    mutationFn: (input: { stage: TicketStage; value: string }) =>
+      setTicketStageLabelsFn({ data: { [input.stage]: input.value } }),
+  })
 
-  async function save(stage: TicketStage) {
+  function save(stage: TicketStage) {
     const value = drafts[stage].trim()
     if (!value || value === labels[stage]) {
       // Empty is invalid; revert to the last saved label rather than reject.
@@ -33,22 +38,22 @@ export function StageLabelsCard() {
       return
     }
     setSavingStage(stage)
-    try {
-      const merged = await setTicketStageLabelsFn({ data: { [stage]: value } })
-      qc.setQueryData(KEY, merged)
-      setDrafts(merged)
-    } catch (error) {
-      setDrafts((d) => ({ ...d, [stage]: labels[stage] }))
-      toast.error(error instanceof Error ? error.message : 'Failed to save label')
-    } finally {
-      setSavingStage(null)
-    }
+    // Per-call rollback: each save restores only its own field, so overlapping
+    // saves on the shared mutation cannot drop one another's rollback.
+    saveMutation
+      .mutateAsync({ stage, value })
+      .then((merged) => {
+        qc.setQueryData(KEY, merged)
+        setDrafts(merged)
+      })
+      .catch(() => setDrafts((d) => ({ ...d, [stage]: labels[stage] })))
+      .finally(() => setSavingStage((s) => (s === stage ? null : s)))
   }
 
   return (
     <SettingsCard
       title="Customer stage labels"
-      description="What requesters see for each stage across the portal and Messenger. Internal statuses map to one of these four stages."
+      description="What requesters see for each stage on the portal and Messenger."
     >
       <div className="grid gap-5 sm:grid-cols-2">
         {TICKET_STAGES.map((stage) => (

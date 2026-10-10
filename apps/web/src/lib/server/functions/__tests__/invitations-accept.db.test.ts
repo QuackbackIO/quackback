@@ -51,7 +51,7 @@ vi.mock('@/lib/server/domains/principals/membership-sync', () => ({
   enqueueMembershipSync: vi.fn(async () => {}),
 }))
 vi.mock('@/lib/server/domains/settings/cloud/cloud.service', () => ({
-  getCloudConfig: async () => ({ enabled: true, plan: 'pro', trialActive: false }),
+  getCloudConfig: async () => ({ enabled: true, plan: 'business', trialActive: false }),
 }))
 
 const { acceptInvitationFn } = await import('../invitations')
@@ -92,7 +92,7 @@ async function seedMember(email: string): Promise<UserId> {
 }
 
 async function projectMaxTeamSeats(maxTeamSeats: number): Promise<void> {
-  const cloud = storedCloud('pro')
+  const cloud = storedCloud('business')
   const projection = {
     ...cloud,
     projection: {

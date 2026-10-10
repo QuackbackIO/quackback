@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 /**
- * The onboarding tree renders react-intl consumers (the stepper in the layout,
- * every step's copy), so an `IntlProvider` has to sit above it. Without one
+ * The onboarding tree renders react-intl consumers (every step's copy), so an
+ * `IntlProvider` has to sit above it. Without one
  * react-intl throws "Could not find required `intl` object", and
  * `/onboarding/account` is the first screen a freshly provisioned workspace
  * lands on.
@@ -98,8 +98,6 @@ describe('onboarding intl provider', () => {
     render(<RouterProvider router={router} />)
 
     expect(screen.queryByTestId('route-error')?.textContent ?? null).toBeNull()
-    // The layout's stepper label goes through intl.formatMessage.
-    expect(await screen.findByLabelText('Setup progress')).toBeInTheDocument()
 
     const step = await screen.findByTestId('step')
     // The locale the request carried reaches the provider (so dates/numbers

@@ -2,10 +2,11 @@ import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
 import { RssIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
-import { PageHeader } from '@/components/shared/page-header'
+import { PortalPageHeader } from '@/components/public/portal-page-header'
 import { ChangelogListPublic, ChangelogSubscribeButton } from '@/components/portal/changelog'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/_portal/changelog/')({
   loader: async ({ context }) => {
@@ -40,12 +41,12 @@ export const Route = createFileRoute('/_portal/changelog/')({
 
 function ChangelogPage() {
   const intl = useIntl()
-  const { session } = Route.useRouteContext()
+  const session = useSessionContext()
   const isIdentified = !!session?.user && session.user.principalType !== 'anonymous'
 
   return (
     <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-8">
-      <PageHeader
+      <PortalPageHeader
         size="large"
         title={intl.formatMessage({ id: 'portal.changelog.title', defaultMessage: 'Changelog' })}
         description={intl.formatMessage({
@@ -58,7 +59,7 @@ function ChangelogPage() {
             <Button variant="outline" size="sm" asChild className="shrink-0 gap-1.5">
               <a href="/changelog/feed" target="_blank" rel="noopener noreferrer">
                 <RssIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">
+                <span className="sr-only sm:not-sr-only">
                   {intl.formatMessage({
                     id: 'portal.changelog.rssFeed',
                     defaultMessage: 'RSS Feed',

@@ -21,7 +21,6 @@ import TableHeader from '@tiptap/extension-table-header'
 import type { TiptapContent } from '@/lib/server/db'
 import type { JSONContent } from '@tiptap/core'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
-import { lookupEmoji } from '@/lib/shared/content-emoji'
 import { parseEmbedUrl } from '@/lib/shared/embeds/parse-embed-url'
 
 /**
@@ -54,6 +53,24 @@ const manager = new MarkdownManager({
 })
 
 /**
+ * GitHub issue bodies are LF markdown. Some clients (and `gh issue create`
+ * without $'...' quoting) store the two-character sequence `\n` instead of a
+ * real line break; turn those into LFs when the body has no actual newlines.
+ */
+export function normalizeGitHubMarkdown(raw: string): string {
+  let text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  if (!text.includes('\n') && text.includes('\\n')) {
+    text = text.replace(/\\n/g, '\n')
+  }
+  return text
+}
+
+/** Parse a GitHub issue or comment body into TipTap JSON. */
+export function githubMarkdownToTiptapJson(markdown: string): TiptapContent {
+  return commentMarkdownToTiptapJson(normalizeGitHubMarkdown(markdown))
+}
+
+/**
  * Parse a markdown string into TipTap JSON.
  *
  * Used by the service layer when content arrives via MCP/API without contentJson.
@@ -80,6 +97,7 @@ export function tiptapJsonToMarkdown(json: TiptapContent | JSONContent): string 
  * plain `image`. Mirrors `IMAGE_NODE_TYPES` in content/rehost-images.ts.
  */
 const IMAGE_NODE_TYPES = new Set(['image', 'resizableImage'])
+const RESTORABLE_MEDIA_NODE_TYPES = new Set([...IMAGE_NODE_TYPES, 'video'])
 
 /**
  * Node types this module can faithfully turn into markdown: the server
@@ -113,6 +131,7 @@ const RESERIALIZABLE_NODE_TYPES = new Set([
   'mention',
   'emoji',
   'youtube',
+  'video',
   'quackbackEmbed',
 ])
 
@@ -138,7 +157,7 @@ export function contentJsonToMarkdown(
   contentJson: TiptapContent | JSONContent | null | undefined,
   fallback: string
 ): string {
-  if (!contentJson || !hasImageNode(contentJson) || !isReserializable(contentJson)) {
+  if (!contentJson || !hasRestorableMediaNode(contentJson) || !isReserializable(contentJson)) {
     return fallback
   }
   try {
@@ -178,6 +197,12 @@ export function hasImageNode(node: JSONContent | null | undefined): boolean {
   return Array.isArray(node.content) ? node.content.some(hasImageNode) : false
 }
 
+function hasRestorableMediaNode(node: JSONContent | null | undefined): boolean {
+  if (!node || typeof node !== 'object') return false
+  if (typeof node.type === 'string' && RESTORABLE_MEDIA_NODE_TYPES.has(node.type)) return true
+  return Array.isArray(node.content) ? node.content.some(hasRestorableMediaNode) : false
+}
+
 /**
  * True only when every node in the tree can be re-serialized without loss. A
  * single unknown node type makes this false so the caller keeps stored markdown.
@@ -202,8 +227,7 @@ function normalizeForMarkdown(node: JSONContent): JSONContent {
   }
   if (node.type === 'emoji') {
     const attrs = node.attrs ?? {}
-    const name = String(attrs.name ?? '')
-    const emoji = String(attrs.emoji ?? lookupEmoji(name)?.emoji ?? (name ? `:${name}:` : ''))
+    const emoji = String(attrs.emoji ?? '')
     return { type: 'text', text: emoji }
   }
   if (node.type === 'youtube') {
@@ -213,6 +237,15 @@ function normalizeForMarkdown(node: JSONContent): JSONContent {
       content: src
         ? [{ type: 'text', text: src, marks: [{ type: 'link', attrs: { href: src } }] }]
         : [{ type: 'text', text: '[YouTube embed]' }],
+    }
+  }
+  if (node.type === 'video') {
+    const src = String(node.attrs?.src ?? '')
+    return {
+      type: 'paragraph',
+      content: src
+        ? [{ type: 'text', text: src, marks: [{ type: 'link', attrs: { href: src } }] }]
+        : [{ type: 'text', text: '[video]' }],
     }
   }
   if (node.type === 'quackbackEmbed') {
@@ -265,6 +298,7 @@ function leafText(node: TiptapContent): string | null {
     return `@${label}`
   }
   if (TEXT_PLACEHOLDER_IMAGE_TYPES.has(node.type)) return '[image]'
+  if (node.type === 'video') return '[video]'
   return null
 }
 

@@ -5,8 +5,23 @@ const HOUR_MS = 3_600_000
 
 describe('hookRetryDelayMs', () => {
   it('keeps the first retries fast so transient blips clear in seconds', () => {
-    expect(hookRetryDelayMs(1)).toBe(1_000)
-    expect(hookRetryDelayMs(2)).toBe(2_000)
+    // Mid-band jitter draw exposes the base delays: 1s, 2s.
+    const mid = () => 0.5
+    expect(hookRetryDelayMs(1, mid)).toBe(1_000)
+    expect(hookRetryDelayMs(2, mid)).toBe(2_000)
+    for (const draw of [0, 0.999]) {
+      expect(hookRetryDelayMs(1, () => draw)).toBeGreaterThanOrEqual(500)
+      expect(hookRetryDelayMs(1, () => draw)).toBeLessThan(1_500)
+      expect(hookRetryDelayMs(2, () => draw)).toBeGreaterThanOrEqual(1_000)
+      expect(hookRetryDelayMs(2, () => draw)).toBeLessThan(3_000)
+    }
+  })
+
+  it('jitters the fast retries, so jobs throttled together do not retry together', () => {
+    // A bulk send that hits a provider rate limit fails dozens of jobs in the
+    // same second; without a spread they all come back in the same second too.
+    expect(hookRetryDelayMs(1, () => 0)).not.toBe(hookRetryDelayMs(1, () => 0.999))
+    expect(hookRetryDelayMs(2, () => 0)).not.toBe(hookRetryDelayMs(2, () => 0.999))
   })
 
   it('spreads the slow retries at growing hourly intervals', () => {

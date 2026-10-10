@@ -1,4 +1,4 @@
-import type { HookHandler } from '../events/hook-types'
+import type { IntegrationHook } from './sync/outcomes'
 import type { InboundWebhookHandler } from './inbound-types'
 import type { UserSyncHandler } from './user-sync-types'
 
@@ -38,9 +38,13 @@ export interface PlatformCredentialField {
   /** true → the value is a URL the server will fetch; validated against the
    *  SSRF guard at save so an admin can't point it at internal infrastructure. */
   url?: boolean
+  /** false → the field may be omitted (empty). Defaults to required. */
+  required?: boolean
 }
 
 export interface IntegrationOAuthConfig {
+  /** Token fragments require a browser handoff; normal OAuth uses query codes. */
+  callbackMode?: 'code' | 'fragment'
   /** State type discriminator (e.g. 'slack_oauth') */
   stateType: string
   /** Provider's error query param name (default: 'error') */
@@ -81,7 +85,7 @@ export const INTEGRATION_CATEGORIES = {
     description: 'Get notified when things happen',
   },
   issue_tracking: {
-    label: 'Issue Tracking',
+    label: 'Issue tracking',
     description: 'Push feedback into your workflow',
   },
   support_crm: {
@@ -89,7 +93,7 @@ export const INTEGRATION_CATEGORIES = {
     description: 'Enrich feedback with customer data',
   },
   user_data: {
-    label: 'User Data',
+    label: 'User data',
     description: 'Sync user attributes and segment membership',
   },
   automation: {
@@ -119,14 +123,17 @@ export interface IntegrationCatalogEntry {
   /**
    * Capability badges. DERIVED from the definition's slots at
    * getIntegrationCatalog() so the catalog cannot drift from what a
-   * provider implements (IF WO-4). Hand-written entries are honored ONLY
-   * as a fallback for providers with no capability slots yet (the
-   * enrichment-only providers, until the context capability lands).
+   * provider implements. Catalog descriptions must also match actual behavior.
    */
   capabilities?: IntegrationCapability[]
   iconBg: string
   settingsPath: string
   available: boolean
+  /**
+   * Platform (env / control-plane) owns the OAuth app credentials. Tenants
+   * connect the workspace install; they do not paste client secrets.
+   */
+  managed?: boolean
   /** true if the integration requires platform credentials to be configured */
   configurable: boolean
   /** Field definitions for platform credentials. Present in catalog API response, empty array if none needed. */
@@ -156,6 +163,11 @@ export interface ParsedIssueRef {
  * specific member being present, never on the provider id.
  */
 export interface IssueTrackerCapability {
+  /** Read-only verification in the configured destination. Never accepts an arbitrary fetch URL. */
+  inspect?(args: {
+    auth: Record<string, unknown>
+    reference: string
+  }): Promise<ParsedIssueRef & { title: string; content: string; version?: string }>
   /**
    * Parse a user-pasted issue reference (full URL or provider shorthand) into
    * the stored link fields. Returns null when the input is not recognizably
@@ -179,17 +191,6 @@ export interface IssueTrackerCapability {
     title: string
     bodyMarkdown: string
   }): Promise<ParsedIssueRef>
-  /**
-   * Build the `auth` bag for `create` from the raw integration row, for
-   * providers whose credentials need more than a config+secrets merge —
-   * Jira's expiring OAuth token, refreshed and persisted before use. Absent =
-   * the caller merges `{ ...config, ...decryptSecrets(secrets) }`.
-   */
-  prepareAuth?(integration: {
-    id: import('@quackback/ids').IntegrationId
-    secrets: unknown
-    config: unknown
-  }): Promise<Record<string, unknown>>
 }
 
 /** One selectable external status/state, as shown in the status-mapping UI. */
@@ -242,10 +243,47 @@ export interface EnrichmentCard {
 }
 
 export interface IntegrationDefinition {
+  /** Provider-owned destination scope, safe presentation, and account ownership checks. */
+  destination?: {
+    scopeKeys: readonly string[]
+    label?: (target: unknown) => string | null
+    validate?: (params: {
+      target: unknown
+      config: Record<string, unknown>
+      accessToken: string
+    }) => Promise<boolean>
+  }
+  appHooks?: {
+    /** The provider executes through the shared ledger, with optional queue scheduling. */
+    execute: (job: import('@/lib/server/jobs/job-queue').ClaimedJob) => Promise<void>
+    queue?: { name: string; maxAttempts: number }
+    kinds: readonly string[]
+    verify: (input: {
+      headers: Headers
+      rawBody: string
+      credentials: Record<string, string>
+      /** Authenticated gateway receipt time; omitted for direct provider requests. */
+      verifiedAt?: number
+    }) => boolean
+    deliveryId: (kind: string, rawBody: string, contentType: string | null) => string | null
+    // Optional transaction keeps receipt and durable enqueue atomic.
+    handle: (
+      kind: string,
+      rawBody: string,
+      contentType: string | null,
+      executor?: import('@/lib/server/jobs/job-queue').JobSqlExecutor
+    ) => Promise<Response>
+  }
+
+  install?: {
+    externalId: (config: Record<string, unknown>) => string | null
+    metadata?: (config: Record<string, unknown>) => Record<string, unknown>
+  }
+
   id: string
   catalog: IntegrationCatalogEntry
   oauth?: IntegrationOAuthConfig
-  hook?: HookHandler
+  hook?: IntegrationHook
   /** Inbound webhook handler for receiving status changes from the external platform */
   inbound?: InboundWebhookHandler
   /** Issue-tracker capabilities (manual ref parsing; issue creation in a later phase). */
@@ -257,19 +295,12 @@ export interface IntegrationDefinition {
    */
   userSync?: UserSyncHandler
   /**
-   * Close/archive the linked external item on cascading post delete. Never
-   * throws — failures are warnings, not blockers (see archive.ts semantics:
-   * 404 means already-gone and counts as success).
+   * Link created items for lifecycle review, including explicit archive/close review
+   * on source deletion. Notification receipts stay in sync history without item links.
    */
-  archive?: (ctx: import('./archive').ArchiveContext) => Promise<import('./archive').ArchiveResult>
-  /**
-   * How the inbound status-sync webhook gets set up with the provider.
-   * `'manual'` = the admin configures the webhook by hand on the external
-   * platform (the UI shows the callback URL); an object = the framework
-   * auto-registers/deregisters via the provider API when status sync is
-   * toggled. Expected alongside `inbound` — pinned by
-   * registry-capability-coverage so provider #12 can't silently no-op.
-   */
+  linkedItems?: true
+  /** Preserve provider-specific portable Markdown when presenting a manual content update. */
+  formatReviewContent?: (content: string, rootUrl: string) => string
   /**
    * Refresh an expiring OAuth access token — a thin wrapper over the
    * provider's token endpoint. The framework's getValidAccessToken
@@ -278,8 +309,14 @@ export interface IntegrationDefinition {
    */
   refreshToken?: (
     refreshToken: string,
-    credentials?: Record<string, string>
-  ) => Promise<{ accessToken: string; refreshToken?: string; expiresIn: number }>
+    credentials?: Record<string, string>,
+    config?: Record<string, unknown>
+  ) => Promise<{
+    accessToken: string
+    refreshToken?: string
+    expiresIn?: number
+    config?: Record<string, unknown>
+  }>
   /**
    * On-demand customer context for the enrichment panel (IF WO-9). Looks the
    * person up by email in the provider's tool and returns a normalized card,
@@ -290,7 +327,7 @@ export interface IntegrationDefinition {
     accessToken: string
     config: Record<string, unknown>
     email: string
-  }) => Promise<import('./types').EnrichmentCard | null>
+  }) => Promise<EnrichmentCard | null>
   /**
    * List the provider's statuses/states for the status-mapping UI. Any
    * scoping id (team, list, board, cloud) is read from `config` — it is
@@ -335,21 +372,6 @@ export interface IntegrationDefinition {
       query: string
     }): Promise<RemoteItemMatch[]>
   }
-  /**
-   * Two-way status sync (IF WO-15). `push` writes a Quackback status change out
-   * to the linked remote item. The framework owns the trigger (a linked-entity
-   * status-change consumer on the event spine), loop-safety (never re-pushes to
-   * the integration that reported the change), and the `pushStatusMappings`
-   * config lookup; the provider only performs the remote write.
-   */
-  remoteStatus?: {
-    push(params: {
-      accessToken: string
-      config: Record<string, unknown>
-      externalId: string
-      remoteStatus: string
-    }): Promise<{ success: boolean; error?: string }>
-  }
   webhookRegistration?:
     | 'manual'
     | {
@@ -358,7 +380,11 @@ export interface IntegrationDefinition {
           config: Record<string, unknown>
           callbackUrl: string
           secret: string
-        }): Promise<{ externalWebhookId?: string }>
+        }): Promise<{
+          externalWebhookId?: string
+          /** Authenticated provider response may issue the signing secret (e.g. Asana). */
+          webhookSecret?: string
+        }>
         unregister(params: {
           accessToken: string
           config: Record<string, unknown>

@@ -2,7 +2,7 @@
  * Internal shared helpers for settings sub-modules.
  * NOT part of the public API — import from settings.service instead.
  */
-import { db, eq, settings } from '@/lib/server/db'
+import { db, eq, settings, type Database, type Transaction } from '@/lib/server/db'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { DomainException, InternalError, NotFoundError } from '@/lib/shared/errors'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
@@ -17,6 +17,7 @@ import {
   type PortalConfig,
   type PortalWelcomeCard,
   type WidgetConfig,
+  workspaceAllowsAnonymous,
 } from './settings.types'
 import type { TiptapContent } from '@/lib/shared/db-types'
 
@@ -97,32 +98,60 @@ export function deepMerge<T extends object>(target: T, source: Partial<T>): T {
   return result
 }
 
+/*
+ * The settings row is read through one of two tiers.
+ *
+ * - requireSettings(): the row, read fresh from the database. Every
+ *   read-modify-write starts from a fresh read (writeMetadataKey reads under
+ *   the row lock), so a write is never based on a copy.
+ * - requireSettingsCached() / findSettingsCached(): the row inside the workspace
+ *   settings (getWorkspaceSettings), for every read-only path. A request reads
+ *   it at most once whichever of the two it asks through, this process reuses
+ *   it for a few seconds (local-cache.ts) and the kv cache for longer.
+ *   invalidateSettingsCache(), which every settings write calls, forgets all
+ *   three, so the writing request and the next one see the write; another
+ *   process sees it once its local copy expires. Date columns arrive as ISO
+ *   strings after the kv round trip.
+ *
+ * A getter whose value can feed a write takes a SettingsFreshness argument:
+ * 'fresh' when the caller derives what it writes (or deletes) from the value.
+ */
+
 /** @internal */
-export async function requireSettings(): Promise<SettingsRecord> {
-  const org = await db.query.settings.findFirst()
+export async function requireSettings(
+  executor: Database | Transaction = db
+): Promise<SettingsRecord> {
+  const org = await executor.query.settings.findFirst()
+  if (!org) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
+  return org
+}
+
+/** Which tier a getter reads: 'fresh' when its value feeds a write. */
+export type SettingsFreshness = 'cached' | 'fresh'
+
+/** @internal */
+export function readSettingsRow(freshness: SettingsFreshness = 'cached'): Promise<SettingsRecord> {
+  return freshness === 'fresh' ? requireSettings() : requireSettingsCached()
+}
+
+/** @internal */
+export async function requireSettingsCached(): Promise<SettingsRecord> {
+  const org = await findSettingsCached()
   if (!org) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
   return org
 }
 
 /**
- * The raw settings row for READ-ONLY paths, served through the Redis-cached
- * workspace-settings blob (a single Redis GET when warm; the miss path is the
- * same DB read as {@link requireSettings}). Every settings mutation calls
- * invalidateSettingsCache(), so reads here are effectively fresh.
- *
- * Two caveats: date columns arrive as ISO strings after the JSON round trip,
- * and read-modify-write paths MUST keep using {@link requireSettings} so a
- * write is never based on a cached row.
+ * {@link requireSettingsCached} for callers that treat a missing row as a
+ * state rather than an error: null before the workspace has one.
  *
  * @internal
  */
-export async function requireSettingsCached(): Promise<SettingsRecord> {
+export async function findSettingsCached(): Promise<SettingsRecord | null> {
   // Dynamic import: settings.service imports these helpers at module scope,
   // so a static import here would be a load-time cycle.
-  const { getWorkspaceSettings } = await import('./settings.service')
-  const workspace = await getWorkspaceSettings()
-  if (!workspace?.settings) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
-  return workspace.settings as SettingsRecord
+  const { getWorkspaceSettingsRow } = await import('./settings.service')
+  return getWorkspaceSettingsRow()
 }
 
 /** @internal */
@@ -144,22 +173,88 @@ export async function invalidateSettingsCache(): Promise<void> {
 }
 
 /**
- * Read-modify-write one key in the `settings.metadata` JSON bag, preserving
- * sibling keys, then bust the settings cache. Non-atomic (last write wins) —
- * acceptable for the admin-driven settings families (office hours, tickets) that
- * ride in this generic bag rather than a dedicated column.
+ * The `settings.metadata` bag as an object to change one key of.
+ *
+ * The bag is one text column that many writers keep a key in, including
+ * writers that are not settings pages, so a write must carry every key it
+ * found. An absent bag (NULL, blank or JSON `null`) holds nothing and starts
+ * empty. A bag that is present but is not a JSON object cannot be carried, and
+ * writing a fresh object over it would erase every key in it, so this throws
+ * instead and the write is abandoned with the stored text untouched.
  *
  * @internal
  */
-export async function writeMetadataKey(key: string, value: unknown): Promise<void> {
-  const org = await requireSettings()
-  const meta = parseJsonOrNull<Record<string, unknown>>(org.metadata) ?? {}
-  meta[key] = value
-  await db
-    .update(settings)
-    .set({ metadata: JSON.stringify(meta) })
-    .where(eq(settings.id, org.id))
-  await invalidateSettingsCache()
+export function parseMetadataBag(
+  stored: string | null,
+  context: { settingsId: string; key: string }
+): Record<string, unknown> {
+  if (storedJsonIsBlank(stored)) return {}
+  let bag: unknown = null
+  let parseError: unknown
+  try {
+    bag = JSON.parse(stored as string)
+  } catch (error) {
+    parseError = error
+  }
+  if (typeof bag === 'object' && bag !== null && !Array.isArray(bag)) {
+    return bag as Record<string, unknown>
+  }
+  const err = new InternalError(
+    'SETTINGS_METADATA_INVALID',
+    'Stored workspace metadata is not a JSON object, so it was left unchanged',
+    parseError
+  )
+  log.error(
+    { err, settingsId: context.settingsId, key: context.key, storedLength: stored?.length },
+    'settings metadata is not a JSON object; refusing to overwrite it'
+  )
+  throw err
+}
+
+/**
+ * Write one key in the `settings.metadata` JSON bag, keeping every sibling
+ * key, then bust the settings cache once the write has committed.
+ *
+ * The read, the change and the write happen under the settings row lock, so
+ * two writers of different keys cannot lose each other's key. A bag that is
+ * present but unreadable is refused rather than replaced (see
+ * {@link parseMetadataBag}).
+ *
+ * `value` may be a function of the stored bag, for a partial update that
+ * merges over what is stored: it is called with the locked row's text, the
+ * text this write replaces, never an earlier or cached read. Returns the value
+ * written.
+ *
+ * @internal
+ */
+export async function writeMetadataKey<T>(
+  key: string,
+  value: T | ((storedMetadata: string | null) => T),
+  options: SettingsWriteOptions = {}
+): Promise<T> {
+  const write = async (tx: Database | Transaction) => {
+    const [row] = await tx
+      .select({ id: settings.id, metadata: settings.metadata })
+      .from(settings)
+      .limit(1)
+      .for('update')
+    if (!row) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
+
+    const bag = parseMetadataBag(row.metadata, { settingsId: row.id, key })
+    const computed =
+      typeof value === 'function'
+        ? (value as (storedMetadata: string | null) => T)(row.metadata)
+        : value
+    bag[key] = computed
+    await tx
+      .update(settings)
+      .set({ metadata: JSON.stringify(bag) })
+      .where(eq(settings.id, row.id))
+    return computed
+  }
+  const next = options.executor ? await write(options.executor) : await db.transaction(write)
+  if (!options.executor) await invalidateSettingsCache()
+  return next
 }
 
 /**
@@ -218,7 +313,14 @@ export function resolveWelcomeCard(
  */
 export function parsePortalConfig(json: string | null): PortalConfig {
   const parsed = parseStoredConfig(json, DEFAULT_PORTAL_CONFIG, LEGACY_PORTAL_CONFIG)
-  return { ...parsed, welcomeCard: resolveWelcomeCard(parsed.welcomeCard) }
+  return {
+    ...parsed,
+    // The anonymous switch reads the way the server gates it: on only when
+    // stored as on. Merging in the default would show it on (and write it on
+    // with the next unrelated save) while every gate denies.
+    features: { ...parsed.features, allowAnonymous: workspaceAllowsAnonymous(json) },
+    welcomeCard: resolveWelcomeCard(parsed.welcomeCard),
+  }
 }
 
 /**
@@ -269,4 +371,9 @@ export function normalizeWelcomeCardInput(
     normalized.body = sanitizeTiptapContent(input.body)
   }
   return normalized
+}
+
+/** A caller transaction owns commit and cache invalidation. */
+export interface SettingsWriteOptions {
+  executor?: Database | Transaction
 }

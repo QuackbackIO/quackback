@@ -16,7 +16,9 @@
  *   account.
  */
 import type { PrincipalId, UserId } from '@quackback/ids'
-import { db, account, session, user, eq } from '@/lib/server/db'
+import { db, account, session, user, principal, eq } from '@/lib/server/db'
+import { isTeamMember } from '@/lib/shared/roles'
+import { isTestCustomer } from '@/lib/server/test-data'
 import { repointPrincipalActivity } from '@/lib/server/domains/principals/principal-repoint'
 import {
   deleteAnonymousIdentity,
@@ -40,9 +42,18 @@ export async function mergeAnonymousToIdentified(params: MergeAnonymousParams): 
   const { anonPrincipalId, targetPrincipalId, anonUserId, anonDisplayName, targetDisplayName } =
     params
 
+  // A teammate's test customer is never folded into a real identity: its
+  // threads and ideas would become real data.
+  if (await isTestCustomer(anonPrincipalId)) return
+
   await db.transaction(async (tx) => {
+    const target = await tx.query.principal.findFirst({
+      where: eq(principal.id, targetPrincipalId),
+      columns: { role: true },
+    })
     await repointPrincipalActivity(tx, anonPrincipalId, targetPrincipalId, {
       displayNames: { from: anonDisplayName || 'Anonymous', to: targetDisplayName },
+      skipBlockTransfer: isTeamMember(target?.role),
     })
     await deleteAnonymousIdentity({ principalId: anonPrincipalId, userId: anonUserId }, tx)
   })
@@ -73,6 +84,9 @@ export async function absorbSignupIntoAnonymous(
   params: AbsorbSignupParams
 ): Promise<{ cacheKeysToBust: readonly string[] }> {
   const { anonUserId, anonPrincipalId, newUserId, newUserPrincipalId } = params
+
+  // A test customer never becomes a real account; the signup keeps its own.
+  if (await isTestCustomer(anonPrincipalId)) return { cacheKeysToBust: [] }
 
   let cacheKeysToBust: readonly string[] = []
   await db.transaction(async (tx) => {

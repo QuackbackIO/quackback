@@ -1,15 +1,13 @@
 /**
  * Hook registry.
  *
- * Hooks are triggered when events occur. All hook types register here.
+ * Built-in hooks are triggered by the ordinary event queue.
  * The event processor uses getHook() to run hooks.
  *
- * Integration hooks (Slack, Discord, etc.) are resolved via the integration
- * registry. Built-in hooks (email, notification, ai, webhook) live here.
+ * Integration hooks run exclusively through the sync ledger and its registry.
  */
 
 import type { HookHandler } from './hook-types'
-import { getIntegrationHook } from '@/lib/server/integrations'
 
 // Import built-in handlers
 import { emailHook } from './handlers/email'
@@ -31,16 +29,13 @@ const builtinHooks = new Map<string, HookHandler>([
  */
 const lazyHooks: Record<string, () => Promise<HookHandler>> = {
   summary: () => import('./handlers/summary').then((m) => m.summaryHook),
-  // IF WO-15: outbound two-way status sync. Enqueued by remote-status-push.resolver.
-  remote_status_push: () =>
-    import('./handlers/remote-status-push').then((m) => m.remoteStatusPushHook),
   // EVENTING-V2 WO-8e: workflow triggers ride the outbox → relay → this hook.
   workflow: () => import('./handlers/workflow').then((m) => m.workflowHook),
 }
 
 /**
  * Get a registered hook by type.
- * Checks built-in hooks first, then lazy hooks, then integration hooks.
+ * Checks built-in hooks first, then lazy hooks.
  */
 export async function getHook(type: string): Promise<HookHandler | undefined> {
   const builtin = builtinHooks.get(type)
@@ -53,7 +48,7 @@ export async function getHook(type: string): Promise<HookHandler | undefined> {
     return hook
   }
 
-  return getIntegrationHook(type)
+  return undefined
 }
 
 /**

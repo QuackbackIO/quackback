@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { defineMessages, useIntl } from 'react-intl'
 import { authClient } from '@/lib/client/auth-client'
 
 interface UseEmailSigninOptions {
@@ -30,6 +31,21 @@ interface UseEmailSigninResult {
   reset: () => void
 }
 
+const codeErrors = defineMessages({
+  invalid: {
+    id: 'portal.auth.otp.error.invalid',
+    defaultMessage: "That code isn't right. Check the email and try again, or send a new code.",
+  },
+  expired: {
+    id: 'portal.auth.otp.error.expired',
+    defaultMessage: 'That code expired. Send a new one.',
+  },
+  tooMany: {
+    id: 'portal.auth.otp.error.tooMany',
+    defaultMessage: 'Too many tries. Send a new code.',
+  },
+})
+
 /**
  * Drives the combined magic-link + OTP sign-in flow. The inline dialog
  * (PortalAuthFormInline) consumes this so the request/verify/resend
@@ -39,6 +55,7 @@ export function useEmailSignin({
   callbackUrl,
   onSuccess,
 }: UseEmailSigninOptions): UseEmailSigninResult {
+  const intl = useIntl()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [code, setCode] = useState('')
@@ -89,11 +106,22 @@ export function useEmailSignin({
     try {
       const result = await authClient.signIn.emailOtp({ email, otp })
       if (result.error) {
-        throw new Error(result.error.message || 'Invalid or expired code')
+        // The auth library's own wording ("Invalid OTP") never reaches people.
+        const code = result.error.code
+        setError(
+          intl.formatMessage(
+            code === 'OTP_EXPIRED'
+              ? codeErrors.expired
+              : code === 'TOO_MANY_ATTEMPTS'
+                ? codeErrors.tooMany
+                : codeErrors.invalid
+          )
+        )
+        return
       }
       await onSuccess()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid or expired code')
+    } catch {
+      setError(intl.formatMessage(codeErrors.invalid))
     } finally {
       // Success has to clear this too. A host that stays mounted after sign-in
       // (the onboarding account step) would otherwise spin forever, and the

@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Jira issue-tracker capability: manual ref parsing for ticket linking.
  * The externalId namespace is the issue KEY (e.g. "PROJ-42") — matching what
@@ -7,7 +8,6 @@
 import type { IssueTrackerCapability, ParsedIssueRef } from '@/lib/server/integrations/types'
 import { issueError } from '@/lib/server/integrations/message-utils'
 import { ValidationError } from '@/lib/shared/errors'
-import { getJiraAccessToken } from '@/integrations/jira/server/token'
 
 /** Markdown → minimal ADF: one paragraph per blank-line-separated block.
  *  Deliberately lossy (markdown syntax renders literally) — converting GFM to
@@ -59,12 +59,6 @@ export const jiraIssues: IssueTrackerCapability = {
     }
   },
 
-  // The stored token expires ~hourly; refresh (and persist) before use.
-  async prepareAuth(integration) {
-    const accessToken = await getJiraAccessToken(integration)
-    return { ...((integration.config ?? {}) as Record<string, unknown>), accessToken }
-  },
-
   async create({ auth, title, bodyMarkdown }): Promise<ParsedIssueRef> {
     // The config UI stores the connected project as the composite
     // channelId "projectId:issueTypeId" (see jira-config.tsx); a legacy
@@ -79,22 +73,25 @@ export const jiraIssues: IssueTrackerCapability = {
     const issueTypeId =
       channelIssueTypeId ?? (typeof auth.issueTypeId === 'string' ? auth.issueTypeId : undefined)
 
-    const response = await fetch(`https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        fields: {
-          project: { id: projectId },
-          summary: title,
-          description: markdownToAdf(bodyMarkdown),
-          ...(issueTypeId ? { issuetype: { id: issueTypeId } } : {}),
+    const response = await integrationFetch(
+      `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
         },
-      }),
-    })
+        body: JSON.stringify({
+          fields: {
+            project: { id: projectId },
+            summary: title,
+            description: markdownToAdf(bodyMarkdown),
+            ...(issueTypeId ? { issuetype: { id: issueTypeId } } : {}),
+          },
+        }),
+      }
+    )
 
     if (!response.ok) {
       const status = response.status

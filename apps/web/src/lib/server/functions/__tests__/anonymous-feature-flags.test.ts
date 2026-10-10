@@ -12,6 +12,7 @@ const commentsHandlers: AnyHandler[] = []
 let currentHandlerTarget: AnyHandler[] = publicPostsHandlers
 
 vi.mock('@tanstack/react-start', () => ({
+  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     const chain = {
       validator() {
@@ -66,6 +67,7 @@ vi.mock('@/lib/server/functions/portal-access', () => ({
 
 const mockVoteOnPost = vi.fn()
 const mockCheckAnonVoteRateLimit = vi.fn().mockResolvedValue(true)
+const mockReserveAnonPostSlot = vi.fn().mockResolvedValue(true)
 
 vi.mock('@/lib/server/domains/posts/post.voting', () => ({
   voteOnPost: (...args: unknown[]) => mockVoteOnPost(...args),
@@ -81,10 +83,14 @@ vi.mock('@/lib/server/domains/posts/post.access', () => ({
 
 vi.mock('@/lib/server/utils/anon-rate-limit', () => ({
   checkAnonVoteRateLimit: (...args: unknown[]) => mockCheckAnonVoteRateLimit(...args),
+  reserveAnonPostSlot: (...args: unknown[]) => mockReserveAnonPostSlot(...args),
 }))
 
+// The forwarding header is client-supplied and must not decide the address the
+// anonymous limits key on; the socket peer does (no trusted proxy hops here).
 vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () => new Headers({ 'x-forwarded-for': '1.2.3.4' }),
+  getRequestIP: () => '203.0.113.5',
 }))
 
 // --- Mock: dependencies for createPublicPostFn ---
@@ -193,6 +199,7 @@ let createCommentHandler: AnyHandler
 beforeEach(async () => {
   vi.clearAllMocks()
   mockCheckAnonVoteRateLimit.mockResolvedValue(true)
+  mockReserveAnonPostSlot.mockResolvedValue(true)
 
   if (publicPostsHandlers.length === 0) {
     currentHandlerTarget = publicPostsHandlers
@@ -356,6 +363,28 @@ describe('createPublicPostFn anonymous feature flag', () => {
     const result = (await createPublicPostHandler({ data: POST_DATA })) as Record<string, unknown>
 
     expect(result).toHaveProperty('id', 'post_new')
+    expect(mockReserveAnonPostSlot).not.toHaveBeenCalled()
+  })
+
+  it('refuses an anonymous idea once the address has posted too many this hour', async () => {
+    mockRequireAuth.mockResolvedValue(ANON_AUTH)
+    setupPostMocks({ features: { allowAnonymous: true } })
+    mockReserveAnonPostSlot.mockImplementation(async (ip: string) => ip !== '203.0.113.5')
+
+    await expect(createPublicPostHandler({ data: POST_DATA })).rejects.toThrow(
+      'Too many ideas, please try again later'
+    )
+    expect(mockReserveAnonPostSlot).toHaveBeenCalledWith('203.0.113.5')
+    expect(mockCreatePost).not.toHaveBeenCalled()
+  })
+
+  it('keys the anonymous vote limit on the resolved peer address, not the forwarding header', async () => {
+    mockRequireAuth.mockResolvedValue(ANON_AUTH)
+    mockGetSettings.mockResolvedValue({ portalConfig: { features: { allowAnonymous: true } } })
+    mockVoteOnPost.mockResolvedValue({ voted: true, voteCount: 1 })
+
+    await toggleVoteHandler({ data: { postId: 'post_123' } })
+    expect(mockCheckAnonVoteRateLimit).toHaveBeenCalledWith('203.0.113.5')
   })
 })
 

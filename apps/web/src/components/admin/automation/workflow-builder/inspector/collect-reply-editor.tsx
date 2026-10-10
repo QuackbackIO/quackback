@@ -39,7 +39,7 @@ export function CollectReplyEditor({
         />
         {textAttributes.length === 0 && (
           <p className="mt-1 text-[11px] text-muted-foreground">
-            No text attributes yet — add one under Settings → Conversation data.
+            No text attributes yet. Add one under Settings → Conversations.
           </p>
         )}
       </Field>

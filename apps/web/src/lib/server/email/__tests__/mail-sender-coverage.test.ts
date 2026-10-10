@@ -50,6 +50,11 @@ const MAIL_FROM_CLASS: Record<string, 'platform' | 'workspace-identity'> = {
   sendNoteMentionEmail: 'platform',
   sendStatusIncidentPublishedEmail: 'platform',
   sendStatusMaintenanceScheduledEmail: 'platform',
+  // To a teammate about setting up their own workspace: not part of any
+  // customer thread.
+  sendOnboardingWelcomeEmail: 'platform',
+  sendOnboardingNudgeEmail: 'platform',
+  sendMessengerInstallEmail: 'platform',
 
   // May leave as an address the workspace proved it owns, so the From is
   // guard-minted or absent. These are the mails that sit inside a thread a

@@ -169,11 +169,14 @@ export const TRANSLATE_LANGUAGES = [
   { value: 'Arabic', label: 'العربية' },
   { value: 'Chinese (Simplified)', label: '简体中文' },
   { value: 'Chinese (Traditional)', label: '繁體中文' },
+  { value: 'Dutch', label: 'Nederlands' },
   { value: 'French', label: 'Français' },
   { value: 'German', label: 'Deutsch' },
+  { value: 'Polish', label: 'Polski' },
   { value: 'Portuguese (Brazilian)', label: 'Português (Brasil)' },
   { value: 'Russian', label: 'Русский' },
   { value: 'Spanish', label: 'Español' },
+  { value: 'Thai', label: 'ภาษาไทย' },
 ] as const
 
 /** The completed rewrite (RUN_FINISHED.result). */

@@ -11,16 +11,21 @@ function InputOTP({
 }: React.ComponentProps<typeof OTPInput> & {
   containerClassName?: string
 }) {
+  // A code reads left to right in every language: without this, right-to-left
+  // copy lays the six digits out mirrored.
   return (
-    <OTPInput
-      data-slot="input-otp"
-      containerClassName={cn(
-        'flex items-center gap-2 has-[:disabled]:opacity-50',
-        containerClassName
-      )}
-      className={cn('disabled:cursor-not-allowed', className)}
-      {...props}
-    />
+    <div dir="ltr" className="contents">
+      <OTPInput
+        data-slot="input-otp"
+        dir="ltr"
+        containerClassName={cn(
+          'flex items-center gap-2 has-[:disabled]:opacity-50',
+          containerClassName
+        )}
+        className={cn('disabled:cursor-not-allowed', className)}
+        {...props}
+      />
+    </div>
   )
 }
 
@@ -49,7 +54,7 @@ function InputOTPSlot({
         'border-y border-r border-input first:rounded-l-md first:border-l last:rounded-r-md',
         'dark:bg-input/30 shadow-xs outline-none transition-all',
         // z-10 on active so the ring isn't clipped by neighbouring cell borders.
-        'data-[active=true]:z-10 data-[active=true]:border-ring data-[active=true]:ring-[3px] data-[active=true]:ring-ring/50',
+        'data-[active=true]:z-10 data-[active=true]:border-ring data-[active=true]:ring-[3px] data-[active=true]:ring-ring',
         'aria-invalid:border-destructive data-[active=true]:aria-invalid:border-destructive data-[active=true]:aria-invalid:ring-destructive/20 dark:data-[active=true]:aria-invalid:ring-destructive/40',
         className
       )}

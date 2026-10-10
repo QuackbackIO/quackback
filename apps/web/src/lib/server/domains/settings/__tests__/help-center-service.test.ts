@@ -48,6 +48,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     update: (...args: unknown[]) => mockUpdate(...args),
     select: () => ({
       from: () => ({
+        where: () => Promise.resolve([]),
         limit: () => Promise.resolve([]),
         orderBy: () => Promise.resolve([]),
       }),

@@ -4,6 +4,7 @@ import { zapierCatalog } from '@/integrations/zapier/server/catalog'
 
 export const zapierIntegration: IntegrationDefinition = {
   id: 'zapier',
+  destination: { scopeKeys: [] },
   catalog: zapierCatalog,
   // No OAuth — Zapier uses webhook URLs pasted by the user
   hook: zapierHook,

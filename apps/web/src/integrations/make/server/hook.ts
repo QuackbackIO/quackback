@@ -1,11 +1,11 @@
+import { deliveryError, httpDeliveryFailure } from '@/lib/server/integrations/sync/outcomes'
 /**
  * Make hook handler.
  * Sends event payloads to a Make webhook URL.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { safeFetch } from '@/lib/server/content/ssrf-guard'
 import { logger } from '@/lib/server/logger'
 import { buildMakePayload } from '@/integrations/make/server/message'
@@ -21,27 +21,23 @@ export interface MakeConfig {
   rootUrl: string
 }
 
-export const makeHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
+export const makeHook: IntegrationHook = {
+  async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId: webhookUrl } = target as MakeTarget
     const { rootUrl } = config as MakeConfig
 
     if (!webhookUrl || !webhookUrl.startsWith('https://')) {
-      return { success: false, error: 'Invalid webhook URL', shouldRetry: false }
+      return { state: 'failed', errorCode: 'provider_failed' }
     }
 
     // Only allow Make webhook domains
     try {
       const url = new URL(webhookUrl)
       if (!url.hostname.endsWith('.make.com') && !url.hostname.endsWith('.integromat.com')) {
-        return {
-          success: false,
-          error: 'Webhook URL must be a Make (make.com) URL',
-          shouldRetry: false,
-        }
+        return { state: 'failed', errorCode: 'provider_failed' }
       }
     } catch {
-      return { success: false, error: 'Invalid webhook URL', shouldRetry: false }
+      return { state: 'failed', errorCode: 'provider_failed' }
     }
 
     log.debug({ event_type: event.type }, 'processing event')
@@ -56,27 +52,15 @@ export const makeHook: HookHandler = {
       })
 
       if (!response.ok) {
-        const status = response.status
-        log.error({ status_code: status }, 'webhook returned error status')
-
-        return {
-          success: false,
-          error: `Webhook returned ${status}`,
-          shouldRetry: status === 429 || status >= 500,
-        }
+        return httpDeliveryFailure(response)
       }
 
       log.info('webhook delivered')
-      return { success: true }
+      return { state: 'succeeded' }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       log.error({ err: error }, 'webhook delivery failed')
 
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: isRetryableError(error),
-      }
+      return deliveryError(error)
     }
   },
 }

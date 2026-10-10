@@ -3,9 +3,8 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { SignalIcon } from '@heroicons/react/24/solid'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { AUTOSAVE } from '@/lib/client/autosave'
 import { StatusGeneralCard } from '@/components/admin/settings/status/status-general-card'
 import { StatusVisibilityCard } from '@/components/admin/settings/status/status-visibility-card'
 import { StatusNotificationsCard } from '@/components/admin/settings/status/status-notifications-card'
@@ -15,8 +14,10 @@ import { statusSettingsQueries } from '@/lib/client/queries/status'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { DEFAULT_STATUS_SETTINGS, type StatusSettings } from '@/lib/shared/status-settings'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/status')({
+  head: adminPageHead('Status settings'),
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'status')) {
       throw redirect({ to: '/admin/settings/general' })
@@ -39,6 +40,7 @@ function StatusSettingsPage() {
   // switches/radios save immediately. Pending text is preserved across a
   // save response so an in-flight result can't clobber newer keystrokes.
   const mutation = useMutation({
+    meta: AUTOSAVE,
     mutationFn: (patch: Partial<StatusSettings>) => updateStatusSettingsFn({ data: patch }),
     onSuccess: (saved) => {
       setSettings((prev) =>
@@ -61,16 +63,7 @@ function StatusSettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
-      </div>
-      <PageHeader
-        icon={SignalIcon}
-        title="Status"
-        description="Public status page for your services: incidents, maintenance, and uptime history."
-      />
-
+    <SettingsPage page="/admin/settings/status">
       <StatusGeneralCard settings={settings} onChange={onChange} onFlushText={textSave.flush} />
       <StatusVisibilityCard settings={settings} onChange={onChange} disabled={mutation.isPending} />
       <StatusNotificationsCard
@@ -79,6 +72,6 @@ function StatusSettingsPage() {
         disabled={mutation.isPending}
       />
       <StatusDangerCard />
-    </div>
+    </SettingsPage>
   )
 }

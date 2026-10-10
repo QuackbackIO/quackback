@@ -17,8 +17,7 @@ import { waitForToast } from '../../utils/helpers'
  * on the widget.
  */
 test.describe('Admin Support Inbox', { tag: '@smoke' }, () => {
-  // The Properties aside is `hidden xl:flex` (1280px). CI's default 1280
-  // viewport can land just under that with chrome, so pin a desktop size.
+  // The Properties aside is `hidden min-[1680px]:flex`. Pin a desktop size so it is always shown.
   test.use({ viewport: { width: 1920, height: 1080 } })
   let seeded: SeededConversation
 

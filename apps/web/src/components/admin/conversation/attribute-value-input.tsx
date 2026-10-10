@@ -125,7 +125,6 @@ export function AttributeValueInput({
                   const next = checked ? [...selected, o.id] : selected.filter((id) => id !== o.id)
                   onChange(next.length === 0 ? null : next)
                 }}
-                onSelect={(e) => e.preventDefault()}
               >
                 {o.label}
               </DropdownMenuCheckboxItem>

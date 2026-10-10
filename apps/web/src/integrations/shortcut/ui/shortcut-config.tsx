@@ -44,11 +44,6 @@ const EVENT_CONFIG = [
     label: 'Create story from new feedback',
     description: 'Automatically create a Shortcut story when new feedback is submitted',
   },
-  {
-    id: 'post.status_changed' as const,
-    label: 'Sync status changes',
-    description: 'Update linked stories when feedback status changes',
-  },
 ]
 
 export function ShortcutConfig({

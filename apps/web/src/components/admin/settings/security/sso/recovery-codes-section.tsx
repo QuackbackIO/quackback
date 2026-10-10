@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { LocalDate } from '@/components/ui/local-date'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   KeyIcon,
@@ -72,7 +73,7 @@ export function RecoveryCodesSection() {
   })
 
   return (
-    <div className="mt-6 border-t border-border/50 pt-6">
+    <div>
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
           <KeyIcon className="h-5 w-5 text-muted-foreground" />
@@ -83,12 +84,10 @@ export function RecoveryCodesSection() {
             One-time break-glass codes to sign in when single sign-on is unavailable.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <Badge variant={activeCount > 0 ? 'secondary' : 'destructive'}>
-              {activeCount} active
-            </Badge>
+            {activeCount > 0 && <Badge variant="secondary">{activeCount} active</Badge>}
             {latest ? (
               <span className="text-muted-foreground">
-                Last generated {new Date(latest.createdAt).toLocaleDateString()}
+                Last generated <LocalDate date={latest.createdAt} />
               </span>
             ) : (
               <span className="text-muted-foreground">No codes generated yet.</span>
@@ -116,7 +115,7 @@ export function RecoveryCodesSection() {
           <ExclamationTriangleIcon className="size-4" />
           <AlertDescription>
             Only {activeCount} recovery {activeCount === 1 ? 'code' : 'codes'} left. Generate a
-            fresh batch before you run out — running out during a broken-SSO incident leaves you
+            fresh batch before you run out. Running out during a broken-SSO incident leaves you
             locked out.
           </AlertDescription>
         </Alert>
@@ -138,8 +137,8 @@ export function RecoveryCodesSection() {
           <DialogHeader>
             <DialogTitle>Save these recovery codes</DialogTitle>
             <DialogDescription>
-              These codes will not be shown again. Store them somewhere safe — a password manager,
-              encrypted note, or printed copy in a locked drawer.
+              These codes will not be shown again. Store them somewhere safe, such as a password
+              manager, an encrypted note or a printed copy in a locked drawer.
             </DialogDescription>
           </DialogHeader>
           {revealedCodes ? (
@@ -170,6 +169,7 @@ export function RecoveryCodesSection() {
                 <Checkbox
                   checked={acknowledged}
                   onCheckedChange={(v) => setAcknowledged(v === true)}
+                  data-in-label
                 />
                 <span>
                   I&apos;ve saved these codes somewhere safe. I understand they won&apos;t be shown

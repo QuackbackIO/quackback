@@ -141,6 +141,15 @@ describe('explainAuthorizeError — prompt rejection', () => {
     expect(hint).toMatch(/prompt/i)
   })
 
+  it('points at not sending a prompt rather than at another prompt value', () => {
+    // A provider that rejects one prompt it does not implement usually rejects
+    // the others too, so suggesting a different value sends the admin round in
+    // a circle. Sending no prompt is the change that reliably works.
+    const hint = explainAuthorizeError('invalid_configuration', null, undefined, 'login')
+    expect(hint).toContain("Don't send a prompt")
+    expect(hint).not.toMatch(/most widely supported/i)
+  })
+
   it('mentions the prompt on a generic server_error too', () => {
     const hint = explainAuthorizeError('server_error', null, undefined, 'select_account')
     expect(hint).toMatch(/prompt/i)

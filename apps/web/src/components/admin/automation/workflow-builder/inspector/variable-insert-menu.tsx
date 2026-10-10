@@ -30,7 +30,7 @@ export function VariableInsertMenu({
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent align={align}>
         {WORKFLOW_VARIABLE_CATALOGUE.map((v) => (
-          <DropdownMenuItem key={v.key} onSelect={() => onInsert(v.key)}>
+          <DropdownMenuItem key={v.key} onClick={() => onInsert(v.key)}>
             {v.label}
             <span className="ml-auto font-mono text-[11px] text-muted-foreground">
               {`{${v.key}}`}

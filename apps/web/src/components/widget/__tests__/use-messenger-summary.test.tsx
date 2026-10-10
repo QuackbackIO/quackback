@@ -13,10 +13,10 @@ vi.mock('@/lib/client/widget-auth', () => ({
   getWidgetAuthHeaders: () => ({}),
 }))
 // Keep both fetches pending: presence comes from the seeded shared query, and
-// the thread fetch (getMyConversationFn) stays pending so only the seed is under test.
-vi.mock('@/lib/server/functions/conversation', () => ({
-  getMyConversationFn: () => new Promise(() => {}),
-  getConversationPresenceFn: () => new Promise(() => {}),
+// the thread fetch stays pending so only the seed is under test.
+vi.mock('@/lib/server/functions/widget/conversation', () => ({
+  widgetGetMyConversationFn: () => new Promise(() => {}),
+  widgetGetConversationPresenceFn: () => new Promise(() => {}),
 }))
 
 import { useConversationSummary } from '../use-messenger-summary'

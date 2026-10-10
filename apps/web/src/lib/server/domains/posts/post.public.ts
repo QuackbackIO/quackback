@@ -16,6 +16,7 @@ import {
   postStatuses,
   userSegments,
   principal as principalTable,
+  user as userTable,
 } from '@/lib/server/db'
 import {
   toUuid,
@@ -27,34 +28,46 @@ import {
 } from '@quackback/ids'
 import type { PublicPostListResult } from './post.types'
 import type { RespondedFilter } from '@/lib/shared/types/filters'
-import { postViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
+import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
-import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 
-/** Resolve avatar URL from principal's avatar fields */
-export function resolveAvatarUrl(principal: {
+/**
+ * Portal tag visibility. Non-team viewers only see tags marked public —
+ * both in filter lists and attached to posts — so an internal tag never
+ * reaches a customer. Team actors see every tag (they assign internal tags
+ * from the portal too). Returns undefined for team actors so it can be
+ * dropped into `and(...)` without a branch.
+ */
+export function publicTagCondition(actor: Actor) {
+  return isTeamActor(actor) ? undefined : eq(postTags.isPublic, true)
+}
+
+/**
+ * Raw-SQL twin of {@link publicTagCondition} for the `json_agg` tag
+ * subqueries, which alias `post_tags` as `t`. Empty for team actors.
+ */
+export function publicTagSqlFilter(actor: Actor) {
+  return isTeamActor(actor) ? sql`` : sql`AND t.is_public = true`
+}
+
+/** Resolve avatar URL — uploaded key first, then OAuth/external URL. */
+export function resolveAvatarUrl(source: {
   avatarKey?: string | null
   avatarUrl?: string | null
+  userImageKey?: string | null
+  userImage?: string | null
 }): string | null {
-  if (principal.avatarKey) {
-    const s3Url = getPublicUrlOrNull(principal.avatarKey)
-    if (s3Url) return s3Url
-  }
-  return principal.avatarUrl ?? null
+  return resolveUserAvatarUrl({
+    userImage: source.userImage,
+    userImageKey: source.userImageKey,
+    principalAvatarUrl: source.avatarUrl,
+    principalAvatarKey: source.avatarKey,
+  })
 }
 
 export function parseJson<T>(value: string | T): T {
   return typeof value === 'string' ? JSON.parse(value) : value
-}
-
-export function parseAvatarData(json: string | null): string | null {
-  if (!json) return null
-  const data = parseJson<{ key?: string; url?: string }>(json)
-  if (data.key) {
-    const s3Url = getPublicUrlOrNull(data.key)
-    if (s3Url) return s3Url
-  }
-  return data.url ?? null
 }
 
 type SortOrder = 'top' | 'new' | 'trending'
@@ -162,10 +175,14 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
   }
 
   if (tagIds && tagIds.length > 0) {
+    // Join the tag catalog so an internal tag id in a crafted URL is inert
+    // for non-team callers — otherwise the filter would reveal which posts
+    // carry a tag the viewer is never shown.
     const postIdsWithTagsSubquery = db
       .selectDistinct({ postId: postTagAssignments.postId })
       .from(postTagAssignments)
-      .where(inArray(postTagAssignments.tagId, tagIds))
+      .innerJoin(postTags, eq(postTags.id, postTagAssignments.tagId))
+      .where(and(inArray(postTagAssignments.tagId, tagIds), publicTagCondition(actor)))
     conditions.push(inArray(posts.id, postIdsWithTagsSubquery))
   }
 
@@ -283,7 +300,7 @@ export async function listPublicPostsWithVotesAndAvatars(
           })
           .from(postTagAssignments)
           .innerJoin(postTags, eq(postTags.id, postTagAssignments.tagId))
-          .where(inArray(postTagAssignments.postId, pagePostIds))
+          .where(and(inArray(postTagAssignments.postId, pagePostIds), publicTagCondition(actor)))
       : Promise.resolve([]),
     pageAuthorIds.length > 0
       ? db
@@ -292,8 +309,11 @@ export async function listPublicPostsWithVotesAndAvatars(
             displayName: principalTable.displayName,
             avatarKey: principalTable.avatarKey,
             avatarUrl: principalTable.avatarUrl,
+            userImage: userTable.image,
+            userImageKey: userTable.imageKey,
           })
           .from(principalTable)
+          .leftJoin(userTable, eq(userTable.id, principalTable.userId))
           .where(inArray(principalTable.id, pageAuthorIds))
       : Promise.resolve([]),
   ])
@@ -308,12 +328,12 @@ export async function listPublicPostsWithVotesAndAvatars(
 
   const items = trimmedResults.map((post): PostWithVotesAndAvatars => {
     const author = authorById.get(post.principalId)
-    // Mirror the previous correlated subquery's avatar precedence exactly: the
-    // stored key (resolved to its S3 URL) wins, with the raw avatar_url only
-    // used when no key is present.
-    const avatarUrl = author?.avatarKey
-      ? getPublicUrlOrNull(author.avatarKey)
-      : (author?.avatarUrl ?? null)
+    const avatarUrl = resolveAvatarUrl({
+      avatarKey: author?.avatarKey,
+      avatarUrl: author?.avatarUrl,
+      userImageKey: author?.userImageKey,
+      userImage: author?.userImage,
+    })
     return {
       id: post.id,
       title: post.title,
@@ -362,7 +382,7 @@ export async function listPublicPosts(
         (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
          FROM ${postTagAssignments} pt
          INNER JOIN ${postTags} t ON t.id = pt.tag_id
-         WHERE pt.post_id = ${posts.id}),
+         WHERE pt.post_id = ${posts.id} ${publicTagSqlFilter(actor)}),
         '[]'
       )`.as('tags_json'),
       authorName: sql<string | null>`(
@@ -411,31 +431,6 @@ export async function getAllUserVotedPostIds(principalId: PrincipalId): Promise<
     .innerJoin(boards, eq(boards.id, posts.boardId))
     .where(
       and(eq(postVotes.principalId, principalId), isNull(posts.deletedAt), isNull(boards.deletedAt))
-    )
-  const ids = new Set<PostId>()
-  for (const row of result) {
-    ids.add(row.postId)
-    if (row.canonicalPostId) ids.add(row.canonicalPostId)
-  }
-  return ids
-}
-
-export async function getVotedPostIdsByUserId(
-  userId: import('@quackback/ids').UserId
-): Promise<Set<PostId>> {
-  // Same source-to-canonical mapping as getAllUserVotedPostIds: a vote on a
-  // merged source should highlight the surviving post in the portal list.
-  const result = await db
-    .select({
-      postId: postVotes.postId,
-      canonicalPostId: posts.canonicalPostId,
-    })
-    .from(postVotes)
-    .innerJoin(principalTable, eq(postVotes.principalId, principalTable.id))
-    .innerJoin(posts, eq(posts.id, postVotes.postId))
-    .innerJoin(boards, eq(boards.id, posts.boardId))
-    .where(
-      and(eq(principalTable.userId, userId), isNull(posts.deletedAt), isNull(boards.deletedAt))
     )
   const ids = new Set<PostId>()
   for (const row of result) {

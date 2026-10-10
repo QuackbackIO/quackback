@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } fro
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import type { JSONContent } from '@tiptap/core'
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import {
   buildConversationRows,
   computeBlockStates,
@@ -18,7 +19,8 @@ import {
   BlockReplyTimeCaption,
 } from './block-affordance'
 import { BlockTicketForm } from './block-ticket-form'
-import { ConversationPresenceBadge } from './conversation-presence-badge'
+import { BackAtTime, ConversationPresenceBadge, hasBackAtTime } from './conversation-presence-badge'
+import { ConversationThreadSkeleton } from './conversation-thread-skeleton'
 import { SystemEventNotice } from './system-event-notice'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
 import { ArrowUpIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
@@ -28,22 +30,33 @@ import { Avatar } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { TypingDots } from '@/components/shared/typing-dots'
 import { personalizeMessage, firstNameOf } from '@/lib/shared/conversation/personalize'
+import { shownGreeting } from '@/lib/shared/conversation/default-greeting'
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
+import { useHostVisibleCount } from '@/lib/client/hooks/use-host-visible'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
 import { useAssistantTurn } from '@/lib/client/hooks/use-assistant-turn'
-import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
-import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
+import {
+  useConversationComposerAttachments,
+  type ComposerUploadFn,
+} from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
+import {
+  ConversationGalleryContext,
+  useGalleryValue,
+} from '@/components/shared/files/conversation-gallery'
 import { VISITOR_CONVERSATION_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { VisitorMessageBubble } from '@/components/conversation/message-bubble'
 import {
   ThreadViewport,
   docHasContentNode,
   useComposerDoc,
+  useComposerDocValue,
+  useDebouncedComposerText,
   useMarkReadOnIncoming,
   useOlderMessages,
   useThreadVirtualizer,
   useTypingSender,
+  type ComposerDocStore,
 } from '@/components/conversation/thread'
 import {
   applyVisitorThreadEvent,
@@ -57,25 +70,19 @@ import { LinkPreviews } from '@/components/shared/link-preview-card'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { CSAT_FACES } from '@/lib/shared/db-types'
 import type { BlockReplyMetadata } from '@/lib/shared/db-types'
-import {
-  getMyConversationFn,
-  sendConversationMessageFn,
-  listConversationMessagesFn,
-  mintConversationStreamTokenFn,
-  submitCsatFn,
-} from '@/lib/server/functions/conversation'
-import { getConversationLinkedTicketFn } from '@/lib/server/functions/tickets'
+import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 import { getWidgetCapabilitiesFn } from '@/lib/server/functions/widget-capabilities'
 import { TicketHeaderCard } from './ticket-header-card'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 import type { RequesterTicketDTO } from '@/lib/server/domains/tickets'
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-}
+/** A message's time of day, e.g. "3:04 PM". */
+const TIME_LABEL: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
 
 const NO_HEADERS = (): Record<string, string> => ({})
 const ALWAYS_READY = async (): Promise<boolean> => true
 const EMPTY_MESSAGES: ConversationMessageDTO[] = []
+const NO_HELP_RESULTS: Array<{ slug: string; title: string }> = []
 
 // The full rich-text editor pulls in lowlight's syntax-highlighting grammars
 // (a meaningful chunk) that the composer doesn't need until it's actually
@@ -89,10 +96,9 @@ const LazyRichTextEditor = lazy(() =>
 
 // Cheap plain-text extraction from a TipTap JSON doc — drives the send-gate,
 // the typing indicator, the help-search query, and the link-preview scanner.
-// Deliberately NOT a markdown serialization: RichTextEditor only pays for the
-// expensive recursive @tiptap/markdown walk when the caller's onChange
-// declares a 3rd (markdown) parameter, which would redo that walk on every
-// keystroke — overkill for what's ultimately just an emptiness/substring check.
+// Deliberately NOT a markdown serialization: reading the editor's markdown
+// would run the recursive @tiptap/markdown walk on every keystroke, overkill
+// for what's ultimately just an emptiness/substring check.
 function tiptapPlainText(doc: JSONContent | null | undefined): string {
   if (!doc?.content) return ''
   const parts: string[] = []
@@ -136,9 +142,10 @@ export interface VisitorConversationThreadProps {
   sessionVersion?: number | string
   /** The visitor's own identity, for their bubbles' name/avatar. */
   currentUser?: { name?: string | null; avatarUrl?: string | null } | null
-  /** Upload one image file, resolving to its public URL. Rejections surface as
-   *  inline composer errors. */
-  uploadImage: (file: File) => Promise<string>
+  /** Upload one attached file, resolving to its stored UploadedFile. Carries
+   *  the surface's own endpoint/headers/session-minting; failures surface on
+   *  the tile that failed. */
+  uploadFile: ComposerUploadFn
   /** Team availability (online agents / office hours), owned by the surface so
    *  every sibling view shares one poll. */
   presence: VisitorConversationThreadPresence
@@ -159,11 +166,24 @@ export interface VisitorConversationThreadProps {
   showHeader?: boolean
   /** Notified when the first send creates the conversation. */
   onConversationStarted?: (id: ConversationId) => void
+  /**
+   * Focus the composer as soon as it mounts. The surface decides: a "new
+   * conversation" landing on a desktop host wants the cursor in the box; a
+   * resumed thread (reading, not writing) or a mobile host (software keyboard
+   * would cover the thread) does not.
+   */
+  autofocusComposer?: boolean
+  /** The widget's messenger is narrow — attachment cards render as compact
+   *  rows there. The portal Support tab is wide and leaves this at its
+   *  default. */
+  compact?: boolean
+  /** Text the composer starts with on its first mount; a send clears it as usual. */
+  initialDraft?: string
 }
 
 /**
  * The visitor side of a conversation: virtualized thread, live SSE updates,
- * composer (rich text + image attachments + emoji), pre-chat email capture,
+ * composer (rich text + file attachments + emoji), pre-chat email capture,
  * presence strip, offline hints, and the post-conversation CSAT prompt.
  *
  * Shared by the widget messenger tab and the portal Support tab — every
@@ -179,16 +199,21 @@ export function VisitorConversationThread({
   ensureSession = ALWAYS_READY,
   sessionVersion = 0,
   currentUser,
-  uploadImage,
+  uploadFile,
   presence,
   onAgentActivity,
   helpSearch,
   embedOpenMode = 'newTab',
   showHeader = true,
   onConversationStarted,
+  autofocusComposer = false,
+  compact = false,
+  initialDraft,
 }: VisitorConversationThreadProps) {
   const intl = useIntl()
+  const formatDate = useLocalDateFormatter()
   const queryClient = useQueryClient()
+  const rpc = useVisitorSurfaceRpc()
   const firstName = firstNameOf(currentUser?.name)
 
   const [loading, setLoading] = useState(true)
@@ -222,9 +247,20 @@ export function VisitorConversationThread({
   const [csatCommentDone, setCsatCommentDone] = useState(false)
   const [csatComment, setCsatComment] = useState('')
   // Composer is a rich TipTap doc (inline images + post embeds): the shared
-  // composer-doc state (plain text gates send + drives help-search/typing; the
+  // composer-doc store (plain text gates send + drives help-search/typing; the
   // doc persists as contentJson; the reset signal clears the editor on send).
+  // Typing writes the store without re-rendering this thread.
   const composer = useComposerDoc()
+  const [initialDraftDoc] = useState<JSONContent | undefined>(() => {
+    const text = initialDraft?.trim()
+    if (!text) return undefined
+    const doc: JSONContent = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+    }
+    composer.draft.set(text, doc)
+    return doc
+  })
   const [sending, setSending] = useState(false)
   // Phase C conversational block layer: the block message currently awaiting
   // its structured-send response — the optimistic tap-disable (contract
@@ -247,6 +283,7 @@ export function VisitorConversationThread({
     staleTime: Infinity,
   })
   const messages = thread?.messages ?? EMPTY_MESSAGES
+  const gallery = useGalleryValue(messages)
   const hasMoreOlder = thread?.hasMore ?? false
   const agentReadAt = thread?.agentLastReadAt ?? null
   const conversationStatus = thread?.status ?? null
@@ -272,97 +309,59 @@ export function VisitorConversationThread({
     clearAssistantTurn,
   } = useAssistantTurn()
 
-  // No toast on visitor surfaces, so upload failures render as inline composer
-  // text. uploadImage rejects on failure; the wrapper records the message.
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const upload = useCallback(
-    async (file: File): Promise<string> => {
-      try {
-        return await uploadImage(file)
-      } catch (err) {
-        setUploadError(err instanceof Error ? err.message : 'Upload failed')
-        throw err
-      }
-    },
-    [uploadImage]
-  )
-  // Image attachments use the shared tray (thumbnails + zoom) — same as admin.
+  // Every attached file stages its own tray tile with its own progress/error
+  // (no toast on visitor surfaces) — uploadFile already carries the surface's
+  // endpoint/headers/session-minting (the widget's flavour mints an anonymous
+  // session on first use, GH #464).
   const {
-    pending: pendingAttachments,
+    items: attachmentItems,
+    attachments: pendingAttachments,
     addFiles,
     remove: removeAttachment,
+    retry: retryAttachment,
     clear: clearAttachments,
     uploading,
-  } = useConversationComposerAttachments(upload)
-  // Attaching/pasting an image fires before the visitor has ever sent a message,
-  // so there may be no session yet — mint one first (anonymous is fine) or the
-  // upload goes out with no Bearer and 401s silently.
-  const handleAddFiles = useCallback(
-    async (files: FileList | File[]) => {
-      // Snapshot to a real array NOW: the file <input>'s live FileList is emptied
-      // by `e.target.value = ''` synchronously after this call, before the
-      // ensureSession() await below resolves — so reading it later loses the pick.
-      const list = Array.from(files)
-      if (list.length === 0) return
-      setUploadError(null)
-      const ready = await ensureSession()
-      if (!ready) {
-        setUploadError(
-          intl.formatMessage({
-            id: 'widget.messenger.upload.failed',
-            defaultMessage: "Couldn't upload that image. Please try again.",
-          })
-        )
-        return
-      }
-      await addFiles(list)
-    },
-    [ensureSession, addFiles, intl]
-  )
-  // Live link unfurl while composing (debounced), matching admin.
-  const debouncedMessageText = useDebouncedValue(composer.text, 500)
+  } = useConversationComposerAttachments(uploadFile)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const composerPlaceholder = intl.formatMessage({
     id: 'widget.messenger.placeholder',
     defaultMessage: 'Type your message…',
   })
 
-  // RichTextEditor's onChange fires (json, html, markdown) — only the JSON is
-  // needed here (see tiptapPlainText above for why we skip the markdown arg).
-  // Also drives the typing indicator, same as onLocalInput did for the old composer.
+  // Only the JSON is read: the send gate needs its text on every edit (see
+  // tiptapPlainText above for why not the markdown). Also drives the typing
+  // indicator, same as onLocalInput did for the old composer.
   const handleEditorChange = useCallback(
-    (json: JSONContent) => {
-      composer.onChange(tiptapPlainText(json).trim(), json)
+    (document: EditorDocument) => {
+      const json = document.json()
+      composer.draft.set(tiptapPlainText(json).trim(), json)
       onLocalInput()
     },
-    [composer.onChange, onLocalInput]
+    [composer.draft, onLocalInput]
   )
 
-  // Pasting/dropping an image routes to the attachment tray, matching the
+  // Pasting/dropping a file routes to the attachment tray, matching the
   // paperclip button — RichTextEditor has no onImageUpload wired for visitors
-  // (images stay tray-only here, never inlined), so this replicates what the
-  // old composer's own paste/drop interception did.
+  // (files stay tray-only here, never inlined), so this replicates what the
+  // old composer's own paste/drop interception did. Paste still works for an
+  // image from the clipboard; drop/paste now accept any file.
   const handleComposerPaste = useCallback(
     (e: React.ClipboardEvent<HTMLDivElement>) => {
-      const images = Array.from(e.clipboardData?.files ?? []).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      if (images.length === 0) return
+      const files = Array.from(e.clipboardData?.files ?? [])
+      if (files.length === 0) return
       e.preventDefault()
-      void handleAddFiles(images)
+      void addFiles(files)
     },
-    [handleAddFiles]
+    [addFiles]
   )
   const handleComposerDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
-      const images = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      if (images.length === 0) return
+      const files = Array.from(e.dataTransfer?.files ?? [])
+      if (files.length === 0) return
       e.preventDefault()
-      void handleAddFiles(images)
+      void addFiles(files)
     },
-    [handleAddFiles]
+    [addFiles]
   )
 
   // Initial load — resumes an existing conversation for the current principal
@@ -379,7 +378,7 @@ export function VisitorConversationThread({
           conversationTarget === 'new'
             ? (createdConversationIdRef.current ?? null)
             : (conversationTarget ?? undefined)
-        const res = await getMyConversationFn({
+        const res = await rpc.getMyConversation({
           data: { conversationId: effectiveTarget, locale: intl.locale },
           headers: getAuthHeaders(),
         })
@@ -424,7 +423,7 @@ export function VisitorConversationThread({
   const refreshMessages = useCallback(async () => {
     if (!conversationId) return
     try {
-      const page = await listConversationMessagesFn({
+      const page = await rpc.listConversationMessages({
         data: { conversationId },
         headers: getAuthHeaders(),
       })
@@ -451,10 +450,11 @@ export function VisitorConversationThread({
   // narration. Fire-and-forget: a failed refresh keeps the current header.
   const refreshLinkedTicket = useCallback(() => {
     if (!conversationId) return
-    void getConversationLinkedTicketFn({
-      data: { conversationId },
-      headers: getAuthHeaders(),
-    })
+    void rpc
+      .getConversationLinkedTicket({
+        data: { conversationId },
+        headers: getAuthHeaders(),
+      })
       .then((ticket) => setLinkedTicket(ticket ?? null))
       .catch(() => {})
   }, [conversationId, getAuthHeaders])
@@ -484,7 +484,7 @@ export function VisitorConversationThread({
     buildUrl: async () => {
       if (!conversationId) return null
       try {
-        const { token } = await mintConversationStreamTokenFn({ headers: getAuthHeaders() })
+        const { token } = await rpc.mintConversationStreamToken({ headers: getAuthHeaders() })
         if (!token) return null
         return `/api/chat/stream?conversationId=${encodeURIComponent(
           conversationId
@@ -544,17 +544,19 @@ export function VisitorConversationThread({
         )
       setRating(rating)
       setCsatJustRated(true)
-      void submitCsatFn({
-        data: { conversationId, rating },
-        headers: getAuthHeaders(),
-      }).catch(() => {
-        // Roll back so the stars reappear for a retry — unless a later CSAT
-        // submit (e.g. the comment) already superseded this request.
-        if (csatSubmitGenRef.current === gen) {
-          setRating(null)
-          setCsatJustRated(false)
-        }
-      })
+      void rpc
+        .submitCsat({
+          data: { conversationId, rating },
+          headers: getAuthHeaders(),
+        })
+        .catch(() => {
+          // Roll back so the stars reappear for a retry — unless a later CSAT
+          // submit (e.g. the comment) already superseded this request.
+          if (csatSubmitGenRef.current === gen) {
+            setRating(null)
+            setCsatJustRated(false)
+          }
+        })
     },
     [conversationId, getAuthHeaders, queryClient]
   )
@@ -565,10 +567,12 @@ export function VisitorConversationThread({
     csatSubmitGenRef.current++ // supersede any in-flight rating-submit rollback
     setCsatCommentDone(true)
     const trimmed = csatComment.trim()
-    void submitCsatFn({
-      data: { conversationId, rating: csatRating, comment: trimmed || undefined },
-      headers: getAuthHeaders(),
-    }).catch(() => setCsatCommentDone(false)) // reopen the box for a retry on failure
+    void rpc
+      .submitCsat({
+        data: { conversationId, rating: csatRating, comment: trimmed || undefined },
+        headers: getAuthHeaders(),
+      })
+      .catch(() => setCsatCommentDone(false)) // reopen the box for a retry on failure
   }, [conversationId, csatRating, csatComment, getAuthHeaders])
 
   // Phase C conversational block layer: a structured reply (button tap /
@@ -583,7 +587,7 @@ export function VisitorConversationThread({
       if (!conversationId || submittingBlockId) return
       setSubmittingBlockId(blockReply.inReplyToMessageId)
       try {
-        const res = await sendConversationMessageFn({
+        const res = await rpc.sendConversationMessage({
           data: { conversationId, content: displayText, blockReply },
           headers: getAuthHeaders(),
         })
@@ -631,7 +635,7 @@ export function VisitorConversationThread({
   const handleCsatComment = useCallback(
     (rating: number, comment: string) => {
       if (!conversationId) return
-      void submitCsatFn({
+      void rpc.submitCsat({
         data: { conversationId, rating, comment: comment || undefined },
         headers: getAuthHeaders(),
       })
@@ -658,32 +662,52 @@ export function VisitorConversationThread({
 
   // Help-center deflection: as the visitor types their first message (before a
   // conversation exists), suggest relevant articles so they can self-serve.
-  const [helpResults, setHelpResults] = useState<Array<{ slug: string; title: string }>>([])
+  const [helpResults, setHelpResults] = useState(NO_HELP_RESULTS)
   const helpSearchFn = helpSearch?.search
-  const messageText = composer.text
+  const composerDraft = composer.draft
+  const clearComposer = composer.clear
+  useEffect(() => {
+    setHelpResults(NO_HELP_RESULTS)
+  }, [helpSearchFn, sessionVersion])
   useEffect(() => {
     if (!helpSearchFn || conversationId || messages.length > 0) {
-      setHelpResults([])
+      setHelpResults(NO_HELP_RESULTS)
       return
     }
-    const q = messageText.trim()
-    if (q.length < 3) {
-      setHelpResults([])
-      return
-    }
-    const controller = new AbortController()
-    const t = setTimeout(async () => {
-      try {
-        setHelpResults(await helpSearchFn(q, controller.signal))
-      } catch {
-        /* aborted or failed — leave suggestions as-is */
+    // Search once the text has rested for 300ms. Each change to the text
+    // drops the pending search and aborts one in flight.
+    let text: string | null = null
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let controller: AbortController | undefined
+    const searchText = () => {
+      const next = composerDraft.get().text
+      if (next === text) return
+      text = next
+      clearTimeout(timer)
+      controller?.abort()
+      const q = next.trim()
+      if (q.length < 3) {
+        setHelpResults(NO_HELP_RESULTS)
+        return
       }
-    }, 300)
-    return () => {
-      clearTimeout(t)
-      controller.abort()
+      const current = new AbortController()
+      controller = current
+      timer = setTimeout(async () => {
+        try {
+          setHelpResults(await helpSearchFn(q, current.signal))
+        } catch {
+          /* aborted or failed: leave suggestions as-is */
+        }
+      }, 300)
     }
-  }, [messageText, helpSearchFn, conversationId, messages.length])
+    searchText()
+    const unsubscribe = composerDraft.subscribe(searchText)
+    return () => {
+      unsubscribe()
+      clearTimeout(timer)
+      controller?.abort()
+    }
+  }, [composerDraft, helpSearchFn, conversationId, messages.length])
 
   // The newest visitor message is "Seen" once the agent's read watermark
   // reaches it.
@@ -697,26 +721,16 @@ export function VisitorConversationThread({
   // when office hours are configured, the schedule also marks us available.
   const available = conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)
 
-  // "Back at" time for the away state, formatted in the visitor's own locale.
-  const reopenLabel = useMemo(() => {
-    if (!presence.nextOpenAt) return null
-    const at = new Date(presence.nextOpenAt)
-    if (Number.isNaN(at.getTime())) return null
-    return new Intl.DateTimeFormat(intl.locale, {
-      weekday: 'long',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(at)
-  }, [presence.nextOpenAt, intl.locale])
-
   // Show the offline hint when the team is away. When we can email a reply, only
   // echo the admin's message if one is set; when we can't, always show the
   // neutral "we'll reply here" note instead of a false email promise. With the
   // assistant fronting the conversation there is no "away" — it is always
   // available, so the hint is suppressed entirely; availability only becomes
-  // relevant again when the assistant hands off to a human (future).
+  // relevant again when the assistant hands off to a human (future). Withheld
+  // during the initial load: assistant/email-reply state is unknown until the
+  // thread arrives, and a hint that shows then vanishes reads as a glitch.
   const showOfflineHint =
-    !assistant && !available && (canEmailReply ? Boolean(offlineMessage) : true)
+    !loading && !assistant && !available && (canEmailReply ? Boolean(offlineMessage) : true)
 
   // Phase C conversational block layer: every block's derived state, computed
   // ONCE per [messages, conversationStatus] change and threaded into rows,
@@ -805,16 +819,23 @@ export function VisitorConversationThread({
   // Clear unread on the visitor side only when the newest message is from an
   // agent — skip the visitor's own outbound sends (avoids a write + 'read'
   // broadcast on every send).
+  // A host that hid this frame says when it shows it again: catch up on any
+  // reply the live stream missed meanwhile, and read the newest one.
+  const shownAgain = useHostVisibleCount()
+  useEffect(() => {
+    if (shownAgain > 0) void refreshMessages()
+  }, [shownAgain, refreshMessages])
   useMarkReadOnIncoming({
     conversationId,
     messages,
     whenLastFrom: 'agent',
     getHeaders: getAuthHeaders,
+    recheck: shownAgain,
   })
 
   const send = useCallback(async () => {
-    const text = composer.text.trim()
-    const doc = composer.docRef.current
+    const { text: typed, doc } = composerDraft.get()
+    const text = typed.trim()
     const hasAttachments = pendingAttachments.length > 0
     // Sendable when there's typed text, an inline embed, or a tray attachment.
     if (
@@ -851,7 +872,7 @@ export function VisitorConversationThread({
               value: text,
             } as const)
           : undefined
-      const res = await sendConversationMessageFn({
+      const res = await rpc.sendConversationMessage({
         data: {
           conversationId: conversationId ?? undefined,
           content: text,
@@ -878,16 +899,16 @@ export function VisitorConversationThread({
         onConversationStarted?.(newId)
       }
       // Clear the composer only on success — the resetSignal bump empties the editor.
-      composer.clear()
+      clearComposer()
       clearAttachments()
-      setUploadError(null)
     } catch {
       // Leave the composer content intact for a retry.
     } finally {
       setSending(false)
     }
   }, [
-    composer,
+    composerDraft,
+    clearComposer,
     sending,
     conversationId,
     ensureSession,
@@ -942,7 +963,7 @@ export function VisitorConversationThread({
             side="peer"
             authorName={assistant?.name ?? teamName ?? undefined}
             isAssistant={!!assistant}
-            content={personalizeMessage(welcomeMessage ?? '', firstName)}
+            content={personalizeMessage(shownGreeting(welcomeMessage, intl) ?? '', firstName)}
             embedOpenMode={embedOpenMode}
           />
         )
@@ -964,8 +985,16 @@ export function VisitorConversationThread({
             content={m.content}
             contentJson={m.contentJson}
             attachments={m.attachments}
+            messageId={m.id}
+            sentAt={m.createdAt}
+            compact={compact}
             citations={m.citations}
-            time={formatTime(m.createdAt)}
+            time={formatDate(m.createdAt, TIME_LABEL)}
+            editedLabel={
+              m.editedAt
+                ? intl.formatMessage({ id: 'widget.messenger.edited', defaultMessage: '(edited)' })
+                : undefined
+            }
             linkPreviews={linkPreviews}
             getAuthHeaders={getAuthHeaders}
             embedOpenMode={embedOpenMode}
@@ -1079,8 +1108,16 @@ export function VisitorConversationThread({
                       key={n}
                       type="button"
                       onClick={() => submitRating(n)}
-                      className="text-lg leading-none text-muted-foreground/50 transition-colors hover:text-amber-500"
-                      aria-label={`Rate ${n} of 5`}
+                      // Brand colour rather than a fixed amber: the stars are
+                      // the only element in the thread that ignored the theme.
+                      className="rounded text-lg leading-none text-muted-foreground/50 transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      aria-label={intl.formatMessage(
+                        {
+                          id: 'widget.messenger.csat.rateAria',
+                          defaultMessage: 'Rate {n} of 5',
+                        },
+                        { n }
+                      )}
                     >
                       ★
                     </button>
@@ -1111,7 +1148,7 @@ export function VisitorConversationThread({
                     id: 'widget.messenger.csat.commentPlaceholder',
                     defaultMessage: 'Add a comment (optional)',
                   })}
-                  className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/20"
                 />
                 <button
                   type="button"
@@ -1169,15 +1206,35 @@ export function VisitorConversationThread({
       {linkedTicket && <TicketHeaderCard ticket={linkedTicket} getAuthHeaders={getAuthHeaders} />}
 
       <div className="relative flex-1 min-h-0">
-        <ThreadViewport
-          virtualizer={virtualizer}
-          rows={rows}
-          renderRow={renderRow}
-          viewportRef={scrollViewportRef}
-          scrollBarClassName="w-1.5"
-          className="h-full"
-          rowClassName="px-3 py-1.5"
-        />
+        {/* Every attachment in the loaded thread, in message order — lets a
+            card's click open the viewer on the whole conversation, not just
+            its own message. Visitor-facing, so internal notes are never
+            included (they should never reach this DTO in the first place;
+            this is belt-and-suspenders). */}
+        <ConversationGalleryContext.Provider value={gallery}>
+          <ThreadViewport
+            virtualizer={virtualizer}
+            rows={rows}
+            renderRow={renderRow}
+            viewportRef={scrollViewportRef}
+            scrollBarClassName="w-1.5"
+            className="h-full"
+            rowClassName="px-3 py-1.5"
+          />
+        </ConversationGalleryContext.Provider>
+
+        {/* First load: the viewport has no rows yet (the greeting/empty row
+            is withheld until we know which thread this is), so bubble-shaped
+            placeholders sit where the newest messages will land. Overlaid,
+            not swapped, so the virtualizer's viewport ref stays mounted and
+            its end-anchoring measures the real element. */}
+        {loading && messages.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 bg-background">
+            <ConversationThreadSkeleton
+              variant={conversationTarget === 'new' ? 'greeting' : 'thread'}
+            />
+          </div>
+        )}
 
         {/* Jump to latest — shown only when the visitor has scrolled up to read
             history (followOnAppend keeps the view pinned when already at end). */}
@@ -1236,12 +1293,12 @@ export function VisitorConversationThread({
               />
             )}
           </p>
-          {reopenLabel && (
+          {hasBackAtTime(presence.nextOpenAt) && (
             <p className="mt-0.5">
               <FormattedMessage
                 id="widget.messenger.offline.backAt"
                 defaultMessage="Back {when}"
-                values={{ when: reopenLabel }}
+                values={{ when: <BackAtTime at={presence.nextOpenAt} /> }}
               />
             </p>
           )}
@@ -1274,20 +1331,19 @@ export function VisitorConversationThread({
               external picker button. The editor is lazy-loaded (defers the
               lowlight syntax-highlighting bundle) behind a quiet placeholder. */}
         <div
-          className="rounded-2xl border border-border bg-background px-3 py-2.5 shadow-sm transition-shadow focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-primary/25"
+          className="rounded-2xl border border-border bg-background px-3 py-2.5 shadow-sm transition-shadow focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-ring/25"
           onPaste={handleComposerPaste}
           onDrop={handleComposerDrop}
         >
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
             multiple
             className="hidden"
             onChange={(e) => {
-              // Attach via the shared tray (thumbnails + zoom), same as admin.
+              // Attach via the shared tray, same as admin.
               const files = e.target.files
-              if (files && files.length > 0) void handleAddFiles(files)
+              if (files && files.length > 0) void addFiles(files)
               e.target.value = ''
             }}
           />
@@ -1321,27 +1377,32 @@ export function VisitorConversationThread({
                 <LazyRichTextEditor
                   // Remounts the editor to clear it after a send (no imperative
                   // ref exists to call clearContent()) — resetSignal starts at 0
-                  // (no remount, no autofocus on first mount) and increments on
-                  // every successful send, at which point we DO want focus back
-                  // so the visitor can keep typing without re-clicking.
+                  // and increments on every successful send, at which point we
+                  // DO want focus back so the visitor can keep typing without
+                  // re-clicking. First mount focuses only when the surface asks
+                  // (a fresh "new conversation" landing).
                   key={composer.resetSignal}
                   borderless
                   minHeight="1.5rem"
                   disabled={sending}
                   placeholder={composerPlaceholder}
                   features={VISITOR_CONVERSATION_FEATURES}
-                  autofocus={composer.resetSignal > 0 ? 'end' : false}
-                  onChange={handleEditorChange}
+                  autofocus={composer.resetSignal > 0 || autofocusComposer ? 'end' : false}
+                  value={composer.resetSignal === 0 ? initialDraftDoc : undefined}
+                  onDocumentChange={handleEditorChange}
                   onSubmit={onComposerSubmit}
                 />
               </Suspense>
             )}
           </ScrollArea>
-          <ComposerAttachmentTray attachments={pendingAttachments} onRemove={removeAttachment} />
-          {uploadError && <p className="px-1 pt-1 text-[11px] text-destructive">{uploadError}</p>}
+          <ComposerAttachmentTray
+            items={attachmentItems}
+            onRemove={removeAttachment}
+            onRetry={retryAttachment}
+          />
           {/* Live link unfurl while composing (Slack-style), gated by the flag. */}
           {linkPreviews && (
-            <LinkPreviews content={debouncedMessageText} getAuthHeaders={getAuthHeaders} />
+            <ComposerLinkPreviews draft={composerDraft} getAuthHeaders={getAuthHeaders} />
           )}
           <div className="flex items-center gap-0.5 pt-1">
             <button
@@ -1351,34 +1412,68 @@ export function VisitorConversationThread({
               className="shrink-0 flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
               aria-label={intl.formatMessage({
                 id: 'widget.messenger.attach',
-                defaultMessage: 'Attach image',
+                defaultMessage: 'Attach files',
               })}
             >
               <PaperClipIcon className="w-5 h-5" />
             </button>
             <div className="flex-1" />
-            <button
-              type="button"
-              onClick={() => void send()}
-              disabled={
-                (!composer.text.trim() &&
-                  !composer.hasContentNode &&
-                  pendingAttachments.length === 0) ||
-                sending ||
-                uploading ||
-                composerLock.disabled
-              }
-              className="shrink-0 flex items-center justify-center size-9 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
-              aria-label={intl.formatMessage({
+            <ComposerSendButton
+              draft={composerDraft}
+              hasAttachments={pendingAttachments.length > 0}
+              busy={sending || uploading || composerLock.disabled}
+              onSend={() => void send()}
+              label={intl.formatMessage({
                 id: 'widget.messenger.send',
                 defaultMessage: 'Send',
               })}
-            >
-              <ArrowUpIcon className="w-4 h-4" />
-            </button>
+            />
           </div>
         </div>
       </div>
     </div>
   )
+}
+
+/**
+ * The send button. It follows whether the draft has anything to send on its
+ * own, so typing re-renders the button (when that flips), never the thread.
+ */
+function ComposerSendButton({
+  draft,
+  hasAttachments,
+  busy,
+  onSend,
+  label,
+}: {
+  draft: ComposerDocStore
+  hasAttachments: boolean
+  busy: boolean
+  onSend: () => void
+  label: string
+}) {
+  const empty = useComposerDocValue(draft, (d) => !d.text.trim() && !d.hasContentNode)
+  return (
+    <button
+      type="button"
+      onClick={onSend}
+      disabled={(empty && !hasAttachments) || busy}
+      className="shrink-0 flex items-center justify-center size-9 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
+      aria-label={label}
+    >
+      <ArrowUpIcon className="w-4 h-4" />
+    </button>
+  )
+}
+
+/** Link previews for the draft's text, once typing pauses. */
+function ComposerLinkPreviews({
+  draft,
+  getAuthHeaders,
+}: {
+  draft: ComposerDocStore
+  getAuthHeaders: () => Record<string, string>
+}) {
+  const content = useDebouncedComposerText(draft, 500)
+  return <LinkPreviews content={content} getAuthHeaders={getAuthHeaders} />
 }

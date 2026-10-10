@@ -16,6 +16,7 @@ export const variableMap: Record<string, string> = {
   mutedForeground: '--muted-foreground',
   accent: '--accent',
   accentForeground: '--accent-foreground',
+  accentInk: '--accent-ink',
   destructive: '--destructive',
   destructiveForeground: '--destructive-foreground',
   border: '--border',
@@ -438,41 +439,44 @@ export function normalizeFontSans(fontSans: string): string {
 export function generateThemeCSS(config: ThemeConfig): string {
   if (!config) return ''
 
-  // Each half is expanded only when the config has one, so a workspace that
-  // branded a single mode keeps the other on the stylesheet defaults. Either
-  // half may be partial; expandTheme fills its gaps from the base palette.
   const themeMode = config.themeMode ?? 'user'
-  const lightVars = config.light ? expandTheme(config.light, { mode: 'light' }) : {}
-  const darkVars = config.dark ? expandTheme(config.dark, { mode: 'dark' }) : {}
+  // An unbranded config still emits the default tokens so admin, portal and
+  // widget share one source of tokens when branding is absent.
+  const lightVars = themeMode !== 'dark' ? expandTheme(config.light ?? {}, { mode: 'light' }) : {}
+  const darkVars = themeMode !== 'light' ? expandTheme(config.dark ?? {}, { mode: 'dark' }) : {}
   if (lightVars.fontSans) lightVars.fontSans = normalizeFontSans(lightVars.fontSans)
   if (darkVars.fontSans) darkVars.fontSans = normalizeFontSans(darkVars.fontSans)
 
   const parts: string[] = []
+  // The same :root / .dark selectors as globals.css. This style comes later in
+  // the document, so it wins over the stylesheet, and custom CSS after it wins
+  // over this.
+  const rootSelector = ':root'
+  const darkClassSelector = '.dark'
 
-  // Only output light mode CSS if themeMode is not 'dark'
-  // Use :root selector so custom CSS (e.g., from tweakcn) can override via cascade
   if (themeMode !== 'dark') {
     const lightCSS = variablesToCSS(lightVars)
-    if (lightCSS) parts.push(`:root { ${lightCSS} }`)
+    if (lightCSS) parts.push(`${rootSelector} { ${lightCSS} }`)
   }
 
-  // Only output dark mode CSS if themeMode is not 'light'
   if (themeMode !== 'light') {
     const darkCSS = variablesToCSS(darkVars)
-    // When forcing dark mode, use :root instead of .dark so it applies without the class
-    // Use .dark selector so custom CSS can override via cascade
     if (darkCSS) {
       if (themeMode === 'dark') {
-        parts.push(`:root { ${darkCSS} }`)
+        parts.push(`${rootSelector} { ${darkCSS} }`)
       } else {
-        parts.push(`.dark { ${darkCSS} }`)
+        parts.push(`${darkClassSelector} { ${darkCSS} }`)
       }
     }
   }
 
   const bodyDeclarations: string[] = []
   if (lightVars.fontSans) bodyDeclarations.push(`--font-sans: ${lightVars.fontSans}`)
-  if (lightVars.radius) bodyDeclarations.push(`--radius: ${lightVars.radius}`)
+  // The body restates a radius only when the config sets one, because a body
+  // declaration beats a :root one and would hide a radius kept in custom CSS.
+  // The stylesheet supplies the default otherwise.
+  const radiusConfigured = typeof config.light?.radius === 'string' && config.light.radius.trim()
+  if (lightVars.radius && radiusConfigured) bodyDeclarations.push(`--radius: ${lightVars.radius}`)
   if (bodyDeclarations.length > 0) {
     parts.push(`body { ${bodyDeclarations.join('; ')}; }`)
   }
@@ -482,6 +486,11 @@ export function generateThemeCSS(config: ThemeConfig): string {
   }
 
   return parts.join(' ')
+}
+
+/** Portal, widget and auth helper: the default tokens with the workspace's branding on top. */
+export function generateWorkspaceThemeCSS(config: ThemeConfig | null | undefined): string {
+  return generateThemeCSS(config ?? {})
 }
 
 export function parseThemeConfig(json: string | null | undefined): ThemeConfig | null {

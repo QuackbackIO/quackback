@@ -47,6 +47,7 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/mess
             before: cursor,
             limit,
             includeInternal,
+            preferAccountName: true,
           })
           return successResponse(result.messages.map(serializeMessage), {
             pagination: { cursor: result.nextCursor, hasMore: result.hasMore },

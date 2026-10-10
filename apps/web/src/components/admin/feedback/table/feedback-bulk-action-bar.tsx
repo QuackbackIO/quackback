@@ -65,9 +65,7 @@ export function FeedbackBulkActionBar({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="center" side="top" className="max-h-72 overflow-y-auto">
-            <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
-              Set status
-            </DropdownMenuLabel>
+            <DropdownMenuLabel className="text-muted-foreground">Set status</DropdownMenuLabel>
             {statuses.map((s) => (
               <DropdownMenuItem
                 key={s.id}

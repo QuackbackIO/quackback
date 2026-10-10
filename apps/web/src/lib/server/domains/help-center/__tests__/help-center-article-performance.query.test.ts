@@ -27,7 +27,7 @@ describe('listArticlePerformance', () => {
   it('marks a row published when publishedAt is set and draft otherwise', async () => {
     mockLimit.mockResolvedValue([
       {
-        id: 'kb_article_1' as KbArticleId,
+        id: 'article_1' as KbArticleId,
         slug: 'popular-article',
         title: 'Popular Article',
         publishedAt: new Date('2024-01-01'),
@@ -37,7 +37,7 @@ describe('listArticlePerformance', () => {
         notHelpfulCount: 5,
       },
       {
-        id: 'kb_article_2' as KbArticleId,
+        id: 'article_2' as KbArticleId,
         slug: 'draft-article',
         title: 'Draft Article',
         publishedAt: null,
@@ -52,7 +52,7 @@ describe('listArticlePerformance', () => {
 
     expect(result).toEqual([
       {
-        id: 'kb_article_1',
+        id: 'article_1',
         slug: 'popular-article',
         title: 'Popular Article',
         status: 'published',
@@ -62,7 +62,7 @@ describe('listArticlePerformance', () => {
         notHelpfulCount: 5,
       },
       {
-        id: 'kb_article_2',
+        id: 'article_2',
         slug: 'draft-article',
         title: 'Draft Article',
         status: 'draft',

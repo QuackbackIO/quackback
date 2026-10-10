@@ -1,0 +1,147 @@
+// @vitest-environment happy-dom
+/**
+ * Opening an item changes only which row is selected. The list column's
+ * header (scope label, search, sort and filter menus, the compose dialog)
+ * does not depend on it, so it skips that render and only the rows update.
+ */
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
+import type { ComponentProps } from 'react'
+import type { ConversationId, PrincipalId } from '@quackback/ids'
+import type { ConversationDTO } from '@/lib/shared/conversation/types'
+import type { InboxItemDTO } from '@/lib/shared/inbox/items'
+
+afterEach(cleanup)
+
+const composeDialogRenders = vi.hoisted(() => ({ count: 0 }))
+const activation = vi.hoisted(() => ({ firstRun: false }))
+vi.mock('@/components/admin/conversation/new-conversation-dialog', () => ({
+  NewConversationDialog: () => {
+    composeDialogRenders.count++
+    return null
+  },
+}))
+vi.mock('@tanstack/react-router', () => ({
+  useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
+    select({ userRole: 'admin', principal: { role: 'admin' }, settings: { featureFlags: {} } }),
+}))
+vi.mock('@/lib/client/hooks/use-activation-action', () => ({
+  useActivationAction: (surface: string) =>
+    surface === 'conversation_empty' && activation.firstRun
+      ? {
+          id: 'connect-messenger',
+          outcome: 'customer_support',
+          label: 'Connect Messenger',
+          kind: 'link',
+          destination: '/admin/settings/widget/install',
+        }
+      : null,
+}))
+
+const { ConversationListColumn } = await import('../conversation-list-column')
+
+function conversation(id: string): ConversationDTO {
+  return {
+    id: id as ConversationId,
+    status: 'open',
+    priority: 'none',
+    channel: 'messenger',
+    subject: null,
+    lastMessagePreview: `Preview of ${id}`,
+    lastMessageAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    visitor: { principalId: 'principal_v' as PrincipalId, displayName: 'Rita', avatarUrl: null },
+    assignedAgent: null,
+    unreadCount: 0,
+    visitorLastReadAt: null,
+    agentLastReadAt: null,
+    csatRating: null,
+    visitorEmail: null,
+    resolvedAt: null,
+    endReason: null,
+    endNote: null,
+    snoozedUntil: null,
+    tags: [],
+  } as unknown as ConversationDTO
+}
+
+const ITEMS: InboxItemDTO[] = ['conversation_a', 'conversation_b'].map((id) => ({
+  kind: 'conversation',
+  conversation: conversation(id),
+  linkedTicket: null,
+  searchSnippet: null,
+}))
+
+const noop = () => {}
+const PROPS: ComponentProps<typeof ConversationListColumn> = {
+  nav: { kind: 'view', view: 'all' },
+  onSelectNav: noop,
+  scopeLabel: 'All conversations',
+  showRefinements: true,
+  searchInput: '',
+  onSearchInput: noop,
+  facet: 'open',
+  onFacet: noop,
+  priorityFilter: 'all',
+  onPriorityFilter: noop,
+  onChannelFilter: noop,
+  sort: 'recent',
+  onSort: noop,
+  loading: false,
+  items: ITEMS,
+  selectedId: null,
+  onSelect: noop,
+}
+
+describe('ConversationListColumn', () => {
+  it('offers putting Messenger on the site on a fresh Support inbox', () => {
+    activation.firstRun = true
+    const client = new QueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <IntlProvider
+          locale="fr"
+          messages={{
+            // The admin inbox owns its title; the widget's string must not leak in.
+            'inbox.empty.firstRun.title': 'Aucune conversation pour le moment',
+            'widget.messages.empty': 'Widget string',
+          }}
+          onError={() => {}}
+        >
+          <ConversationListColumn {...PROPS} items={[]} />
+        </IntlProvider>
+      </QueryClientProvider>
+    )
+    expect(screen.getByText('Aucune conversation pour le moment')).toBeVisible()
+    expect(screen.queryByText('Widget string')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Connect Messenger' })).toHaveAttribute(
+      'href',
+      '/admin/settings/widget/install'
+    )
+    expect(screen.queryByRole('button', { name: /test message/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('When customers message you, conversations show up here.')
+    ).not.toBeInTheDocument()
+    activation.firstRun = false
+  })
+
+  it('re-renders the rows, not the header, when the selection changes', () => {
+    const client = new QueryClient()
+    const ui = (selectedId: string | null) => (
+      <QueryClientProvider client={client}>
+        <IntlProvider locale="en">
+          <ConversationListColumn {...PROPS} selectedId={selectedId} />
+        </IntlProvider>
+      </QueryClientProvider>
+    )
+    const { rerender, container } = render(ui(null))
+    const headerRenders = composeDialogRenders.count
+
+    rerender(ui('conversation_b'))
+
+    expect(composeDialogRenders.count).toBe(headerRenders)
+    expect(container.querySelectorAll('.bg-muted\\/60')).toHaveLength(1)
+  })
+})

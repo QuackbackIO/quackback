@@ -4,6 +4,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from '@/components/public/comment-editor-features'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import { shownName } from '@/lib/shared/greeting-name'
 
 interface WidgetUser {
   id: string
@@ -87,14 +88,15 @@ export function WidgetCommentForm({
           minHeight="52px"
           features={COMMENT_EDITOR_FEATURES}
           onImageUpload={onImageUpload}
+          onVideoUpload={onImageUpload}
           disabled={isSubmitting}
           placeholder={intl.formatMessage({
             id: 'widget.commentForm.placeholder',
             defaultMessage: 'Write a comment...',
           })}
-          onChange={(json, _html, markdown) => {
-            editorJsonRef.current = json as TiptapContent
-            setCommentText(markdown ?? '')
+          onDocumentChange={(document) => {
+            editorJsonRef.current = document.json() as TiptapContent
+            setCommentText(document.markdown())
           }}
         />
       </div>
@@ -105,7 +107,7 @@ export function WidgetCommentForm({
             <FormattedMessage
               id="widget.commentForm.postingAs"
               defaultMessage="Posting as {name}"
-              values={{ name: user?.name || user?.email }}
+              values={{ name: shownName(user?.name, user?.email) }}
             />
           ) : (
             <FormattedMessage

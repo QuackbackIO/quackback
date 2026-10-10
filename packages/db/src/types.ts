@@ -26,6 +26,21 @@ import type { tickets, ticketStatuses, ticketConversations, ticketLinks } from '
 import type { ticketTypes } from './schema/ticket-types'
 import type { ticketActivity } from './schema/ticket-activity'
 import type { principal } from './schema/auth'
+import type { workspaceExperiments } from './schema/labs'
+
+export type {
+  IdentitySource,
+  ProfileField,
+  ClaimRoleMapping,
+  ClaimRoleRule,
+  IdentityProviderClaimMapping,
+  SourceSnapshot,
+  SourceUnavailableReason,
+  CapturedIdentity,
+  IdentityProviderTestCapture,
+  IdentityProviderTestCaptureV1,
+  IdentityProviderTestCaptureV2,
+} from './schema/auth'
 
 // Status categories (defined here to avoid circular imports in tests)
 export const STATUS_CATEGORIES = ['active', 'complete', 'closed'] as const
@@ -293,6 +308,7 @@ export const USE_CASE_TYPES = [
   'product_feedback',
   'customer_support',
   'help_center',
+  'status_page',
   'internal',
   // Legacy — do not show in the picker
   'saas',
@@ -306,6 +322,7 @@ export const ONBOARDING_OUTCOMES = [
   'product_feedback',
   'customer_support',
   'help_center',
+  'status_page',
   'internal',
 ] as const
 export type OnboardingOutcome = (typeof ONBOARDING_OUTCOMES)[number]
@@ -349,6 +366,8 @@ export type OutcomeTaskResolutions = Partial<
 export interface ActivationMilestones {
   /** A workspace admin copied a publicly viewable board's distribution link. */
   publicBoardLinkCopiedAt?: string
+  /** A workspace admin copied the status page link. */
+  statusLinkCopiedAt?: string
 }
 
 export type SetupCompletionSource = 'wizard' | 'managed' | 'legacy'
@@ -361,8 +380,16 @@ export interface SetupState {
     startingPoint: StartingPointState | null
   }
   completedAt?: string
+  /**
+   * The principal who set the workspace up. Recorded once and never moved, so
+   * the owner stays the owner whatever role they hold later.
+   */
+  ownerPrincipalId?: string
   /** ICP outcome for setup and activation personalization. */
   useCase?: OnboardingOutcome
+  /** Ordered products selected during setup; the first is the activation goal. */
+  goals?: OnboardingOutcome[]
+  feedbackPrivate?: boolean
   /** Cloud owner saved or skipped the optional post-handoff identity polish. */
   workspaceDetailsSeenAt?: string
   completionSource?: SetupCompletionSource
@@ -468,9 +495,33 @@ function normalizeTaskResolutions(value: unknown): OutcomeTaskResolutions | unde
 export function normalizeSetupStateV2(value: unknown): SetupState | null {
   if (!isRecord(value)) return null
   const steps = isRecord(value.steps) ? value.steps : {}
-  const useCase = normalizeOnboardingOutcome(
+  const legacyUseCase = normalizeOnboardingOutcome(
     typeof value.useCase === 'string' ? value.useCase : undefined
   )
+
+  const selected = Array.isArray(value.goals)
+    ? value.goals.filter(
+        (goal): goal is OnboardingOutcome =>
+          typeof goal === 'string' && (ONBOARDING_OUTCOMES as readonly string[]).includes(goal)
+      )
+    : []
+  const legacyInternal = legacyUseCase === 'internal' || selected.includes('internal')
+  const goals = [
+    ...new Set(
+      (selected.length ? selected : legacyUseCase ? [legacyUseCase] : []).map((goal) =>
+        goal === 'internal' ? ('product_feedback' as const) : goal
+      )
+    ),
+  ]
+  const useCase = goals[0]
+  const intent = {
+    ...(goals.length ? { goals } : {}),
+    ...(legacyInternal
+      ? { feedbackPrivate: true }
+      : typeof value.feedbackPrivate === 'boolean'
+        ? { feedbackPrivate: value.feedbackPrivate }
+        : {}),
+  }
 
   if (value.version === 2) {
     const startingPoint = normalizeStartingPoint(steps.startingPoint)
@@ -485,6 +536,11 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
       ? value.activationMilestones
       : undefined
     const publicBoardLinkCopiedAt = asIsoString(storedMilestones?.publicBoardLinkCopiedAt)
+    const statusLinkCopiedAt = asIsoString(storedMilestones?.statusLinkCopiedAt)
+    const activationMilestones = {
+      ...(publicBoardLinkCopiedAt ? { publicBoardLinkCopiedAt } : {}),
+      ...(statusLinkCopiedAt ? { statusLinkCopiedAt } : {}),
+    }
     return {
       version: 2,
       steps: {
@@ -493,7 +549,12 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
         startingPoint,
       },
       ...(asIsoString(value.completedAt) ? { completedAt: value.completedAt as string } : {}),
+      ...(typeof value.ownerPrincipalId === 'string' &&
+      value.ownerPrincipalId.startsWith('principal_')
+        ? { ownerPrincipalId: value.ownerPrincipalId }
+        : {}),
       ...(useCase ? { useCase } : {}),
+      ...intent,
       ...(asIsoString(value.workspaceDetailsSeenAt)
         ? { workspaceDetailsSeenAt: value.workspaceDetailsSeenAt as string }
         : {}),
@@ -502,7 +563,7 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
         ? { activationHandoffSeenAt: value.activationHandoffSeenAt as string }
         : {}),
       ...(taskResolutions ? { taskResolutions } : {}),
-      ...(publicBoardLinkCopiedAt ? { activationMilestones: { publicBoardLinkCopiedAt } } : {}),
+      ...(Object.keys(activationMilestones).length > 0 ? { activationMilestones } : {}),
     }
   }
 
@@ -542,6 +603,7 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
     },
     ...(completedAt ? { completedAt } : {}),
     ...(useCase ? { useCase } : {}),
+    ...intent,
     ...(legacyComplete ? { completionSource: knownCompletionSource } : {}),
     ...(legacyComplete ? { activationHandoffSeenAt: migrationTime } : {}),
     ...(Object.keys(migratedTasks).length > 0
@@ -709,10 +771,10 @@ export type AgentAvailability = (typeof AGENT_AVAILABILITY_VALUES)[number]
 // The inbound channel a conversation arrived on — kept in sync with the
 // conversations.channel column enum. Widget threads are 'messenger' (ticket
 // intake forms mint messenger-channel backing conversations with source
-// 'ticket_form'); 'email' threads point at their inbound channel account.
-// This keeps one polymorphic conversation object with a channel field, not
-// a per-channel table.
-export const CHANNELS = ['messenger', 'email'] as const
+// 'ticket_form'); 'email' threads point at their inbound channel account;
+// 'github' threads are a connected repository's issues. This keeps one
+// polymorphic conversation object with a channel field, not a per-channel table.
+export const CHANNELS = ['messenger', 'email', 'github'] as const
 export type Channel = (typeof CHANNELS)[number]
 
 // Agent-set conversation priority for inbox triage — kept in sync with the
@@ -753,11 +815,64 @@ export const MESSAGE_SENDER_TYPES = ['visitor', 'agent', 'system'] as const
 export type MessageSenderType = (typeof MESSAGE_SENDER_TYPES)[number]
 
 // A single attachment ref stored on a conversation message (conversation_messages.attachments).
+// Files uploaded through the file pipeline carry `fileId` (a `files` row whose
+// type and size were read from the stored bytes) and whatever preview data was
+// ready when the message was written or since. Rows written before the
+// pipeline, and inline images lifted from rich content, have neither.
 export interface ConversationAttachment {
   url: string
   name: string
   contentType: string
   size: number
+  fileId?: string
+  family?: StoredFileFamily
+  preview?: FilePreviewMeta
+}
+
+/** Mirrors `FileFamily` in the app's file-type registry (files.family). */
+export type StoredFileFamily =
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'pdf'
+  | 'document'
+  | 'spreadsheet'
+  | 'presentation'
+  | 'csv'
+  | 'text'
+  | 'code'
+  | 'archive'
+  | 'other'
+
+/**
+ * What a file's card and viewer can show without opening the file. Written by
+ * the preview job onto the `files` row and copied onto the message attachment.
+ * Every field is optional: a family fills only what it has.
+ */
+export interface FilePreviewMeta {
+  /** Pages of a PDF or a Word document, slides of a presentation. */
+  pages?: number
+  /** Sheet names of a workbook, in order. */
+  sheets?: string[]
+  /** Data rows of the first sheet or of a CSV. */
+  rows?: number
+  /** Lines of a text file. */
+  lines?: number
+  /** Entries in an archive. */
+  entries?: number
+  width?: number
+  height?: number
+  durationMs?: number
+  /** First rows of a sheet or CSV as display text, for the card's mini grid. */
+  head?: string[][]
+  /** First lines of a text file, for the card. */
+  text?: string
+  /** Storage key of a rendered thumbnail (page one of a PDF, a scaled image). */
+  thumbKey?: string
+  /** Storage key of a browser-viewable rendition (a HEIC photo as JPEG). */
+  renditionKey?: string
+  /** An Office file that carries a VBA project. */
+  macro?: boolean
 }
 
 // A source the AI assistant grounded a message in (conversation_messages.citations).
@@ -963,9 +1078,37 @@ export type BlockReplyMetadata =
   | { kind: 'collectReply'; inReplyToMessageId: string; value: string }
   | { kind: 'csat'; inReplyToMessageId: string; rating: number; comment?: string }
 
+/** Outbound delivery of an agent reply onto a thread-addressed channel
+ *  (the customer's GitHub issue, etc.). Pending at insert; sent once the
+ *  provider accepts; failed if the post does not land. Messenger/email
+ *  replies do not carry this. */
+export type ChannelDeliveryStatus = 'pending' | 'sent' | 'failed'
+
+export interface ChannelDelivery {
+  status: ChannelDeliveryStatus
+  channel: Channel
+  /** ISO timestamp of the last status change. */
+  at: string
+  /** Provider-side id once accepted (GitHub issue comment id). */
+  externalId?: string
+  /** Short agent-facing reason when status is failed. */
+  error?: string
+}
+
 export interface ConversationMessageMetadata {
+  /** Private workspace turn identity and its server-authored final payload. */
+  workspaceTurn?: { runId: string; payload?: Record<string, unknown> }
+
   /** The channel this message arrived through, when not the in-app messenger. */
-  source?: 'email'
+  source?: 'email' | 'github'
+  /** GitHub issue comment REST id, used to dedupe webhook retries. */
+  githubCommentId?: string
+  /** Live outbound status for a thread-addressed channel send. */
+  channelDelivery?: ChannelDelivery
+  /** GitHub issue number for the message's thread, when known. */
+  githubIssueNumber?: string
+  /** Tracker inbound webhook body hash, used to dedupe redelivered status notes. */
+  inboundDeliveryKey?: string
   /** Provider Message-ID for an inbound email, used to dedupe webhook retries. */
   emailMessageId?: string
   /** RFC 5322 threading of an inbound email message: the parent it replied to
@@ -1080,6 +1223,10 @@ export type NewChangelogEntryPost = InferInsertModel<typeof changelogEntryPosts>
 // Principal types
 export type Principal = InferSelectModel<typeof principal>
 export type NewPrincipal = InferInsertModel<typeof principal>
+
+// Labs experiments (one row per workspace + registered experiment id)
+export type WorkspaceExperiment = InferSelectModel<typeof workspaceExperiments>
+export type NewWorkspaceExperiment = InferInsertModel<typeof workspaceExperiments>
 
 // Extended types for queries with relations
 export type CommentWithReplies = Comment & {

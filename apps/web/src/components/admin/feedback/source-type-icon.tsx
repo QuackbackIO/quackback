@@ -137,7 +137,7 @@ export function SourceTypeStack({ sourceTypes, maxVisible = 4, className }: Sour
       <div
         className={cn('flex items-center justify-center h-6 w-6 rounded-md bg-muted', className)}
       >
-        <span className="text-xs text-muted-foreground">&mdash;</span>
+        <span className="text-xs text-muted-foreground">-</span>
       </div>
     )
   }

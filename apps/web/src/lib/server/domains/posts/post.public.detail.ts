@@ -12,12 +12,13 @@ import {
   postCommentReactions,
   postStatuses,
   principal as principalTable,
+  user as userTable,
 } from '@/lib/server/db'
 import { toUuid, fromUuid, type PostId, type PostCommentId, type PrincipalId } from '@quackback/ids'
 import { buildCommentTree, toStatusChange } from '@/lib/shared'
 import type { PublicPostDetail, PublicComment, PinnedComment } from './post.types'
 import { DEFAULT_COMMENT_PAGE_SIZE, encodeCommentCursor, decodeCommentCursor } from './comment-page'
-import { resolveAvatarUrl, parseJson, parseAvatarData } from './post.public'
+import { resolveAvatarUrl, parseJson, publicTagSqlFilter } from './post.public'
 import { getExecuteRows } from '@/lib/server/utils'
 import {
   canViewPost,
@@ -29,6 +30,8 @@ import {
 import { hydrateMentions } from './hydrate-mentions'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { JSONContent } from '@tiptap/core'
+import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 /**
  * Fetch the public-facing detail view for a post.
@@ -117,6 +120,13 @@ export async function getPublicPostDetail(
       ? sql`AND (c.moderation_state = 'published' OR (c.moderation_state = 'pending' AND c.principal_id = ${ownPendingPrincipalUuid}::uuid))`
       : sql`AND c.moderation_state = 'published'`
 
+  const testPrincipalVisible = (column: ReturnType<typeof sql>) =>
+    includePrivateComments
+      ? sql`true`
+      : ownPendingPrincipalUuid
+        ? sql`(${notTestPrincipal(column)} OR ${column} = ${ownPendingPrincipalUuid}::uuid)`
+        : notTestPrincipal(column)
+
   // Pre-compute which merged-source posts the actor is entitled to see.
   // Runs in parallel with the post + comments fetch so we don't pay an
   // extra round-trip. Team actors trivially get every id. Without this
@@ -147,20 +157,24 @@ export async function getPublicPostDetail(
           (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
            FROM ${postTagAssignments} pt
            INNER JOIN ${postTags} t ON t.id = pt.tag_id
-           WHERE pt.post_id = ${posts.id}),
+           WHERE pt.post_id = ${posts.id} ${publicTagSqlFilter(actor)}),
           '[]'
         )`.as('tags_json'),
         authorName: sql<string | null>`(
           SELECT m.display_name FROM ${principalTable} m
           WHERE m.id = ${posts.principalId}
         )`.as('author_name'),
+        // All four sources — resolveUserAvatarUrl still needs the OAuth
+        // URLs when a stored key cannot produce a public URL (storage off).
         authorAvatarData: sql<string | null>`(
-          SELECT CASE
-            WHEN m.avatar_key IS NOT NULL
-            THEN json_build_object('key', m.avatar_key)
-            ELSE json_build_object('url', m.avatar_url)
-          END
+          SELECT json_build_object(
+            'userImageKey', u.image_key,
+            'avatarKey', m.avatar_key,
+            'userImage', u.image,
+            'avatarUrl', m.avatar_url
+          )
           FROM ${principalTable} m
+          LEFT JOIN ${userTable} u ON u.id = m.user_id
           WHERE m.id = ${posts.principalId}
         )`.as('author_avatar_data'),
       })
@@ -170,7 +184,14 @@ export async function getPublicPostDetail(
       // from being read by id — soft-delete intent applies to both the
       // post and the board it lives on. Without this, a deleted-board
       // post stayed reachable via its direct URL.
-      .where(and(eq(posts.id, postId), isNull(posts.deletedAt), isNull(boards.deletedAt)))
+      .where(
+        and(
+          eq(posts.id, postId),
+          isNull(posts.deletedAt),
+          isNull(boards.deletedAt),
+          postViewFilter(actor)
+        )
+      )
       .limit(1),
 
     // Query 2: Per-actor merged-source allowlist. Computed in parallel with
@@ -193,7 +214,10 @@ export async function getPublicPostDetail(
   // existence to unauthorized callers).
   const viewDecision = canViewPost(
     actor,
-    { moderationState: postResult.postModerationState, principalId: postResult.postPrincipalId },
+    {
+      moderationState: postResult.postModerationState,
+      principalId: postResult.postPrincipalId,
+    },
     { access: postResult.boardAccess }
   )
   if (!viewDecision.allowed) {
@@ -203,7 +227,15 @@ export async function getPublicPostDetail(
   const tagsResult = parseJson<
     Array<{ id: import('@quackback/ids').PostTagId; name: string; color: string }>
   >(postResult.tagsJson)
-  const authorAvatarUrl = parseAvatarData(postResult.authorAvatarData)
+  const authorAvatarFields = postResult.authorAvatarData
+    ? parseJson<{
+        userImageKey: string | null
+        avatarKey: string | null
+        userImage: string | null
+        avatarUrl: string | null
+      }>(postResult.authorAvatarData)
+    : null
+  const authorAvatarUrl = resolveAvatarUrl(authorAvatarFields ?? {})
 
   type CommentRow = {
     id: string
@@ -221,6 +253,8 @@ export async function getPublicPostDetail(
     deleted_by_principal_id: string | null
     avatar_key: string | null
     avatar_url: string | null
+    user_image: string | null
+    user_image_key: string | null
     reactions_json: string
     sc_from_name: string | null
     sc_from_color: string | null
@@ -248,7 +282,7 @@ export async function getPublicPostDetail(
         c.content, c.content_json, c.is_team_member, c.is_private,
         c.moderation_state,
         c.created_at, c.updated_at, c.deleted_at, c.deleted_by_principal_id,
-        m.avatar_key, m.avatar_url,
+        m.avatar_key, m.avatar_url, u.image as user_image, u.image_key as user_image_key,
         COALESCE(
           json_agg(json_build_object('emoji', cr.emoji, 'principalId', cr.principal_id))
           FILTER (WHERE cr.id IS NOT NULL),
@@ -258,14 +292,17 @@ export async function getPublicPostDetail(
         sct.name as sc_to_name, sct.color as sc_to_color
       FROM ${postComments} c
       INNER JOIN ${principalTable} m ON c.principal_id = m.id
+      LEFT JOIN ${userTable} u ON m.user_id = u.id
       LEFT JOIN ${postCommentReactions} cr ON cr.comment_id = c.id
+        AND ${notTestPrincipal(sql`cr.principal_id`)}
       LEFT JOIN ${postStatuses} scf ON scf.id = c.status_change_from_id
       LEFT JOIN ${postStatuses} sct ON sct.id = c.status_change_to_id
       WHERE c.post_id IN (${postIdInList})
       ${includePrivateComments ? sql`` : sql`AND c.is_private = false`}
       ${moderationFilterSql}
+      AND ${testPrincipalVisible(sql`c.principal_id`)}
       ${whereExtra}
-      GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url, scf.name, scf.color, sct.name, sct.color
+      GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url, u.image, u.image_key, scf.name, scf.color, sct.name, sct.color
       ${orderLimit}
     `)
 
@@ -319,6 +356,7 @@ export async function getPublicPostDetail(
       ${includePrivateComments ? sql`` : sql`AND c.is_private = false`}
       ${includePrivateComments ? sql`` : sql`AND c.deleted_at IS NULL`}
       ${moderationFilterSql}
+      AND ${testPrincipalVisible(sql`c.principal_id`)}
   `)
   const totalRootRows = getExecuteRows<{ count: string | number }>(totalRootResult)
   const commentsTotalRootCount = Number(totalRootRows[0]?.count ?? 0)
@@ -375,6 +413,8 @@ export async function getPublicPostDetail(
     avatarUrl: resolveAvatarUrl({
       avatarKey: comment.avatar_key,
       avatarUrl: comment.avatar_url,
+      userImageKey: comment.user_image_key,
+      userImage: comment.user_image,
     }),
     statusChange: toStatusChange(
       comment.sc_from_name ? { name: comment.sc_from_name, color: comment.sc_from_color! } : null,
@@ -421,9 +461,11 @@ export async function getPublicPostDetail(
   // renamed users show up-to-date names. List views skip this; only the
   // detail read paths pay the extra round-trip.
   const hydratePublicCommentTree = async (node: PublicComment): Promise<PublicComment> => {
-    const hydratedContentJson = node.contentJson
-      ? ((await hydrateMentions(node.contentJson as JSONContent)) as PublicComment['contentJson'])
-      : node.contentJson
+    const hydratedContentJson = contentJsonForClient(
+      node.contentJson
+        ? ((await hydrateMentions(node.contentJson as JSONContent)) as PublicComment['contentJson'])
+        : node.contentJson
+    )
     const hydratedReplies = await Promise.all(node.replies.map(hydratePublicCommentTree))
     return { ...node, contentJson: hydratedContentJson, replies: hydratedReplies }
   }
@@ -443,11 +485,13 @@ export async function getPublicPostDetail(
     if (pinnedRow && !pinnedRow.deleted_at) {
       const pinnedContentJson =
         (pinnedRow.content_json as PinnedComment['contentJson'] | null | undefined) ?? null
-      const pinnedHydrated = pinnedContentJson
-        ? ((await hydrateMentions(
-            pinnedContentJson as JSONContent
-          )) as PinnedComment['contentJson'])
-        : null
+      const pinnedHydrated = contentJsonForClient(
+        pinnedContentJson
+          ? ((await hydrateMentions(
+              pinnedContentJson as JSONContent
+            )) as PinnedComment['contentJson'])
+          : null
+      )
       pinnedComment = {
         id: fromUuid('post_comment', pinnedRow.id) as PostCommentId,
         content: pinnedRow.content,
@@ -457,6 +501,8 @@ export async function getPublicPostDetail(
         avatarUrl: resolveAvatarUrl({
           avatarKey: pinnedRow.avatar_key,
           avatarUrl: pinnedRow.avatar_url,
+          userImageKey: pinnedRow.user_image_key,
+          userImage: pinnedRow.user_image,
         }),
         createdAt: ensureDate(pinnedRow.created_at),
         isTeamMember: pinnedRow.is_team_member,
@@ -464,9 +510,11 @@ export async function getPublicPostDetail(
     }
   }
 
-  const hydratedPostContentJson = postResult.contentJson
-    ? ((await hydrateMentions(postResult.contentJson as JSONContent)) as TiptapContent | null)
-    : postResult.contentJson
+  const hydratedPostContentJson = contentJsonForClient(
+    postResult.contentJson
+      ? ((await hydrateMentions(postResult.contentJson as JSONContent)) as TiptapContent | null)
+      : postResult.contentJson
+  )
 
   return {
     id: postResult.id,

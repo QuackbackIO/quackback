@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { sniffImageMime, ALLOWED_REHOST_MIMES, canonicalizeImageMime } from '../magic-bytes'
+import {
+  sniffImageMime,
+  sniffVideoMime,
+  canonicalizeVideoMime,
+  ALLOWED_REHOST_MIMES,
+  canonicalizeImageMime,
+} from '../magic-bytes'
 
 const bytes = (...values: number[]) => Buffer.from(values)
 
@@ -63,6 +69,34 @@ describe('sniffImageMime', () => {
   it('detects ICO from magic bytes', () => {
     const buf = Buffer.concat([bytes(0x00, 0x00, 0x01, 0x00), Buffer.alloc(32)])
     expect(sniffImageMime(buf)).toBe('image/x-icon')
+  })
+})
+
+describe('sniffVideoMime', () => {
+  it('detects MP4 from an ISO media ftyp box', () => {
+    expect(sniffVideoMime(Buffer.from('\0\0\0\x18ftypmp42\0\0\0\0', 'binary'))).toBe('video/mp4')
+  })
+
+  it('detects WebM from the EBML header', () => {
+    expect(sniffVideoMime(bytes(0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0))).toBe('video/webm')
+  })
+
+  it('detects a QuickTime MOV container as ISO media', () => {
+    expect(sniffVideoMime(Buffer.from('\0\0\0\x18ftypqt  \0\0\0\0', 'binary'))).toBe('video/mp4')
+    expect(canonicalizeVideoMime('video/quicktime')).toBe('video/mp4')
+  })
+
+  it('accepts M4V MIME aliases as MP4-family containers', () => {
+    expect(canonicalizeVideoMime('video/x-m4v')).toBe('video/mp4')
+    expect(canonicalizeVideoMime('video/m4v')).toBe('video/mp4')
+  })
+
+  it('does not misclassify AVIF as MP4', () => {
+    expect(sniffVideoMime(Buffer.from('\0\0\0\x18ftypavif\0\0\0\0', 'binary'))).toBeNull()
+  })
+
+  it('does not misclassify HEIC as MP4', () => {
+    expect(sniffVideoMime(Buffer.from('\0\0\0\x18ftypheic\0\0\0\0', 'binary'))).toBeNull()
   })
 })
 

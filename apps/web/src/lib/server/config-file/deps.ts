@@ -3,7 +3,7 @@ import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.
 import {
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_WIDGET_CONFIG,
-  featureFlagsForUseCase,
+  newWorkspaceFlagsForGoals,
 } from '@/lib/server/domains/settings/settings.types'
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
 import { getSetupState } from '@/lib/shared/db-types'
@@ -14,6 +14,13 @@ import type { ReconcileDeps, SettingsInsert, SettingsRow, SettingsUpdate } from 
 import { makeReportStatus } from './report-status'
 import { mutateSetupStateAtomic } from '@/lib/server/setup-state'
 import { mergeSetupState } from './reconciler'
+
+/** The goals a stamped setup state chose, or none (Feedback by default). */
+function stampedGoals(setupState: string | null | undefined) {
+  const state = getSetupState(setupState ?? null)
+  if (state?.goals?.length) return state.goals
+  return state?.useCase ? [state.useCase] : []
+}
 
 /** Production wiring of `ReconcileDeps`. The reconciler is db-agnostic
  *  to keep its tests fast; this is the only place that touches Drizzle
@@ -84,9 +91,7 @@ export function makeReconcileDeps(): ReconcileDeps {
           portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
           widgetConfig: JSON.stringify(DEFAULT_WIDGET_CONFIG),
           assistantConfig: DEFAULT_ASSISTANT_CONFIG,
-          featureFlags: JSON.stringify(
-            featureFlagsForUseCase(getSetupState(insert.setupState ?? null)?.useCase)
-          ),
+          featureFlags: JSON.stringify(newWorkspaceFlagsForGoals(stampedGoals(insert.setupState))),
         })
         .onConflictDoNothing({ target: settings.slug })
     },

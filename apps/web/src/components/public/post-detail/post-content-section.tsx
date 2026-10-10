@@ -6,7 +6,7 @@ import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import type { JSONContent } from '@tiptap/react'
 import { PostContent } from '@/components/public/post-content'
 import { Button } from '@/components/ui/button'
-import type { EditorFeatures } from '@/components/ui/rich-text-editor'
+import type { EditorDocument, EditorFeatures } from '@/components/ui/rich-text-editor'
 import { Skeleton } from '@/components/ui/skeleton'
 
 // The full rich-text editor drags in a heavy chunk (ProseMirror + lowlight
@@ -97,6 +97,7 @@ interface PostContentSectionProps {
 const DEFAULT_USER_EDITOR_FEATURES: EditorFeatures = {
   headings: true,
   images: true,
+  videos: true,
   codeBlocks: true,
   bubbleMenu: true,
   slashMenu: true,
@@ -146,9 +147,9 @@ export function PostContentSection({
 
   const showActionsMenu = (canEdit || canDelete) && onEditStart && onDelete && !isEditing
 
-  const handleContentChange = useCallback((_json: JSONContent, _html: string, markdown: string) => {
-    setEditContentJson(_json)
-    setEditMarkdown(markdown)
+  const handleContentChange = useCallback((document: EditorDocument) => {
+    setEditContentJson(document.json())
+    setEditMarkdown(document.markdown())
   }, [])
 
   function handleSave(): void {
@@ -196,7 +197,7 @@ export function PostContentSection({
               id: 'portal.postDetail.edit.titleLabel',
               defaultMessage: 'Post title',
             })}
-            className="w-full bg-transparent border-0 outline-none text-xl sm:text-2xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-4 focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="w-full bg-transparent border-0 outline-none text-xl sm:text-2xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-4"
           />
 
           {/* Rich text editor — lazy-loaded so its chunk never lands in the
@@ -204,7 +205,7 @@ export function PostContentSection({
           <Suspense fallback={<EditorPlaceholder />}>
             <LazyRichTextEditor
               value={editContentJson || ''}
-              onChange={handleContentChange}
+              onDocumentChange={handleContentChange}
               placeholder={intl.formatMessage({
                 id: 'portal.postDetail.edit.detailsPlaceholder',
                 defaultMessage: 'Add more details... Type / for commands',
@@ -215,6 +216,7 @@ export function PostContentSection({
               toolbarPosition="bottom"
               features={editorFeatures}
               onImageUpload={onImageUpload}
+              onVideoUpload={onImageUpload}
             />
           </Suspense>
         </div>

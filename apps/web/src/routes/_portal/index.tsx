@@ -1,18 +1,17 @@
-import { Suspense } from 'react'
+import { Suspense, useDeferredValue } from 'react'
 import { createFileRoute, notFound, redirect, useRouteContext } from '@tanstack/react-router'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
-import { useIntl } from 'react-intl'
-import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
-import { EmptyState } from '@/components/shared/empty-state'
+import { ViewerPortalNoBoards } from '@/components/public/portal-no-boards'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
-import { usePreviewDraft } from '@/components/public/preview-draft-context'
-import { portalQueries } from '@/lib/client/queries/portal'
+import { usePreviewWelcomeCard } from '@/components/public/preview-draft-context'
+import { portalQueries, useSeedPortalStatusesCache } from '@/lib/client/queries/portal'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -131,16 +130,10 @@ export const Route = createFileRoute('/_portal/')({
 })
 
 function PublicPortalPage() {
-  const { settings } = useRouteContext({ from: '__root__' })
-  // Admin branding preview: unsaved welcome-card drafts win over the saved
-  // config. Null outside the preview iframe.
-  const previewDraft = usePreviewDraft()
-  const welcomeCard = previewDraft?.welcomeCard ?? settings?.publicPortalConfig?.welcomeCard
-
   return (
     <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-6">
       {/* Hero renders immediately (context-only, no feed dependency). */}
-      <PortalWelcomeCard welcomeCard={welcomeCard} />
+      <PortalHero />
       {/* Only the feed region suspends on the streamed portalData query. */}
       <Suspense fallback={<PortalFeedSkeleton />}>
         <PortalFeed />
@@ -150,14 +143,28 @@ function PublicPortalPage() {
 }
 
 /**
+ * The welcome card. In the admin branding preview an unsaved welcome-card
+ * draft wins over the saved config; read here rather than by the page, a
+ * draft edit re-renders the card and not the feed beside it.
+ */
+function PortalHero() {
+  const draftWelcomeCard = usePreviewWelcomeCard()
+  const savedWelcomeCard = useRouteContext({
+    from: '__root__',
+    select: (context) => context.settings?.publicPortalConfig?.welcomeCard,
+  })
+  return <PortalWelcomeCard welcomeCard={draftWelcomeCard ?? savedWelcomeCard} />
+}
+
+/**
  * Feed region — suspends on the streamed portalData query. The loader fires the
  * query without awaiting; the router ssr-query integration streams its result
  * into the same HTML response, so the feed is still server-rendered (SEO
  * preserved) while the header/hero above flush on the first byte.
  */
 function PortalFeed() {
-  const intl = useIntl()
-  const { session, settings } = useRouteContext({ from: '__root__' })
+  const session = useSessionContext()
+  const settings = useWorkspaceSettings()
   const { showPoweredBy } = Route.useLoaderData()
   const search = Route.useSearch()
 
@@ -165,9 +172,30 @@ function PortalFeed() {
   const currentSearch = search.search
   const currentSort = search.sort ?? 'trending'
 
+  // A visitor's first post or vote mints an anonymous session mid-action,
+  // which changes the viewer and so the feed's key. Deferring the viewer
+  // keeps the current feed, and the composer inside it, on screen while the
+  // new viewer's feed loads, instead of swapping them for the skeleton.
+  // Signing in or out clears every viewer's feed first, so there is nothing
+  // to keep on screen: key on the new viewer straight away, rather than
+  // fetching the old viewer's feed again under the new session.
+  const queryClient = useQueryClient()
+  const liveViewerId = session?.user?.id
+  const deferredViewerId = useDeferredValue(liveViewerId)
+  const previousFeedCached =
+    queryClient.getQueryData(
+      portalQueries.portalData(portalDataParams(search, deferredViewerId)).queryKey
+    ) !== undefined
+  const viewerId =
+    deferredViewerId !== liveViewerId && !previousFeedCached ? liveViewerId : deferredViewerId
   const { data: portalData } = useSuspenseQuery(
-    portalQueries.portalData(portalDataParams(search, session?.user?.id))
+    portalQueries.portalData(portalDataParams(search, viewerId))
   )
+
+  // Seeds the shared statuses cache from this response so a post-detail
+  // navigation right after reuses it instead of fetching the same status
+  // list again (see useSeedPortalStatusesCache).
+  useSeedPortalStatusesCache(portalData.statuses)
 
   // votedPosts is seeded from portalData.votedPostIds via FeedbackContainer's
   // useVotedPosts({ initialVotedIds }) below (its query uses that as
@@ -178,24 +206,7 @@ function PortalFeed() {
 
   // Empty state if no boards exist (derived from the query, not the loader).
   if (portalData.boards.length === 0) {
-    return (
-      <EmptyState
-        icon={ChatBubbleOvalLeftEllipsisIcon}
-        title={intl.formatMessage({
-          id: 'portal.feedback.empty.comingSoonTitle',
-          defaultMessage: 'Coming Soon',
-        })}
-        description={intl.formatMessage(
-          {
-            id: 'portal.feedback.empty.comingSoonDescription',
-            defaultMessage:
-              '{orgName} is setting up their feedback portal. Check back soon to share your ideas and suggestions.',
-          },
-          { orgName: workspaceName }
-        )}
-        className="py-24"
-      />
-    )
+    return <ViewerPortalNoBoards orgName={workspaceName} />
   }
 
   return (

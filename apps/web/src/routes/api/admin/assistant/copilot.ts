@@ -51,7 +51,7 @@ import {
   type AssistantTurnResult,
 } from '@/lib/server/domains/assistant'
 import { gateCopilotAguiRequest } from '@/lib/server/domains/assistant/copilot-gate'
-import { aguiThreadMessages } from '@/lib/server/domains/assistant/agui'
+import { aguiThreadMessages, withSseKeepalive } from '@/lib/server/domains/assistant/agui'
 import { withAssistantItemRef } from '@/lib/server/domains/assistant/item-ref.schema'
 import { isCopilotCapabilityEnabled } from '@/lib/server/domains/settings/settings.service'
 import { errorResponse } from '@/lib/server/domains/api/responses'
@@ -120,30 +120,34 @@ export async function handleCopilot({ request }: { request: Request }): Promise<
   // conversation write of its own.
   const assistant = await ensureAssistantPrincipal()
 
-  return toServerSentEventsResponse(
-    streamAssistantTurn({
-      input: {
-        messages,
-        assistantPrincipalId: assistant.id,
-        role: 'copilot_qa',
-        // A real conversation OR ticket id (unlike the sandbox's null-null),
-        // never both — so the turn gets item-scoped grounding (see this
-        // file's doc comment). `writeToolPolicy: 'propose'` keeps a write
-        // tool from ever executing for real here.
-        conversationId,
-        ticketId,
-        surface: 'copilot',
-        // Attributes this turn to the asking teammate in the usage log, for
-        // the per-teammate breakdown in analytics/copilot-usage.ts — Quinn's
-        // own principal id above never identifies the human on the other end.
-        actorPrincipalId: auth.principal.id,
-        sourceTypes: parsed.sourceTypes,
-        signal: request.signal,
-      },
-      wire: { threadId: agui.threadId, runId: agui.runId },
-      buildFinalPayload: toFinalPayload,
-      mapError: () => ({ code: 'TURN_FAILED', message: 'Copilot run failed' }),
-    })
+  // A turn can say nothing for longer than the server's idle timeout while a
+  // model or tool step runs, so silence is filled with SSE comments.
+  return withSseKeepalive(
+    toServerSentEventsResponse(
+      streamAssistantTurn({
+        input: {
+          messages,
+          assistantPrincipalId: assistant.id,
+          role: 'copilot_qa',
+          // A real conversation OR ticket id (unlike the sandbox's null-null),
+          // never both, so the turn gets item-scoped grounding (see this
+          // file's doc comment). `writeToolPolicy: 'propose'` keeps a write
+          // tool from ever executing for real here.
+          conversationId,
+          ticketId,
+          surface: 'copilot',
+          // Attributes this turn to the asking teammate in the usage log, for
+          // the per-teammate breakdown in analytics/copilot-usage.ts; Quinn's
+          // own principal id above never identifies the human on the other end.
+          actorPrincipalId: auth.principal.id,
+          sourceTypes: parsed.sourceTypes,
+          signal: request.signal,
+        },
+        wire: { threadId: agui.threadId, runId: agui.runId },
+        buildFinalPayload: toFinalPayload,
+        mapError: () => ({ code: 'TURN_FAILED', message: 'Copilot run failed' }),
+      })
+    )
   )
 }
 

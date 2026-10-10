@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
-import { ArrowPathIcon, PhotoIcon, TrashIcon } from '@heroicons/react/24/solid'
+import { ArrowPathIcon, PhotoIcon } from '@heroicons/react/24/solid'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -14,41 +14,68 @@ import { useUpdateAssistantIdentity } from '@/lib/client/mutations/assistant'
 import { getAssistantAvatarUploadUrlFn } from '@/lib/server/functions/uploads'
 import type { AssistantIdentity } from '@/lib/shared/assistant/config'
 import {
-  AssistantSaveFeedback,
-  type AssistantSaveState,
+  AssistantConflictNotice,
   isAssistantFieldManaged,
-  isAssistantRevisionConflict,
   ManagedSettingHint,
+  useAssistantAutosave,
   useUnsavedChanges,
 } from './assistant-form'
+
+const NAME_SAVE_DELAY_MS = 800
 
 const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024
 
+// The saved name is trimmed, so a trailing space is not an unsaved change.
 function identityEquals(a: AssistantIdentity | null, b: AssistantIdentity | null): boolean {
-  return Boolean(a && b && a.name === b.name && a.avatarUrl === b.avatarUrl)
+  return Boolean(a && b && a.name.trim() === b.name.trim() && a.avatarUrl === b.avatarUrl)
 }
 
 export function AssistantIdentityCard() {
   const intl = useIntl()
+  const queryClient = useQueryClient()
   const settingsQuery = useQuery(assistantQueries.settings())
   const updateIdentity = useUpdateAssistantIdentity()
   const [draft, setDraft] = useState<AssistantIdentity | null>(null)
+  // The last identity the server is known to hold.
   const [saved, setSaved] = useState<AssistantIdentity | null>(null)
-  const [saveState, setSaveState] = useState<AssistantSaveState>('idle')
+  const [nameFocused, setNameFocused] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
   const [showCropper, setShowCropper] = useState(false)
   const [uploading, setUploading] = useState(false)
 
+  // Names are typed, so they save after a pause; an avatar change is one action and saves at once.
+  const editKind = useRef<'name' | 'avatar'>('name')
   const dirty = Boolean(draft && saved && !identityEquals(draft, saved))
+  const nameValid = Boolean(draft && draft.name.trim() && draft.name.length <= 80)
   useUnsavedChanges(dirty, 'basics')
 
+  async function save() {
+    const latest = queryClient.getQueryData(assistantQueries.settings().queryKey)
+    if (!latest || !draft || !draft.name.trim()) return
+    const sent = { name: draft.name.trim(), avatarUrl: draft.avatarUrl }
+    await updateIdentity.mutateAsync({ expectedRevision: latest.revision, identity: sent })
+    setSaved(sent)
+  }
+
+  const { conflict, clearConflict } = useAssistantAutosave({
+    dirty,
+    valid: nameValid && !uploading,
+    signature: `${draft?.name ?? ''}|${draft?.avatarUrl ?? ''}`,
+    delayMs: editKind.current === 'avatar' ? 0 : NAME_SAVE_DELAY_MS,
+    save,
+  })
+
+  // The draft is what the person typed. The server's identity replaces it only
+  // when it changed elsewhere and the person has nothing pending or in hand.
   useEffect(() => {
-    if (!settingsQuery.data || dirty) return
-    setDraft(settingsQuery.data.config.identity)
-    setSaved(settingsQuery.data.config.identity)
-  }, [settingsQuery.data, dirty])
+    if (!settingsQuery.data || dirty || nameFocused) return
+    const identity = settingsQuery.data.config.identity
+    if (draft && identityEquals(identity, saved)) return
+    setDraft(identity)
+    setSaved(identity)
+  }, [settingsQuery.data, dirty, nameFocused, draft, saved])
 
   if (settingsQuery.isError) {
     return (
@@ -143,8 +170,8 @@ export function AssistantIdentityCard() {
         headers: { 'Content-Type': contentType },
       })
       if (!response.ok) throw new Error('Failed to upload image to storage')
+      editKind.current = 'avatar'
       setDraft((current) => (current ? { ...current, avatarUrl: publicUrl } : current))
-      setSaveState('idle')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to upload image')
     } finally {
@@ -161,8 +188,8 @@ export function AssistantIdentityCard() {
   }
 
   function removeAvatar() {
+    editKind.current = 'avatar'
     setDraft((current) => (current ? { ...current, avatarUrl: null } : current))
-    setSaveState('idle')
   }
 
   async function reloadLatest() {
@@ -170,41 +197,16 @@ export function AssistantIdentityCard() {
     if (!result.data) return
     setDraft(result.data.config.identity)
     setSaved(result.data.config.identity)
-    setSaveState('idle')
+    clearConflict()
   }
 
-  async function save() {
-    if (nameError || !settingsQuery.data) return
-    const identity = draft
-    if (!identity) return
-    setSaveState('saving')
-    try {
-      const result = await updateIdentity.mutateAsync({
-        expectedRevision: settingsQuery.data.revision,
-        identity: {
-          name: identity.name.trim(),
-          avatarUrl: identity.avatarUrl,
-        },
-      })
-      setDraft(result.config.identity)
-      setSaved(result.config.identity)
-      setSaveState('saved')
-    } catch (error) {
-      setSaveState(isAssistantRevisionConflict(error) ? 'conflict' : 'error')
-    }
-  }
-
-  const avatarActionsDisabled = avatarManaged || uploading || saveState === 'saving'
+  const avatarActionsDisabled = avatarManaged || uploading
 
   return (
     <SettingsCard
       title={intl.formatMessage({
         id: 'automation.agent.identity.title',
         defaultMessage: 'Identity',
-      })}
-      description={intl.formatMessage({
-        id: 'automation.agent.identity.description',
-        defaultMessage: 'Choose how the AI agent appears to customers.',
       })}
     >
       <div className="space-y-5">
@@ -253,13 +255,12 @@ export function AssistantIdentityCard() {
               {draft.avatarUrl && (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="text-destructive hover:text-destructive"
+                  className="text-muted-foreground"
                   disabled={avatarActionsDisabled}
                   onClick={removeAvatar}
                 >
-                  <TrashIcon className="size-4" />
                   {intl.formatMessage({
                     id: 'automation.agent.identity.avatarRemove',
                     defaultMessage: 'Remove image',
@@ -275,12 +276,6 @@ export function AssistantIdentityCard() {
               className="hidden"
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            {intl.formatMessage({
-              id: 'automation.agent.identity.previewHelp',
-              defaultMessage: 'This identity appears in Messenger and customer conversations.',
-            })}
-          </p>
           {avatarManaged && <ManagedSettingHint />}
         </div>
 
@@ -293,10 +288,12 @@ export function AssistantIdentityCard() {
             value={draft.name}
             aria-invalid={Boolean(nameError)}
             aria-describedby={nameError ? 'assistant-name-error' : undefined}
-            disabled={nameManaged || saveState === 'saving'}
+            disabled={nameManaged}
+            onFocus={() => setNameFocused(true)}
+            onBlur={() => setNameFocused(false)}
             onChange={(event) => {
+              editKind.current = 'name'
               setDraft({ ...draft, name: event.target.value })
-              setSaveState('idle')
             }}
           />
           {nameError && (
@@ -307,25 +304,7 @@ export function AssistantIdentityCard() {
           {nameManaged && <ManagedSettingHint />}
         </div>
 
-        <AssistantSaveFeedback state={saveState} onReload={reloadLatest} />
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            className="min-h-11 sm:min-h-9"
-            disabled={!dirty || Boolean(nameError) || uploading || saveState === 'saving'}
-            onClick={() => void save()}
-          >
-            {saveState === 'saving'
-              ? intl.formatMessage({
-                  id: 'automation.agent.save.savingButton',
-                  defaultMessage: 'Saving…',
-                })
-              : intl.formatMessage({
-                  id: 'automation.agent.save.button',
-                  defaultMessage: 'Save changes',
-                })}
-          </Button>
-        </div>
+        {conflict && <AssistantConflictNotice onReload={reloadLatest} />}
       </div>
 
       {cropImageSrc && (

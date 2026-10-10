@@ -7,6 +7,7 @@ export default defineConfig([
     entry: {
       index: 'src/index.ts',
       'react/index': 'src/react/index.ts',
+      version: 'src/version.ts',
     },
     format: ['esm', 'cjs'],
     // Declarations come from `tsc --emitDeclarationOnly` (TypeScript 7).

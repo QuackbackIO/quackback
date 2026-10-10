@@ -12,19 +12,27 @@
  * explicitly ('messenger'), status 'open', priority 'none', and the
  * denormalized last-message preview/timestamp are populated.
  *
- * Prints a JSON blob: { conversationId, visitorPrincipalId, subject, messages }
- * where conversationId is the TypeID string used in /admin/inbox?c=... URLs.
+ * `--legacy-image` prepends a smashed 500×500 resizableImage so conversation-
+ * image e2e can assert the read-time lift. Default seeds stay text-only so
+ * convert-to-post still uses the first visitor line.
  *
- * Usage: bun seed-conversation.ts "<subject>" [visitor-email]
+ * Prints a JSON blob: { conversationId, visitorPrincipalId, subject, messages,
+ * legacyImageName } where conversationId is the TypeID string used in
+ * /admin/inbox?c=... URLs.
+ *
+ * Usage: bun seed-conversation.ts "<subject>" [visitor-email] [--legacy-image]
  */
 import { generateId, toUuid } from '@quackback/ids'
 import { openDb } from './_lib'
 
-const subject = process.argv[2]
-const visitorEmail = process.argv[3]
+const args = process.argv.slice(2)
+const legacyImage = args.includes('--legacy-image')
+const positional = args.filter((a) => a !== '--legacy-image')
+const subject = positional[0]
+const visitorEmail = positional[1]
 
 if (!subject) {
-  console.error('Usage: bun seed-conversation.ts "<subject>" [visitor-email]')
+  console.error('Usage: bun seed-conversation.ts "<subject>" [visitor-email] [--legacy-image]')
   process.exit(1)
 }
 
@@ -61,6 +69,7 @@ try {
     : await createAnonymousVisitor()
 
   const messages = [`${subject} - visitor message one`, `${subject} - visitor message two`]
+  const legacyImageName = legacyImage ? 'e2e-legacy-wide.png' : null
 
   const conversationTypeId = generateId('conversation')
   const conversationUuid = toUuid(conversationTypeId)
@@ -72,7 +81,32 @@ try {
       (${conversationUuid}, ${visitorUuid}, 'open', 'messenger', 'none', ${subject},
        ${messages[1]}, NOW(), NOW())`
 
-  // Two visitor messages, a minute apart, so thread ordering is deterministic.
+  if (legacyImageName) {
+    const smashedInlineImage = {
+      type: 'doc',
+      content: [
+        {
+          type: 'resizableImage',
+          attrs: {
+            src: `/api/storage/chat-images/${legacyImageName}`,
+            width: 500,
+            height: 500,
+            'data-keep-ratio': true,
+            alt: legacyImageName,
+          },
+        },
+      ],
+    }
+    const imageMsgUuid = toUuid(generateId('conversation_msg'))
+    await sql`
+      INSERT INTO conversation_messages
+        (id, conversation_id, principal_id, sender_type, content, content_json,
+         is_internal, created_at)
+      VALUES
+        (${imageMsgUuid}, ${conversationUuid}, ${visitorUuid}, 'visitor', ${'Image'},
+         ${sql.json(smashedInlineImage)}, false, NOW() - make_interval(mins => 3))`
+  }
+
   for (let i = 0; i < messages.length; i++) {
     const msgUuid = toUuid(generateId('conversation_msg'))
     await sql`
@@ -89,6 +123,7 @@ try {
       visitorPrincipalId: visitorUuid,
       subject,
       messages,
+      legacyImageName,
     })
   )
   await sql.end()

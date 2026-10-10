@@ -42,6 +42,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   return {
     ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
+      transaction: vi.fn(async (work) => work({ update: vi.fn(() => createChainMock()) })),
       query: {
         posts: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
         postStatuses: {

@@ -193,7 +193,15 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
     // with no text) — it was never a source for the stored `content`, so
     // that stays blank rather than being replaced with derived or label text.
     expect(message.content).toBe('')
-    expect(message.contentJson?.content?.[0]?.type).toBe('chatImage')
+    expect(message.attachments).toEqual([
+      {
+        url: '/api/storage/chat-images/x.png',
+        name: 'x.png',
+        contentType: 'image/png',
+        size: 0,
+      },
+    ])
+    expect(message.contentJson?.content?.some((n) => n.type === 'chatImage')).toBe(false)
   })
 
   it('extends the same image-only allowance to a resizableImage doc (the unified RichTextEditor node)', async () => {
@@ -208,7 +216,15 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
     const { message } = await sendTicketMessage(actor, { ticketId, content: '', contentJson })
 
     expect(message.content).toBe('')
-    expect(message.contentJson?.content?.[0]?.type).toBe('resizableImage')
+    expect(message.attachments).toEqual([
+      {
+        url: '/api/storage/chat-images/x.png',
+        name: 'x.png',
+        contentType: 'image/png',
+        size: 0,
+      },
+    ])
+    expect(message.contentJson?.content?.some((n) => n.type === 'resizableImage')).toBe(false)
   })
 
   it('rejects an image-only message whose image src was cleared (renders blank)', async () => {
@@ -264,8 +280,15 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
       contentJson,
     })
 
-    const img = (message.contentJson?.content ?? []).find((n) => n.type === 'resizableImage')
-    expect(img?.attrs?.src).toBe('https://docs.example.com/diagram.png')
+    expect(message.contentJson?.content?.some((n) => n.type === 'resizableImage')).toBe(false)
+    expect(message.attachments).toEqual([
+      {
+        url: 'https://docs.example.com/diagram.png',
+        name: 'diagram',
+        contentType: 'image/png',
+        size: 0,
+      },
+    ])
   })
 
   it('prefers explicit non-blank content over deriving from contentJson', async () => {

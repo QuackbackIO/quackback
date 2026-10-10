@@ -1,4 +1,4 @@
-import { betterAuth, type RateLimit } from 'better-auth'
+import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import {
   anonymous,
@@ -10,10 +10,11 @@ import {
   bearer,
   twoFactor,
 } from 'better-auth/plugins'
-import { oauthProvider } from '@better-auth/oauth-provider'
+import { mcp } from '@better-auth/mcp'
+import { betterAuthMcpResource } from './mcp-plugin-resource'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId, type PrincipalId, type UserId } from '@quackback/ids'
-import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
+import { API_KEY_SCOPES, MCP_AS_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { config } from '@/lib/server/config'
 import { activeSecretKey } from '@/lib/server/secret-key'
 import { logger } from '@/lib/server/logger'
@@ -21,8 +22,12 @@ import { getWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspace
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import type { GenericOAuthConfig } from './build-oauth-configs'
 import { guardBetterAuthUserCreation } from './signup-policy'
+import { assignSessionScope } from './session-audience'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
+import { accountDisplayName } from '@/lib/shared/greeting-name'
 import { workspaceAuthTrustedOrigins } from './trusted-origins'
+import { ensureMcpOauthResource } from './ensure-mcp-oauth-resource'
+import { HTTP_DISABLED_AUTH_PATHS } from './http-disabled-paths'
 
 const log = logger.child({ component: 'auth-config' })
 
@@ -121,22 +126,41 @@ const authInstances = new WorkspaceKeyedCache<AuthInstance>(256)
 // round-trip). Mismatch → rebuild, other pods' writes propagate.
 const authConfigVersions = new WorkspaceKeyedCache<number>(256)
 const AUTH_CACHE_KEY = 'instance'
+// The build in flight, per workspace. A cold page fans out into several
+// concurrent server-function requests; they share one build rather than each
+// loading every provider's credentials and registering the plugins again.
+const authBuilds = new WorkspaceKeyedCache<Promise<AuthInstance>>(256)
 
-const rateLimitCounters = new WorkspaceKeyedCache<RateLimit>(20_000)
+type RateLimitCounter = { count: number; lastRequest: number }
+
+const rateLimitCounters = new WorkspaceKeyedCache<RateLimitCounter>(20_000)
 
 /**
  * Rate-limit counters, partitioned by workspace.
  *
- * Exported for the isolation tests: the leak this replaces is invisible from
- * outside (a 429 looks the same whichever workspace's traffic earned it), so
- * the only way to assert the separation is to read the counters directly.
+ * Better Auth 1.7 requires a single `consume` that checks and increments
+ * together. Exported for the isolation tests.
  */
 export const workspaceRateLimitStorage = {
-  async get(key: string): Promise<RateLimit | null> {
-    return rateLimitCounters.get(key) ?? null
-  },
-  async set(key: string, value: RateLimit): Promise<void> {
-    rateLimitCounters.set(key, value)
+  async consume(
+    key: string,
+    rule: { window: number; max: number }
+  ): Promise<{ allowed: boolean; retryAfter: number | null }> {
+    const now = Date.now()
+    const existing = rateLimitCounters.get(key)
+    if (!existing || now - existing.lastRequest >= rule.window * 1000) {
+      rateLimitCounters.set(key, { count: 1, lastRequest: now })
+      return { allowed: true, retryAfter: null }
+    }
+    if (existing.count >= rule.max) {
+      const retryAfter = Math.max(
+        1,
+        Math.ceil((existing.lastRequest + rule.window * 1000 - now) / 1000)
+      )
+      return { allowed: false, retryAfter }
+    }
+    existing.count += 1
+    return { allowed: true, retryAfter: null }
   },
 }
 
@@ -162,13 +186,16 @@ async function createAuth() {
     oauthAccessToken: oauthAccessTokenTable,
     oauthRefreshToken: oauthRefreshTokenTable,
     oauthConsent: oauthConsentTable,
+    oauthResource: oauthResourceTable,
+    oauthClientResource: oauthClientResourceTable,
+    oauthClientAssertion: oauthClientAssertionTable,
     twoFactor: twoFactorTable,
     eq,
   } = await import('@/lib/server/db')
   const { sendPasswordResetEmail, isEmailConfigured } = await import('@quackback/email')
   const { getPlatformCredentials } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
-  const { getAllAuthProviders } = await import('./auth-providers')
+  const { getAllAuthProviders, socialProviderConfig } = await import('./auth-providers')
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const { listIdentityProviders, getIdentityProviderCredentials } =
@@ -176,21 +203,6 @@ async function createAuth() {
   const { buildGenericOAuthConfigs } = await import('./build-oauth-configs')
   const { ensurePrincipalForUser } =
     await import('@/lib/server/domains/principals/principal.factory')
-
-  // login_hint pre-selects the typed email in the IdP picker. Read from
-  // the `additionalData.loginHint` body field that the team-login /
-  // portal-auth forms pass when initiating an OIDC sign-in. When absent
-  // (e.g. a direct hit on /sign-in/oauth2 with no email context) the hint
-  // is omitted and the IdP shows its default account list. Carried to
-  // every OIDC provider since any of them may be domain-routed.
-  const buildLoginHintParams = (ctx: {
-    body?: { additionalData?: { loginHint?: string } }
-  }): Record<string, string> => {
-    const hint = ctx.body?.additionalData?.loginHint
-    const params: Record<string, string> = {}
-    if (hint) params.login_hint = hint
-    return params
-  }
 
   // Build socialProviders config from DB-stored credentials
   const socialProviders: Record<string, Record<string, unknown>> = {}
@@ -264,24 +276,41 @@ async function createAuth() {
     return minted
   }
 
-  const providerRows = await listIdentityProviders()
+  // The same row the build takes auth_config_version from, so the redirect
+  // styles match the version this instance is cached under.
+  const providerRows = await listIdentityProviders({
+    authConfig: workspaceSettings?.settings?.authConfig ?? null,
+  })
   const oidcConfigs = await buildGenericOAuthConfigs({
     providers: providerRows,
     creds: getIdentityProviderCredentials,
     tierAllowsOidc: tierLimits.features.customOidcProvider,
+    baseUrl: config.baseUrl,
     discovery: (discoveryUrl) => fetchJson(discoveryUrl),
     fetchUserInfo: (url, accessToken) => fetchJson(url, { authorization: `Bearer ${accessToken}` }),
     // Observe-then-enforce: log the discrepancy so its real rate is known
     // before any release starts refusing sign-ins over it.
-    onResolved: (registrationId, accountId, claims) => {
-      stashResolvedClaims(registrationId, accountId, claims)
+    onResolved: (registrationId, accountId, resolved) => {
+      stashResolvedClaims(registrationId, accountId, resolved)
     },
     onResolutionWarning: (registrationId, warnings) => {
       log.warn({ registrationId, warnings }, 'identity resolution discrepancy observed')
     },
+    onIdentityFailure: (registrationId, reason) => {
+      log.warn({ registrationId, reason }, 'identity profile resolution failed')
+    },
     placeholderEmailFor: resolvePlaceholderEmail,
+    // A failure here must never block the sign-in: Better Auth then answers as
+    // it would have without the vouch.
+    onProviderEmail: async (registrationId, accountId, email) => {
+      try {
+        const { vouchForEnforcedAddress } = await import('./enforcing-provider-email')
+        await vouchForEnforcedAddress({ registrationId, accountId, email, providers: providerRows })
+      } catch (error) {
+        log.error({ err: error, registrationId }, 'enforcing provider vouch failed')
+      }
+    },
     mapProfileToUser: mapProfileClaims,
-    buildLoginHintParams,
   })
   genericOAuthConfigs.push(...oidcConfigs)
 
@@ -294,31 +323,18 @@ async function createAuth() {
   // Observed, not enforced. Withdrawing it outright would stop existing
   // password users linking on their first SSO sign-in and start returning
   // "account not linked" — a regression for providers that are behaving
-  // perfectly well. So log which providers would lose it, size the blast radius
-  // from real installations, and flip afterwards. Two of the predicate's inputs
-  // (whether the provider asserts a verified address, and an admin override)
-  // also need a column that has not landed yet.
-  const { allowsAutoLinking } = await import('./provider-trust')
-  for (const c of oidcConfigs) {
-    trustedProviders.push(c.providerId)
-    const row = providerRows.find((p) => p.registrationId === c.providerId)
-    if (
-      row &&
-      !allowsAutoLinking({
-        lastSuccessfulTestAt: row.lastSuccessfulTestAt,
-        detailsChangedAt: row.detailsChangedAt,
-        // Not yet persisted; assumed true so the observation isolates the
-        // connection-test signal rather than flagging every provider.
-        assertsVerifiedEmail: true,
-        trustOverride: null,
-      })
-    ) {
-      log.warn(
-        { registrationId: c.providerId },
-        'provider would lose auto-linking under derived trust (no fresh connection test)'
-      )
-    }
-  }
+  // perfectly well. So note which providers the derived predicate would not
+  // trust, size the population from real installations, and flip afterwards.
+  // Two of the predicate's inputs (whether the provider asserts a verified
+  // address, and an admin override) also need a column that has not landed yet.
+  const { oidcTrustedProviderIds } = await import('./provider-trust')
+  trustedProviders.push(
+    ...oidcTrustedProviderIds(
+      oidcConfigs.map((c) => c.providerId),
+      providerRows,
+      log
+    )
+  )
 
   // Layer A registration filter: an OAuth provider is registered on
   // the Better-Auth instance only if creds exist AND `authConfig.oauth`
@@ -345,18 +361,10 @@ async function createAuth() {
     if (!isSignInMethodEnabled(unifiedOAuthConfig, provider.id)) continue
 
     // Built-in social providers
-    const providerConfig: Record<string, unknown> = {
-      clientId: creds.clientId,
-      clientSecret: creds.clientSecret,
+    socialProviders[provider.id] = {
+      ...socialProviderConfig(provider, creds),
       mapProfileToUser: mapProfileClaims,
     }
-    // Add provider-specific fields (e.g., workspaceKey for Microsoft, issuer for GitLab)
-    for (const field of provider.platformCredentials) {
-      if (field.key !== 'clientId' && field.key !== 'clientSecret' && creds[field.key]) {
-        providerConfig[field.key] = creds[field.key]
-      }
-    }
-    socialProviders[provider.id] = providerConfig
     trustedProviders.push(provider.id)
   }
 
@@ -365,6 +373,19 @@ async function createAuth() {
   // instance is cached per workspace, so the callback origin and the cookie
   // `secure` flag below follow the hostname the request arrived on.
   const baseURL = config.baseUrl
+  const mcpResourceIdentifier = betterAuthMcpResource(`${baseURL}/api/mcp`)
+  // Better Auth 1.7 seeds oauth_resource on plugin init. Pre-insert so a
+  // Drizzle-wrapped unique from a concurrent replica cannot abort that init
+  // (better-auth/better-auth#11034). Both spellings: e2e rewrites *.localhost
+  // on the plugin `resource` only.
+  for (const identifier of new Set([`${baseURL}/api/mcp`, mcpResourceIdentifier])) {
+    await ensureMcpOauthResource({
+      db: db as Parameters<typeof ensureMcpOauthResource>[0]['db'],
+      table: oauthResourceTable,
+      identifier,
+      allowedScopes: API_KEY_SCOPES,
+    })
+  }
 
   // Origin allowlist. Better Auth rejects an auth POST whose Origin is
   // absent. The list is the documented per-request callback
@@ -376,6 +397,7 @@ async function createAuth() {
   // Per-endpoint hooks for Layer B/C enforcement. Imported lazily here
   // to keep the createAuth() module-loading dependency graph clean.
   const { hooksBefore, hooksAfter } = await import('./hooks')
+  const { betterAuthIpAddressOptions } = await import('./client-ip')
 
   const instance = betterAuth({
     hooks: {
@@ -399,9 +421,8 @@ async function createAuth() {
     // Use SECRET_KEY for auth signing (Better Auth defaults to BETTER_AUTH_SECRET)
     secret: activeSecretKey(),
 
-    // Disable the JWT plugin's /token endpoint — conflicts with OAuth's /oauth2/token
-    // Does NOT affect magicLink or session management
-    disabledPaths: ['/token'],
+    // Closed to HTTP, still callable in process: see http-disabled-paths.ts.
+    disabledPaths: HTTP_DISABLED_AUTH_PATHS,
 
     database: drizzleAdapter(db, {
       provider: 'pg',
@@ -422,6 +443,9 @@ async function createAuth() {
         oauthAccessToken: oauthAccessTokenTable,
         oauthRefreshToken: oauthRefreshTokenTable,
         oauthConsent: oauthConsentTable,
+        oauthResource: oauthResourceTable,
+        oauthClientResource: oauthClientResourceTable,
+        oauthClientAssertion: oauthClientAssertionTable,
         // The twoFactor plugin uses model name "twoFactor"; our Drizzle
         // table is `two_factor` (snake-case). The column→field mapping
         // (camelCase plugin field → snake_case column) is handled by
@@ -438,14 +462,17 @@ async function createAuth() {
 
     // Tell Better-Auth about non-standard columns on `user` so the
     // OAuth `mapProfileToUser` return shape is allowed through and
-    // written by drizzleAdapter. We only register `locale` here —
-    // existing custom columns (metadata, isAnonymous, twoFactorEnabled,
-    // imageKey) are written by other code paths (anonymous plugin /
-    // databaseHooks / direct queries) and don't need to round-trip
-    // through Better-Auth's signup validators.
+    // written by drizzleAdapter. `imageKey` (the uploaded avatar) is
+    // registered so the session's user carries it and the viewer's avatar
+    // needs no read of its own; `input: false` keeps it out of what sign-up
+    // and update-user accept, since only the avatar upload writes it. The
+    // other custom columns (metadata, isAnonymous, twoFactorEnabled) are
+    // written by other code paths (anonymous plugin / databaseHooks / direct
+    // queries) and don't need to round-trip through Better-Auth's validators.
     user: {
       additionalFields: {
         locale: { type: 'string', required: false, input: false },
+        imageKey: { type: 'string', required: false, input: false },
       },
     },
 
@@ -522,9 +549,15 @@ async function createAuth() {
       storeSessionInDatabase: true,
       expiresIn: 60 * 60 * 24 * 7, // 7 days
       updateAge: 60 * 60 * 24, // Update session every 24 hours
+      additionalFields: {
+        scope: { type: 'string', required: false, input: false, defaultValue: 'dashboard' },
+      },
     },
 
     advanced: {
+      // The client address comes from the app's own trusted resolution, never
+      // from a header the client can write. See `./client-ip`.
+      ipAddress: betterAuthIpAddressOptions,
       // Use TypeID format for user IDs to match our schema
       database: {
         generateId: ({ model }) => {
@@ -568,7 +601,7 @@ async function createAuth() {
                   const { generateAnonymousName } = await import('@/lib/shared/anonymous-names')
                   return generateAnonymousName(user.id)
                 })()
-              : user.name
+              : (accountDisplayName(user.name, user.email) ?? user.name)
             // Race-safe lazy create (the factory's onConflictDoNothing subsumes
             // the prior explicit findFirst guard). Always 'user' — team access is
             // via invitations only.
@@ -594,12 +627,19 @@ async function createAuth() {
               if (!isAnonymous) {
                 const { ensureAutoSubscribed } =
                   await import('@/lib/server/domains/changelog/changelog-subscription.service')
+                const { logSettingsReadError } =
+                  await import('@/lib/server/domains/settings/settings-log')
                 ensureAutoSubscribed(createdPrincipal.id as PrincipalId).catch((err) =>
-                  log.error({ err }, 'failed to auto-subscribe to changelog on signup')
+                  logSettingsReadError(log, err, 'failed to auto-subscribe to changelog on signup')
                 )
               }
             }
           },
+        },
+      },
+      session: {
+        create: {
+          before: assignSessionScope,
         },
       },
     },
@@ -646,17 +686,8 @@ async function createAuth() {
           // `email-verification` (adding a first address) and `change-email`
           // (moving to a new one) both mean the same thing to the recipient:
           // prove you hold this address.
-          const { sendVerifyAddressEmail } = await import('@quackback/email')
-          const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-          const settings = await db.query.settings.findFirst({
-            columns: { name: true, logoKey: true },
-          })
-          await sendVerifyAddressEmail({
-            to: email,
-            code: otp,
-            workspaceName: settings?.name ?? undefined,
-            logoUrl: getEmailSafeUrl(settings?.logoKey) ?? undefined,
-          })
+          const { sendVerifyAddressCode } = await import('./verify-address-email')
+          await sendVerifyAddressCode(email, otp)
         },
         otpLength: 6,
         expiresIn: 600,
@@ -677,66 +708,41 @@ async function createAuth() {
         expiresIn: 10,
       }),
 
-      // JWT plugin — signs access tokens, exposes /api/auth/jwks for verification
-      jwt(),
+      // JWT plugin: signs access tokens, exposes /api/auth/jwks for verification.
+      // Its `set-auth-jwt` header on `/get-session` is set by `hooksAfter`
+      // instead, and only for a request that came over the wire: the plugin's
+      // own hook signed one for every in-process session read too.
+      jwt({ disableSettingJwtHeader: true }),
 
-      // OAuth 2.1 Provider — turns Better Auth into an authorization server for MCP
-      oauthProvider({
-        // Redirect unauthenticated OAuth users to portal login
+      // MCP authorization server (`mcp()` replaces `oauthProvider()` — do not
+      // register both). Tokens are audience-bound to `/api/mcp`.
+      mcp({
         loginPage: '/auth/login',
-
-        // Consent page — always shown for non-trusted clients
         consentPage: '/oauth/consent',
-
-        // Allow Claude Code (and other MCP clients) to self-register
-        // (RFC 7591). Admin-toggleable via Settings > Developers; the
-        // service bumps auth_config_version on change, so the toggle takes
-        // effect without a restart via the normal instance rebuild.
-        // `?? true` also covers cached settings serialized before the key
-        // existed.
+        resource: mcpResourceIdentifier,
         allowDynamicClientRegistration:
           workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
         allowUnauthenticatedClientRegistration: true,
-
-        // Identity scopes plus the shared capability vocabulary (the same
-        // list API keys store and the MCP tools enforce).
-        scopes: ['openid', 'profile', 'email', 'offline_access', ...API_KEY_SCOPES],
-
-        // Default scopes when a registering client omits `scope` (RFC 7591).
-        // Real MCP clients (Claude Code, MCP SDK per SEP-835) resolve their
-        // scope list from the protected-resource metadata's scopes_supported
-        // and send it explicitly at registration, so these defaults only
-        // apply to clients that ask for nothing. Keep that fallback
-        // read-only with no offline_access: an unknown silent client gets
-        // no write access and no refresh token unless it asks.
+        scopes: [...MCP_AS_SCOPES],
+        // Fallback when DCR omits `scope`. The register interceptor still
+        // persists the full AS allow-list on the client row so step-up works.
         clientRegistrationDefaultScopes: [
           'openid',
           'profile',
           'email',
           ...API_KEY_SCOPES.filter((s) => s.startsWith('read:')),
         ],
-
-        // Setting clientRegistrationDefaultScopes alone would also narrow
-        // the set a registering client may REQUEST to those defaults and
-        // reject MCP clients' explicit write/offline_access registrations,
-        // so allow the full catalogue for explicit requests.
-        clientRegistrationAllowedScopes: [
-          'openid',
-          'profile',
-          'email',
-          'offline_access',
-          ...API_KEY_SCOPES,
+        clientRegistrationAllowedScopes: [...MCP_AS_SCOPES],
+        resources: [
+          {
+            identifier: `${baseURL}/api/mcp`,
+            allowedScopes: [...API_KEY_SCOPES],
+          },
         ],
-
-        // MCP endpoint is a valid token audience
-        validAudiences: [`${baseURL}/api/mcp`],
-
-        // Better Auth warns that /.well-known/oauth-authorization-server/api/auth
-        // doesn't exist, but we intentionally serve metadata at the root well-known
-        // path (matching the official Better Auth demo pattern — see #7453)
-        silenceWarnings: { oauthAuthServerConfig: true },
-
-        // Embed principal info in the JWT so MCP handler can avoid extra DB lookups
+        // DCR clients otherwise get `invalid_target` (1.7 defaults this on).
+        enforcePerClientResources: false,
+        clientRegistrationDefaultResources: [`${baseURL}/api/mcp`],
+        clientRegistrationAllowedResources: [`${baseURL}/api/mcp`],
         customAccessTokenClaims: async ({ user }) => {
           if (!user?.id) return {}
           const p = await db.query.principal.findFirst({
@@ -804,7 +810,11 @@ async function createAuth() {
               name: newUser.user.name,
               email: newUser.user.email,
               image: newImage,
-              displayName: newUser.user.name || anonymousUser.user.name,
+              // A sign-in by email alone gives no name: show one from the
+              // address before the visitor's generated name, never "Anonymous".
+              displayName:
+                accountDisplayName(newUser.user.name, newUser.user.email) ??
+                (anonPrincipal?.displayName || anonymousUser.user.name),
             })
 
             // The principal's `type` flipped from 'anonymous' → 'user'; drop
@@ -847,15 +857,15 @@ async function createAuth() {
  * Get the auth instance (lazy-initialized).
  *
  * Cross-pod invalidation: every call reads the cached settings row's
- * `authConfigVersion` (one Redis hit, already happens for everything
- * else). If the cached _auth was built against an older version, drop
- * it and rebuild. This guarantees that a write on pod A propagates to
- * pod B no later than its next request after pod A's commit. The
+ * `authConfigVersion` (read once per request, and reused by a process for
+ * up to `SETTINGS_LOCAL_TTL_MS`). If the cached _auth was built against an
+ * older version, drop it and rebuild. A write on pod A therefore reaches
+ * pod B within that window of pod A's commit, and pod A at once. The
  * version is bumped by `bumpAuthConfigVersionInTx` from every
  * auth-instance-affecting write path.
  */
 export async function getAuth(): Promise<AuthInstance> {
-  let instance = authInstances.get(AUTH_CACHE_KEY)
+  const instance = authInstances.get(AUTH_CACHE_KEY)
   const builtVersion = authConfigVersions.get(AUTH_CACHE_KEY)
   // Skip the version check when no instance is cached yet — the build
   // path below records the version after creation.
@@ -864,17 +874,40 @@ export async function getAuth(): Promise<AuthInstance> {
     const t = await getWorkspaceSettings()
     const current = t?.settings?.authConfigVersion
     if (typeof current === 'number' && current !== builtVersion) {
-      resetAuth()
-      instance = undefined
+      // Concurrent callers all see the same stale instance; only the first
+      // drops it and rebuilds. The rest take what that rebuild installed, or
+      // join it while it is still in flight, rather than starting another.
+      if (authInstances.get(AUTH_CACHE_KEY) === instance) {
+        resetAuth()
+        return buildAuth()
+      }
+      return authInstances.get(AUTH_CACHE_KEY) ?? buildAuth()
     }
+    return instance
   }
-  if (!instance) {
-    const built = await createAuth()
-    instance = built.instance
-    authInstances.set(AUTH_CACHE_KEY, instance)
-    authConfigVersions.set(AUTH_CACHE_KEY, built.authConfigVersion)
-  }
-  return instance
+  return instance ?? buildAuth()
+}
+
+/** Join the workspace's build in flight, or start one. */
+function buildAuth(): Promise<AuthInstance> {
+  const inFlight = authBuilds.get(AUTH_CACHE_KEY)
+  if (inFlight) return inFlight
+  const build: Promise<AuthInstance> = createAuth()
+    .then((built) => {
+      // A reset while this was building means it was built from a config that
+      // has since changed: serve it to the callers already waiting on it, but
+      // do not install it.
+      if (authBuilds.get(AUTH_CACHE_KEY) === build) {
+        authInstances.set(AUTH_CACHE_KEY, built.instance)
+        authConfigVersions.set(AUTH_CACHE_KEY, built.authConfigVersion)
+      }
+      return built.instance
+    })
+    .finally(() => {
+      if (authBuilds.get(AUTH_CACHE_KEY) === build) authBuilds.delete(AUTH_CACHE_KEY)
+    })
+  authBuilds.set(AUTH_CACHE_KEY, build)
+  return build
 }
 
 /**
@@ -884,6 +917,7 @@ export async function getAuth(): Promise<AuthInstance> {
 export function resetAuth(): void {
   authInstances.delete(AUTH_CACHE_KEY)
   authConfigVersions.delete(AUTH_CACHE_KEY)
+  authBuilds.delete(AUTH_CACHE_KEY)
 }
 
 // Export a proxy object that lazily initializes auth on first access
@@ -896,7 +930,8 @@ export const auth = {
         return async (...args: unknown[]) => {
           const authInstance = await getAuth()
           const api = authInstance.api as Record<string, (...args: unknown[]) => unknown>
-          return api[prop as string](...args)
+          const { withTrustedClientIpArgs } = await import('./client-ip')
+          return api[prop as string](...withTrustedClientIpArgs(args))
         }
       },
     })
@@ -908,7 +943,8 @@ export const auth = {
       log.debug({ method: request.method, path: url.pathname }, 'magic-link request')
     }
     const authInstance = await getAuth()
-    const response = await authInstance.handler(request)
+    const { withTrustedClientIpRequest } = await import('./client-ip')
+    const response = await authInstance.handler(withTrustedClientIpRequest(request))
     if (isMagicLink) {
       log.debug({ status: response.status }, 'magic-link response')
     }

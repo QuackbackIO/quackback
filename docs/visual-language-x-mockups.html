@@ -1,0 +1,1500 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quackback — X visual language mockups</title>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+    <style>
+      :root {
+        --doc-bg: #f4f4f5;
+        --doc-fg: #18181b;
+        --doc-muted: #71717a;
+        --doc-border: #e4e4e7;
+        --gold: oklch(0.886 0.176 86);
+        --gold-fg: #0a0a0a;
+        --font: "InterVariable", "Inter", ui-sans-serif, system-ui, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--doc-bg);
+        color: var(--doc-fg);
+        font-family: var(--font);
+        font-size: 16px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      a { color: inherit; }
+      .wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 600;
+        color: var(--doc-muted);
+        margin: 0 0 12px;
+      }
+      h1, h2, h3, h4 { margin: 0; letter-spacing: -0.02em; }
+      h1 { font-size: clamp(36px, 5vw, 52px); font-weight: 600; line-height: 1.1; }
+      h2.doc { font-size: 24px; font-weight: 650; margin-bottom: 12px; }
+      h3.doc { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+      p { margin: 0 0 16px; }
+      p.lead { font-size: 17px; color: var(--doc-muted); max-width: 680px; }
+      .muted { color: var(--doc-muted); }
+      nav.top {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        background: color-mix(in srgb, var(--doc-bg) 88%, transparent);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--doc-border);
+      }
+      nav.top .wrap {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 56px;
+        gap: 24px;
+      }
+      nav.top .brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 15px;
+      }
+      nav.top .brand img { width: 28px; height: 28px; border-radius: 6px; }
+      nav.top ul {
+        display: flex;
+        gap: 18px;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      nav.top a.nav {
+        font-size: 13px;
+        font-weight: 500;
+        text-decoration: none;
+        color: var(--doc-muted);
+      }
+      nav.top a.nav:hover { color: var(--doc-fg); }
+      header.hero { padding: 80px 0 64px; border-bottom: 1px solid var(--doc-border); background: #fff; }
+      header.hero .meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 24px; }
+      section.doc { padding: 72px 0; border-bottom: 1px solid var(--doc-border); }
+      section.doc.alt { background: #fff; }
+      .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+      ul.plain { margin: 0; padding: 0; list-style: none; }
+      ul.plain li { padding: 14px 0; border-bottom: 1px solid var(--doc-border); }
+      ul.plain li:last-child { border-bottom: 0; }
+      ul.plain strong { display: block; margin-bottom: 4px; font-weight: 600; }
+      ul.plain span { color: var(--doc-muted); font-size: 14px; }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        background: #e4e4e7;
+        color: #3f3f46;
+      }
+      .chip.gold { background: color-mix(in srgb, var(--gold) 32%, #fff); color: #3f2f00; }
+
+      .x {
+        --bg: #0a0a0a;
+        --fg: #fafafa;
+        --muted: #a1a1a1;
+        --border: #262626;
+        --hover: #181818;
+        --elevated: #101010;
+        --gold: oklch(0.886 0.176 86);
+        --gold-fg: #0a0a0a;
+        --success: oklch(0.696 0.149 163);
+        --accent-ink: var(--gold);
+        --radius-panel: 12px;
+        --radius-field: 8px;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font);
+        -webkit-font-smoothing: antialiased;
+      }
+      .x.light {
+        --bg: #ffffff;
+        --fg: #0a0a0a;
+        --accent-ink: #896800;
+        --muted: #737373;
+        --border: #e5e5e5;
+        --hover: #f5f5f5;
+        --elevated: #f5f5f5;
+        --gold: oklch(0.886 0.176 86);
+        --gold-fg: #0a0a0a;
+      }
+
+      .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+      .swatch {
+        border: 1px solid var(--doc-border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: #fff;
+      }
+      .swatch .chip-color { height: 64px; }
+      .swatch .meta { padding: 10px 12px; font-size: 12px; }
+      .swatch .meta strong { display: block; font-size: 13px; }
+      .swatch .meta span { color: var(--doc-muted); }
+
+      .device {
+        border: 1px solid #d4d4d8;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #000;
+      }
+      .chrome {
+        height: 40px;
+        background: #18181b;
+        border-bottom: 1px solid #27272a;
+        display: flex;
+        align-items: center;
+        padding: 0 14px;
+        gap: 7px;
+      }
+      .chrome i { width: 10px; height: 10px; border-radius: 50%; background: #3f3f46; }
+      .chrome .url {
+        margin-left: 10px;
+        font-size: 12px;
+        color: #a1a1aa;
+        font-variant-numeric: tabular-nums;
+      }
+      .screen { height: 720px; position: relative; overflow: hidden; }
+      .screen.short { height: 560px; }
+
+      .admin { display: flex; height: 100%; }
+      .rail {
+        width: 56px;
+        flex-shrink: 0;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px 0 12px;
+        gap: 2px;
+      }
+      .rail .logo {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        margin-bottom: 10px;
+        object-fit: contain;
+      }
+      .rail button.nav {
+        width: 40px;
+        height: 40px;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        position: relative;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .rail button.nav:hover { background: var(--hover); color: var(--fg); }
+      .rail button.nav.on { color: var(--fg); background: var(--hover); }
+      .rail button.nav.on::before {
+        content: "";
+        position: absolute;
+        left: 3px;
+        top: 12px;
+        bottom: 12px;
+        width: 3px;
+        border-radius: 999px;
+        background: var(--gold);
+      }
+      .rail .spacer { flex: 1; }
+      .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+      .page-head {
+        height: 53px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-shrink: 0;
+      }
+      .page-head h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+      .search {
+        height: 36px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--elevated);
+        color: var(--muted);
+        padding: 0 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        min-width: 160px;
+      }
+      .search.wide { width: 100%; min-width: 0; margin-bottom: 12px; }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 36px;
+        padding: 0 16px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+      }
+      .btn.primary { background: var(--gold); color: var(--gold-fg); }
+      .btn.primary:hover { filter: brightness(0.94); }
+      .btn.outline { background: transparent; color: var(--fg); border-color: var(--border); }
+      .btn.outline:hover { background: var(--hover); }
+      .btn.ghost { background: transparent; color: var(--muted); height: 32px; font-weight: 600; }
+      .btn.ghost:hover { background: var(--hover); color: var(--fg); }
+      .btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
+      .btn.fab {
+        position: absolute;
+        left: 16px;
+        bottom: 16px;
+        box-shadow: none;
+        z-index: 2;
+      }
+
+      .split { display: flex; flex: 1; min-height: 0; }
+      .filters {
+        width: 228px;
+        flex-shrink: 0;
+        border-right: 1px solid var(--border);
+        padding: 8px 8px 16px;
+        overflow: auto;
+      }
+      .filters h2 {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 16px 10px 6px;
+      }
+      .filters h2:first-child { margin-top: 6px; }
+      .frow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 8px 10px;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        border-radius: 8px;
+        font: inherit;
+        font-size: 14px;
+        cursor: pointer;
+        text-align: left;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .frow:hover { background: var(--hover); color: var(--fg); }
+      .frow.on { color: var(--fg); font-weight: 600; background: var(--hover); }
+      .frow.on .n { color: var(--accent-ink); }
+      .frow .n { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
+      .list { flex: 1; min-width: 0; overflow: auto; }
+      .row {
+        display: flex;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        transition: background 120ms ease;
+        position: relative;
+      }
+      .row:hover { background: var(--hover); }
+      .row.sel { background: var(--hover); }
+      .row.sel::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 10px;
+        bottom: 10px;
+        width: 3px;
+        border-radius: 999px;
+        background: var(--gold);
+      }
+      .vote {
+        width: 36px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        padding-top: 2px;
+        gap: 2px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        background: none;
+        border: 0;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .vote:hover { color: var(--fg); }
+      .vote.on { color: var(--accent-ink); }
+      .row .body { min-width: 0; flex: 1; }
+      .row .title { font-size: 15px; font-weight: 600; line-height: 1.3; margin-bottom: 2px; }
+      .row .excerpt { font-size: 14px; color: var(--muted); line-height: 1.4; }
+      .meta-line {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+      .dot.open { background: var(--muted); }
+      .dot.planned { background: var(--gold); }
+      .dot.progress { background: var(--success); }
+      .count {
+        display: inline-flex;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: var(--gold);
+        color: var(--gold-fg);
+        font-size: 11px;
+        font-weight: 600;
+        align-items: center;
+        justify-content: center;
+      }
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #262626;
+        color: var(--fg);
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+      .x.light .avatar { background: #e5e5e5; color: #0a0a0a; }
+      .x.light .rail button.nav { color: #737373; }
+      .x.light .rail button.nav.on { color: #0a0a0a; }
+      .avatar.sm { width: 18px; height: 18px; font-size: 9px; }
+
+      .tabs {
+        display: flex;
+        border-bottom: 1px solid var(--border);
+      }
+      .tabs button {
+        flex: 1;
+        height: 52px;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-size: 15px;
+        font-weight: 500;
+        cursor: pointer;
+        position: relative;
+      }
+      .tabs button.on { color: var(--fg); font-weight: 600; }
+      .tabs button.on::after {
+        content: "";
+        position: absolute;
+        left: 28%;
+        right: 28%;
+        bottom: 0;
+        height: 3px;
+        border-radius: 999px;
+        background: var(--gold);
+      }
+      .tabs button:hover { background: var(--hover); }
+
+      .card-panel {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-panel);
+        padding: 14px 16px 12px;
+        margin-bottom: 12px;
+      }
+      .card-panel h3 { font-size: 20px; font-weight: 600; margin-bottom: 10px; }
+      .card-panel h4 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+      .card-panel .foot {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .side-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 0;
+        font-size: 14px;
+        color: var(--muted);
+        border: 0;
+        background: none;
+        width: 100%;
+        cursor: pointer;
+        font-family: inherit;
+        text-align: left;
+      }
+      .side-item:hover { color: var(--fg); }
+      .side-item.on { color: var(--fg); font-weight: 600; }
+      .side-item .n { font-variant-numeric: tabular-nums; font-size: 13px; }
+
+      .thread { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+      .bubble {
+        max-width: 78%;
+        padding: 10px 12px;
+        border-radius: 16px;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+      .bubble.in { background: var(--elevated); border: 1px solid var(--border); }
+      .bubble.out {
+        margin-left: auto;
+        background: var(--fg);
+        color: var(--bg);
+      }
+      .composer {
+        border-top: 1px solid var(--border);
+        padding: 10px 12px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .composer input {
+        flex: 1;
+        height: 40px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--fg);
+        padding: 0 14px;
+        font: inherit;
+        font-size: 14px;
+        outline: none;
+      }
+      .composer input:focus { border-color: var(--gold); }
+
+      .portal-top {
+        height: 56px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        gap: 16px;
+      }
+      .portal-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; }
+      .portal-brand img { width: 28px; height: 28px; }
+      .portal-nav { display: flex; gap: 2px; }
+      .portal-nav button {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-size: 15px;
+        font-weight: 500;
+        padding: 8px 12px;
+        cursor: pointer;
+        position: relative;
+        border-radius: 999px;
+      }
+      .portal-nav button:hover { background: var(--hover); color: var(--fg); }
+      .portal-nav button.on { color: var(--fg); font-weight: 600; }
+      .portal-nav button.on::after {
+        content: "";
+        position: absolute;
+        left: 14px;
+        right: 14px;
+        bottom: -12px;
+        height: 3px;
+        border-radius: 999px;
+        background: var(--gold);
+      }
+      .portal-body {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        padding: 12px 20px 20px;
+        height: calc(100% - 56px);
+        overflow: auto;
+      }
+      .feed {
+        width: min(600px, 100%);
+        border-left: 1px solid var(--border);
+        border-right: 1px solid var(--border);
+        min-height: 100%;
+      }
+      .aside { width: 300px; flex-shrink: 0; }
+
+      .settings { display: flex; height: 100%; }
+      .set-nav { width: 228px; border-right: 1px solid var(--border); padding: 16px 8px; }
+      .set-nav h1 { font-size: 20px; font-weight: 600; padding: 0 10px 12px; }
+      .set-body { flex: 1; padding: 20px 28px; overflow: auto; }
+      .field { margin-bottom: 16px; }
+      .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+      .field input, .field textarea {
+        width: 100%;
+        height: 40px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-field);
+        background: transparent;
+        color: var(--fg);
+        padding: 0 12px;
+        font: inherit;
+        font-size: 14px;
+        outline: none;
+      }
+      .field textarea { height: 88px; padding: 10px 12px; resize: none; }
+      .field input:focus, .field textarea:focus { border-color: var(--gold); }
+
+      .mod {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 14px;
+      }
+      .mod:last-child { border-bottom: 0; }
+      .switch {
+        width: 36px;
+        height: 20px;
+        border-radius: 999px;
+        background: #262626;
+        border: 0;
+        position: relative;
+        cursor: pointer;
+        padding: 0;
+      }
+      .switch::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #fff;
+        transition: transform 120ms ease;
+      }
+      .switch.on { background: var(--gold); }
+      .switch.on::after { transform: translateX(16px); }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .overlay.on { display: flex; }
+      .dialog {
+        width: min(440px, 100%);
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 20px;
+      }
+      .dialog h2 { font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+      .seg { display: flex; gap: 8px; margin-bottom: 16px; }
+      .seg button {
+        flex: 1;
+        height: 36px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .seg button.on { border-color: var(--gold); color: var(--fg); }
+
+      .empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 80px 24px;
+        color: var(--muted);
+        height: 100%;
+      }
+      .empty .mark {
+        width: 48px;
+        height: 48px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+      }
+      .empty h3 { color: var(--fg); font-size: 20px; font-weight: 600; margin: 14px 0 6px; }
+      .empty p { font-size: 14px; max-width: 260px; }
+
+      .phone-bar {
+        height: 52px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        font-weight: 600;
+      }
+
+      .switcher { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+      .switcher button {
+        border: 1px solid var(--doc-border);
+        background: #fff;
+        border-radius: 999px;
+        padding: 6px 12px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        color: var(--doc-muted);
+      }
+      .switcher button.on { background: #18181b; color: #fff; border-color: #18181b; }
+      .note { font-size: 13px; color: var(--doc-muted); margin: 10px 0 0; }
+      table.cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
+      table.cmp th, table.cmp td {
+        text-align: left;
+        vertical-align: top;
+        padding: 12px 12px 12px 0;
+        border-bottom: 1px solid var(--doc-border);
+      }
+      table.cmp th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--doc-muted); }
+      .gallery {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        padding: 20px;
+      }
+      .x-inline { border-radius: 12px; overflow: hidden; border: 1px solid #27272a; }
+      .x .muted { color: var(--muted); }
+      .x svg { flex-shrink: 0; }
+      .x button:focus-visible, .switcher button:focus-visible, a:focus-visible {
+        outline: 2px solid var(--gold);
+        outline-offset: 3px;
+      }
+      .rail button.nav { border-radius: 10px; }
+      .btn { font-weight: 500; }
+      .dialog, .bubble { border-radius: 12px; }
+      section.doc { scroll-margin-top: 72px; }
+      .workspace-content { flex: 1; min-width: 0; overflow: auto; padding: 24px; font-size: 14px; }
+      .workspace-content h2 { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+      .workspace-content h3 { font-size: 14px; font-weight: 600; margin: 16px 0; }
+      .workspace-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+      .workspace-heading h2, .workspace-heading p { margin-bottom: 0; }
+      .product-table { border-collapse: collapse; width: 100%; font-size: 13px; text-align: left; }
+      .product-table th { color: var(--muted); font-weight: 500; font-size: 12px; }
+      .product-table th, .product-table td { padding: 14px 10px; border-bottom: 1px solid var(--border); }
+      .product-table td:first-child, .product-table th:first-child { padding-left: 0; }
+      .product-table td .btn { text-align: left; justify-content: flex-start; border: 0; padding: 0; height: auto; }
+      .kanban { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
+      .kanban section { min-height: 420px; border-right: 1px solid var(--border); padding-right: 12px; }
+      .kanban-post { display: block; width: 100%; text-align: left; background: var(--elevated); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 12px; color: var(--fg); font: inherit; cursor: pointer; }
+      .kanban-post:hover { background: var(--hover); }
+      .editor-layout { display: flex; gap: 24px; }
+      .article-copy { flex: 1; min-width: 0; line-height: 1.8; }
+      .article-copy h1 { font-size: 26px; line-height: 1.3; margin: 16px 0; }
+      .article-copy hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
+      .article-meta { width: 180px; flex-shrink: 0; border-left: 1px solid var(--border); padding-left: 20px; }
+      .metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin: 24px 0; }
+      .metrics > div { border-right: 1px solid var(--border); }
+      .metrics strong { display: block; font-size: 28px; font-weight: 600; margin-top: 6px; }
+      .activity-chart { height: 160px; display: flex; gap: 14px; align-items: flex-end; border-bottom: 1px solid var(--border); padding: 12px 0 0; }
+      .activity-chart i { flex: 1; background: var(--gold); opacity: .7; border-radius: 3px 3px 0 0; }
+      .chart-labels { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; padding-top: 8px; }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        *, *::before, *::after { transition: none !important; }
+      }
+      @media (max-width: 600px) {
+        nav.top .wrap { height: auto; padding-top: 12px; padding-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+        nav.top ul { gap: 12px; justify-content: flex-start; }
+        header.hero { padding: 48px 0 40px; }
+        section.doc { padding: 40px 0; scroll-margin-top: 120px; }
+        .device { overflow-x: auto; }
+        .device > .screen:not(#mobile-admin):not(#mobile-portal) { min-width: 850px; }
+      }
+      @media (max-width: 900px) {
+        .grid-2, .swatches { grid-template-columns: 1fr; }
+        .wrap { padding: 0 20px; }
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="top">
+      <div class="wrap">
+        <a class="brand" href="#top">
+          <img src="../apps/web/public/logo.png" alt="" />
+          Visual language
+        </a>
+        <ul>
+          <li><a class="nav" href="#decisions">Decisions</a></li>
+          <li><a class="nav" href="#tokens">Tokens</a></li>
+          <li><a class="nav" href="#components">Components</a></li>
+          <li><a class="nav" href="#admin">Admin</a></li>
+          <li><a class="nav" href="#portal">Portal</a></li>
+          <li><a class="nav" href="#settings">Settings</a></li>
+          <li><a class="nav" href="#mobile">Mobile</a></li>
+          <li><a class="nav" href="#rounds">Rounds</a></li>
+        </ul>
+      </div>
+    </nav>
+
+    <header class="hero" id="top">
+      <div class="wrap">
+        <p class="eyebrow">Mockups · not implemented</p>
+        <h1>Quackback, with a lighter touch</h1>
+        <p class="lead">
+          Same product: gold duck, Feedback, Support, Changelog, Help Center, Status.
+          Current page structures, with illustrative data and local preview interactions. The change is surface — neutral charcoal, hairline
+          separators, familiar pill actions, solid Heroicons, and quiet hierarchy instead
+          of cards and shadows.
+        </p>
+        <div class="meta">
+          <span class="chip gold">Brand gold kept, used sparingly</span>
+          <span class="chip">No X marks or social compose</span>
+          <span class="chip">Dark first · light sibling</span>
+          <span class="chip">HTML mockups only · illustrative data</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="doc alt" id="decisions">
+      <div class="wrap">
+        <p class="eyebrow">Locked for this pass</p>
+        <h2 class="doc">What the references change — and what they don’t</h2>
+        <div class="grid-2">
+          <div>
+            <h3 class="doc">Keep the restraint</h3>
+            <ul class="plain">
+              <li>
+                <strong>Familiar charcoal field</strong>
+                <span>Background #0A0A0A, matching Quackback’s dark base. Supporting surfaces lift just one step; the main list stays flush.</span>
+              </li>
+              <li>
+                <strong>Hairline structure</strong>
+                <span>Columns and rows divide with #262626. Supporting blocks (boards, roadmap peek) use a 12px outlined panel. Lists stay continuous.</span>
+              </li>
+              <li>
+                <strong>Type as hierarchy</strong>
+                <span>20px / 600 page titles. 15px / 600 list titles. 14px body. 13px metadata in #A1A1A1.</span>
+              </li>
+              <li>
+                <strong>Familiar controls, restrained rounding</strong>
+                <span>Buttons, search, and compact segments. Not filter rows, not form fields, not module toggles.</span>
+              </li>
+              <li>
+                <strong>Solid icons, quiet selection</strong>
+                <span>Solid Heroicons throughout, matching the current admin rail. Active: a subtle neutral background and a small gold rail mark.</span>
+              </li>
+              <li>
+                <strong>Underline tabs</strong>
+                <span>Trending / New / Top and portal product nav use a short gold underline.</span>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="doc">Keep as Quackback</h3>
+            <ul class="plain">
+              <li>
+                <strong>Icon-only admin rail</strong>
+                <span>Do not grow it into X’s labeled 275px column. The 56px rail stays.</span>
+              </li>
+              <li>
+                <strong>Gold, not sky blue — and not a fill color</strong>
+                <span>Ticks, voted chevrons, unread counts, focus rings, tab underlines, and primary buttons. Not selected rows, not chat bubbles, not empty-state discs.</span>
+              </li>
+              <li>
+                <strong>Existing columns and entry points</strong>
+                <span>Feedback keeps filters | list. Support keeps views | threads | detail. New post stays a header pill that opens the existing dialog — no tweet composer on the feed.</span>
+              </li>
+              <li>
+                <strong>Workspace themes still win</strong>
+                <span>Unbranded default only. Branding CSS variables continue to override.</span>
+              </li>
+              <li>
+                <strong>Light mode stays</strong>
+                <span>White field, #0A0A0A text, #E5E5E5 borders, same geometry. Toggle it on the devices below.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="doc" id="tokens">
+      <div class="wrap">
+        <p class="eyebrow">Token system</p>
+        <h2 class="doc">Default dark palette</h2>
+        <p class="lead">Mapped onto the existing tweakcn variables so branding and <code>expandTheme</code> keep working. Only the unbranded bases move.</p>
+        <div class="swatches">
+          <div class="swatch"><div class="chip-color" style="background:#0a0a0a"></div><div class="meta"><strong>background</strong><span>#0a0a0a · --background</span></div></div>
+          <div class="swatch"><div class="chip-color" style="background:#fafafa"></div><div class="meta"><strong>foreground</strong><span>#FAFAFA · --foreground</span></div></div>
+          <div class="swatch"><div class="chip-color" style="background:#a1a1a1"></div><div class="meta"><strong>muted-foreground</strong><span>#A1A1A1 · secondary text</span></div></div>
+          <div class="swatch"><div class="chip-color" style="background:#262626"></div><div class="meta"><strong>border</strong><span>#262626 · --border / --input</span></div></div>
+          <div class="swatch"><div class="chip-color" style="background:#181818"></div><div class="meta"><strong>hover / selected row</strong><span>#181818 · --accent, --muted</span></div></div>
+          <div class="swatch"><div class="chip-color" style="background:#101010"></div><div class="meta"><strong>elevated</strong><span>#101010 · popover, search fill</span></div></div>
+          <div class="swatch"><div class="chip-color" style="background:oklch(0.886 0.176 86)"></div><div class="meta"><strong>primary</strong><span>oklch(0.886 0.176 86) · existing gold</span></div></div>
+          <div class="swatch"><div class="chip-color" style="background:#0a0a0a"></div><div class="meta"><strong>primary-foreground</strong><span>#0A0A0A · ink on gold</span></div></div>
+        </div>
+        <div style="margin-top:28px; overflow-x:auto">
+          <table class="cmp">
+            <thead>
+              <tr><th>Token</th><th>Today (dark)</th><th>Proposed</th><th>Why</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>--background / --sidebar</td><td>oklch(0.145) zinc</td><td>#0a0a0a</td><td>Keep the current charcoal base; remove the raised frame around lists.</td></tr>
+              <tr><td>--card / --popover</td><td>oklch(0.17) lifted</td><td>#0A0A0A / #101010</td><td>Cards share the page. Popovers may lift one step.</td></tr>
+              <tr><td>--border</td><td>oklch(0.269)</td><td>#262626</td><td>Visible hairline on black without becoming a frame.</td></tr>
+              <tr><td>--muted-foreground</td><td>oklch(0.708)</td><td>#A1A1A1</td><td>Neutral secondary text stays legible without a blue-gray cast.</td></tr>
+              <tr><td>--radius</td><td>0.625rem everywhere</td><td>8px fields; 12px panels; pill buttons/search</td><td>Pills are for controls, not every rectangle. 12px on a 40px field still reads as a capsule.</td></tr>
+              <tr><td>--shadow-*</td><td>Pronounced dark shadows</td><td>None on surfaces</td><td>Depth from hairlines. Dialogs sit on a neutral black dim.</td></tr>
+              <tr><td>--ring</td><td>Neutral gray</td><td>Gold</td><td>A restrained gold focus ring keeps keyboard position clear.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="doc alt" id="components">
+      <div class="wrap">
+        <p class="eyebrow">Shared primitives</p>
+        <h2 class="doc">Buttons, tabs, fields, panels</h2>
+        <p class="lead">Update these first. Most screens inherit the system without a per-page restyle.</p>
+        <div class="x x-inline">
+          <div class="gallery">
+            <button class="btn primary" type="button">New post</button>
+            <button class="btn outline" type="button">Copy link</button>
+            <button class="btn ghost" type="button">Skip</button>
+            <span class="search">Search posts</span>
+            <span class="meta-line" style="margin:0"><span class="dot planned"></span> Planned</span>
+            <span class="count">3</span>
+          </div>
+          <div class="tabs" data-tabs>
+            <button class="on" type="button">Trending</button>
+            <button type="button">New</button>
+            <button type="button">Top</button>
+          </div>
+          <div style="display:flex;gap:16px;padding:16px;align-items:stretch">
+            <div class="card-panel" style="flex:1;margin:0">
+              <h4>Outlined panel</h4>
+              <p class="muted" style="font-size:13px;margin:0">Boards, billing, getting started. 12px radius, 1px border, no shadow.</p>
+            </div>
+            <div style="flex:1;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:12px 0">
+              <div class="title" style="font-weight:700;font-size:15px">Continuous row</div>
+              <div style="font-size:13px;color:var(--muted)">Lists, inbox threads, changelog entries. Hairline only.</div>
+            </div>
+          </div>
+        </div>
+        <p class="note">No second “Post” white pill. Primary is gold. Page titles are type only — no gold icon tile. Form fields are 8px, not capsules.</p>
+      </div>
+    </section>
+
+    <section class="doc" id="admin">
+      <div class="wrap">
+        <p class="eyebrow">Admin</p>
+        <h2 class="doc">More of the product, one quiet system</h2>
+        <p class="lead">
+          The inset rounded stage around admin main goes away. Rail, filters, and list
+          share one charcoal field. Rows are posts, not cards. Click filters, votes, and
+          rows. Toggle light to see the sibling.
+        </p>
+        <div class="switcher" id="admin-switch">
+          <button class="on" data-screen="feedback" type="button">Feedback</button>
+          <button data-screen="support" type="button">Support</button>
+          <button data-screen="changelog" type="button">Changelog</button>
+<button data-screen="roadmap" type="button">Roadmap</button>
+          <button data-screen="help" type="button">Help Center</button>
+          <button data-screen="status" type="button">Status</button>
+          <button data-screen="analytics" type="button">Analytics</button>
+          <button data-screen="automation" type="button">Quinn Agent</button>
+          <button data-screen="users" type="button">Users</button>
+          <button data-screen="post" type="button">Post detail</button>
+          <button data-screen="article" type="button">Article detail</button>
+          <button data-screen="empty" type="button">Empty</button>
+          <button data-screen="dialog" type="button">Create board</button>
+          <button data-theme type="button">Light</button>
+        </div>
+        <div class="device">
+          <div class="chrome"><i></i><i></i><i></i><span class="url" id="admin-url">acme.quackback.app/admin/feedback</span></div>
+          <div class="screen x" id="admin-screen"></div>
+        </div>
+        <p class="note" id="admin-note"></p>
+        <details style="margin-top:20px;font-size:13px">
+          <summary style="cursor:pointer;font-weight:600">Page coverage and source references</summary>
+          <p class="note">Structure checked against the current repository. These are visual previews with illustrative data, not a functional replica. View navigation, theme toggles, votes, switches, and the board dialog work locally; search, publishing, and persistence are not connected.</p>
+          <table class="cmp">
+            <thead><tr><th>Area</th><th>Preview coverage</th><th>Source in apps/web/src</th></tr></thead>
+            <tbody>
+              <tr><td>Feedback &amp; Support</td><td>Inbox, post detail, conversation, empty state, board dialog</td><td>components/admin/feedback · routes/admin/inbox.tsx</td></tr>
+              <tr><td>Roadmap</td><td>Roadmap selector, status columns, post cards</td><td>components/admin/roadmap-admin.tsx · roadmap-sidebar.tsx</td></tr>
+              <tr><td>Help Center</td><td>Articles, status/category navigation, article detail</td><td>components/admin/help-center/help-center-list.tsx · help-center-filters.tsx</td></tr>
+              <tr><td>Status</td><td>Overview, incidents, maintenance, services</td><td>components/admin/status/status-admin.tsx · status-overview-view.tsx</td></tr>
+              <tr><td>Analytics &amp; Users</td><td>Overview metrics and activity, people and companies</td><td>components/admin/analytics/analytics-page.tsx · users/users-layout.tsx</td></tr>
+              <tr><td>Quinn Agent</td><td>Basics, Knowledge, Guidance</td><td>routes/admin/automation.agent.tsx</td></tr>
+              <tr><td>Public portal</td><td>Feedback, Changelog, Help Center, Status</td><td>routes/_portal/changelog.index.tsx · hc.tsx · status.index.tsx</td></tr>
+            </tbody>
+          </table>
+        </details>
+      </div>
+    </section>
+
+    <section class="doc alt" id="portal">
+      <div class="wrap">
+        <p class="eyebrow">Public portal · /</p>
+        <h2 class="doc">Feed, not a dashboard of cards</h2>
+        <p class="lead">
+          Header: logo, workspace name, underline product nav, gold New post, avatar.
+          Search lives above the boards panel. Use the product navigation to preview Changelog, Help Center, and Status.
+          No inline composer. New post stays the existing dialog.
+        </p>
+        <div class="switcher">
+          <button data-theme type="button">Light</button>
+        </div>
+        <div class="device">
+          <div class="chrome"><i></i><i></i><i></i><span class="url">acme.quackback.app/</span></div>
+          <div class="screen x" id="portal-screen"></div>
+        </div>
+        <p class="note">Voted chevron is gold, no mute box. Status is a dot + label. Boards panel footer keeps Powered by when the plan requires it.</p>
+      </div>
+    </section>
+
+    <section class="doc" id="settings">
+      <div class="wrap">
+        <p class="eyebrow">Admin · /admin/settings/general</p>
+        <h2 class="doc">Settings as a form, not a stack of cards</h2>
+        <p class="lead">Left nav stays. Sections are 12px outlined panels. Fields are 8px rectangles. Module rows are a label + switch, not feature tiles.</p>
+        <div class="device">
+          <div class="chrome"><i></i><i></i><i></i><span class="url">acme.quackback.app/admin/settings/general</span></div>
+          <div class="screen x short" id="settings-screen"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="doc alt" id="mobile">
+      <div class="wrap">
+        <p class="eyebrow">Small screens</p>
+        <h2 class="doc">Collapse the rail, keep the list</h2>
+        <p class="lead">Admin keeps today’s hamburger sheet plus the floating Filters pill — not a new four-icon dock. Portal: New post in the header; Boards opens the existing sheet.</p>
+        <div class="grid-2">
+          <div>
+            <div class="device" style="max-width:390px;margin:0 auto">
+              <div class="chrome"><i></i><i></i><i></i><span class="url">/admin/feedback</span></div>
+              <div class="screen x" id="mobile-admin"></div>
+            </div>
+            <p class="note">Gold New post in the header. Filters stays the existing FAB. No second dock.</p>
+          </div>
+          <div>
+            <div class="device" style="max-width:390px;margin:0 auto">
+              <div class="chrome"><i></i><i></i><i></i><span class="url">/</span></div>
+              <div class="screen x" id="mobile-portal"></div>
+            </div>
+            <p class="note">Boards is a header control, not a second column.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="doc" id="rounds">
+      <div class="wrap">
+        <p class="eyebrow">Critic rounds</p>
+        <h2 class="doc">What the first pass got wrong</h2>
+        <div class="grid-2">
+          <ul class="plain">
+            <li>
+              <strong>Gold as a fill</strong>
+              <span>Selected rows had an 8% gold wash. Agent replies were gold bubbles. Empty state was a gold “?”. That makes gold a surface, not an accent. Rows are #181818. Replies are near-white pills. Empty uses a muted solid feedback icon.</span>
+            </li>
+            <li>
+              <strong>X compose on the portal</strong>
+              <span>“What should we improve?” copied the tweet box. Quackback creates posts in a dialog from New post. The composer is gone.</span>
+            </li>
+            <li>
+              <strong>Pills on everything</strong>
+              <span>Filter rows, settings fields, and module rows were capsules. The brief reserves pills for buttons, search, and compact segments. Fields are 12px. Filters are text rows. Modules are switches.</span>
+            </li>
+            <li>
+              <strong>Invented mobile chrome</strong>
+              <span>A four-icon dock is not the admin app. Mobile admin is hamburger + Filters FAB, as today.</span>
+            </li>
+          </ul>
+          <ul class="plain">
+            <li>
+              <strong>Crowded portal header</strong>
+              <span>Search moved to the right column, above Boards — X’s search slot, Quackback’s boards job.</span>
+            </li>
+            <li>
+              <strong>Light mode was copy only</strong>
+              <span>Devices now toggle the white sibling so the geometry can be judged in both.</span>
+            </li>
+            <li>
+              <strong>Status as a chip</strong>
+              <span>Notes said dot + label; the mock used outline pills. Status is a 6px dot and the status name.</span>
+            </li>
+            <li>
+              <strong>Still out of scope</strong>
+              <span>No X logo, no verification, no Home label, no workflow-canvas restyle. Branding presets still override these defaults.</span>
+            </li>
+            <li>
+              <strong>Round 3 · closer to Quackback</strong>
+              <span>Restored the current charcoal and gold, neutralized secondary text, softened headings to semibold, and embedded solid Heroicons. Quiet selected backgrounds and 12px supporting panels retain the minimal structure.</span>
+            </li>
+          </ul>
+        </div>
+        <h3 class="doc" style="margin-top:36px">When you implement</h3>
+        <ul class="plain">
+          <li>
+            <strong>globals.css + DEFAULT_*_BASE</strong>
+            <span>Keep the existing charcoal and primary tokens. Use quiet hairlines and flat list surfaces; preserve workspace theme overrides.</span>
+          </li>
+          <li>
+            <strong>button, input, tabs, card, dialog, settings-card</strong>
+            <span>Keep pill buttons. Strip shadows. Card is border-only or flush. Line tabs are the page default. Inputs stay rectangular.</span>
+          </li>
+          <li>
+            <strong>admin.tsx + admin-sidebar</strong>
+            <span>Drop the inset rounded main frame. Solid Heroicons. Gold tick on the active item.</span>
+          </li>
+          <li>
+            <strong>Post rows, conversation rows, portal feed</strong>
+            <span>No per-item card. Hairline + #181818 hover. Vote control loses the muted box.</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <script>
+      const logo = "../apps/web/public/logo.png"
+      // Heroicons 24/solid, embedded from the installed package (MIT).
+      const icons = {
+        automation: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path d=\"M16.5 7.5h-9v9h9v-9Z\"></path><path fill-rule=\"evenodd\" d=\"M8.25 2.25A.75.75 0 0 1 9 3v.75h2.25V3a.75.75 0 0 1 1.5 0v.75H15V3a.75.75 0 0 1 1.5 0v.75h.75a3 3 0 0 1 3 3v.75H21A.75.75 0 0 1 21 9h-.75v2.25H21a.75.75 0 0 1 0 1.5h-.75V15H21a.75.75 0 0 1 0 1.5h-.75v.75a3 3 0 0 1-3 3h-.75V21a.75.75 0 0 1-1.5 0v-.75h-2.25V21a.75.75 0 0 1-1.5 0v-.75H9V21a.75.75 0 0 1-1.5 0v-.75h-.75a3 3 0 0 1-3-3v-.75H3A.75.75 0 0 1 3 15h.75v-2.25H3a.75.75 0 0 1 0-1.5h.75V9H3a.75.75 0 0 1 0-1.5h.75v-.75a3 3 0 0 1 3-3h.75V3a.75.75 0 0 1 .75-.75ZM6 6.75A.75.75 0 0 1 6.75 6h10.5a.75.75 0 0 1 .75.75v10.5a.75.75 0 0 1-.75.75H6.75a.75.75 0 0 1-.75-.75V6.75Z\" clip-rule=\"evenodd\"></path></svg>",
+        users: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path d=\"M4.5 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM14.25 8.625a3.375 3.375 0 1 1 6.75 0 3.375 3.375 0 0 1-6.75 0ZM1.5 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122ZM17.25 19.128l-.001.144a2.25 2.25 0 0 1-.233.96 10.088 10.088 0 0 0 5.06-1.01.75.75 0 0 0 .42-.643 4.875 4.875 0 0 0-6.957-4.611 8.586 8.586 0 0 1 1.71 5.157v.003Z\"></path></svg>",
+        feedback: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path fill-rule=\"evenodd\" d=\"M4.848 2.771A49.144 49.144 0 0 1 12 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97-1.94.284-3.916.455-5.922.505a.39.39 0 0 0-.266.112L8.78 21.53A.75.75 0 0 1 7.5 21v-3.955a48.842 48.842 0 0 1-2.652-.316c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97Z\" clip-rule=\"evenodd\"></path></svg>",
+        support: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path d=\"M4.913 2.658c2.075-.27 4.19-.408 6.337-.408 2.147 0 4.262.139 6.337.408 1.922.25 3.291 1.861 3.405 3.727a4.403 4.403 0 0 0-1.032-.211 50.89 50.89 0 0 0-8.42 0c-2.358.196-4.04 2.19-4.04 4.434v4.286a4.47 4.47 0 0 0 2.433 3.984L7.28 21.53A.75.75 0 0 1 6 21v-4.03a48.527 48.527 0 0 1-1.087-.128C2.905 16.58 1.5 14.833 1.5 12.862V6.638c0-1.97 1.405-3.718 3.413-3.979Z\"></path><path d=\"M15.75 7.5c-1.376 0-2.739.057-4.086.169C10.124 7.797 9 9.103 9 10.609v4.285c0 1.507 1.128 2.814 2.67 2.94 1.243.102 2.5.157 3.768.165l2.782 2.781a.75.75 0 0 0 1.28-.53v-2.39l.33-.026c1.542-.125 2.67-1.433 2.67-2.94v-4.286c0-1.505-1.125-2.811-2.664-2.94A49.392 49.392 0 0 0 15.75 7.5Z\"></path></svg>",
+        roadmap: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path fill-rule=\"evenodd\" d=\"M8.161 2.58a1.875 1.875 0 0 1 1.678 0l4.993 2.498c.106.052.23.052.336 0l3.869-1.935A1.875 1.875 0 0 1 21.75 4.82v12.485c0 .71-.401 1.36-1.037 1.677l-4.875 2.437a1.875 1.875 0 0 1-1.676 0l-4.994-2.497a.375.375 0 0 0-.336 0l-3.868 1.935A1.875 1.875 0 0 1 2.25 19.18V6.695c0-.71.401-1.36 1.036-1.677l4.875-2.437ZM9 6a.75.75 0 0 1 .75.75V15a.75.75 0 0 1-1.5 0V6.75A.75.75 0 0 1 9 6Zm6.75 3a.75.75 0 0 0-1.5 0v8.25a.75.75 0 0 0 1.5 0V9Z\" clip-rule=\"evenodd\"></path></svg>",
+        changelog: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path fill-rule=\"evenodd\" d=\"M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0 0 16.5 9h-1.875a1.875 1.875 0 0 1-1.875-1.875V5.25A3.75 3.75 0 0 0 9 1.5H5.625ZM7.5 15a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 7.5 15Zm.75 2.25a.75.75 0 0 0 0 1.5H12a.75.75 0 0 0 0-1.5H8.25Z\" clip-rule=\"evenodd\"></path><path d=\"M12.971 1.816A5.23 5.23 0 0 1 14.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 0 1 3.434 1.279 9.768 9.768 0 0 0-6.963-6.963Z\"></path></svg>",
+        help: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path d=\"M11.25 4.533A9.707 9.707 0 0 0 6 3a9.735 9.735 0 0 0-3.25.555.75.75 0 0 0-.5.707v14.25a.75.75 0 0 0 1 .707A8.237 8.237 0 0 1 6 18.75c1.995 0 3.823.707 5.25 1.886V4.533ZM12.75 20.636A8.214 8.214 0 0 1 18 18.75c.966 0 1.89.166 2.75.47a.75.75 0 0 0 1-.708V4.262a.75.75 0 0 0-.5-.707A9.735 9.735 0 0 0 18 3a9.707 9.707 0 0 0-5.25 1.533v16.103Z\"></path></svg>",
+        status: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path fill-rule=\"evenodd\" d=\"M5.636 4.575a.75.75 0 0 1 0 1.061 9 9 0 0 0 0 12.728.75.75 0 1 1-1.06 1.06c-4.101-4.1-4.101-10.748 0-14.849a.75.75 0 0 1 1.06 0Zm12.728 0a.75.75 0 0 1 1.06 0c4.101 4.1 4.101 10.75 0 14.85a.75.75 0 1 1-1.06-1.061 9 9 0 0 0 0-12.728.75.75 0 0 1 0-1.06ZM7.757 6.697a.75.75 0 0 1 0 1.06 6 6 0 0 0 0 8.486.75.75 0 0 1-1.06 1.06 7.5 7.5 0 0 1 0-10.606.75.75 0 0 1 1.06 0Zm8.486 0a.75.75 0 0 1 1.06 0 7.5 7.5 0 0 1 0 10.606.75.75 0 0 1-1.06-1.06 6 6 0 0 0 0-8.486.75.75 0 0 1 0-1.06ZM9.879 8.818a.75.75 0 0 1 0 1.06 3 3 0 0 0 0 4.243.75.75 0 1 1-1.061 1.061 4.5 4.5 0 0 1 0-6.364.75.75 0 0 1 1.06 0Zm4.242 0a.75.75 0 0 1 1.061 0 4.5 4.5 0 0 1 0 6.364.75.75 0 0 1-1.06-1.06 3 3 0 0 0 0-4.243.75.75 0 0 1 0-1.061ZM10.875 12a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Z\" clip-rule=\"evenodd\"></path></svg>",
+        analytics: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path d=\"M18.375 2.25c-1.035 0-1.875.84-1.875 1.875v15.75c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875V4.125c0-1.036-.84-1.875-1.875-1.875h-.75ZM9.75 8.625c0-1.036.84-1.875 1.875-1.875h.75c1.036 0 1.875.84 1.875 1.875v11.25c0 1.035-.84 1.875-1.875 1.875h-.75a1.875 1.875 0 0 1-1.875-1.875V8.625ZM3 13.125c0-1.036.84-1.875 1.875-1.875h.75c1.036 0 1.875.84 1.875 1.875v6.75c0 1.035-.84 1.875-1.875 1.875h-.75A1.875 1.875 0 0 1 3 19.875v-6.75Z\"></path></svg>",
+        settings: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path fill-rule=\"evenodd\" d=\"M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.493 7.493 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z\" clip-rule=\"evenodd\"></path></svg>",
+        globe: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path d=\"M21.721 12.752a9.711 9.711 0 0 0-.945-5.003 12.754 12.754 0 0 1-4.339 2.708 18.991 18.991 0 0 1-.214 4.772 17.165 17.165 0 0 0 5.498-2.477ZM14.634 15.55a17.324 17.324 0 0 0 .332-4.647c-.952.227-1.945.347-2.966.347-1.021 0-2.014-.12-2.966-.347a17.515 17.515 0 0 0 .332 4.647 17.385 17.385 0 0 0 5.268 0ZM9.772 17.119a18.963 18.963 0 0 0 4.456 0A17.182 17.182 0 0 1 12 21.724a17.18 17.18 0 0 1-2.228-4.605ZM7.777 15.23a18.87 18.87 0 0 1-.214-4.774 12.753 12.753 0 0 1-4.34-2.708 9.711 9.711 0 0 0-.944 5.004 17.165 17.165 0 0 0 5.498 2.477ZM21.356 14.752a9.765 9.765 0 0 1-7.478 6.817 18.64 18.64 0 0 0 1.988-4.718 18.627 18.627 0 0 0 5.49-2.098ZM2.644 14.752c1.682.971 3.53 1.688 5.49 2.099a18.64 18.64 0 0 0 1.988 4.718 9.765 9.765 0 0 1-7.478-6.816ZM13.878 2.43a9.755 9.755 0 0 1 6.116 3.986 11.267 11.267 0 0 1-3.746 2.504 18.63 18.63 0 0 0-2.37-6.49ZM12 2.276a17.152 17.152 0 0 1 2.805 7.121c-.897.23-1.837.353-2.805.353-.968 0-1.908-.122-2.805-.353A17.151 17.151 0 0 1 12 2.276ZM10.122 2.43a18.629 18.629 0 0 0-2.37 6.49 11.266 11.266 0 0 1-3.746-2.504 9.754 9.754 0 0 1 6.116-3.985Z\"></path></svg>",
+        search: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"16\" height=\"16\"><path fill-rule=\"evenodd\" d=\"M10.5 3.75a6.75 6.75 0 1 0 0 13.5 6.75 6.75 0 0 0 0-13.5ZM2.25 10.5a8.25 8.25 0 1 1 14.59 5.28l4.69 4.69a.75.75 0 1 1-1.06 1.06l-4.69-4.69A8.25 8.25 0 0 1 2.25 10.5Z\" clip-rule=\"evenodd\"></path></svg>",
+        chevron: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"14\" height=\"14\"><path fill-rule=\"evenodd\" d=\"M11.47 7.72a.75.75 0 0 1 1.06 0l7.5 7.5a.75.75 0 1 1-1.06 1.06L12 9.31l-6.97 6.97a.75.75 0 0 1-1.06-1.06l7.5-7.5Z\" clip-rule=\"evenodd\"></path></svg>",
+        menu: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path fill-rule=\"evenodd\" d=\"M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z\" clip-rule=\"evenodd\"></path></svg>",
+        empty: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\" data-slot=\"icon\" width=\"22\" height=\"22\"><path fill-rule=\"evenodd\" d=\"M4.848 2.771A49.144 49.144 0 0 1 12 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97-1.94.284-3.916.455-5.922.505a.39.39 0 0 0-.266.112L8.78 21.53A.75.75 0 0 1 7.5 21v-3.955a48.842 48.842 0 0 1-2.652-.316c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97Z\" clip-rule=\"evenodd\"></path></svg>",
+      }
+
+      const POSTS = [
+        { t: "Dark mode for the customer portal", x: "The public board is fine in light, but night-shift readers get a white flash.", v: 128, c: 14, a: "Maya", s: "Planned", sk: "planned", voted: true },
+        { t: "Export votes to CSV", x: "We review the board in a weekly ops meeting and still copy counts by hand.", v: 64, c: 6, a: "Chris", s: "Open", sk: "open" },
+        { t: "Slack notify on new comments", x: "The webhook fires on create, not on the thread. We miss the actual conversation.", v: 41, c: 9, a: "Priya", s: "In progress", sk: "progress" },
+        { t: "Private boards for beta customers", x: "Need a URL they can open without seeing the public roadmap.", v: 22, c: 3, a: "Alex", s: "Open", sk: "open" },
+      ]
+
+      function rail(active) {
+        const items = ["feedback", "support", "roadmap", "changelog", "help", "status", "analytics", "automation", "users"]
+        return (
+          '<aside class="rail">' +
+            '<img class="logo" src="' + logo + '" alt="Acme" />' +
+            items.map((id) =>
+              '<button class="nav' + (id === active ? " on" : "") + '" type="button" data-admin="' + id + '" aria-label="' + id + '">' + icons[id] + "</button>"
+            ).join("") +
+            '<div class="spacer"></div>' +
+            '<button class="nav' + (active === "settings" ? " on" : "") + '" type="button" data-admin="settings" aria-label="Settings">' + icons.settings + "</button>" +
+            '<button class="nav" type="button" aria-label="View portal">' + icons.globe + "</button>" +
+            '<div class="avatar" style="width:28px;height:28px;margin-top:6px">JM</div>' +
+          "</aside>"
+        )
+      }
+
+      function posts(opts) {
+        opts = opts || {}
+        return POSTS.map((r, i) =>
+          '<div class="row' + (opts.selectFirst && i === 0 ? " sel" : "") + '" data-row>' +
+            '<button class="vote' + (r.voted ? " on" : "") + '" type="button" data-vote>' + icons.chevron + '<span>' + r.v + "</span></button>" +
+            '<div class="body">' +
+              '<div class="title">' + r.t + "</div>" +
+              (opts.compact ? "" : '<div class="excerpt">' + r.x + "</div>") +
+              '<div class="meta-line"><span class="avatar sm">' + r.a[0] + "</span>" + r.a + " · 2d" +
+              ' <span class="dot ' + r.sk + '"></span> ' + r.s + " · " + r.c + " comments</div>" +
+            "</div>" +
+          "</div>"
+        ).join("")
+      }
+
+      function filterGroup(title, rows) {
+        return (
+          (title ? "<h2>" + title + "</h2>" : "") +
+          rows.map((r, i) =>
+            '<button class="frow' + (i === 0 ? " on" : "") + '" type="button" data-filter>' +
+              r[0] + (r[1] != null ? ' <span class="n">' + r[1] + "</span>" : "") +
+            "</button>"
+          ).join("")
+        )
+      }
+
+      function feedback(opts) {
+        opts = opts || {}
+        return (
+          '<div class="admin">' +
+            rail("feedback") +
+            '<div class="main">' +
+              '<div class="page-head"><h1>Feedback</h1><div style="display:flex;gap:8px;align-items:center"><span class="search">' + icons.search + " Search</span><button class=\"btn primary sm\" type=\"button\">New post</button></div></div>" +
+              '<div class="split">' +
+                '<aside class="filters">' +
+                  filterGroup("Boards", opts.empty
+                    ? [["All boards", 0], ["Feature requests", 0], ["Bugs", 0]]
+                    : [["All boards", 248], ["Feature requests", 112], ["Bugs", 61]]) +
+                  filterGroup("Status", [["Open"], ["Planned"], ["In progress"]]) +
+                "</aside>" +
+                '<div class="list">' +
+                  (opts.empty
+                    ? '<div class="empty"><div class="mark">' + icons.empty + "</div><h3>No posts yet</h3><p>Create a board, then add the first piece of feedback.</p><button class=\"btn primary\" type=\"button\" style=\"margin-top:12px\" data-open-dialog>Create board</button></div>"
+                    : posts({ selectFirst: true })) +
+                "</div>" +
+              "</div>" +
+            "</div>" +
+            (opts.dialog
+              ? '<div class="overlay on" data-overlay><div class="dialog"><h2>Create board</h2><div class="field"><label>Name</label><input value="Beta customers" /></div><div class="field"><label>Description</label><textarea>Private board for design partners.</textarea></div><div class="seg" data-seg><button type="button">Private</button><button class="on" type="button">Public</button></div><div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn outline sm" type="button" data-close-dialog>Cancel</button><button class="btn primary sm" type="button" data-close-dialog>Create</button></div></div></div>'
+              : "") +
+          "</div>"
+        )
+      }
+
+      function support() {
+        return (
+          '<div class="admin">' +
+            rail("support") +
+            '<div class="main">' +
+              '<div class="page-head"><h1>Support</h1><span class="search">' + icons.search + " Search conversations</span></div>" +
+              '<div class="split">' +
+                '<aside class="filters">' +
+                  filterGroup("", [["Your inbox", 6], ["Unassigned", 12], ["All", 41]]) +
+                  filterGroup("Views", [["Urgent"], ["Snoozed"]]) +
+                "</aside>" +
+                '<div class="list" style="max-width:300px;border-right:1px solid var(--border)">' +
+                  '<div class="row sel" data-row><div class="avatar">N</div><div class="body"><div class="title" style="font-size:14px">Nora Chen <span class="count">2</span></div><div class="excerpt">The widget never appears on checkout…</div><div class="meta-line">2m · Unassigned</div></div></div>' +
+                  '<div class="row" data-row><div class="avatar">R</div><div class="body"><div class="title" style="font-size:14px">Ravi</div><div class="excerpt">Can you add us to the beta board?</div><div class="meta-line">18m · Maya</div></div></div>' +
+                  '<div class="row" data-row><div class="avatar">L</div><div class="body"><div class="title" style="font-size:14px">Luis</div><div class="excerpt">Invoice for March looks short.</div><div class="meta-line">1h · You</div></div></div>' +
+                "</div>" +
+                '<div class="thread">' +
+                  '<div class="page-head" style="height:48px"><div><strong>Nora Chen</strong><div class="muted" style="font-size:12px">Widget · Checkout</div></div><button class="btn outline sm" type="button">Close</button></div>' +
+                  '<div style="flex:1;padding:16px;display:flex;flex-direction:column;gap:10px">' +
+                    '<div class="bubble in">The messenger never opens on /checkout. I see the snippet in the head.</div>' +
+                    '<div class="bubble out">Thanks — checking whether the route is excluded in the widget settings.</div>' +
+                  "</div>" +
+                  '<div class="composer"><input placeholder="Reply…" /><button class="btn primary sm" type="button">Send</button></div>' +
+                "</div>" +
+              "</div>" +
+            "</div>" +
+          "</div>"
+        )
+      }
+
+      function changelog() {
+        const entries = [
+          ["Messenger install from an agent prompt", "Published · 12 Sep", "Pairing code and skill first; snippet stays collapsed."],
+          ["Private boards", "Scheduled · 18 Sep", "Share links stay off until you flip the board public."],
+          ["Seat billing", "Draft", "Checkout collects name and URL together on Cloud."],
+        ]
+        return (
+          '<div class="admin">' +
+            rail("changelog") +
+            '<div class="main">' +
+              '<div class="page-head"><h1>Changelog</h1><button class="btn primary sm" type="button">New entry</button></div>' +
+              '<div class="list">' +
+                entries.map((e) =>
+                  '<div class="row" data-row><div class="body"><div class="title">' + e[0] + '</div><div class="excerpt">' + e[2] + '</div><div class="meta-line">' + e[1] + "</div></div></div>"
+                ).join("") +
+              "</div>" +
+            "</div>" +
+          "</div>"
+        )
+      }
+
+      function portal() {
+        return (
+          '<div class="portal-top">' +
+            '<div class="portal-brand"><img src="' + logo + '" alt="" /> Acme</div>' +
+            '<div class="portal-nav" data-tabs><button class="on" type="button">Feedback</button><button type="button">Changelog</button><button type="button">Help</button><button type="button">Status</button></div>' +
+            '<div style="display:flex;gap:8px;align-items:center"><button class="btn primary sm" type="button">New post</button><div class="avatar">JM</div></div>' +
+          "</div>" +
+          '<div class="portal-body">' +
+            '<div class="feed">' +
+              '<div class="tabs" data-tabs><button class="on" type="button">Trending</button><button type="button">New</button><button type="button">Top</button></div>' +
+              posts() +
+            "</div>" +
+            '<aside class="aside">' +
+              '<div class="search wide">' + icons.search + " Search</div>" +
+              '<div class="card-panel"><h3>Boards</h3>' +
+                '<button class="side-item on" type="button" data-side>View all posts <span class="n">248</span></button>' +
+                '<button class="side-item" type="button" data-side>Feature requests <span class="n">112</span></button>' +
+                '<button class="side-item" type="button" data-side>Bugs <span class="n">61</span></button>' +
+                '<button class="side-item" type="button" data-side>Integrations <span class="n">19</span></button>' +
+                '<div class="foot">Powered by Quackback</div>' +
+              "</div>" +
+              '<div class="card-panel"><h4>Roadmap</h4>' +
+                '<div class="side-item">Dark mode for the portal <span class="dot planned"></span></div>' +
+                '<div class="side-item">Slack on comments <span class="dot progress"></span></div>' +
+                '<div class="side-item">Export votes <span class="dot open"></span></div>' +
+              "</div>" +
+            "</aside>" +
+          "</div>"
+        )
+      }
+
+      function portalPage(view) {
+        const base = portal();
+        if (view === "Feedback") return base;
+        const holder = document.createElement("div"); holder.innerHTML = base;
+        holder.querySelectorAll(".portal-nav button").forEach(b=>b.classList.toggle("on",b.textContent===view));
+        const content = view === "Changelog" ? '<article class="article-copy"><span class="muted">12 September 2026</span><h1>Messenger install from an agent prompt</h1><p>Connect your website and start talking to customers with a guided Messenger setup.</p><hr><span class="muted">8 September 2026</span><h1>Private boards</h1><p>Give your design partners a dedicated place to share feedback.</p></article>' : view === "Help" ? '<article class="article-copy"><h1>How can we help?</h1><div class="search wide">Search for articles…</div>'+['Getting started','Workspace','Billing'].map((n,i)=>'<div class="card-panel"><h3>'+n+'</h3><p class="muted">'+['Install the Messenger · Invite your team','Manage your workspace · Custom domains','Subscriptions · Invoices'][i]+'</p></div>').join('')+'</article>' : '<article class="article-copy"><h1><span class="dot progress"></span> All systems operational</h1>'+dataTable(['Service','Status'],[['API','Operational'],['Customer portal','Operational'],['Messenger','Operational']])+'<h3>Upcoming maintenance</h3><p>Database upgrade · 18 Sep, 02:00–03:00 UTC</p><h3>Past incidents</h3><p class="muted">No incidents reported today.</p></article>';
+        holder.querySelector('.portal-body').innerHTML = '<div style="width:760px;max-width:100%;padding:28px 12px">'+content+'</div>';
+        return holder.innerHTML;
+      }
+      function settings() {
+        return (
+          '<div class="admin">' +
+            rail("settings") +
+            '<div class="settings" style="flex:1">' +
+              '<aside class="set-nav"><h1>Settings</h1>' +
+                filterGroup("", [["General"], ["Branding"], ["Members"], ["Domains"], ["Modules"]]) +
+              "</aside>" +
+              '<div class="set-body">' +
+                '<div class="card-panel">' +
+                  "<h4>Workspace</h4>" +
+                  '<div class="field"><label>Name</label><input value="Acme" /></div>' +
+                  '<div class="field"><label>URL</label><input value="acme.quackback.app" /></div>' +
+                  '<div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn outline sm" type="button">Cancel</button><button class="btn primary sm" type="button">Save</button></div>' +
+                "</div>" +
+                '<div class="card-panel">' +
+                  "<h4>Modules</h4>" +
+                  '<div class="mod"><span>Feedback</span><button class="switch on" type="button" data-switch aria-label="Feedback"></button></div>' +
+                  '<div class="mod"><span>Changelog</span><button class="switch on" type="button" data-switch aria-label="Changelog"></button></div>' +
+                  '<div class="mod"><span>Support</span><button class="switch" type="button" data-switch aria-label="Support"></button></div>' +
+                  '<div class="mod"><span>Help Center</span><button class="switch" type="button" data-switch aria-label="Help Center"></button></div>' +
+                "</div>" +
+              "</div>" +
+            "</div>" +
+          "</div>"
+        )
+      }
+
+      function mobileAdmin() {
+        return (
+          '<div class="phone-bar"><button class="btn ghost" type="button" aria-label="Menu">' + icons.menu + '</button><strong>Feedback</strong><button class="btn primary sm" type="button">New</button></div>' +
+          '<div class="list" style="height:calc(100% - 52px);overflow:auto">' + posts({ compact: true }) + "</div>" +
+          '<button class="btn outline sm fab" type="button">Filters</button>'
+        )
+      }
+
+      function mobilePortal() {
+        return (
+          '<div class="phone-bar"><div class="portal-brand"><img src="' + logo + '" alt="" style="width:22px;height:22px" /> Acme</div><div style="display:flex;gap:6px"><button class="btn ghost sm" type="button">Boards</button><button class="btn primary sm" type="button">New</button></div></div>' +
+          '<div class="tabs" data-tabs><button class="on" type="button">Trending</button><button type="button">New</button><button type="button">Top</button></div>' +
+          '<div class="list" style="height:calc(100% - 104px);overflow:auto">' + posts({ compact: true }) + "</div>"
+        )
+      }
+
+      // Page structure follows routes/admin and the matching admin components.
+      // Content and metrics below are illustrative, not live workspace data.
+      function action(label, target) {
+        return '<button class="btn outline sm" type="button" data-preview="'+target+'">'+label+'</button>'
+      }
+      function dataTable(headers, rows) {
+        return '<table class="product-table"><thead><tr>'+headers.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table>'
+      }
+      function shell(active, title, nav, content, toolbar='') {
+        return '<div class="admin">'+rail(active)+'<div class="main"><div class="page-head"><h1>'+title+'</h1>'+toolbar+'</div><div class="split">'+(nav?'<aside class="filters">'+nav+'</aside>':'')+'<div class="workspace-content">'+content+'</div></div></div></div>'
+      }
+      function navLinks(title, items) {
+        return '<h2>'+title+'</h2>'+items.map(([label,target])=>'<button class="frow'+(adminView===target?' on':'')+'" data-preview="'+target+'" type="button">'+label+'</button>').join('')
+      }
+      function roadmapPage() {
+        return shell('roadmap','Roadmap',filterGroup('Roadmaps',[['Product roadmap'],['Customer requests']]),'<div class="workspace-heading"><div><h2>Product roadmap</h2><p class="muted">What we’re building next</p></div><span class="chip">Public</span></div><div class="kanban">'+['Planned','In progress','Complete'].map((name,i)=>'<section><h3><span class="dot '+['planned','progress','open'][i]+'"></span> '+name+' <span class="muted">'+[2,1,1][i]+'</span></h3>'+POSTS.filter((_,j)=>[0,0,1,2][j]===i).map(p=>'<button class="kanban-post" data-preview="post" type="button"><strong>'+p.t+'</strong><span class="meta-line">Feature requests</span><span class="meta-line">'+icons.chevron+' '+p.v+' · '+p.c+' comments</span></button>').join('')+'</section>').join('')+'</div>',action('View feedback','feedback'))
+      }
+      const articleRows=[['Install the Messenger','Published','Getting started','Maya · 2h'],['Invite your team','Published','Getting started','Chris · 1d'],['Set up a custom domain','Draft','Workspace','Maya · 2d'],['Manage your subscription','Published','Billing','Alex · 3d']];
+      function helpPage() {
+        return shell('help','Help Center',filterGroup('Status',[['All',4],['Draft',1],['Published',3]])+filterGroup('Categories',[['All categories'],['Getting started'],['Workspace'],['Billing']]),'<div class="workspace-heading"><h2>All articles <span class="muted">4</span></h2><span class="search">'+icons.search+' Search articles</span></div>'+dataTable(['Title','Status','Category','Updated'],articleRows.map(r=>[action(r[0],'article'),...r.slice(1)])),action('Preview article','article'))
+      }
+      function articlePage() {
+        return shell('help','Help Center',navLinks('Articles',[['All articles','help']]),'<div class="workspace-heading"><span class="muted">Getting started / Article</span><span class="chip">Published</span></div><div class="editor-layout"><article class="article-copy"><h1>Install the Messenger</h1><p class="muted">Help customers reach you without leaving your product.</p><h3>Add Messenger to your website</h3><p>Open Settings, choose Messenger, and follow the installation steps for your website.</p><h3>Check your installation</h3><p>Visit your website and open the Messenger. Send a test message and check that it appears in your support inbox.</p><h3>Make it yours</h3><p>Choose your welcome message and appearance before sharing it with customers.</p></article><aside class="article-meta"><h3>Details</h3><div class="field"><label for="article-category">Category</label><input id="article-category" value="Getting started"></div><div class="field"><label for="article-author">Author</label><input id="article-author" value="Maya"></div><p class="muted">Visibility · Public</p><p class="muted">Language · English</p></aside></div>',action('Back to articles','help'))
+      }
+      const statusNav=()=>navLinks('Incidents',[['Overview','status'],['Open incidents','incidents'],['Scheduled maintenance','maintenance']])+navLinks('Manage',[['Services','services']]);
+      function statusPage(view='status') {
+        const body=view==='services'?'<h2>Services</h2>'+dataTable(['Service','Group','Status'],[['API','Platform','Operational'],['Customer portal','Platform','Operational'],['Messenger','Platform','Operational']]):view==='incidents'?'<h2>Open incidents</h2><div class="empty"><div class="mark">'+icons.status+'</div><h3>No active incidents</h3><p>Your services are operating normally.</p></div>':view==='maintenance'?'<h2>Scheduled maintenance</h2>'+dataTable(['Maintenance','Scheduled','Status'],[['Database upgrade','18 Sep · 02:00–03:00 UTC','Scheduled']]):'<div class="workspace-heading"><h2><span class="dot progress"></span> All services operational</h2></div><div class="card-panel"><h4>Active incidents</h4><p class="muted">No active incidents.</p></div><div class="card-panel"><h4>Service health</h4>'+dataTable(['Service','Status'],[['API','Operational'],['Customer portal','Operational'],['Messenger','Operational']])+'</div><div class="card-panel"><h4>Upcoming maintenance</h4><p>Database upgrade</p><p class="muted">18 Sep · 02:00–03:00 UTC</p></div>';
+        return shell('status','Status',statusNav(),body,action('Services','services'))
+      }
+      function usersPage(companies=false) {
+        return shell('users','Users',navLinks('Directory',[['People','users'],['Companies','companies']]),'<div class="workspace-heading"><h2>'+ (companies?'Companies':'People')+'</h2><span class="search">'+icons.search+' Search '+(companies?'companies':'people')+'</span></div>'+dataTable(companies?['Company','Domain','People']:['Name','Email','Role','Last seen'],companies?[['Acme','acme.example','12'],['Orbit','orbit.example','8']]:[['Maya Patel','maya@acme.example','Admin','2 minutes ago'],['Chris Lee','chris@acme.example','Member','1 hour ago'],['Nora Chen','nora@orbit.example','User','3 hours ago'],['Alex Morgan','alex@acme.example','Member','Yesterday']]))
+      }
+      function analyticsPage() {
+        return shell('analytics','Analytics',filterGroup('Sections',[['Overview'],['Visitors'],['Feedback'],['Support'],['Quinn AI'],['Changelog'],['Users']]),'<div class="workspace-heading"><h2>Overview</h2><span class="chip">Last 30 days</span></div><div class="metrics">'+[['Posts','248'],['Votes','1,204'],['Comments','386'],['Users','164']].map(([l,v])=>'<div><span class="muted">'+l+'</span><strong>'+v+'</strong></div>').join('')+'</div><div class="card-panel"><h4>Activity</h4><div class="activity-chart" role="img" aria-label="Illustrative activity over 12 periods, generally increasing">'+[25,38,32,52,45,61,49,73,65,84,77,92].map(n=>'<i style="height:'+n+'%"></i>').join('')+'</div><div class="chart-labels"><span>16 Aug</span><span>30 Aug</span><span>14 Sep</span></div></div><h3>Top posts</h3>'+dataTable(['Post','Votes','Comments'],POSTS.slice(0,3).map(p=>[p.t,p.v,p.c])))
+      }
+      function automationPage() {
+        return shell('automation','AI & Automation',filterGroup('Quinn',[['Quinn Agent'],['Copilot'],['Assistant']])+filterGroup('Manage',[['Knowledge & skills'],['Workflows'],['Connectors'],['Performance']]),'<h2>Quinn Agent</h2><p class="muted">The customer-facing agent. Replies in Messenger and anywhere else Quinn speaks for you.</p><div class="tabs" data-agent-tabs>'+['Basics','Knowledge','Guidance'].map((t,i)=>'<button type="button" class="'+(!i?'on':'')+'" data-agent-tab="'+t+'">'+t+'</button>').join('')+'</div><div id="agent-panel">'+agentPanel('Basics')+'</div>')
+      }
+      function agentPanel(tab) {
+        return '<div style="padding-top:24px">'+(tab==='Knowledge'?'<h3>Knowledge sources</h3><p class="muted">Help Center articles Quinn can use to answer customers.</p>'+dataTable(['Source','Status'],[['Install the Messenger','Published'],['Invite your team','Published']]):tab==='Guidance'?'<div class="field"><label for="agent-guidance">Guidance</label><textarea id="agent-guidance">Keep answers concise and helpful. Ask a teammate when you need more information.</textarea></div>':'<div class="card-panel"><h4>Quinn Agent</h4><div class="mod"><span>Enable Quinn Agent</span><button class="switch on" data-switch type="button" aria-label="Enable Quinn Agent"></button></div><p class="muted">Help customers with answers from your knowledge.</p></div>')+'</div>'
+      }
+      function postPage() {
+        return shell('feedback','Feedback',navLinks('Feedback',[['All posts','feedback'],['Product roadmap','roadmap']]),'<div class="editor-layout"><article class="article-copy"><span class="meta-line">Feature requests · Maya · 2 days ago</span><h1>Dark mode for the customer portal</h1><p>The public board is fine in light, but night-shift readers get a white flash.</p><button class="btn outline sm" data-vote type="button">'+icons.chevron+'<span>128</span></button><hr><h3>Activity</h3><div class="row"><div class="avatar">C</div><div><strong>Chris</strong><p>We’d love this for our customers in other time zones too.</p><span class="muted">Yesterday</span></div></div><div class="field"><label for="post-comment">Reply</label><textarea id="post-comment" placeholder="Write a comment…"></textarea></div></article><aside class="article-meta"><h3>Details</h3><p><span class="dot planned"></span> Planned</p><p class="muted">Board · Feature requests</p><p class="muted">14 comments · 128 votes</p><h3>Tags</h3><span class="chip">Portal</span></aside></div>')
+      }
+      const extraPages={roadmap:roadmapPage,help:helpPage,article:articlePage,status:statusPage,services:()=>statusPage('services'),incidents:()=>statusPage('incidents'),maintenance:()=>statusPage('maintenance'),users:usersPage,companies:()=>usersPage(true),analytics:analyticsPage,automation:automationPage,post:postPage};
+
+      const notes = {
+        feedback: "Selected rows use a neutral lift and a gold tick. Filters have a quiet neutral selection. Solid Heroicons match the app. Votes toggle.",
+        support: "Three columns stay. Unread is a gold count. Agent reply is near-white, not gold. Send is the gold pill.",
+        changelog: "Same list language as Feedback: title, excerpt, quiet meta. No cards.",
+        empty: "Solid feedback icon, short title, one primary action. Create board opens the mock dialog.",
+        dialog: "Name, description, Public / Private. Overlay is a neutral black dim. Cancel and Create close it.",
+      }
+      const urls = {
+        roadmap: "acme.quackback.app/admin/roadmap",
+        help: "acme.quackback.app/admin/help-center",
+        article: "acme.quackback.app/admin/help-center/articles/demo-article",
+        post: "acme.quackback.app/admin/feedback?post=demo-post",
+        status: "acme.quackback.app/admin/status",
+        services: "acme.quackback.app/admin/status?view=components",
+        incidents: "acme.quackback.app/admin/status?view=open",
+        maintenance: "acme.quackback.app/admin/status?view=maintenance",
+        users: "acme.quackback.app/admin/users",
+        companies: "acme.quackback.app/admin/users",
+        analytics: "acme.quackback.app/admin/analytics",
+        automation: "acme.quackback.app/admin/automation/agent",
+        feedback: "acme.quackback.app/admin/feedback",
+        support: "acme.quackback.app/admin/inbox",
+        changelog: "acme.quackback.app/admin/changelog",
+        empty: "acme.quackback.app/admin/feedback",
+        dialog: "acme.quackback.app/admin/feedback",
+        settings: "acme.quackback.app/admin/settings/general",
+      }
+
+      const adminScreen = document.getElementById("admin-screen")
+      const adminUrl = document.getElementById("admin-url")
+      const adminNote = document.getElementById("admin-note")
+      let adminView = "feedback"
+      let adminLight = false
+
+      function paintAdmin() {
+        const html = extraPages[adminView] ? extraPages[adminView]() :
+          adminView === "support" ? support() :
+          adminView === "changelog" ? changelog() :
+          adminView === "empty" ? feedback({ empty: true }) :
+          adminView === "dialog" ? feedback({ dialog: true }) :
+          adminView === "settings" ? settings() :
+          feedback()
+        adminScreen.innerHTML = html
+        adminScreen.classList.toggle("light", adminLight)
+        adminUrl.textContent = urls[adminView] || urls.feedback
+        adminNote.textContent = notes[adminView] || "Page structure follows the current product components. Content and metrics are illustrative; actions demonstrate local mockup states."
+      }
+
+      document.addEventListener("click", (e) => {
+        const target = e.target.closest("[data-preview], [data-agent-tab]");
+        if (!target) return;
+        if (target.dataset.preview) {
+          adminView = target.dataset.preview;
+          document.querySelectorAll("#admin-switch [data-screen]").forEach(b => b.classList.toggle("on", b.dataset.screen === adminView));
+          paintAdmin();
+        } else {
+          document.querySelectorAll("[data-agent-tab]").forEach(b => b.classList.toggle("on", b === target));
+          document.getElementById("agent-panel").innerHTML = agentPanel(target.dataset.agentTab);
+        }
+      });
+      paintAdmin()
+      document.querySelectorAll("#admin-switch [data-screen]").forEach((b) => {
+        b.addEventListener("click", () => {
+          document.querySelectorAll("#admin-switch [data-screen]").forEach((x) => x.classList.toggle("on", x === b))
+          adminView = b.dataset.screen
+          paintAdmin()
+        })
+      })
+
+      document.getElementById("portal-screen").innerHTML = portal()
+      document.getElementById("settings-screen").innerHTML = settings()
+      document.getElementById("mobile-admin").innerHTML = mobileAdmin()
+      document.getElementById("mobile-portal").innerHTML = mobilePortal()
+
+      document.querySelectorAll("[data-theme]").forEach((b) => {
+        b.addEventListener("click", () => {
+          const screen = b.closest("section").querySelector(".screen.x")
+          const on = screen.classList.toggle("light")
+          b.classList.toggle("on", on)
+          b.textContent = on ? "Dark" : "Light"
+          if (screen.id === "admin-screen") adminLight = on
+        })
+      })
+
+      function exclusive(root, selector, el) {
+        root.querySelectorAll(selector).forEach((n) => n.classList.toggle("on", n === el))
+      }
+
+      document.addEventListener("click", (e) => {
+        const t = e.target.closest("[data-tabs] button, [data-filter], [data-row], [data-vote], [data-side], [data-switch], [data-seg] button, [data-overlay], [data-close-dialog], [data-open-dialog], [data-admin]")
+        if (!t) return
+        if (t.matches("[data-tabs] button")) {
+          if (t.closest('.portal-nav') && t.closest('#portal-screen')) {
+            const view=t.textContent;
+            document.getElementById('portal-screen').innerHTML=portalPage(view);
+            document.querySelector('#portal .url').textContent='acme.quackback.app/'+({Feedback:'',Changelog:'changelog',Help:'hc',Status:'status'}[view]);
+          } else exclusive(t.parentElement, "button", t)
+        } else if (t.matches("[data-filter]")) {
+          exclusive(t.parentElement, "[data-filter]", t)
+        } else if (t.matches("[data-vote]")) {
+          e.stopPropagation()
+          t.classList.toggle("on")
+        } else if (t.matches("[data-row]")) {
+          const list = t.parentElement
+          list.querySelectorAll("[data-row]").forEach((n) => n.classList.toggle("sel", n === t))
+        } else if (t.matches("[data-side]")) {
+          exclusive(t.parentElement, "[data-side]", t)
+        } else if (t.matches("[data-switch]")) {
+          t.classList.toggle("on")
+        } else if (t.matches("[data-seg] button")) {
+          exclusive(t.parentElement, "button", t)
+        } else if (t.matches("[data-close-dialog]") || t.matches("[data-overlay]")) {
+          if (t.matches("[data-overlay]") && e.target !== t) return
+          adminView = "feedback"
+          document.querySelectorAll("#admin-switch [data-screen]").forEach((x) => x.classList.toggle("on", x.dataset.screen === "feedback"))
+          paintAdmin()
+        } else if (t.matches("[data-open-dialog]")) {
+          adminView = "dialog"
+          document.querySelectorAll("#admin-switch [data-screen]").forEach((x) => x.classList.toggle("on", x.dataset.screen === "dialog"))
+          paintAdmin()
+        } else if (t.matches("[data-admin]")) {
+          const map = { roadmap:"roadmap", help:"help", status:"status", analytics:"analytics", automation:"automation", users:"users", feedback: "feedback", support: "support", changelog: "changelog", settings: "settings" }
+          const next = map[t.dataset.admin]
+          if (!next) return
+          adminView = next
+          document.querySelectorAll("#admin-switch [data-screen]").forEach((x) => x.classList.toggle("on", x.dataset.screen === next))
+          paintAdmin()
+        }
+      })
+    </script>
+  </body>
+</html>

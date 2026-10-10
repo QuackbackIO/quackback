@@ -40,7 +40,7 @@ export function DeleteWebhookDialog({ webhook, open, onOpenChange }: DeleteWebho
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Delete Webhook"
+      title="Delete webhook?"
       description="Are you sure you want to delete this webhook?"
       warning={{
         title: 'This action cannot be undone',
@@ -52,7 +52,7 @@ export function DeleteWebhookDialog({ webhook, open, onOpenChange }: DeleteWebho
         ),
       }}
       variant="destructive"
-      confirmLabel={isPending ? 'Deleting...' : 'Delete Webhook'}
+      confirmLabel={isPending ? 'Deleting...' : 'Delete webhook'}
       isPending={isPending}
       onConfirm={handleDelete}
     >

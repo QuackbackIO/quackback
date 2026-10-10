@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod'
+import { PageLimitSchema } from './taxonomy'
 import { tiptapContentSchema } from './posts'
 import { SUPPORTED_LOCALES } from '../i18n'
 
@@ -52,7 +53,8 @@ export const deleteCategorySchema = z.object({
 // ============================================================================
 
 export const createArticleSchema = z.object({
-  categoryId: z.string().min(1),
+  /** Optional: an article saved without one is filed under General. */
+  categoryId: z.string().optional(),
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Content is required'),
   contentJson: tiptapContentSchema.nullable().optional(),
@@ -87,7 +89,7 @@ export const listArticlesSchema = z.object({
   status: z.enum(['draft', 'published', 'all']).optional(),
   search: z.string().optional(),
   cursor: z.string().optional(),
-  limit: z.number().int().positive().max(100).optional(),
+  limit: PageLimitSchema,
   showDeleted: z.boolean().optional(),
   sort: z.enum(['newest', 'oldest']).optional(),
 })
@@ -96,7 +98,7 @@ export const listPublicArticlesSchema = z.object({
   categoryId: z.string().optional(),
   search: z.string().optional(),
   cursor: z.string().optional(),
-  limit: z.number().int().positive().max(100).optional(),
+  limit: PageLimitSchema,
 })
 
 export const listArticlePerformanceSchema = z.object({
@@ -132,7 +134,7 @@ export const articleFeedbackReasonSchema = z.object({
 
 export const listArticleFeedbackReasonsSchema = z.object({
   articleId: z.string().min(1),
-  limit: z.number().int().positive().max(100).optional(),
+  limit: PageLimitSchema,
 })
 
 export const getCategoryBySlugSchema = z.object({
@@ -163,7 +165,7 @@ export const restoreArticleSchema = z.object({
 // ============================================================================
 
 /** A header link URL: an absolute http(s) URL or a root-relative path. */
-const helpCenterHeaderLinkUrl = z
+export const helpCenterHeaderLinkUrl = z
   .string()
   .min(1)
   .max(500)

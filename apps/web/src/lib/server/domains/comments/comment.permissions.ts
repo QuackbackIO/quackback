@@ -13,6 +13,7 @@ import {
   postComments,
   postCommentEditHistory,
   posts,
+  principal,
   type PostComment,
 } from '@/lib/server/db'
 import { type PostCommentId, type PrincipalId } from '@quackback/ids'
@@ -21,6 +22,7 @@ import { Role } from '@/lib/shared/roles'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 /**
  * Minimal actor shape the comment policy consumes. `permissions` is the
@@ -268,11 +270,22 @@ export async function userEditComment(
     }
 
     if (wasPublished && nextModerationState === 'pending' && !result.isPrivate) {
-      await tx
+      const counted = await tx
         .update(posts)
         .set({ commentCount: sql`GREATEST(${posts.commentCount} - 1, 0)` })
-        .where(eq(posts.id, existingComment.postId))
-      await adjustCanonicalCommentCount(existingComment.postId, -1, tx)
+        .where(
+          and(
+            eq(posts.id, existingComment.postId),
+            and(
+              notTestPrincipal(posts.principalId),
+              notTestPrincipal(
+                sql`(SELECT ${principal.id} FROM ${principal} WHERE ${eq(principal.id, result.principalId)})`
+              )
+            )!
+          )
+        )
+        .returning({ id: posts.id })
+      if (counted.length > 0) await adjustCanonicalCommentCount(existingComment.postId, -1, tx)
     }
 
     return result
@@ -368,19 +381,26 @@ export async function softDeleteComment(
       !updatedComment.isPrivate && updatedComment.moderationState !== 'pending'
     const shouldUnpin = comment.post?.pinnedCommentId === commentId
 
-    if (shouldDecrementCount || shouldUnpin) {
-      await tx
-        .update(posts)
-        .set({
-          ...(shouldDecrementCount
-            ? { commentCount: sql`GREATEST(0, ${posts.commentCount} - 1)` }
-            : {}),
-          ...(shouldUnpin ? { pinnedCommentId: null } : {}),
-        })
-        .where(eq(posts.id, comment.postId))
+    if (shouldUnpin) {
+      await tx.update(posts).set({ pinnedCommentId: null }).where(eq(posts.id, comment.postId))
     }
     if (shouldDecrementCount) {
-      await adjustCanonicalCommentCount(comment.postId, -1, tx)
+      const counted = await tx
+        .update(posts)
+        .set({ commentCount: sql`GREATEST(0, ${posts.commentCount} - 1)` })
+        .where(
+          and(
+            eq(posts.id, comment.postId),
+            and(
+              notTestPrincipal(posts.principalId),
+              notTestPrincipal(
+                sql`(SELECT ${principal.id} FROM ${principal} WHERE ${eq(principal.id, updatedComment.principalId)})`
+              )
+            )!
+          )
+        )
+        .returning({ id: posts.id })
+      if (counted.length > 0) await adjustCanonicalCommentCount(comment.postId, -1, tx)
     }
 
     return true

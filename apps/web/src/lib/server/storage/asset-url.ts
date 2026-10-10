@@ -64,8 +64,43 @@ export function getSystemAssetOrigin(): string {
 }
 
 /**
+ * The separate origin user files are served from (`USER_CONTENT_URL`), or
+ * null to serve them from the app's own origin.
+ *
+ * Null under a workspace scope whatever the setting says: the storage route
+ * resolves the workspace from the Host header, so one shared host would name
+ * no workspace. The config getter already drops it under pooled tenancy; this
+ * holds the same line for any scope.
+ */
+export function userContentOrigin(): string | null {
+  if (getCurrentWorkspace()) return null
+  try {
+    return config.userContentUrl ?? null
+  } catch {
+    // The configuration is validated at boot, so this only fails outside a
+    // booted process (a build, a unit test), where there is no setting to honour.
+    return null
+  }
+}
+
+/**
+ * A stored `/api/storage/…` ref as a browser should load it: on the
+ * user-content origin when one is configured, unchanged otherwise.
+ *
+ * Read time only. What a message stores stays host-independent, so the
+ * setting can be turned off or moved without rewriting anything. Absolute and
+ * foreign URLs are never rewritten.
+ */
+export function toUserContentUrl(src: string): string {
+  if (!src.startsWith('/api/storage/') || !storedAssetKeyFromSrc(src)) return src
+  const origin = userContentOrigin()
+  return origin ? `${origin}${src}` : src
+}
+
+/**
  * Hosts that may legally appear on a stored `/api/storage/…` URL for this
- * workspace: the system pin, every routing hostname, and the process base.
+ * workspace: the system pin, every routing hostname, the process base, and
+ * the user-content origin when one is configured.
  */
 export function trustedStorageHosts(): Set<string> {
   const hosts = new Set<string>()
@@ -82,6 +117,7 @@ export function trustedStorageHosts(): Set<string> {
   }
 
   addOrigin(config.baseUrl)
+  addOrigin(userContentOrigin())
   const workspace = getCurrentWorkspace()
   if (workspace) {
     addOrigin(workspace.routing.baseUrl)

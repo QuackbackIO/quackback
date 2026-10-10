@@ -27,6 +27,10 @@ import {
   type AiBucket,
 } from '@/lib/client/conversation/inbox-scope'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
+import {
+  conversationPanelsToLoad,
+  seedConversationPanels,
+} from '@/lib/client/queries/conversation-panel-cache'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 import type { Channel } from '@/lib/shared/channels'
 import {
@@ -101,11 +105,28 @@ export const conversationInboxQueries = {
       staleTime: 60_000,
     }),
 
-  /** A single conversation's thread (conversation DTO + first page of messages). */
+  /** A single conversation's thread (conversation DTO + first page of
+   *  messages). The same request loads the reads beside the thread whose
+   *  caches are empty or stale and seeds each one's own query (see
+   *  conversation-panel-cache.ts); they stay out of the thread's cache entry. */
   thread: (conversationId: ConversationId) =>
     queryOptions({
       queryKey: conversationKeys.agentThread(conversationId),
-      queryFn: () => getConversationFn({ data: { conversationId } }),
+      queryFn: async ({ client }) => {
+        const panels = conversationPanelsToLoad(client, conversationId)
+        const { panels: loaded, ...thread } = await getConversationFn({
+          data: { conversationId, ...(panels.length > 0 ? { panels } : {}) },
+        })
+        if (loaded) {
+          seedConversationPanels(
+            client,
+            conversationId,
+            thread.conversation.visitor.principalId,
+            loaded
+          )
+        }
+        return thread
+      },
     }),
 
   /** Labels + per-tag open-conversation counts (drives the nav Tags group). */

@@ -1,5 +1,5 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { closeJiraIssue } from '@/integrations/jira/server/archive'
 import { fetchJiraStatuses } from '@/integrations/jira/server/statuses'
 import {
   registerJiraWebhook,
@@ -21,6 +21,7 @@ const log = logger.child({ component: 'jira' })
 
 export const jiraIntegration: IntegrationDefinition = {
   id: 'jira',
+  destination: channelDestination(['cloudId', 'siteUrl']),
   catalog: jiraCatalog,
   oauth: {
     stateType: 'jira_oauth',
@@ -30,7 +31,7 @@ export const jiraIntegration: IntegrationDefinition = {
   hook: jiraHook,
   inbound: jiraInboundHandler,
   issues: jiraIssues,
-  archive: closeJiraIssue,
+  linkedItems: true,
   webhookRegistration: {
     register: async ({ accessToken, config, callbackUrl }) => {
       const cloudId = config.cloudId as string

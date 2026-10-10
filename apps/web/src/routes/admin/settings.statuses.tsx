@@ -1,15 +1,14 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { Cog6ToothIcon } from '@heroicons/react/24/solid'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
-import { StatusList } from '@/components/admin/settings/statuses/status-list'
+import { StatusesSettingsPage } from '@/components/admin/settings/statuses/status-list'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/statuses')({
+  head: adminPageHead('Statuses settings'),
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'feedback')) {
       throw redirect({ to: '/admin/settings/general' })
@@ -31,18 +30,5 @@ function StatusesPage() {
   // Read pre-fetched data from React Query cache
   const statusesQuery = useSuspenseQuery(adminQueries.statuses())
 
-  return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
-      </div>
-      <PageHeader
-        icon={Cog6ToothIcon}
-        title="Public Statuses"
-        description="Customize the statuses available for feedback posts"
-      />
-
-      <StatusList initialStatuses={statusesQuery.data} />
-    </div>
-  )
+  return <StatusesSettingsPage initialStatuses={statusesQuery.data} />
 }

@@ -51,7 +51,7 @@ export const fetchShortcutProjectsFn = createServerFn({ method: 'GET' }).handler
   async (): Promise<ShortcutProject[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
     const { listShortcutProjects } = await import('@/integrations/shortcut/server/projects')
 
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
@@ -64,7 +64,7 @@ export const fetchShortcutProjectsFn = createServerFn({ method: 'GET' }).handler
       throw new Error('Shortcut not connected')
     }
 
-    const secrets = decryptSecrets<{ accessToken: string }>(integration.secrets)
+    const secrets = { accessToken: await getValidAccessToken(integration.id) }
     return listShortcutProjects(secrets.accessToken)
   }
 )

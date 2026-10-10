@@ -25,6 +25,41 @@ const log = logger.child({ component: 'conversation-email-store' })
 
 const EMAIL_CHANNEL = 'email'
 
+export async function resolvePrincipalIdByChannelIdentity(
+  channel: string,
+  externalId: string
+): Promise<PrincipalId | null> {
+  const id = externalId.trim()
+  if (!id) return null
+  const rows = await db
+    .select({ principalId: channelIdentities.principalId })
+    .from(channelIdentities)
+    .where(and(eq(channelIdentities.channel, channel), eq(channelIdentities.externalId, id)))
+    .limit(1)
+  return (rows[0]?.principalId as PrincipalId | undefined) ?? null
+}
+
+export async function recordChannelIdentity(
+  channel: string,
+  externalId: string,
+  principalId: PrincipalId,
+  verified = false
+): Promise<void> {
+  const id = externalId.trim()
+  if (!id) return
+  try {
+    await db
+      .insert(channelIdentities)
+      .values({ channel, externalId: id, principalId, verified })
+      .onConflictDoUpdate({
+        target: [channelIdentities.channel, channelIdentities.externalId],
+        set: { verified: sql`${channelIdentities.verified} OR excluded.verified` },
+      })
+  } catch (err) {
+    log.warn({ err, channel }, 'failed to record channel identity')
+  }
+}
+
 /** True when the stored inbound id is an RFC 5322 msg-id, not a transport dedupe key. */
 function isRfcMessageId(id: string): boolean {
   return id.includes('@') && !id.toLowerCase().startsWith('qb-transport:')
@@ -206,17 +241,7 @@ export async function resolveConversationByMessageIds(
 
 /** Resolve a sender email to the principal that owns it, or null. */
 export async function resolvePrincipalIdByEmail(email: string): Promise<PrincipalId | null> {
-  const rows = await db
-    .select({ principalId: channelIdentities.principalId })
-    .from(channelIdentities)
-    .where(
-      and(
-        eq(channelIdentities.channel, EMAIL_CHANNEL),
-        eq(channelIdentities.externalId, email.toLowerCase())
-      )
-    )
-    .limit(1)
-  return (rows[0]?.principalId as PrincipalId | undefined) ?? null
+  return resolvePrincipalIdByChannelIdentity(EMAIL_CHANNEL, email.toLowerCase())
 }
 
 /**
@@ -233,15 +258,5 @@ export async function recordEmailIdentity(
   principalId: PrincipalId,
   verified = false
 ): Promise<void> {
-  try {
-    await db
-      .insert(channelIdentities)
-      .values({ channel: EMAIL_CHANNEL, externalId: email.toLowerCase(), principalId, verified })
-      .onConflictDoUpdate({
-        target: [channelIdentities.channel, channelIdentities.externalId],
-        set: { verified: sql`${channelIdentities.verified} OR excluded.verified` },
-      })
-  } catch (err) {
-    log.warn({ err }, 'failed to record channel identity')
-  }
+  await recordChannelIdentity(EMAIL_CHANNEL, email.toLowerCase(), principalId, verified)
 }

@@ -1,9 +1,10 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { serverWorkers } from './src/lib/build/server-workers'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), serverWorkers()],
   test: {
     globals: true,
     environment: 'happy-dom',

@@ -53,6 +53,11 @@ const mockIsOpenToBootstrapClaim = vi.fn()
 vi.mock('@/lib/server/domains/principals/bootstrap-admin', () => ({
   findHumanAdmin: (...a: unknown[]) => mockFindHumanAdmin(...a),
   isOpenToBootstrapClaim: (...a: unknown[]) => mockIsOpenToBootstrapClaim(...a),
+  // Setup still open; a finished install is covered against real Postgres.
+  isSetupOpenToClaim: async () => true,
+  // Nobody has claimed setup by creating an account; that claim is covered
+  // against real Postgres.
+  findSetupClaimant: async () => undefined,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({

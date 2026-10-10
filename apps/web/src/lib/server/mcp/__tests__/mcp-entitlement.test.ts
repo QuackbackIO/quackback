@@ -107,14 +107,14 @@ describe('handleMcpRequest — plan gate', () => {
       error: { message: string; data: Record<string, unknown> }
     }
     expect(body.error.message).toBe(
-      'The MCP server is a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
+      'The MCP server is a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
     )
     expect(body.error.data).toMatchObject({
       error: 'entitlement_required',
       entitlement: 'mcpServer',
       currentPlan: 'free',
-      requiredPlan: 'growth',
-      requiredPlanName: 'Growth',
+      requiredPlan: 'pro',
+      requiredPlanName: 'Pro',
     })
     // The server was never built, so no tool could run.
     expect(hoisted.mockCreateMcpServer).not.toHaveBeenCalled()
@@ -122,7 +122,7 @@ describe('handleMcpRequest — plan gate', () => {
   })
 
   it('serves the request on a plan that includes it', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
     const response = await handleMcpRequest(mcpRequest())
     expect(response.status).toBe(200)
     expect(hoisted.mockCreateMcpServer).toHaveBeenCalledOnce()
@@ -132,7 +132,7 @@ describe('handleMcpRequest — plan gate', () => {
     withCloud(storedCloud('free', { mcpServer: true }))
     expect((await handleMcpRequest(mcpRequest())).status).toBe(200)
 
-    withCloud(storedCloud('scale', { mcpServer: false }))
+    withCloud(storedCloud('enterprise', { mcpServer: false }))
     expect((await handleMcpRequest(mcpRequest())).status).toBe(402)
   })
 

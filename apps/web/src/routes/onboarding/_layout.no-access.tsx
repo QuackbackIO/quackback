@@ -1,5 +1,11 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
+import {
+  OnboardingHeading,
+  OnboardingPreviewPanel,
+  OnboardingSplit,
+} from '@/components/onboarding/onboarding-split'
+import { PortalPreview } from '@/components/onboarding/portal-preview'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { isSetupBlocked, pickOnboardingStep } from './-onboarding-step'
 import { SignOutButton } from './-sign-out-button'
@@ -35,74 +41,90 @@ export const Route = createFileRoute('/onboarding/_layout/no-access')({
       // the workspace they paid for that it "belongs to an existing admin"
       // sends them to support for nothing.
       claimedByOther: state.setupClaimedByOther,
+      // A finished workspace whose admins are gone: not provisioned for anyone,
+      // just already set up.
+      alreadySetUp: !state.setupClaimedByOther && state.setupClosedReason === 'setupComplete',
     }
   },
   component: NoAccessStep,
 })
 
 function NoAccessStep() {
-  const { setupComplete, claimedByOther } = Route.useLoaderData()
+  const { setupComplete, claimedByOther, alreadySetUp } = Route.useLoaderData()
 
   return (
-    <div className="w-full max-w-md mx-auto">
-      <div className="overflow-hidden rounded-2xl border bg-card">
-        <div className="p-8 text-center">
-          <h1 className="text-2xl font-bold">
-            {claimedByOther ? (
-              <FormattedMessage
-                id="onboarding.noAccess.title"
-                defaultMessage="Setup belongs to an existing admin"
-              />
-            ) : (
-              <FormattedMessage
-                id="onboarding.noAccess.notOpenTitle"
-                defaultMessage="This workspace is not yours to set up"
-              />
-            )}
-          </h1>
-          <p className="mt-2 text-muted-foreground">
-            {!claimedByOther ? (
-              <FormattedMessage
-                id="onboarding.noAccess.notOpenBody"
-                defaultMessage="This workspace was created for a specific account. Sign in with that account to set it up."
-              />
-            ) : setupComplete ? (
-              <FormattedMessage
-                id="onboarding.noAccess.readyBody"
-                defaultMessage="This workspace is already set up. Ask an admin to invite you, then sign in with the account they invite."
-              />
-            ) : (
-              <FormattedMessage
-                id="onboarding.noAccess.body"
-                defaultMessage="An admin here is finishing setup. Ask them to invite you, then sign in with the account they invite."
-              />
-            )}
-          </p>
-          <p className="mt-4 text-sm text-muted-foreground">
+    <OnboardingSplit panel={<NoAccessPanel />}>
+      <div className="max-w-[440px]">
+        <OnboardingHeading className="text-[30px] leading-[1.12] tracking-[-0.02em]! sm:text-[34px]">
+          {claimedByOther ? (
             <FormattedMessage
-              id="onboarding.noAccess.ownerPrompt"
-              defaultMessage="Signed in as the wrong account? Sign out and try the one that set this workspace up."
+              id="onboarding.noAccess.title"
+              defaultMessage="Setup belongs to an existing admin"
             />
-          </p>
-          <SignOutButton className="mt-6 w-full h-11" variant="default" />
-          {/* Only once the workspace has pages of its own: before that the root
+          ) : alreadySetUp ? (
+            <FormattedMessage
+              id="onboarding.noAccess.alreadySetUpTitle"
+              defaultMessage="This workspace is already set up"
+            />
+          ) : (
+            <FormattedMessage
+              id="onboarding.noAccess.notOpenTitle"
+              defaultMessage="This workspace is not yours to set up"
+            />
+          )}
+        </OnboardingHeading>
+        <p className="mt-4 text-[15px] leading-relaxed text-muted-foreground">
+          {alreadySetUp ? (
+            <FormattedMessage
+              id="onboarding.noAccess.alreadySetUpBody"
+              defaultMessage="Sign in with an admin account to manage it."
+            />
+          ) : !claimedByOther ? (
+            <FormattedMessage
+              id="onboarding.noAccess.notOpenBody"
+              defaultMessage="This workspace was created for a specific account. Sign in with that account to set it up."
+            />
+          ) : setupComplete ? (
+            <FormattedMessage
+              id="onboarding.noAccess.readyBody"
+              defaultMessage="This workspace is already set up. Ask an admin to invite you, then sign in with the account they invite."
+            />
+          ) : (
+            <FormattedMessage
+              id="onboarding.noAccess.body"
+              defaultMessage="An admin here is finishing setup. Ask them to invite you, then sign in with the account they invite."
+            />
+          )}
+        </p>
+        <p className="mt-4 text-sm text-muted-foreground">
+          <FormattedMessage
+            id="onboarding.noAccess.ownerPrompt"
+            defaultMessage="Signed in as the wrong account? Sign out and try the one that set this workspace up."
+          />
+        </p>
+        <SignOutButton className="mt-8 h-12 w-full rounded-full text-base" variant="default" />
+        {/* Only once the workspace has pages of its own: before that the root
               gate returns the portal root to the wizard, so this link would
               land the visitor back on this card. */}
-          {setupComplete && (
-            <p className="mt-4 text-sm text-muted-foreground">
-              <Link
-                to="/"
-                className="font-medium text-foreground hover:underline underline-offset-4"
-              >
-                <FormattedMessage
-                  id="onboarding.noAccess.requestAccess"
-                  defaultMessage="Go to the workspace"
-                />
-              </Link>
-            </p>
-          )}
-        </div>
+        {setupComplete && (
+          <p className="mt-4 text-sm text-muted-foreground">
+            <Link to="/" className="font-medium text-foreground hover:underline underline-offset-4">
+              <FormattedMessage
+                id="onboarding.noAccess.requestAccess"
+                defaultMessage="Go to the workspace"
+              />
+            </Link>
+          </p>
+        )}
       </div>
-    </div>
+    </OnboardingSplit>
+  )
+}
+
+function NoAccessPanel() {
+  return (
+    <OnboardingPreviewPanel>
+      <PortalPreview variant="example" name="" />
+    </OnboardingPreviewPanel>
   )
 }

@@ -12,7 +12,8 @@ import {
   type AskAiSourceMeta,
 } from '@/components/help-center/ask-ai'
 import { useKbSearch, type KbSearchArticle } from '@/components/help-center/use-kb-search'
-import { localizedHcPath } from '@/lib/shared/help-center-url'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { hcArticlePath } from '@/lib/shared/help-center-url'
 
 // ============================================================================
 // Hero Search (landing page)
@@ -63,14 +64,20 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
   const handleResultClick = (result: KbSearchArticle) => {
     setShowResults(false)
     setQuery('')
-    const path = `/hc/articles/${result.category.slug}/${result.slug}`
-    window.location.href = locale ? localizedHcPath(locale, path) : path
+    window.location.href = hcArticlePath({
+      locale: locale ?? DEFAULT_LOCALE,
+      urlId: result.urlId,
+      slug: result.slug,
+    })
   }
 
   const handleSourceClick = useCallback(
     (source: AskAiSourceMeta) => {
-      const path = `/hc/articles/${source.categorySlug}/${source.slug}`
-      window.location.href = locale ? localizedHcPath(locale, path) : path
+      window.location.href = hcArticlePath({
+        locale: locale ?? DEFAULT_LOCALE,
+        urlId: source.urlId,
+        slug: source.slug,
+      })
     },
     [locale]
   )
@@ -84,6 +91,7 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
     triggerAsk,
     dismissAnswer,
     handleKeyDown,
+    warmAskAi,
   } = useAskAiSearchController({
     query,
     askAiAvailable,
@@ -108,11 +116,14 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
         id: 'helpAskAi.searchPlaceholder',
         defaultMessage: 'Ask AI or search our help articles to find an answer',
       })
-    : 'Search articles...'
+    : intl.formatMessage({
+        id: 'portal.hc.search.placeholder',
+        defaultMessage: 'Search articles...',
+      })
 
   return (
     <div ref={containerRef} role="search" className="relative w-full">
-      <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted pl-5 pr-2 shadow-lg transition-[color,box-shadow] focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/20">
+      <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted pl-5 pr-2 shadow-lg transition-[color,box-shadow] focus-within:border-ring focus-within:ring-4 focus-within:ring-ring/20">
         <MagnifyingGlassIcon className="h-5 w-5 shrink-0 text-muted-foreground" />
         <input
           id="hc-search"
@@ -122,7 +133,10 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => (results.length > 0 || (hasAskRow && !answerOpen)) && setShowResults(true)}
+          onFocus={() => {
+            warmAskAi()
+            if (results.length > 0 || (hasAskRow && !answerOpen)) setShowResults(true)
+          }}
           autoComplete="off"
           className="min-w-0 flex-1 bg-transparent py-4 text-base text-foreground outline-none placeholder:text-muted-foreground"
         />

@@ -82,12 +82,15 @@ export interface UpdateChangelogInput {
  * Parameters for listing changelog entries
  */
 export interface ListChangelogParams {
+  search?: string
   /** Filter by status */
   status?: 'draft' | 'scheduled' | 'published' | 'all'
   /** Cursor-based pagination */
   cursor?: string
   /** Number of items to return */
   limit?: number
+  /** Order by creation time; defaults to newest first */
+  sort?: 'newest' | 'oldest'
 }
 
 // ============================================================================

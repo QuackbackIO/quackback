@@ -24,7 +24,8 @@ import type { SegmentId, PrincipalId } from '@quackback/ids'
 import { createId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
-import { slugify } from '@/lib/shared/utils/string'
+import { forgetRequestSegmentIds } from '@/lib/server/auth/request-session'
+import { slugify } from '@/lib/shared/utils/slugify'
 import type {
   Segment,
   SegmentWithCount,
@@ -138,8 +139,11 @@ export async function listSegments(): Promise<SegmentWithCount[]> {
 /**
  * Get a single segment by ID.
  */
-export async function getSegment(segmentId: SegmentId): Promise<Segment | null> {
-  const row = await db.query.segments.findFirst({
+export async function getSegment(
+  segmentId: SegmentId,
+  executor: typeof db | import('@/lib/server/db').Transaction = db
+): Promise<Segment | null> {
+  const row = await executor.query.segments.findFirst({
     where: and(eq(segments.id, segmentId), isNull(segments.deletedAt)),
   })
   if (!row) return null
@@ -243,6 +247,7 @@ export async function deleteSegment(segmentId: SegmentId): Promise<void> {
     await tx.delete(userSegments).where(eq(userSegments.segmentId, segmentId))
     await tx.update(segments).set({ deletedAt: new Date() }).where(eq(segments.id, segmentId))
   })
+  forgetRequestSegmentIds()
 }
 
 // ============================================
@@ -340,6 +345,7 @@ export async function removeUsersFromSegment(
       and(eq(userSegments.segmentId, segmentId), inArray(userSegments.principalId, principalIds))
     )
     .returning({ principalId: userSegments.principalId })
+  forgetRequestSegmentIds()
 
   if (actor && removedRows.length > 0) {
     for (const row of removedRows) {

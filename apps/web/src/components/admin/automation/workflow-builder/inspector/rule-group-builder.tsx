@@ -24,7 +24,7 @@
  *
  * The property picker is organized by entity group (Conversation / Message /
  * Person / Availability from the static catalogue, plus the live
- * Conversation attribute / Person attribute / Company attribute registries)
+ * Conversation attribute / User attribute / Company attribute registries)
  * via workflow-graph.ts's STATIC_CONDITION_FIELD_GROUPS.
  */
 import { PlusIcon, SparklesIcon, XMarkIcon } from '@heroicons/react/24/outline'
@@ -83,7 +83,7 @@ function AiFieldBadge() {
   return (
     <span
       aria-label="AI"
-      className="inline-flex items-center gap-0.5 rounded-md bg-indigo-500/10 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400"
+      className="inline-flex items-center gap-0.5 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary"
     >
       <SparklesIcon className="size-2.5" aria-hidden />
       AI
@@ -270,7 +270,7 @@ function RuleGroup({
           // (workflow-graph.ts's groupsToCondition), not treated as "matches
           // everything" — that would silently override the other groups.
           <p className="text-xs text-muted-foreground">
-            No rules in this group — it's ignored until you add one.
+            No rules in this group. It's ignored until you add one.
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">No rules yet, so everything matches.</p>
@@ -422,7 +422,7 @@ function RuleRow({
             )}
             {personAttributeItems.length > 0 && (
               <SelectGroup>
-                <SelectLabel>Person attribute</SelectLabel>
+                <SelectLabel>User attribute</SelectLabel>
                 {personAttributeItems.map((d) => (
                   <SelectItem key={d.key} value={personAttributeFieldForKey(d.key)}>
                     {d.label}

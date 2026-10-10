@@ -1,14 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { adminQueries } from '@/lib/client/queries/admin'
-import {
-  portalUsersInfiniteOptions,
-  defaultUsersFilters,
-} from '@/lib/client/hooks/use-users-queries'
 import { UsersContainer } from '@/components/admin/users/users-container'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
+import { errorMessage } from '@/components/shared/error-page'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const searchSchema = z.object({
   search: z.string().optional(),
@@ -52,6 +49,7 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/admin/users')({
+  head: adminPageHead('Users'),
   validateSearch: searchSchema,
   // Note: No loaderDeps for the filter fields - the loader only runs on
   // initial route load for SSR (prefetching the default/unfiltered dataset).
@@ -66,12 +64,10 @@ export const Route = createFileRoute('/admin/users')({
       queryClient: typeof context.queryClient
     }
 
-    await Promise.all([
-      // Warm the SAME infinite cache the Users list renders (QC-1), so a
-      // segment membership change (invalidating usersKeys.all) reaches it.
-      queryClient.ensureInfiniteQueryData(portalUsersInfiniteOptions(defaultUsersFilters)),
-      queryClient.ensureQueryData(adminQueries.segments()),
-    ])
+    // Imported here rather than at the top: route loaders ship in the entry
+    // chunk every page loads.
+    const { warmUsersPage } = await import('@/lib/client/queries/users-page')
+    await warmUsersPage(queryClient, principal.role)
 
     return {
       currentMemberRole: principal.role,
@@ -80,14 +76,15 @@ export const Route = createFileRoute('/admin/users')({
   component: UsersPage,
 })
 
-function UsersErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function UsersErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
+  const message = errorMessage(error)
   return (
     <div className="flex items-center justify-center min-h-[400px] p-4">
       <Alert variant="destructive" className="max-w-2xl">
         <ExclamationCircleIcon className="h-4 w-4" />
         <AlertTitle>Failed to load users</AlertTitle>
         <AlertDescription className="mt-2">
-          <p className="mb-4">{error.message}</p>
+          <p className="mb-4">{message}</p>
           <Button onClick={reset} variant="outline" size="sm">
             Try again
           </Button>
@@ -100,8 +97,8 @@ function UsersErrorComponent({ error, reset }: { error: Error; reset: () => void
 function UsersPage() {
   const { currentMemberRole } = Route.useLoaderData()
 
-  // The Users list is read by UsersContainer's own infinite `usePortalUsers`
-  // hook, which shares its query definition with the loader's prefetch (QC-1) —
-  // no separate suspense query here.
+  // Every read UsersContainer makes on load shares its query definition with
+  // the loader's prefetch (QC-1), so none is a separate request after
+  // hydration.
   return <UsersContainer currentMemberRole={currentMemberRole} />
 }

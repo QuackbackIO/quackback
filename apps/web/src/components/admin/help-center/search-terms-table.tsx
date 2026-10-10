@@ -48,8 +48,7 @@ export function SearchTermsTable() {
           <EmptyState
             icon={MagnifyingGlassIcon}
             title="No searches yet"
-            description="Visitor search terms show up here once people start searching your help center."
-            className="h-32"
+            description="Visitor search terms show up here once users start searching your help center."
           />
         </div>
       ) : (
@@ -73,7 +72,6 @@ export function SearchTermsTable() {
                       {alwaysMisses && (
                         <Badge
                           size="sm"
-                          shape="pill"
                           variant="secondary"
                           data-testid={`search-term-no-results-${row.normalizedQuery}`}
                           className="bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0"
@@ -92,7 +90,7 @@ export function SearchTermsTable() {
                   >
                     {row.zeroResultSearches > 0
                       ? numberFormatter.format(row.zeroResultSearches)
-                      : '—'}
+                      : '-'}
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground">
                     <TimeAgo date={row.lastSearchedAt} />

@@ -48,10 +48,13 @@ export const ID_PREFIXES = {
   conversation_message_reaction: 'conversation_msg_reaction',
   conversation_summary: 'conversation_summary',
   conversation_message_translation: 'conversation_msg_translation',
+  // A stored upload attached to conversation and ticket messages.
+  file: 'file',
 
   // Help center
   kb_category: 'kb_category',
-  kb_article: 'kb_article',
+  // Serialized as `article_…` (same UUID as the retired `kb_article_…` prefix).
+  kb_article: 'article',
   kb_article_feedback: 'kb_article_feedback',
   hc_redirect_rule: 'hc_redirect_rule',
   kb_article_translation: 'kb_article_translation',
@@ -223,6 +226,33 @@ export type IdPrefix = (typeof ID_PREFIXES)[keyof typeof ID_PREFIXES]
 export type EntityType = keyof typeof ID_PREFIXES
 
 /**
+ * Retired serialized prefixes that still identify the same entity.
+ * Incoming IDs with these prefixes are accepted and rewritten to the
+ * canonical `ID_PREFIXES` value on ensure/parse.
+ */
+export const ID_PREFIX_ALIASES: Readonly<Record<string, IdPrefix>> = {
+  kb_article: 'article',
+  // Feedback entities, serialized under a `post_` namespace.
+  status: 'post_status',
+  tag: 'post_tag',
+  comment: 'post_comment',
+  vote: 'post_vote',
+  reaction: 'post_comment_reaction',
+  comment_edit: 'post_comment_edit',
+  note: 'post_note',
+  activity: 'post_activity',
+  merge_sug: 'post_merge_sug',
+  linked_entity: 'post_external_link',
+  // Messenger entities, serialized under a `conversation_` namespace.
+  chat_msg: 'conversation_msg',
+  chat_tag: 'conversation_tag',
+  chat_msg_mention: 'conversation_msg_mention',
+  // Help center entities, serialized under a `kb_` namespace.
+  category: 'kb_category',
+  article_feedback: 'kb_article_feedback',
+}
+
+/**
  * Get the prefix for a given entity type
  */
 export function getPrefix(entity: EntityType): IdPrefix {
@@ -230,8 +260,23 @@ export function getPrefix(entity: EntityType): IdPrefix {
 }
 
 /**
- * Check if a string is a valid prefix
+ * Check if a string is a valid canonical prefix
  */
 export function isValidPrefix(prefix: string): prefix is IdPrefix {
   return Object.values(ID_PREFIXES).includes(prefix as IdPrefix)
+}
+
+/**
+ * True when `actual` is `expected` or a retired alias of it.
+ */
+export function prefixMatches(actual: string, expected: IdPrefix): boolean {
+  return actual === expected || ID_PREFIX_ALIASES[actual] === expected
+}
+
+/**
+ * Map a serialized prefix (canonical or alias) onto the catalogue prefix.
+ */
+export function resolvePrefix(prefix: string): IdPrefix | undefined {
+  if (isValidPrefix(prefix)) return prefix
+  return ID_PREFIX_ALIASES[prefix]
 }

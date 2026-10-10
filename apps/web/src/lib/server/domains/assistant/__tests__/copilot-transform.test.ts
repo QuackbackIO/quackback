@@ -340,3 +340,10 @@ describe('runCopilotTransform', () => {
     })
   })
 })
+
+describe('dash-free rewrites', () => {
+  it('tells a rewrite not to add em dashes', () => {
+    const prompt = buildTransformSystemPrompts('more_friendly', 'Please refund me').join('\n')
+    expect(prompt).toContain('Do not add em dashes or en dashes')
+  })
+})

@@ -13,7 +13,7 @@ import { TEST_CHANNEL_ID, testChannelDescriptor } from './test-channel.fixture'
 describe('channel descriptors', () => {
   it('registers messenger and email with the spec capabilities', () => {
     const ids = listChannelDescriptors().map((d) => d.id)
-    expect(ids).toEqual(['messenger', 'email'])
+    expect(ids).toEqual(['messenger', 'email', 'github'])
     expect(getChannelDescriptor('messenger')).toMatchObject({
       surface: 'ours',
       reopenOnReply: 'configurable',
@@ -23,6 +23,16 @@ describe('channel descriptors', () => {
       surface: 'theirs',
       reopenOnReply: 'always',
       accountRoles: ['inbound', 'sending'],
+      addressing: 'email',
+    })
+    expect(getChannelDescriptor('github')).toMatchObject({
+      surface: 'theirs',
+      threading: 'per-thread',
+      accountRoles: ['connection'],
+      addressing: 'thread',
+      reopenOnReply: 'never',
+      closeSurface: 'native',
+      nativeObject: 'issue',
     })
   })
 
@@ -35,9 +45,11 @@ describe('channel descriptors', () => {
   it('parses inbox channel values from the registry', () => {
     expect(parseChannel('messenger')).toBe('messenger')
     expect(parseChannel('email')).toBe('email')
+    expect(parseChannel('github')).toBe('github')
     expect(parseChannel('sms')).toBeUndefined()
     expect(parseChannel(undefined)).toBeUndefined()
     expect(inboxChannelFilterSchema.parse('email')).toBe('email')
+    expect(inboxChannelFilterSchema.parse('github')).toBe('github')
     expect(() => inboxChannelFilterSchema.parse('sms')).toThrow()
   })
 })

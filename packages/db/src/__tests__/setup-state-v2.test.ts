@@ -21,6 +21,7 @@ describe('SetupState V2 normalization', () => {
       version: 1,
       steps: { core: true, workspace: true, boards: true },
       useCase: 'help_center',
+      goals: ['help_center'],
       completedAt: '2026-01-02T03:04:05.000Z',
     })
 
@@ -38,6 +39,7 @@ describe('SetupState V2 normalization', () => {
         },
       },
       useCase: 'help_center',
+      goals: ['help_center'],
       completedAt: '2026-01-02T03:04:05.000Z',
       completionSource: 'legacy',
       activationHandoffSeenAt: '2026-01-02T03:04:05.000Z',
@@ -137,6 +139,18 @@ describe('SetupState V2 normalization', () => {
     expect(normalized?.activationMilestones?.publicBoardLinkCopiedAt).toBe(
       '2026-08-14T10:00:00.000Z'
     )
+  })
+
+  it('keeps the status page link milestone beside the board one', () => {
+    const normalized = normalizeSetupStateV2({
+      version: 2,
+      steps: { core: true, workspace: true, startingPoint: null },
+      activationMilestones: { statusLinkCopiedAt: '2026-10-04T10:00:00.000Z' },
+    })
+
+    expect(normalized?.activationMilestones).toEqual({
+      statusLinkCopiedAt: '2026-10-04T10:00:00.000Z',
+    })
   })
 
   it('preserves the cloud workspace-details handoff marker', () => {

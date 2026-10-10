@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod'
+import { PageLimitSchema } from './taxonomy'
 import { tiptapContentSchema } from './posts'
 
 /**
@@ -69,7 +70,8 @@ export const updateChangelogSchema = z.object({
 export const listChangelogsSchema = z.object({
   status: z.enum(['draft', 'scheduled', 'published', 'all']).optional(),
   cursor: z.string().optional(),
-  limit: z.number().int().positive().max(100).optional(),
+  limit: PageLimitSchema,
+  sort: z.enum(['newest', 'oldest']).optional(),
 })
 
 /**
@@ -98,7 +100,7 @@ export const topViewedChangelogsSchema = z.object({
  */
 export const listPublicChangelogsSchema = z.object({
   cursor: z.string().optional(),
-  limit: z.number().int().positive().max(100).optional(),
+  limit: PageLimitSchema,
 })
 
 // Export types inferred from schemas

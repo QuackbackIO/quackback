@@ -10,16 +10,23 @@ import type { PostId, BoardId } from '@quackback/ids'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
-import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
+import { embeddingUsage, withUsageLogging } from '@/lib/server/domains/ai/usage-log'
+import { isTestPost } from '@/lib/server/test-data'
 import { logger } from '@/lib/server/logger'
+import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
 const log = logger.child({ component: 'embeddings' })
 
 const EMBEDDING_DIMENSIONS = 1536
 
+/** Step recorded for embedding calls whose caller gave no log context. */
+const DEFAULT_EMBEDDING_STEP = 'embedding_query'
+
 /**
  * Generate embedding for text using OpenAI.
- * When logContext is provided, usage is recorded to ai_usage_log.
+ * Every call is recorded to ai_usage_log, under the caller's step when a
+ * logContext is given. `signal` cancels the provider request and any retry,
+ * and the call then returns null.
  */
 export async function generateEmbedding(
   text: string,
@@ -28,7 +35,8 @@ export async function generateEmbedding(
     postId?: string
     rawFeedbackItemId?: string
     signalId?: string
-  }
+  },
+  opts: { signal?: AbortSignal } = {}
 ): Promise<number[] | null> {
   const openai = getOpenAI()
   const model = getEmbeddingModel()
@@ -38,41 +46,32 @@ export async function generateEmbedding(
   const truncated = text.slice(0, 8000)
 
   try {
-    if (logContext) {
-      const response = await withUsageLogging(
-        {
-          pipelineStep: logContext.pipelineStep,
-          callType: 'embedding',
-          model,
-          postId: logContext.postId,
-          rawFeedbackItemId: logContext.rawFeedbackItemId,
-          signalId: logContext.signalId,
-        },
-        () =>
-          withRetry(() =>
-            openai.embeddings.create({
-              model,
-              input: truncated,
-              dimensions: EMBEDDING_DIMENSIONS,
-            })
-          ),
-        (r) => ({
-          inputTokens: r.usage?.prompt_tokens ?? 0,
-          totalTokens: r.usage?.total_tokens ?? 0,
-        })
-      )
-      return response.data[0]?.embedding ?? null
-    }
-
-    const { result: response } = await withRetry(() =>
-      openai.embeddings.create({
+    const response = await withUsageLogging(
+      {
+        pipelineStep: logContext?.pipelineStep ?? DEFAULT_EMBEDDING_STEP,
+        callType: 'embedding',
         model,
-        input: truncated,
-        dimensions: EMBEDDING_DIMENSIONS,
-      })
+        postId: logContext?.postId,
+        rawFeedbackItemId: logContext?.rawFeedbackItemId,
+        signalId: logContext?.signalId,
+      },
+      () =>
+        withRetry(
+          () =>
+            openai.embeddings.create(
+              { model, input: truncated, dimensions: EMBEDDING_DIMENSIONS },
+              { signal: opts.signal }
+            ),
+          { signal: opts.signal }
+        ),
+      (r) => embeddingUsage(r, truncated)
     )
     return response.data[0]?.embedding ?? null
   } catch (error) {
+    if (opts.signal?.aborted) {
+      log.debug({ pipeline_step: logContext?.pipelineStep }, 'embedding generation aborted')
+      return null
+    }
     log.error(
       { pipeline_step: logContext?.pipelineStep, post_id: logContext?.postId, err: error },
       'embedding generation failed'
@@ -111,6 +110,8 @@ export async function generatePostEmbedding(
   content: string,
   tags?: string[]
 ): Promise<boolean> {
+  // A test customer's idea spends no embedding tokens.
+  if (await isTestPost(postId)) return false
   const text = formatPostText(title, content, tags)
   const embedding = await generateEmbedding(text, {
     pipelineStep: 'post_embedding',
@@ -127,7 +128,13 @@ export async function generatePostEmbedding(
   // Fire-and-forget: check for merge candidates now that embedding is fresh
   import('@/lib/server/domains/merge-suggestions/merge-check.service')
     .then(({ checkPostForMergeCandidates }) => checkPostForMergeCandidates(postId))
-    .catch((err) => log.error({ post_id: postId, err }, 'merge check failed'))
+    .catch((err) => {
+      if (err instanceof TierLimitError) {
+        log.info({ post_id: postId, err }, 'merge check skipped: ai budget unavailable')
+      } else {
+        log.error({ post_id: postId, err }, 'merge check failed')
+      }
+    })
 
   return true
 }

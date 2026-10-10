@@ -1,6 +1,16 @@
-import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
+import { LaunchPlanDock, LaunchPlanInHelp } from '@/components/onboarding/launch-plan-dock'
+import { openHelpLauncher } from '@/components/shared/cloud-quackback-widget'
+import { PlanNoticeQuiet } from '@/components/admin/plan-notice-banner'
+import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
+import { SearchTrigger } from '@/components/admin/ask/search-palette'
+import { useProductTour } from '@/components/onboarding/product-tour'
+import { FormattedMessage, useIntl } from 'react-intl'
+import { htmlLangDir } from '@/lib/shared/document-locale'
+import type { SupportedLocale } from '@/lib/shared/i18n'
+import { railControlClass } from '@/components/admin/rail-item'
+import { useMemo, useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { Link, useRouter, useRouterState } from '@tanstack/react-router'
 import {
   ChatBubbleLeftIcon,
   ChatBubbleLeftRightIcon,
@@ -13,10 +23,10 @@ import {
   BookOpenIcon,
   ChartBarIcon,
   QuestionMarkCircleIcon,
-  CpuChipIcon,
-  RocketLaunchIcon,
+  HomeIcon,
+  SignalIcon,
+  FlagIcon,
 } from '@heroicons/react/24/solid'
-import { SignalIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -27,7 +37,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { signOut } from '@/lib/client/auth-client'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { NotificationBell } from '@/components/notifications'
@@ -36,22 +45,27 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import type { LatestVersionResult } from '@/lib/server/functions/version'
 import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
 import { setAgentAvailabilityFn } from '@/lib/server/functions/conversation'
-import { adminQueries } from '@/lib/client/queries/admin'
 import {
   listOwnerWorkspacesFn,
   openOwnerWorkspaceFn,
 } from '@/lib/server/functions/owner-workspaces'
 import { friendlySiblingAddress, WorkspaceSwitcher } from '@/components/admin/workspace-switcher'
-import {
-  isLaunchPlanActive,
-  launchChecklistSummary,
-  type LaunchStatus,
-} from '@/lib/shared/launch-checklist'
-import { useIntl } from 'react-intl'
 import { usePermission } from '@/lib/client/hooks/use-permission'
+import { usePermissions } from '@/lib/client/use-permissions'
+import {
+  buildNavSections,
+  canOpenSettings,
+} from '@/components/admin/settings/settings-nav-sections'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
-import { resolveAdminHomePath } from '@/lib/shared/admin-home'
+import { adminQueries } from '@/lib/client/queries/admin'
+import { ENTITY_ICONS } from '@/components/admin/entity-icon'
+import {
+  useBillingEnabled,
+  useCloudEnabled,
+  useSessionContext,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
 
 /** Availability toggle for the account menu (conversation routing). The label shows the
  *  state you'll switch to; the avatar dot shows the current one. */
@@ -78,162 +92,240 @@ interface AdminSidebarProps {
     chatAvailability?: 'online' | 'away'
   }
   latestVersion?: LatestVersionResult | null
+  /** A running trial shows here quietly until its last days. */
+  planNotice?: PlanNotice | null
 }
 
-const navItems: Array<{
+interface RailItem {
   label: string
   href: string
   icon: typeof ChatBubbleLeftIcon
+  /** Active on this path only, not on the pages under it. */
+  exact?: boolean
+  /** The catalogue id of the label, so the rail reads in the workspace language. */
+  labelId: string
+  /** The workspace product this item belongs to; hidden while it is off. */
   product?: ProductId
-}> = [
-  { label: 'Feedback', href: '/admin/feedback', icon: ChatBubbleLeftIcon, product: 'feedback' },
-  // UNIFIED-INBOX-SPEC.md §2.3/§4: one Support entry replaces the old
-  // Conversations + Tickets pair — the unified /admin/inbox shell now covers
-  // both (gated below on either flag being on).
-  { label: 'Support', href: '/admin/inbox', icon: ChatBubbleLeftRightIcon, product: 'support' },
-  { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon, product: 'feedback' },
-  { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon, product: 'changelog' },
-  { label: 'Help Center', href: '/admin/help-center', icon: BookOpenIcon, product: 'helpCenter' },
-  { label: 'Status', href: '/admin/status', icon: SignalIcon, product: 'status' },
-  { label: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
-  { label: 'AI & Automation', href: '/admin/automation/agent', icon: CpuChipIcon },
-  { label: 'Users', href: '/admin/users', icon: UsersIcon },
+  /** The guided tour's `data-tour` name for this item. */
+  tour?: string
+}
+
+// One product reads as one run: Feedback, Roadmap and Changelog sit together,
+// then Support, Help Center and Status.
+const RAIL_ITEMS: RailItem[] = [
+  { label: 'Home', labelId: 'admin.nav.home', href: '/admin', icon: HomeIcon, exact: true },
+  {
+    label: 'Feedback',
+    labelId: 'admin.nav.feedback',
+    href: '/admin/feedback',
+    icon: ENTITY_ICONS.post,
+    product: 'feedback',
+    tour: 'nav-feedback',
+  },
+  {
+    label: 'Roadmap',
+    labelId: 'admin.nav.roadmap',
+    href: '/admin/roadmap',
+    icon: MapIcon,
+    product: 'feedback',
+    tour: 'nav-roadmap',
+  },
+  {
+    label: 'Changelog',
+    labelId: 'admin.nav.changelog',
+    href: '/admin/changelog',
+    icon: ENTITY_ICONS.changelog,
+    product: 'changelog',
+    tour: 'nav-changelog',
+  },
+  // One Support entry covers conversations and tickets: the unified inbox
+  // shell serves both (gated on either flag being on).
+  {
+    label: 'Support',
+    labelId: 'admin.nav.support',
+    href: '/admin/inbox',
+    icon: ENTITY_ICONS.conversation,
+    product: 'support',
+    tour: 'nav-support',
+  },
+  {
+    label: 'Help center',
+    labelId: 'admin.nav.helpCenter',
+    href: '/admin/help-center',
+    icon: ENTITY_ICONS.article,
+    product: 'helpCenter',
+    tour: 'nav-help-center',
+  },
+  {
+    label: 'Status',
+    labelId: 'admin.nav.status',
+    href: '/admin/status',
+    icon: SignalIcon,
+    product: 'status',
+    tour: 'nav-status',
+  },
+  {
+    label: 'Analytics',
+    labelId: 'admin.nav.analytics',
+    href: '/admin/analytics',
+    icon: ChartBarIcon,
+  },
+  { label: 'Users', labelId: 'admin.nav.users', href: '/admin/users', icon: UsersIcon },
 ]
 
-function isNavActive(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(href + '/')
+/** The rail items a viewer sees: the products that are on. */
+export function buildRailItems(flags: Partial<FeatureFlags> | undefined): RailItem[] {
+  return RAIL_ITEMS.filter((item) => !item.product || isProductEnabled(flags, item.product))
 }
+
+/**
+ * A rail item is active on its page and every page under it, whatever the
+ * search. The Link works that out itself and renders again only when it
+ * changes, so a navigation renders the items it highlights or clears, and a
+ * search-only one (opening a post or a conversation) none.
+ */
+const NAV_ACTIVE_OPTIONS = { includeSearch: false }
+const NAV_EXACT_OPTIONS = { exact: true, includeSearch: false }
+
+const railLinkProps = (exact: boolean) => ({
+  activeOptions: exact ? NAV_EXACT_OPTIONS : NAV_ACTIVE_OPTIONS,
+  activeProps: { className: railControlClass(true), 'data-active': 'true' },
+  inactiveProps: { className: railControlClass() },
+})
+
+const MOBILE_LINK_CLASS =
+  'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors text-muted-foreground/80 hover:text-foreground hover:bg-muted/50'
 
 function NavItem({
   href,
   icon: Icon,
   label,
-  isActive,
   onClick,
   badge,
+  badgeLabel,
   dot,
+  exact = false,
+  tour,
 }: {
   href: string
   icon: typeof ChatBubbleLeftIcon
   label: string
-  isActive: boolean
+  /** The guided tour's name for this item. */
+  tour?: string
   onClick?: () => void
   /** Optional count or short mark (e.g. remaining launch steps) */
   badge?: string | number | null
+  /** What the badge counts, read out in place of the bare number. */
+  badgeLabel?: string
   /** Quiet marker while the plan is resolved but the first win is still open */
   dot?: boolean
+  /** Active on this path only, not on the pages under it. */
+  exact?: boolean
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Link
-          to={href}
-          onClick={onClick}
-          className={cn(
-            'relative flex size-9 items-center justify-center rounded-lg transition-all duration-200',
-            'text-muted-foreground/70 hover:text-foreground hover:bg-muted/50',
-            isActive && 'bg-muted/80 text-foreground'
-          )}
-        >
-          <Icon className="size-5" />
-          {badge != null && badge !== '' && (
-            <span
-              className={cn(
-                'absolute -top-0.5 -right-0.5 flex items-center justify-center',
-                'min-w-[18px] h-[18px] px-1 rounded-full',
-                'bg-primary text-primary-foreground text-[11px] font-semibold',
-                'border-2 border-card'
-              )}
-            >
-              {badge}
-            </span>
-          )}
-          {dot && (badge == null || badge === '') && (
-            <span
-              className="absolute top-0.5 right-0.5 size-2 rounded-full bg-primary"
-              aria-hidden="true"
-            />
-          )}
-          <span className="sr-only">{label}</span>
-        </Link>
-      </TooltipTrigger>
-      <TooltipContent side="right" sideOffset={8}>
-        {label}
-      </TooltipContent>
-    </Tooltip>
+    <Link
+      to={href}
+      onClick={onClick}
+      data-admin-rail-item=""
+      data-tour={tour}
+      data-labeled=""
+      {...railLinkProps(exact)}
+    >
+      <Icon className="size-5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge != null && badge !== '' && (
+        <span className="ms-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-card bg-primary px-1 text-[11px] font-semibold text-primary-foreground">
+          <span aria-hidden="true">{badge}</span>
+          <span className="sr-only">{badgeLabel ?? badge}</span>
+        </span>
+      )}
+      {dot && (badge == null || badge === '') && (
+        <span className="ms-auto size-2 rounded-full bg-primary" aria-hidden="true" />
+      )}
+    </Link>
   )
 }
 
-export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarProps) {
+function MobileNavLink({
+  href,
+  icon: Icon,
+  label,
+  onClick,
+  exact = false,
+  badge,
+  badgeLabel,
+}: {
+  href: string
+  icon: typeof ChatBubbleLeftIcon
+  label: string
+  onClick: () => void
+  exact?: boolean
+  badge?: number | null
+  badgeLabel?: string
+}) {
+  return (
+    <Link
+      to={href}
+      onClick={onClick}
+      activeOptions={exact ? NAV_EXACT_OPTIONS : NAV_ACTIVE_OPTIONS}
+      activeProps={{ className: cn(MOBILE_LINK_CLASS, 'bg-muted/80 text-foreground font-medium') }}
+      inactiveProps={{ className: MOBILE_LINK_CLASS }}
+    >
+      <Icon className="h-5 w-5" />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge ? (
+        <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground">
+          <span aria-hidden="true">{badge}</span>
+          <span className="sr-only">{badgeLabel ?? badge}</span>
+        </span>
+      ) : null}
+    </Link>
+  )
+}
+
+export function AdminSidebar({ initialUserData, latestVersion, planNotice }: AdminSidebarProps) {
   const intl = useIntl()
   const router = useRouter()
-  const { session, settings, userRole, billingEnabled } = useRouteContext({ from: '__root__' })
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  // The settings area is admin-only (every tab gates on requireAuth(['admin'])).
-  // Members would only ever land on the access-denied page, so hide the cog.
-  const isAdmin = userRole === 'admin'
-  const canManageAssistant = usePermission(PERMISSIONS.ASSISTANT_MANAGE)
-  const canManageWorkflows = usePermission(PERMISSIONS.WORKFLOW_MANAGE)
-  const canOpenAutomation = canManageAssistant || canManageWorkflows
-  // Launch-plan progress for the shell badge (admins only). Stay visible and
-  // polling until essentials resolve *and* the first win lands — a first win
-  // can arrive while invite-team is still open. Skip/complete actions also
-  // invalidate ['admin', 'onboarding'] explicitly.
-  const queryClient = useQueryClient()
-  const onboardingQueryOptions = adminQueries.onboardingStatus()
-  const cachedOnboardingStatus = queryClient.getQueryData<LaunchStatus>(
-    onboardingQueryOptions.queryKey
-  )
-  const cachedLaunchSettled = cachedOnboardingStatus
-    ? !isLaunchPlanActive(launchChecklistSummary(cachedOnboardingStatus))
-    : false
-  const onboardingQuery = useQuery({
-    ...onboardingQueryOptions,
-    enabled: isAdmin && !cachedLaunchSettled,
-    refetchInterval: (query) => {
-      const data = query.state.data
-      if (!data) return 15_000
-      return isLaunchPlanActive(launchChecklistSummary(data)) ? 15_000 : false
-    },
+  const onNotificationsPage = useRouterState({
+    select: (s) => s.location.pathname.startsWith('/admin/notifications'),
   })
-  const launchSummary = onboardingQuery.data ? launchChecklistSummary(onboardingQuery.data) : null
-  const showLaunchNav = isAdmin && (!launchSummary || isLaunchPlanActive(launchSummary))
-  const launchRemaining =
-    launchSummary && !launchSummary.resolved && launchSummary.remaining > 0
-      ? launchSummary.remaining
-      : null
-  const launchQuietDot = Boolean(launchSummary?.resolved && !launchSummary.firstWinComplete)
-  const launchPlanLabel =
-    launchRemaining != null
-      ? intl.formatMessage(
-          {
-            id: 'activation.nav.remaining',
-            defaultMessage: 'Launch plan · {count} left',
-          },
-          { count: launchRemaining }
-        )
-      : intl.formatMessage({
-          id: 'activation.nav.label',
-          defaultMessage: 'Launch plan',
-        })
+  // Each part is selected: the route context is a new object after every
+  // navigation, while these stay the same until the viewer or workspace changes.
+  const tour = useProductTour()
+  const session = useSessionContext()
+  const settings = useWorkspaceSettings()
+  const billingEnabled = useBillingEnabled()
+  const cloudEnabled = useCloudEnabled()
+  const permissions = usePermissions()
 
   const flags = settings?.featureFlags as FeatureFlags | undefined
+  // Settings is offered to anyone who can open at least one of its pages; the
+  // rest would only reach an access-denied page.
+  const showSettings = useMemo(
+    () =>
+      canOpenSettings(buildNavSections(flags, Boolean(billingEnabled), cloudEnabled), permissions),
+    [flags, billingEnabled, cloudEnabled, permissions]
+  )
   // The org's own logo (resolved in brandingData by the root loader, same source
   // PortalBrandMark uses); fall back to the Quackback mark when none is set.
   const branding = (settings as { brandingData?: SettingsBrandingData } | undefined)?.brandingData
   const orgLogo = branding?.logoUrl ?? branding?.headerLogoUrl ?? '/logo.png'
   const orgName = branding?.name ?? 'Quackback'
 
-  const filteredNavItems = navItems.filter((item) => {
-    if (item.product && !isProductEnabled(flags, item.product)) return false
-    if (item.href === '/admin/automation/agent') return canOpenAutomation
-    return true
+  const railItems = buildRailItems(flags)
+  // Posts and comments waiting for review. Shown on Feedback when there are any.
+  const feedbackEnabled = isProductEnabled(flags, 'feedback')
+  const canReviewPosts = usePermission(PERMISSIONS.POST_APPROVE)
+  const reviewEnabled = feedbackEnabled && canReviewPosts
+  const { data: moderation } = useQuery({
+    ...adminQueries.moderationStatus(),
+    enabled: reviewEnabled,
   })
-  const homePath = resolveAdminHomePath({
-    isAdmin,
-    launchResolved: Boolean(launchSummary?.resolved),
-    flags,
-  })
+  const pendingModeration = reviewEnabled ? (moderation?.pendingCount ?? 0) : 0
+  const itemBadge = (item: RailItem) =>
+    item.href === '/admin/feedback' && pendingModeration > 0 ? pendingModeration : null
+  const itemBadgeLabel = (item: RailItem) =>
+    itemBadge(item) ? `${pendingModeration} waiting for review` : undefined
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const user = session?.user
@@ -279,13 +371,20 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden w-14 shrink-0 flex-col sm:flex">
+      <aside
+        data-admin-rail=""
+        data-labeled=""
+        // The rail speaks the workspace language while the page around it may
+        // not, so it says which language it is in for screen readers.
+        lang={htmlLangDir(intl.locale as SupportedLocale).lang}
+        className="hidden w-56 shrink-0 flex-col border-chrome-hairline bg-chrome [--card:var(--chrome-background)] sm:flex"
+      >
         <ScrollArea className="h-full" scrollBarClassName="w-2" type="auto">
           <div className="flex h-full min-h-screen flex-col py-2">
             {/* Logo */}
             <Link
-              to={homePath}
-              className="mb-4 flex items-center justify-center opacity-90 transition-opacity hover:opacity-100"
+              to="/admin"
+              className="mb-4 flex items-center gap-2.5 px-4 opacity-90 transition-opacity hover:opacity-100"
             >
               <img
                 src={orgLogo}
@@ -294,27 +393,24 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 height={28}
                 className="h-7 w-7 rounded object-contain"
               />
+              <span className="truncate text-sm font-semibold">{orgName}</span>
             </Link>
 
             {/* Main Navigation */}
-            <nav className="flex flex-col items-center gap-2.5">
-              {showLaunchNav && (
-                <NavItem
-                  href="/admin/getting-started"
-                  icon={RocketLaunchIcon}
-                  label={launchPlanLabel}
-                  isActive={isNavActive(pathname, '/admin/getting-started')}
-                  badge={launchRemaining}
-                  dot={launchQuietDot}
-                />
-              )}
-              {filteredNavItems.map((item) => (
+            <div className="mb-2 px-2">
+              <SearchTrigger tour className={railControlClass()} />
+            </div>
+            <nav data-tour="products" className="flex flex-col gap-0.5 px-2">
+              {railItems.map((item) => (
                 <NavItem
                   key={item.href}
                   href={item.href}
                   icon={item.icon}
-                  label={item.label}
-                  isActive={isNavActive(pathname, item.href)}
+                  label={intl.formatMessage({ id: item.labelId, defaultMessage: item.label })}
+                  exact={item.exact}
+                  badge={itemBadge(item)}
+                  badgeLabel={itemBadgeLabel(item)}
+                  tour={item.tour}
                 />
               ))}
             </nav>
@@ -323,14 +419,19 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
             <div className="min-h-3 flex-1" />
 
             {/* Bottom Section */}
-            <div className="flex flex-col items-center gap-2.5">
+            <div className="flex flex-col gap-0.5 px-2">
+              {/* Mounted only for a notice, so a page without one renders nothing here. */}
+              {planNotice && <PlanNoticeQuiet notice={planNotice} />}
+              <LaunchPlanDock />
               {/* Settings (admin-only) */}
-              {isAdmin && (
+              {showSettings && (
                 <NavItem
                   href="/admin/settings"
                   icon={Cog6ToothIcon}
-                  label="Settings"
-                  isActive={isNavActive(pathname, '/admin/settings')}
+                  label={intl.formatMessage({
+                    id: 'admin.nav.settings',
+                    defaultMessage: 'Settings',
+                  })}
                 />
               )}
 
@@ -339,43 +440,60 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
               ) : null}
 
               {/* Notifications */}
-              <NotificationBell className="size-9" />
+              <NotificationBell labeled active={onNotificationsPage} />
 
               {/* Portal Link */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link
-                    to="/"
-                    className="flex size-9 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/50 hover:text-foreground"
-                  >
-                    <GlobeAltIcon className="size-5" />
-                    <span className="sr-only">View Portal</span>
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="right" sideOffset={8}>
-                  View Portal
-                </TooltipContent>
-              </Tooltip>
+              <Link
+                to="/"
+                data-tour="view-portal"
+                data-admin-rail-item=""
+                className={railControlClass()}
+              >
+                <GlobeAltIcon className="size-5 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">
+                  {intl.formatMessage({
+                    id: 'admin.nav.viewPortal',
+                    defaultMessage: 'View portal',
+                  })}
+                </span>
+              </Link>
 
               {/* Help Menu */}
               <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <button className="relative flex size-9 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        <QuestionMarkCircleIcon className="size-5" />
-                        {latestVersion && (
-                          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
-                        )}
-                        <span className="sr-only">Help</span>
-                      </button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={8}>
-                    Help
-                  </TooltipContent>
-                </Tooltip>
+                <DropdownMenuTrigger asChild>
+                  <button data-admin-rail-item="" className={railControlClass()}>
+                    <QuestionMarkCircleIcon className="size-5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate text-left">
+                      {intl.formatMessage({ id: 'admin.help.label', defaultMessage: 'Help' })}
+                    </span>
+                    {latestVersion && (
+                      <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-52">
+                  <DropdownMenuItem onClick={() => tour?.start()}>
+                    <FormattedMessage
+                      id="onboarding.tour.replay"
+                      defaultMessage="Replay the tour"
+                    />
+                  </DropdownMenuItem>
+                  <LaunchPlanInHelp>
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin/getting-started">
+                        <FormattedMessage
+                          id="onboarding.launch.name"
+                          defaultMessage="Launch plan"
+                        />
+                      </Link>
+                    </DropdownMenuItem>
+                  </LaunchPlanInHelp>
+                  {cloudEnabled && (
+                    <DropdownMenuItem onClick={openHelpLauncher}>
+                      <ChatBubbleLeftRightIcon className="mr-2 h-4 w-4" />
+                      <FormattedMessage id="admin.help.contact" defaultMessage="Contact us" />
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem asChild>
                     <a
                       href="https://www.quackback.io/docs/"
@@ -383,7 +501,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                       rel="noopener noreferrer"
                     >
                       <BookOpenIcon className="mr-2 h-4 w-4" />
-                      Documentation
+                      <FormattedMessage id="admin.help.docs" defaultMessage="Documentation" />
                     </a>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
@@ -393,7 +511,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                       rel="noopener noreferrer"
                     >
                       <DocumentTextIcon className="mr-2 h-4 w-4" />
-                      Changelog
+                      <FormattedMessage id="admin.help.whatsNew" defaultMessage="What's new" />
                     </a>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -415,31 +533,27 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
 
               {/* User Menu */}
               <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <button className="relative flex size-9 items-center justify-center rounded-full transition-all duration-200 hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        <Avatar className="size-7" src={avatarUrl} name={name} />
-                        {conversationsEnabled && (
-                          <span
-                            className={cn(
-                              'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-background',
-                              availability === 'online'
-                                ? 'bg-green-500'
-                                : 'border-2 border-muted-foreground bg-background'
-                            )}
-                            aria-hidden="true"
-                          />
-                        )}
-                      </button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={8}>
-                    Account
-                  </TooltipContent>
-                </Tooltip>
+                <DropdownMenuTrigger asChild>
+                  <button data-admin-rail-item="" className={railControlClass()}>
+                    <span className="relative shrink-0">
+                      <Avatar className="size-6" src={avatarUrl} name={name} />
+                      {conversationsEnabled && (
+                        <span
+                          className={cn(
+                            'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-background',
+                            availability === 'online'
+                              ? 'bg-green-500'
+                              : 'border-2 border-muted-foreground bg-background'
+                          )}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-left">{name || 'Account'}</span>
+                  </button>
+                </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">
-                  <DropdownMenuLabel className="font-normal">
+                  <DropdownMenuLabel>
                     <div className="flex items-center gap-2">
                       <Avatar className="h-8 w-8 shrink-0" src={avatarUrl} name={name} />
                       <div className="flex min-w-0 flex-col gap-0.5">
@@ -453,10 +567,17 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                     <AvailabilityMenuItems availability={availability} onSet={setAvail} />
                   )}
                   <DropdownMenuItem asChild>
-                    <Link to="/settings">Settings</Link>
+                    <Link to="/settings">
+                      <FormattedMessage
+                        id="portal.header.auth.settings"
+                        defaultMessage="Settings"
+                      />
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleSignOut}>Sign out</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleSignOut}>
+                    <FormattedMessage id="portal.header.auth.signOut" defaultMessage="Sign out" />
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -468,14 +589,26 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
       <header className="sm:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between h-14 px-4 border-b border-border/60 bg-card/95 backdrop-blur-sm">
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Open menu">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              aria-label={intl.formatMessage({
+                id: 'admin.nav.openMenu',
+                defaultMessage: 'Open menu',
+              })}
+            >
               <Bars3Icon className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0">
+          <SheetContent
+            side="left"
+            className="w-72 p-0"
+            lang={htmlLangDir(intl.locale as SupportedLocale).lang}
+          >
             <SheetHeader className="px-5 pt-6 pb-4">
               <SheetTitle className="flex items-center gap-3">
-                <Link to={homePath} onClick={() => setMobileMenuOpen(false)}>
+                <Link to="/admin" onClick={() => setMobileMenuOpen(false)}>
                   <img
                     src={orgLogo}
                     alt={orgName}
@@ -484,59 +617,37 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                     className="h-7 w-7 rounded object-contain"
                   />
                 </Link>
-                <span className="text-base font-semibold">Quackback</span>
+                <span className="text-base font-semibold">{orgName}</span>
               </SheetTitle>
             </SheetHeader>
             <nav className="flex flex-col gap-1.5 px-4 py-3">
-              {showLaunchNav && (
-                <Link
-                  to="/admin/getting-started"
+              {railItems.map((item) => (
+                <MobileNavLink
+                  key={item.href}
+                  href={item.href}
+                  icon={item.icon}
+                  label={intl.formatMessage({ id: item.labelId, defaultMessage: item.label })}
+                  exact={item.exact}
+                  badge={itemBadge(item)}
+                  badgeLabel={itemBadgeLabel(item)}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
-                    'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
-                    isNavActive(pathname, '/admin/getting-started') &&
-                      'bg-muted/80 text-foreground font-medium'
-                  )}
-                >
-                  <RocketLaunchIcon className="h-5 w-5" />
-                  {launchPlanLabel}
-                </Link>
-              )}
-              {filteredNavItems.map((item) => {
-                const isActive = isNavActive(pathname, item.href)
-                const Icon = item.icon
-                return (
-                  <Link
-                    key={item.href}
-                    to={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={cn(
-                      'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
-                      'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
-                      isActive && 'bg-muted/80 text-foreground font-medium'
-                    )}
-                  >
-                    <Icon className="h-5 w-5" />
-                    {item.label}
-                  </Link>
-                )
-              })}
+                />
+              ))}
               <div className="h-px bg-border/40 my-4" />
-              {isAdmin && (
-                <Link
-                  to="/admin/settings"
+              <PlanNoticeQuiet notice={planNotice ?? null} />
+              <div onClickCapture={() => setMobileMenuOpen(false)}>
+                <LaunchPlanDock />
+              </div>
+              {showSettings && (
+                <MobileNavLink
+                  href="/admin/settings"
+                  icon={Cog6ToothIcon}
+                  label={intl.formatMessage({
+                    id: 'admin.nav.settings',
+                    defaultMessage: 'Settings',
+                  })}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
-                    'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
-                    isNavActive(pathname, '/admin/settings') &&
-                      'bg-muted/80 text-foreground font-medium'
-                  )}
-                >
-                  <Cog6ToothIcon className="h-5 w-5" />
-                  Settings
-                </Link>
+                />
               )}
               {billingEnabled && siblings.length > 0
                 ? siblings.map((sibling) => (
@@ -562,8 +673,29 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
               >
                 <GlobeAltIcon className="h-5 w-5" />
-                View Portal
+                <FormattedMessage id="admin.nav.viewPortal" defaultMessage="View portal" />
               </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  tour?.start()
+                }}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-muted-foreground"
+              >
+                <QuestionMarkCircleIcon className="h-5 w-5" />
+                <FormattedMessage id="onboarding.tour.replay" defaultMessage="Replay the tour" />
+              </button>
+              <LaunchPlanInHelp>
+                <Link
+                  to="/admin/getting-started"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                >
+                  <FlagIcon className="h-5 w-5" />
+                  <FormattedMessage id="onboarding.launch.name" defaultMessage="Launch plan" />
+                </Link>
+              </LaunchPlanInHelp>
               <div className="h-px bg-border/40 my-4" />
               <a
                 href="https://www.quackback.io/docs/"
@@ -572,7 +704,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
               >
                 <BookOpenIcon className="h-5 w-5" />
-                Documentation
+                <FormattedMessage id="admin.help.docs" defaultMessage="Documentation" />
               </a>
               <a
                 href="https://feedback.quackback.io/changelog"
@@ -581,8 +713,21 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
               >
                 <DocumentTextIcon className="h-5 w-5" />
-                Changelog
+                <FormattedMessage id="admin.help.whatsNew" defaultMessage="What's new" />
               </a>
+              {cloudEnabled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    openHelpLauncher()
+                  }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                >
+                  <ChatBubbleLeftRightIcon className="h-5 w-5" />
+                  <FormattedMessage id="admin.help.contact" defaultMessage="Contact us" />
+                </button>
+              )}
               <div className="px-4 py-2 flex flex-col gap-1">
                 <span className="text-xs text-muted-foreground/50">v{__APP_VERSION__}</span>
                 {latestVersion && (
@@ -600,7 +745,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
           </SheetContent>
         </Sheet>
 
-        <Link to={homePath} className="absolute left-1/2 -translate-x-1/2">
+        <Link to="/admin" className="absolute left-1/2 -translate-x-1/2">
           <img
             src={orgLogo}
             alt={orgName}
@@ -611,6 +756,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
         </Link>
 
         <div className="flex items-center gap-1">
+          <SearchTrigger className="flex size-9 items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25 [&>span]:hidden [&>kbd]:hidden" />
           <NotificationBell className="h-9 w-9" />
 
           <DropdownMenu>
@@ -631,7 +777,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="font-normal">
+              <DropdownMenuLabel>
                 <div className="flex items-center gap-2">
                   <Avatar className="h-8 w-8 shrink-0" src={avatarUrl} name={name} />
                   <div className="flex min-w-0 flex-col gap-0.5">
@@ -645,10 +791,14 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 <AvailabilityMenuItems availability={availability} onSet={setAvail} />
               )}
               <DropdownMenuItem asChild>
-                <Link to="/settings">Settings</Link>
+                <Link to="/settings">
+                  <FormattedMessage id="portal.header.auth.settings" defaultMessage="Settings" />
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut}>Sign out</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleSignOut}>
+                <FormattedMessage id="portal.header.auth.signOut" defaultMessage="Sign out" />
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

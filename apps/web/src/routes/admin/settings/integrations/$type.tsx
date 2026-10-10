@@ -1,17 +1,9 @@
-import { Suspense, useState } from 'react'
+import { useCallback } from 'react'
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { IntegrationHeader } from '@/components/admin/settings/integrations/integration-header'
-import { IntegrationSetupCard } from '@/components/admin/settings/integrations/integration-setup-card'
-import { PlatformCredentialsDialog } from '@/components/admin/settings/integrations/platform-credentials-dialog'
-import { IntegrationHealthPanel } from '@/components/admin/settings/integrations/integration-health-panel'
-import {
-  getIntegrationSettingsEntry,
-  type IntegrationSettingsData,
-} from '@/components/admin/settings/integrations/integration-settings-registry'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
+import { IntegrationDetail } from '@/components/admin/settings/integrations/integration-detail'
+import { getIntegrationSettingsEntry } from '@/components/admin/settings/integrations/integration-settings-registry'
 
 /** URL segments use hyphens (e.g. `azure-devops`); registry keys use the
  * underscore integration type (`azure_devops`). Every other provider is a
@@ -21,8 +13,15 @@ function toIntegrationType(param: string): string {
 }
 
 export const Route = createFileRoute('/admin/settings/integrations/$type')({
+  validateSearch: (search: Record<string, unknown>): { tab?: 'history' } => ({
+    tab: search.tab === 'history' ? 'history' : undefined,
+  }),
   loader: async ({ context, params }) => {
     const type = toIntegrationType(params.type)
+    // Loaded on demand: a static import would put every provider's settings
+    // UI in the route module, which every page loads eagerly.
+    const { getIntegrationSettingsEntry } =
+      await import('@/components/admin/settings/integrations/integration-settings-registry')
     if (!getIntegrationSettingsEntry(type)) throw notFound()
     await context.queryClient.ensureQueryData(adminQueries.integrationByType(type))
     return {}
@@ -37,92 +36,20 @@ function IntegrationSettingsPage() {
   if (!entry) throw notFound()
 
   const { data } = useSuspenseQuery(adminQueries.integrationByType(type))
-  const integration = data.integration as IntegrationSettingsData | null
-  const { platformCredentialFields, platformCredentialsConfigured } = data
-  const [credentialsOpen, setCredentialsOpen] = useState(false)
-
-  const { catalog, Icon, ConnectionActions, setup } = entry
-  const status = integration?.status ?? null
-  const isConnected = status === 'active'
-  const isPaused = status === 'paused'
-  const hasCredentials = platformCredentialFields.length > 0
-  const workspaceName = integration
-    ? (entry.getWorkspaceName?.(integration) ?? integration.workspaceName)
-    : undefined
+  const { tab } = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const clearTab = useCallback(
+    () => void navigate({ search: (previous) => ({ ...previous, tab: undefined }), replace: true }),
+    [navigate]
+  )
 
   return (
-    <div className="space-y-6">
-      <IntegrationHeader
-        catalog={catalog}
-        status={status}
-        workspaceName={workspaceName}
-        icon={<Icon className="h-6 w-6 text-white" />}
-        actions={
-          isConnected || isPaused ? (
-            <div className="flex items-center gap-2">
-              {hasCredentials && (
-                <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
-                  Configure credentials
-                </Button>
-              )}
-              <ConnectionActions integrationId={integration?.id} isConnected={true} />
-            </div>
-          ) : undefined
-        }
-      />
-
-      {integration && (isConnected || isPaused) && (
-        <>
-          <IntegrationHealthPanel health={integration.health} />
-          {entry.renderConfig ? (
-            <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-              <Suspense fallback={<Skeleton className="h-40 w-full" />}>
-                {entry.renderConfig({ integration, isConnected })}
-              </Suspense>
-            </div>
-          ) : (
-            entry.connectedBanner
-          )}
-        </>
-      )}
-
-      {!integration && (
-        <IntegrationSetupCard
-          icon={<Icon className="h-6 w-6 text-muted-foreground" />}
-          title={setup.title}
-          description={setup.description}
-          steps={setup.steps}
-          connectionForm={
-            <div className="flex flex-col items-end gap-2">
-              {hasCredentials && !platformCredentialsConfigured && (
-                <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
-              )}
-              {(!hasCredentials || platformCredentialsConfigured) && (
-                <div className="flex items-center gap-2">
-                  {hasCredentials && (
-                    <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
-                      Configure credentials
-                    </Button>
-                  )}
-                  <Suspense fallback={null}>
-                    <ConnectionActions integrationId={undefined} isConnected={false} />
-                  </Suspense>
-                </div>
-              )}
-            </div>
-          }
-        />
-      )}
-
-      {hasCredentials && (
-        <PlatformCredentialsDialog
-          integrationType={type}
-          integrationName={catalog.name}
-          fields={platformCredentialFields}
-          open={credentialsOpen}
-          onOpenChange={setCredentialsOpen}
-        />
-      )}
-    </div>
+    <IntegrationDetail
+      type={type}
+      entry={entry}
+      data={data}
+      historyRequested={tab === 'history'}
+      onHistoryHandled={clearTab}
+    />
   )
 }

@@ -1,8 +1,9 @@
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { salesforceHook } from '@/integrations/salesforce/server/hook'
+import { salesforceContext } from '@/integrations/salesforce/server/enrichment'
 import {
   getSalesforceOAuthUrl,
   exchangeSalesforceCode,
+  refreshSalesforceToken,
 } from '@/integrations/salesforce/server/oauth'
 import { salesforceCatalog } from '@/integrations/salesforce/server/catalog'
 
@@ -14,7 +15,8 @@ export const salesforceIntegration: IntegrationDefinition = {
     buildAuthUrl: getSalesforceOAuthUrl,
     exchangeCode: exchangeSalesforceCode,
   },
-  hook: salesforceHook,
+  context: salesforceContext,
+  refreshToken: refreshSalesforceToken,
   platformCredentials: [
     {
       key: 'clientId',

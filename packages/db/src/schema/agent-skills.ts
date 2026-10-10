@@ -22,6 +22,7 @@ import { principal } from './auth'
 export interface SkillAssignments {
   agent: boolean
   copilot: boolean
+  workspace?: boolean
 }
 
 export const DEFAULT_SKILL_ASSIGNMENTS: SkillAssignments = {

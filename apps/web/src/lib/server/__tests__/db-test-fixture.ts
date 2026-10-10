@@ -17,7 +17,7 @@
  *   registries per file); each file opens its own connection, and tests
  *   within a file must run sequentially (no `it.concurrent`).
  */
-import { sql } from 'drizzle-orm'
+import { sql, type Logger } from 'drizzle-orm'
 // Direct client import to spin up our own pool — bypasses the global `db`
 // proxy/singleton so each test file keeps its own short-lived connection
 // (and closes it cleanly in afterAll). The lint rule reserves
@@ -71,6 +71,12 @@ export interface DbTestFixtureOptions {
    * failing it mid-test.
    */
   probe?: (db: Database) => Promise<void>
+  /**
+   * Drizzle logger for the fixture's connection. A suite can record the
+   * statements the code under test sends, to pin how many round trips a
+   * read takes.
+   */
+  logger?: Logger
 }
 
 export interface DbTestFixture {
@@ -104,7 +110,7 @@ export async function createDbTestFixture(
   created = true
 
   for (const url of CANDIDATE_URLS) {
-    const candidate = createDb(url, { max: 1, prepare: false })
+    const candidate = createDb(url, { max: 1, prepare: false, logger: options.logger })
     try {
       await candidate.execute(sql`select 1`)
       await options.probe?.(candidate)

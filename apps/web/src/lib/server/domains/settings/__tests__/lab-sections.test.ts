@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_FEATURE_FLAGS,
+  LABS_FEATURE_FLAGS,
+  NEW_WORKSPACE_FEATURE_FLAGS,
   PRODUCT_DEFINITIONS,
   enableFlagsForUseCase,
   flagsForGoal,
@@ -16,7 +18,16 @@ describe('feature flag settings layout', () => {
   it('places every remaining flag on exactly one product', () => {
     const productFlags = PRODUCT_DEFINITIONS.flatMap((product) => [...product.featureFlags])
     expect(new Set(productFlags).size).toBe(productFlags.length)
-    expect([...productFlags].sort()).toEqual(Object.keys(DEFAULT_FEATURE_FLAGS).sort())
+    expect([...productFlags, ...LABS_FEATURE_FLAGS].sort()).toEqual(
+      Object.keys(DEFAULT_FEATURE_FLAGS).sort()
+    )
+  })
+
+  it('keeps Copilot on Home off for existing workspaces and on for new ones', () => {
+    expect(DEFAULT_FEATURE_FLAGS.copilotHome).toBe(false)
+    expect(resolveFeatureFlags(JSON.stringify({ supportInbox: true })).copilotHome).toBe(false)
+    expect(NEW_WORKSPACE_FEATURE_FLAGS).toEqual({ ...DEFAULT_FEATURE_FLAGS, copilotHome: true })
+    expect(enableFlagsForUseCase(DEFAULT_FEATURE_FLAGS, 'customer_support').copilotHome).toBe(false)
   })
 
   it('shows the five workspace products in the expected order', () => {
@@ -75,6 +86,14 @@ describe('feature flag settings layout', () => {
 describe('resolveFeatureFlags', () => {
   it('returns defaults for a null row', () => {
     expect(resolveFeatureFlags(null)).toEqual(DEFAULT_FEATURE_FLAGS)
+  })
+
+  it('does not treat Labs appearance as a product feature flag', () => {
+    expect(DEFAULT_FEATURE_FLAGS).not.toHaveProperty('refinedVisualTheme')
+    expect(DEFAULT_FEATURE_FLAGS).not.toHaveProperty('labs')
+    expect(PRODUCT_DEFINITIONS.flatMap((product) => [...product.featureFlags])).not.toContain(
+      'refinedVisualTheme'
+    )
   })
 
   it('keeps stored values for current keys and drops unknown keys', () => {

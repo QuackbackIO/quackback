@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import { requireAuth } from './auth-helpers'
+import { assertDashboardScope, requireAuth } from './auth-helpers'
 import { ControlPlaneUnavailableError } from '@/lib/server/control-plane/client'
 
 async function cloudBillingOn(): Promise<boolean> {
@@ -13,6 +13,7 @@ export const wipeCloudWorkspaceFn = createServerFn({ method: 'POST' })
   .validator(z.object({ confirm: z.literal('wipe') }).strict())
   .handler(async ({ data }) => {
     const auth = await requireAuth()
+    assertDashboardScope(auth)
     if (!(await cloudBillingOn())) {
       throw new Error('Cloud workspace actions are not available')
     }

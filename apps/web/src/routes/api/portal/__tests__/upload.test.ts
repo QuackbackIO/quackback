@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mockSession, mockPrincipal, mockImageFile } from '../../__tests__/upload-fixtures'
+import {
+  mockSession,
+  mockPrincipal,
+  mockImageFile,
+  mockVideoFile,
+} from '../../__tests__/upload-fixtures'
 
 vi.mock('@/lib/server/auth', () => ({
   auth: {
@@ -68,12 +73,14 @@ describe('POST /api/portal/upload', () => {
     expect(await res.json()).toMatchObject({ error: 'Unauthorized' })
   })
 
-  it('returns 403 when session is anonymous', async () => {
+  it('allows an anonymous portal session to upload media', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(anonymousSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(anonymousPrincipal)
-    const res = await handlePortalUpload({ request: makeRequest() })
-    expect(res.status).toBe(403)
-    expect(await res.json()).toMatchObject({ error: expect.stringContaining('Authentication') })
+    vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/portal-media/photo.jpg')
+    const res = await handlePortalUpload({
+      request: makeRequest(mockImageFile('photo.jpg', 'image/jpeg')),
+    })
+    expect(res.status).toBe(200)
   })
 
   it('returns 503 when S3 is not configured', async () => {
@@ -95,10 +102,47 @@ describe('POST /api/portal/upload', () => {
   it('returns 400 for invalid file type', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal)
-    const file = new File(['data'], 'clip.mp4', { type: 'video/mp4' })
+    const file = new File(['data'], 'notes.pdf', { type: 'application/pdf' })
     const res = await handlePortalUpload({ request: makeRequest(file) })
     expect(res.status).toBe(400)
     expect(await res.json()).toMatchObject({ error: 'Invalid file type' })
+  })
+
+  it('uploads a native MP4 recording for an identified user', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal)
+    vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/portal-media/clip.mp4')
+    const res = await handlePortalUpload({ request: makeRequest(mockVideoFile()) })
+    expect(res.status).toBe(200)
+    expect(uploadObject).toHaveBeenCalledWith(
+      expect.stringContaining('portal-media'),
+      expect.any(Buffer),
+      'video/mp4'
+    )
+  })
+
+  it('uploads a QuickTime MOV recording for an identified user', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal)
+    vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/portal-media/clip.mov')
+    const res = await handlePortalUpload({
+      request: makeRequest(mockVideoFile('recording.mov', 'video/quicktime')),
+    })
+    expect(res.status).toBe(200)
+    expect(uploadObject).toHaveBeenCalledWith(
+      expect.stringContaining('portal-media'),
+      expect.any(Buffer),
+      'video/quicktime'
+    )
+  })
+
+  it('accepts feedback videos larger than the 5 MB image limit', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal)
+    vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/portal-media/clip.mp4')
+    const sixMegabyteVideo = mockVideoFile('recording.mp4', 'video/mp4', 6 * 1024 * 1024)
+    const res = await handlePortalUpload({ request: makeRequest(sixMegabyteVideo) })
+    expect(res.status).toBe(200)
   })
 
   it('returns 400 when file exceeds max size', async () => {
@@ -122,8 +166,8 @@ describe('POST /api/portal/upload', () => {
     const body = await res.json()
     expect(body).toHaveProperty('publicUrl')
     expect(uploadObject).toHaveBeenCalledWith(
-      expect.stringContaining('portal-images'),
-      expect.any(Buffer),
+      expect.stringContaining('portal-media'),
+      expect.anything(),
       'image/jpeg'
     )
   })
@@ -138,13 +182,13 @@ describe('POST /api/portal/upload', () => {
     expect(await res.json()).toMatchObject({ error: expect.stringContaining('Too many uploads') })
   })
 
-  it('uses portal-images prefix for storage key', async () => {
+  it('uses portal-media prefix for storage key', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal)
     vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/portal-images/img.png')
     const file = mockImageFile('img.png', 'image/png')
     await handlePortalUpload({ request: makeRequest(file) })
     const { generateStorageKey } = await import('@/lib/server/storage/s3')
-    expect(generateStorageKey).toHaveBeenCalledWith('portal-images', expect.any(String))
+    expect(generateStorageKey).toHaveBeenCalledWith('portal-media', expect.any(String))
   })
 })

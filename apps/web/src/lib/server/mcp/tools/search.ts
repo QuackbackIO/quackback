@@ -19,7 +19,7 @@ import {
   getArticleById,
   getCategoryById,
 } from '@/lib/server/domains/help-center/help-center.service'
-import { getTypeIdPrefix } from '@quackback/ids'
+import { ensureTypeId, getTypeIdPrefix } from '@quackback/ids'
 import { truncate } from '@/lib/shared/utils/string'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { CommentTreeNode } from '@/lib/shared/comment-tree'
@@ -30,8 +30,10 @@ import type {
   ChangelogId,
   KbArticleId,
   KbCategoryId,
+  PrincipalId,
 } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
+import { getBaseUrl } from '@/lib/server/config'
 import {
   registerTool,
   requireScope,
@@ -42,6 +44,7 @@ import {
   errorResult,
   encodeSearchCursor,
   decodeSearchCursor,
+  parseFlexibleDate,
   articleResult,
   categoryResult,
   READ_ONLY,
@@ -84,7 +87,7 @@ const searchSchema = {
     .string()
     .optional()
     .describe(
-      'ISO 8601 date string for filtering posts created on or after this date (e.g. "2024-06-01")'
+      'Created on or after this time. ISO 8601 (e.g. "2024-06-01") or a relative window: 7d, 30d, 24h, this_week, this_month, today.'
     ),
   dateTo: z
     .string()
@@ -94,6 +97,14 @@ const searchSchema = {
     ),
   limit: z.number().min(1).max(100).default(20).describe('Max results per page'),
   cursor: z.string().optional().describe('Pagination cursor from previous response'),
+  authorPrincipalId: z
+    .string()
+    .optional()
+    .describe('Filter posts by author TypeID, or "me" for the authenticated teammate'),
+  authorEmail: z
+    .string()
+    .optional()
+    .describe('Filter posts by author email, or "me" for the authenticated teammate'),
 }
 
 const getDetailsSchema = {
@@ -123,6 +134,8 @@ type SearchArgs = {
   sort: 'newest' | 'oldest' | 'votes'
   limit: number
   cursor?: string
+  authorPrincipalId?: string
+  authorEmail?: string
 }
 
 type GetDetailsArgs = { id: string }
@@ -143,7 +156,9 @@ Examples:
 - Search changelogs: search({ entity: "changelogs", status: "published" })
 - Search articles: search({ entity: "articles", query: "getting started" })
 - Filter articles by category: search({ entity: "articles", categoryId: "kb_category_01abc..." })
-- Sort by votes: search({ sort: "votes", limit: 10 })`,
+- Sort by votes: search({ sort: "votes", limit: 10 })
+- Posts created by the authenticated teammate: search({ authorPrincipalId: "me" })
+- Posts created by an email: search({ authorEmail: "ada@acme.com" })`,
     schema: searchSchema,
     annotations: READ_ONLY,
     handler: async (args) => {
@@ -173,7 +188,7 @@ Examples:
       if (args.entity === 'changelogs') {
         return searchChangelogs(args)
       }
-      return searchPosts(args)
+      return searchPosts(args, auth)
     },
   })
 
@@ -184,7 +199,7 @@ Examples:
 Examples:
 - Get a post: get_details({ id: "post_01abc..." })
 - Get a changelog: get_details({ id: "changelog_01xyz..." })
-- Get an article: get_details({ id: "kb_article_01abc..." })
+- Get an article: get_details({ id: "article_01abc..." })
 - Get a category: get_details({ id: "kb_category_01abc..." })`,
     schema: getDetailsSchema,
     annotations: READ_ONLY,
@@ -197,7 +212,7 @@ Examples:
       } catch {
         return errorResult(
           new Error(
-            `Invalid TypeID format: "${args.id}". Expected format: prefix_base32suffix (e.g., post_01abc..., kb_article_01abc...)`
+            `Invalid TypeID format: "${args.id}". Expected format: prefix_base32suffix (e.g., post_01abc..., article_01abc...)`
           )
         )
       }
@@ -222,6 +237,7 @@ Examples:
           if (roleDenied) return roleDenied
           return getChangelogDetails(args.id as ChangelogId)
         }
+        case 'article':
         case 'kb_article': {
           const flagDenied = await requireHelpCenter()
           if (flagDenied) return flagDenied
@@ -234,7 +250,7 @@ Examples:
           // unauthenticated path for the published slice.
           const roleDenied = requireTeamRole(auth)
           if (roleDenied) return roleDenied
-          return getArticleDetails(args.id as KbArticleId)
+          return getArticleDetails(ensureTypeId(args.id, 'article'))
         }
         case 'kb_category': {
           const flagDenied = await requireHelpCenter()
@@ -250,7 +266,7 @@ Examples:
         default:
           return errorResult(
             new Error(
-              `Unsupported entity type: "${prefix}". Supported: post, changelog, kb_article, kb_category`
+              `Unsupported entity type: "${prefix}". Supported: post, changelog, article, kb_category`
             )
           )
       }
@@ -262,7 +278,22 @@ Examples:
 // Search dispatchers
 // ============================================================================
 
-async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
+/** Map "me" to the authenticated teammate; pass through TypeIDs and emails. */
+export function resolvePostAuthorFilter(
+  args: Pick<SearchArgs, 'authorPrincipalId' | 'authorEmail'>,
+  auth: Pick<McpAuthContext, 'principalId'>
+): { authorId?: PrincipalId; authorEmail?: string } {
+  if (args.authorPrincipalId === 'me' || args.authorEmail === 'me') {
+    return { authorId: auth.principalId }
+  }
+  if (args.authorPrincipalId) {
+    return { authorId: args.authorPrincipalId as PrincipalId }
+  }
+  if (args.authorEmail) return { authorEmail: args.authorEmail }
+  return {}
+}
+
+async function searchPosts(args: SearchArgs, auth: McpAuthContext): Promise<CallToolResult> {
   const decoded = decodeSearchCursor(args.cursor)
   // Reject cursors from a different entity
   if (args.cursor && decoded.entity && decoded.entity !== 'posts') {
@@ -272,13 +303,15 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
   }
   // The cursor value is a PostId string from the previous page's last item
   const cursorValue = typeof decoded.value === 'string' ? decoded.value : undefined
+  const author = resolvePostAuthorFilter(args, auth)
 
   const result = await listInboxPosts({
     search: args.query,
+    excludeTest: true,
     boardIds: args.boardId ? [args.boardId as BoardId] : undefined,
     statusSlugs: args.status ? [args.status] : undefined,
     tagIds: args.tagIds as PostTagId[] | undefined,
-    dateFrom: args.dateFrom ? new Date(args.dateFrom) : undefined,
+    dateFrom: parseFlexibleDate(args.dateFrom),
     dateTo: (() => {
       if (!args.dateTo) return undefined
       const d = new Date(args.dateTo)
@@ -290,16 +323,19 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
     sort: args.sort,
     cursor: cursorValue,
     limit: args.limit,
+    ...author,
   })
 
   // Encode nextCursor with entity type to prevent cross-entity misuse
   const lastItem = result.items[result.items.length - 1]
   const nextCursor = result.hasMore && lastItem ? encodeSearchCursor('posts', lastItem.id) : null
 
+  const origin = getBaseUrl()
   return compactJsonResult({
     posts: result.items.map((p) => ({
       id: p.id,
       title: p.title,
+      url: `${origin}/b/${encodeURIComponent(p.board.slug)}/posts/${p.id}`,
       excerpt: p.content ? truncate(p.content, 200) : '',
       voteCount: p.voteCount,
       commentCount: p.commentCount,

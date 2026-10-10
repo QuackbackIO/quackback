@@ -1,12 +1,8 @@
--- Stamp workspaces that never persisted product flags so they keep today's
--- all-on surface after DEFAULT_FEATURE_FLAGS becomes core-only (Feedback +
--- Changelog). Stored keys win; missing keys receive the previous defaults.
--- New workspaces write an explicit JSON blob on insert and pick up the new
--- defaults instead.
+-- Stamp workspaces that never persisted product flags so they match
+-- DEFAULT_FEATURE_FLAGS: Feedback + Changelog on; Support, Help Center, and
+-- Status off until Settings → General (or an onboarding goal) turns them on.
+-- Only null/empty rows are touched; an already-stored Labs blob is left alone.
 UPDATE "settings"
-SET "feature_flags" = (
-  '{"feedback":true,"changelog":true,"helpCenter":true,"supportInbox":true,"supportTickets":true,"statusPage":true,"inboxAi":true,"assistantConnectors":false,"assistantSkills":false}'::jsonb
-  || coalesce("feature_flags"::jsonb, '{}'::jsonb)
-)::text
+SET "feature_flags" = '{"feedback":true,"changelog":true,"helpCenter":false,"supportInbox":false,"supportTickets":false,"statusPage":false}'
 WHERE "feature_flags" IS NULL
    OR btrim("feature_flags") IN ('', 'null');

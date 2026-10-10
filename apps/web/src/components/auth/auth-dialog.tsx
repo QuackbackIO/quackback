@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
+import { FormattedMessage } from 'react-intl'
 import {
   Dialog,
   DialogContent,
@@ -6,17 +7,26 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { PortalAuthFormInline } from './portal-auth-form-inline'
+import { Spinner } from '@/components/shared/spinner'
 import { headerForStep, type FormContext } from './auth-step-header'
+import { hasDistinctSignup } from './oauth-buttons'
 import { useAuthPopover } from './auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { signOut } from '@/lib/client/auth-client'
+import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
+import { isTeamCallback } from '@/lib/shared/routing'
+
+// Every portal page mounts this dialog, but only a visitor who opens it needs
+// the sign-in form and the steps it carries, so the form loads on first open.
+const PortalAuthFormInline = lazy(() =>
+  import('./portal-auth-form-inline').then((m) => ({ default: m.PortalAuthFormInline }))
+)
 
 export interface OrgAuthConfig {
   found: boolean
   oauth: Record<string, boolean | undefined>
   openSignup?: boolean
-  oidcProviders?: { id: string; name: string }[]
+  oidcProviders?: OidcSignInButton[]
   /** All registered auth provider ids — lets the form show the email input for
    *  a routed-only IdP that renders no public button. */
   registeredAuthProviders?: string[]
@@ -37,13 +47,25 @@ export function AuthDialog({ authConfig, workspaceName }: AuthDialogProps) {
     useAuthPopover()
   const [formContext, setFormContext] = useState<FormContext>({ step: 'credentials', email: '' })
 
+  // Sign-up mode only differs from login when password auth is on and signups
+  // are open. Otherwise force login mode and drop the switch link, so a
+  // `?auth=signup` deep link still lands on the (identical) login form.
+  const distinctSignup = hasDistinctSignup(authConfig ?? {})
+  const effectiveMode = distinctSignup ? mode : 'login'
+
   // Listen for auth success broadcasts from popup windows
   useAuthBroadcast({
     onSuccess: onAuthSuccess,
     enabled: isOpen,
   })
 
-  const { title, description } = headerForStep(mode, formContext)
+  // A teammate on the way to an admin page gets the team version of the copy.
+  const team = isTeamCallback(callbackUrl)
+  const workspace = workspaceName?.trim()
+  const { title, description } = headerForStep(effectiveMode, formContext, {
+    surface: team ? 'team' : 'dialog',
+    workspaceName,
+  })
 
   return (
     <Dialog
@@ -73,15 +95,59 @@ export function AuthDialog({ authConfig, workspaceName }: AuthDialogProps) {
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <PortalAuthFormInline
-          mode={mode}
-          authConfig={authConfig}
-          workspaceName={workspaceName}
-          callbackUrl={callbackUrl}
-          linkConflict={linkConflict}
-          onModeSwitch={setMode}
-          onContextChange={setFormContext}
-        />
+        <Suspense
+          fallback={
+            <div className="flex justify-center py-10">
+              <Spinner />
+            </div>
+          }
+        >
+          <PortalAuthFormInline
+            mode={effectiveMode}
+            authConfig={authConfig}
+            workspaceName={workspaceName}
+            callbackUrl={callbackUrl}
+            linkConflict={linkConflict}
+            onModeSwitch={distinctSignup ? setMode : undefined}
+            onContextChange={setFormContext}
+          />
+        </Suspense>
+        {team && effectiveMode === 'login' && formContext.step === 'credentials' ? (
+          <p className="text-center text-sm text-muted-foreground">
+            {workspace ? (
+              <FormattedMessage
+                id="portal.auth.team.notOnTeam"
+                defaultMessage="Not on the team? <link>Go to the {workspace} portal</link>"
+                values={{
+                  workspace,
+                  link: (chunks) => (
+                    <a
+                      href="/"
+                      className="font-medium text-foreground underline-offset-4 hover:underline"
+                    >
+                      {chunks}
+                    </a>
+                  ),
+                }}
+              />
+            ) : (
+              <FormattedMessage
+                id="portal.auth.team.notOnTeamGeneric"
+                defaultMessage="Not on the team? <link>Go to the portal</link>"
+                values={{
+                  link: (chunks) => (
+                    <a
+                      href="/"
+                      className="font-medium text-foreground underline-offset-4 hover:underline"
+                    >
+                      {chunks}
+                    </a>
+                  ),
+                }}
+              />
+            )}
+          </p>
+        ) : null}
       </DialogContent>
     </Dialog>
   )

@@ -1,16 +1,14 @@
 /**
- * Remote status-push resolver (IF WO-15) — the OUTBOUND half of two-way status
- * sync. When a Quackback post/ticket status changes, this fans the change out
- * to every linked external item whose integration declares `remoteStatus.push`
- * and has mapped the new status under `pushStatusMappings`.
+ * Resolve outbound status proposals for Sync history. When a Quackback
+ * post/ticket status changes, each linked item with external statuses
+ * and a matching `pushStatusMappings` entry gets a review operation.
+ * No adapter currently supports a verified conditional remote write.
  *
  * LOOP-SAFETY: an inbound webhook applies its status change via the
  * integration's service principal, so the emitted status-changed event carries
  * `actorType='service'` + `actorId=<that integration's principalId>`. We never
- * push back to the integration that reported the change — only cross-integration
- * links and human-originated changes push. Suppression is keyed per link's
- * integration, so a Linear-reported change still syncs out to a linked GitHub
- * issue.
+ * propose the same change back to its originating integration. Suppression
+ * is keyed per link's integration, so cross-integration proposals remain visible.
  */
 import {
   db,
@@ -64,8 +62,13 @@ export function buildRemoteStatusPushTargets(params: {
     if (!remoteStatus) continue
     targets.push({
       type: 'remote_status_push',
-      target: { integrationType: link.integrationType, externalId: link.externalId, entityType },
-      config: { integrationId: link.integrationId, remoteStatus },
+      target: {
+        integrationType: link.integrationType,
+        externalId: link.externalId,
+        entityType,
+        linkId: link.linkId,
+      },
+      config: { integrationId: link.integrationId, remoteStatus, sourceStatusId: statusId },
       // Idempotent per (link, status) so a redelivered event doesn't double-push.
       deliveryKey: `push:${link.linkId}:${statusId}`,
     })
@@ -105,8 +108,7 @@ async function resolvePostLinks(
     integrationType: r.integrationType,
     integrationPrincipalId: r.integrationPrincipalId ?? null,
     pushStatusMappings: (r.config as Record<string, unknown> | null)?.pushStatusMappings as
-      | Record<string, string>
-      | undefined,
+      Record<string, string> | undefined,
   }))
   return { statusId: post.statusId, links }
 }
@@ -146,8 +148,7 @@ async function resolveTicketLinks(
     integrationType: r.integrationType,
     integrationPrincipalId: r.integrationPrincipalId ?? null,
     pushStatusMappings: (r.config as Record<string, unknown> | null)?.ticketPushStatusMappings as
-      | Record<string, string>
-      | undefined,
+      Record<string, string> | undefined,
   }))
   return { statusId: ticket.statusId, links }
 }
@@ -170,7 +171,7 @@ export const remoteStatusPushResolver: SinkResolver = {
       actorType: event.actorType,
       actorId: event.actorId,
       entityType: isPost ? 'post' : 'ticket',
-      hasPushCapability: (type) => typeof getIntegration(type)?.remoteStatus?.push === 'function',
+      hasPushCapability: (type) => !!getIntegration(type)?.listExternalStatuses,
     })
   },
 }

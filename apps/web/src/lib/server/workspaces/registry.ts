@@ -46,6 +46,13 @@ const log = logger.child({ component: 'workspace-registry' })
  */
 export interface WorkspaceDescriptor extends WorkspaceRecord {
   readonly physical: PhysicalExpectation
+  /**
+   * When a request last reached this workspace (`cp_workspace_activity`), or
+   * null when no stamp exists. Only the fleet listing selects it — the request
+   * path does not need it — so it is optional; `activity.ts` reads absent as
+   * null, and null as active.
+   */
+  readonly lastActiveAt?: Date | null
 }
 
 export type WorkspaceLookup =
@@ -76,6 +83,8 @@ interface RegistryRow {
   hostnames: string[]
   requested_kind?: string
   redirect_to_hostname?: string | null
+  /** Added by the fleet listing only; see {@link WorkspaceDescriptor.lastActiveAt}. */
+  last_active_at?: Date | string | null
 }
 
 let controlSql: postgres.Sql | null = null
@@ -305,6 +314,10 @@ export async function resolveWorkspaceById(
  *
  * Refused records are logged and dropped rather than returned, so a caller
  * iterating the fleet cannot act on a record the request path would refuse.
+ *
+ * Carries each workspace's last-activity stamp (`cp_workspace_activity`, a
+ * LEFT JOIN so a missing row reads as null rather than dropping the workspace)
+ * for the dormancy decision in `activity.ts`.
  */
 export async function listActiveWorkspaces(sql: postgres.Sql = getControlSql()): Promise<{
   workspaces: WorkspaceDescriptor[]
@@ -312,7 +325,11 @@ export async function listActiveWorkspaces(sql: postgres.Sql = getControlSql()):
 }> {
   const rows = (await recordControlRead(
     sql.unsafe(
-      `SELECT ${SELECT_COLUMNS} FROM cp_workspace_registry r WHERE r.state = 'active' ORDER BY r.workspace_key`
+      `SELECT ${SELECT_COLUMNS}, a.last_active_at
+         FROM cp_workspace_registry r
+         LEFT JOIN cp_workspace_activity a ON a.workspace_key = r.workspace_key
+        WHERE r.state = 'active'
+        ORDER BY r.workspace_key`
     )
   )) as unknown as RegistryRow[]
 
@@ -389,8 +406,16 @@ export function interpretRow(row: RegistryRow, hostname: string): WorkspaceLooku
         catalogOid: emptyToNull(row.pg_database_oid == null ? null : String(row.pg_database_oid)),
         clusterId: emptyToNull(row.pg_cluster_id),
       },
+      lastActiveAt: toDateOrNull(row.last_active_at),
     },
   }
+}
+
+/** A timestamp the driver may hand back as Date or string; anything unparseable is null. */
+function toDateOrNull(value: Date | string | null | undefined): Date | null {
+  if (value == null) return null
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
 }
 
 function emptyToNull(value: string | null): string | null {

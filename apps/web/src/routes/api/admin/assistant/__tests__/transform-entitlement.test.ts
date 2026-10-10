@@ -86,9 +86,10 @@ function makeRequest(): Request {
   })
 }
 
-const NULL_LIMITS = Object.fromEntries(
-  PROJECTED_LIMIT_KEYS.map((key) => [key, null])
-) as Record<(typeof PROJECTED_LIMIT_KEYS)[number], null>
+const NULL_LIMITS = Object.fromEntries(PROJECTED_LIMIT_KEYS.map((key) => [key, null])) as Record<
+  (typeof PROJECTED_LIMIT_KEYS)[number],
+  null
+>
 
 /**
  * Build the stored cloud block the resolver actually accepts: commercial state
@@ -161,14 +162,14 @@ describe('POST /api/admin/assistant/transform — plan gate', () => {
     }
     expect(body.error.code).toBe('ENTITLEMENT_REQUIRED')
     expect(body.error.message).toBe(
-      'AI drafts are a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
+      'AI drafts are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
     )
     expect(body.error.details).toMatchObject({
       error: 'entitlement_required',
       entitlement: 'aiDrafts',
       currentPlan: 'free',
-      requiredPlan: 'growth',
-      requiredPlanName: 'Growth',
+      requiredPlan: 'pro',
+      requiredPlanName: 'Pro',
     })
     // No model work was started.
     expect(mockRunCopilotTransform).not.toHaveBeenCalled()
@@ -176,7 +177,7 @@ describe('POST /api/admin/assistant/transform — plan gate', () => {
   })
 
   it('runs the transform on a plan that includes it', async () => {
-    withCloud({ enabled: true, plan: 'growth' })
+    withCloud({ enabled: true, plan: 'pro' })
     const res = await handleTransform({ request: makeRequest() })
     expect(res.status).toBe(200)
     expect(mockRunCopilotTransform).toHaveBeenCalledOnce()
@@ -186,7 +187,7 @@ describe('POST /api/admin/assistant/transform — plan gate', () => {
     withCloud({ enabled: true, plan: 'free', entitlements: { aiDrafts: true } })
     expect((await handleTransform({ request: makeRequest() })).status).toBe(200)
 
-    withCloud({ enabled: true, plan: 'scale', entitlements: { aiDrafts: false } })
+    withCloud({ enabled: true, plan: 'enterprise', entitlements: { aiDrafts: false } })
     expect((await handleTransform({ request: makeRequest() })).status).toBe(402)
   })
 })

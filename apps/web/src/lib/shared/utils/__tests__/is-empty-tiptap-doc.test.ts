@@ -70,4 +70,71 @@ describe('isEmptyTiptapDoc', () => {
     }
     expect(isEmptyTiptapDoc(doc)).toBe(false)
   })
+
+  it('treats an empty bullet list as empty', () => {
+    const doc: TiptapContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph' }],
+            },
+          ],
+        },
+      ],
+    }
+    expect(isEmptyTiptapDoc(doc)).toBe(true)
+  })
+
+  it('treats a bullet list with text as non-empty', () => {
+    const doc: TiptapContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [
+                {
+                  type: 'paragraph',
+                  content: [{ type: 'text', text: 'GIF per link' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    expect(isEmptyTiptapDoc(doc)).toBe(false)
+  })
+
+  it('treats an empty heading as empty', () => {
+    const doc: TiptapContent = {
+      type: 'doc',
+      content: [{ type: 'heading', attrs: { level: 1 } }],
+    }
+    expect(isEmptyTiptapDoc(doc)).toBe(true)
+  })
+
+  it('treats an empty table shell as empty', () => {
+    const doc: TiptapContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'table',
+          content: [
+            {
+              type: 'tableRow',
+              content: [{ type: 'tableCell', content: [{ type: 'paragraph' }] }],
+            },
+          ],
+        },
+      ],
+    }
+    expect(isEmptyTiptapDoc(doc)).toBe(true)
+  })
 })

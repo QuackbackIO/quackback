@@ -20,8 +20,12 @@
  */
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
-import type { UserId } from '@quackback/ids'
-import type { Role } from '@/lib/shared/roles'
+import { getJwtToken } from 'better-auth/plugins'
+import type { PrincipalId, RoleId, UserId } from '@quackback/ids'
+import type { SsoRoleMatch } from '@/lib/shared/resolve-sso-role'
+import { SYSTEM_ROLES } from '@/lib/shared/permissions'
+import { toSessionScope, type Role } from '@/lib/shared/roles'
+import { TEST_CUSTOMER_SESSION_PREFIX } from '@/lib/shared/test-customer'
 import {
   findProviderForDomainEmail,
   isRegisteredOidcProvider,
@@ -39,14 +43,25 @@ import {
 } from './signin-rate-limit'
 import { checkAnonMintRateLimit } from './widget-rate-limit'
 import {
-  computeDeviceFingerprint,
-  forgetDevice,
-  isDeviceUnseen,
-  markDeviceSeen,
-} from './signin-device-tracker'
+  isOidcCallbackPath,
+  LEGACY_OIDC_CALLBACK_PATH,
+  oidcCallbackProviderId,
+} from './oidc-callback-path'
+import { formatSignInDevice, forgetDevice, isDeviceUnseen } from './signin-device-tracker'
+import {
+  deviceCookieAttributes,
+  deviceCookieName,
+  mintDeviceId,
+  readDeviceCookie,
+  signDeviceCookie,
+} from './signin-device-cookie'
+import { getBaseUrl } from '@/lib/server/config'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
-import { decodeSsoClaims } from './sso-claims-decode'
-import { takeResolvedClaims } from './resolved-claims-stash'
+import { readSsoClaims, readSsoClaimsWithProvenance, type ClaimRead } from './read-sso-claims'
+import { applyClaimAttributesAfter } from './apply-claim-attributes'
+import type { ResolvedProfile } from './resolved-claims-stash'
+import { profileSyncEnabled } from '@/lib/shared/oidc-claim-mapping'
+import { forgetRequestIdentity } from './request-session'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-hooks' })
@@ -395,16 +410,96 @@ export async function handleSignInPreCheck(ctx: {
   }
 }
 
+/** Better Auth HTTP paths a widget-scoped session may call. Everything else
+ *  is denied so new BA endpoints stay closed by default. */
+const WIDGET_AUTH_ALLOWLIST = new Set([
+  '/get-session',
+  '/sign-in/anonymous',
+  '/one-time-token/generate',
+  '/one-time-token/verify',
+])
+
+type HeaderBag = { get(name: string): string | null }
+
+function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | null {
+  if (!headers) return null
+  const authHeader = headers.get('authorization') ?? headers.get('Authorization')
+  if (authHeader && authHeader.slice(0, 7).toLowerCase() === 'bearer ') {
+    const token = authHeader.slice(7).trim()
+    if (token) return token.includes('.') ? token.split('.')[0]! : token
+  }
+  const cookie = headers.get('cookie') ?? ''
+  for (const part of cookie.split(';')) {
+    const [name, ...rest] = part.trim().split('=')
+    if (name?.trim() !== 'better-auth.session_token') continue
+    const raw = rest.join('=')
+    if (!raw) return null
+    let value = raw
+    try {
+      value = decodeURIComponent(raw)
+    } catch {
+      /* keep raw */
+    }
+    return value.includes('.') ? value.split('.')[0]! : value
+  }
+  return null
+}
+
+/**
+ * Widget-scoped sessions may only hit the Better Auth allowlist. Portal and
+ * dashboard sessions still pass; missing sessions are left to the endpoint's
+ * own auth middleware.
+ *
+ * An allowlisted path passes whatever the session is, so it returns before the
+ * lookup: `/get-session` backs every authenticated request, and resolving the
+ * session here as well would double its cost.
+ */
+export async function handleWidgetAccountMutationGate(ctx: {
+  path?: string
+  headers?: HeaderBag
+  request?: { headers?: HeaderBag }
+  context?: {
+    internalAdapter?: {
+      findSession?: (token: string) => Promise<unknown>
+    }
+  }
+}): Promise<void> {
+  const headers = ctx.headers ?? ctx.request?.headers
+  const token = sessionTokenFromAuthHeaders(headers)
+  if (token?.startsWith(TEST_CUSTOMER_SESSION_PREFIX)) {
+    throw new APIError('FORBIDDEN', { message: 'A test session only works in the test widget' })
+  }
+  if (WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')) return
+  if (!token) return
+  const found = await ctx.context?.internalAdapter?.findSession?.(token)
+  const session =
+    typeof found === 'object' &&
+    found !== null &&
+    Object.prototype.hasOwnProperty.call(found, 'session')
+      ? (found as { session?: { scope?: unknown } }).session
+      : undefined
+  if (!session) return
+  if (toSessionScope(session.scope) !== 'widget') return
+  throw new APIError('FORBIDDEN', {
+    message: 'Widget sessions cannot access this endpoint',
+  })
+}
+
 export const hooksBefore = createAuthMiddleware(async (ctx) => {
   // Disjoint path matchers: grace heal only touches /oauth2/token,
-  // sign-in pre-check only touches sign-in/OTP paths. Order is irrelevant.
+  // sign-in pre-check only touches sign-in/OTP paths. Widget-session
+  // allowlist covers every Better Auth HTTP path.
   await handleRefreshGraceHeal(ctx)
   await handleSignInPreCheck(ctx as Parameters<typeof handleSignInPreCheck>[0])
+  await handleWidgetAccountMutationGate(ctx)
 })
 
 /**
  * OIDC callback post-processing — runs for any registered OIDC provider's
- * callback (the genericOAuth path `/oauth2/callback/:providerId`).
+ * callback. Better Auth 1.7 delivers that on `/callback/:id` (`params.id`).
+ * Hooks also accept the legacy `/oauth2/callback/:providerId` template.
+ * The auth catch-all rewrites a pre-1.7 return onto `/callback/:id`
+ * before Better Auth sees it.
  *
  * Two responsibilities:
  *
@@ -453,10 +548,8 @@ export async function handleSsoCallbackAfter(
    *  Used to resolve the callback provider for the H8 promotion gate. */
   providers: readonly ProviderWithDomains[]
 ): Promise<void> {
-  if (ctx.path !== '/oauth2/callback/:providerId') return
-  const providerId = ctx.params?.providerId
-  if (typeof providerId !== 'string' || !isRegisteredOidcProvider(providerId, registeredOidcIds))
-    return
+  const providerId = oidcCallbackProviderId(ctx)
+  if (!providerId || !isRegisteredOidcProvider(providerId, registeredOidcIds)) return
   const userId = ctx.context?.newSession?.user?.id
   if (typeof userId !== 'string' || userId.length === 0) return
   const email = ctx.context?.newSession?.user?.email
@@ -551,8 +644,8 @@ export function shouldBootstrapPromote(
 /**
  * Auto-provision SSO users to a role on first OIDC sign-in.
  *
- * Fires on any registered OIDC provider's callback
- * (`/oauth2/callback/:providerId`). The IdP's assertion of email + identity
+ * Fires on any registered OIDC provider's callback (`/callback/:id`, and
+ * the legacy `/oauth2/callback/:providerId` alias). The IdP's assertion of email + identity
  * is the trust source; magic-link to a verified-domain email is hard-bound
  * in `hooksBefore` so it never reaches this path, and password/social
  * callbacks are likewise blocked.
@@ -601,12 +694,12 @@ export async function handleAutoProvisionAfter(
     >
   >,
   /** OIDC provider ids registered right now (from getRegisteredOidcProviderIds). */
-  registeredOidcIds: Set<string>
+  registeredOidcIds: Set<string>,
+  /** Shared per-callback claim reader. Omitted, falls back to `readSsoClaims`. */
+  readClaims?: () => Promise<ClaimRead>
 ): Promise<void> {
-  if (ctx.path !== '/oauth2/callback/:providerId') return
-  const providerId = ctx.params?.providerId
-  if (typeof providerId !== 'string' || !isRegisteredOidcProvider(providerId, registeredOidcIds))
-    return
+  const providerId = oidcCallbackProviderId(ctx)
+  if (!providerId || !isRegisteredOidcProvider(providerId, registeredOidcIds)) return
 
   const userId = ctx.context?.newSession?.user?.id
   const email = ctx.context?.newSession?.user?.email
@@ -629,12 +722,19 @@ export async function handleAutoProvisionAfter(
   // the email is not at one of the provider's verified domains.
   const { roleMappingFor } = await import('@/lib/shared/oidc-claim-mapping')
   const roleMapping = roleMappingFor(provider.claimMapping)
-  let claimRole: Role | null = null
+  let claimMatch: SsoRoleMatch | null = null
   if (roleMapping) {
-    const claims = await readSsoClaims(userIdTyped, providerId)
-    const { resolveSsoRole } = await import('./resolve-sso-role')
-    claimRole = resolveSsoRole(claims, roleMapping)
+    // Role resolution is indifferent to provenance: a role claim absent from
+    // the stored token yields the default role either way.
+    const claims = readClaims
+      ? (await readClaims()).claims
+      : await readSsoClaims(userIdTyped, providerId)
+    const { resolveSsoRoleMatch } = await import('@/lib/shared/resolve-sso-role')
+    // The stored section, so a match names the rule by its stored position.
+    const stored = provider.claimMapping as { role?: unknown } | null
+    claimMatch = resolveSsoRoleMatch(claims, stored?.role)
   }
+  const claimRole: Role | null = claimMatch?.role ?? null
 
   // The default role (no claim matched) is NOT a per-user attestation, so it
   // stays scoped to the CALLBACK provider's own verified domains: without the
@@ -642,11 +742,12 @@ export async function handleAutoProvisionAfter(
   // team membership. A claim-matched role bypasses this gate.
   if (claimRole === null && findProviderForDomainEmail(email, [provider]) === null) return
 
-  const targetRole: Role = claimRole ?? provider.autoProvisionRole ?? 'member'
+  const { DEFAULT_PROVISION_ROLE } = await import('@/lib/shared/sso-mapping-preview')
+  const targetRole: Role = claimRole ?? provider.autoProvisionRole ?? DEFAULT_PROVISION_ROLE
 
   const p = await db.query.principal.findFirst({
     where: eq(principalTable.userId, userIdTyped),
-    columns: { role: true },
+    columns: { id: true, role: true },
   })
 
   // A missing principal is a returning user whose row was soft-removed
@@ -666,11 +767,39 @@ export async function handleAutoProvisionAfter(
   // demote an existing team-role user to 'user' under sync mode.
   if (targetRole === 'user' && !syncOnEverySignIn) return
 
-  if (currentRole === targetRole) return // no-op, save the write
+  // A rule may grant a workspace role on top of the member tier, through the
+  // same assignment path custom-role invites and role changes use. Looked up
+  // only once this sign-in may change the role.
+  const targetCustom = claimMatch?.roleId
+    ? await grantableRuleRole(claimMatch.roleId, claimMatch.ruleIndex, provider.id)
+    : null
+  // A matched rule whose role cannot be granted grants nothing. First match
+  // wins, so later rules and the default role do not apply either, and the
+  // person keeps whatever role they hold. Granting the bare tier instead would
+  // hand out the member preset, which can exceed the role the admin chose.
+  if (claimMatch?.roleId && !targetCustom) return
+
+  // Under sync the provider owns roles: a plain-member outcome (a rule with no
+  // workspace role, or the default) moves a member holding another workspace
+  // role back to the plain member role.
+  const plainMember = targetRole === 'member' && !targetCustom
+  const syncedMember = syncOnEverySignIn && plainMember && currentRole === 'member'
+  const currentCustom =
+    p && (targetCustom || syncedMember) ? await workspaceAssignmentOf(p.id as PrincipalId) : null
+  // Under sync, a person whose matched rule now names a different workspace
+  // role moves to it even when the tier is unchanged.
+  const customMoves = targetCustom != null && currentCustom?.id !== targetCustom.id
+  const clearsCustom =
+    syncedMember && currentCustom != null && currentCustom.key !== SYSTEM_ROLES.MANAGER
+  if (currentRole === targetRole && !customMoves && !clearsCustom) return // no-op
+  const assignRoleId = targetCustom?.id
 
   if (p) {
     // No tx -> the factory busts PRINCIPAL_BY_USER itself.
-    await setPrincipalRole({ userId: userIdTyped }, targetRole)
+    await setPrincipalRole({ userId: userIdTyped }, targetRole, {
+      assignRoleId,
+      resetAssignment: clearsCustom,
+    })
   } else {
     // Recreate the soft-removed principal in-band with the provisioned role.
     // Display fields come from the auth user so the rebuilt principal matches
@@ -690,21 +819,28 @@ export async function handleAutoProvisionAfter(
       lastSsoSignInAt: new Date(),
     })
     // If a concurrent lazy create won the race it seeded role 'user'; reapply the
-    // provisioned role so the SSO attestation isn't silently dropped.
-    if (!created && rebuilt.role !== targetRole) {
-      await setPrincipalRole({ userId: userIdTyped }, targetRole)
+    // provisioned role so the SSO attestation isn't silently dropped. A
+    // workspace role is written through the role writer either way, since a
+    // plain create records no assignment.
+    if (assignRoleId || (!created && rebuilt.role !== targetRole)) {
+      await setPrincipalRole({ userId: userIdTyped }, targetRole, { assignRoleId })
     }
   }
 
-  if (p?.role && p.role !== targetRole) {
+  if (p?.role && (p.role !== targetRole || customMoves || clearsCustom)) {
     const { recordAuditEvent } = await import('@/lib/server/audit/log')
     await recordAuditEvent({
       event: 'user.role.changed',
       outcome: 'success',
-      actor: { email: email ?? null }, // SSO callback — no authenticated admin actor
+      actor: { userId: userIdTyped },
       target: { type: 'user', id: userIdTyped },
-      before: { role: p.role },
-      after: { role: targetRole },
+      before: {
+        role: p.role,
+        ...((customMoves || clearsCustom) && currentCustom
+          ? { assignedRole: currentCustom.name }
+          : {}),
+      },
+      after: { role: targetRole, ...(targetCustom ? { assignedRole: targetCustom.name } : {}) },
       metadata: { source: roleMapping ? 'claim_mapping' : 'auto_provision' },
     })
   }
@@ -713,44 +849,268 @@ export async function handleAutoProvisionAfter(
 }
 
 /**
- * Read the latest stored ID-token claims for a user's OIDC account.
- * Returns an empty object when no token is stored or the token is
- * malformed — caller should fall back to the legacy auto-provision
- * field in that case.
- *
- * `providerId` is the callback provider's registrationId (the account's
- * `provider_id`). It must match what just authenticated, else the row
- * lookup misses and attribute mapping silently returns {} → default role
- * for every non-`sso` provider.
+ * The workspace role a matched rule names, when it can still be granted. A
+ * role deleted since the rule was saved (or the Owner preset, which rides the
+ * admin tier and its own promotion path) yields null and the rule grants
+ * nothing; the warning carries ids only.
  */
-async function readSsoClaims(
-  userId: `user_${string}`,
+async function grantableRuleRole(
+  roleId: string,
+  ruleIndex: number,
   providerId: string
-): Promise<Record<string, unknown>> {
-  const { db, account, and, eq, desc } = await import('@/lib/server/db')
+): Promise<{ id: RoleId; name: string } | null> {
+  const { db, roles, eq } = await import('@/lib/server/db')
+  const [row] = await db
+    .select({ id: roles.id, key: roles.key, name: roles.name })
+    .from(roles)
+    .where(eq(roles.id, roleId as RoleId))
+    .limit(1)
+  if (row && row.key !== SYSTEM_ROLES.OWNER) return { id: row.id, name: row.name }
+  log.warn(
+    {
+      code: 'sso_role_rule_role_missing',
+      provider_id: providerId,
+      rule_index: ruleIndex,
+      role_id: roleId,
+    },
+    'sso role rule names a role that cannot be granted; leaving the role unchanged'
+  )
+  return null
+}
+
+/** The principal's workspace-wide role assignment, if any. */
+async function workspaceAssignmentOf(
+  principalId: PrincipalId
+): Promise<{ id: RoleId; key: string; name: string } | null> {
+  const { db, roles, principalRoleAssignments, and, eq, isNull } = await import('@/lib/server/db')
+  const [row] = await db
+    .select({ id: roles.id, key: roles.key, name: roles.name })
+    .from(principalRoleAssignments)
+    .innerJoin(roles, eq(roles.id, principalRoleAssignments.roleId))
+    .where(
+      and(
+        eq(principalRoleAssignments.principalId, principalId),
+        isNull(principalRoleAssignments.teamId)
+      )
+    )
+    .limit(1)
+  return row ?? null
+}
+
+type IdpRows = Awaited<
+  ReturnType<
+    typeof import('@/lib/server/domains/settings/identity-providers.service').listIdentityProviders
+  >
+>
+
+/** What a provider last wrote to an account's user, per `account_profile_sync`. */
+type SyncedProfile = { name: string | null; image: string | null }
+
+/**
+ * One field of the next record: the stored value, while it equals what the
+ * provider sends now or is still provider-set. A provider-set value stays
+ * recorded, so turning sync on later can refresh it. Anything else was changed
+ * by someone other than the provider.
+ */
+function nextSyncedField(
+  stored: string | null,
+  providerValue: string | undefined,
+  providerSet: boolean
+): string | null {
+  return stored !== null && (stored === providerValue || providerSet) ? stored : null
+}
+
+/**
+ * Keep `user.name` and `user.image` in step with the identity provider after an
+ * OIDC callback, without ever overwriting what a person chose in Quackback.
+ *
+ * Better-Auth's genericOAuth writes `name` and `image` only when it CREATES the
+ * user, and `overrideUserInfo` stays off. So, on every callback:
+ *
+ *  - Fill: an empty avatar takes the provider's avatar, for every provider.
+ *  - Sync, when the provider's claim mapping has `profile.syncOnSignIn`:
+ *    - the name follows the provider's name while the current name is
+ *      provider-set: the value recorded for the account or, for an account
+ *      with no record yet, a name sign-up generated for it. Once a record
+ *      exists, any other name is a person's edit;
+ *    - the avatar follows the provider's avatar while the current avatar is the
+ *      value this provider last wrote and nothing was uploaded (`imageKey`).
+ *  - Record: `account_profile_sync` keeps, per field, the provider-set value
+ *    the user's stored value equals (a generated name counts), whether sync is
+ *    on or off. A row means the account is tracked, so it is created on the
+ *    first sign-in and never deleted; after that it is written only when it
+ *    changes, so an ordinary sign-in costs no extra write. A record that
+ *    cannot be read (a database that has not created the table yet) counts as
+ *    no record and is left unwritten, so the avatar fill still runs.
+ *
+ * The user update and the principal copy commit together, and only while the
+ * name, avatar and upload are still what was read: a concurrent edit wins, and
+ * the refresh then writes nothing more. The record is written after that
+ * commit, outside it, since its table may not exist yet.
+ *
+ * The provider's name, avatar and generated names are the resolver's
+ * decisions for this sign-in, read through the shared per-callback claim
+ * reader. A stale read (the stored ID token, not this sign-in) changes
+ * nothing, the same stance as attribute sync.
+ *
+ * Name and avatar changes reach `principal.display_name` / `avatar_url` the way
+ * a profile edit does. A failure is logged and swallowed: a profile refresh
+ * must never block a sign-in.
+ */
+export async function handleProfileRefreshAfter(
+  ctx: {
+    path?: string
+    params?: Record<string, unknown>
+    context?: { newSession?: { user?: { id?: string } } | null }
+  },
+  registeredOidcIds: Set<string>,
+  providers: IdpRows,
+  /** Shared per-callback claim reader. Omitted, falls back to `readSsoClaimsWithProvenance`. */
+  readClaims?: () => Promise<ClaimRead>
+): Promise<void> {
+  const providerId = oidcCallbackProviderId(ctx)
+  if (!providerId || !isRegisteredOidcProvider(providerId, registeredOidcIds)) return
+  const userId = ctx.context?.newSession?.user?.id
+  if (typeof userId !== 'string' || userId.length === 0) return
+  try {
+    const read = await (readClaims
+      ? readClaims()
+      : readSsoClaimsWithProvenance(userId as UserId, providerId))
+    if (!read.fresh || !read.profile) return
+    const provider = providers.find((p) => p.registrationId === providerId)
+    await refreshSsoProfile(
+      userId as UserId,
+      providerId,
+      read.profile,
+      profileSyncEnabled(provider?.claimMapping)
+    )
+  } catch {
+    // No error object: a failed query's message can carry the values it wrote.
+    log.error(
+      { code: 'sso_profile_refresh_failed', user_id: userId, provider_id: providerId },
+      'sso profile refresh failed'
+    )
+  }
+}
+
+async function refreshSsoProfile(
+  userId: UserId,
+  providerId: string,
+  profile: ResolvedProfile,
+  sync: boolean
+): Promise<void> {
+  const {
+    db,
+    user: userTable,
+    account,
+    accountProfileSync,
+    and,
+    eq,
+    desc,
+    isNull,
+  } = await import('@/lib/server/db')
+
+  const owner = await db.query.user.findFirst({
+    where: eq(userTable.id, userId),
+    columns: { name: true, image: true, imageKey: true },
+  })
+  if (!owner) return
+
   const row = await db.query.account.findFirst({
     where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
-    columns: { idToken: true, accountId: true },
-    // Deterministic ordering. There is no uniqueness constraint on
-    // (user_id, provider_id), so a duplicate account row — which a change in
-    // which claim supplies the account identifier can create — would otherwise
-    // leave this reading whichever row the database happened to return, quite
-    // possibly a stale one, on every sign-in.
+    columns: { id: true },
     orderBy: desc(account.createdAt),
   })
+  if (!row) return
 
-  // Prefer what the resolver actually validated this request. The stored ID
-  // token is a fallback: a provider resolving identity from userinfo or an
-  // access token has none, and would otherwise always land on the default role
-  // however its claims are mapped.
-  if (row?.accountId) {
-    const fresh = takeResolvedClaims(providerId, row.accountId)
-    if (fresh) return fresh
+  // `undefined`: no row, the account is not tracked yet. `null`: unreadable.
+  let recorded: SyncedProfile | undefined | null
+  try {
+    recorded = await db.query.accountProfileSync.findFirst({
+      where: eq(accountProfileSync.accountId, row.id),
+      columns: { name: true, image: true },
+    })
+  } catch {
+    recorded = null
+    log.warn(
+      { code: 'sso_profile_record_unreadable', user_id: userId, provider_id: providerId },
+      'sso profile record unreadable'
+    )
   }
 
-  // Refuses an expired token; see sso-claims-decode.ts for why freshness is
-  // the property that matters when the signature is not verified.
-  return decodeSsoClaims(row?.idToken)
+  // A blank name is never written over a real one.
+  const providerName = profile.name?.trim() ? profile.name : undefined
+  const providerImage = profile.image
+  const imageEmpty = !owner.image?.trim()
+  const nameProviderSet = recorded
+    ? owner.name === recorded.name
+    : profile.generatedNames.includes(owner.name)
+  const imageProviderSet = owner.image !== null && owner.image === recorded?.image
+
+  const changes: { name?: string; image?: string } = {}
+  if (sync && providerName && owner.name !== providerName && nameProviderSet) {
+    changes.name = providerName
+  }
+  if (
+    providerImage &&
+    owner.image !== providerImage &&
+    (imageEmpty || (sync && !owner.imageKey && imageProviderSet))
+  ) {
+    changes.image = providerImage
+  }
+
+  const fields = Object.keys(changes)
+  if (fields.length > 0) {
+    const { syncPrincipalProfile } =
+      await import('@/lib/server/domains/principals/principal.factory')
+    const applied = await db.transaction(async (tx) => {
+      const updated = await tx
+        .update(userTable)
+        .set(changes)
+        .where(
+          and(
+            eq(userTable.id, userId),
+            eq(userTable.name, owner.name),
+            owner.image === null ? isNull(userTable.image) : eq(userTable.image, owner.image),
+            owner.imageKey === null
+              ? isNull(userTable.imageKey)
+              : eq(userTable.imageKey, owner.imageKey)
+          )
+        )
+        .returning({ id: userTable.id })
+      if (updated.length === 0) return false
+      await syncPrincipalProfile(
+        userId,
+        {
+          ...(changes.name !== undefined ? { displayName: changes.name } : {}),
+          ...(changes.image !== undefined ? { avatarUrl: changes.image } : {}),
+        },
+        tx
+      )
+      return true
+    })
+    if (!applied) {
+      log.debug(
+        { user_id: userId, provider_id: providerId },
+        'sso profile refresh skipped: user changed concurrently'
+      )
+      return
+    }
+    log.info({ user_id: userId, provider_id: providerId, fields }, 'refreshed sso profile')
+  }
+
+  // Unknown state is left alone rather than overwritten.
+  if (recorded === null) return
+  const next: SyncedProfile = {
+    name: nextSyncedField(changes.name ?? owner.name, providerName, nameProviderSet),
+    image: nextSyncedField(changes.image ?? owner.image, providerImage, imageProviderSet),
+  }
+  if (recorded && next.name === recorded.name && next.image === recorded.image) return
+  const values = { ...next, updatedAt: new Date() }
+  await db
+    .insert(accountProfileSync)
+    .values({ accountId: row.id, ...values })
+    .onConflictDoUpdate({ target: accountProfileSync.accountId, set: values })
 }
 
 /**
@@ -1002,18 +1362,16 @@ export async function handleTwoFactorLifecycleAudit(ctx: {
  * are logged. Passwords, tokens, and credential material are never
  * recorded.
  *
- * Covers two paths:
+ * Covers:
  *  - `/sign-in/email` (password) — newSession absent on wrong password.
  *  - `/magic-link/verify` / `/sign-in/email-otp` — newSession absent
  *    on invalid or expired token.
+ *  - OIDC / social callbacks — labeled `sso` only for a registered
+ *    customer IdP (or the legacy OIDC-only template). GitHub / Google
+ *    / Microsoft on the shared `/callback/:id` path are `oauth`.
  */
 const CREDENTIAL_FAILURE_PATHS = new Set<string>(['/sign-in/email'])
 const MAGIC_LINK_FAILURE_PATHS = new Set<string>(['/magic-link/verify', '/sign-in/email-otp'])
-/** The genericOAuth callback, as a Better-Auth path TEMPLATE — the concrete
- *  provider id lives in `ctx.params.providerId`, matching `inferProvider`.
- *  A failure here redirects with `?error=<code>` rather than returning a body,
- *  so the reason is read off the Location header. */
-const OIDC_CALLBACK_PATH = '/oauth2/callback/:providerId'
 
 /**
  * Pull the IdP-reported failure code out of the callback's redirect and
@@ -1032,25 +1390,29 @@ function oidcFailureReason(returned: unknown): string | null {
   }
 }
 
-export async function handleSignInFailureAudit(ctx: {
-  path?: string
-  params?: Record<string, unknown>
-  body?: Record<string, unknown>
-  context?: {
-    newSession?: {
-      user?: { id?: string; email?: string }
-      session?: { token?: string }
-    } | null
-    /** The Response the route produced, when the hook chain exposes it. */
-    returned?: unknown
-  }
-}): Promise<void> {
+export async function handleSignInFailureAudit(
+  ctx: {
+    path?: string
+    params?: Record<string, unknown>
+    body?: Record<string, unknown>
+    context?: {
+      newSession?: {
+        user?: { id?: string; email?: string }
+        session?: { token?: string }
+      } | null
+      /** The Response the route produced, when the hook chain exposes it. */
+      returned?: unknown
+    }
+  },
+  /** OIDC provider ids registered right now (from getRegisteredOidcProviderIds). */
+  registeredOidcIds: Set<string> = new Set()
+): Promise<void> {
   // Only fire on sign-in paths where a failure produces no newSession.
   const path = ctx.path ?? ''
   const isCredentialPath = CREDENTIAL_FAILURE_PATHS.has(path)
   const isMagicLinkPath = MAGIC_LINK_FAILURE_PATHS.has(path)
-  const isOidcCallback = path === OIDC_CALLBACK_PATH
-  if (!isCredentialPath && !isMagicLinkPath && !isOidcCallback) return
+  const isCallback = isOidcCallbackPath(path)
+  if (!isCredentialPath && !isMagicLinkPath && !isCallback) return
 
   // If a session was actually created, the success audit handles it.
   const sessionCreated =
@@ -1059,16 +1421,26 @@ export async function handleSignInFailureAudit(ctx: {
 
   // Each path shape contributes only its actor + reason; the emit tail below is
   // shared so a change to it (a retry, a new field, the log level) lands once.
-  let actor: { email: string | null; type: 'user'; authMethod: 'sso' | 'magic_link' | 'password' }
+  let actor: {
+    email: string | null
+    type: 'user'
+    authMethod: 'sso' | 'oauth' | 'magic_link' | 'password'
+  }
   let metadata: Record<string, unknown>
 
-  if (isOidcCallback) {
+  if (isCallback) {
     // No email is recorded. The callback body carries no typed credential, and
     // any address in play came from the IdP response rather than a user attempt.
-    actor = { email: null, type: 'user', authMethod: 'sso' }
+    const providerId = oidcCallbackProviderId(ctx)
+    const isSso =
+      path === LEGACY_OIDC_CALLBACK_PATH ||
+      (providerId !== null && isRegisteredOidcProvider(providerId, registeredOidcIds))
+    actor = { email: null, type: 'user', authMethod: isSso ? 'sso' : 'oauth' }
     metadata = {
-      reason: oidcFailureReason(ctx.context?.returned) ?? 'OIDC_SIGNIN_FAILED',
-      providerId: typeof ctx.params?.providerId === 'string' ? ctx.params.providerId : null,
+      reason:
+        oidcFailureReason(ctx.context?.returned) ??
+        (isSso ? 'OIDC_SIGNIN_FAILED' : 'OAUTH_SIGNIN_FAILED'),
+      providerId,
     }
   } else {
     // Never log passwords, tokens, or other credential material — only the
@@ -1172,22 +1544,31 @@ export async function handleSignInSuccessAudit(ctx: {
 }
 
 /**
- * First-sight new-device notification. Atomic SADD claims the
- * fingerprint; on success we fire the email + audit row in parallel
- * and refresh the SET's 90-day TTL. On failure we roll back the
- * claim so the next sign-in re-fires the alert rather than losing
- * it to a transient SMTP outage. All errors swallowed — Redis/SMTP
- * outages must not break sign-in.
+ * First-sight new-device notification. Identity is the signed
+ * `qb.device.{userId}` cookie. Atomic claim of that id; on success we
+ * fire the email + audit row in parallel. On failure we roll back the
+ * claim so the next sign-in re-fires the alert rather than losing it
+ * to a transient SMTP outage. The cookie is written on every real
+ * sign-in (known or new) so a later request can reuse the id. All
+ * errors swallowed — store/SMTP outages must not break sign-in.
+ *
+ * Better Auth sets `newSession` whenever it writes a session cookie,
+ * including `/get-session` sliding the 24h `updateAge`. That is not a
+ * sign-in. Gate on `inferProvider` the same way `handleSignInSuccessAudit`
+ * does, and skip anonymous widget mints.
  */
 export async function handleNewDeviceNotification(
   ctx: {
     path?: string
+    params?: Record<string, unknown>
+    body?: Record<string, unknown>
     context?: {
       newSession?: {
         user?: { id?: string; email?: string }
         session?: { token?: string }
       } | null
     }
+    setCookie?: (name: string, value: string, opts?: Record<string, unknown>) => string
   },
   workspace: Awaited<
     ReturnType<typeof import('@/lib/server/domains/settings/settings.service').getWorkspaceSettings>
@@ -1198,30 +1579,55 @@ export async function handleNewDeviceNotification(
   const token = ctx.context?.newSession?.session?.token
   if (typeof userId !== 'string' || typeof email !== 'string' || typeof token !== 'string') return
 
+  const provider = inferProvider(ctx)
+  if (!provider || provider === 'anonymous') return
+
   const headers = getRequestHeaders()
   const userAgent = headers.get('user-agent') ?? ''
   const ip = getClientIp(headers)
-  const fingerprint = computeDeviceFingerprint(userAgent, ip)
 
-  const unseen = await isDeviceUnseen(userId, fingerprint).catch(() => false)
+  const deviceId = ensureSignInDeviceId(ctx, userId, headers.get('cookie') ?? '')
+  if (!deviceId) return
+
+  const unseen = await isDeviceUnseen(userId, deviceId)
   if (!unseen) return
 
-  // Email + audit are independent — fire in parallel. TTL refresh
-  // runs only on full success so a failure can roll back via
-  // `forgetDevice` and re-fire on the next sign-in.
+  // Email + audit are independent — fire in parallel. A failure
+  // rolls back via `forgetDevice` so the next sign-in re-fires.
   try {
     const { sendNewSignInEmail } = await import('@quackback/email')
     const { recordAuditEvent } = await import('@/lib/server/audit/log')
     const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
     const occurredAt = new Date().toISOString()
+    const device = formatSignInDevice(userAgent)
+    const location = captureCountryFromHeaders(headers)
+    const base = getBaseUrl().replace(/\/$/, '')
+    const settingsUrl = base ? `${base}/settings/profile` : undefined
     // Account class, and deliberately no contact-address fallback: this alert
     // discloses IP, user agent and sign-in timing, and a contact address can be
     // one an agent typed into the inbox. An account with no deliverable address
-    // simply does not get the alert. The audit row and markDeviceSeen still run,
-    // or every subsequent sign-in would retry a send that can never succeed.
+    // simply does not get the alert. The audit row still runs, or every
+    // subsequent sign-in would retry a send that can never succeed.
     const to = await resolveAccountRecipient(userId as UserId)
     if (!to) {
       log.warn({ user_id: userId }, 'new-device alert skipped: no deliverable account address')
+    }
+    // Same predicate the profile page uses to hide PasswordForm. Fail open
+    // so a registry miss still sends the alert (password copy) rather than
+    // skipping it or blocking sign-in.
+    let ssoEnforced = false
+    if (to) {
+      try {
+        const { isHardBound } = await import('./auth-restrictions')
+        const { listIdentityProviders } =
+          await import('@/lib/server/domains/settings/identity-providers.service')
+        const { getRegisteredOidcProviderIds } = await import('./registered-providers')
+        const providers = await listIdentityProviders()
+        const registeredOidcIds = await getRegisteredOidcProviderIds(providers)
+        ssoEnforced = isHardBound('credential', email, providers, registeredOidcIds)
+      } catch (error) {
+        log.warn({ err: error }, 'sso-enforced lookup failed; sending password recovery copy')
+      }
     }
     await Promise.all([
       to
@@ -1230,7 +1636,10 @@ export async function handleNewDeviceNotification(
             workspaceName: workspace?.name,
             occurredAt,
             ipAddress: ip,
-            userAgent,
+            userAgent: device,
+            location,
+            settingsUrl: ssoEnforced ? undefined : settingsUrl,
+            ssoEnforced,
             logoUrl: workspace?.brandingData?.logoUrl ?? undefined,
           })
         : Promise.resolve(),
@@ -1239,13 +1648,46 @@ export async function handleNewDeviceNotification(
         outcome: 'success',
         actor: { userId: userId as `user_${string}`, email },
         headers,
-        metadata: { ip, userAgent },
+        metadata: { ip, userAgent, device, location },
       }),
     ])
-    await markDeviceSeen(userId)
   } catch (error) {
     log.error({ err: error }, 'new-device notification failed')
-    await forgetDevice(userId, fingerprint)
+    await forgetDevice(userId, deviceId)
+  }
+}
+
+/** Mint or reuse the cookie id and write it. Returns null when we
+ *  cannot identify this browser (missing workspace secret, userId that
+ *  is not a cookie-name token, or a freshly minted id that never
+ *  reached the browser). */
+function ensureSignInDeviceId(
+  ctx: {
+    setCookie?: (name: string, value: string, opts?: Record<string, unknown>) => string
+  },
+  userId: string,
+  cookieHeader: string
+): string | null {
+  try {
+    const existing = readDeviceCookie(cookieHeader, userId)
+    const deviceId = existing ?? mintDeviceId()
+    const value = signDeviceCookie(userId, deviceId)
+    if (typeof ctx.setCookie !== 'function') {
+      if (!existing) {
+        log.warn('device cookie not set: Better Auth setCookie missing on after-hook ctx')
+        return null
+      }
+      return deviceId
+    }
+    ctx.setCookie(
+      deviceCookieName(userId),
+      value,
+      deviceCookieAttributes(getBaseUrl().startsWith('https://'))
+    )
+    return deviceId
+  } catch (error) {
+    log.error({ err: error }, 'device cookie failed; treating device as known')
+    return null
   }
 }
 
@@ -1297,24 +1739,76 @@ export async function handleCountryCapture(ctx: {
  *     per-domain SSO enforcement or a disabled per-method toggle. SSO is
  *     allowed for every role, so verified-domain users pass this step; it
  *     gates the non-SSO providers.
- *  4. `handleSignInSuccessAudit` — emits `auth.signin.success` if a
+ *  4. `handleProfileRefreshAfter`: fill an empty avatar and, with profile
+ *     sync on, keep provider-set name and avatar following the provider.
+ *     After cleanup so a revoked session changes nothing; never throws.
+ *  5. `applyClaimAttributesAfter`: copy mapped IdP claims into person
+ *     attributes. After cleanup so a revoked session writes nothing;
+ *     wrapped in try/catch so a DB error never blocks sign-in.
+ *  6. `handleSignInSuccessAudit`: emits `auth.signin.success` if a
  *     session still exists at this point (i.e. wasn't revoked by
  *     prior steps). Runs after the gates so it only records sign-ins
  *     that actually stuck.
- *  5. `handleNewDeviceNotification` — sends a "new device" email +
- *     records an audit row when the user's UA + /24-IP combination
- *     hasn't been seen for them within the last 90 days.
+ *  7. `handleNewDeviceNotification`: sends a "new device" email +
+ *     records an audit row when an additional signed device cookie
+ *     for this user hasn't been seen within the last 90 days. The
+ *     first recorded device is seeded silently. Alerts cannot be
+ *     disabled. Bowser labels the email; it is not the claim key.
  */
+/**
+ * The jwt plugin's `set-auth-jwt` header on `/get-session`, for HTTP callers
+ * only.
+ *
+ * A client reads the session's signed JWT from this header. The plugin's own
+ * hook (disabled in `auth/index.ts`) also signed one for every in-process
+ * `auth.api.getSession`, where the header is discarded, at the cost of a JWKS
+ * read and a signature on every session resolution. An in-process call carries
+ * no `request`; a routed one always does. Mirrors the plugin's hook otherwise.
+ */
+export async function handleSessionJwtHeader(ctx: {
+  path?: string
+  request?: unknown
+  context?: {
+    session?: { session?: unknown } | null
+    newSession?: { session?: unknown } | null
+    responseHeaders?: Headers
+  }
+  setHeader?: (name: string, value: string) => void
+}): Promise<void> {
+  if (ctx.path !== '/get-session' || !ctx.request || !ctx.setHeader) return
+  const session = ctx.context?.session || ctx.context?.newSession
+  if (!session?.session) return
+  const jwt = await getJwtToken(ctx as Parameters<typeof getJwtToken>[0])
+  const exposed = ctx.context?.responseHeaders?.get('access-control-expose-headers') || ''
+  const headers = new Set(
+    exposed
+      .split(',')
+      .map((header) => header.trim())
+      .filter(Boolean)
+  )
+  headers.add('set-auth-jwt')
+  ctx.setHeader('set-auth-jwt', jwt)
+  ctx.setHeader('Access-Control-Expose-Headers', Array.from(headers).join(', '))
+}
+
 export const hooksAfter = createAuthMiddleware(async (ctx) => {
   if (process.env.AUTH_HOOKS_DEBUG === '1') {
     const provider = inferProvider(ctx as Parameters<typeof inferProvider>[0])
     log.debug({ path: ctx.path, provider: provider ?? null }, 'after-hook')
   }
 
+  // Any endpoint but a session read may have changed who the request is
+  // (sign-in, sign-out, a revoked session, a changed email or password). An
+  // in-process call is followed by the rest of its request, which must read
+  // the identity afresh rather than the memoized one.
+  if (ctx.path !== '/get-session') forgetRequestIdentity()
+  await handleSessionJwtHeader(ctx as Parameters<typeof handleSessionJwtHeader>[0])
+
   // The provider registry is only consulted by the OAuth-callback after-hooks
-  // (bootstrap promotion, auto-provision, policy cleanup). Skip the DB read on
-  // password / magic-link success paths — those callbacks early-return before
-  // touching `providers` / `registeredOidcIds`, so the empty defaults are safe.
+  // (bootstrap promotion, auto-provision, policy cleanup, claim attributes).
+  // Skip the DB read on password / magic-link success paths — those callbacks
+  // early-return before touching `providers` / `registeredOidcIds`, so the
+  // empty defaults are safe.
   let providers: Awaited<
     ReturnType<
       typeof import('@/lib/server/domains/settings/identity-providers.service').listIdentityProviders
@@ -1340,10 +1834,30 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const workspace = await getWorkspaceSettings()
 
+  // One claim read per callback. The stash is take-once, so role
+  // provisioning, the profile refresh and attribute writes must share the
+  // result rather than each calling `takeResolvedClaims`.
+  let claimsPromise: Promise<ClaimRead> | undefined
+  const callbackUserId = ctx.context?.newSession?.user?.id
+  const callbackProviderId = oidcCallbackProviderId(ctx)
+  const readClaims =
+    callbackProviderId !== null && typeof callbackUserId === 'string'
+      ? () => {
+          if (!claimsPromise) {
+            claimsPromise = readSsoClaimsWithProvenance(
+              callbackUserId as `user_${string}`,
+              callbackProviderId
+            )
+          }
+          return claimsPromise
+        }
+      : undefined
+
   await handleAutoProvisionAfter(
     ctx as Parameters<typeof handleAutoProvisionAfter>[0],
     providers,
-    registeredOidcIds
+    registeredOidcIds,
+    readClaims
   )
   await handleCallbackPolicyCleanup(
     ctx as Parameters<typeof handleCallbackPolicyCleanup>[0],
@@ -1351,17 +1865,43 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
     providers,
     registeredOidcIds
   )
+  // After cleanup, so a revoked session changes no profile. Never throws.
+  await handleProfileRefreshAfter(
+    ctx as Parameters<typeof handleProfileRefreshAfter>[0],
+    registeredOidcIds,
+    providers,
+    readClaims
+  )
+  try {
+    await applyClaimAttributesAfter(
+      ctx as Parameters<typeof applyClaimAttributesAfter>[0],
+      providers,
+      registeredOidcIds,
+      readClaims
+    )
+  } catch {
+    log.error(
+      {
+        code: 'claim_attribute_write_failed',
+        user_id: callbackUserId,
+        provider_id: callbackProviderId,
+      },
+      'claim attribute write failed'
+    )
+  }
   // SOC2 trail for user-initiated 2FA lifecycle (`two_factor.enabled`
   // and `two_factor.disabled`). Independent of sign-in success audit;
   // both can fire on the same request only for the verify-totp
   // enrollment path (which itself does not constitute a sign-in).
   await handleTwoFactorLifecycleAudit(ctx as Parameters<typeof handleTwoFactorLifecycleAudit>[0])
-  await handleSignInFailureAudit(ctx as Parameters<typeof handleSignInFailureAudit>[0])
+  await handleSignInFailureAudit(
+    ctx as Parameters<typeof handleSignInFailureAudit>[0],
+    registeredOidcIds
+  )
   await handleSignInSuccessAudit(ctx as Parameters<typeof handleSignInSuccessAudit>[0])
   // Geo-IP country from CDN headers; written best-effort, never blocks.
   await handleCountryCapture(ctx as Parameters<typeof handleCountryCapture>[0])
-  // Fires only when a new device fingerprint (UA + /24) for this user
-  // is observed; default-on but workspace can opt out.
+  // Fires only on a real sign-in path when an additional device is unseen.
   await handleNewDeviceNotification(
     ctx as Parameters<typeof handleNewDeviceNotification>[0],
     workspace

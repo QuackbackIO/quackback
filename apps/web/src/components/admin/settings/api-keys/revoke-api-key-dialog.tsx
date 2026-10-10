@@ -41,7 +41,7 @@ export function RevokeApiKeyDialog({ open, onOpenChange, apiKey }: RevokeApiKeyD
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Revoke API Key"
+      title="Revoke API key"
       description={
         <>
           Are you sure you want to revoke the API key <strong>{apiKey.name}</strong>?
@@ -53,7 +53,7 @@ export function RevokeApiKeyDialog({ open, onOpenChange, apiKey }: RevokeApiKeyD
           'Any applications using this key will immediately lose access to the API. You will need to create a new key and update your integrations.',
       }}
       variant="destructive"
-      confirmLabel={isPending ? 'Revoking...' : 'Revoke Key'}
+      confirmLabel={isPending ? 'Revoking...' : 'Revoke key'}
       isPending={isPending}
       onConfirm={handleRevoke}
     >

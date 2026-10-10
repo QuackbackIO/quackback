@@ -14,21 +14,30 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
   insertValuesCalls: [] as Array<Record<string, unknown>>,
-  mockOnConflictDoNothing: vi.fn(async () => {}),
+  mockOnConflictDoNothing: vi.fn(),
 }))
 
 const mockValues = vi.fn((vals: Record<string, unknown>) => {
   hoisted.insertValuesCalls.push(vals)
-  return { onConflictDoNothing: hoisted.mockOnConflictDoNothing }
+  return {
+    onConflictDoNothing: () => {
+      hoisted.mockOnConflictDoNothing()
+      return { returning: async () => [{ id: vals.id }] }
+    },
+  }
 })
+
+const mockInsert = vi.fn(() => ({ values: mockValues }))
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   // Spread the real db module so tables/operators stay current; override only what this suite drives.
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
-    insert: vi.fn(() => ({ values: mockValues })),
+    insert: mockInsert,
     query: { settings: { findFirst: vi.fn() } },
-    transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({})),
+    transaction: vi.fn(async (fn: (tx: { insert: typeof mockInsert }) => Promise<unknown>) =>
+      fn({ insert: mockInsert })
+    ),
   },
   eq: vi.fn(),
 }))
@@ -88,6 +97,7 @@ describe('createSettings', () => {
       supportInbox: false,
       supportTickets: false,
       statusPage: false,
+      copilotHome: true,
     })
   })
 

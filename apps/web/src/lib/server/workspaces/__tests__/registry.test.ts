@@ -36,6 +36,7 @@ const ROW: {
   hostnames: string[]
   requested_kind?: string
   redirect_to_hostname?: string | null
+  last_active_at?: Date | string | null
 } = {
   workspace_key: 'inst_cloud_ws_t1',
   contract_version: 1,
@@ -140,6 +141,35 @@ describe('interpretRow', () => {
       catalogOid: '4242',
       clusterId: 'fleet-a',
     })
+  })
+
+  it('carries the activity stamp when the fleet listing joins it, and null otherwise', () => {
+    // The request-path queries do not select it: absent must read as null,
+    // which `activity.ts` treats as active — never as dormant.
+    const bare = interpretRow(row(), 't1.localhost')
+    expect(bare.kind === 'ok' && bare.workspace.lastActiveAt).toBeNull()
+
+    const stamped = interpretRow(
+      row({ last_active_at: '2026-08-30T10:00:00.000Z' } as Partial<Row>),
+      't1.localhost'
+    )
+    expect(stamped.kind === 'ok' && stamped.workspace.lastActiveAt).toEqual(
+      new Date('2026-08-30T10:00:00.000Z')
+    )
+
+    const asDate = interpretRow(
+      row({ last_active_at: new Date('2026-08-30T10:00:00.000Z') } as Partial<Row>),
+      't1.localhost'
+    )
+    expect(asDate.kind === 'ok' && asDate.workspace.lastActiveAt).toEqual(
+      new Date('2026-08-30T10:00:00.000Z')
+    )
+
+    const unparseable = interpretRow(
+      row({ last_active_at: 'garbage' } as Partial<Row>),
+      't1.localhost'
+    )
+    expect(unparseable.kind === 'ok' && unparseable.workspace.lastActiveAt).toBeNull()
   })
 
   it('reports a suspended workspace with its reason and no DSN', () => {
@@ -295,6 +325,8 @@ describe('the projection', () => {
       if (column === 'state') continue
       // Added by the hostname-specific query, not the shared registry projection.
       if (column === 'requested_kind' || column === 'redirect_to_hostname') continue
+      // Joined from cp_workspace_activity by the fleet listing only.
+      if (column === 'last_active_at') continue
       expect(SELECT_COLUMNS).toContain(`r.${column}`)
     }
     expect(SELECT_COLUMNS).toContain('r.state::text AS state')

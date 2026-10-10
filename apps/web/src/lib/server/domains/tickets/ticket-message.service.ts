@@ -85,13 +85,13 @@ import type {
 } from '@/lib/shared/conversation/types'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import {
-  validateAttachments,
   validateContent,
   richMessageFallbackLabel,
   resolveMessageContent,
   toMessageDTO,
 } from '@/lib/server/messages/message-core'
-import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
+import { resolveAttachments, linkFilesToMessage } from '@/lib/server/domains/files/files.service'
+import { loadAuthors, loadAuthorAudiences, fallbackAuthor } from '../principals/principal-display'
 // The conversation domain, not this one, owns reaction/flag storage
 // (conversationMessageReactions/Flags) — `enrichMessagesForAgent` is already
 // generic over any ConversationMessageDTO[] + viewer id, so the agent-view
@@ -245,7 +245,12 @@ export async function insertTicketMessage(
   principalId: PrincipalId,
   opts: InsertTicketMessageOpts
 ): Promise<{ message: ConversationMessageDTO; ticket: Ticket }> {
-  const attachments = validateAttachments(input.attachments)
+  // The caller authorized the sender; an agent write may attach any stored
+  // file, a requester only files they uploaded.
+  const attachments = await resolveAttachments(input.attachments, {
+    principalId,
+    canAttachAnyFile: opts.senderType === 'agent',
+  })
   const safeContentJson = input.contentJson
     ? sanitizeTiptapContent(input.contentJson, {
         // Requester-authored inline images may only reference our own storage.
@@ -292,6 +297,7 @@ export async function insertTicketMessage(
         metadata: input.metadata ?? undefined,
       })
       .returning()
+    await linkFilesToMessage(tx, attachments, row!.id)
 
     await tx
       .update(tickets)
@@ -307,7 +313,9 @@ export async function insertTicketMessage(
     return row
   })
 
-  const author = (await loadAuthors([principalId])).get(principalId) ?? fallbackAuthor(principalId)
+  const author =
+    (await loadAuthors([principalId], { preferAccountName: true })).get(principalId) ??
+    fallbackAuthor(principalId)
   const message = toMessageDTO(messageRow, author)
   // Realtime signal (unified inbox §3.2, M3): the one low-level write shared
   // by the agent reply, the internal note, AND the requester reply (see
@@ -359,11 +367,12 @@ async function sendViaPairConversation(
 ): Promise<{ message: ConversationMessageDTO; ticket: Ticket }> {
   const { sendVisitorMessage, sendAgentMessage } =
     await import('@/lib/server/domains/conversation/conversation.service')
-  // ConversationAuthorDTO and ConversationAuthorInput share one shape
-  // (principalId + optional displayName/avatarUrl/email), so the display
-  // resolution every ticket-thread write already does doubles as the author.
-  const author = (await loadAuthors([principalId])).get(principalId) ?? fallbackAuthor(principalId)
-  const message =
+  // The conversation send publishes the public name on the visitor channel.
+  // The ticket channel is team-only, so that copy uses the account name.
+  const views = (await loadAuthorAudiences([principalId])).get(principalId)
+  const publicAuthor = views?.publicAuthor ?? fallbackAuthor(principalId)
+  const supportAuthor = views?.supportAuthor ?? publicAuthor
+  const sent =
     opts.senderType === 'visitor'
       ? (
           await sendVisitorMessage(
@@ -376,7 +385,7 @@ async function sendViaPairConversation(
               // — the metadata->>'emailMessageId' dedupe is parent-agnostic.
               metadata: input.metadata as ConversationMessageMetadata | undefined,
             },
-            author,
+            publicAuthor,
             opts.actor,
             prepared.contentJson
           )
@@ -385,13 +394,14 @@ async function sendViaPairConversation(
           await sendAgentMessage(
             conversationId,
             prepared.content,
-            author,
+            publicAuthor,
             opts.actor,
             prepared.attachments,
             prepared.contentJson,
             input.metadata as ConversationMessageMetadata | undefined
           )
         ).message
+  const message = { ...sent, author: supportAuthor }
 
   await db
     .update(tickets)
@@ -543,7 +553,7 @@ export interface TicketMessagePage {
  */
 export async function listTicketMessages(
   ticketId: TicketId,
-  opts: { before?: string; includeInternal?: boolean; all?: boolean } = {}
+  opts: Parameters<typeof listPairThreadMessages>[1] = {}
 ): Promise<TicketMessagePage> {
   return listPairThreadMessages(ticketId, opts)
 }
@@ -571,7 +581,7 @@ export async function listTicketMessagesForAgent(
   viewerPrincipalId: PrincipalId,
   opts: { before?: string; includeInternal?: boolean } = {}
 ): Promise<AgentTicketMessagePage> {
-  const page = await listTicketMessages(ticketId, opts)
+  const page = await listTicketMessages(ticketId, { ...opts, preferAccountName: true })
   const messages = await enrichMessagesForAgent(page.messages, viewerPrincipalId, new Map())
   return { messages, hasMore: page.hasMore }
 }

@@ -146,7 +146,12 @@ describe.skipIf(!fixture.available)('getWorkspaceClaimFn', () => {
 
     const claim = await getWorkspaceClaimFn()
 
-    expect(claim).toEqual({ claimed: true, setupComplete: false, openToClaim: false })
+    expect(claim).toEqual({
+      claimed: true,
+      setupComplete: false,
+      openToClaim: false,
+      closedReason: 'provisioned',
+    })
     const wire = JSON.stringify(claim)
     expect(wire).not.toContain(OWNER_EMAIL)
     expect(wire).not.toContain('jane.doe')
@@ -162,7 +167,12 @@ describe.skipIf(!fixture.available)('getWorkspaceClaimFn', () => {
 
     const claim = await getWorkspaceClaimFn()
 
-    expect(claim).toEqual({ claimed: false, setupComplete: false, openToClaim: false })
+    expect(claim).toEqual({
+      claimed: false,
+      setupComplete: false,
+      openToClaim: false,
+      closedReason: 'provisioned',
+    })
     // Nothing about the customer it was created for, on a payload any visitor
     // of a guessable hostname can fetch with no cookie.
     expect(JSON.stringify(claim)).not.toContain('acme')
@@ -171,7 +181,12 @@ describe.skipIf(!fixture.available)('getWorkspaceClaimFn', () => {
   it('reads a self-hosted install with nobody seeded as unclaimed and open', async () => {
     const claim = await getWorkspaceClaimFn()
 
-    expect(claim).toEqual({ claimed: false, setupComplete: false, openToClaim: true })
+    expect(claim).toEqual({
+      claimed: false,
+      setupComplete: false,
+      openToClaim: true,
+      closedReason: null,
+    })
   })
 
   // The control for the two above: the same settings row without the stamp is
@@ -183,11 +198,26 @@ describe.skipIf(!fixture.available)('getWorkspaceClaimFn', () => {
     await expect(getWorkspaceClaimFn()).resolves.toMatchObject({ openToClaim: true })
   })
 
+  // On a provisioned workspace an account is not a claim, so only an owner
+  // makes it claimed, and holding a team role is not being one.
   it('does not read a non-admin member as the owner', async () => {
+    await seedControlPlaneStamp()
     const userId = await seedUser('member@acme.example')
     await seedPrincipal({ userId, role: 'member', type: 'user' })
 
     await expect(getWorkspaceClaimFn()).resolves.toMatchObject({ claimed: false })
+  })
+
+  // On an install still being set up, the first account created claims it,
+  // whatever its role.
+  it('reads an install with an account on it as claimed', async () => {
+    const userId = await seedUser('member@acme.example')
+    await seedPrincipal({ userId, role: 'user', type: 'user' })
+
+    await expect(getWorkspaceClaimFn()).resolves.toMatchObject({
+      claimed: true,
+      openToClaim: true,
+    })
   })
 
   it('does not read a service principal as the owner', async () => {
@@ -204,7 +234,36 @@ describe.skipIf(!fixture.available)('getWorkspaceClaimFn', () => {
 
     const claim = await getWorkspaceClaimFn()
 
-    expect(claim).toEqual({ claimed: true, setupComplete: true, openToClaim: false })
+    expect(claim).toEqual({
+      claimed: true,
+      setupComplete: true,
+      openToClaim: false,
+      closedReason: 'provisioned',
+    })
+  })
+
+  // A finished install whose human admins are gone, with only an API
+  // principal left. Unclaimed, but its setup is not waiting for anyone, so the
+  // screen must not offer the claim the workspace step would refuse.
+  it('reads a finished install with no human admin as not open to claim', async () => {
+    await testDb.insert(settings).values({
+      id: createId('workspace'),
+      name: 'Acme',
+      slug: `acme-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: new Date(),
+      setupState: FINISHED_SETUP,
+    })
+    hoisted.getSettings.mockResolvedValue({ setupState: FINISHED_SETUP })
+    await seedPrincipal({ role: 'admin', type: 'service' })
+
+    const claim = await getWorkspaceClaimFn()
+
+    expect(claim).toEqual({
+      claimed: false,
+      setupComplete: true,
+      openToClaim: false,
+      closedReason: 'setupComplete',
+    })
   })
 
   // The claim tracks the principal, not the user row: an admin whose user row

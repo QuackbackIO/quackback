@@ -32,7 +32,12 @@ import {
 } from '@/lib/server/db'
 import { DEFAULT_BOARD_ACCESS, type BoardAccess } from '@/lib/shared/db-types'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
-import { getPublicRoadmapPosts, getRoadmapPosts } from '../roadmap.query'
+import {
+  getPublicRoadmapDateBuckets,
+  getPublicRoadmapPosts,
+  getRoadmapPosts,
+} from '../roadmap.query'
+import { listPublicRoadmaps } from '../roadmap.service'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -303,6 +308,92 @@ describe.skipIf(!fixture.available)('roadmap derived membership (real DB)', () =
     expect(admin.items.some((post) => post.id === merged)).toBe(false)
   })
 
+  it('makes an internal tag inert in caller-supplied public roadmap filters, but not for team', async () => {
+    const seeded = await seedBase()
+    const roadmapId = await seedRoadmap(seeded, {})
+    const [internalTag] = await testDb
+      .insert(postTags)
+      .values({ name: `Internal roadmap tag ${suffix()}`, isPublic: false })
+      .returning()
+    const tagged = await seedPost(seeded)
+    await seedPost(seeded)
+    await testDb.insert(postTagAssignments).values({ postId: tagged, tagId: internalTag.id })
+
+    // A non-team viewer filtering by the internal tag's id must not learn
+    // which posts carry it: the filter matches nothing rather than leaking.
+    const anonymous = await getPublicRoadmapPosts(
+      roadmapId,
+      { statusId: seeded.statusA, tagIds: [internalTag.id] },
+      ANONYMOUS_ACTOR
+    )
+    expect(anonymous.items).toEqual([])
+    expect(anonymous.total).toBe(0)
+
+    // Public tags still filter normally for the same viewer.
+    await testDb.insert(postTagAssignments).values({ postId: tagged, tagId: seeded.tagA })
+    const byPublicTag = await getPublicRoadmapPosts(
+      roadmapId,
+      { statusId: seeded.statusA, tagIds: [seeded.tagA] },
+      ANONYMOUS_ACTOR
+    )
+    expect(byPublicTag.items.map((post) => post.id)).toEqual([tagged])
+
+    // Team viewers see and filter by internal tags.
+    const team = await getPublicRoadmapPosts(
+      roadmapId,
+      { statusId: seeded.statusA, tagIds: [internalTag.id] },
+      actor({ role: 'member', principalId: seeded.authorA })
+    )
+    expect(team.items.map((post) => post.id)).toEqual([tagged])
+
+    // The admin-configured base filter is not caller-controlled and keeps
+    // defining membership even when it names an internal tag.
+    const internalBaseRoadmap = await seedRoadmap(seeded, {
+      baseFilter: { tagIds: [internalTag.id] },
+    })
+    const viaBase = await getPublicRoadmapPosts(
+      internalBaseRoadmap,
+      { statusId: seeded.statusA },
+      ANONYMOUS_ACTOR
+    )
+    expect(viaBase.items.map((post) => post.id)).toEqual([tagged])
+  })
+
+  it('redacts internal tag ids from public roadmap base filters for non-team viewers', async () => {
+    const seeded = await seedBase()
+    const [internalTag] = await testDb
+      .insert(postTags)
+      .values({ name: `Internal curation tag ${suffix()}`, isPublic: false })
+      .returning()
+    const mixed = await seedRoadmap(seeded, {
+      baseFilter: { boardIds: [seeded.boardA], tagIds: [seeded.tagA, internalTag.id] },
+    })
+    const onlyInternal = await seedRoadmap(seeded, { baseFilter: { tagIds: [internalTag.id] } })
+    const tagged = await seedPost(seeded)
+    await testDb.insert(postTagAssignments).values({ postId: tagged, tagId: internalTag.id })
+
+    const anonymous = await listPublicRoadmaps(ANONYMOUS_ACTOR)
+    const anonMixed = anonymous.find((r) => r.id === mixed)!
+    const anonOnlyInternal = anonymous.find((r) => r.id === onlyInternal)!
+    expect(anonMixed.baseFilter).toEqual({ boardIds: [seeded.boardA], tagIds: [seeded.tagA] })
+    expect(anonOnlyInternal.baseFilter).toEqual({})
+    expect(JSON.stringify(anonymous)).not.toContain(internalTag.id)
+
+    // Redaction is payload-only: the curation still defines membership.
+    const posts = await getPublicRoadmapPosts(
+      onlyInternal,
+      { statusId: seeded.statusA },
+      ANONYMOUS_ACTOR
+    )
+    expect(posts.items.map((post) => post.id)).toEqual([tagged])
+
+    const team = await listPublicRoadmaps(actor({ role: 'member', principalId: seeded.authorA }))
+    expect(team.find((r) => r.id === mixed)!.baseFilter.tagIds).toEqual([
+      seeded.tagA,
+      internalTag.id,
+    ])
+  })
+
   it('enforces public, team, and matching-segment roadmap visibility', async () => {
     const seeded = await seedBase()
     const publicRoadmap = await seedRoadmap(seeded, { visibility: 'public' })
@@ -340,5 +431,46 @@ describe.skipIf(!fixture.available)('roadmap derived membership (real DB)', () =
         actor({ role: 'member', principalId: seeded.authorA })
       )
     ).resolves.toMatchObject({ total: 1 })
+  })
+
+  it('keeps a test customer idea off the public roadmap, its count and its date range', async () => {
+    const seeded = await seedBase()
+    const owner = await seedPrincipal(`Roadmap teammate ${suffix()}`)
+    const customer = createId('principal') as PrincipalId
+    await testDb.insert(principal).values({
+      id: customer,
+      role: 'user',
+      type: 'anonymous',
+      testOwnerPrincipalId: owner,
+      createdAt: new Date(),
+    })
+    const columns = await seedRoadmap(seeded, {})
+    const dated = await seedRoadmap(seeded, { type: 'date' })
+    const real = await seedPost(seeded, { eta: new Date('2026-10-15T00:00:00Z') })
+    const test = await seedPost(seeded, {
+      principalId: customer,
+      eta: new Date('2031-03-15T00:00:00Z'),
+    })
+
+    const publicPage = await getPublicRoadmapPosts(
+      columns,
+      { statusId: seeded.statusA },
+      ANONYMOUS_ACTOR
+    )
+    expect(publicPage.items.map((item) => item.id)).toEqual([real])
+    expect(publicPage.total).toBe(1)
+    const buckets = await getPublicRoadmapDateBuckets(dated, ANONYMOUS_ACTOR)
+    expect(buckets.some((bucket) => bucket.start?.startsWith('2031'))).toBe(false)
+    expect(buckets.some((bucket) => bucket.start?.startsWith('2026'))).toBe(true)
+
+    // The test customer still sees its own idea; the team sees both.
+    const own = await getPublicRoadmapPosts(
+      columns,
+      { statusId: seeded.statusA },
+      actor({ principalId: customer, role: 'user', principalType: 'anonymous' })
+    )
+    expect(own.items.map((item) => item.id).sort()).toEqual([real, test].sort())
+    const team = await getRoadmapPosts(columns, { statusId: seeded.statusA })
+    expect(team.total).toBe(2)
   })
 })

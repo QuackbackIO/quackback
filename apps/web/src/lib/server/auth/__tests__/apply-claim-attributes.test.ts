@@ -94,4 +94,26 @@ describe('planClaimAttributeWrites', () => {
     })
     expect(valid).toEqual({ department: 'Eng' })
   })
+
+  it('treats an array of objects into a string attribute as a type mismatch', () => {
+    const { valid, skips } = planClaimAttributeWrites({
+      claims: { groups: [{ id: '1' }, { id: '2' }] },
+      mapping: { map: [{ claimPath: 'groups', attributeKey: 'department' }] },
+      existing: {},
+      definitions: defs,
+      explain: true,
+    })
+    expect(valid).toEqual({})
+    expect(skips).toEqual([{ key: 'department', reason: 'type_mismatch' }])
+  })
+
+  it('joins an array of primitives into a string attribute', () => {
+    const { valid } = planClaimAttributeWrites({
+      claims: { groups: ['eng', 'sales'] },
+      mapping: { map: [{ claimPath: 'groups', attributeKey: 'department' }] },
+      existing: {},
+      definitions: defs,
+    })
+    expect(valid).toEqual({ department: 'eng,sales' })
+  })
 })

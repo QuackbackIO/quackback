@@ -5,10 +5,11 @@
  * Mutations are in @/lib/client/mutations/notifications.
  */
 
-import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
+import { queryOptions, useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import type { NotificationId } from '@quackback/ids'
 import type { NotificationType } from '@/lib/shared/types'
 import { getNotificationsFn, getUnreadCountFn } from '@/lib/server/functions/notifications'
+import type { NotificationTextParams } from '@/lib/shared/notifications/text-params'
 
 /** Page size for the infinite-scrolling notification pages (admin + portal). */
 const NOTIFICATIONS_PAGE_SIZE = 30
@@ -59,6 +60,8 @@ export interface SerializedNotification {
   /** Which app this row's deep link belongs to (from metadata, ticket bells only):
    *  'portal' for the requester, 'admin' for agent watchers; null on older rows. */
   audience: 'admin' | 'portal' | null
+  /** Lets the bell word the title and body in the reader's language. */
+  params?: NotificationTextParams
   readAt: string | null
   archivedAt: string | null
   createdAt: string
@@ -143,12 +146,18 @@ export function useInfiniteNotifications({
   })
 }
 
-export function useUnreadCount(enabled = true): ReturnType<typeof useQuery<number>> {
-  return useQuery({
+/**
+ * The unread badge count. The admin layout's loader warms it with the page,
+ * so the bell has it at first paint instead of asking once the page hydrates.
+ */
+export const unreadCountQuery = () =>
+  queryOptions({
     queryKey: notificationsKeys.unreadCount(),
     queryFn: async () => (await getUnreadCountFn()).count,
-    enabled,
     staleTime: 15_000,
     refetchInterval: 30_000,
   })
+
+export function useUnreadCount(enabled = true): ReturnType<typeof useQuery<number>> {
+  return useQuery({ ...unreadCountQuery(), enabled })
 }

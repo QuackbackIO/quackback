@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { ChevronRightIcon } from '@heroicons/react/20/solid'
 import { CategoryIcon } from '@/components/help-center/category-icon'
-import { PlusIcon, PencilIcon, TrashIcon, FolderPlusIcon } from '@heroicons/react/16/solid'
+import { PencilIcon, TrashIcon, FolderPlusIcon } from '@heroicons/react/16/solid'
+import { MENU_ROW } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
 import { buildAncestorChain, MAX_CATEGORY_DEPTH } from '@/lib/shared/help-center-tree'
 import type { KbCategoryId } from '@quackback/ids'
@@ -127,14 +128,6 @@ export function HelpCenterCategoryTree({
       <div role="tree" aria-label="Help center categories" className="space-y-0.5">
         {tree.map(renderNode)}
       </div>
-      <button
-        type="button"
-        onClick={() => actions.onNew(null)}
-        className="mt-1 w-full flex items-center gap-1.5 px-2 h-7 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-      >
-        <PlusIcon className="h-3 w-3 shrink-0" />
-        New category
-      </button>
     </div>
   )
 }
@@ -172,15 +165,25 @@ function TreeRow({
       aria-level={depth + 1}
       aria-expanded={hasChildren ? isExpanded : undefined}
       aria-selected={isSelected}
+      data-active={isSelected || undefined}
       className={cn(
-        'group relative flex items-center h-7 rounded-md text-xs transition-colors',
+        MENU_ROW,
+        'group relative w-full',
         isSelected
           ? 'bg-muted text-foreground font-medium'
           : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
       )}
-      style={{ paddingLeft: 4 + depth * 12 }}
+      style={depth > 0 ? { paddingInlineStart: 10 + depth * 12 } : undefined}
     >
-      {hasChildren ? (
+      <button
+        type="button"
+        onClick={onNavigate}
+        className="flex-1 min-w-0 flex items-center gap-2 pr-1 text-left h-full"
+      >
+        <CategoryIcon icon={category.icon} className="w-4 h-4 shrink-0 text-muted-foreground" />
+        <span className="truncate">{category.name}</span>
+      </button>
+      {hasChildren && (
         <button
           type="button"
           onClick={onToggle}
@@ -191,19 +194,9 @@ function TreeRow({
             className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-90')}
           />
         </button>
-      ) : (
-        <span className="shrink-0 w-5" aria-hidden="true" />
       )}
-      <button
-        type="button"
-        onClick={onNavigate}
-        className="flex-1 min-w-0 flex items-center gap-1.5 pr-1 text-left h-full"
-      >
-        <CategoryIcon icon={category.icon} className="w-4 h-4 shrink-0 text-muted-foreground" />
-        <span className="truncate">{category.name}</span>
-      </button>
       <span
-        className="shrink-0 tabular-nums text-xs text-muted-foreground pr-2 group-hover:opacity-0 transition-opacity"
+        className="shrink-0 tabular-nums text-[11px] text-muted-foreground group-hover:opacity-0 transition-opacity"
         title={
           category.articleCount === category.recursiveArticleCount
             ? `${category.articleCount} article${category.articleCount === 1 ? '' : 's'}`

@@ -66,6 +66,55 @@ export interface LedgerEntry {
 
 export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   {
+    file: 'apps/web/src/lib/server/domains/ai/structured-chat.ts',
+    name: 'fallbackLevels',
+    category: 'fleet-wide',
+    reason:
+      'Maps an AI endpoint (the process-wide OPENAI_BASE_URL plus the model name) to how far structured requests had to fall back from json_schema. The base URL is process config and the model is a per-feature setting, neither is workspace data, and every workspace in the process talks to the same endpoints. A cross-workspace hit returns only "this endpoint and model reject json_schema (or response_format)", which is exactly what the requesting workspace would learn from its own first request; the worst case is one extra fallback request.',
+  },
+  {
+    file: 'apps/web/src/lib/server/functions/read-batch.ts',
+    name: 'registeredReads',
+    category: 'fleet-wide',
+    reason:
+      'Maps the query key of each registered read to its query factory, built once from the static BATCHED_READS list. It holds code, not data: every workspace resolves the same keys to the same factories, and each factory runs its own gated server function for the calling workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/files/preview/mupdf.ts',
+    name: 'loading',
+    category: 'fleet-wide',
+    reason:
+      'Memoizes the import of the bundled PDF and raster engine (a WebAssembly module), so it initializes once per process. It holds library code, not data: every workspace would load the same module, and each preview opens its own document from its own bytes and frees it.',
+  },
+  {
+    file: 'apps/web/src/lib/shared/content-emoji.ts',
+    name: 'byChar',
+    category: 'fleet-wide',
+    reason:
+      'Indexes the bundled emoji dataset by character, built once on first lookup. The dataset ships with the app and is the same for every workspace, so a cross-workspace hit returns the emoji any workspace would look up.',
+  },
+  {
+    file: 'apps/web/src/lib/shared/content-emoji.ts',
+    name: 'byEmoticon',
+    category: 'fleet-wide',
+    reason:
+      'Indexes the bundled emoji dataset by emoticon, built once on first lookup. The dataset ships with the app and is the same for every workspace, so a cross-workspace hit returns the emoji any workspace would look up.',
+  },
+  {
+    file: 'apps/web/src/lib/server/integrations/sync/transport.ts',
+    name: 'evidence',
+    category: 'process-lifetime',
+    reason:
+      'The AsyncLocalStorage instance carries transport evidence for exactly one sync attempt. withSyncTransport creates a new store on every call; concurrent workspaces and attempts cannot read each other’s response counts or failures. No provider data is cached outside that async context.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/platform-credentials/platform-credential.service.ts',
+    name: '_controlPlaneSource',
+    category: 'fleet-wide',
+    reason:
+      'CloudCredentialSource reads only the process environment populated before startup. Cross-workspace calls return the same centrally managed OAuth application credentials; per-workspace installation tokens remain in workspace databases.',
+  },
+  {
     file: 'apps/web/src/lib/server/auth/index.ts',
     name: 'authConfigVersions',
     category: 'workspace-keyed',
@@ -73,6 +122,24 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'auth_config_version is a small per-workspace counter, so two workspaces sitting on the same ' +
       'number is routine; compared across workspaces the guard reads "unchanged" and hands back an ' +
       'instance built for someone else.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/conversation/conversation-translation.service.ts',
+    name: 'overAllowanceWarned',
+    category: 'workspace-keyed',
+    reason:
+      'Remembers which allowance windows already logged the over-allowance warning. Window start ' +
+      'times are shared by every workspace on calendar months, so a cross-workspace hit would ' +
+      "silence another workspace's one warning for the period.",
+  },
+  {
+    file: 'apps/web/src/lib/server/auth/index.ts',
+    name: 'authBuilds',
+    category: 'workspace-keyed',
+    reason:
+      'The auth instance build in flight, shared by concurrent cold requests. It resolves to an ' +
+      "instance closed over one workspace's database adapter and providers (see authInstances), so " +
+      'a caller joining another workspace build would authenticate against the wrong workspace.',
   },
   {
     file: 'apps/web/src/lib/server/auth/index.ts',
@@ -213,6 +280,30 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'captured with the credentials at construction.',
   },
   {
+    file: 'apps/web/src/lib/server/storage/s3.ts',
+    name: 'preNamespaceHits',
+    category: 'refuses-pooled',
+    reason:
+      'Bare bucket-root key → when its pre-namespace original was last seen present; bounded and LRU-evicted, kept apart from misses so a flood of made-up keys cannot evict it. ' +
+      'It decides whether a token-less link is served, so a shared entry would let one ' +
+      "workspace's bucket vouch for a key in another workspace's namespace. " +
+      'isPreNamespaceObject, its only writer, returns false before touching it under pooled ' +
+      'tenancy or inside any workspace scope, so it only ever describes the one bucket a ' +
+      "single-workspace process's only workspace owns.",
+  },
+  {
+    file: 'apps/web/src/lib/server/storage/s3.ts',
+    name: 'preNamespaceMisses',
+    category: 'refuses-pooled',
+    reason:
+      'Bare bucket-root key → when its pre-namespace original was last seen absent (HEAD 403 or 404); bounded and LRU-evicted, short TTL. ' +
+      'It decides whether a token-less link is served, so a shared entry would let one ' +
+      "workspace's bucket vouch for a key in another workspace's namespace. " +
+      'isPreNamespaceObject, its only writer, returns false before touching it under pooled ' +
+      'tenancy or inside any workspace scope, so it only ever describes the one bucket a ' +
+      "single-workspace process's only workspace owns.",
+  },
+  {
     file: 'apps/web/src/lib/server/storage/workspace-scope.ts',
     name: 'workspaceIds',
     category: 'workspace-keyed',
@@ -253,6 +344,34 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "another workspace's messages on a bus with no authorization layer of its own.",
   },
   {
+    file: 'apps/web/src/lib/server/test-data.ts',
+    name: 'testOwners',
+    category: 'workspace-keyed',
+    reason:
+      "Which principals are a teammate's test customer, by principal id. The answer is fixed when the " +
+      'principal is created, but it is read from one workspace database: shared across workspaces a ' +
+      "copied id could answer from the wrong workspace and leak or hide that workspace's test data.",
+  },
+  {
+    file: 'apps/web/src/lib/server/local-cache.ts',
+    name: 'localCopies',
+    category: 'workspace-keyed',
+    reason:
+      "Short-lived copies of cached values, chiefly the workspace settings, which hold one workspace's " +
+      'auth config, secrets and flags. Shared, one workspace would be served another workspace settings ' +
+      'for up to the copy lifetime.',
+  },
+  {
+    file: 'apps/web/src/lib/server/response-hooks.ts',
+    name: 'bodyEndHooks',
+    category: 'workspace-scoped-key',
+    keyedBy: 'response.body',
+    reason:
+      "Keyed by one response's body stream, an object that exists only for the request that produced " +
+      'it, so a lookup can only ever find its own request. It is a WeakMap and the entry is removed ' +
+      'when taken, so nothing outlives the response.',
+  },
+  {
     file: 'apps/web/src/lib/server/workspaces/pool-cache.ts',
     name: 'pools',
     category: 'workspace-scoped-key',
@@ -271,6 +390,39 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'refusal was seen at. A cross-workspace hit would say one workspace is refused because another is, ' +
       'which the revision check makes impossible: the entry is discarded the moment the record it ' +
       'accuses changes.',
+  },
+  {
+    file: 'apps/web/src/lib/server/workspaces/activity.ts',
+    name: 'lastStampedAt',
+    category: 'workspace-scoped-key',
+    keyedBy: 'workspaceKey',
+    reason:
+      'When this process last wrote a workspace\u2019s activity stamp to the control plane, keyed by ' +
+      'workspaceKey, so a busy workspace costs one UPDATE per five minutes. A cross-workspace hit would ' +
+      'suppress a stamp for the wrong workspace, letting the worker park one that has traffic; the key ' +
+      'is the workspaceKey the request scope already resolved, so there is no other key to hit.',
+  },
+  {
+    file: 'apps/web/src/lib/server/workspaces/activity.ts',
+    name: 'standingWork',
+    category: 'workspace-scoped-key',
+    keyedBy: 'workspaceKey',
+    reason:
+      'Workspaces the job worker found idle but holding a pending job or a deadline, keyed by ' +
+      'workspaceKey, so a fleet pass in the same process keeps visiting them. Written only by the ' +
+      'worker\u2019s refresh from a probe run inside that workspace\u2019s own scope; a wrong entry would ' +
+      'keep an idle workspace awake, never park a busy one.',
+  },
+  {
+    file: 'apps/web/src/lib/server/workspaces/activity.ts',
+    name: 'dormant',
+    category: 'workspace-scoped-key',
+    keyedBy: 'workspaceKey',
+    reason:
+      'Workspaces whose job loop this worker has parked, keyed by workspaceKey. Read for the status ' +
+      'payload and to skip re-probing an already parked workspace; the decision itself is re-derived ' +
+      'every refresh from the registry\u2019s last_active_at, so a stale entry costs at most one refresh ' +
+      'interval.',
   },
   {
     file: 'apps/web/src/lib/server/workspaces/resolver.ts',
@@ -344,18 +496,19 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'identical for every workspace.',
   },
   {
-    file: 'apps/web/src/lib/shared/assistant/markdown-lite.ts',
-    name: 'inlineReCache',
-    category: 'content-addressed',
-    reason:
-      'Compiled regexes keyed by their own source string. A cross-workspace hit returns the same ' +
-      'compiled pattern the requesting workspace would have built from the same characters.',
-  },
-  {
     file: 'apps/web/src/lib/shared/i18n.ts',
     name: 'messageCache',
     category: 'content-addressed',
     reason: 'Message catalogues keyed by locale, imported from static files in the bundle.',
+  },
+  {
+    file: 'apps/web/src/lib/shared/utils/date.ts',
+    name: 'monthYearFormatters',
+    category: 'content-addressed',
+    reason:
+      'Intl.DateTimeFormat instances keyed by locale. The formatter is a pure function of that ' +
+      'locale and the fixed month/year UTC options, so a cross-workspace hit returns the formatter ' +
+      'the requesting workspace would have built for the same locale.',
   },
   {
     file: 'apps/web/src/lib/shared/office-hours.ts',
@@ -414,11 +567,27 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'packages/email/src/index.ts',
-    name: 'inboundFetchClient',
+    name: 'resendClient',
     category: 'fleet-wide',
     reason:
-      'Built from the inbound API key, which §8 confirms the control plane writes fleet-wide into ' +
-      'every workspace. Fetches an inbound body by provider id; carries no outbound mail.',
+      'Built from EMAIL_RESEND_API_KEY/RESEND_API_KEY, a process environment value (§8: written ' +
+      'fleet-wide into every workspace), and stored beside the key it was built from so a key ' +
+      'change rebuilds it. A cross-workspace hit returns the client the requesting workspace ' +
+      'would have built from the same key. It fetches inbound bodies by provider id and, when ' +
+      'Resend is the outbound provider, sends; every per-message field (From, To, headers) is ' +
+      'passed per call, so it holds nothing of any workspace.',
+  },
+  {
+    file: 'packages/email/src/idempotency.ts',
+    name: 'scope',
+    category: 'process-lifetime',
+    reason:
+      "The AsyncLocalStorage instance carrying one logical send's idempotency key. " +
+      'withEmailIdempotencyKey opens a new store per send (a hook job id, or a fresh uuid around ' +
+      "the conversation retry loop), so concurrent workspaces and sends never read each other's " +
+      'key, and the instance itself holds no value outside those contexts. Only dispatch reads it, ' +
+      'at send time; work armed inside a send that later sends mail of its own would inherit the ' +
+      'key, and nothing inside either scope does.',
   },
   {
     file: 'packages/email/src/ses.ts',
@@ -438,6 +607,18 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Region plus key id of the client cached beside it, so a credential change rebuilds rather ' +
       'than being served stale. Fleet-wide for the same reason the client is, and carries no ' +
       'secret: the key id names a principal, the secret is never part of it.',
+  },
+  {
+    file: 'packages/email/src/ses.ts',
+    name: 'sharedLimiter',
+    category: 'process-lifetime',
+    reason:
+      'The per-process SES send pacer: holds only its rate and the monotonic time of the next free ' +
+      'send slot. It is shared across workspaces on purpose, because the quota it protects belongs ' +
+      'to the one SES credential the whole process sends with, not to any workspace; a per-workspace ' +
+      'limiter would let N busy workspaces send at N times the account rate. It carries no ' +
+      'workspace data (no recipient, message or key), so a cross-workspace hit can only delay a ' +
+      "send behind another workspace's sends by at most the 30s wait cap, never read or alter them.",
   },
   {
     file: 'packages/email/src/ses-identity.ts',
@@ -494,6 +675,38 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     reason:
       'OpenAPI path registrations accumulated at import time from static zod schemas. The document is ' +
       'identical for every workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/api/rate-limit.ts',
+    name: 'lastEdgeRejectionWarnAt',
+    category: 'process-lifetime',
+    reason:
+      'Timestamp throttling the rejected-edge-address warning to one line a minute. It holds a ' +
+      'single number about the PROCESS and no workspace data: the edge secret and trusted origins ' +
+      'are process configuration, so a rejection seen in one workspace is the same misconfiguration ' +
+      'in every other, and sharing the throttle across workspaces costs at most a minute of ' +
+      'suppressed duplicate log lines.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/api/rate-limit.ts',
+    name: 'lastTrustedHeaderWarnAt',
+    category: 'process-lifetime',
+    reason:
+      'Timestamp throttling the unusable TRUSTED_CLIENT_IP_HEADER warning to one line a minute. It ' +
+      'holds a single number about the PROCESS and no workspace data, never the header value: the ' +
+      'header name is process configuration and the proxy that fails to set it fronts every ' +
+      'workspace alike, so sharing the throttle across workspaces costs at most a minute of ' +
+      'suppressed duplicate log lines.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/api/rate-limit.ts',
+    name: 'warnedForwardedHeaders',
+    category: 'process-lifetime',
+    reason:
+      'Warn-once latch for the missing TRUSTED_PROXY_HOPS setting. It holds a single boolean about the ' +
+      'PROCESS and no workspace data: TRUSTED_PROXY_HOPS is process configuration, so the condition ' +
+      'it describes has no workspace dimension, and sharing the latch across workspaces costs one ' +
+      'suppressed duplicate log line.',
   },
   {
     file: 'apps/web/src/lib/server/domains/conversation/conversation.email-imap-queue.ts',
@@ -831,6 +1044,18 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'a second .exec() site, or an await inside that loop, is a visible diff.',
   },
   {
+    file: 'apps/web/src/lib/server/jobs/dormant-usage-report.ts',
+    name: 'checked',
+    category: 'workspace-scoped-key',
+    keyedBy: 'workspaceKey',
+    reason:
+      'Which month this worker process last asked a parked workspace to queue its usage report, ' +
+      'keyed by workspaceKey, so each parked workspace is asked once a month rather than every ' +
+      'refresh. Written only by the worker\u2019s refresh; the ask itself runs inside that ' +
+      'workspace\u2019s own scope. A wrong entry would skip or repeat one workspace\u2019s ask, and ' +
+      'repeating is harmless because the report\u2019s dedupe key coalesces it.',
+  },
+  {
     file: 'apps/web/src/lib/server/jobs/worker.ts',
     name: 'loops',
     category: 'workspace-scoped-key',
@@ -872,6 +1097,49 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'The interval handle that re-reads the active workspace list so loops appear and disappear ' +
       'with the fleet. One timer per process by construction; the workspace dimension lives in the ' +
       'loops it maintains, not in the handle.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
+    name: 'storedConfig',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'RunnerConfig captured at startJobWorker so a job-wake can start a parked loop with the same ' +
+      'poll/batch/cap numbers. A fact about this process, not a workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
+    name: 'unsubscribeCommit',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'Handle for the after-commit start-by-id sink registered from startJobWorker. Cleared on stop ' +
+      'so a restarted worker does not double-subscribe.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
+    name: 'loopSetTail',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'Promise chain that serializes loops Map mutations (wake vs refresh). Process-local; the ' +
+      'workspace key lives in the map entries, not in this tail.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/wake.ts',
+    name: 'pending',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'Coalesce buffer for Cloud web job-wake POSTs, keyed by workspaceKey. Lives on ROLE=web only; ' +
+      'values are ids, not workspace-derived secrets, and flush in 10ms.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/wake.ts',
+    name: 'unsubscribe',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason: 'Start-once latch for the HTTP job-wake publisher on ROLE=web.',
   },
   {
     file: 'apps/web/src/lib/server/jobs/runner.ts',
@@ -976,6 +1244,17 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "workspace's data.",
   },
   {
+    file: 'apps/web/src/lib/server/domains/channels/github-deliver.ts',
+    name: 'postedThisInvocation',
+    category: 'workspace-scoped-key',
+    keyedBy: 'conversationId',
+    reason:
+      'A one-tick latch so notify fan-out posts one GitHub comment per message. Keyed by ' +
+      'conversationId:messageId TypeIDs, which name one conversation in one workspace. A ' +
+      "cross-workspace hit cannot skip another workspace's send because those ids do not collide, " +
+      'and the entry is deleted at the next macrotask so it does not persist across requests.',
+  },
+  {
     file: 'apps/web/src/lib/shared/channels/registry.ts',
     name: 'DESCRIPTORS',
     category: 'process-lifetime',
@@ -1000,11 +1279,53 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'bytes the requesting workspace would have fetched.',
   },
   {
+    file: 'apps/web/src/integrations/slack/server/agent/turns.ts',
+    name: 'inflight',
+    category: 'workspace-scoped-key',
+    keyedBy: 'slackInflightTurnKey',
+    reason:
+      'AbortControllers for in-flight Slack turns, keyed by Slack team, channel and thread. A Slack ' +
+      'team is bound to one workspace install, so a cross-workspace hit misses (different team id) ' +
+      'rather than cancelling another tenant’s turn.',
+  },
+  {
     file: 'packages/email/src/index.ts',
     name: 'emailLogSink',
     category: 'process-lifetime',
     reason:
       'The installed email-log callback for this process. apps/web plugs it in once; every ' +
       'workspace uses the same function, which then writes through the active workspace scope.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/user-attributes/user-attribute.service.ts',
+    name: 'service',
+    category: 'process-lifetime',
+    reason:
+      'A stateless closure bundle from createAttributeDefinitionService. Every method reads and ' +
+      'writes the ACTIVE workspace\u2019s user_attribute_definitions rows through the db proxy on ' +
+      'each call; it caches nothing, so a cross-workspace hit cannot return another tenant\u2019s data.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/company-attributes/company-attribute.service.ts',
+    name: 'service',
+    category: 'process-lifetime',
+    reason:
+      'A stateless closure bundle from createAttributeDefinitionService. Every method reads and ' +
+      'writes the ACTIVE workspace\u2019s company_attribute_definitions rows through the db proxy ' +
+      'on each call; it caches nothing, so a cross-workspace hit cannot return another tenant\u2019s data.',
+  },
+  {
+    file: 'apps/web/src/lib/server/auth/provider-trust.ts',
+    name: 'reportedObservations',
+    category: 'workspace-scoped-key',
+    keyedBy: 'row.id',
+    reason:
+      'The last connection-test state this process logged for each untested identity provider, ' +
+      'keyed by the provider row id (a random uuid, unique across workspaces) and holding only ' +
+      'that row’s two test timestamps, so an auth rebuild does not repeat the same info line. ' +
+      'One entry per row, dropped once the provider is trusted, so it is bounded by the number ' +
+      'of untested providers across the fleet. It holds no workspace data and gates nothing but ' +
+      'a log line: a wrong hit would drop one informational line, never change which providers ' +
+      'are trusted.',
   },
 ]

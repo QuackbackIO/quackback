@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { PlusIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import { XMarkIcon } from '@heroicons/react/24/solid'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,6 +23,7 @@ export function TrustedSendersCard({ entries, onSave }: TrustedSendersCardProps)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [removeTarget, setRemoveTarget] = useState<string | null>(null)
 
   async function save(next: string[]) {
     setSaving(true)
@@ -56,7 +58,7 @@ export function TrustedSendersCard({ entries, onSave }: TrustedSendersCardProps)
   return (
     <SettingsCard
       title="Trusted senders"
-      description="Senders that always skip the spam filter. Add a full address to trust one mailbox, or a domain to trust everyone at it."
+      description="Senders that always skip the spam filter. Add a full address or a whole domain."
     >
       <div className="space-y-3">
         <div className="flex items-start gap-2">
@@ -85,12 +87,10 @@ export function TrustedSendersCard({ entries, onSave }: TrustedSendersCardProps)
           <Button
             type="button"
             variant="outline"
-            size="sm"
             onClick={addEntry}
             disabled={!draft.trim() || saving}
-            className="h-9 shrink-0"
+            className="shrink-0"
           >
-            <PlusIcon className="mr-1 h-3.5 w-3.5" />
             Add
           </Button>
         </div>
@@ -105,7 +105,7 @@ export function TrustedSendersCard({ entries, onSave }: TrustedSendersCardProps)
                 <span className="text-sm font-mono">{entry}</span>
                 <button
                   type="button"
-                  onClick={() => void save(entries.filter((e) => e !== entry))}
+                  onClick={() => setRemoveTarget(entry)}
                   disabled={saving}
                   className="ml-2 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40 transition-colors"
                   aria-label={`Remove ${entry}`}
@@ -116,11 +116,25 @@ export function TrustedSendersCard({ entries, onSave }: TrustedSendersCardProps)
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-muted-foreground">
-            No trusted senders — every inbound message goes through spam classification.
-          </p>
+          <p className="text-xs text-muted-foreground">No trusted senders yet.</p>
         )}
       </div>
+      <ConfirmDialog
+        open={removeTarget !== null}
+        onOpenChange={(open) => !open && setRemoveTarget(null)}
+        title="Delete sender?"
+        description={
+          removeTarget ? `${removeTarget} will go through spam classification again.` : undefined
+        }
+        confirmLabel="Delete sender"
+        variant="destructive"
+        isPending={saving}
+        onConfirm={async () => {
+          const target = removeTarget
+          setRemoveTarget(null)
+          if (target) await save(entries.filter((e) => e !== target))
+        }}
+      />
     </SettingsCard>
   )
 }

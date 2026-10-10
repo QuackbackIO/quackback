@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useRouterState } from '@tanstack/react-router'
+import { browserOptedOutOfTracking } from '@/lib/client/analytics'
 
 /**
  * Fires an anonymous pageview beacon on portal route changes (visitor
@@ -25,21 +26,25 @@ function getOrCreateDeviceId(): string | null {
 }
 
 export function VisitorBeacon() {
-  const href = useRouterState({ select: (s) => s.location.href })
-  // Public visitor-facing surfaces: the portal tree plus the standalone
-  // changelog and help-center trees (the latter also serve the subdomain).
-  const isPublicSurface = useRouterState({
+  // The URL to track, or null off the public visitor-facing surfaces (the
+  // portal tree plus the standalone changelog and help-center trees, the
+  // latter also serving the subdomain), so a navigation elsewhere renders
+  // nothing. The admin's framed portal preview (`?preview=true`) is not a
+  // visit either.
+  const href = useRouterState({
     select: (s) =>
+      (s.location.search as { preview?: unknown }).preview !== true &&
       s.matches.some((m) =>
         ['/_portal', '/changelog', '/hc', '/help'].some((prefix) => m.routeId.startsWith(prefix))
-      ),
+      )
+        ? s.location.href
+        : null,
   })
   const lastTracked = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!isPublicSurface || lastTracked.current === href) return
-    const nav = navigator as Navigator & { globalPrivacyControl?: boolean }
-    if (nav.doNotTrack === '1' || nav.globalPrivacyControl === true) return
+    if (!href || lastTracked.current === href) return
+    if (browserOptedOutOfTracking()) return
     lastTracked.current = href
 
     const deviceId = getOrCreateDeviceId()
@@ -52,7 +57,7 @@ export function VisitorBeacon() {
     if (!navigator.sendBeacon?.('/api/track', body)) {
       fetch('/api/track', { method: 'POST', body, keepalive: true }).catch(() => {})
     }
-  }, [href, isPublicSurface])
+  }, [href])
 
   return null
 }

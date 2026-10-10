@@ -7,8 +7,15 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
+  availableAddTargets,
+  buildClaimsTableModel,
+  extraProfileClaimKeys,
+  hasCustomProfileClaims,
   identityMappingIssue,
+  isCustomProfilePath,
   mergeClaimMapping,
+  normalizeAttributeMapping,
+  normalizeProfileClaims,
   normalizeRoleMapping,
   withAllowMissingEmail,
 } from '../provider-shared'
@@ -70,6 +77,45 @@ describe('withAllowMissingEmail', () => {
   })
 })
 
+describe('normalizeAttributeMapping', () => {
+  it('drops empty rows and returns undefined when nothing remains', () => {
+    expect(
+      normalizeAttributeMapping({
+        map: [
+          { claimPath: '', attributeKey: 'department' },
+          { claimPath: 'dept', attributeKey: '  ' },
+        ],
+      })
+    ).toBeUndefined()
+    expect(normalizeAttributeMapping({ map: [] })).toBeUndefined()
+    expect(normalizeAttributeMapping(null)).toBeUndefined()
+  })
+
+  it('preserves flags on a non-empty mapping', () => {
+    expect(
+      normalizeAttributeMapping({
+        map: [{ claimPath: 'dept', attributeKey: 'department' }],
+        overrideExisting: true,
+        syncOnSignIn: true,
+      })
+    ).toEqual({
+      map: [{ claimPath: 'dept', attributeKey: 'department' }],
+      overrideExisting: true,
+      syncOnSignIn: true,
+    })
+  })
+
+  it('drops flags that are off so the stored shape stays sparse', () => {
+    expect(
+      normalizeAttributeMapping({
+        map: [{ claimPath: 'dept', attributeKey: 'department' }],
+        overrideExisting: false,
+        syncOnSignIn: false,
+      })
+    ).toEqual({ map: [{ claimPath: 'dept', attributeKey: 'department' }] })
+  })
+})
+
 describe('normalizeRoleMapping', () => {
   it('drops a mapping with no rules and no sync', () => {
     expect(normalizeRoleMapping({ claimPath: 'groups', rules: [] })).toBeUndefined()
@@ -119,5 +165,237 @@ describe('identityMappingIssue', () => {
     expect(
       identityMappingIssue({ role: { claimPath: 'groups', rules: [], syncOnEverySignIn: true } })
     ).toMatch(/no rules/i)
+  })
+
+  it('healthy default providers have no mapping warning pill', () => {
+    expect(identityMappingIssue(null)).toBeNull()
+    expect(identityMappingIssue({})).toBeNull()
+    expect(identityMappingIssue({ profile: { claims: { id: 'sub', email: 'email' } } })).toBeNull()
+    expect(identityMappingIssue({ profile: { sources: ['idToken', 'userinfo'] } })).toBeNull()
+    expect(identityMappingIssue({ profile: { allowMissingEmail: true } })).toBeNull()
+  })
+
+  it('flags an explicitly blank supported path', () => {
+    expect(identityMappingIssue({ profile: { claims: { email: '  ' } } })).toMatch(/email/i)
+    expect(identityMappingIssue({ profile: { claims: { id: ' ' } } })).toMatch(/account id/i)
+  })
+
+  it('flags a blank username or avatar path', () => {
+    expect(identityMappingIssue({ profile: { claims: { username: ' ' } } })).toBe(
+      'Username mapping has no claim path'
+    )
+    expect(identityMappingIssue({ profile: { claims: { image: ' ' } } })).toBe(
+      'Avatar mapping has no claim path'
+    )
+  })
+
+  it('flags sources that contain no valid identity source', () => {
+    expect(
+      identityMappingIssue({
+        profile: { sources: ['nope' as unknown as 'idToken'] },
+      })
+    ).toMatch(/sources/i)
+  })
+})
+
+describe('normalizeProfileClaims', () => {
+  it('omits default email, name, and default sources', () => {
+    expect(
+      normalizeProfileClaims({
+        claims: { email: 'email', name: 'name' },
+        sources: ['idToken', 'userinfo'],
+      })
+    ).toBeUndefined()
+  })
+
+  it('keeps explicit id: sub because it disables userinfo id fallback', () => {
+    expect(normalizeProfileClaims({ claims: { id: 'sub' } })).toEqual({
+      claims: { id: 'sub' },
+    })
+  })
+
+  it('keeps a custom email path and missing-email policy', () => {
+    expect(
+      normalizeProfileClaims({
+        allowMissingEmail: true,
+        claims: { email: 'upn' },
+      })
+    ).toEqual({ allowMissingEmail: true, claims: { email: 'upn' } })
+  })
+})
+
+describe('hasCustomProfileClaims', () => {
+  it('is false for missing-email or default display values', () => {
+    expect(hasCustomProfileClaims(null)).toBe(false)
+    expect(hasCustomProfileClaims({ profile: { allowMissingEmail: true } })).toBe(false)
+    expect(hasCustomProfileClaims({ profile: { claims: { email: 'email' } } })).toBe(false)
+  })
+
+  it('is true for explicit identifier or a custom email/name path', () => {
+    expect(hasCustomProfileClaims({ profile: { claims: { id: 'sub' } } })).toBe(true)
+    expect(hasCustomProfileClaims({ profile: { claims: { email: 'upn' } } })).toBe(true)
+  })
+})
+
+describe('buildClaimsTableModel', () => {
+  const defs = [
+    { key: 'department', label: 'Department', type: 'string' },
+    { key: 'plan', label: 'Plan', type: 'string' },
+  ]
+
+  it('always lists the five profile fields together, all standard by default', () => {
+    const model = buildClaimsTableModel({ mapping: null, definitions: defs })
+    expect(model.profile.map((r) => r.field)).toEqual(['id', 'email', 'name', 'username', 'image'])
+    expect(model.profile.every((r) => r.isDefault)).toBe(true)
+    expect(model.profile.map((r) => r.path)).toEqual([
+      'sub',
+      'email',
+      'name',
+      'preferred_username',
+      'picture',
+    ])
+    expect(model.additional).toEqual([])
+  })
+
+  it('pins explicit sub as a custom identifier', () => {
+    const model = buildClaimsTableModel({
+      mapping: { profile: { claims: { id: 'sub' } } },
+      definitions: [],
+    })
+    expect(model.profile[0]).toMatchObject({ field: 'id', path: 'sub', isDefault: false })
+  })
+
+  it('preserves orphaned and duplicate People rows by baseline index', () => {
+    const model = buildClaimsTableModel({
+      mapping: {
+        attributes: {
+          map: [
+            { claimPath: 'dept', attributeKey: 'department' },
+            { claimPath: 'org.department', attributeKey: 'department' },
+            { claimPath: 'cc', attributeKey: 'cost_center' },
+          ],
+        },
+      },
+      definitions: defs,
+    })
+    const people = model.additional.filter((r) => r.kind === 'people')
+    expect(people).toHaveLength(3)
+    expect(people[0]).toMatchObject({ baselineIndex: 0, duplicate: true, orphaned: false })
+    expect(people[1]).toMatchObject({ baselineIndex: 1, duplicate: true })
+    expect(people[2]).toMatchObject({
+      baselineIndex: 2,
+      attributeKey: 'cost_center',
+      orphaned: true,
+    })
+  })
+})
+
+describe('availableAddTargets', () => {
+  it('offers unused People keys only, never role rules', () => {
+    const defs = [
+      { key: 'department', label: 'Department', type: 'string' },
+      { key: 'plan', label: 'Plan', type: 'string' },
+    ]
+    expect(availableAddTargets({ mapping: null, definitions: defs })).toEqual([
+      { kind: 'people', key: 'department', label: 'Department', attrType: 'string' },
+      { kind: 'people', key: 'plan', label: 'Plan', attrType: 'string' },
+    ])
+    expect(
+      availableAddTargets({
+        mapping: {
+          role: { claimPath: 'groups', rules: [{ whenContains: 'eng', role: 'member' }] },
+          attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] },
+        },
+        definitions: defs,
+      })
+    ).toEqual([{ kind: 'people', key: 'plan', label: 'Plan', attrType: 'string' }])
+  })
+})
+
+describe('username, avatar and profile sync', () => {
+  it('lists five profile rows with their labels, hints and standard claims', () => {
+    const model = buildClaimsTableModel({ mapping: null, definitions: [] })
+    expect(model.profile.map((r) => [r.field, r.label, r.hint, r.path])).toEqual([
+      ['id', 'Account ID', 'Unique, never changes', 'sub'],
+      ['email', 'Email', 'Email address', 'email'],
+      ['name', 'Name', 'Display name', 'name'],
+      ['username', 'Username', 'Used when no name is sent', 'preferred_username'],
+      ['image', 'Avatar', 'Image URL', 'picture'],
+    ])
+    expect(model.profile.every((r) => r.isDefault)).toBe(true)
+    expect(model.additional).toEqual([])
+  })
+
+  it('marks a custom avatar or username claim as Custom, not as an unsupported row', () => {
+    const model = buildClaimsTableModel({
+      mapping: { profile: { claims: { image: 'photo_url', username: 'handle' } } },
+      definitions: [],
+    })
+    expect(model.profile.find((r) => r.field === 'image')).toMatchObject({
+      path: 'photo_url',
+      isDefault: false,
+    })
+    expect(model.profile.find((r) => r.field === 'username')).toMatchObject({
+      path: 'handle',
+      isDefault: false,
+    })
+    expect(model.additional).toEqual([])
+  })
+
+  it('treats the five fields as editable and anything else as extra', () => {
+    expect(
+      extraProfileClaimKeys({
+        profile: {
+          claims: { username: 'handle', image: 'photo_url', locale: 'locale' } as Record<
+            string,
+            string
+          >,
+        },
+      })
+    ).toEqual(['locale'])
+  })
+
+  it('drops the standard avatar claim and keeps custom ones', () => {
+    expect(normalizeProfileClaims({ claims: { image: 'picture' } })).toBeUndefined()
+    expect(
+      normalizeProfileClaims({ claims: { username: ' handle ', image: 'profile.photo' } })
+    ).toEqual({ claims: { username: 'handle', image: 'profile.photo' } })
+  })
+
+  it('keeps an explicit preferred_username, which turns the nickname fallback off', () => {
+    expect(normalizeProfileClaims({ claims: { username: 'preferred_username' } })).toEqual({
+      claims: { username: 'preferred_username' },
+    })
+    expect(
+      hasCustomProfileClaims({ profile: { claims: { username: 'preferred_username' } } })
+    ).toBe(true)
+    const model = buildClaimsTableModel({
+      mapping: { profile: { claims: { username: 'preferred_username' } } },
+      definitions: [],
+    })
+    expect(model.profile.find((r) => r.field === 'username')).toMatchObject({
+      path: 'preferred_username',
+      isDefault: false,
+    })
+  })
+
+  it('treats any stored Account ID or username as custom, and other fields only off-standard', () => {
+    expect(isCustomProfilePath('id', 'sub')).toBe(true)
+    expect(isCustomProfilePath('username', 'preferred_username')).toBe(true)
+    expect(isCustomProfilePath('image', ' picture ')).toBe(false)
+    expect(isCustomProfilePath('email', 'upn')).toBe(true)
+    expect(isCustomProfilePath('name', '  ')).toBe(false)
+    expect(isCustomProfilePath('id', undefined)).toBe(false)
+  })
+
+  it('keeps profile sync only when it is on', () => {
+    expect(normalizeProfileClaims({ syncOnSignIn: true })).toEqual({ syncOnSignIn: true })
+    expect(normalizeProfileClaims({ syncOnSignIn: false })).toBeUndefined()
+  })
+
+  it('counts a custom avatar or username claim as a custom profile', () => {
+    expect(hasCustomProfileClaims({ profile: { claims: { image: 'photo_url' } } })).toBe(true)
+    expect(hasCustomProfileClaims({ profile: { claims: { username: 'handle' } } })).toBe(true)
+    expect(hasCustomProfileClaims({ profile: { claims: { image: 'picture' } } })).toBe(false)
   })
 })

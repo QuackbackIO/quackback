@@ -25,7 +25,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId/fe
         try {
           const { principalId } = await withApiKeyAuth(request)
 
-          const articleId = parseTypeId<KbArticleId>(params.articleId, 'kb_article', 'article ID')
+          const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
 
           const body = await request.json()
           const parsed = feedbackBody.safeParse(body)

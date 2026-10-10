@@ -15,15 +15,18 @@ const hoisted = vi.hoisted(() => ({
   one: vi.fn(),
   many: vi.fn(),
   retry: vi.fn(),
+  count: vi.fn(),
 }))
 
 vi.mock('@/lib/server/kv/pg-kv', () => ({
   incrementRateBucket: hoisted.one,
   incrementRateBuckets: hoisted.many,
   rateBucketRetryAfter: hoisted.retry,
+  rateBucketCount: hoisted.count,
 }))
 
-const { incrementBucket, incrementBuckets, bucketRetryAfter } = await import('../rate-bucket')
+const { incrementBucket, incrementBuckets, bucketRetryAfter, getBucketCount } =
+  await import('../rate-bucket')
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -67,6 +70,19 @@ describe('incrementBuckets', () => {
         { key: 'b', windowSeconds: 60 },
       ])
     ).toEqual([null, null])
+  })
+})
+
+describe('getBucketCount', () => {
+  it('returns the live count', async () => {
+    hoisted.count.mockResolvedValueOnce(12)
+    expect(await getBucketCount('api:month')).toBe(12)
+    expect(hoisted.count).toHaveBeenCalledWith('api:month')
+  })
+
+  it('treats a store error as zero', async () => {
+    hoisted.count.mockRejectedValueOnce(new Error('database unreachable'))
+    expect(await getBucketCount('api:month')).toBe(0)
   })
 })
 

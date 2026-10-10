@@ -1,5 +1,5 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { closeClickUpTask } from '@/integrations/clickup/server/archive'
 import { fetchClickUpStatuses } from '@/integrations/clickup/server/statuses'
 import {
   registerClickUpWebhook,
@@ -16,6 +16,7 @@ const log = logger.child({ component: 'clickup' })
 
 export const clickupIntegration: IntegrationDefinition = {
   id: 'clickup',
+  destination: channelDestination(['workspaceId', 'spaceId']),
   catalog: clickupCatalog,
   oauth: {
     stateType: 'clickup_oauth',
@@ -24,7 +25,7 @@ export const clickupIntegration: IntegrationDefinition = {
   },
   hook: clickupHook,
   inbound: clickupInboundHandler,
-  archive: closeClickUpTask,
+  linkedItems: true,
   webhookRegistration: {
     register: async ({ accessToken, config, callbackUrl, secret }) => {
       const teamId = config.teamId as string

@@ -23,7 +23,7 @@ import {
   isNull,
   count,
 } from '@/lib/server/db'
-import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { loadAuthors } from '@/lib/server/domains/principals/principal-display'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { type PostId, type PostCommentId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
@@ -32,6 +32,7 @@ import type { PostWithDetails, PinnedComment } from './post.types'
 import { hydrateMentions } from './hydrate-mentions'
 import type { JSONContent } from '@tiptap/core'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
 
 /**
  * Get a post with full details including board, tags, and comment count.
@@ -121,20 +122,17 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
 
   let pinnedComment: PinnedComment | null = null
   if (pinnedCommentData && !pinnedCommentData.deletedAt) {
-    let avatarUrl: string | null = null
-    if (pinnedCommentData.author) {
-      if (pinnedCommentData.author.avatarKey) {
-        avatarUrl = getPublicUrlOrNull(pinnedCommentData.author.avatarKey)
-      }
-      if (!avatarUrl && pinnedCommentData.author.avatarUrl) {
-        avatarUrl = pinnedCommentData.author.avatarUrl
-      }
-    }
+    const author = (await loadAuthors([pinnedCommentData.principalId])).get(
+      pinnedCommentData.principalId
+    )
+    const avatarUrl = author?.avatarUrl ?? null
 
     const pinnedRawContentJson = pinnedCommentData.contentJson ?? null
-    const pinnedHydratedContentJson = pinnedRawContentJson
-      ? ((await hydrateMentions(pinnedRawContentJson as JSONContent)) as TiptapContent | null)
-      : null
+    const pinnedHydratedContentJson = contentJsonForClient(
+      pinnedRawContentJson
+        ? ((await hydrateMentions(pinnedRawContentJson as JSONContent)) as TiptapContent | null)
+        : null
+    )
     pinnedComment = {
       id: pinnedCommentData.id,
       content: pinnedCommentData.content,
@@ -148,9 +146,13 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
   }
 
   // Hydrate mention labels on the post body so renamed users render correctly.
-  const hydratedPostContentJson = post.contentJson
-    ? ((await hydrateMentions(post.contentJson as JSONContent)) as TiptapContent | null)
-    : post.contentJson
+  // Remint storage read tokens after that: persist stays unsigned, and posts
+  // created before private-object tokens existed still have to render.
+  const hydratedPostContentJson = contentJsonForClient(
+    post.contentJson
+      ? ((await hydrateMentions(post.contentJson as JSONContent)) as TiptapContent | null)
+      : post.contentJson
+  )
 
   // Cast needed: columns selection omits heavy internal fields (embedding, searchVector,
   // etc.) that no caller reads, but PostWithDetails extends the full Post type.
@@ -228,9 +230,9 @@ export async function getCommentsWithReplies(
 }
 
 /**
- * Resolve the set of post ids whose comments belong to this post's thread:
- * the post itself plus any posts merged into it (excluding sources on a
- * soft-deleted board). Shared by the unbounded and paginated comment reads.
+ * Resolve the set of post ids whose comments belong to this post's thread,
+ * after checking the post and its board exist: the unbounded read's callers
+ * rely on it for their not-found answer.
  */
 async function resolveCommentPostIds(postId: PostId): Promise<PostId[]> {
   // Verify post exists and belongs to organization
@@ -244,6 +246,14 @@ async function resolveCommentPostIds(postId: PostId): Promise<PostId[]> {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
   }
 
+  return resolveThreadPostIds(postId)
+}
+
+/**
+ * The post ids whose comments belong to this post's thread: the post itself
+ * plus any posts merged into it (excluding sources on a soft-deleted board).
+ */
+async function resolveThreadPostIds(postId: PostId): Promise<PostId[]> {
   const mergedPosts = await db
     .select({ id: posts.id })
     .from(posts)
@@ -277,7 +287,9 @@ export async function getPaginatedCommentsWithReplies(
   const rootLimit = Math.max(1, opts.limit ?? DEFAULT_COMMENT_PAGE_SIZE)
   const cursor = decodeCommentCursor(opts.cursor)
 
-  const postIds = await resolveCommentPostIds(postId)
+  // No existence check: the only caller loads the post (and its board) in
+  // parallel and answers not-found from that.
+  const postIds = await resolveThreadPostIds(postId)
   const postFilter =
     postIds.length === 1 ? eq(postComments.postId, postId) : inArray(postComments.postId, postIds)
 
@@ -296,20 +308,21 @@ export async function getPaginatedCommentsWithReplies(
       )!
     )
   }
-  const rootRows = await db.query.postComments.findMany({
-    where: and(...rootConditions),
-    columns: { id: true, createdAt: true },
-    orderBy: [desc(postComments.createdAt), desc(postComments.id)],
-    limit: rootLimit + 1,
-  })
+  const [rootRows, [totalRootRow]] = await Promise.all([
+    db.query.postComments.findMany({
+      where: and(...rootConditions),
+      columns: { id: true, createdAt: true },
+      orderBy: [desc(postComments.createdAt), desc(postComments.id)],
+      limit: rootLimit + 1,
+    }),
+    db
+      .select({ count: count() })
+      .from(postComments)
+      .where(and(postFilter, isNull(postComments.parentId))),
+  ])
   const hasMore = rootRows.length > rootLimit
   const pageRoots = hasMore ? rootRows.slice(0, rootLimit) : rootRows
   const rootIds = pageRoots.map((r) => r.id)
-
-  const [totalRootRow] = await db
-    .select({ count: count() })
-    .from(postComments)
-    .where(and(postFilter, isNull(postComments.parentId)))
   const totalRootCount = Number(totalRootRow?.count ?? 0)
 
   const nextCursor =

@@ -158,7 +158,12 @@ export function mergeSetupState(
   const completedAt = forceComplete
     ? (parsed.completedAt ?? new Date().toISOString())
     : parsed.completedAt
-  const outcome = normalizeOnboardingOutcome(workspace.useCase) ?? parsed.useCase
+  // The file's goal decides private feedback both ways: `internal` is the
+  // feedback goal kept to the team, and any other goal is not private.
+  const fileOutcome =
+    workspace.useCase !== undefined ? normalizeOnboardingOutcome(workspace.useCase) : undefined
+  const fileGoal = fileOutcome === 'internal' ? 'product_feedback' : fileOutcome
+  const outcome = fileGoal ?? parsed.useCase
   const startingPoint = forceComplete
     ? (parsed.steps.startingPoint ?? {
         outcome: outcome ?? 'product_feedback',
@@ -169,6 +174,8 @@ export function mergeSetupState(
       })
     : parsed.steps.startingPoint
   return {
+    ...parsed,
+    ...(fileGoal ? { goals: [fileGoal], feedbackPrivate: fileOutcome === 'internal' } : {}),
     version: 2,
     steps: {
       core: forceComplete ? true : parsed.steps.core,

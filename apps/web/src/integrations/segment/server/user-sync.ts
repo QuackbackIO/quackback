@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Segment CDP user-sync handler.
  *
@@ -16,7 +17,7 @@
  *   writeKey — Segment source write key for the HTTP Tracking API
  */
 
-import { timingSafeEqual, createHmac, createHash } from 'crypto'
+import { timingSafeEqual, createHmac } from 'crypto'
 import type {
   UserSyncHandler,
   UserIdentifyPayload,
@@ -24,7 +25,6 @@ import type {
 import { logger } from '@/lib/server/logger'
 import { db, integrations, and, eq } from '@/lib/server/db'
 import { decryptSecrets } from '@/lib/server/integrations/encryption'
-import { kvSetNx } from '@/lib/server/kv/pg-kv'
 
 const log = logger.child({ component: 'segment' })
 
@@ -79,14 +79,6 @@ export const segmentUserSync: UserSyncHandler = {
       return new Response('Invalid JSON body', { status: 400 })
     }
 
-    // Segment includes messageId on normal deliveries. Claim it before the
-    // write so provider retries cannot apply the same identify mutation twice.
-    if (typeof payload.messageId === 'string' && payload.messageId.length > 0) {
-      const digest = createHash('sha256').update(payload.messageId).digest('hex')
-      const claimed = await kvSetNx(`segment:identify:${digest}`, 1, 86_400)
-      if (!claimed) return new Response('OK', { status: 200 })
-    }
-
     // Only process identify events — acknowledge but ignore everything else
     if (payload.type !== 'identify') {
       return new Response('OK', { status: 200 })
@@ -102,6 +94,8 @@ export const segmentUserSync: UserSyncHandler = {
     }
 
     return {
+      deliveryId: typeof payload.messageId === 'string' ? payload.messageId : undefined,
+      occurredAt: typeof payload.timestamp === 'string' ? payload.timestamp : undefined,
       email,
       externalUserId: payload.userId as string | undefined,
       attributes: { ...contextTraits, ...traits },
@@ -113,7 +107,8 @@ export const segmentUserSync: UserSyncHandler = {
     if (!config.outgoingEnabled) return
 
     const writeKey = secrets.writeKey as string | undefined
-    if (!writeKey || users.length === 0) return
+    if (!writeKey) throw Object.assign(new Error('Segment write key missing'), { status: 401 })
+    if (users.length === 0) return
 
     // Segment attribute key: snake_case from segment name
     const attributeKey = segmentName.toLowerCase().replace(/[^a-z0-9]+/g, '_')
@@ -124,13 +119,16 @@ export const segmentUserSync: UserSyncHandler = {
       const batch = users.slice(i, i + OUTBOUND_BATCH_SIZE)
       const results = await Promise.allSettled(
         batch.map(async (u) => {
-          const response = await fetch(`${SEGMENT_TRACKING_API}/identify`, {
+          const response = await integrationFetch(`${SEGMENT_TRACKING_API}/identify`, {
             method: 'POST',
             headers: {
               Authorization: `Basic ${encoded}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
+              ...(typeof config.syncOperationKey === 'string'
+                ? { messageId: config.syncOperationKey }
+                : {}),
               userId: u.externalUserId ?? u.email,
               traits: { [attributeKey]: joined },
               context: { active: false },

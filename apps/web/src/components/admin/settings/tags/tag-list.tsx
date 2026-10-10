@@ -1,151 +1,54 @@
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useTransition, type ReactNode } from 'react'
 import { useRouter } from '@tanstack/react-router'
+import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { PlusIcon, TrashIcon, PencilSquareIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
+import { EyeSlashIcon, GlobeAltIcon, TagIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Radio } from '@base-ui/react/radio'
+import { RadioGroup } from '@/components/ui/radio-group'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { ColorPickerGrid, ColorHexInput, randomColor } from '@/components/shared/color-picker'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { RowDot, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
+import { AiBackfillCard } from '@/components/admin/settings/tags/ai-backfill-card'
+import { EmptyState } from '@/components/shared/empty-state'
+import { NewButton } from '@/components/shared/new-button'
+import { Badge } from '@/components/ui/badge'
+import { AUTOSAVE } from '@/lib/client/autosave'
 import { cn } from '@/lib/shared/utils'
-import type { PostTag } from '@/lib/shared/db-types'
+import type { Board, PostTag } from '@/lib/shared/db-types'
 import { createPostTagFn, updatePostTagFn, deletePostTagFn } from '@/lib/server/functions/post-tags'
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-const PRESET_COLORS = [
-  '#ef4444',
-  '#f97316',
-  '#eab308',
-  '#22c55e',
-  '#14b8a6',
-  '#3b82f6',
-  '#8b5cf6',
-  '#ec4899',
-  '#f87171',
-  '#fb923c',
-  '#facc15',
-  '#4ade80',
-  '#2dd4bf',
-  '#60a5fa',
-  '#a78bfa',
-  '#f472b6',
-  '#b91c1c',
-  '#c2410c',
-  '#a16207',
-  '#15803d',
-  '#0f766e',
-  '#1d4ed8',
-  '#6d28d9',
-  '#be185d',
-  '#0f172a',
-  '#334155',
-  '#64748b',
-  '#94a3b8',
-  '#475569',
-  '#1e293b',
-  '#78716c',
-  '#a8a29e',
-]
-
-function randomColor(): string {
-  return (
-    '#' +
-    Math.floor(Math.random() * 0xffffff)
-      .toString(16)
-      .padStart(6, '0')
-  )
-}
-
-// ============================================================================
-// Color Picker Components
-// ============================================================================
-
-function ColorPickerGrid({
-  selectedColor,
-  onColorChange,
-}: {
-  selectedColor: string
-  onColorChange: (color: string) => void
-}) {
-  return (
-    <div className="grid grid-cols-8 gap-1.5">
-      {PRESET_COLORS.map((c) => (
-        <button
-          key={c}
-          type="button"
-          className={cn(
-            'h-6 w-6 rounded-full border-2 transition-colors',
-            selectedColor.toLowerCase() === c.toLowerCase()
-              ? 'border-foreground'
-              : 'border-transparent'
-          )}
-          style={{ backgroundColor: c }}
-          onClick={() => onColorChange(c)}
-        />
-      ))}
-    </div>
-  )
-}
-
-function ColorHexInput({
+function ColorPickerPopover({
   color,
   onColorChange,
+  trigger,
 }: {
   color: string
   onColorChange: (color: string) => void
+  trigger: ReactNode
 }) {
-  const [hexInput, setHexInput] = useState(color)
-
-  useEffect(() => {
-    setHexInput(color)
-  }, [color])
-
-  function handleHexChange(value: string) {
-    setHexInput(value)
-    if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
-      onColorChange(value)
-    }
-  }
-
   return (
-    <div className="flex items-center gap-2">
-      <span
-        className="h-6 w-6 rounded-md border border-border shrink-0"
-        style={{ backgroundColor: color }}
-      />
-      <Input
-        value={hexInput}
-        onChange={(e) => handleHexChange(e.target.value)}
-        className="font-mono text-xs h-7"
-        placeholder="#000000"
-      />
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="h-7 w-7 shrink-0"
-        onClick={() => {
-          const c = randomColor()
-          setHexInput(c)
-          onColorChange(c)
-        }}
-        title="Random color"
-      >
-        <ArrowPathIcon className="h-3.5 w-3.5" />
-      </Button>
-    </div>
+    <Popover>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent className="w-auto p-2 space-y-2" align="start">
+        <ColorPickerGrid selectedColor={color} onColorChange={onColorChange} />
+        <ColorHexInput color={color} onColorChange={onColorChange} />
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -164,6 +67,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('#6b7280')
+  const [isPublic, setIsPublic] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -175,10 +79,12 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
         setName(tag.name)
         setDescription(tag.description ?? '')
         setColor(tag.color)
+        setIsPublic(tag.isPublic)
       } else {
         setName('')
         setDescription('')
         setColor(randomColor())
+        setIsPublic(true)
       }
       setError(null)
     }
@@ -211,6 +117,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
             name: trimmedName,
             color,
             description: description.trim() || null,
+            isPublic,
           },
         })
       } else {
@@ -219,6 +126,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
             name: trimmedName,
             color,
             description: description.trim() || undefined,
+            isPublic,
           },
         })
       }
@@ -234,64 +142,136 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit tag' : 'New tag'}</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-md" aria-describedby="tag-dialog-desc">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            void handleSave()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{isEdit ? 'Edit tag' : 'New tag'}</DialogTitle>
+            <DialogDescription id="tag-dialog-desc">
+              Label posts for filtering. Visible on the portal unless marked internal.
+            </DialogDescription>
+          </DialogHeader>
 
-        {/* Live preview */}
-        <div className="flex justify-center py-3 bg-muted/30 rounded-lg">
-          <span
-            className="inline-flex items-center px-3 py-0.5 rounded-md text-sm font-medium"
-            style={{ backgroundColor: color + '20', color }}
-          >
-            {name.trim() || 'PostTag name'}
-          </span>
-        </div>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="tag-name">Name</Label>
+              <div className="flex items-center gap-2">
+                <ColorPickerPopover
+                  color={color}
+                  onColorChange={setColor}
+                  trigger={
+                    <button
+                      type="button"
+                      className="h-9 w-9 rounded-full border border-border shrink-0 hover:ring-2 hover:ring-offset-1 hover:ring-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-ring"
+                      style={{ backgroundColor: color }}
+                      aria-label="Color"
+                      title="Change color"
+                    />
+                  }
+                />
+                <Input
+                  id="tag-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. bug, enhancement, design"
+                  maxLength={50}
+                  autoFocus
+                  className="flex-1 min-w-0"
+                />
+              </div>
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="tag-name">Name</Label>
-          <Input
-            id="tag-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. bug, enhancement, design"
-            maxLength={50}
-          />
-        </div>
+            <div className="space-y-2">
+              <Label id="tag-visibility-label">Visibility</Label>
+              <RadioGroup
+                value={isPublic ? 'portal' : 'internal'}
+                onValueChange={(value) => setIsPublic(value === 'portal')}
+                aria-labelledby="tag-visibility-label"
+                className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+              >
+                <VisibilityCard
+                  value="portal"
+                  label="Portal"
+                  description="Shown on the public portal"
+                  icon={<GlobeAltIcon className="h-3.5 w-3.5" />}
+                />
+                <VisibilityCard
+                  value="internal"
+                  label="Internal"
+                  description="Hidden from the portal"
+                  icon={<EyeSlashIcon className="h-3.5 w-3.5" />}
+                />
+              </RadioGroup>
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="tag-desc">
-            Description <span className="text-muted-foreground font-normal">(optional)</span>
-          </Label>
-          <Textarea
-            id="tag-desc"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Brief description of when to use this tag"
-            rows={2}
-            maxLength={200}
-          />
-        </div>
+            <div className="space-y-2">
+              <Label htmlFor="tag-desc">
+                Description <span className="text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              <Textarea
+                id="tag-desc"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="When to use this tag"
+                rows={2}
+                maxLength={200}
+              />
+            </div>
 
-        <div className="space-y-2">
-          <Label>Color</Label>
-          <ColorPickerGrid selectedColor={color} onColorChange={setColor} />
-          <ColorHexInput color={color} onColorChange={setColor} />
-        </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : isEdit ? 'Save changes' : 'Create tag'}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSaving || !name.trim()}>
+              {isSaving ? 'Saving...' : isEdit ? 'Save changes' : 'Create tag'}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function VisibilityCard({
+  value,
+  label,
+  description,
+  icon,
+}: {
+  value: string
+  label: string
+  description: string
+  icon: ReactNode
+}) {
+  return (
+    <Radio.Root
+      value={value}
+      aria-label={label}
+      className={cn(
+        'group flex flex-col items-stretch gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors outline-none',
+        'border-border bg-muted/30 hover:bg-muted/60 cursor-pointer',
+        'focus-visible:ring-2 focus-visible:ring-ring/50',
+        'data-checked:border-primary data-checked:bg-primary/10'
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground group-data-checked:text-primary">{icon}</span>
+        <span className="text-sm font-semibold group-data-checked:text-primary">{label}</span>
+      </div>
+      <span className="text-xs text-muted-foreground leading-snug">{description}</span>
+    </Radio.Root>
   )
 }
 
@@ -299,34 +279,35 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
 // PostTag List (main export)
 // ============================================================================
 
-interface TagListProps {
+interface TagsSettingsPageProps {
   initialTags: PostTag[]
+  boards: Board[]
 }
 
-export function TagList({ initialTags }: TagListProps) {
+export function TagsSettingsPage({ initialTags, boards }: TagsSettingsPageProps) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [tags, setTags] = useState(initialTags)
-  const [savingField, setSavingField] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTag, setEditingTag] = useState<PostTag | null>(null)
   const [deletingTag, setDeletingTag] = useState<PostTag | null>(null)
 
-  // Change color inline — save immediately
-  const handleColorChange = async (tag: PostTag, color: string) => {
-    const previousColor = tag.color
-    setSavingField(`color-${tag.id}`)
-    setTags((prev) => prev.map((t) => (t.id === tag.id ? { ...t, color } : t)))
+  // Colour changes save on change; a failure reverts the dot and the autosave
+  // handler shows the one toast.
+  const colorMutation = useMutation({
+    mutationFn: (input: { id: string; color: string; previousColor: string }) =>
+      updatePostTagFn({ data: { id: input.id, color: input.color } }),
+    meta: AUTOSAVE,
+    onSuccess: () => startTransition(() => router.invalidate()),
+    onError: (_error, input) =>
+      setTags((prev) =>
+        prev.map((t) => (t.id === input.id ? { ...t, color: input.previousColor } : t))
+      ),
+  })
 
-    try {
-      await updatePostTagFn({ data: { id: tag.id, color } })
-      startTransition(() => router.invalidate())
-    } catch {
-      toast.error('Failed to update color')
-      setTags((prev) => prev.map((t) => (t.id === tag.id ? { ...t, color: previousColor } : t)))
-    } finally {
-      setSavingField(null)
-    }
+  function handleColorChange(tag: PostTag, color: string) {
+    setTags((prev) => prev.map((t) => (t.id === tag.id ? { ...t, color } : t)))
+    colorMutation.mutate({ id: tag.id, color, previousColor: tag.color })
   }
 
   function handleTagSaved(saved: PostTag) {
@@ -362,91 +343,59 @@ export function TagList({ initialTags }: TagListProps) {
   }
 
   return (
-    <div className="space-y-8">
-      <SettingsCard
-        title="Tags"
-        description="Label posts across boards for filtering and organization. Tags appear as colored badges throughout the app."
-        contentClassName="p-4"
-      >
-        <div className="space-y-1">
-          {tags.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No tags yet. Create your first tag to get started.
-            </p>
-          )}
-
-          {tags.map((tag) => (
-            <div
-              key={tag.id}
-              className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 group"
-            >
-              {/* Color dot with popover */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    className="h-3 w-3 rounded-full shrink-0 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-muted-foreground/50"
-                    style={{ backgroundColor: tag.color }}
-                  />
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-2 space-y-2" align="start">
-                  <ColorPickerGrid
-                    selectedColor={tag.color}
-                    onColorChange={(c) => handleColorChange(tag, c)}
-                  />
-                  <ColorHexInput
+    <SettingsPage
+      page="/admin/settings/tags"
+      actions={tags.length > 0 ? <NewButton noun="tag" onClick={openCreate} /> : undefined}
+    >
+      <SettingsCard flush>
+        {tags.length === 0 ? (
+          <EmptyState
+            size="compact"
+            icon={TagIcon}
+            title="No tags yet"
+            description="Tags label posts for filtering."
+            action={<NewButton noun="tag" onClick={openCreate} />}
+          />
+        ) : (
+          <SettingsList>
+            {tags.map((tag) => (
+              <SettingsListRow
+                key={tag.id}
+                leading={
+                  <ColorPickerPopover
                     color={tag.color}
                     onColorChange={(c) => handleColorChange(tag, c)}
+                    trigger={
+                      <button
+                        type="button"
+                        aria-label={`Change colour of ${tag.name}`}
+                        className="flex cursor-pointer rounded-full hover:ring-2 hover:ring-muted-foreground/40 hover:ring-offset-1"
+                      >
+                        <RowDot color={tag.color} />
+                      </button>
+                    }
                   />
-                </PopoverContent>
-              </Popover>
-
-              {/* Name */}
-              <span className="text-sm font-medium">{tag.name}</span>
-
-              {/* Description */}
-              <span className="text-xs text-muted-foreground truncate flex-1">
-                {tag.description ?? ''}
-              </span>
-
-              {/* Saving spinner */}
-              {savingField === `color-${tag.id}` && (
-                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-              )}
-
-              {/* Edit button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100"
-                onClick={() => openEdit(tag)}
-                title="Edit tag"
-              >
-                <PencilSquareIcon className="h-3.5 w-3.5" />
-              </Button>
-
-              {/* Delete button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
-                onClick={() => setDeletingTag(tag)}
-                title="Delete tag"
-              >
-                <TrashIcon className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ))}
-
-          {/* Add new tag button */}
-          <button
-            className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 w-full text-muted-foreground"
-            onClick={openCreate}
-          >
-            <PlusIcon className="h-3 w-3" />
-            <span className="text-sm">Add new tag</span>
-          </button>
-        </div>
+                }
+                title={tag.name}
+                badges={
+                  !tag.isPublic ? (
+                    <Badge size="sm" variant="secondary">
+                      Internal
+                    </Badge>
+                  ) : undefined
+                }
+                meta={tag.description || undefined}
+                actions={[
+                  { label: 'Edit', onSelect: () => openEdit(tag) },
+                  { label: 'Delete', onSelect: () => setDeletingTag(tag), destructive: true },
+                ]}
+              />
+            ))}
+          </SettingsList>
+        )}
       </SettingsCard>
+
+      <AiBackfillCard tags={tags} boards={boards} />
 
       {/* Create/Edit dialog */}
       <TagDialog
@@ -460,12 +409,12 @@ export function TagList({ initialTags }: TagListProps) {
       <ConfirmDialog
         open={!!deletingTag}
         onOpenChange={() => setDeletingTag(null)}
-        title="Delete tag"
-        description={`Are you sure you want to delete "${deletingTag?.name}"? This will remove it from all posts.`}
-        confirmLabel="Delete"
+        title="Delete tag?"
+        description={`"${deletingTag?.name}" will be removed from all posts. This cannot be undone.`}
+        confirmLabel="Delete tag"
         variant="destructive"
         onConfirm={handleDelete}
       />
-    </div>
+    </SettingsPage>
   )
 }

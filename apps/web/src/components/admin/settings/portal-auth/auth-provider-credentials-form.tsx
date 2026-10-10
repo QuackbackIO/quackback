@@ -9,6 +9,7 @@ import {
   useDeleteAuthProviderCredentials,
 } from '@/lib/client/mutations'
 import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -58,7 +59,7 @@ function CopyableField({ label, value }: { label: string; value: string }) {
           title="Copy to clipboard"
         >
           {copied ? (
-            <CheckIcon className="h-3.5 w-3.5 text-green-600" />
+            <CheckIcon className="h-3.5 w-3.5 text-success" />
           ) : (
             <ClipboardDocumentIcon className="h-3.5 w-3.5" />
           )}
@@ -81,13 +82,13 @@ export function AuthProviderCredentialsForm({
   const baseUrl = credentialsQuery.data.baseUrl
 
   const [isEditing, setIsEditing] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const [values, setValues] = useState<Record<string, string>>({})
 
   const saveMutation = useSaveAuthProviderCredentials()
   const deleteMutation = useDeleteAuthProviderCredentials()
 
-  // Generic-OAuth providers (Custom OIDC) register a different callback path
-  // than built-in social providers, so derive it from the provider type. (#233)
+  // Social providers return to `/api/auth/callback/<id>`.
   const redirectUri = `${baseUrl}${authProviderCallbackPath(providerId)}`
 
   const handleStartEdit = () => {
@@ -170,7 +171,7 @@ export function AuthProviderCredentialsForm({
             <div key={field.key}>
               <Label className="text-sm font-medium text-muted-foreground">{field.label}</Label>
               <div className="mt-1 rounded-md border border-border/50 bg-muted/30 px-3 py-2 text-sm font-mono text-muted-foreground">
-                {maskedFields?.[field.key] ?? '—'}
+                {maskedFields?.[field.key] ?? 'Not set'}
               </div>
             </div>
           ))}
@@ -182,13 +183,22 @@ export function AuthProviderCredentialsForm({
           <Button
             variant="outline"
             size="sm"
-            onClick={handleDelete}
+            onClick={() => setConfirmRemove(true)}
             disabled={deleteMutation.isPending}
             className="text-destructive hover:text-destructive"
           >
             {deleteMutation.isPending ? 'Removing...' : 'Remove'}
           </Button>
         </div>
+        <ConfirmDialog
+          open={confirmRemove}
+          onOpenChange={setConfirmRemove}
+          variant="destructive"
+          title={`Remove ${providerName} credentials?`}
+          description="This provider stops working for sign-in until you add credentials again."
+          confirmLabel="Remove credentials"
+          onConfirm={handleDelete}
+        />
       </div>
     )
   }
@@ -274,7 +284,7 @@ export function AuthProviderCredentialsForm({
           className="rounded-md border border-border/40 bg-muted/10"
         >
           <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
-            Advanced — manual endpoints &amp; scopes
+            Advanced: manual endpoints &amp; scopes
           </summary>
           <div className="space-y-3 px-3 pt-1 pb-3">{advancedFields.map(renderField)}</div>
         </details>

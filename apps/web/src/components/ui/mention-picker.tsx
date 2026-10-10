@@ -1,10 +1,11 @@
 import { forwardRef, useImperativeHandle, useState, useEffect, useRef } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import { CheckBadgeIcon } from '@heroicons/react/24/solid'
-import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
 import { isTeamMember, type Role } from '@/lib/shared/roles'
 import { Avatar } from './avatar'
 import { ScrollArea } from './scroll-area'
+import { applySuggestionListKey } from './suggestion-list-keys'
+import { HighlightQuery } from './highlight-query'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export interface MentionItem {
   principalId: string
@@ -16,6 +17,7 @@ export interface MentionItem {
 interface MentionPickerProps {
   items: MentionItem[]
   command: (attrs: { id: string; label: string }) => void
+  query?: string
 }
 
 export interface MentionPickerHandle {
@@ -23,7 +25,7 @@ export interface MentionPickerHandle {
 }
 
 export const MentionPicker = forwardRef<MentionPickerHandle, MentionPickerProps>(
-  ({ items, command }, ref) => {
+  ({ items, command, query = '' }, ref) => {
     const [selected, setSelected] = useState(0)
     const listRef = useRef<HTMLDivElement>(null)
     // Refs shadow state so the imperative handle (empty-deps useImperativeHandle)
@@ -34,12 +36,10 @@ export const MentionPicker = forwardRef<MentionPickerHandle, MentionPickerProps>
     const commandRef = useRef(command)
     itemsRef.current = items
     commandRef.current = command
-    const ctx = useRouteContext({ from: '__root__' }) as {
-      settings?: { brandingData?: SettingsBrandingData; name?: string | null }
-    }
-    const branding = ctx.settings?.brandingData
+    const settings = useWorkspaceSettings()
+    const branding = settings?.brandingData
     const teamBadgeLogoUrl = branding?.logoUrl ?? null
-    const teamBadgeLabel = branding?.name ?? ctx.settings?.name ?? 'Team'
+    const teamBadgeLabel = branding?.name ?? settings?.name ?? 'Team'
 
     const updateSelected = (next: number) => {
       selectedRef.current = next
@@ -58,36 +58,14 @@ export const MentionPicker = forwardRef<MentionPickerHandle, MentionPickerProps>
     useImperativeHandle(
       ref,
       () => ({
-        onKeyDown: ({ event }) => {
-          const current = itemsRef.current
-          if (current.length === 0) return false
-          const last = current.length - 1
-          const cur = selectedRef.current
-          if (event.key === 'ArrowUp') {
-            updateSelected(cur <= 0 ? last : cur - 1)
-            return true
-          }
-          if (event.key === 'ArrowDown') {
-            updateSelected(cur >= last ? 0 : cur + 1)
-            return true
-          }
-          if (event.key === 'Home') {
-            updateSelected(0)
-            return true
-          }
-          if (event.key === 'End') {
-            updateSelected(last)
-            return true
-          }
-          if (event.key === 'Enter' || event.key === 'Tab') {
-            const target = current[cur]
-            if (target) {
-              commandRef.current({ id: target.principalId, label: target.displayName })
-              return true
-            }
-          }
-          return false
-        },
+        onKeyDown: ({ event }) =>
+          applySuggestionListKey(event, {
+            items: itemsRef.current,
+            selected: selectedRef.current,
+            onMove: updateSelected,
+            onConfirm: (item) =>
+              commandRef.current({ id: item.principalId, label: item.displayName }),
+          }),
       }),
       []
     )
@@ -117,7 +95,9 @@ export const MentionPicker = forwardRef<MentionPickerHandle, MentionPickerProps>
                     name={item.displayName}
                     className="mention-picker__avatar"
                   />
-                  <span className="mention-picker__name">{item.displayName}</span>
+                  <span className="mention-picker__name">
+                    <HighlightQuery text={item.displayName} query={query} />
+                  </span>
                   {isTeamMember(item.role) && (
                     <span
                       className="mention-picker__team-badge"

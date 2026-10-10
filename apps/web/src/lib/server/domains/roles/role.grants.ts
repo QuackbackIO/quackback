@@ -8,6 +8,7 @@ import { db } from '@/lib/server/db'
 import type { RoleId } from '@quackback/ids'
 import { SYSTEM_ROLES, type PermissionKey } from '@/lib/shared/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
+import { isAdmin, type Role } from '@/lib/shared/roles'
 import { assertWithinCeiling } from './role.ceiling'
 import { loadRole, permissionKeysForRole } from './role.service'
 
@@ -34,4 +35,35 @@ export async function assertGrantableRole(
     "You can't grant a role with permissions you don't hold"
   )
   return { id: role.id, key: role.key, name: role.name }
+}
+
+/**
+ * The legacy-tier half of the grant ceiling: the Admin role (the Owner tier,
+ * every permission) is granted only by an admin. member.manage alone adds and
+ * re-roles people as members; without this cap it would hand out a tier above
+ * the granter's own. Applies to promotion, role change and invites alike, and
+ * fails closed when the granter's role is unknown.
+ */
+export function assertCanGrantTeamRole(
+  role: 'admin' | 'member',
+  granterRole: Role | null | undefined
+): void {
+  if (role === 'admin' && !isAdmin(granterRole)) {
+    throw new ForbiddenError('GRANT_CEILING', 'Only an admin can grant the Admin role')
+  }
+}
+
+/**
+ * The ceiling on changing someone who already holds Admin: demoting an admin
+ * or removing them from the team is reserved to admins, so member.manage
+ * cannot strip an admin of the tier it may not grant. Fails closed when the
+ * granter's role is unknown. The last-admin guard still applies on top.
+ */
+export function assertCanChangeTeamRole(
+  targetRole: string,
+  granterRole: Role | null | undefined
+): void {
+  if (isAdmin(targetRole) && !isAdmin(granterRole)) {
+    throw new ForbiddenError('GRANT_CEILING', 'Only an admin can change or remove an admin')
+  }
 }

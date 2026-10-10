@@ -85,7 +85,27 @@ vi.mock('@/lib/server/logger', () => ({
   },
 }))
 
+// The binding to the triggering close runs against the real database in
+// close-summary.test.ts; here it always holds, and the write goes to this
+// suite's db double.
+vi.mock('../close-summary', () => ({
+  isCurrentClose: async () => true,
+  upToClose: <T>(messages: T[]) => messages,
+  writeForCurrentClose: async (
+    _entity: unknown,
+    _id: unknown,
+    _close: unknown,
+    _signal: unknown,
+    write: (tx: unknown) => Promise<void>
+  ) => {
+    await write((await import('@/lib/server/db')).db)
+    return true
+  },
+}))
+
 import { summarizeTicketOnClose } from '../ticket-summary.service'
+
+const CLOSE = { eventId: 'event_close_1', at: new Date('2026-01-01T01:00:00Z') }
 
 const TICKET_ID = 'ticket_1' as TicketId
 const REQUESTER_ID = 'principal_requester_1' as PrincipalId
@@ -104,20 +124,20 @@ beforeEach(() => {
 describe('summarizeTicketOnClose', () => {
   it('no-ops without touching the model when AI is unconfigured', async () => {
     mockConfig.openaiApiKey = undefined
-    await summarizeTicketOnClose(TICKET_ID)
+    await summarizeTicketOnClose(TICKET_ID, CLOSE)
     expect(mockChat).not.toHaveBeenCalled()
     expect(mockInsertValues).not.toHaveBeenCalled()
   })
 
   it('excludes internal notes when loading the ticket thread', async () => {
     mockChat.mockResolvedValue({ summary: 'resolved' })
-    await summarizeTicketOnClose(TICKET_ID)
+    await summarizeTicketOnClose(TICKET_ID, CLOSE)
     expect(mockListTicketMessages).toHaveBeenCalledWith(TICKET_ID, { includeInternal: false })
   })
 
   it('no-ops when nothing customer-visible happened (empty transcript)', async () => {
     mockBuildTicketTranscript.mockReturnValue('')
-    await summarizeTicketOnClose(TICKET_ID)
+    await summarizeTicketOnClose(TICKET_ID, CLOSE)
     expect(mockChat).not.toHaveBeenCalled()
     expect(mockInsertValues).not.toHaveBeenCalled()
   })
@@ -126,7 +146,7 @@ describe('summarizeTicketOnClose', () => {
     mockChat.mockResolvedValue({
       summary: 'SSO redirect_uri mismatch; fixed by re-adding the callback URL.',
     })
-    await summarizeTicketOnClose(TICKET_ID)
+    await summarizeTicketOnClose(TICKET_ID, CLOSE)
 
     expect(mockInsertValues).toHaveBeenCalledTimes(1)
     const values = mockInsertValues.mock.calls[0][0]
@@ -143,7 +163,7 @@ describe('summarizeTicketOnClose', () => {
   it('persists the embedding columns when an embedding is generated', async () => {
     mockGenerateEmbedding.mockResolvedValue([0.1, 0.2, 0.3])
     mockChat.mockResolvedValue({ summary: 'resolved' })
-    await summarizeTicketOnClose(TICKET_ID)
+    await summarizeTicketOnClose(TICKET_ID, CLOSE)
 
     const values = mockInsertValues.mock.calls[0][0]
     expect(values).toHaveProperty('embedding')
@@ -151,18 +171,44 @@ describe('summarizeTicketOnClose', () => {
     expect(values.embeddingUpdatedAt).toBeInstanceOf(Date)
   })
 
+  it(
+    'an aborted signal cancels the in-flight provider call and writes nothing',
+    { timeout: 2_000 },
+    async () => {
+      // The provider honours the controller it is given, as fetch does.
+      let callStarted!: () => void
+      const started = new Promise<void>((resolve) => (callStarted = resolve))
+      mockChat.mockImplementation(({ abortController }: { abortController?: AbortController }) => {
+        callStarted()
+        return new Promise((_, reject) => {
+          const signal = abortController?.signal
+          if (signal?.aborted) reject(signal.reason)
+          signal?.addEventListener('abort', () => reject(signal.reason))
+        })
+      })
+      const deadline = new AbortController()
+
+      const run = summarizeTicketOnClose(TICKET_ID, CLOSE, { signal: deadline.signal })
+      await started
+      deadline.abort(new Error('event reactions passed their deadline'))
+
+      await expect(run).resolves.toBeUndefined()
+      expect(mockInsertValues).not.toHaveBeenCalled()
+    }
+  )
+
   it('swallows a malformed model response (never throws, writes nothing)', async () => {
     // With outputSchema, chat() validates and rejects on a non-conforming
     // response; the outer best-effort catch logs and swallows it.
     mockChat.mockRejectedValue(new Error('response did not match schema'))
-    await expect(summarizeTicketOnClose(TICKET_ID)).resolves.toBeUndefined()
+    await expect(summarizeTicketOnClose(TICKET_ID, CLOSE)).resolves.toBeUndefined()
     expect(mockInsertValues).not.toHaveBeenCalled()
     expect(mockLogError).toHaveBeenCalled()
   })
 
   it('swallows a missing ticket (never throws, writes nothing)', async () => {
     mockTicketFindFirst.mockResolvedValue(undefined)
-    await expect(summarizeTicketOnClose(TICKET_ID)).resolves.toBeUndefined()
+    await expect(summarizeTicketOnClose(TICKET_ID, CLOSE)).resolves.toBeUndefined()
     expect(mockInsertValues).not.toHaveBeenCalled()
   })
 })

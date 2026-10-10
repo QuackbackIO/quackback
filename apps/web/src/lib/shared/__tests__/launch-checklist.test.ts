@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  buildLaunchTasks,
-  isLaunchPlanActive,
-  launchChecklistSummary,
-  normalizeOutcome,
-} from '../launch-checklist'
+import { buildLaunchTasks, launchPlanLeadsHome, normalizeOutcome } from '../launch-checklist'
 import type { LaunchStatus } from '../launch-checklist'
 
 const base: LaunchStatus = {
@@ -14,12 +9,23 @@ const base: LaunchStatus = {
   memberCount: 1,
   hasBranding: false,
   hasWidgetInstalled: false,
+  hasWidgetEnabled: false,
   hasMessengerEnabled: false,
   hasHelpArticle: false,
+  hasPublishedChangelog: false,
+  hasStatusComponent: false,
   hasIntegration: false,
   hasFirstWin: false,
   useCase: 'product_feedback',
 }
+
+const noExtraModules = {
+  supportInbox: false,
+  helpCenter: false,
+  statusPage: false,
+  integrations: true,
+  changelog: false,
+} as const
 
 describe('normalizeOutcome', () => {
   it('maps legacy industries while preserving V2 outcomes', () => {
@@ -29,86 +35,181 @@ describe('normalizeOutcome', () => {
   })
 })
 
-describe('buildLaunchTasks V2', () => {
+describe('buildLaunchTasks', () => {
+  it('always includes create-board and completes it on any board', () => {
+    expect(buildLaunchTasks(base).find((task) => task.id === 'create-board')?.isCompleted).toBe(
+      false
+    )
+    expect(
+      buildLaunchTasks({ ...base, hasBoards: true, hasPublicBoard: false }).find(
+        (task) => task.id === 'create-board'
+      )?.isCompleted
+    ).toBe(true)
+  })
+
+  it('hides share until a public board exists', () => {
+    expect(
+      buildLaunchTasks({ ...base, features: noExtraModules }).some(
+        (task) => task.id === 'distribute-feedback'
+      )
+    ).toBe(false)
+    expect(
+      buildLaunchTasks({
+        ...base,
+        hasBoards: true,
+        hasPublicBoard: false,
+        features: noExtraModules,
+      }).some((task) => task.id === 'distribute-feedback')
+    ).toBe(false)
+    expect(
+      buildLaunchTasks({
+        ...base,
+        hasBoards: true,
+        hasPublicBoard: true,
+        features: noExtraModules,
+      }).some((task) => task.id === 'distribute-feedback')
+    ).toBe(true)
+  })
+
+  it('adds changelog by default and completes only on a published entry', () => {
+    const draft = buildLaunchTasks(base).find((task) => task.id === 'publish-changelog')
+    expect(draft?.isCompleted).toBe(false)
+    expect(draft?.href).toBe('/admin/changelog')
+    expect(
+      buildLaunchTasks({ ...base, hasPublishedChangelog: true }).find(
+        (task) => task.id === 'publish-changelog'
+      )?.isCompleted
+    ).toBe(true)
+    expect(
+      buildLaunchTasks({ ...base, features: noExtraModules }).some(
+        (task) => task.id === 'publish-changelog'
+      )
+    ).toBe(false)
+  })
+
+  it('composes essentials from enabled modules', () => {
+    const ids = buildLaunchTasks({
+      ...base,
+      features: {
+        supportInbox: true,
+        helpCenter: true,
+        statusPage: true,
+        integrations: true,
+        changelog: true,
+      },
+    })
+      .filter((task) => task.classification === 'prerequisite')
+      .map((task) => task.id)
+    expect(ids).toEqual([
+      'create-board',
+      'publish-changelog',
+      'connect-messenger',
+      'set-up-quinn',
+      'help-article',
+      'add-status-service',
+    ])
+  })
+
   it('keeps Connect Messenger pending until installation is externally observed', () => {
     const configured = buildLaunchTasks({
       ...base,
-      useCase: 'customer_support',
-      hasMessengerEnabled: true,
+      features: { ...noExtraModules, supportInbox: true },
+      hasWidgetEnabled: true,
       hasWidgetInstalled: false,
     })
     expect(configured.find((task) => task.id === 'connect-messenger')?.isCompleted).toBe(false)
-    expect(configured.filter((task) => task.classification === 'prerequisite')).toHaveLength(1)
+    expect(
+      configured.filter((task) => task.classification === 'prerequisite').map((t) => t.id)
+    ).toEqual(['create-board', 'connect-messenger', 'set-up-quinn'])
   })
 
-  it('counts a blocked board step in the readiness denominator', () => {
-    const status = { ...base, boardCount: 1, maxBoards: 1 }
+  it('completes Connect Messenger when the SDK is observed and the widget is on', () => {
+    const task = buildLaunchTasks({
+      ...base,
+      hasWidgetInstalled: true,
+      hasWidgetEnabled: true,
+      features: { ...noExtraModules, supportInbox: true },
+    }).find((row) => row.id === 'connect-messenger')
+    expect(task?.isCompleted).toBe(true)
+  })
+
+  describe('Set up Quinn', () => {
+    const withSupport = { ...base, features: { ...noExtraModules, supportInbox: true } }
+    const quinn = (status: LaunchStatus) =>
+      buildLaunchTasks(status).find((task) => task.id === 'set-up-quinn')
+
+    it('is offered only while the Support inbox is on', () => {
+      expect(quinn(base)).toBeUndefined()
+      expect(quinn(withSupport)).toBeDefined()
+    })
+
+    it('is left out when the plan lacks the assistant or no AI model is configured', () => {
+      expect(
+        quinn({ ...withSupport, features: { ...withSupport.features, assistant: false } })
+      ).toBe(undefined)
+      expect(
+        quinn({ ...withSupport, features: { ...withSupport.features, assistant: true } })
+      ).toBeDefined()
+    })
+
+    it('stays out while the Support inbox is off even when Quinn can answer', () => {
+      expect(quinn({ ...base, features: { ...noExtraModules, assistant: true } })).toBeUndefined()
+    })
+
+    it('is done when the Agent is on and answering, and open otherwise', () => {
+      expect(quinn({ ...withSupport, hasAgentAnswering: true })?.isCompleted).toBe(true)
+      expect(quinn({ ...withSupport, hasAgentAnswering: false })?.isCompleted).toBe(false)
+      expect(quinn(withSupport)?.isCompleted).toBe(false)
+    })
+
+    it('opens the Agent settings for an assistant manager', () => {
+      const task = quinn({ ...withSupport, hasAgentAnswering: false })
+      expect(task?.href).toBe('/admin/settings/agent')
+      expect(task?.actionLabel).toBe('Set up Quinn')
+      expect(task?.availability).toBe('available')
+    })
+
+    it('is blocked without a link for someone who cannot manage the assistant', () => {
+      const task = quinn({
+        ...withSupport,
+        hasAgentAnswering: false,
+        permissions: {
+          settingsManage: true,
+          boardManage: true,
+          memberManage: true,
+          brandingManage: true,
+          integrationManage: true,
+          helpCenterManage: true,
+          assistantManage: false,
+        },
+      })
+      expect(task?.availability).toBe('blocked')
+      expect(task?.href).toBeUndefined()
+    })
+  })
+
+  it('blocks the board step at the plan limit', () => {
+    const status = { ...base, boardCount: 1, maxBoards: 1, features: noExtraModules }
     const board = buildLaunchTasks(status).find((task) => task.id === 'create-board')
     expect(board?.availability).toBe('blocked')
     expect(board?.blocked?.kind).toBe('plan-limit')
-    expect(board?.blockedReason).toMatch(/board limit/i)
-    const summary = launchChecklistSummary(status)
-    expect(summary.denominator).toBeGreaterThan(0)
-    expect(summary.doneCount).toBe(0)
   })
 
-  it('keeps a Help Center article blocked when the product is later turned off', () => {
-    const summary = launchChecklistSummary({
+  it('hides Help Center and Support rows when those modules are off', () => {
+    const tasks = buildLaunchTasks({
       ...base,
       useCase: 'help_center',
       hasHelpArticle: true,
-      features: {
-        supportInbox: false,
-        helpCenter: false,
-        statusPage: false,
-        integrations: true,
-      },
+      features: noExtraModules,
     })
-    const article = summary.tasks.find((task) => task.id === 'help-article')
-    expect(article?.isCompleted).toBe(false)
-    expect(article?.blocked).toEqual({ kind: 'module-off', productId: 'helpCenter' })
-    expect(summary.resolved).toBe(false)
-  })
-
-  it('keeps Connect Messenger blocked when Support is later turned off', () => {
-    const task = buildLaunchTasks({
-      ...base,
-      useCase: 'customer_support',
-      hasWidgetInstalled: true,
-      features: {
-        supportInbox: false,
-        helpCenter: false,
-        statusPage: false,
-        integrations: true,
-      },
-    }).find((row) => row.id === 'connect-messenger')
-    expect(task?.isCompleted).toBe(false)
-    expect(task?.blocked).toEqual({ kind: 'module-off', productId: 'support' })
-  })
-
-  it('counts a blocked Help Center step as 0/1, never 0/0', () => {
-    const summary = launchChecklistSummary({
-      ...base,
-      useCase: 'help_center',
-      features: {
-        supportInbox: false,
-        helpCenter: false,
-        statusPage: false,
-        integrations: true,
-      },
-    })
-    const article = summary.tasks.find((task) => task.id === 'help-article')
-    expect(article?.availability).toBe('blocked')
-    expect(article?.blocked).toEqual({ kind: 'module-off', productId: 'helpCenter' })
-    expect(summary.denominator).toBe(1)
-    expect(summary.doneCount).toBe(0)
-    expect(summary.blockedCount).toBe(1)
-    expect(summary.remaining).toBe(1)
+    expect(tasks.some((task) => task.id === 'help-article')).toBe(false)
+    expect(tasks.some((task) => task.id === 'connect-messenger')).toBe(false)
   })
 
   it('removes action links when the caller lacks the responsible permission', () => {
     const tasks = buildLaunchTasks({
       ...base,
+      features: noExtraModules,
       permissions: {
         settingsManage: false,
         boardManage: false,
@@ -116,15 +217,17 @@ describe('buildLaunchTasks V2', () => {
         brandingManage: false,
         integrationManage: false,
         helpCenterManage: false,
+        assistantManage: false,
       },
     })
     expect(tasks.filter((task) => task.href)).toHaveLength(0)
     expect(tasks.find((task) => task.id === 'create-board')?.availability).toBe('blocked')
   })
 
-  it('reads legacy deferred rows as skipped without bypassing their dependency', () => {
+  it('reads legacy deferred rows as skipped', () => {
     const tasks = buildLaunchTasks({
       ...base,
+      features: noExtraModules,
       taskResolutions: {
         product_feedback: {
           'create-board': {
@@ -134,137 +237,38 @@ describe('buildLaunchTasks V2', () => {
         },
       },
     })
-    const board = tasks.find((task) => task.id === 'create-board')!
-    expect(board.isSkipped).toBe(true)
-    expect(board.isCompleted).toBe(false)
-    expect(tasks.find((task) => task.id === 'distribute-feedback')?.availability).toBe('blocked')
+    expect(tasks.find((task) => task.id === 'create-board')!.isSkipped).toBe(true)
   })
 
-  it('excludes skipped essentials from numerator and denominator', () => {
-    const summary = launchChecklistSummary({
+  it('links Connect Messenger to its install page, opens Invite in place, and completes Invite on the first invite sent', () => {
+    const support: LaunchStatus = {
       ...base,
-      taskResolutions: {
-        product_feedback: {
-          'create-board': {
-            resolution: 'dismissed',
-            resolvedAt: '2026-07-13T10:00:00.000Z',
-          },
-        },
+      features: { ...noExtraModules, supportInbox: true },
+      permissions: {
+        settingsManage: true,
+        boardManage: true,
+        memberManage: true,
+        brandingManage: true,
+        integrationManage: true,
+        helpCenterManage: true,
+        assistantManage: true,
       },
-    })
-    const board = summary.tasks.find((task) => task.id === 'create-board')!
-    expect(board.isSkipped).toBe(true)
-    expect(summary.skippedTasks.map((task) => task.id)).toContain('create-board')
-    expect(summary.denominator).toBe(1)
-    expect(summary.doneCount).toBe(0)
-    expect(summary.resolved).toBe(false)
-  })
-
-  it('treats polish dismissal as skipped without changing the essentials count', () => {
-    const summary = launchChecklistSummary({
-      ...base,
-      hasBoards: true,
-      publicBoardLinkCopiedAt: '2026-07-13T10:00:00.000Z',
-      taskResolutions: {
-        product_feedback: {
-          'customize-branding': {
-            resolution: 'dismissed',
-            resolvedAt: '2026-07-13T10:00:00.000Z',
-          },
-        },
-      },
-    })
-    const branding = summary.tasks.find((task) => task.id === 'customize-branding')!
-    expect(branding.isSkipped).toBe(true)
-    expect(branding.isCompleted).toBe(false)
-    expect(summary.denominator).toBe(2)
-    expect(summary.doneCount).toBe(2)
-  })
-
-  it('resolves once every prerequisite is done or skipped, without waiting for the first win', () => {
-    const summary = launchChecklistSummary({
-      ...base,
-      hasBoards: true,
-      publicBoardLinkCopiedAt: '2026-07-13T10:00:00.000Z',
-    })
-    expect(summary.allComplete).toBe(true)
-    expect(summary.firstWinComplete).toBe(false)
-    expect(summary.resolved).toBe(true)
-  })
-
-  it('keeps the launch-plan nav until essentials resolve, even if the first win arrived early', () => {
-    expect(isLaunchPlanActive({ resolved: false, firstWinComplete: true })).toBe(true)
-    expect(isLaunchPlanActive({ resolved: true, firstWinComplete: false })).toBe(true)
-    expect(isLaunchPlanActive({ resolved: false, firstWinComplete: false })).toBe(true)
-    expect(isLaunchPlanActive({ resolved: true, firstWinComplete: true })).toBe(false)
-  })
-
-  it('resolves an all-skipped essentials list and hides it from the count', () => {
-    const summary = launchChecklistSummary({
-      ...base,
-      useCase: 'help_center',
-      features: {
-        supportInbox: false,
-        helpCenter: true,
-        statusPage: false,
-        integrations: true,
-      },
-      taskResolutions: {
-        help_center: {
-          'help-article': {
-            resolution: 'deferred',
-            resolvedAt: '2026-07-13T10:00:00.000Z',
-          },
-        },
-      },
-    })
-    expect(summary.denominator).toBe(0)
-    expect(summary.doneCount).toBe(0)
-    expect(summary.skippedTasks).toHaveLength(1)
-    expect(summary.resolved).toBe(true)
-    expect(summary.firstWinComplete).toBe(false)
-  })
-
-  it('uses the write-article copy for the Help Center essential', () => {
-    const task = buildLaunchTasks({
-      ...base,
-      useCase: 'help_center',
-      features: {
-        supportInbox: false,
-        helpCenter: true,
-        statusPage: false,
-        integrations: true,
-      },
-    }).find((row) => row.id === 'help-article')
-    expect(task?.title).toBe('Write your first article')
-    expect(task?.description).toMatch(/first answer/i)
-    expect(task?.actionLabel).toBe('Write article')
-  })
-
-  it('uses only the current goal task set', () => {
-    const ids = buildLaunchTasks({ ...base, useCase: 'help_center' }).map((task) => task.id)
-    expect(ids).toContain('help-article')
-    expect(ids).not.toContain('create-board')
-    expect(ids).not.toContain('distribute-feedback')
-  })
-
-  it('requires a board with the right audience after the workspace goal changes', () => {
-    const status = {
-      ...base,
-      hasBoards: true,
-      hasPublicBoard: true,
-      hasInternalBoard: false,
     }
-    expect(
-      buildLaunchTasks(status, 'product_feedback').find((task) => task.id === 'create-board')
-        ?.isCompleted
-    ).toBe(true)
-    expect(
-      buildLaunchTasks(status, 'internal').find((task) => task.id === 'create-board')?.isCompleted
-    ).toBe(false)
+    const find = (status: LaunchStatus, id: string) =>
+      buildLaunchTasks(status, 'customer_support').find((task) => task.id === id)
+    expect(find(support, 'connect-messenger')?.sheet).toBeUndefined()
+    expect(find(support, 'connect-messenger')?.href).toBe('/admin/settings/widget/install')
+    expect(find(support, 'invite-team')?.sheet).toBe('invite-team')
+    expect(find(support, 'invite-team')?.isCompleted).toBe(false)
+    expect(find({ ...support, hasTeamInvite: true }, 'invite-team')?.isCompleted).toBe(true)
+    const noPermission: LaunchStatus = {
+      ...support,
+      permissions: { ...support.permissions!, memberManage: false },
+    }
+    expect(find(noPermission, 'invite-team')?.sheet).toBeUndefined()
   })
 
-  it('treats invitations as optional except for internal feedback', () => {
+  it('keeps invite as polish, except for private team feedback, where it is the first step', () => {
     expect(
       buildLaunchTasks(base, 'product_feedback').find((task) => task.id === 'invite-team')
         ?.classification
@@ -275,24 +279,27 @@ describe('buildLaunchTasks V2', () => {
   })
 
   it.each([
-    ['product_feedback', 'Receive your first customer post or vote'],
-    ['customer_support', 'Receive your first customer conversation'],
-    ['help_center', 'Publish your first article'],
-    ['internal', 'Collect your first team idea'],
-  ] as const)('first-win title for %s', (useCase, title) => {
-    const task = buildLaunchTasks({ ...base, useCase }).find((row) => row.id === 'first-win')
-    expect(task?.title).toBe(title)
-    expect(task?.classification).toBe('first_win')
-  })
-
-  it.each([
     { publicBoardLinkCopiedAt: '2026-08-14T10:00:00.000Z' },
-    { hasWidgetInstalled: true },
+    { hasWidgetInstalled: true, hasWidgetEnabled: true },
     { hasFirstWin: true },
   ])('accepts any real distribution signal: %o', (signal) => {
-    const task = buildLaunchTasks({ ...base, hasPublicBoard: true, ...signal }).find(
-      (candidate) => candidate.id === 'distribute-feedback'
-    )
+    const task = buildLaunchTasks({
+      ...base,
+      hasPublicBoard: true,
+      features: noExtraModules,
+      ...signal,
+    }).find((candidate) => candidate.id === 'distribute-feedback')
     expect(task?.isCompleted).toBe(true)
+  })
+})
+
+describe('launchPlanLeadsHome', () => {
+  it('leads Home only in the launch window and only until the first win', () => {
+    const open = { ...base, hasBoards: true, inLaunchWindow: true }
+    expect(launchPlanLeadsHome(open)).toBe(true)
+    // After the win, Home has room for the workspace's counts again.
+    expect(launchPlanLeadsHome({ ...open, hasFirstWin: true })).toBe(false)
+    expect(launchPlanLeadsHome({ ...open, inLaunchWindow: false })).toBe(false)
+    expect(launchPlanLeadsHome(undefined)).toBe(false)
   })
 })

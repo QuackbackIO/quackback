@@ -19,7 +19,7 @@ import type { Board, BoardAccess } from '@/lib/shared/db-types'
 import type { BoardId } from '@quackback/ids'
 import { boardKeys } from '@/lib/client/hooks/use-boards-query'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { slugify } from '@/lib/shared/utils'
+import { AUTOSAVE } from '@/lib/client/autosave'
 
 // ============================================================================
 // Mutation Hooks
@@ -34,6 +34,13 @@ export function useCreateBoard() {
   return useMutation({
     mutationFn: (input: CreateBoardInput) => createBoardFn({ data: input }),
     onMutate: async (input) => {
+      // Loaded on demand: slugify carries large transliteration tables, and
+      // this module ships on pages that never create a board. The slug is only
+      // a placeholder until the list refetches, so a chunk that fails to load
+      // (an older tab after a deploy) must not stop the board being created.
+      const slug = await import('@/lib/shared/utils/slugify')
+        .then(({ slugify }) => slugify(input.name))
+        .catch(() => '')
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
       const previous = queryClient.getQueryData<Board[]>(boardKeys.lists())
 
@@ -43,7 +50,7 @@ export function useCreateBoard() {
       const optimisticBoard: Board = {
         id: `board_temp_${Date.now()}` as Board['id'],
         name: input.name,
-        slug: slugify(input.name),
+        slug,
         description: input.description ?? null,
         access: accessForPreset(input.preset ?? 'public'),
         settings: {},
@@ -65,6 +72,7 @@ export function useCreateBoard() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: boardKeys.lists() })
       queryClient.invalidateQueries({ queryKey: adminQueries.boardsForSettings().queryKey })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }
@@ -77,6 +85,7 @@ export function useUpdateBoard() {
 
   return useMutation({
     mutationFn: (input: UpdateBoardInput) => updateBoardFn({ data: input }),
+    meta: AUTOSAVE,
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
       await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.id as BoardId) })
@@ -124,6 +133,7 @@ export function useUpdateBoard() {
       queryClient.invalidateQueries({ queryKey: boardKeys.lists() })
       queryClient.invalidateQueries({ queryKey: boardKeys.detail(input.id as BoardId) })
       queryClient.invalidateQueries({ queryKey: adminQueries.boardsForSettings().queryKey })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }
@@ -139,6 +149,7 @@ export function useUpdateBoardAccess() {
   return useMutation({
     mutationFn: (input: { boardId: BoardId; access: BoardAccess }) =>
       updateBoardAccessFn({ data: input }),
+    meta: AUTOSAVE,
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
       await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.boardId) })
@@ -181,6 +192,7 @@ export function useUpdateBoardAccess() {
       queryClient.invalidateQueries({ queryKey: boardKeys.lists() })
       queryClient.invalidateQueries({ queryKey: boardKeys.detail(input.boardId) })
       queryClient.invalidateQueries({ queryKey: adminQueries.boardsForSettings().queryKey })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }
@@ -213,6 +225,7 @@ export function useDeleteBoard() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: boardKeys.lists() })
       queryClient.invalidateQueries({ queryKey: adminQueries.boardsForSettings().queryKey })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }

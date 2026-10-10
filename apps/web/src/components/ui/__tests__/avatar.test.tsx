@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { Avatar } from '../avatar'
@@ -34,8 +34,8 @@ describe('Avatar (simple API)', () => {
     const img = screen.getByRole('img')
     expect(img).toHaveAttribute('src', 'https://example.com/a.png')
     expect(img).toHaveAttribute('alt', 'Jane Doe')
-    // Prioritize the avatar fetch among page resources.
-    expect(img).toHaveAttribute('fetchpriority', 'high')
+    expect(img).toHaveAttribute('loading', 'lazy')
+    expect(img).toHaveAttribute('decoding', 'async')
   })
 
   // The <img> must be in the server-rendered HTML so the browser fetches it
@@ -55,6 +55,30 @@ describe('Avatar (simple API)', () => {
     fireEvent.load(screen.getByRole('img'))
     expect(screen.queryByText('JD')).not.toBeInTheDocument()
     expect(screen.getByRole('img')).toBeInTheDocument()
+  })
+
+  // A pending or failing request must never paint the browser's broken-image
+  // glyph over the initials: the image stays invisible until it has loaded.
+  it('keeps the image invisible until it has loaded', () => {
+    render(<Avatar src="https://example.com/a.png" name="Jane Doe" />)
+    expect(screen.getByRole('img')).toHaveClass('opacity-0')
+    fireEvent.load(screen.getByRole('img'))
+    expect(screen.getByRole('img')).not.toHaveClass('opacity-0')
+  })
+
+  it('reports a failed load, including one that happened before hydration', () => {
+    const onImageError = vi.fn()
+    render(
+      <Avatar src="https://example.com/broken.png" name="Jane Doe" onImageError={onImageError} />
+    )
+    expect(onImageError).not.toHaveBeenCalled()
+    fireEvent.error(screen.getByRole('img'))
+    expect(onImageError).toHaveBeenCalledTimes(1)
+    cleanup()
+    imgComplete = true
+    const early = vi.fn()
+    render(<Avatar src="https://example.com/early.png" name="Jane Doe" onImageError={early} />)
+    expect(early).toHaveBeenCalledTimes(1)
   })
 
   it('drops the image and shows initials when it fails to load', () => {

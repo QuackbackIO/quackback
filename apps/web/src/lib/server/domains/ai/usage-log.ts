@@ -52,6 +52,32 @@ export async function logAiUsage(params: LogAiUsageParams): Promise<void> {
 }
 
 /**
+ * Rough token count for text whose provider did not report usage: about four
+ * characters per token for English, which is what the embedding providers we
+ * support average out to.
+ */
+export function estimateTokensFromText(text: string): number {
+  return Math.ceil(text.length / 4)
+}
+
+/**
+ * Usage for an embedding response. Some OpenAI-compatible providers omit the
+ * usage block (or report zero); the call still cost tokens, so it is counted
+ * from the input instead of being recorded as free.
+ */
+export function embeddingUsage(
+  response: { usage?: { prompt_tokens?: number; total_tokens?: number } | null },
+  input: string
+): { inputTokens: number; totalTokens: number } {
+  const reported = response.usage?.total_tokens ?? response.usage?.prompt_tokens ?? 0
+  if (reported > 0) {
+    return { inputTokens: response.usage?.prompt_tokens ?? reported, totalTokens: reported }
+  }
+  const estimated = estimateTokensFromText(input)
+  return { inputTokens: estimated, totalTokens: estimated }
+}
+
+/**
  * Outcome classification AI answer surfaces record in metadata.answerKind.
  * Per model call — unrelated to the assistant_involvements status vocabulary,
  * which classifies whole conversations rather than individual attempts.
@@ -147,7 +173,9 @@ export async function cleanupExpiredLogs(): Promise<{
   const aiUsageDeleted = (aiResult as { count: number }).count ?? 0
   const operationalResult = await db.execute(sql`
     WITH deleted_hooks AS (
-      DELETE FROM hook_deliveries WHERE processed_at < now() - interval '7 days' RETURNING 1
+      -- Post delivery receipts outlive queue retention so manual retry cannot resend successes.
+      DELETE FROM hook_deliveries WHERE processed_at < now() - interval '7 days'
+        AND job_id NOT LIKE 'integration-post-created:%' RETURNING 1
     ), deleted_tokens AS (
       DELETE FROM unsubscribe_tokens
       WHERE expires_at < now() - interval '30 days' OR used_at < now() - interval '30 days'

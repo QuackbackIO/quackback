@@ -24,8 +24,9 @@ describe('_template provider fixture', () => {
     expect(dest['issue-type'].childOf).toBe('project')
   })
 
-  it('demonstrates the WO-15 two-way slots', () => {
-    expect(typeof templateIntegration.remoteStatus?.push).toBe('function')
-    expect(typeof templateIntegration.externalLinks?.search).toBe('function')
+  it('demonstrates delivery, inbound review, and on-demand context', () => {
+    expect(templateIntegration.linkedItems).toBe(true)
+    expect(templateIntegration.inbound?.statusMode).toBe('review')
+    expect(templateIntegration.context).toBeTypeOf('function')
   })
 })

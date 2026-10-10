@@ -98,6 +98,21 @@ const SCRATCH_DB = 'quackback_drift_check'
  */
 const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
   {
+    reason: 'workspace turn dedupe: jsonb expression member does not round-trip introspection',
+    pattern: /^CREATE UNIQUE INDEX "conversation_messages_workspace_run_sender_idx"/,
+  },
+  {
+    reason: 'workspace turn dedupe: jsonb expression member does not round-trip introspection',
+    pattern: /^DROP INDEX "conversation_messages_workspace_run_sender_idx"/,
+  },
+  {
+    reason:
+      'drizzle-kit composite PK column-order rewrite on PG 17; identical named key and columns',
+    pattern:
+      /^ALTER TABLE "integration_deliveries" DROP CONSTRAINT "integration_deliveries_pkey";\s*--> statement-breakpoint\s*ALTER TABLE "integration_deliveries" ADD CONSTRAINT "integration_deliveries_pkey" PRIMARY KEY\("provider","delivery_id"\);?$/,
+    optional: true,
+  },
+  {
     // page_views is declaratively day-partitioned (0137); drizzle-kit's
     // introspection does not see partitioned parents (relkind 'p'), so the
     // diff wants to create the table and its indexes from scratch. The
@@ -197,8 +212,9 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
     // HNSW cosine indexes over embedding columns (migrations 0203 + 0209).
     // drizzle-kit cannot round-trip an hnsw partial index (vector_cosine_ops
     // opclass + partial predicate), so it emits a spurious drop/create pair for
-    // every one. Each listed index is created by a migration, so a genuinely
-    // unmigrated hnsw index (a new, unlisted name) still fails the check.
+    // every one. Each listed index is created by a migration or by
+    // CONCURRENT_INDEX_SPECS, so a genuinely unbuilt hnsw index (a new,
+    // unlisted name) still fails the check.
     reason:
       'hnsw vector_cosine_ops partial index is not faithfully round-tripped by drizzle-kit; drop half of the spurious pair',
     pattern:
@@ -219,13 +235,20 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
       /^ALTER TABLE "apps" ALTER COLUMN "(granted_scopes|subscribed_event_types)" SET DEFAULT '\{\}';?$/,
   },
   {
+    // Same empty text[] default false positive as apps / invitation
+    // (0279 Better Auth 1.7 oauth_client.client_credentials_scopes).
+    reason: 'drizzle-kit false positive: empty text[] default reads back as \'{""}\'',
+    pattern:
+      /^ALTER TABLE "oauth_client" ALTER COLUMN "client_credentials_scopes" SET DEFAULT '\{\}';?$/,
+  },
+  {
     // The settings.assistant_config jsonb default (0204) is byte-identical in TS,
     // but postgres normalizes the stored jsonb literal (spacing/formatting) so
     // drizzle-kit's introspected default never string-matches the TS default.
     reason:
       'drizzle-kit false positive: jsonb default is normalized by postgres and no longer string-matches TS',
     pattern:
-      /^ALTER TABLE "settings" ALTER COLUMN "assistant_config" SET DEFAULT '\{"version":3,.*\}'::jsonb;?$/,
+      /^ALTER TABLE "settings" ALTER COLUMN "assistant_config" SET DEFAULT '\{"version":4,.*\}'::jsonb;?$/,
   },
   {
     // dispatch_owner is rollout compatibility state owned by migrations 0253/0254.
@@ -250,7 +273,7 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
     reason:
       'drizzle-kit composite PK column-order rewrite (PG 17 creation order vs alphabetical TS)',
     pattern:
-      /^ALTER TABLE "(?:status_incident_components|ticket_links|visitor_top_stats|ticket_conversations|changelog_entry_categories)" DROP CONSTRAINT "(?:status_incident_components_incident_id_component_id_pk|ticket_links_pkey|visitor_top_stats_pkey|ticket_conversations_pkey|changelog_entry_categories_pk)"/,
+      /^ALTER TABLE "(?:status_incident_components|ticket_links|visitor_top_stats|ticket_conversations|changelog_entry_categories|slack_thread_sessions|workspace_experiments)" DROP CONSTRAINT "(?:status_incident_components_incident_id_component_id_pk|ticket_links_pkey|visitor_top_stats_pkey|ticket_conversations_pkey|changelog_entry_categories_pk|slack_thread_sessions_pkey|workspace_experiments_pkey)"/,
     optional: true,
   },
   {
@@ -365,10 +388,11 @@ async function main(): Promise<number> {
     console.log('Applying all migrations to the scratch database...')
     // The same code path production boot uses (migrate + system seed); the
     // seed's DML cannot affect the DDL diff.
-    // Concurrent indexes and the post-condition sweep are deliberately off:
-    // this check diffs DDL that drizzle-kit can express, while concurrent
-    // indexes are raw-SQL-owned and verified separately by schema operations.
-    await runMigrations(scratchUrl(), { concurrentIndexes: false, verify: false })
+    // The concurrent index step runs too, because the HNSW and trigram indexes
+    // exist only through it (no migration builds them), and every booted
+    // database has run it. The post-condition sweep is off: it is verified
+    // separately by schema operations.
+    await runMigrations(scratchUrl(), { verify: false })
 
     console.log('Diffing live schema against the Drizzle TS schema...')
     // pushSchema reads `.rows` off execute() results, but the postgres-js

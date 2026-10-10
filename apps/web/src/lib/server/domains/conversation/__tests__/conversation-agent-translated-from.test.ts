@@ -11,6 +11,7 @@ import type { Actor } from '@/lib/server/policy/types'
 
 const insertedMessages: Record<string, unknown>[] = []
 const publishConversationEvent = vi.fn()
+const publishConversationMessage = vi.fn()
 const publishAgentConversationEvent = vi.fn()
 const publishConversationUpdate = vi.fn()
 
@@ -29,6 +30,7 @@ vi.mock('../conversation.webhooks', () => emit)
 
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationEvent: (...args: unknown[]) => publishConversationEvent(...args),
+  publishConversationMessage: (...args: unknown[]) => publishConversationMessage(...args),
   publishAgentConversationEvent: (...args: unknown[]) => publishAgentConversationEvent(...args),
   publishConversationUpdate: (...args: unknown[]) => publishConversationUpdate(...args),
 }))
@@ -63,6 +65,14 @@ vi.mock('../conversation.query', () => ({
     displayName: null,
     avatarUrl: null,
   })),
+  resolveAuthorAudiences: vi.fn(async (a: { principalId: string; displayName?: string | null }) => {
+    const author = {
+      principalId: a.principalId,
+      displayName: a.displayName ?? null,
+      avatarUrl: null,
+    }
+    return { publicAuthor: author, supportAuthor: author }
+  }),
 }))
 
 vi.mock('@/lib/server/db', () => {
@@ -159,13 +169,13 @@ describe('sendAgentMessage — translatedFrom propagation (P2-D.1)', () => {
       translatedFrom,
     })
 
-    expect(publishConversationEvent).toHaveBeenCalledTimes(1)
-    const [, sharedEvent] = publishConversationEvent.mock.calls[0] as [
+    expect(publishConversationMessage).toHaveBeenCalledTimes(1)
+    const [, shared] = publishConversationMessage.mock.calls[0] as [
       unknown,
-      { kind: string; message: Record<string, unknown> },
+      { visitor: Record<string, unknown>; agent: Record<string, unknown> },
     ]
-    expect(sharedEvent.kind).toBe('message')
-    expect(sharedEvent.message.translatedFrom).toBeUndefined()
+    expect(shared.visitor.translatedFrom).toBeUndefined()
+    expect(shared.agent.translatedFrom).toBeUndefined()
   })
 
   it('broadcasts translatedFrom on an inbox-only message_updated event', async () => {
@@ -185,5 +195,18 @@ describe('sendAgentMessage — translatedFrom propagation (P2-D.1)', () => {
     const result = await sendAgentMessage(conversationId, 'Hi', agent, agentActor)
     expect(result.message.translatedFrom).toBeNull()
     expect(publishAgentConversationEvent).not.toHaveBeenCalled()
+  })
+})
+
+describe('sendAgentMessage: the inbox list signal', () => {
+  // A reply writes the message and the conversation row together, and sends
+  // the row as its own event; the inbox list refreshes on that one, so the
+  // message event says it need not.
+  it('marks the message event as sent alongside the conversation update', async () => {
+    await sendAgentMessage(conversationId, 'Hi', agent, agentActor)
+
+    expect(publishConversationUpdate).toHaveBeenCalledTimes(1)
+    expect(publishConversationMessage).toHaveBeenCalledTimes(1)
+    expect(publishConversationMessage.mock.calls[0]![2]).toEqual({ conversationUpdated: true })
   })
 })

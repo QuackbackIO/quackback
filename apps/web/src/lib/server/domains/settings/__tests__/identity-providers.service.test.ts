@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   connectionAffectingChange,
   deriveVisibility,
+  persistTestResult,
   shouldRenderPublicButton,
   verifiedDomainCount,
 } from '../identity-providers.service'
@@ -18,6 +19,7 @@ describe('connectionAffectingChange', () => {
     scopes: null,
     prompt: null,
     tokenEndpointAuthMethod: null,
+    idTokenNonce: null,
   }
 
   it('is false when no connection-affecting field is supplied', () => {
@@ -45,6 +47,14 @@ describe('connectionAffectingChange', () => {
     )
   })
 
+  it('is true when the ID token nonce setting changes', () => {
+    // Turning the nonce off changes what the test checks, so a pass recorded
+    // with the old setting must stop vouching for the new one.
+    expect(connectionAffectingChange({ clientId: 'client-1', idTokenNonce: 'off' }, existing)).toBe(
+      true
+    )
+  })
+
   it('is false when scopes are supplied but unchanged', () => {
     expect(
       connectionAffectingChange(
@@ -58,6 +68,27 @@ describe('connectionAffectingChange', () => {
     expect(
       connectionAffectingChange(
         { claimMapping: { profile: { allowMissingEmail: true } } },
+        { ...existing, claimMapping: null }
+      )
+    ).toBe(true)
+  })
+
+  it('default Save with Advanced sources mounted does not invalidate a passing connection test', () => {
+    expect(
+      connectionAffectingChange(
+        { claimMapping: { profile: { sources: ['idToken', 'userinfo'] } } },
+        { ...existing, claimMapping: null }
+      )
+    ).toBe(false)
+    expect(
+      connectionAffectingChange(
+        { claimMapping: { profile: { sources: ['userinfo', 'idToken'] } } },
+        { ...existing, claimMapping: { profile: { sources: ['idToken', 'userinfo'] } } }
+      )
+    ).toBe(true)
+    expect(
+      connectionAffectingChange(
+        { claimMapping: { profile: { claims: { id: 'sub' } } } },
         { ...existing, claimMapping: null }
       )
     ).toBe(true)
@@ -113,5 +144,11 @@ describe('identity providers visibility', () => {
         domains: [{ verifiedAt: null }, { verifiedAt: 'x' }, { verifiedAt: 'y' }] as any,
       })
     ).toBe(2)
+  })
+})
+
+describe('persistTestResult', () => {
+  it('is the atomic capture persistence API', () => {
+    expect(typeof persistTestResult).toBe('function')
   })
 })

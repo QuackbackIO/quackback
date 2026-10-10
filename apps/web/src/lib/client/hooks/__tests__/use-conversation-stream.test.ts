@@ -4,7 +4,8 @@
  * extraction refactor. Pins the current reconnect contract:
  *  - the EventSource is recreated on error with a FRESH URL from buildUrl
  *    (token re-mint per attempt) after an exponential backoff
- *  - onReconnect fires only after a successful RE-connect, never the first open
+ *  - onReconnect fires after a successful RE-connect, never a clean first open
+ *  - onReconnect also fires on the first open after a failed initial attempt
  *  - a null buildUrl result (mint failure) schedules a retry
  *  - unmount closes the stream and cancels any pending reconnect timer
  */
@@ -78,8 +79,12 @@ describe('useConversationStream', () => {
 
     act(() => {
       es.emit('message', { kind: 'message', conversationId: 'conversation_1' })
+      es.emit('ticket_message', { kind: 'ticket_message', ticketId: 'ticket_1' })
+      es.emit('ticket_updated', { kind: 'ticket_updated', ticket: { id: 'ticket_1' } })
     })
     expect(onEvent).toHaveBeenCalledWith({ kind: 'message', conversationId: 'conversation_1' })
+    expect(onEvent).toHaveBeenCalledWith({ kind: 'ticket_message', ticketId: 'ticket_1' })
+    expect(onEvent).toHaveBeenCalledWith({ kind: 'ticket_updated', ticket: { id: 'ticket_1' } })
   })
 
   it('does not connect when disabled', async () => {
@@ -148,6 +153,47 @@ describe('useConversationStream', () => {
     act(() => MockEventSource.instances[1].onerror?.())
     await advance(2000)
     expect(MockEventSource.instances).toHaveLength(3)
+  })
+
+  it('fires onReconnect on the first successful open after a failed initial attempt', async () => {
+    const onReconnect = vi.fn()
+    renderHook(() =>
+      useConversationStream({
+        buildUrl: async () => '/stream',
+        enabled: true,
+        onEvent: vi.fn(),
+        onReconnect,
+      })
+    )
+    await flush()
+
+    act(() => MockEventSource.instances[0].onerror?.())
+    expect(onReconnect).not.toHaveBeenCalled()
+    await advance(2000)
+    expect(MockEventSource.instances).toHaveLength(2)
+
+    act(() => MockEventSource.instances[1].onopen?.())
+    expect(onReconnect).toHaveBeenCalledTimes(1)
+  })
+
+  it('fires onReconnect on the first open after a failed token mint', async () => {
+    const onReconnect = vi.fn()
+    let attempt = 0
+    renderHook(() =>
+      useConversationStream({
+        buildUrl: async () => (attempt++ === 0 ? null : '/stream'),
+        enabled: true,
+        onEvent: vi.fn(),
+        onReconnect,
+      })
+    )
+    await flush()
+    expect(MockEventSource.instances).toHaveLength(0)
+
+    await advance(2000)
+    expect(MockEventSource.instances).toHaveLength(1)
+    act(() => MockEventSource.instances[0].onopen?.())
+    expect(onReconnect).toHaveBeenCalledTimes(1)
   })
 
   it('schedules a retry when buildUrl resolves null (token mint failed)', async () => {

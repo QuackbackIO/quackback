@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { coerceAttributeValue } from '../coerce'
+import { coerceAttributeValue } from '@/lib/shared/coerce-attribute-value'
 
 describe('coerceAttributeValue', () => {
   describe('string type', () => {
@@ -13,6 +13,11 @@ describe('coerceAttributeValue', () => {
 
     it('should pass strings through', () => {
       expect(coerceAttributeValue('hello', 'string')).toBe('hello')
+    })
+
+    it('joins an array of primitives and refuses an array of objects', () => {
+      expect(coerceAttributeValue(['eng', 'sales'], 'string')).toBe('eng,sales')
+      expect(coerceAttributeValue([{ id: 1 }], 'string')).toBeUndefined()
     })
 
     it('should coerce empty string', () => {

@@ -57,7 +57,7 @@ describe('saveAuthProviderCredentialsFn — customOidcProvider gate', () => {
     expect(hoisted.mockSavePlatformCredentials).not.toHaveBeenCalled()
   })
 
-  it('allows generic-oauth save when feature is on (Scale tier / OSS default)', async () => {
+  it('allows generic-oauth save when feature is on (Enterprise tier / OSS default)', async () => {
     hoisted.mockGetTierLimits.mockResolvedValue(OSS_TIER_LIMITS)
 
     await saveAuthProviderCredentialsFn({

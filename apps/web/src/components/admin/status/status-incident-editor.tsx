@@ -21,6 +21,7 @@ import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DateTimePicker } from '@/components/ui/datetime-picker'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { ModalFooter } from '@/components/shared/modal-footer'
@@ -29,7 +30,6 @@ import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { SidebarContainer, StatusSelect } from '@/components/shared/sidebar-primitives'
-import { Route } from '@/routes/admin/status'
 import { statusIncidentQueries, type StatusIncidentAdminDetail } from '@/lib/client/queries/status'
 import { useUpdateStatusIncident, usePostStatusIncidentUpdate } from '@/lib/client/mutations/status'
 import {
@@ -278,7 +278,7 @@ function StatusIncidentEditorContent({
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder="What's the latest? This appears on the public status page."
-                className="min-h-24 border-0 shadow-none rounded-none focus-visible:ring-0 resize-y"
+                className="min-h-24 border-0 focus-visible:ring-0 resize-y"
               />
               <div className="flex items-center gap-2 px-3 py-2 border-t border-border/40 bg-muted/30">
                 <TemplatePickerButton
@@ -291,7 +291,11 @@ function StatusIncidentEditorContent({
                 <div className="ml-auto">
                   {terminal && (
                     <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-                      <Checkbox checked={restore} onCheckedChange={(c) => setRestore(c === true)} />
+                      <Checkbox
+                        checked={restore}
+                        onCheckedChange={(c) => setRestore(c === true)}
+                        data-in-label
+                      />
                       Restore affected services to operational
                     </label>
                   )}
@@ -520,6 +524,7 @@ function EditorSidebarContent({
 // ─── Timeline ───────────────────────────────────────────────────────────
 
 function IncidentTimeline({ incident }: { incident: StatusIncidentAdminDetail }) {
+  const formatNumber = useFormatNumber()
   const updates = useMemo(
     () =>
       [...incident.updates].sort(
@@ -560,7 +565,7 @@ function IncidentTimeline({ incident }: { incident: StatusIncidentAdminDetail })
                   Published
                   {typeof incident.notifiedSubscriberCount === 'number' &&
                     incident.notifiedSubscriberCount > 0 &&
-                    ` · emailed ~${incident.notifiedSubscriberCount.toLocaleString()} subscribers`}
+                    ` · emailed ~${formatNumber(incident.notifiedSubscriberCount)} subscribers`}
                 </span>
               )}
               {isPublishRow && incident.backfilled && (
@@ -583,13 +588,10 @@ export function StatusIncidentModal({
 }: {
   incidentId: string | undefined
 }) {
-  const search = Route.useSearch()
   const { open, validatedId, close } = useUrlModal<StatusIncidentId>({
     urlId: urlIncidentId,
     idPrefix: 'status_incident',
     searchParam: 'incident',
-    route: '/admin/status',
-    search,
   })
 
   return (

@@ -16,6 +16,22 @@ const sanitize = sanitizeTiptapContent as (
 ) => ReturnType<typeof sanitizeTiptapContent>
 
 describe('sanitizeTiptapContent', () => {
+  it('preserves integer list starts and rejects hostile or fractional values', () => {
+    for (const [start, expected] of [
+      [0, 0],
+      [-3, -3],
+      [7, 7],
+      [999999999, 999999999],
+      ['7" onclick="alert(1)', 1],
+      [Infinity, 1],
+      [1000000000, 1],
+      [1.5, 1],
+    ]) {
+      const result = sanitize({ type: 'doc', content: [{ type: 'orderedList', attrs: { start } }] })
+      expect(result.content?.[0].attrs?.start).toBe(expected)
+    }
+  })
+
   // ============================================
   // Basic structure
   // ============================================
@@ -86,6 +102,7 @@ describe('sanitizeTiptapContent', () => {
       'image',
       'resizableImage',
       'youtube',
+      'video',
       'horizontalRule',
       'hardBreak',
       'table',
@@ -704,6 +721,65 @@ describe('sanitizeTiptapContent', () => {
   // Inline conversation image sanitization
   // ============================================
 
+  it('preserves a same-origin uploaded video and drops unknown attributes', () => {
+    const result = sanitizeTiptapContent({
+      type: 'doc',
+      content: [
+        {
+          type: 'video',
+          attrs: {
+            src: '/api/storage/portal-media/recording.mp4',
+            mimeType: 'video/mp4',
+            title: 'Reproduction',
+            autoplay: true,
+          },
+        },
+      ],
+    })
+    expect(result.content?.[0]).toEqual({
+      type: 'video',
+      attrs: {
+        src: '/api/storage/portal-media/recording.mp4',
+        mimeType: 'video/mp4',
+        title: 'Reproduction',
+      },
+    })
+  })
+
+  it('preserves QuickTime playback metadata and normalizes M4V to MP4', () => {
+    const result = sanitizeTiptapContent({
+      type: 'doc',
+      content: [
+        {
+          type: 'video',
+          attrs: {
+            src: '/api/storage/portal-media/recording.mov',
+            mimeType: 'video/quicktime',
+          },
+        },
+        {
+          type: 'video',
+          attrs: {
+            src: '/api/storage/portal-media/recording.m4v',
+            mimeType: 'video/x-m4v',
+          },
+        },
+      ],
+    })
+    expect(result.content?.[0]?.attrs?.mimeType).toBe('video/quicktime')
+    expect(result.content?.[1]?.attrs?.mimeType).toBe('video/mp4')
+  })
+
+  it('neutralizes a video pointing at an external host', () => {
+    const result = sanitizeTiptapContent({
+      type: 'doc',
+      content: [
+        { type: 'video', attrs: { src: 'https://evil.example/track.mp4', mimeType: 'video/mp4' } },
+      ],
+    })
+    expect(result.content?.[0]?.attrs?.src).toBe('')
+  })
+
   it('preserves a chatImage with a same-origin upload src', () => {
     const input = {
       type: 'doc',
@@ -744,6 +820,59 @@ describe('sanitizeTiptapContent', () => {
   })
 
   // ============================================
+  // Pipeline files are attachments, attached by id, never inline: a src
+  // naming one would be re-signed on every read, past its link's expiry and
+  // without the file's ownership check.
+  // ============================================
+
+  const PIPELINE_SRCS = [
+    '/api/storage/files/2026/10/0b1c-report.png?read=abc&exp=1',
+    '/api/storage/files%2F2026%2F10%2F0b1c-report.png',
+    'https://other-host.example.com/api/storage/files/2026/10/0b1c-report.png',
+  ]
+
+  it('clears an inline image src that names a pipeline file, whatever the node or options', () => {
+    for (const src of PIPELINE_SRCS) {
+      for (const type of ['chatImage', 'image', 'resizableImage']) {
+        for (const restrict of [false, true]) {
+          const result = sanitizeTiptapContent(
+            { type: 'doc', content: [{ type, attrs: { src, alt: 'x' } }] },
+            { restrictImagesToTrustedOrigins: restrict }
+          )
+          expect(result.content![0]!.attrs, `${type} ${src} ${restrict}`).toEqual({
+            src: '',
+            alt: '',
+          })
+        }
+      }
+    }
+  })
+
+  it('clears a video src that names a pipeline file', () => {
+    const result = sanitizeTiptapContent({
+      type: 'doc',
+      content: [{ type: 'video', attrs: { src: PIPELINE_SRCS[0], mimeType: 'video/mp4' } }],
+    })
+    expect(result.content![0]!.attrs!.src).toBe('')
+  })
+
+  it('keeps inline srcs under every other prefix', () => {
+    for (const src of [
+      '/api/storage/chat-images/2026/10/a.png',
+      '/api/storage/filesystem/a.png',
+      '/api/storage/post-images/files/a.png',
+    ]) {
+      for (const type of ['chatImage', 'image', 'resizableImage']) {
+        const result = sanitizeTiptapContent({
+          type: 'doc',
+          content: [{ type, attrs: { src, alt: 'x' } }],
+        })
+        expect(result.content![0]!.attrs!.src, `${type} ${src}`).toBe(src)
+      }
+    }
+  })
+
+  // ============================================
   // restrictImagesToTrustedOrigins — the chatImage guard, opted into for
   // image/resizableImage on visitor-authored content
   // ============================================
@@ -758,6 +887,24 @@ describe('sanitizeTiptapContent', () => {
     const result = sanitizeTiptapContent(input)
     const node = result.content!.find((n) => n.type === 'resizableImage')
     expect(node!.attrs!.src).toBe('https://cdn.example.com/shot.png')
+  })
+
+  it('keeps extraTrustedImageHosts when image restriction is on', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        {
+          type: 'image',
+          attrs: { src: 'https://user-images.githubusercontent.com/1/pic.png', alt: 'gh' },
+        },
+      ],
+    }
+    const result = sanitizeTiptapContent(input, {
+      restrictImagesToTrustedOrigins: true,
+      extraTrustedImageHosts: ['githubusercontent.com'],
+    })
+    const image = result.content!.find((n) => n.type === 'image')
+    expect(image!.attrs!.src).toBe('https://user-images.githubusercontent.com/1/pic.png')
   })
 
   it('strips an external resizableImage src under restrictImagesToTrustedOrigins', () => {

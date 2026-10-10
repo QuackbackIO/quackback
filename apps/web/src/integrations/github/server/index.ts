@@ -1,10 +1,16 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { closeGitHubIssue } from '@/integrations/github/server/archive'
 import { fetchGitHubStatuses } from '@/integrations/github/server/statuses'
 import {
   registerGitHubWebhook,
   deleteGitHubWebhook,
+  patchGitHubWebhook,
+  findGitHubWebhookByUrl,
 } from '@/integrations/github/server/webhook-registration'
+import {
+  getLiveGitHubConnectionAccount,
+  githubWebhookEvents,
+} from '@/lib/server/domains/channel-accounts/github-connection'
 import { githubHook } from '@/integrations/github/server/hook'
 import { githubInboundHandler } from '@/integrations/github/server/inbound'
 import { githubIssues } from '@/integrations/github/server/issues'
@@ -18,6 +24,7 @@ import { listGitHubRepos } from '@/integrations/github/server/repos'
 
 export const githubIntegration: IntegrationDefinition = {
   id: 'github',
+  destination: channelDestination(['organizationName']),
   catalog: githubCatalog,
   oauth: {
     stateType: 'github_oauth',
@@ -36,13 +43,30 @@ export const githubIntegration: IntegrationDefinition = {
   hook: githubHook,
   inbound: githubInboundHandler,
   issues: githubIssues,
-  archive: closeGitHubIssue,
+  linkedItems: true,
   webhookRegistration: {
     register: async ({ accessToken, config, callbackUrl, secret }) => {
       const ownerRepo = config.channelId as string
       if (!ownerRepo) throw new Error('No repository configured')
-      const result = await registerGitHubWebhook(accessToken, ownerRepo, callbackUrl, secret)
-      return { externalWebhookId: result.webhookId }
+      const inboxEnabled = !!(await getLiveGitHubConnectionAccount())
+      const events = githubWebhookEvents(inboxEnabled)
+      try {
+        const result = await registerGitHubWebhook(
+          accessToken,
+          ownerRepo,
+          callbackUrl,
+          secret,
+          events
+        )
+        return { externalWebhookId: result.webhookId }
+      } catch (err) {
+        const raw = err instanceof Error ? err.message : String(err)
+        if (!/already exists/i.test(raw)) throw err
+        const existingId = await findGitHubWebhookByUrl(accessToken, ownerRepo, callbackUrl)
+        if (!existingId) throw err
+        await patchGitHubWebhook(accessToken, ownerRepo, existingId, events, callbackUrl, secret)
+        return { externalWebhookId: existingId }
+      }
     },
     unregister: async ({ accessToken, config, externalWebhookId }) => {
       const ownerRepo = config.channelId as string

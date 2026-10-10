@@ -273,19 +273,65 @@ describe('the real corpus', () => {
     // of any hole below them is refused, which is the capability
     // `migrator-gap-heal.test.ts` exercises.
     //
+    // 0239 adds spam_filter_config only while the column is absent and stamps
+    // the rows that existed at that moment in the same branch, so a second
+    // run finds the column and does nothing.
     // 0269 wraps two WHERE-null-or-empty UPDATEs in a DO block so a stored blob
     // makes the second run write zero rows. A bare UPDATE at the tip would
     // collapse that same window.
+    // 0274 checks the installed constraint definitions and updates only version 3 configs.
+    // A replay preserves widened constraints, workspace customizations and revisions.
+    // 0277 rewrites leftover widget `chat` keys and inserts chat-only macros
+    // that are not already present, so a second run writes zero rows.
+    // 0279 wraps oauth_client backfills, the oauth_client_resource FK rewrite,
+    // and the Microsoft oid rewrite so each second run writes zero rows.
+    // 0280 marks session scope behind scope predicates, so a second run writes zero rows.
+    // 0283 inserts a Labs row only where none exists, then deletes the 1h
+    // settings cache only if that insert returned a row. A second run writes
+    // zero rows. A bare CTE DELETE at the tip would collapse the gap-heal window.
+    // 0284 removes only retired delivery shapes that new writers cannot create.
+    // 0285 replaces only the old three-column link constraint and adds its
+    // scoped replacement only when absent. Real PostgreSQL replay is covered
+    // by lineage-double-apply and migrator-gap-heal.
+    // 0288 rebuilds kb_article_translations.search_vector only while its
+    // expression lacks the Dutch config, so a second run changes nothing.
+    // 0199 drops the roadmap archive only while it exists and holds no rows;
+    // a populated archive, or none at all, makes the block do nothing.
+    // 0209 drops a trigram index only while it has no partial predicate; the
+    // partial copy the concurrent build creates is never dropped.
+    // 0291 rewrites only feature_flags blobs that lack the `feedback` key and
+    // its last UPDATE adds that key to every such blob, so a second run
+    // selects no rows and skips the cache DELETE.
+    // 0294 widens the parent check once, guarded by its existing definition,
+    // and adds the internal-only check once, guarded by its exact name. Its
+    // migration regression also verifies existing parent rows and constraint OIDs.
+    // 0295 marks a settings row only while its metadata lacks brandingLookup,
+    // so a second run writes zero rows.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
     expect(vouching).toEqual([
+      '0199_drop_roadmap_curation.sql',
+      '0209_drift_repair.sql',
+      '0239_spam_filter_config.sql',
       '0253_event_dispatch_owner.sql',
       '0256_workspace_key_columns.sql',
       '0259_channel_threads.sql',
       '0260_channel_threads_conversation_fk.sql',
       '0261_connectors.sql',
       '0269_messenger_ai_default_on.sql',
+      '0274_slack_agent_gateway.sql',
+      '0277_widget_chat_to_messenger.sql',
+      '0279_better_auth_17.sql',
+      '0280_widget_session_scope.sql',
+      '0283_refined_visual_theme_default_on.sql',
+      '0284_integration_sync.sql',
+      '0285_integration_link_scope.sql',
+      '0288_kb_translations_dutch_search.sql',
+      '0291_legacy_surface_switches.sql',
+      '0294_workspace_copilot.sql',
+      '0295_website_branding_existing_workspaces.sql',
+      '0296_validate_workspace_copilot_checks.sql',
     ])
   })
 

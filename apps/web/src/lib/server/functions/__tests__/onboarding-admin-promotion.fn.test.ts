@@ -13,6 +13,8 @@ vi.mock('@tanstack/react-start', () => ({
 const hoisted = vi.hoisted(() => ({
   getSession: vi.fn(),
   getSettings: vi.fn(),
+  /** Reads made on the pool, outside any transaction: the early checks. */
+  dbExecute: vi.fn(),
   txExecute: vi.fn(),
   principalFindFirst: vi.fn(),
   /** Reads made INSIDE the bootstrap transaction, kept distinct from the
@@ -25,12 +27,35 @@ const hoisted = vi.hoisted(() => ({
   settingsInsert: vi.fn(),
   invalidateSettingsCache: vi.fn(),
   flagWrites: [] as Record<string, unknown>[],
+  prepared: [] as { executor: unknown; state: { goals?: string[]; useCase?: string } }[],
   /** What `settings.cloud_workspace_key` holds — null on an install, a key on a
    *  workspace a control plane created. Read by the tx `execute` double below. */
   stamp: { value: null as string | null },
 }))
 
+// Goal application itself is covered against a database in
+// onboarding-goals.db.test.ts; here it only records what setup handed it.
+vi.mock('@/lib/server/onboarding-board', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/onboarding-board')>()),
+  applyOnboardingGoals: async (
+    executor: unknown,
+    _row: unknown,
+    state: { goals?: string[]; useCase?: string }
+  ) => {
+    const writer = executor as { insert?: unknown; update?: unknown }
+    expect(typeof writer.insert === 'function' || typeof writer.update === 'function').toBe(true)
+    expect(state.goals?.[0]).toBe(state.useCase)
+    hoisted.prepared.push({ executor, state })
+    return { modulesChanged: false }
+  },
+}))
+
 vi.mock('@/lib/server/auth/session', () => ({ getSession: hoisted.getSession }))
+// Queuing the welcome emails is covered against a real transaction in
+// onboarding-goals.db.test.ts; this suite's transaction is a stand-in.
+vi.mock('@/lib/server/domains/onboarding/onboarding-emails', () => ({
+  scheduleOnboardingEmails: vi.fn(async () => {}),
+}))
 vi.mock('@/lib/server/functions/workspace', () => ({ getSettings: hoisted.getSettings }))
 vi.mock('@/lib/server/domains/principals/principal.service', () => ({
   syncPrincipalProfile: vi.fn(),
@@ -93,9 +118,29 @@ vi.mock('@/lib/server/setup-state', async (importOriginal) => ({
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/server/db')>()
+  const insert = vi.fn((table: unknown) => ({
+    values: vi.fn((values: Record<string, unknown>) => {
+      if (table === actual.settings) {
+        hoisted.settingsInsert(values)
+        return {
+          returning: vi.fn(async () => [
+            {
+              id: 'workspace_test',
+              name: values.name,
+              slug: values.slug,
+            },
+          ]),
+        }
+      }
+      return Promise.resolve()
+    }),
+  }))
   const tx = {
     execute: hoisted.txExecute,
     query: { principal: { findFirst: hoisted.txPrincipalFindFirst } },
+    // The fresh-install write re-reads the settings table under the lock.
+    select: vi.fn(() => ({ from: vi.fn(() => ({ limit: vi.fn(async () => []) })) })),
+    insert,
   }
   return {
     ...actual,
@@ -103,40 +148,28 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
       transaction: vi.fn(async (callback: (executor: typeof tx) => Promise<unknown>) =>
         callback(tx)
       ),
+      execute: hoisted.dbExecute,
       query: {
         principal: { findFirst: hoisted.principalFindFirst },
         postStatuses: { findFirst: hoisted.postStatusesFindFirst },
       },
-      insert: vi.fn((table: unknown) => ({
-        values: vi.fn((values: Record<string, unknown>) => {
-          if (table === actual.settings) {
-            hoisted.settingsInsert(values)
-            return {
-              returning: vi.fn(async () => [
-                {
-                  id: 'workspace_test',
-                  name: values.name,
-                  slug: values.slug,
-                },
-              ]),
-            }
-          }
-          return Promise.resolve()
-        }),
-      })),
+      insert,
     },
   }
 })
 
-const { saveWorkspaceAndGoalFn, saveCloudOnboardingGoalFn } = await import('../onboarding')
-const { DEFAULT_FEATURE_FLAGS, resolveFeatureFlags } =
-  await import('@/lib/server/domains/settings/settings.types')
+const { saveWorkspaceAndGoalFn } = await import('../onboarding')
+const { DEFAULT_FEATURE_FLAGS } = await import('@/lib/server/domains/settings/settings.types')
 const { bootstrapAdminLock } = await import('@/lib/server/domains/principals/bootstrap-admin')
 
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.flagWrites = []
-  hoisted.getSession.mockResolvedValue({ user: { id: 'user_caller' } })
+  hoisted.prepared = []
+  hoisted.getSession.mockResolvedValue({
+    session: { scope: 'dashboard' },
+    user: { id: 'user_caller' },
+  })
   hoisted.postStatusesFindFirst.mockResolvedValue({ id: 'status_existing' })
   hoisted.stamp.value = null
   // The transaction's `execute` answers by statement, as the real one does: the
@@ -144,11 +177,17 @@ beforeEach(() => {
   // the fixture's workspace shape implies. A double that answered both alike
   // could not tell a lock from a read, and this file's central assertion is
   // about the ordering between exactly those two.
-  hoisted.txExecute.mockImplementation(async (statement: { queryChunks?: unknown[] }) => {
+  const answer = async (statement: { queryChunks?: unknown[] }) => {
     const text = JSON.stringify(statement?.queryChunks ?? '')
+    if (text.includes('setup_state')) {
+      const row = await hoisted.getSettings()
+      return row ? [{ setup_state: row.setupState ?? null }] : []
+    }
     if (!text.includes('cloud_workspace_key')) return undefined
     return [{ stamp_column: hoisted.stamp.value, metadata: null }]
-  })
+  }
+  hoisted.txExecute.mockImplementation(answer)
+  hoisted.dbExecute.mockImplementation(answer)
 })
 
 /** A workspace whose wizard steps are already stamped. */
@@ -173,8 +212,9 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
       saveWorkspaceAndGoalFn({
         data: { workspaceName: 'Acme', useCase: 'product_feedback' },
       })
-    ).rejects.toThrow(/only admin/i)
+    ).resolves.toEqual({ ok: false, refusal: 'not_owner' })
     expect(hoisted.settingsInsert).not.toHaveBeenCalled()
+    expect(hoisted.prepared).toHaveLength(0)
     // Refused at the gate: the promoter is never even opened.
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
     expect(hoisted.txExecute).not.toHaveBeenCalled()
@@ -201,6 +241,7 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
       { userId: 'user_caller', role: 'admin' },
       expect.any(Object)
     )
+    expect(hoisted.prepared[0]?.state.goals).toEqual(['product_feedback'])
   })
 
   it('promotes the first user and creates one combined V2 workspace record', async () => {
@@ -242,6 +283,7 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
     )
     expect(result).toEqual(
       expect.objectContaining({
+        ok: true,
         id: 'workspace_test',
         name: 'Acme Inc',
         slug: 'acme-inc',
@@ -304,7 +346,7 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
 
     await expect(
       saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme Inc', useCase: 'customer_support' } })
-    ).rejects.toThrow(/not open to be set up/i)
+    ).resolves.toEqual({ ok: false, refusal: 'not_owner' })
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
     expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
     expect(hoisted.settingsInsert).not.toHaveBeenCalled()
@@ -328,10 +370,13 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
       data: { workspaceName: 'Acme Labs', useCase: 'product_feedback' },
     })
 
-    expect(result.name).toBe('Acme Labs')
-    expect(result.slug).toBe('fixed-portal')
-    expect(result.managed).toEqual({ name: false, slug: true, useCase: false })
-    expect(result.enabledModules).toEqual([])
+    expect(result).toMatchObject({
+      ok: true,
+      name: 'Acme Labs',
+      slug: 'fixed-portal',
+      managed: { name: false, slug: true, useCase: false },
+      enabledModules: [],
+    })
   })
 
   it('enables Help Center when an existing workspace picks that goal', async () => {
@@ -345,9 +390,8 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
       data: { workspaceName: 'Acme', useCase: 'help_center' },
     })
 
-    expect(result.enabledModules).toEqual(['Help Center'])
-    const written = hoisted.flagWrites.find((values) => typeof values.featureFlags === 'string')
-    expect(resolveFeatureFlags(written!.featureFlags as string).helpCenter).toBe(true)
+    expect(result).toMatchObject({ ok: true, enabledModules: ['Help Center'] })
+    expect(hoisted.prepared.map((call) => call.state.goals)).toEqual([['help_center']])
   })
 
   it.each([
@@ -376,66 +420,5 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
     hoisted.principalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'admin' })
 
     await expect(saveWorkspaceAndGoalFn({ data: example.data })).rejects.toThrow(example.message)
-  })
-})
-
-const CLOUD_IDENTITY = {
-  version: 4,
-  displayName: 'Acme',
-  canonicalOrigin: 'https://acme.example.com',
-  platformHostname: 'acme.example.com',
-  customDomains: [],
-  updatedAt: '2026-08-14T12:00:00.000Z',
-}
-
-describe('saveCloudOnboardingGoalFn enables the goal modules', () => {
-  function cloudRow(overrides: Record<string, unknown> = {}) {
-    return {
-      id: 'workspace_1',
-      name: 'Acme',
-      slug: 'acme',
-      managedFieldPaths: [],
-      cloudIdentity: CLOUD_IDENTITY,
-      featureFlags: JSON.stringify(DEFAULT_FEATURE_FLAGS),
-      setupState: JSON.stringify({
-        version: 2,
-        steps: { core: true, workspace: true, startingPoint: null },
-        useCase: null,
-        workspaceDetailsSeenAt: '2026-08-14T11:00:00.000Z',
-      }),
-      ...overrides,
-    }
-  }
-
-  it('turns Help Center on when a cloud workspace picks that goal', async () => {
-    hoisted.getSettings.mockResolvedValue(cloudRow())
-    hoisted.principalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'admin' })
-
-    const result = await saveCloudOnboardingGoalFn({ data: { useCase: 'help_center' } })
-
-    expect(result).toEqual({ useCase: 'help_center', enabledModules: ['Help Center'] })
-    const written = hoisted.flagWrites.find((values) => typeof values.featureFlags === 'string')
-    expect(written).toBeDefined()
-    const flags = resolveFeatureFlags(written!.featureFlags as string)
-    expect(flags.helpCenter).toBe(true)
-    expect(flags.supportInbox).toBe(false)
-  })
-
-  it('turns Support on for customer support without turning Help Center off', async () => {
-    hoisted.getSettings.mockResolvedValue(
-      cloudRow({
-        featureFlags: JSON.stringify({ ...DEFAULT_FEATURE_FLAGS, helpCenter: true }),
-      })
-    )
-    hoisted.principalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'admin' })
-
-    const result = await saveCloudOnboardingGoalFn({ data: { useCase: 'customer_support' } })
-
-    expect(result.enabledModules).toEqual(['Support'])
-    const written = hoisted.flagWrites.find((values) => typeof values.featureFlags === 'string')
-    const flags = resolveFeatureFlags(written!.featureFlags as string)
-    expect(flags.supportInbox).toBe(true)
-    expect(flags.supportTickets).toBe(true)
-    expect(flags.helpCenter).toBe(true)
   })
 })

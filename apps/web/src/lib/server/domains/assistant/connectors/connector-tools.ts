@@ -6,6 +6,8 @@
  * touching built-ins.
  */
 import { z } from 'zod'
+import { RETRIEVED_CONTENT_NOTE } from '../injection-guard'
+import { isHomeTurn } from '../workspace-safety'
 import { toolDefinition } from '@tanstack/ai'
 import { eq } from 'drizzle-orm'
 import { db as defaultDb, connectors, type CachedConnectorTool } from '@/lib/server/db'
@@ -19,7 +21,11 @@ import {
   toolGroupFromAnnotations,
   type ConnectorToolPolicy,
 } from '@/lib/shared/assistant/connectors'
-import { withGateEnvelope, type AssistantToolSpec } from '../assistant.toolspec'
+import {
+  withGateEnvelope,
+  type AssistantToolContext,
+  type AssistantToolSpec,
+} from '../assistant.toolspec'
 import { openConnectorSession } from './mcp-client'
 import type { ConnectorRow } from './connectors.service'
 import { recordConnectorCall } from './connectors.health'
@@ -31,7 +37,7 @@ export const connectorToolOutputSchema = z.object({
   note: z.string().optional(),
 })
 
-function jsonSchemaToZod(schema: Record<string, unknown> | undefined): z.ZodTypeAny {
+export function jsonSchemaToZod(schema: Record<string, unknown> | undefined): z.ZodTypeAny {
   if (!schema || typeof schema !== 'object') return z.record(z.string(), z.unknown())
   if (schema.type === 'object' && schema.properties && typeof schema.properties === 'object') {
     const properties = schema.properties as Record<string, Record<string, unknown>>
@@ -105,29 +111,36 @@ export function buildConnectorToolSpec(
     parents: ['conversation', 'ticket'],
     approvalPolicy: policy,
     definition,
-    execute: async (args: unknown) => {
+    execute: async (args: unknown, ctx: AssistantToolContext) => {
       const { createConnectorOAuthProvider, ConnectorOAuthRedirect } =
         await import('./oauth-provider')
       const token = await getValidConnectorAccessToken(row)
       try {
-        const session = await openConnectorSession({
-          url: row.url,
-          auth: {
-            mode: row.authMode,
-            bearerToken: row.authMode === 'bearer' ? (token ?? undefined) : undefined,
-            accessToken: row.authMode === 'oauth' ? (token ?? undefined) : undefined,
-          },
-          authProvider: row.authMode === 'oauth' ? createConnectorOAuthProvider(row) : undefined,
-        })
+        let session = ctx.mcpConnectorSessions?.get(row.id)
+        const owned = !session
+        if (!session) {
+          session = await openConnectorSession({
+            url: row.url,
+            auth: {
+              mode: row.authMode,
+              bearerToken: row.authMode === 'bearer' ? (token ?? undefined) : undefined,
+              accessToken: row.authMode === 'oauth' ? (token ?? undefined) : undefined,
+            },
+            authProvider: row.authMode === 'oauth' ? createConnectorOAuthProvider(row) : undefined,
+          })
+          ctx.mcpConnectorSessions?.set(row.id, session)
+        }
         try {
           const result = await session.callTool(tool.name, (args ?? {}) as Record<string, unknown>)
           await recordConnectorCall(row.id, {
             ok: result.ok,
             error: result.ok ? undefined : result.note,
           })
-          return result
+          return isHomeTurn(ctx)
+            ? { ...result, note: [result.note, RETRIEVED_CONTENT_NOTE].filter(Boolean).join(' ') }
+            : result
         } finally {
-          await session.close()
+          if (owned && !ctx.mcpConnectorSessions) await session.close()
         }
       } catch (err) {
         if (err instanceof ConnectorOAuthRedirect) {

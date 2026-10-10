@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { Actor } from '@/lib/server/policy/types'
 import type { AuthContext } from '../auth-helpers'
 import type { PrincipalId, SegmentId, UserId, WorkspaceId } from '@quackback/ids'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
@@ -9,7 +10,45 @@ vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
   ),
 }))
 
-import { policyActorFromAuth } from '../auth-helpers'
+const mockResolveTestFeedbackActor = vi.hoisted(() =>
+  vi.fn(async (actor: Actor): Promise<Actor> => {
+    expect(actor.principalType).toBe('anonymous')
+    expect(actor.principalId).not.toBeNull()
+    expect(actor.permissions).toBeInstanceOf(Set)
+    expect(actor.segmentIds).toBeInstanceOf(Set)
+    if (actor.principalId === 'principal_test_feedback') {
+      return {
+        ...actor,
+        testFeedback: {
+          ownerPrincipalId: 'principal_test_owner' as PrincipalId,
+          active: true,
+          canView: true,
+          canSubmit: true,
+        },
+      }
+    }
+    return actor
+  })
+)
+vi.mock('@/lib/server/test-customer-feedback', () => ({
+  resolveTestFeedbackActor: mockResolveTestFeedbackActor,
+}))
+beforeEach(() => {
+  mockResolveTestFeedbackActor.mockClear()
+})
+
+import { policyActorFromAuth, normalizePrincipalType } from '../auth-helpers'
+
+describe('normalizePrincipalType', () => {
+  it('preserves support and does not collapse it to user', () => {
+    expect(normalizePrincipalType('support')).toBe('support')
+    expect(normalizePrincipalType('user')).toBe('user')
+    expect(normalizePrincipalType('anonymous')).toBe('anonymous')
+    expect(normalizePrincipalType('service')).toBe('service')
+    expect(normalizePrincipalType('future_kind')).toBe('user')
+    expect(normalizePrincipalType(null)).toBe('user')
+  })
+})
 
 // Build a fully-typed AuthContext (no `as never`/`as unknown` casts).
 // principal.role is constrained to {admin, member, user} — service is a
@@ -40,6 +79,7 @@ function buildAuth(overrides: {
       type: overrides.principalType ?? 'user',
     },
     permissions: overrides.permissions ?? [],
+    scope: 'dashboard',
   }
 }
 
@@ -67,6 +107,32 @@ describe('policyActorFromAuth', () => {
     expect(actor.principalType).toBe('anonymous')
   })
 
+  it('passes the complete anonymous actor through the feedback resolver without changing identity', async () => {
+    const actor = await policyActorFromAuth(
+      buildAuth({
+        principalId: 'principal_test_feedback',
+        principalType: 'anonymous',
+        permissions: [PERMISSIONS.POST_CREATE],
+      })
+    )
+    expect(mockResolveTestFeedbackActor).toHaveBeenCalledExactlyOnceWith({
+      principalId: 'principal_test_feedback',
+      role: 'user',
+      principalType: 'anonymous',
+      segmentIds: new Set(['segment_a', 'segment_b']),
+      permissions: new Set([PERMISSIONS.POST_CREATE]),
+    })
+    expect(actor.principalId).toBe('principal_test_feedback')
+    expect(actor.principalType).toBe('anonymous')
+    expect(actor.permissions).toEqual(new Set([PERMISSIONS.POST_CREATE]))
+    expect(actor.testFeedback).toEqual({
+      ownerPrincipalId: 'principal_test_owner',
+      active: true,
+      canView: true,
+      canSubmit: true,
+    })
+  })
+
   it('preserves principalType=service for API-key principals', async () => {
     // Service principals have a regular role (member/admin/user) plus a
     // distinct principalType='service'. The two are independent — role
@@ -76,6 +142,16 @@ describe('policyActorFromAuth', () => {
     )
     expect(actor.principalType).toBe('service')
     expect(actor.role).toBe('member')
+  })
+
+  it('preserves principalType=support for Cloud support admins', async () => {
+    // Collapsing this onto 'user' would make isIdentifiedHuman true and put
+    // the operator on people lists. Role stays admin so isTeamActor still admits /admin.
+    const actor = await policyActorFromAuth(
+      buildAuth({ principalType: 'support', principalRole: 'admin' })
+    )
+    expect(actor.principalType).toBe('support')
+    expect(actor.role).toBe('admin')
   })
 
   it('maps admin role through verbatim', async () => {

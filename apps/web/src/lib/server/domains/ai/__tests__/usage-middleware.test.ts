@@ -97,4 +97,31 @@ describe('createUsageLoggingMiddleware', () => {
     const rows = logAiUsage.mock.calls.map(([p]) => p as { inputTokens: number })
     expect(rows.map((r) => r.inputTokens).sort((x, y) => x - y)).toEqual([10, 20])
   })
+
+  it('settled() waits for the usage row to be written', async () => {
+    let release!: () => void
+    logAiUsage.mockImplementationOnce(() => new Promise<void>((r) => (release = r)))
+    const mw = createUsageLoggingMiddleware({ pipelineStep: 'inbox_translation', model: 'm' })
+    const c = ctx('req-settle')
+    mw.onStart?.(c)
+    mw.onUsage?.(c, usage(10, 5))
+    mw.onFinish?.(c, {} as never)
+
+    let settled = false
+    const done = mw.settled().then(() => (settled = true))
+    await flush()
+    expect(settled).toBe(false)
+    release()
+    await done
+    expect(settled).toBe(true)
+  })
+
+  it('settled() resolves even when the write fails', async () => {
+    logAiUsage.mockRejectedValueOnce(new Error('db down'))
+    const mw = createUsageLoggingMiddleware({ pipelineStep: 'inbox_translation', model: 'm' })
+    const c = ctx('req-fail')
+    mw.onStart?.(c)
+    mw.onFinish?.(c, {} as never)
+    await expect(mw.settled()).resolves.toBeUndefined()
+  })
 })

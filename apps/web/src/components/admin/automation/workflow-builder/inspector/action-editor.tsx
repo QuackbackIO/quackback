@@ -200,8 +200,8 @@ export function ActionEditor({
             </Select>
             {(action.target ?? 'conversation') === 'ticket' && (
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Applies to the conversation&apos;s linked customer ticket. No linked ticket — or a
-                policy with no time-to-resolve target — does nothing.
+                Applies to the conversation&apos;s linked customer ticket. No linked ticket, or a
+                policy with no time-to-resolve target, does nothing.
               </p>
             )}
           </Field>
@@ -300,12 +300,12 @@ export function ActionEditor({
             value={action.body}
             onChange={(e) => onChange({ ...action, body: e.target.value })}
             maxLength={MAX_CONVERSATION_MESSAGE_LENGTH}
-            placeholder="e.g. Escalated per the customer's VIP tier — routing to the billing team."
+            placeholder="e.g. Escalated per the customer's VIP tier, routing to the billing team."
             className="min-h-20 text-sm"
           />
           <p className="text-[11px] text-muted-foreground">
-            Posted as an internal note, visible to teammates only — never to the customer. Plain
-            text for now.
+            Posted as an internal note, visible to teammates only, never to the customer. Plain text
+            for now.
           </p>
         </Field>
       )}

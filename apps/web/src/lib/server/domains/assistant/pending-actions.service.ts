@@ -37,8 +37,9 @@ const DEFAULT_TTL_HOURS = 24
  * on `assistant_pending_actions`.
  */
 export type ProposePendingActionParent =
-  | { conversationId: ConversationId; ticketId?: undefined }
-  | { ticketId: TicketId; conversationId?: undefined }
+  | { workspaceThreadKey: string; conversationId?: undefined; ticketId?: undefined }
+  | { conversationId: ConversationId; ticketId?: undefined; workspaceThreadKey?: undefined }
+  | { ticketId: TicketId; conversationId?: undefined; workspaceThreadKey?: undefined }
 
 export type ProposePendingActionInput = ProposePendingActionParent & {
   involvementId?: AssistantInvolvementId
@@ -80,6 +81,7 @@ export async function proposePendingAction(
   const [row] = await exec
     .insert(assistantPendingActions)
     .values({
+      workspaceThreadKey: input.workspaceThreadKey ?? null,
       conversationId: input.conversationId ?? null,
       ticketId: input.ticketId ?? null,
       involvementId: input.involvementId ?? null,
@@ -157,6 +159,7 @@ export async function getPendingActionByIdempotencyKey(
  * other bounded ticket/conversation authority.
  */
 async function surfacePendingActionNote(row: AssistantPendingAction): Promise<void> {
+  if (row.workspaceThreadKey) return
   try {
     const assistant = await getAssistantPrincipal()
     if (!assistant) return

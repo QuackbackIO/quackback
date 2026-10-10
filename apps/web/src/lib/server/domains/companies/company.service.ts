@@ -31,7 +31,9 @@ import { companyCreated, companyDeleted } from '@/lib/server/events/catalogue'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { isUniqueViolation } from '@/lib/server/utils'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { logger } from '@/lib/server/logger'
+import { notTestConversation, notTestTicket, notTestPrincipal } from '@/lib/server/test-data'
 import type {
   Company,
   CompanyId,
@@ -177,7 +179,7 @@ export async function getCompanyWithMemberCount(id: CompanyId): Promise<CompanyW
       memberCount: sql<number>`count(${principal.id})::int`.as('member_count'),
     })
     .from(companies)
-    .leftJoin(principal, eq(principal.companyId, companies.id))
+    .leftJoin(principal, and(eq(principal.companyId, companies.id), notTestPrincipal(principal.id)))
     .where(eq(companies.id, id))
     .groupBy(companies.id)
   const row = rows[0]
@@ -333,7 +335,7 @@ export async function listCompanies(
       memberCount: sql<number>`count(${principal.id})::int`.as('member_count'),
     })
     .from(companies)
-    .leftJoin(principal, eq(principal.companyId, companies.id))
+    .leftJoin(principal, and(eq(principal.companyId, companies.id), notTestPrincipal(principal.id)))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .groupBy(companies.id)
     .orderBy(companies.name, companies.id)
@@ -373,7 +375,7 @@ export async function listCompaniesPage(filter: CompanyListFilter = {}): Promise
       memberCount: sql<number>`count(${principal.id})::int`.as('member_count'),
     })
     .from(companies)
-    .leftJoin(principal, eq(principal.companyId, companies.id))
+    .leftJoin(principal, and(eq(principal.companyId, companies.id), notTestPrincipal(principal.id)))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .groupBy(companies.id)
     .orderBy(companies.name, companies.id)
@@ -407,14 +409,28 @@ export async function listMembers(companyId: CompanyId): Promise<CompanyMember[]
       principalId: principal.id,
       displayName: principal.displayName,
       email: user.email,
+      userImage: user.image,
+      userImageKey: user.imageKey,
+      principalAvatarUrl: principal.avatarUrl,
       type: principal.type,
       createdAt: principal.createdAt,
     })
     .from(principal)
     .leftJoin(user, eq(user.id, principal.userId))
-    .where(eq(principal.companyId, companyId))
+    .where(and(eq(principal.companyId, companyId), notTestPrincipal(principal.id)))
     .orderBy(asc(principal.createdAt))
-  return rows.map((r) => ({ ...r, email: realEmail(r.email) }))
+  return rows.map((r) => ({
+    principalId: r.principalId,
+    displayName: r.displayName,
+    email: realEmail(r.email),
+    avatarUrl: resolveUserAvatarUrl({
+      userImage: r.userImage,
+      userImageKey: r.userImageKey,
+      principalAvatarUrl: r.principalAvatarUrl,
+    }),
+    type: r.type,
+    createdAt: r.createdAt,
+  }))
 }
 
 /** Activity rollup counts: member conversations + tickets linked to the company. */
@@ -423,11 +439,13 @@ export async function getActivityCounts(companyId: CompanyId): Promise<CompanyAc
     .select({ count: sql<number>`count(*)::int` })
     .from(conversations)
     .innerJoin(principal, eq(principal.id, conversations.visitorPrincipalId))
-    .where(eq(principal.companyId, companyId))
+    .where(and(eq(principal.companyId, companyId), notTestConversation(conversations.id)))
   const [tick] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(tickets)
-    .where(and(eq(tickets.companyId, companyId), isNull(tickets.deletedAt)))
+    .where(
+      and(eq(tickets.companyId, companyId), isNull(tickets.deletedAt), notTestTicket(tickets.id))
+    )
   return { conversations: conv?.count ?? 0, tickets: tick?.count ?? 0 }
 }
 

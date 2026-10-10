@@ -20,6 +20,7 @@ import type {
   EventMessageData,
 } from '@/lib/server/events/types'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { isTestCustomer } from '@/lib/server/test-data'
 import {
   dispatchConversationCreated,
   dispatchConversationStatusChanged,
@@ -30,10 +31,13 @@ import {
   dispatchMessageCreated,
   dispatchMessageNoteCreated,
   dispatchMessageDeleted,
+  dispatchMessageUpdated,
 } from '@/lib/server/events/dispatch'
 import { logger } from '@/lib/server/logger'
+import { makeSafeDispatch } from '@/lib/server/events/safe-dispatch'
 
 const log = logger.child({ component: 'conversation-webhooks' })
+const safe = makeSafeDispatch(log)
 
 function toEventActor(actor: Actor, author?: ConversationAuthorInput | null): EventActor {
   const principalId = actor.principalId ?? undefined
@@ -93,14 +97,6 @@ function messageData(
   }
 }
 
-async function safe(label: string, fn: () => Promise<void>): Promise<void> {
-  try {
-    await fn()
-  } catch (err) {
-    log.warn({ err, label }, 'webhook failed')
-  }
-}
-
 export async function emitConversationCreated(
   actor: Actor,
   author: ConversationAuthorInput,
@@ -112,7 +108,7 @@ export async function emitConversationCreated(
       await import('@/lib/server/domains/settings/settings.sla-default')
     const { applySlaToConversation } = await import('@/lib/server/domains/sla/sla.service')
     const { policyId } = await getDefaultSlaPolicySettings()
-    if (!policyId) return
+    if (!policyId || (await isTestCustomer(conversation.visitorPrincipalId))) return
     await applySlaToConversation(conversation.id as ConversationId, policyId as SlaPolicyId)
   })
   await safe('conversation.created', () =>
@@ -166,6 +162,22 @@ export async function emitMessageDeleted(
       toEventActor(actor),
       { id: message.id, conversationId: conversation.id },
       conversationRef(conversation)
+    )
+  )
+}
+
+export async function emitMessageUpdated(
+  actor: Actor,
+  author: ConversationAuthorInput,
+  message: ConversationMessage,
+  conversation: Conversation
+): Promise<void> {
+  await safe('message.updated', () =>
+    dispatchMessageUpdated(
+      toEventActor(actor, author),
+      messageData(message, author, conversation),
+      conversationRef(conversation),
+      (message.editedAt ?? new Date()).toISOString()
     )
   )
 }

@@ -1,11 +1,11 @@
+import { deliveryError, httpDeliveryFailure } from '@/lib/server/integrations/sync/outcomes'
 /**
  * n8n hook handler.
  * Sends event payloads to an n8n webhook URL.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { safeFetch } from '@/lib/server/content/ssrf-guard'
 import { logger } from '@/lib/server/logger'
 import { buildN8nPayload } from '@/integrations/n8n/server/message'
@@ -21,13 +21,13 @@ export interface N8nConfig {
   rootUrl: string
 }
 
-export const n8nHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
+export const n8nHook: IntegrationHook = {
+  async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId: webhookUrl } = target as N8nTarget
     const { rootUrl } = config as N8nConfig
 
     if (!webhookUrl || !webhookUrl.startsWith('https://')) {
-      return { success: false, error: 'Invalid webhook URL', shouldRetry: false }
+      return { state: 'failed', errorCode: 'provider_failed' }
     }
 
     log.debug({ event_type: event.type }, 'processing event')
@@ -42,27 +42,15 @@ export const n8nHook: HookHandler = {
       })
 
       if (!response.ok) {
-        const status = response.status
-        log.error({ status_code: status }, 'webhook returned error status')
-
-        return {
-          success: false,
-          error: `Webhook returned ${status}`,
-          shouldRetry: status === 429 || status >= 500,
-        }
+        return httpDeliveryFailure(response)
       }
 
       log.info('webhook delivered')
-      return { success: true }
+      return { state: 'succeeded' }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       log.error({ err: error }, 'webhook delivery failed')
 
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: isRetryableError(error),
-      }
+      return deliveryError(error)
     }
   },
 }

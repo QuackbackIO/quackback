@@ -30,7 +30,38 @@ import { isAuthDenialError } from '@/lib/server/functions/auth-errors'
 function isValidationFailure(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   const candidate = error as { name?: unknown; issues?: unknown }
-  return candidate.name === 'ZodError' || Array.isArray(candidate.issues)
+  return (
+    candidate.name === 'ZodError' || Array.isArray(candidate.issues) || isSerializedIssueList(error)
+  )
+}
+
+/**
+ * The framework's validator path (`execValidator`) does not rethrow the schema
+ * library's error. For a standard-schema validator it throws a plain `Error`
+ * whose message is `JSON.stringify(issues)`, so the issues only survive as
+ * text. Recognise that exact shape: a non-empty JSON array whose every entry is
+ * a standard-schema issue (an object with a string `message`).
+ */
+function isSerializedIssueList(error: object): boolean {
+  if (!(error instanceof Error) || error.name !== 'Error') return false
+  const text = error.message.trimStart()
+  if (!text.startsWith('[')) return false
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return false
+  }
+  return (
+    Array.isArray(parsed) &&
+    parsed.length > 0 &&
+    parsed.every(
+      (issue) =>
+        !!issue &&
+        typeof issue === 'object' &&
+        typeof (issue as { message?: unknown }).message === 'string'
+    )
+  )
 }
 
 /**

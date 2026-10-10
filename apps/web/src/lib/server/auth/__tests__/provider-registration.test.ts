@@ -5,6 +5,7 @@ import {
   DEFAULT_OIDC_SCOPES,
 } from '../build-oauth-configs'
 import { getAllAuthProviders } from '../auth-providers'
+import { mapProfileClaims } from '../map-profile-claims'
 
 /** Minimal enabled provider row for the builder. */
 function row(over: Record<string, unknown> = {}) {
@@ -95,6 +96,14 @@ describe('buildGenericOAuthConfigs', () => {
     expect(cfgs[0].providerId).toBe('sso') // preserved registration id, NOT oidc_idp_abc
     expect(cfgs[0].pkce).toBe(true)
     expect(cfgs[0].disableSignUp).toBe(false)
+    expect(cfgs[0].disableProviderLogout).toBe(true)
+  })
+
+  it('keeps sign-out local so a GitHub session does not federate Microsoft logout', async () => {
+    // Better Auth 1.7 RP-initiated logout redirects to any linked OIDC
+    // provider with end_session_endpoint, not the provider used this session.
+    const cfg = await buildOne()
+    expect(cfg.disableProviderLogout).toBe(true)
   })
 
   it('requests the broadly-supported prompt=login, not the OIDC-optional select_account', async () => {
@@ -112,6 +121,16 @@ describe('buildGenericOAuthConfigs', () => {
       tierAllowsOidc: true,
     })
     expect(cfgs[0].prompt).toBe('login')
+  })
+
+  it('keeps ID token nonce binding on for a provider that has not opted out', async () => {
+    const cfg = await buildOne()
+    expect(cfg.disableIdTokenNonceBinding).toBeUndefined()
+  })
+
+  it('turns nonce binding off for a provider set to not use a nonce', async () => {
+    const cfg = await buildOne({ idTokenNonce: 'off' })
+    expect(cfg.disableIdTokenNonceBinding).toBe(true)
   })
 
   it('skips disabled providers and providers without credentials', async () => {
@@ -211,6 +230,57 @@ describe('buildGenericOAuthConfigs discovery + resolver wiring', () => {
     })
     expect(cfgs[0].userInfoUrl).toBe('https://manual/userinfo')
     expect(discovery).not.toHaveBeenCalled()
+  })
+
+  it('passes mapped claim paths to resolveIdentity so userinfo-only claims are fetched', async () => {
+    const fetchUserInfo = vi.fn(async () => ({ department: 'Engineering' }))
+    const idToken = (payload: Record<string, unknown>) =>
+      `x.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.y`
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        row({
+          userInfoUrl: 'https://idp/userinfo',
+          claimMapping: {
+            attributes: { map: [{ claimPath: 'department', attributeKey: 'department' }] },
+            role: { claimPath: 'groups', rules: [] },
+          },
+        }),
+      ] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      fetchUserInfo,
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({ sub: 's1', email: 'e@x.com', name: 'N' }),
+      accessToken: 'at',
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(info?.department).toBe('Engineering')
+  })
+
+  it('keeps the zero-network fast path when nothing is mapped', async () => {
+    // With no attribute or role mapping there are no required claim paths, so
+    // a complete ID token (including `picture`, which production pursues via
+    // `wantImage`) must still stop before userinfo.
+    const fetchUserInfo = vi.fn(async () => ({ department: 'Engineering' }))
+    const idToken = (payload: Record<string, unknown>) =>
+      `x.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.y`
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [row({ userInfoUrl: 'https://idp/userinfo' })] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      fetchUserInfo,
+    })
+    await cfgs[0].getUserInfo?.({
+      idToken: idToken({
+        sub: 's1',
+        email: 'e@x.com',
+        name: 'N',
+        picture: 'https://cdn.example.com/n.png',
+      }),
+      accessToken: 'at',
+    })
+    expect(fetchUserInfo).not.toHaveBeenCalled()
   })
 
   it('still builds when discovery is unreachable', async () => {
@@ -323,5 +393,322 @@ describe('gap-fill for providers that release no email or name', () => {
     })
     expect(info?.name).toBeTruthy()
     expect(info?.name).not.toContain(':')
+  })
+})
+
+/**
+ * Better-Auth's genericOAuth only maps `userInfo.image` to the account avatar,
+ * never the OIDC-standard `picture` claim, so `getUserInfo` has to promote it.
+ */
+describe('avatar from the OIDC `picture` claim', () => {
+  const idToken = (payload: Record<string, unknown>) =>
+    `x.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.y`
+
+  it('returns `picture` as `image` so Better-Auth sets the avatar', async () => {
+    const cfg = await buildOne()
+    const info = await cfg.getUserInfo?.({
+      idToken: idToken({
+        sub: 's1',
+        email: 'real@x.com',
+        name: 'Real',
+        picture: 'https://cdn.example.com/u/1.png',
+      }),
+      accessToken: undefined,
+    })
+    expect(info?.image).toBe('https://cdn.example.com/u/1.png')
+  })
+
+  it('omits `image` when the provider sends no usable picture', async () => {
+    const cfg = await buildOne()
+    const info = await cfg.getUserInfo?.({
+      idToken: idToken({ sub: 's1', email: 'real@x.com', name: 'Real' }),
+      accessToken: undefined,
+    })
+    expect(info && 'image' in info).toBe(false)
+    // The rest of the profile is unaffected.
+    expect(info?.email).toBe('real@x.com')
+    expect(info?.name).toBe('Real')
+  })
+
+  it('ignores a `picture` that is not an http(s) URL', async () => {
+    const cfg = await buildOne()
+    const info = await cfg.getUserInfo?.({
+      idToken: idToken({
+        sub: 's1',
+        email: 'real@x.com',
+        picture: 'data:image/png;base64,iVBORw0KGgo=',
+      }),
+      accessToken: undefined,
+    })
+    expect(info && 'image' in info).toBe(false)
+  })
+
+  it('pulls `picture` from userinfo when the ID token is otherwise complete', async () => {
+    // The reported failure: a "custom OIDC" provider whose ID token carries
+    // sub + email + name (so the resolver fast-path stopped there) but whose
+    // avatar is only at userinfo. `wantImage` keeps the cascade going for it.
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: 's1',
+      picture: 'https://cdn.example.com/from-userinfo.png',
+    }))
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [row({ discoveryUrl: null, userInfoUrl: 'https://idp/userinfo' })] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      fetchUserInfo,
+    } as never)
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({ sub: 's1', email: 'real@x.com', name: 'Real' }),
+      accessToken: 'opaque',
+    })
+    expect(fetchUserInfo).toHaveBeenCalledWith('https://idp/userinfo', 'opaque')
+    expect(info?.image).toBe('https://cdn.example.com/from-userinfo.png')
+  })
+})
+
+/**
+ * Production getUserInfo must honour stored profile claim paths and sources.
+ * The SSO test already forwarded them; production previously resolved only the
+ * OIDC defaults, so a stored `upn` mapping would pass the test and fail sign-in.
+ */
+describe('production profile mapping adapter', () => {
+  const idToken = (payload: Record<string, unknown>) =>
+    `x.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.y`
+
+  it('production honors stored profile paths and sources', async () => {
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: 'from-userinfo',
+      upn: 'mapped@x.com',
+      preferred_username: 'Mapped Name',
+    }))
+    const onIdentityFailure = vi.fn()
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        row({
+          userInfoUrl: 'https://idp/userinfo',
+          claimMapping: {
+            profile: {
+              sources: ['userinfo'],
+              claims: { id: 'sub', email: 'upn', name: 'preferred_username' },
+            },
+          },
+        }),
+      ] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      fetchUserInfo,
+      onIdentityFailure,
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({
+        sub: 'from-id-token',
+        email: 'raw@x.com',
+        name: 'Raw Name',
+        oid: 'oid-99',
+      }),
+      accessToken: 'at',
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(onIdentityFailure).not.toHaveBeenCalled()
+    expect(info?.id).toBe('from-userinfo')
+    expect(info?.email).toBe('mapped@x.com')
+    expect(info?.name).toBe('Mapped Name')
+  })
+
+  it('explicit mapped email cannot fall back to an unrelated raw email', async () => {
+    const onIdentityFailure = vi.fn()
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        row({
+          claimMapping: { profile: { claims: { email: 'upn' } } },
+        }),
+      ] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      onIdentityFailure,
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({
+        sub: 's1',
+        email: 'raw-default@x.com',
+        name: 'N',
+        mail: ['array@x.com'],
+      }),
+      accessToken: undefined,
+    })
+    expect(info).toBeNull()
+    expect(onIdentityFailure).toHaveBeenCalledTimes(1)
+    expect(onIdentityFailure).toHaveBeenCalledWith('oidc_abc', 'missing_email')
+    const [registrationId, reason] = onIdentityFailure.mock.calls[0] as [string, string]
+    expect(registrationId).toBe('oidc_abc')
+    expect(reason).toBe('missing_email')
+    expect(JSON.stringify(onIdentityFailure.mock.calls[0])).not.toMatch(/raw-default@x\.com/)
+  })
+
+  it('treats an array-valued mapped email as missing rather than using a raw default', async () => {
+    const onIdentityFailure = vi.fn()
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        row({
+          claimMapping: { profile: { claims: { email: 'mail' } } },
+        }),
+      ] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      onIdentityFailure,
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({
+        sub: 's1',
+        email: 'raw-default@x.com',
+        name: 'N',
+        mail: ['array@x.com'],
+      }),
+      accessToken: undefined,
+    })
+    expect(info).toBeNull()
+    expect(onIdentityFailure).toHaveBeenCalledWith('oidc_abc', 'missing_email')
+  })
+
+  it('mints a placeholder when opted in and leaves mapped email missing unverified', async () => {
+    const placeholderEmailFor = vi.fn(async () => 'sso-oidc-abc-deadbeef@anon.quackback.io')
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        row({
+          claimMapping: {
+            profile: { allowMissingEmail: true, claims: { email: 'upn' } },
+          },
+        }),
+      ] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      placeholderEmailFor,
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({
+        sub: 's1',
+        email: 'raw-default@x.com',
+        name: 'N',
+        email_verified: true,
+      }),
+      accessToken: undefined,
+    })
+    expect(placeholderEmailFor).toHaveBeenCalledWith('oidc_abc', 's1')
+    expect(info?.email).toBe('sso-oidc-abc-deadbeef@anon.quackback.io')
+    expect(info?.emailVerified).toBe(false)
+    expect(info?.email_verified).toBe(false)
+    expect(mapProfileClaims(info).emailVerified).toBe(false)
+  })
+
+  // The enforcing-provider vouch must only ever see an address the provider
+  // itself released: a placeholder or a stored address standing in for one
+  // would let a provider vouch for an account it never named.
+  it('hands only a provider-released address to onProviderEmail', async () => {
+    const onProviderEmail = vi.fn(async () => {})
+    const build = (claimMapping: unknown) =>
+      buildGenericOAuthConfigs({
+        providers: [row({ claimMapping })] as never,
+        creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+        tierAllowsOidc: true,
+        placeholderEmailFor: async () => 'sso-oidc-abc-deadbeef@anon.quackback.io',
+        onProviderEmail,
+      })
+
+    const [withEmail] = await build({})
+    await withEmail.getUserInfo?.({
+      idToken: idToken({ sub: 's1', email: 'sam@acme.com', name: 'Sam' }),
+      accessToken: undefined,
+    })
+    expect(onProviderEmail).toHaveBeenCalledWith('oidc_abc', 's1', 'sam@acme.com')
+
+    onProviderEmail.mockClear()
+    const [placeholder] = await build({ profile: { allowMissingEmail: true } })
+    await placeholder.getUserInfo?.({ idToken: idToken({ sub: 's2' }), accessToken: undefined })
+    expect(onProviderEmail).not.toHaveBeenCalled()
+  })
+
+  it('does not mint a placeholder when the mapped email is missing and opt-in is off', async () => {
+    const placeholderEmailFor = vi.fn(async () => 'should-not-mint@anon.quackback.io')
+    const onIdentityFailure = vi.fn()
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        row({
+          claimMapping: { profile: { claims: { email: 'upn' } } },
+        }),
+      ] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      placeholderEmailFor,
+      onIdentityFailure,
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({ sub: 's1', email: 'raw-default@x.com', name: 'N' }),
+      accessToken: undefined,
+    })
+    expect(placeholderEmailFor).not.toHaveBeenCalled()
+    expect(info).toBeNull()
+    expect(onIdentityFailure).toHaveBeenCalledWith('oidc_abc', 'missing_email')
+  })
+
+  it('profile hook preserves resolved email verification provenance', async () => {
+    // ID token asserts verified for a different address; the mapped email lives
+    // only at userinfo and carries no verification. The resolved address must
+    // stay unverified through getUserInfo and mapProfileToUser.
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: 's1',
+      upn: 'from-userinfo@x.com',
+      name: 'N',
+    }))
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        row({
+          userInfoUrl: 'https://idp/userinfo',
+          claimMapping: { profile: { claims: { email: 'upn' } } },
+        }),
+      ] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      fetchUserInfo,
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({
+        sub: 's1',
+        name: 'N',
+        email: 'id-token@x.com',
+        email_verified: true,
+      }),
+      accessToken: 'at',
+    })
+    expect(info?.email).toBe('from-userinfo@x.com')
+    expect(info?.emailVerified).toBe(false)
+    expect(info?.email_verified).toBe(false)
+    expect(mapProfileClaims(info).emailVerified).toBe(false)
+  })
+
+  it('missing email fails before Better-Auth can log a claims profile', async () => {
+    const onIdentityFailure = vi.fn()
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        row({
+          claimMapping: { profile: { claims: { email: 'upn' } } },
+        }),
+      ] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      onIdentityFailure,
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({
+        sub: 's1',
+        email: 'raw-default@x.com',
+        name: 'N',
+        groups: ['captured-group'],
+      }),
+      accessToken: undefined,
+    })
+    // Returning a profile without email lets genericOAuth log the entire
+    // userInfo on email_is_missing. Null keeps the claims bag out of that path.
+    expect(info).toBeNull()
+    expect(onIdentityFailure.mock.calls).toEqual([['oidc_abc', 'missing_email']])
   })
 })

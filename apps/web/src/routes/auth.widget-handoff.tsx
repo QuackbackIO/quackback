@@ -19,10 +19,10 @@
  *      renders.
  *
  * Why the server fn wrapper?
- *   The actual OTT consumption logic needs `setResponseHeader` and
- *   `getRequestHeaders` from `@tanstack/react-start/server`. Vite's
- *   import-protection plugin denies that specifier in client-bundled code,
- *   and route files end up in the client bundle via `routeTree.gen.ts`.
+ *   The actual OTT consumption logic needs `setResponseHeader` from
+ *   `@tanstack/react-start/server`. Vite's import-protection plugin denies
+ *   that specifier in client-bundled code, and route files end up in the
+ *   client bundle via `routeTree.gen.ts`.
  *   Wrapping the logic in a `createServerFn` confines the server-only
  *   imports to the server bundle — same pattern used by `widget.tsx`'s
  *   `setIframeHeaders`.
@@ -35,33 +35,45 @@
  *     through this route cannot gain the widget grant.
  *   - identifyVerificationEnabled is also checked by the evaluator: email-capture
  *     widget sessions (HMAC not required) never reach the portal via this path.
+ *   - Teammate identities never receive a portal cookie. An existing dashboard
+ *     session is redirected to returnTo; otherwise handoff lands on portal
+ *     sign-in unsigned so a dashboard login is not replaced.
  */
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
-import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
+import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
+import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
 import type { UserId } from '@quackback/ids'
 
+/** Skip the portal cookie for teammates so a dashboard login is not replaced. */
+export const isHandoffPrincipalTeammate = createServerOnlyFn(
+  async (userId: string): Promise<boolean> => {
+    try {
+      // oxlint-disable-next-line no-restricted-imports -- createServerOnlyFn body; stripped from the client graph
+      const { db, principal, eq } = await import('@/lib/server/db')
+      // oxlint-disable-next-line no-restricted-imports -- createServerOnlyFn body; stripped from the client graph
+      const { isTeamMember } = await import('@/lib/shared/roles')
+      const row = await db.query.principal.findFirst({
+        where: eq(principal.userId, userId as UserId),
+        columns: { role: true },
+      })
+      return isTeamMember(row?.role)
+    } catch (err) {
+      // oxlint-disable-next-line no-restricted-imports -- createServerOnlyFn body; stripped from the client graph
+      const { logger } = await import('@/lib/server/logger')
+      logger
+        .child({ component: 'widget-handoff' })
+        .error({ err }, 'teammate lookup failed; skipping portal cookie')
+      return true
+    }
+  }
+)
+
 /**
- * Look up the widget identification provenance for a session.
- *
- * Returns true only when the session has a `widget_identified_session`
- * row with `hmac_verified=true` — i.e. the session was created by
- * `/api/widget/identify` on the HMAC-verified path. Returns false when
- * the row is missing (session minted elsewhere — e.g. a portal email
- * signup that produced a generic BA OTT) OR when the row says the
- * identify happened on the email-capture path.
- *
- * The handoff route uses this to gate insertion of the
- * `widget_origin_session` marker — without it, any BA OTT could earn
- * the marker, breaking the chain of trust the portal-access widget
- * branch depends on.
- *
- * Exported for unit-test reach. Fails closed on DB errors — a query
- * hiccup must never be interpreted as "verified". Imports db lazily
- * so this file stays client-bundle-safe (the route file ends up in
- * the client bundle via routeTree.gen.ts).
+ * True only when the session has a widget_identified_session row with
+ * hmac_verified=true. Missing or unverified rows fail closed. Exported for tests.
  */
 export const isWidgetSessionHmacVerified = createServerOnlyFn(
   async (sessionId: string): Promise<boolean> => {
@@ -102,7 +114,29 @@ type LoaderData = { status: 'invalid' | 'expired' | 'error' }
 // ---------------------------------------------------------------------------
 
 type HandoffResult =
-  { kind: 'redirect'; to: string } | { kind: 'error'; status: 'invalid' | 'expired' | 'error' }
+  | { kind: 'redirect'; to: string; search?: Record<string, string> }
+  | { kind: 'error'; status: 'invalid' | 'expired' | 'error' }
+
+/**
+ * Server-to-server call to BA's one-time-token verify endpoint.
+ *
+ * The browser's cookie header is deliberately NOT forwarded. The token alone
+ * identifies the session to install. The only caller cookie the verify
+ * handler reads is the "don't remember me" flag, and that belongs to whatever
+ * session the browser held before, not to the one being installed.
+ * Forwarding cookies is actively harmful: BA's origin check rejects a
+ * cookie-bearing request that carries no Origin header with a 403, and any
+ * visitor who already holds a cookie on the portal host (a theme preference,
+ * a CDN clearance cookie, an earlier hand-off's session) would be refused as
+ * if the link had expired.
+ */
+export function verifyHandoffToken(baseUrl: string, ott: string): Promise<Response> {
+  return fetch(`${baseUrl}/api/auth/one-time-token/verify`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: ott }),
+  })
+}
 
 /**
  * Verify the OTT against BA, forward Set-Cookie to the browser, insert the
@@ -113,8 +147,9 @@ type HandoffResult =
  * Runs in the same h3 request scope as the route loader when called
  * server-side, so `setResponseHeader('Set-Cookie', ...)` here applies to
  * the OUTER request's response — the redirect carries the session cookie.
+ * Exported for tests.
  */
-const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
+export const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
   .validator(searchSchema)
   .handler(async ({ data }): Promise<HandoffResult> => {
     const { config } = await import('@/lib/server/config')
@@ -142,18 +177,7 @@ const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
     // redirect fires.
     let verifyResponse: Response
     try {
-      verifyResponse = await fetch(`${config.baseUrl}/api/auth/one-time-token/verify`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          // Forward the caller's cookie header so BA can resolve any
-          // existing session context if needed.
-          ...(getRequestHeaders().get('cookie')
-            ? { cookie: getRequestHeaders().get('cookie')! }
-            : {}),
-        },
-        body: JSON.stringify({ token: data.ott }),
-      })
+      verifyResponse = await verifyHandoffToken(config.baseUrl, data.ott)
     } catch (err) {
       log.error({ err }, 'ott verify fetch failed')
       await recordAuditEvent({
@@ -247,6 +271,42 @@ const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
       return { kind: 'error', status: 'invalid' }
     }
 
+    // Never install a portal cookie over a dashboard login. Teammate OTTs
+    // (and a customer OTT while a dashboard cookie is present) skip the
+    // cookie. An already-authenticated dashboard session goes straight to
+    // returnTo so "View on board" lands on the post/article; unauthenticated
+    // teammate OTTs still hit the sign-in landing.
+    const { getSession } = await import('@/lib/server/auth/session')
+    const { toSessionScope } = await import('@/lib/shared/roles')
+    const existing = await getSession().catch(() => null)
+    const existingIsDashboard =
+      !!existing?.user && toSessionScope(existing.session.scope) === 'dashboard'
+    const isTeammate = await isHandoffPrincipalTeammate(userId)
+    if (isTeammate || existingIsDashboard) {
+      await recordAuditEvent({
+        event: 'portal.widget_handshake.invalid',
+        outcome: 'failure',
+        actor: { userId: userId as UserId },
+        target: { type: 'session', id: sessionId },
+        metadata: {
+          reason: isTeammate ? 'teammate_identity' : 'dashboard_session_present',
+        },
+      })
+      if (existingIsDashboard) {
+        return { kind: 'redirect', to: returnTo }
+      }
+      const landing = buildSigninRedirect(returnTo)
+      return { kind: 'redirect', to: landing.to, search: landing.search }
+    }
+
+    // Promote to portal audience so the cookie can never satisfy team gates.
+    try {
+      const { db, session: sessionTable, eq } = await import('@/lib/server/db')
+      await db.update(sessionTable).set({ scope: 'portal' }).where(eq(sessionTable.id, sessionId))
+    } catch (err) {
+      log.error({ err }, 'failed to promote handoff session to portal scope')
+    }
+
     // Provenance passed — safe to install the BA session cookie now.
     // Pass the array so h3/Node emits a separate Set-Cookie line per
     // cookie. Calling setResponseHeader in a loop would overwrite (set,
@@ -294,7 +354,7 @@ export const Route = createFileRoute('/auth/widget-handoff')({
       data: { ott: search.ott, returnTo: search.returnTo },
     })
     if (result.kind === 'redirect') {
-      throw redirect({ to: result.to })
+      throw redirect({ to: result.to, search: result.search })
     }
     return { status: result.status }
   },

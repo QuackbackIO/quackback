@@ -68,6 +68,31 @@ describe('isSafeCallbackUrl', () => {
   it('still accepts "/admin" (regression)', () => {
     expect(isSafeCallbackUrl('/admin')).toBe(true)
   })
+
+  // Browsers strip tab, CR and LF from URLs before parsing, so "/\t/evil.com"
+  // is fetched as "//evil.com": a protocol-relative jump to another host.
+  it.each([
+    ['tab', '/\t/evil.com'],
+    ['newline', '/\n/evil.com'],
+    ['carriage return', '/\r/evil.com'],
+    ['leading space', ' //evil.com'],
+    ['NUL', '/\0/evil.com'],
+    ['DEL', '/\u007f/evil.com'],
+  ])('rejects a %s smuggled between the slashes', (_label, url) => {
+    expect(isSafeCallbackUrl(url)).toBe(false)
+  })
+
+  it('rejects a path that resolves to another origin', () => {
+    expect(isSafeCallbackUrl('/\t\\evil.com')).toBe(false)
+  })
+
+  it('accepts a deep admin link with a query and a hash', () => {
+    expect(isSafeCallbackUrl('/admin/inbox?view=open&c=conv_1#m2')).toBe(true)
+  })
+
+  it('accepts an encoded slash in the path (it stays a path)', () => {
+    expect(isSafeCallbackUrl('/admin/%2F%2Fevil.com')).toBe(true)
+  })
 })
 
 describe('isTeamCallback', () => {
@@ -86,5 +111,11 @@ describe('isTeamCallback', () => {
   })
   it('is false for non-admin lookalikes', () => {
     expect(isTeamCallback('/administrator-handbook')).toBe(false)
+    expect(isTeamCallback('/administrator?x=1')).toBe(false)
+  })
+  it('is true for admin paths carrying a query or a hash', () => {
+    expect(isTeamCallback('/admin?post=post_1')).toBe(true)
+    expect(isTeamCallback('/admin#plan')).toBe(true)
+    expect(isTeamCallback('/admin/status?view=components')).toBe(true)
   })
 })

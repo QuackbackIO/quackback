@@ -52,7 +52,7 @@ export function RecoveryCodeUsedEmail({
       </Text>
       <Text style={typography.text}>
         If this wasn&apos;t you, sign in and rotate your recovery codes immediately. The person who
-        used the code now has an active session — revoke it from your security settings.
+        used the code now has an active session. Revoke it from your security settings.
       </Text>
 
       <TransactionalFooter>

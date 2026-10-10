@@ -10,6 +10,15 @@ import type { Role } from '@/lib/shared/roles'
 import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
 import type { WidgetTranslations } from '@/lib/shared/widget/translations'
 import type { StatusSettings } from '@/lib/shared/status-settings'
+import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
+import type { OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
+// Vite aliases this to a no-op stub for the client bundle (see
+// logger.client-stub.ts), so it is safe for this otherwise client-bundled
+// module to import it for the one server-side parse-failure log below.
+import { logger } from '@/lib/server/logger'
+import { DEFAULT_WELCOME_MESSAGE } from '@/lib/shared/conversation/default-greeting'
+
+const log = logger.child({ component: 'settings-types' })
 
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
@@ -118,6 +127,14 @@ export interface AuthConfig {
    * existing workspaces pre-migration aren't suddenly locked out.
    */
   twoFactor?: { required: boolean }
+  /**
+   * Which callback URL each OIDC provider sends as its redirect URI, keyed by
+   * the provider's `registrationId`. A provider with no entry is `current`; see
+   * `lib/shared/oidc-redirect.ts`. `legacy` is stamped by migration 0279 and the
+   * custom-oidc startup backfill for providers registered before the callback
+   * moved; an admin switch changes it and deleting the provider removes it.
+   */
+  oidcRedirectStyles?: Record<string, OidcRedirectStyle>
 }
 
 /**
@@ -437,11 +454,13 @@ export interface ThemeColors {
   mutedForeground?: string
   accent?: string
   accentForeground?: string
+  accentInk?: string
   destructive?: string
   destructiveForeground?: string
   border?: string
   input?: string
   ring?: string
+  success?: string
   sidebarBackground?: string
   sidebarForeground?: string
   sidebarPrimary?: string
@@ -455,6 +474,15 @@ export interface ThemeColors {
   chart3?: string
   chart4?: string
   chart5?: string
+  fontSans?: string
+  shadow2xs?: string
+  shadowXs?: string
+  shadowSm?: string
+  shadow?: string
+  shadowMd?: string
+  shadowLg?: string
+  shadowXl?: string
+  shadow2xl?: string
   /** Border radius CSS variable value */
   radius?: string
 }
@@ -689,6 +717,8 @@ export interface WidgetConfig {
     help?: boolean
     /** Messenger (the "Messages" tab). */
     messenger?: boolean
+    /** Requester's own-tickets list (the "Tickets" tab). Defaults on. */
+    tickets?: boolean
     /** Show the aggregated Home tab (defaults to on; only appears with 2+ sections) */
     home?: boolean
   }
@@ -696,8 +726,8 @@ export interface WidgetConfig {
   messenger?: MessengerConfig
   /** Home surface customisation (greeting, hero style, quick-link cards). */
   home?: WidgetHomeConfig
-  /** Per-locale overrides of the customer-facing copy (welcome/offline message,
-   *  home greeting/subtitle). The base fields are the fallback. */
+  /** Per-locale overrides of the messenger welcome/offline message. The base
+   *  fields are the fallback. */
   translations?: WidgetTranslations
 }
 
@@ -705,42 +735,31 @@ export interface WidgetConfig {
  * Public subset of widget config — safe to include in WorkspaceSettings / bootstrap data
  * Does NOT include identifyVerification (admin-only concern)
  */
-export type PublicWidgetConfig = Omit<
-  Pick<
-    WidgetConfig,
-    | 'enabled'
-    | 'defaultBoard'
-    | 'position'
-    | 'tabs'
-    | 'home'
-    | 'launcherGreeting'
-    | 'launcherLabel'
-    | 'translations'
-  >,
-  'tabs'
+export type PublicWidgetConfig = Pick<
+  WidgetConfig,
+  | 'enabled'
+  | 'defaultBoard'
+  | 'position'
+  | 'tabs'
+  | 'home'
+  | 'launcherGreeting'
+  | 'launcherLabel'
+  | 'translations'
 > & {
   /** Always true: identify requires a backend-signed ssoToken (GH issue #300). */
   hmacRequired?: boolean
   /** Client-safe messenger config (no agent-only fields like routing). */
   messenger?: PublicMessengerConfig
-  tabs?: NonNullable<WidgetConfig['tabs']> & {
-    /**
-     * Computed from the `supportTickets` flag — not a stored tab. Ticket
-     * pairs surface through Messages; this bit still drives the requester's
-     * own-tickets list in the widget.
-     */
-    tickets?: boolean
-  }
 }
 
 export const DEFAULT_MESSENGER_CONFIG: MessengerConfig = {
   enabled: false,
-  welcomeMessage: 'Hi! 👋 How can we help you today?',
+  welcomeMessage: DEFAULT_WELCOME_MESSAGE,
   offlineMessage: "We're away right now. Leave a message and we'll get back to you by email.",
   // AI-first: identity on, and Quinn answers when a model is configured.
   // Admins pause replies under Automation → Agent. The widget master stays
-  // off until Support is turned on (or the install CTA) so a pasted snippet
-  // does not go live by itself.
+  // off until Support is turned on (or Show on your website) so a pasted
+  // snippet does not go live by itself.
   assistant: { enabled: true, respond: true },
 }
 
@@ -750,6 +769,7 @@ export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
     feedback: true,
     changelog: true,
     messenger: true,
+    tickets: true,
     home: true,
   },
   messenger: DEFAULT_MESSENGER_CONFIG,
@@ -795,6 +815,7 @@ export interface UpdateWidgetConfigInput {
     changelog?: boolean
     help?: boolean
     messenger?: boolean
+    tickets?: boolean
     home?: boolean
   }
   messenger?: Partial<MessengerConfig>
@@ -1012,11 +1033,11 @@ export interface PublicPortalConfig {
   /**
    * Public OIDC sign-in buttons from the identity_provider table. Each
    * `id` is a provider's `registrationId` (drives
-   * `signIn.oauth2({ providerId })`); `name` is its display label. Only
+   * `signIn.social({ provider })`); `name` is its display label. Only
    * button-eligible, registered providers appear — routed-only providers
    * (verified domain + showButton:false) are omitted.
    */
-  oidcProviders?: { id: string; name: string }[]
+  oidcProviders?: OidcSignInButton[]
   /** Welcome message on the portal index. Absent / empty body = nothing rendered. */
   welcomeCard?: PortalWelcomeCard
   /**
@@ -1119,6 +1140,42 @@ export interface FeatureFlags {
   /** Status page: public/private/segment-scoped service status with incidents,
    *  maintenance windows, uptime history, and subscriber notifications. */
   statusPage: boolean
+  /** Copilot on Home: the Home chat that answers from Copilot's knowledge and
+   *  proposes reversible settings changes. A Labs switch; on for new workspaces. */
+  copilotHome: boolean
+}
+
+/**
+ * Parse stored `feature_flags` JSON into a plain object, tolerating
+ * corruption. Blank (absent/empty) or the literal string `'null'` means "no
+ * stored flags yet" — expected, silent, resolves to defaults. Anything else
+ * that fails to parse, or parses to something other than a plain object
+ * (array, string, number, boolean, `null`), is corrupt data: logged once so
+ * it can be found and repaired, and treated the same as "no stored flags" so
+ * callers still get safe defaults instead of throwing.
+ */
+function parseStoredFeatureFlags(storedJson: string | null | undefined): Record<string, unknown> {
+  if (!storedJson) return {}
+  const trimmed = storedJson.trim()
+  if (trimmed === '' || trimmed === 'null') return {}
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(storedJson)
+  } catch (err) {
+    log.error({ err, column: 'feature_flags' }, 'unreadable feature_flags JSON, using defaults')
+    return {}
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    log.error(
+      { column: 'feature_flags', valueType: Array.isArray(parsed) ? 'array' : typeof parsed },
+      'feature_flags JSON was not an object, using defaults'
+    )
+    return {}
+  }
+
+  return parsed as Record<string, unknown>
 }
 
 /**
@@ -1128,7 +1185,7 @@ export interface FeatureFlags {
  * the first write after an upgrade persists a clean shape.
  */
 export function resolveFeatureFlags(storedJson: string | null | undefined): FeatureFlags {
-  const stored: Record<string, unknown> = storedJson ? JSON.parse(storedJson) : {}
+  const stored = parseStoredFeatureFlags(storedJson)
   const flags: FeatureFlags = { ...DEFAULT_FEATURE_FLAGS }
   for (const key of Object.keys(DEFAULT_FEATURE_FLAGS) as Array<keyof FeatureFlags>) {
     if (typeof stored[key] === 'boolean') flags[key] = stored[key]
@@ -1149,10 +1206,10 @@ export function resolveFeatureFlags(storedJson: string | null | undefined): Feat
  * onboarding goal turns them on.
  *
  * Existing workspaces with an explicit `featureFlags` JSON row keep stored
- * values. A one-time SQL stamp wrote today's previous all-on object onto
- * null rows before this default flipped, so already-running installs do
- * not lose surfaces. Only missing keys and new null rows pick up these
- * defaults (merged in settings.service).
+ * values. A one-time SQL stamp writes this same core-only object onto null
+ * rows so a 0.13.x upgrade does not turn Support, Help Center, or Status on.
+ * Only missing keys and new null rows pick up these defaults (merged in
+ * settings.service).
  */
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   feedback: true,
@@ -1161,12 +1218,61 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   supportInbox: false,
   supportTickets: false,
   statusPage: false,
+  copilotHome: false,
+}
+
+/** Flags that are Labs switches rather than products (Settings › Labs). */
+export const LABS_FEATURE_FLAGS = ['copilotHome'] as const satisfies readonly (keyof FeatureFlags)[]
+
+/** Flags a workspace is created with: the defaults plus Copilot on Home. */
+export const NEW_WORKSPACE_FEATURE_FLAGS: FeatureFlags = {
+  ...DEFAULT_FEATURE_FLAGS,
+  copilotHome: true,
+}
+
+/**
+ * A new workspace's flags when its row was created bare (by an operator):
+ * each flag new workspaces start with that the row never stored is filled
+ * from NEW_WORKSPACE_FEATURE_FLAGS. A stored choice always stands.
+ */
+export function withNewWorkspaceFlags(
+  storedJson: string | null | undefined,
+  flags: FeatureFlags,
+  goals?: readonly FeatureFlagUseCase[]
+): FeatureFlags {
+  const stored = parseStoredFeatureFlags(storedJson)
+  const next = { ...flags }
+  for (const key of LABS_FEATURE_FLAGS) {
+    if (typeof stored[key] !== 'boolean') next[key] = NEW_WORKSPACE_FEATURE_FLAGS[key]
+  }
+  if (goals && typeof stored.changelog !== 'boolean') {
+    next.changelog = newWorkspaceBaseFlags(goals).changelog
+  }
+  return next
+}
+
+/** A new workspace's flags before its goals add their modules. */
+export function newWorkspaceBaseFlags(goals: readonly FeatureFlagUseCase[]): FeatureFlags {
+  return {
+    ...NEW_WORKSPACE_FEATURE_FLAGS,
+    changelog: goals.length === 0 || goals.includes('product_feedback'),
+  }
+}
+
+/**
+ * Flags a workspace starts with for the goals chosen at setup: the new
+ * workspace defaults plus each goal's modules. Changelog starts on only with
+ * the Feedback goal, so a support or status workspace is not handed a module
+ * it never asked for.
+ */
+export function newWorkspaceFlagsForGoals(goals: readonly FeatureFlagUseCase[]): FeatureFlags {
+  return flagsForGoals(newWorkspaceBaseFlags(goals), goals).flags
 }
 
 /** Onboarding outcomes that may turn extra products on. Kept local so this
  *  file stays free of the db package. */
 export type FeatureFlagUseCase =
-  'product_feedback' | 'customer_support' | 'help_center' | 'internal'
+  'product_feedback' | 'customer_support' | 'help_center' | 'status_page' | 'internal'
 
 /** Flags to persist for a new workspace, or to merge on (never off) when
  *  the operator picks a goal that needs a module. */
@@ -1177,6 +1283,8 @@ export function featureFlagsForUseCase(useCase?: FeatureFlagUseCase | null): Fea
     flags.supportTickets = true
   } else if (useCase === 'help_center') {
     flags.helpCenter = true
+  } else if (useCase === 'status_page') {
+    flags.statusPage = true
   }
   return flags
 }
@@ -1189,9 +1297,12 @@ export function enableFlagsForUseCase(
   const needed = featureFlagsForUseCase(useCase)
   return {
     ...current,
+    // Shipping updates belongs with collecting ideas; other goals leave it alone.
+    changelog: current.changelog || useCase === 'product_feedback',
     supportInbox: current.supportInbox || needed.supportInbox,
     supportTickets: current.supportTickets || needed.supportTickets,
     helpCenter: current.helpCenter || needed.helpCenter,
+    statusPage: current.statusPage || needed.statusPage,
   }
 }
 
@@ -1263,6 +1374,15 @@ export function flagsForGoal(
   useCase?: FeatureFlagUseCase | null
 ): { flags: FeatureFlags; enabledModules: string[] } {
   const flags = enableFlagsForUseCase(current, useCase)
+  return { flags, enabledModules: newlyEnabledProductLabels(current, flags) }
+}
+
+/** Enable the union of selected goals without disabling existing products. */
+export function flagsForGoals(
+  current: FeatureFlags,
+  goals: readonly FeatureFlagUseCase[]
+): { flags: FeatureFlags; enabledModules: string[] } {
+  const flags = goals.reduce((flags, goal) => enableFlagsForUseCase(flags, goal), current)
   return { flags, enabledModules: newlyEnabledProductLabels(current, flags) }
 }
 

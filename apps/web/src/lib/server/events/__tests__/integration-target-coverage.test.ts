@@ -44,12 +44,6 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 vi.mock('@/lib/server/integrations/encryption', () => ({
   decryptSecrets: vi.fn((s: string) => JSON.parse(s)),
 }))
-vi.mock('@/lib/server/integrations/jira/access-token', () => ({
-  getJiraAccessToken: vi.fn(async (integration: { secrets: unknown }) => {
-    const parsed = JSON.parse(integration.secrets as string) as { accessToken?: string }
-    return parsed.accessToken
-  }),
-}))
 vi.mock('@/lib/server/domains/webhooks/encryption', () => ({
   decryptWebhookSecret: vi.fn((s: string) => s),
 }))
@@ -73,7 +67,7 @@ vi.mock('../hook-utils', () => ({
 }))
 
 const { getHookTargets } = await import('../targets')
-const { listIntegrationTypes, getIntegrationHook } = await import('@/lib/server/integrations')
+const { listIntegrationTypes, getIntegration } = await import('@/lib/server/integrations')
 
 /**
  * The config a connected install has, for each hook integration that resolves a
@@ -141,7 +135,7 @@ function makePostCreatedEvent() {
   }
 }
 
-const hookTypes = listIntegrationTypes().filter((t) => getIntegrationHook(t))
+const hookTypes = listIntegrationTypes().filter((t) => getIntegration(t)?.hook)
 const resolvingTypes = hookTypes.filter((t) => !KNOWN_UNRESOLVED.has(t))
 
 beforeEach(() => {
@@ -158,7 +152,7 @@ function mappingRow(
   return {
     eventType: 'post.created',
     integrationType: type,
-    secrets: JSON.stringify({ accessToken: 'token' }),
+    integrationId: `integration-${type}`,
     integrationConfig: fixture.integrationConfig ?? {},
     actionConfig: fixture.actionConfig ?? {},
     filters: null,

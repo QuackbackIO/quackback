@@ -10,10 +10,14 @@
 import { describe, expect, it } from 'vitest'
 import { assertBootConfigurationOrExit } from '../boot-config'
 
-function run(env: NodeJS.ProcessEnv): { exited: number | null } {
+function run(
+  env: NodeJS.ProcessEnv,
+  validateRuntimeConfig: () => void = () => {}
+): { exited: number | null } {
   let exited: number | null = null
   assertBootConfigurationOrExit({
     env,
+    validateRuntimeConfig,
     exit: ((code: number) => {
       exited = code
       // The real `process.exit` never returns; returning here would let the
@@ -36,6 +40,42 @@ describe('assertBootConfigurationOrExit', () => {
     }
   })
 
+  it('exits 1 when the runtime config fails validation', () => {
+    // A config failure used to be thrown from the banner, which left the
+    // process up and answering 500 on every route.
+    const failing = () => {
+      throw new Error('Configuration validation failed')
+    }
+    expect(run({}, failing).exited).toBe(1)
+  })
+
+  it('runs the runtime config validation it is given', () => {
+    let called = 0
+    run({}, () => {
+      called++
+    })
+    expect(called).toBe(1)
+  })
+
+  it('exits 1 when more than one outbound email provider is configured', () => {
+    const ses = { EMAIL_SES_ACCESS_KEY_ID: 'AKIA', EMAIL_SES_SECRET_ACCESS_KEY: 's' }
+    expect(run({ ...ses, EMAIL_SMTP_HOST: 'smtp.test' }).exited).toBe(1)
+    expect(run({ ...ses, EMAIL_RESEND_API_KEY: 're_x' }).exited).toBe(1)
+    expect(run({ EMAIL_SMTP_HOST: 'smtp.test', RESEND_API_KEY: 're_x' }).exited).toBe(1)
+  })
+
+  it('does not exit for one email provider, or a Resend key declared inbound-only', () => {
+    expect(run({ EMAIL_SMTP_HOST: 'smtp.test' }).exited).toBeNull()
+    expect(run({ EMAIL_RESEND_API_KEY: 're_x' }).exited).toBeNull()
+    expect(
+      run({
+        EMAIL_SMTP_HOST: 'smtp.test',
+        EMAIL_RESEND_API_KEY: 're_x',
+        EMAIL_INBOUND_PROVIDER: 'resend',
+      }).exited
+    ).toBeNull()
+  })
+
   it('does not exit on a valid configuration — the control', () => {
     // Without this, every assertion above would be satisfied by a function that
     // exits unconditionally.
@@ -49,6 +89,11 @@ describe('assertBootConfigurationOrExit', () => {
     // environment that is not the one it will run in, so a build-time reading
     // of these variables says nothing about the deployment.
     expect(run({ QUACKBACK_BUILD: '1', MIN_SCHEMA_VERSION: '9999' }).exited).toBeNull()
+    expect(
+      run({ QUACKBACK_BUILD: '1' }, () => {
+        throw new Error('Config not available during build')
+      }).exited
+    ).toBeNull()
   })
 
   it('does not throw past the exit — the caller must never continue', () => {

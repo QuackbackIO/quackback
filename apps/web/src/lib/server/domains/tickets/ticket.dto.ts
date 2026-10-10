@@ -35,7 +35,7 @@ import type { TicketStatusCategory } from '@/lib/shared/db-types'
 import type { JsonValue } from '@/lib/shared/json'
 import { formatTicketNumber, type TicketStageLabels } from '@/lib/shared/tickets'
 import { preview } from '@/lib/server/messages/message-core'
-import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
+import { loadAuthorAudiences, fallbackAuthor } from '../principals/principal-display'
 import { getStageLabels } from '../settings/settings.tickets'
 import { resolveStage } from './ticket.lifecycle'
 import { resolvePairConversationIds } from './pair-thread.service'
@@ -51,7 +51,11 @@ import type {
 interface TicketDTOContext {
   statuses: Map<TicketStatusId, TicketStatusEntity>
   ticketTypes: Map<TicketTypeId, TicketTypeEntity>
-  principals: Map<PrincipalId, TicketPrincipalRef>
+  /** Public name for requesters, account name for agents. */
+  principals: Map<
+    PrincipalId,
+    { publicAuthor: TicketPrincipalRef; supportAuthor: TicketPrincipalRef }
+  >
   teams: Map<TeamId, string>
   companies: Map<CompanyId, string>
   stageLabels: TicketStageLabels
@@ -297,7 +301,7 @@ export async function buildTicketContext(rows: Ticket[]): Promise<TicketDTOConte
         : Promise.resolve([] as TicketTypeEntity[]),
       // Reuse the inbox's principal loader so the avatar-precedence rule
       // (user.image → uploaded key → principal copy) stays in one place.
-      loadAuthors([
+      loadAuthorAudiences([
         ...rows.map((r) => r.requesterPrincipalId),
         ...rows.map((r) => r.assigneePrincipalId),
       ]),
@@ -346,12 +350,14 @@ export function ticketToDTO(
 ): TicketDTO | RequesterTicketDTO {
   const status = ctx.statuses.get(row.statusId)
   const slot = status ? resolveStage(status) : null
-  const requester = row.requesterPrincipalId
-    ? (ctx.principals.get(row.requesterPrincipalId) ?? fallbackAuthor(row.requesterPrincipalId))
-    : null
-  const assignee = row.assigneePrincipalId
-    ? (ctx.principals.get(row.assigneePrincipalId) ?? fallbackAuthor(row.assigneePrincipalId))
-    : null
+  const principalFor = (id: PrincipalId | null) => {
+    if (!id) return null
+    const views = ctx.principals.get(id)
+    if (!views) return fallbackAuthor(id)
+    return audience === 'agent' ? views.supportAuthor : views.publicAuthor
+  }
+  const requester = principalFor(row.requesterPrincipalId)
+  const assignee = principalFor(row.assigneePrincipalId)
 
   const dto: TicketDTO = {
     id: row.id,

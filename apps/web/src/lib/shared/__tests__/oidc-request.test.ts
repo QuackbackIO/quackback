@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import {
+  DEFAULT_ID_TOKEN_NONCE,
   DEFAULT_OIDC_PROMPT,
   DEFAULT_TOKEN_AUTH_METHOD,
+  ID_TOKEN_NONCE_CHOICES,
   PROMPT_CHOICES,
   TOKEN_AUTH_CHOICES,
   authorizeRequestFor,
+  normalizeIdTokenNonceInput,
   normalizePromptInput,
   normalizeTokenAuthInput,
   supportsPrompt,
@@ -14,6 +17,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   scopes: null,
   prompt: null,
   tokenEndpointAuthMethod: null,
+  idTokenNonce: null,
   ...over,
 })
 
@@ -23,15 +27,28 @@ describe('authorizeRequestFor', () => {
     expect(req.scopes).toEqual(['openid', 'email', 'profile'])
     expect(req.prompt).toBe(DEFAULT_OIDC_PROMPT)
     expect(req.tokenAuth).toBe(DEFAULT_TOKEN_AUTH_METHOD)
+    expect(req.idTokenNonce).toBe('check')
   })
 
   it('carries every configured value', () => {
     const req = authorizeRequestFor(
-      row({ scopes: 'openid public', prompt: 'login', tokenEndpointAuthMethod: 'basic' })
+      row({
+        scopes: 'openid public',
+        prompt: 'login',
+        tokenEndpointAuthMethod: 'basic',
+        idTokenNonce: 'off',
+      })
     )
     expect(req.scopes).toEqual(['openid', 'public'])
     expect(req.prompt).toBe('login')
     expect(req.tokenAuth).toBe('basic')
+    expect(req.idTokenNonce).toBe('off')
+  })
+
+  it('checks the nonce for any stored value it does not recognise', () => {
+    // Fail closed: a hand-edited row must never switch replay protection off.
+    expect(authorizeRequestFor(row({ idTokenNonce: 'false' })).idTokenNonce).toBe('check')
+    expect(authorizeRequestFor(row({ idTokenNonce: '' })).idTokenNonce).toBe('check')
   })
 
   it('omits the prompt entirely when configured to send none', () => {
@@ -80,6 +97,17 @@ describe('normalizeTokenAuthInput', () => {
   })
 })
 
+describe('normalizeIdTokenNonceInput', () => {
+  it('stores null for the default so an untouched provider is not rewritten', () => {
+    expect(normalizeIdTokenNonceInput(DEFAULT_ID_TOKEN_NONCE)).toBeNull()
+  })
+
+  it('stores off verbatim and rejects the unknown', () => {
+    expect(normalizeIdTokenNonceInput('off')).toBe('off')
+    expect(normalizeIdTokenNonceInput('disabled')).toBeNull()
+  })
+})
+
 describe('supportsPrompt', () => {
   it('says nothing when the provider advertises no prompt list', () => {
     // prompt_values_supported is optional metadata and almost nobody publishes
@@ -109,5 +137,6 @@ describe('choice lists', () => {
   it('marks the default choice in each list', () => {
     expect(PROMPT_CHOICES.find((c) => c.value === DEFAULT_OIDC_PROMPT)).toBeDefined()
     expect(TOKEN_AUTH_CHOICES.find((c) => c.value === DEFAULT_TOKEN_AUTH_METHOD)).toBeDefined()
+    expect(ID_TOKEN_NONCE_CHOICES.find((c) => c.value === DEFAULT_ID_TOKEN_NONCE)).toBeDefined()
   })
 })

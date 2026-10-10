@@ -8,12 +8,10 @@
  * This is fetched by MCP clients (e.g., Claude Code) during
  * the OAuth discovery flow.
  *
- * Note: Better Auth's oauthProvider plugin uses /api/auth as its
- * basePath, making the issuer `<origin>/api/auth`. RFC 8414 says
- * the metadata should live at `/.well-known/oauth-authorization-server/api/auth`,
- * but the official Better Auth demo serves it at the root well-known
- * path instead (see github.com/better-auth/better-auth #7453).
- * We follow the same pattern and silence the framework warning.
+ * The issuer is `<origin>/api/auth`. RFC 8414 puts that document at
+ * `/.well-known/oauth-authorization-server/api/auth` (see the sibling route).
+ * This root URL stays so clients that still request it receive the same
+ * metadata body.
  */
 
 import { createFileRoute } from '@tanstack/react-router'

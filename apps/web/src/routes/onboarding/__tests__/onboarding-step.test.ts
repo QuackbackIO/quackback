@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mayForwardCompletedSetup, pickOnboardingStep } from '../-onboarding-step'
+import { isSetupBlocked, mayForwardCompletedSetup, pickOnboardingStep } from '../-onboarding-step'
 import { DEFAULT_SETUP_STATE, type SetupState } from '@/lib/shared/db-types'
 
 function state(overrides: Partial<SetupState> = {}): SetupState {
@@ -81,6 +81,23 @@ describe('pickOnboardingStep V2', () => {
     ).toBe('/onboarding/no-access')
   })
 
+  // A finished self-hosted install whose human admins are gone. Not
+  // provisioned, so `setupOpenToClaim` stays true, but the workspace step
+  // refuses the claim, so a non-admin who signs in must not be routed there.
+  it('routes a non-admin on a finished install with no admin to the terminal page', () => {
+    const state = {
+      setupClaimedByOther: false,
+      setupOpenToClaim: true,
+      setupClosedReason: 'setupComplete' as const,
+      setupState: null,
+      principalRecord: { id: 'p_visitor', role: 'user' },
+    }
+    expect(isSetupBlocked(state)).toBe(true)
+    expect(pickOnboardingStep({ session: { userId: 'u_visitor' }, state })).toBe(
+      '/onboarding/no-access'
+    )
+  })
+
   // The control: one fact different, and the same caller belongs in the wizard.
   it('still sends the first user of an unprovisioned install to the claim step', () => {
     expect(
@@ -112,7 +129,7 @@ describe('pickOnboardingStep V2', () => {
     ).toBe('/onboarding/workspace')
   })
 
-  it('asks a provisioned owner for their outcome after workspace details', () => {
+  it('sends a provisioned owner to Home after workspace details', () => {
     expect(
       pickOnboardingStep({
         session: { userId: 'u_owner' },
@@ -123,24 +140,22 @@ describe('pickOnboardingStep V2', () => {
           principalRecord: { id: 'p_owner', role: 'admin' },
         },
       })
-    ).toBe('/onboarding/usecase')
+    ).toBe('/admin')
   })
 
-  it('routes a provisioned owner with details and an outcome to the ready step', () => {
+  it('skips the Cloud details form when a friendly hostname already exists', () => {
     expect(
       pickOnboardingStep({
         session: { userId: 'u_owner' },
         state: {
           setupClaimedByOther: false,
           setupOpenToClaim: false,
-          setupState: state({
-            workspaceDetailsSeenAt: '2026-08-14T10:00:00.000Z',
-            useCase: 'product_feedback',
-          }),
+          setupState: state(),
           principalRecord: { id: 'p_owner', role: 'admin' },
+          platformHostname: 'acme.quackback.co.uk',
         },
       })
-    ).toBe('/onboarding/complete')
+    ).toBe('/admin')
   })
 
   it('does not let a pre-seeded outcome skip cloud workspace details', () => {
@@ -157,7 +172,7 @@ describe('pickOnboardingStep V2', () => {
     ).toBe('/onboarding/workspace')
   })
 
-  it('does not let a provision stamp skip the goal or starter steps', () => {
+  it('sends a provision-stamped owner to Home instead of a goal picker', () => {
     const stamped = state({
       workspaceDetailsSeenAt: '2026-08-14T10:00:00.000Z',
       useCase: 'product_feedback',
@@ -184,7 +199,7 @@ describe('pickOnboardingStep V2', () => {
           principalRecord: { id: 'p_owner', role: 'admin' },
         },
       })
-    ).toBe('/onboarding/usecase')
+    ).toBe('/admin')
   })
 
   // The workspace step is where a workspace is claimed, and the declarative
@@ -232,7 +247,7 @@ describe('pickOnboardingStep V2', () => {
     ).toBe('/onboarding/workspace')
   })
 
-  it('routes configured workspace and goal to the ready step', () => {
+  it('routes a configured workspace to Home', () => {
     expect(
       pickOnboardingStep({
         session: { userId: 'u1' },
@@ -244,10 +259,10 @@ describe('pickOnboardingStep V2', () => {
           principalRecord,
         },
       })
-    ).toBe('/onboarding/complete')
+    ).toBe('/admin')
   })
 
-  it('shows the bridge until it is acknowledged', () => {
+  it('skips the Ready hallway once identity is saved', () => {
     const completedAt = '2026-07-13T10:00:00.000Z'
     const setupState = state({
       useCase: 'customer_support',
@@ -269,7 +284,7 @@ describe('pickOnboardingStep V2', () => {
         session: { userId: 'u1' },
         state: { setupState, principalRecord },
       })
-    ).toBe('/onboarding/complete')
+    ).toBe('/admin')
     expect(
       pickOnboardingStep({
         session: { userId: 'u1' },
@@ -278,7 +293,7 @@ describe('pickOnboardingStep V2', () => {
           principalRecord,
         },
       })
-    ).toBe('/admin/getting-started')
+    ).toBe('/admin')
   })
 })
 

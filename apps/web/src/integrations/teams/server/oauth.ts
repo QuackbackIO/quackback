@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Microsoft Teams OAuth utilities.
  * Uses Azure AD OAuth2 with Microsoft Graph API.
@@ -127,17 +128,20 @@ export async function refreshTeamsToken(
     throw new Error('Teams credentials not configured')
   }
 
-  const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      scope: TEAMS_SCOPES,
-    }),
-  })
+  const response = await integrationFetch(
+    'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        scope: TEAMS_SCOPES,
+      }),
+    }
+  )
 
   if (!response.ok) {
     throw new Error(`Teams token refresh failed: ${response.status}`)

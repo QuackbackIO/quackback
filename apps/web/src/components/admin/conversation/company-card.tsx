@@ -5,7 +5,8 @@ import { BuildingOffice2Icon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { getCompanyForPrincipalFn, qualifyCompanyFn } from '@/lib/server/functions/companies'
+import { qualifyCompanyFn } from '@/lib/server/functions/companies'
+import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
 
 /**
  * Company context for the conversation detail panel: the visitor's company with
@@ -27,10 +28,8 @@ export function CompanyCard({
   const [editing, setEditing] = useState(false)
   const queryClient = useQueryClient()
   const { data: company, isPending } = useQuery({
-    queryKey: ['admin', 'company', 'for-principal', principalId],
-    queryFn: () => getCompanyForPrincipalFn({ data: { principalId } }),
+    ...conversationPanelQueries.company(principalId),
     enabled: enabled && !!principalId,
-    staleTime: 60_000,
   })
 
   if (isPending) return null
@@ -47,7 +46,6 @@ export function CompanyCard({
             type="button"
             size="sm"
             variant="ghost"
-            shape="default"
             onClick={() => setEditing((open) => !open)}
           >
             {editing ? 'Cancel' : 'Add company'}
@@ -199,7 +197,6 @@ function QualificationEditor({
       <Button
         size="sm"
         variant="outline"
-        shape="default"
         className="w-full"
         disabled={!name.trim() || saving}
         onClick={() => void commit()}
@@ -207,7 +204,7 @@ function QualificationEditor({
         {saving ? 'Saving...' : 'Save company'}
       </Button>
       <p className="text-[11px] leading-snug text-muted-foreground">
-        Saving links this person to an existing company with the same name, or creates one.
+        Saving links this user to an existing company with the same name, or creates one.
       </p>
     </div>
   )

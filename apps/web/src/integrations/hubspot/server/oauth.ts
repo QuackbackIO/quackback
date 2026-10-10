@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * HubSpot OAuth utilities.
  */
@@ -128,7 +129,7 @@ export async function refreshHubSpotToken(
     throw new Error('HubSpot credentials not configured')
   }
 
-  const response = await fetch(`${HUBSPOT_API}/oauth/v1/token`, {
+  const response = await integrationFetch(`${HUBSPOT_API}/oauth/v1/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

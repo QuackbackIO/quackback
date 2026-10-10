@@ -23,20 +23,15 @@ import { readAttributeValue } from '@/lib/shared/conversation/attribute-values'
 import { StageChip, StageTracker } from '@/components/shared/ticket-stage'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
-import {
-  getMyTicketStageLabelsFn,
-  getMyTicketFormFn,
-  getMyTicketWatchStatusFn,
-  watchMyTicketFn,
-  unwatchMyTicketFn,
-} from '@/lib/server/functions/tickets'
+import { formatCalendarDate } from '@/lib/shared/utils/date'
+import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 
 const NO_HEADERS = (): Record<string, string> => ({})
 
 /** Render one stored intake answer as customer-facing text, keyed off the
  *  field's declared type (checkbox → Yes/No, date → localized day, lists →
  *  comma-joined). Null for an empty/unset answer so the row is skipped. */
-function formatIntakeValue(
+export function formatIntakeValue(
   field: TicketFormField,
   value: unknown,
   intl: ReturnType<typeof useIntl>
@@ -55,10 +50,10 @@ function formatIntakeValue(
       : intl.formatMessage({ id: 'portal.tickets.details.no', defaultMessage: 'No' })
   }
   if (field.type === 'date' && typeof v === 'string') {
-    const d = new Date(v)
-    return Number.isNaN(d.getTime())
-      ? v
-      : d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+    // A calendar date: the day as written, in the visitor's language.
+    return (
+      formatCalendarDate(v, { year: 'numeric', month: 'short', day: 'numeric' }, intl.locale) ?? v
+    )
   }
   return String(v)
 }
@@ -73,26 +68,28 @@ export function TicketHeaderCard({
 }) {
   const intl = useIntl()
   const queryClient = useQueryClient()
+  const rpc = useVisitorSurfaceRpc()
   const [expanded, setExpanded] = useState(false)
   const id = ticket.id as TicketId
 
   // B19: customized stage labels, shared cache with everything ticket-shaped.
   const { data: stageLabels } = useQuery({
     queryKey: ['ticket-stage-labels'],
-    queryFn: () => getMyTicketStageLabelsFn({ headers: getAuthHeaders() }),
+    queryFn: () => rpc.getMyTicketStageLabels({ headers: getAuthHeaders() }),
     staleTime: 300_000,
   })
   // The intake form resolves stored answers back to field labels; only
   // fetched once the Details disclosure is opened.
   const { data: intakeForm } = useQuery({
     queryKey: ['ticket-intake-form'],
-    queryFn: () => getMyTicketFormFn({ headers: getAuthHeaders() }),
+    queryFn: () => rpc.getMyTicketForm({ headers: getAuthHeaders() }),
     staleTime: 300_000,
     enabled: expanded && !!ticket.ticketType,
   })
   const { data: watchStatus } = useQuery({
     queryKey: ['ticket-watch', id],
-    queryFn: () => getMyTicketWatchStatusFn({ data: { ticketId: id }, headers: getAuthHeaders() }),
+    queryFn: () =>
+      rpc.getMyTicketWatchStatus({ data: { ticketId: id }, headers: getAuthHeaders() }),
     staleTime: 30_000,
   })
   const watching = watchStatus?.watching ?? false
@@ -100,8 +97,8 @@ export function TicketHeaderCard({
   const toggleWatch = useMutation({
     mutationFn: () =>
       watching
-        ? unwatchMyTicketFn({ data: { ticketId: id }, headers: getAuthHeaders() })
-        : watchMyTicketFn({ data: { ticketId: id }, headers: getAuthHeaders() }),
+        ? rpc.unwatchMyTicket({ data: { ticketId: id }, headers: getAuthHeaders() })
+        : rpc.watchMyTicket({ data: { ticketId: id }, headers: getAuthHeaders() }),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ['ticket-watch', id] }),
   })
 

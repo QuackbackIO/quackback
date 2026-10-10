@@ -24,6 +24,7 @@ import {
 } from '@/lib/server/db'
 import { ratePctOrNull } from '@/lib/shared/percent'
 import { summarizeCsat, type CsatSummary } from './csat-summary'
+import { notTestConversation } from '@/lib/server/test-data'
 
 export interface QuinnInvolvementRow {
   status: AssistantInvolvementStatus
@@ -51,6 +52,8 @@ export interface QuinnPerformanceSummary {
   systemErrors: number
   /** handedOff / involvements, 0-100. */
   escalationRate: number
+  /** Still with Quinn: involvements neither resolved nor handed off. */
+  pending: number
   /** Successful assistant_tool_calls in the range. */
   actionsTaken: number
   /** Involvements opened + resolved per UTC day, ascending by date. */
@@ -120,6 +123,7 @@ export function summarizeQuinnPerformance(
     handedOff,
     systemErrors,
     escalationRate: pct(handedOff, involvements),
+    pending: involvements - resolved - handedOff - systemErrors,
     actionsTaken,
     dailyTrend,
   }
@@ -138,6 +142,7 @@ export async function getQuinnCsat(from: Date, to: Date): Promise<CsatSummary> {
     .where(
       and(
         isNotNull(conversations.csatRating),
+        notTestConversation(conversations.id),
         gte(conversations.csatSubmittedAt, from),
         lt(conversations.csatSubmittedAt, to),
         exists(
@@ -167,18 +172,29 @@ export async function getQuinnPerformance(from: Date, to: Date): Promise<QuinnPe
       })
       .from(assistantInvolvements)
       .where(
-        and(gte(assistantInvolvements.createdAt, from), lt(assistantInvolvements.createdAt, to))
+        and(
+          gte(assistantInvolvements.createdAt, from),
+          lt(assistantInvolvements.createdAt, to),
+          notTestConversation(assistantInvolvements.conversationId)
+        )
       ),
     db
       .select({ n: sql<number>`count(*)::int` })
       .from(conversations)
-      .where(and(gte(conversations.createdAt, from), lt(conversations.createdAt, to))),
+      .where(
+        and(
+          gte(conversations.createdAt, from),
+          lt(conversations.createdAt, to),
+          notTestConversation(conversations.id)
+        )
+      ),
     db
       .select({ n: sql<number>`count(*)::int` })
       .from(assistantToolCalls)
       .where(
         and(
           eq(assistantToolCalls.status, 'succeeded'),
+          notTestConversation(assistantToolCalls.conversationId),
           gte(assistantToolCalls.createdAt, from),
           lt(assistantToolCalls.createdAt, to)
         )

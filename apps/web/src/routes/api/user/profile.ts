@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { db, user, eq } from '@/lib/server/db'
 import type { UserId } from '@quackback/ids'
 import { getSession } from '@/lib/server/auth/session'
+import { toSessionScope } from '@/lib/shared/roles'
 import { deleteObject } from '@/lib/server/storage/s3'
 import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
 import { logger } from '@/lib/server/logger'
@@ -62,6 +63,9 @@ export const Route = createFileRoute('/api/user/profile')({
           if (!session?.user) {
             log.warn('unauthorized profile update')
             return Response.json({ error: 'Unauthorized' }, { status: 401 })
+          }
+          if (toSessionScope(session.session.scope) === 'widget') {
+            return Response.json({ error: 'Forbidden' }, { status: 403 })
           }
 
           const contentType = request.headers.get('content-type') || ''
@@ -126,6 +130,9 @@ export const Route = createFileRoute('/api/user/profile')({
           if (!session?.user) {
             log.warn('unauthorized avatar delete')
             return Response.json({ error: 'Unauthorized' }, { status: 401 })
+          }
+          if (toSessionScope(session.session.scope) === 'widget') {
+            return Response.json({ error: 'Forbidden' }, { status: 403 })
           }
 
           // Get current user to check for existing S3 key

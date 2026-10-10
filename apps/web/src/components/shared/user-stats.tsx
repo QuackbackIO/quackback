@@ -1,7 +1,8 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { getUserStatsFn } from '@/lib/server/functions/user'
+import { useIntl } from 'react-intl'
+import { getUserStatsFn, type UserEngagementStats } from '@/lib/server/functions/user'
 import { cn } from '@/lib/shared/utils'
 
 function StatItem({
@@ -36,20 +37,35 @@ interface UserStatsBarProps {
   compact?: boolean
   className?: string
   headers?: Record<string, string>
+  fetchStats?: () => Promise<UserEngagementStats>
 }
 
-export function UserStatsBar({ compact, className, headers }: UserStatsBarProps) {
+export function UserStatsBar({ compact, className, headers, fetchStats }: UserStatsBarProps) {
+  const intl = useIntl()
   const { data } = useQuery({
-    queryKey: headers ? ['widget', 'user', 'engagement-stats'] : ['user', 'engagement-stats'],
-    queryFn: () => getUserStatsFn(headers ? { headers } : undefined),
+    queryKey:
+      fetchStats || headers ? ['widget', 'user', 'engagement-stats'] : ['user', 'engagement-stats'],
+    queryFn: () => (fetchStats ? fetchStats() : getUserStatsFn(headers ? { headers } : undefined)),
     staleTime: 60 * 1000,
   })
 
   return (
     <div className={cn('grid grid-cols-3 gap-1', className)}>
-      <StatItem value={data?.ideas} label="Ideas" compact={compact} />
-      <StatItem value={data?.votes} label="Votes" compact={compact} />
-      <StatItem value={data?.comments} label="Comments" compact={compact} />
+      <StatItem
+        value={data?.ideas}
+        label={intl.formatMessage({ id: 'common.userStats.ideas', defaultMessage: 'Ideas' })}
+        compact={compact}
+      />
+      <StatItem
+        value={data?.votes}
+        label={intl.formatMessage({ id: 'common.userStats.votes', defaultMessage: 'Votes' })}
+        compact={compact}
+      />
+      <StatItem
+        value={data?.comments}
+        label={intl.formatMessage({ id: 'common.userStats.comments', defaultMessage: 'Comments' })}
+        compact={compact}
+      />
     </div>
   )
 }

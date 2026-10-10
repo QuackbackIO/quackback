@@ -17,7 +17,7 @@ export type IdpKind = 'okta' | 'auth0' | 'keycloak' | 'entra' | 'google' | 'othe
 export const IDP_KIND_NAMES: Record<IdpKind, string> = {
   okta: 'Okta',
   auth0: 'Auth0',
-  entra: 'Microsoft Entra',
+  entra: 'Microsoft Entra ID',
   keycloak: 'Keycloak',
   google: 'Google Workspace',
   other: 'Custom OIDC',
@@ -102,7 +102,7 @@ const ENTRA: IdpShortcutDef = {
   fields: [
     {
       key: 'workspace',
-      label: 'Workspace ID or domain',
+      label: 'Tenant ID or domain',
       placeholder: 'acme.onmicrosoft.com  /  6045704a-f241-4b8d-99ba-...',
     },
   ],

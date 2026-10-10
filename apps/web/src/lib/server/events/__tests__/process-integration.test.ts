@@ -58,6 +58,7 @@ vi.mock('../hook-utils', async (importOriginal) => {
 
 import { EVENTS_QUEUE, enqueueHookJobsWithIds } from '../process'
 import { drainOnce, runnerConfig } from '@/lib/server/jobs/runner'
+import { JOB_DEFINITIONS, __setJobDefinitionsForTests } from '@/lib/server/jobs/definitions'
 
 const RUN = `it${process.pid}${Date.now().toString(36)}`
 const keys: string[] = []
@@ -124,6 +125,10 @@ async function rowsForRun(): Promise<Array<{ status: string; attempts: number; r
 
 beforeAll(async () => {
   await ensureJobQueueSchema()
+  // Drain only the shipped `events` definition. The full list would also claim
+  // other suites' rows in the shared database (their integration-sync,
+  // event-dispatch and event-reactions jobs) and count their hook runs here.
+  __setJobDefinitionsForTests(JOB_DEFINITIONS.filter((def) => def.name === EVENTS_QUEUE))
 })
 
 // Each case counts its own hook calls, so a row an earlier case deliberately
@@ -136,6 +141,7 @@ beforeEach(async () => {
 })
 
 afterAll(async () => {
+  __setJobDefinitionsForTests(null)
   await cleanupDedupeKeys(EVENTS_QUEUE, keys)
   await closeHarness()
 })

@@ -1,8 +1,16 @@
-import { useEffect, useState } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+} from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import { ArrowLeftIcon, PaperAirplaneIcon } from '@heroicons/react/24/solid'
+import { ArrowLeftIcon, PaperAirplaneIcon, PaperClipIcon } from '@heroicons/react/24/solid'
 import type { JSONContent } from '@tiptap/react'
 import type { PrincipalId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/db-types'
@@ -10,10 +18,14 @@ import { MAX_CONVERSATION_MESSAGE_LENGTH } from '@/lib/shared/conversation/types
 import { startAgentConversationFn } from '@/lib/server/functions/conversation'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { PortalUserPicker } from '@/components/shared/portal-user-picker'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { LazyRichTextEditor } from '@/components/ui/lazy-rich-text-editor'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { CONVERSATION_EDITOR_FEATURES } from '@/components/conversation/conversation-editor-features'
+import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
-import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useAgentFileUpload } from '@/lib/client/hooks/use-file-upload'
+import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import {
   Dialog,
   DialogContent,
@@ -50,6 +62,7 @@ export function NewConversationDialog({
   initialTarget,
 }: NewConversationDialogProps) {
   const navigate = useNavigate()
+  const formatNumber = useFormatNumber()
   const [target, setTarget] = useState<NewConversationTarget | null>(initialTarget ?? null)
   const [messageJson, setMessageJson] = useState<JSONContent | undefined>(undefined)
   const [messageMarkdown, setMessageMarkdown] = useState('')
@@ -67,16 +80,49 @@ export function NewConversationDialog({
       setMessageJson(undefined)
       setMessageMarkdown('')
       setComposerKey((k) => k + 1)
+      clearAttachments()
     }
   }, [open, initialTarget])
 
-  const { upload: uploadImage } = useImageUpload({ prefix: 'chat-images' })
+  const { upload } = useAgentFileUpload()
+  const {
+    items,
+    attachments,
+    addFiles,
+    remove: removeAttachment,
+    retry: retryAttachment,
+    clear: clearAttachments,
+    uploading,
+  } = useConversationComposerAttachments(upload)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Paste still works for an image from the clipboard; drop/paste now accept
+  // any file, same as the paperclip picker.
+  const handleComposerPaste = useCallback(
+    (e: ClipboardEvent<HTMLDivElement>) => {
+      const files = Array.from(e.clipboardData?.files ?? [])
+      if (files.length === 0) return
+      e.preventDefault()
+      void addFiles(files)
+    },
+    [addFiles]
+  )
+  const handleComposerDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      const files = Array.from(e.dataTransfer?.files ?? [])
+      if (files.length === 0) return
+      e.preventDefault()
+      void addFiles(files)
+    },
+    [addFiles]
+  )
 
   const send = useMutation({
     mutationFn: (vars: {
       targetPrincipalId: PrincipalId
       content: string
       contentJson?: TiptapContent | null
+      attachments?: typeof attachments
     }) => startAgentConversationFn({ data: vars }),
     onSuccess: (result) => {
       toast.success('Message sent')
@@ -89,7 +135,7 @@ export function NewConversationDialog({
   })
 
   const isEmpty = isEmptyTiptapDoc(messageJson as TiptapContent | undefined)
-  const canSend = !!target && !isEmpty && !send.isPending
+  const canSend = !!target && (!isEmpty || attachments.length > 0) && !send.isPending && !uploading
 
   const submit = () => {
     if (!canSend || !target) return
@@ -99,7 +145,7 @@ export function NewConversationDialog({
     // enforced pre-submit instead.
     if (content.length > MAX_CONVERSATION_MESSAGE_LENGTH) {
       toast.error(
-        `Message must be ${MAX_CONVERSATION_MESSAGE_LENGTH.toLocaleString()} characters or less`
+        `Message must be ${formatNumber(MAX_CONVERSATION_MESSAGE_LENGTH)} characters or less`
       )
       return
     }
@@ -107,6 +153,7 @@ export function NewConversationDialog({
       targetPrincipalId: target.principalId as PrincipalId,
       content,
       contentJson: isEmpty ? null : (messageJson as TiptapContent),
+      attachments: attachments.length > 0 ? attachments : undefined,
     })
   }
 
@@ -154,20 +201,49 @@ export function NewConversationDialog({
                 </span>
               </span>
             </div>
-            <RichTextEditor
-              key={composerKey}
-              value={messageJson ?? ''}
-              onChange={(json, _html, markdown) => {
-                setMessageJson(json)
-                setMessageMarkdown(markdown)
+            <div onPaste={handleComposerPaste} onDrop={handleComposerDrop}>
+              <Suspense
+                fallback={<Skeleton className="w-full rounded-md" style={{ minHeight: '100px' }} />}
+              >
+                <LazyRichTextEditor
+                  key={composerKey}
+                  value={messageJson ?? ''}
+                  onDocumentChange={(document) => {
+                    setMessageJson(document.json())
+                    setMessageMarkdown(document.markdown())
+                  }}
+                  features={CONVERSATION_EDITOR_FEATURES}
+                  autofocus
+                  minHeight="100px"
+                  placeholder="Write your message…"
+                />
+              </Suspense>
+              <ComposerAttachmentTray
+                items={items}
+                onRemove={removeAttachment}
+                onRetry={retryAttachment}
+              />
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = e.target.files
+                if (files && files.length > 0) void addFiles(files)
+                e.target.value = ''
               }}
-              features={CONVERSATION_EDITOR_FEATURES}
-              onImageUpload={uploadImage}
-              autofocus
-              minHeight="100px"
-              placeholder="Write your message…"
             />
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                aria-label="Attach files"
+              >
+                <PaperClipIcon className="h-4 w-4" />
+              </button>
               <Button onClick={submit} disabled={!canSend}>
                 <PaperAirplaneIcon className="me-1.5 size-4" />
                 {send.isPending ? 'Sending…' : 'Send message'}

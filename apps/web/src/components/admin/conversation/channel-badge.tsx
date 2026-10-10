@@ -1,6 +1,7 @@
 import { ChatBubbleLeftRightIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
 import type { Channel } from '@/lib/shared/conversation/types'
 import { channelLabelMap, getChannelDescriptor } from '@/lib/shared/channels'
+import { GitHubIcon } from '@/components/icons/integration-icons'
 
 /** Every channel's display label — sourced from the descriptor registry. */
 export const CHANNEL_LABEL: Record<Channel, string> = channelLabelMap()
@@ -8,6 +9,7 @@ export const CHANNEL_LABEL: Record<Channel, string> = channelLabelMap()
 const CHANNEL_ICON = {
   messenger: ChatBubbleLeftRightIcon,
   email: EnvelopeIcon,
+  github: GitHubIcon,
 } as const
 
 /** Badge showing a non-default (their-surface) channel; first-party messenger is silent. */
@@ -37,7 +39,7 @@ export function NoEmailBadge() {
 export function UnreachableBadge({ channel }: { channel: Channel }) {
   const label = getChannelDescriptor(channel)?.label ?? 'channel'
   return (
-    <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">
+    <span className="inline-flex items-center whitespace-nowrap rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">
       Unreachable on {label}
     </span>
   )

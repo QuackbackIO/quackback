@@ -1,59 +1,49 @@
-import { memo, useState, type ReactNode } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
+import { nameInitial } from '@/lib/shared/utils/initial'
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { hasConversationsFn } from '@/lib/server/functions/onboarding-progress'
+import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
+import { inboxQueries } from '@/lib/client/queries/inbox'
 import type {
   ConversationDTO,
   ConversationPriority,
   Channel,
 } from '@/lib/shared/conversation/types'
-import { listChannelDescriptors } from '@/lib/shared/channels'
 import { CONVERSATION_SPAM_FILED_BY_LABELS } from '@/lib/shared/conversation/types'
-import type { InboxItemDTO, InboxTriageFacet } from '@/lib/shared/inbox/items'
-import { ChevronDownIcon, PencilSquareIcon, BarsArrowDownIcon } from '@heroicons/react/24/solid'
-import { TicketIcon, BuildingOffice2Icon, RectangleStackIcon } from '@heroicons/react/24/outline'
 import {
-  CONVERSATION_SORTS,
-  TERMLESS_CONVERSATION_SORTS,
-  CONVERSATION_SORT_LABELS,
-  defaultConversationSort,
-  type ConversationSort,
-} from '@/lib/shared/conversation/views'
+  inboxItemRefFromId,
+  type InboxItemDTO,
+  type InboxTriageFacet,
+} from '@/lib/shared/inbox/items'
+import { TicketIcon, BuildingOffice2Icon, RectangleStackIcon } from '@heroicons/react/24/outline'
+import type { ConversationSort } from '@/lib/shared/conversation/views'
 import type { TicketType } from '@/lib/shared/db-types'
 import { NewConversationDialog } from '@/components/admin/conversation/new-conversation-dialog'
 import { SearchSnippet } from '@/components/admin/conversation/search-snippet'
-import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
-import { PriorityDot, PriorityMenuItems } from '@/components/admin/conversation/priority-control'
 import {
   InboxScopeMenu,
   type InboxNavItem,
 } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { TicketStatusChip, TICKET_TYPE_CLASS } from '@/components/admin/inbox/ticket-chips'
+import { NewButton } from '@/components/shared/new-button'
+import { ActivationActionButton } from '@/components/admin/activation-action-button'
+import { SearchInput } from '@/components/shared/search-input'
+import {
+  ConversationListToolbar,
+  type CompanyFilter,
+} from '@/components/admin/conversation/conversation-list-toolbar'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
-import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { FormattedMessage, useIntl } from 'react-intl'
 
-const TRIAGE_FACETS: readonly InboxTriageFacet[] = ['open', 'waiting', 'closed']
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60_000)
-  if (m < 1) return 'now'
-  if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h`
-  return `${Math.floor(h / 24)}d`
-}
+/** Ignore scroll-by hovers; only warm a thread the pointer actually rests on. */
+const PREFETCH_DELAY_MS = 120
 
 /** Stable string id for any inbox item (a conversation or ticket TypeID). */
 function itemId(item: InboxItemDTO): string {
@@ -139,7 +129,7 @@ function TicketAssigneeGlyph({
         title={assignee.teamName ?? 'Team'}
         className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground"
       >
-        {(assignee.teamName ?? 'T').charAt(0).toUpperCase()}
+        {nameInitial(assignee.teamName ?? 'T')}
       </span>
     )
   }
@@ -173,6 +163,8 @@ interface ConversationListColumnProps {
   ticketTypeOptions?: Array<{ id: string; name: string; icon: string | null; color: string }>
   channelFilter?: Channel
   onChannelFilter?: (value: Channel | undefined) => void
+  /** The company refinement; offered only when the workspace has companies. */
+  companyFilter?: CompanyFilter
   sort: ConversationSort
   onSort: (value: ConversationSort) => void
   loading: boolean
@@ -206,6 +198,7 @@ export function ConversationListColumn({
   ticketTypeOptions,
   channelFilter,
   onChannelFilter,
+  companyFilter,
   sort,
   onSort,
   loading,
@@ -213,297 +206,72 @@ export function ConversationListColumn({
   selectedId,
   onSelect,
 }: ConversationListColumnProps) {
-  const intl = useIntl()
-  const { userRole } = useRouteContext({ from: '__root__' })
-  const activationAction = useActivationAction('conversation_empty')
-  const [composeOpen, setComposeOpen] = useState(false)
-  // Whether the list is a search, which decides both the implicit sort and
-  // whether the term-scored sort is offered at all.
-  const searching = searchInput.trim().length > 0
+  const queryClient = useQueryClient()
+  const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelPrefetch = useCallback(() => {
+    if (prefetchTimer.current) {
+      clearTimeout(prefetchTimer.current)
+      prefetchTimer.current = null
+    }
+  }, [])
+  useEffect(() => cancelPrefetch, [cancelPrefetch])
+  const prefetchItem = useCallback(
+    (id: string) => {
+      cancelPrefetch()
+      prefetchTimer.current = setTimeout(() => {
+        const ref = inboxItemRefFromId(id)
+        if (ref?.kind === 'conversation') {
+          void queryClient.prefetchQuery(conversationInboxQueries.thread(ref.id))
+        } else if (ref?.kind === 'ticket') {
+          void queryClient.prefetchQuery(inboxQueries.ticketThread(ref.id))
+          void queryClient.prefetchQuery(inboxQueries.ticketDetail(ref.id))
+        }
+      }, PREFETCH_DELAY_MS)
+    },
+    [cancelPrefetch, queryClient]
+  )
   return (
     <div
       className={cn(
-        'flex min-h-0 w-full shrink-0 flex-col border-r border-border/50 md:w-80',
+        'flex min-h-0 w-full shrink-0 flex-col border-r border-border/50 md:w-72 xl:w-[22.5rem]',
         // On mobile the list and thread are one column: hide the list while an
         // item is open (a back button returns to it).
         selectedId && 'hidden md:flex'
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border/50 px-4 py-[0.85rem]">
-        {/* At lg+ the nav sidebar owns scope selection, so the header is a
-            plain label. Below lg the sidebar is hidden, so offer a dropdown. */}
-        <h2 className="hidden min-w-0 truncate text-sm font-semibold leading-tight lg:block">
-          {scopeLabel}
-        </h2>
-        <div className="min-w-0 lg:hidden">
-          <InboxScopeMenu nav={nav} onSelect={onSelectNav} />
-        </div>
-        <button
-          type="button"
-          onClick={() => setComposeOpen(true)}
-          title="New conversation"
-          aria-label="New conversation"
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <PencilSquareIcon className="size-4" />
-        </button>
-      </div>
-      {headerSlot}
-      <NewConversationDialog open={composeOpen} onOpenChange={setComposeOpen} />
-      {/* Search is owned by the nav pane at lg+; the list keeps a copy for the
-          sub-lg layout where that pane is hidden. */}
-      <div className="px-3 pt-2 lg:hidden">
-        <input
-          type="search"
-          value={searchInput}
-          onChange={(e) => onSearchInput(e.target.value)}
-          placeholder="Search…"
-          aria-label="Search the inbox"
-          className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary/20"
-        />
-      </div>
-      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none px-3 py-2">
-        {/* Sort applies to every scope (including Mentions + custom views). Best
-            match ranks a searched list by default and is offered only while a
-            term is active — the rest of the list stays selectable, so the
-            matches can also be scanned chronologically. */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label="Sort the inbox"
-              className={cn(
-                'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
-                sort !== defaultConversationSort(searching)
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-muted'
-              )}
-            >
-              <BarsArrowDownIcon className="size-4" />
-              {CONVERSATION_SORT_LABELS[sort]}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {(searching ? CONVERSATION_SORTS : TERMLESS_CONVERSATION_SORTS).map((s) => (
-              <DropdownMenuItem
-                key={s}
-                onClick={() => onSort(s)}
-                className={cn(s === sort && 'text-primary')}
-              >
-                {CONVERSATION_SORT_LABELS[s]}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {showRefinements && (
-          <>
-            {/* Triage facet — a removable filter chip (mirrors the feedback
-                inbox), replacing the old per-status filter (UNIFIED-INBOX-SPEC.md
-                §2.1: Open/Waiting/Closed/All). 'all' = no facet filter. */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
-                    facet !== 'all'
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:bg-muted'
-                  )}
-                >
-                  <span className="capitalize">{facet === 'all' ? 'Status' : facet}</span>
-                  <ChevronDownIcon className="size-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={() => onFacet('all')}>All</DropdownMenuItem>
-                {TRIAGE_FACETS.map((f) => (
-                  <DropdownMenuItem key={f} onClick={() => onFacet(f)} className="capitalize">
-                    {f}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Filter by priority"
-                  className={cn(
-                    'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
-                    priorityFilter !== 'all'
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:bg-muted'
-                  )}
-                >
-                  <PriorityDot priority={priorityFilter === 'all' ? 'none' : priorityFilter} />
-                  {priorityFilter === 'all' ? 'Priority' : priorityMeta(priorityFilter).label}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onPriorityFilter('all')}>
-                  All priorities
-                </DropdownMenuItem>
-                <PriorityMenuItems
-                  selected={priorityFilter === 'all' ? undefined : priorityFilter}
-                  onSelect={onPriorityFilter}
-                />
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Registry-type filter (Phase 4) — the Tickets-section scopes
-                only; the route scopes the options to the view's category. */}
-            {onChannelFilter && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Filter by channel"
-                    className={cn(
-                      'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
-                      channelFilter
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-muted'
-                    )}
-                  >
-                    {channelFilter
-                      ? (listChannelDescriptors().find((d) => d.id === channelFilter)?.label ??
-                        'Channel')
-                      : 'Channel'}
-                    <ChevronDownIcon className="size-3.5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={() => onChannelFilter(undefined)}>
-                    Any channel
-                  </DropdownMenuItem>
-                  {listChannelDescriptors().map((d) => (
-                    <DropdownMenuItem
-                      key={d.id}
-                      onClick={() => onChannelFilter(d.id)}
-                      className={cn(d.id === channelFilter && 'text-primary')}
-                    >
-                      {d.label}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-
-            {ticketTypeOptions && onTicketTypeFilter && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Filter by ticket type"
-                    className={cn(
-                      'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
-                      ticketTypeFilter
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-muted'
-                    )}
-                  >
-                    {(() => {
-                      const active = ticketTypeOptions.find((t) => t.id === ticketTypeFilter)
-                      return active ? (
-                        <>
-                          <span aria-hidden>{active.icon}</span>
-                          {active.name}
-                        </>
-                      ) : (
-                        'Type'
-                      )
-                    })()}
-                    <ChevronDownIcon className="size-3.5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={() => onTicketTypeFilter(undefined)}>
-                    All types
-                  </DropdownMenuItem>
-                  {ticketTypeOptions.map((t) => (
-                    <DropdownMenuItem
-                      key={t.id}
-                      onClick={() => onTicketTypeFilter(t.id)}
-                      className={cn(t.id === ticketTypeFilter && 'text-primary')}
-                    >
-                      <span aria-hidden>{t.icon}</span> {t.name}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </>
-        )}
-      </div>
+      <ConversationListHeader
+        nav={nav}
+        onSelectNav={onSelectNav}
+        scopeLabel={scopeLabel}
+        headerSlot={headerSlot}
+        showRefinements={showRefinements}
+        searchInput={searchInput}
+        onSearchInput={onSearchInput}
+        facet={facet}
+        onFacet={onFacet}
+        priorityFilter={priorityFilter}
+        onPriorityFilter={onPriorityFilter}
+        ticketTypeFilter={ticketTypeFilter}
+        onTicketTypeFilter={onTicketTypeFilter}
+        ticketTypeOptions={ticketTypeOptions}
+        channelFilter={channelFilter}
+        onChannelFilter={onChannelFilter}
+        companyFilter={companyFilter}
+        sort={sort}
+        onSort={onSort}
+      />
       <ScrollArea className="min-h-0 flex-1">
         {loading ? (
           <ConversationListSkeleton />
         ) : items.length === 0 ? (
-          (() => {
-            const isMainConversationQueue =
-              nav.kind === 'view' &&
-              (nav.view === 'mine' || nav.view === 'unassigned' || nav.view === 'all')
-            const isFiltered =
-              searchInput.trim().length > 0 ||
-              priorityFilter !== 'all' ||
-              !!channelFilter ||
-              (facet !== 'all' && facet !== 'open')
-            const isAllClear =
-              isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction
-            const emptyMsg = isFiltered
-              ? intl.formatMessage({
-                  id: 'inbox.empty.filtered.title',
-                  defaultMessage: 'No conversations match these filters',
-                })
-              : isAllClear
-                ? intl.formatMessage({
-                    id: 'inbox.empty.allClear.title',
-                    defaultMessage: 'You’re all caught up',
-                  })
-                : emptyStateMessage(nav, facet, scopeLabel)
-            // First-run CTA on the unfiltered main queues (not tickets/labels).
-            const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
-            return (
-              <div className="px-4 py-10 text-center space-y-3">
-                <p className="text-sm font-medium text-foreground">{emptyMsg}</p>
-                {isFiltered && (
-                  <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
-                    <FormattedMessage
-                      id="inbox.empty.filtered.description"
-                      defaultMessage="Try changing your search or filters."
-                    />
-                  </p>
-                )}
-                {isAllClear && (
-                  <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
-                    <FormattedMessage
-                      id="inbox.empty.allClear.description"
-                      defaultMessage="No open conversations need your attention."
-                    />
-                  </p>
-                )}
-                {showMessengerCta && (
-                  <>
-                    <p className="text-xs text-muted-foreground max-w-[16rem] mx-auto">
-                      When customers message you, conversations show up here.
-                    </p>
-                    {/* Widget settings are admin-only; members get the message
-                        without a button they can't use. */}
-                    {userRole === 'admin' && activationAction && (
-                      <ActivationActionButton
-                        action={activationAction}
-                        surface="conversation_empty"
-                        className="h-11 sm:h-9"
-                      />
-                    )}
-                  </>
-                )}
-              </div>
-            )
-          })()
+          <EmptyList
+            nav={nav}
+            facet={facet}
+            scopeLabel={scopeLabel}
+            searchInput={searchInput}
+            priorityFilter={priorityFilter}
+            channelFilter={channelFilter}
+          />
         ) : (
           items.map((item) => {
             const id = itemId(item)
@@ -514,6 +282,8 @@ export function ConversationListColumn({
                 item={item}
                 selected={selectedId === id}
                 onSelect={onSelect}
+                onPrefetch={prefetchItem}
+                onPrefetchCancel={cancelPrefetch}
               />
             ) : (
               <TicketRow
@@ -522,6 +292,8 @@ export function ConversationListColumn({
                 item={item}
                 selected={selectedId === id}
                 onSelect={onSelect}
+                onPrefetch={prefetchItem}
+                onPrefetchCancel={cancelPrefetch}
               />
             )
           })
@@ -531,13 +303,179 @@ export function ConversationListColumn({
   )
 }
 
+type ConversationListHeaderProps = Omit<
+  ConversationListColumnProps,
+  'loading' | 'items' | 'selectedId' | 'onSelect'
+>
+
+/**
+ * The list column's header: scope label (desktop) or scope menu (mobile), the
+ * compose button and dialog, search, and the sort and filter menus. Nothing
+ * here depends on which item is open, so opening one re-renders only the
+ * rows below it.
+ */
+const ConversationListHeader = memo(function ConversationListHeader({
+  nav,
+  onSelectNav,
+  scopeLabel,
+  headerSlot,
+  showRefinements,
+  searchInput,
+  onSearchInput,
+  facet,
+  onFacet,
+  priorityFilter,
+  onPriorityFilter,
+  ticketTypeFilter,
+  onTicketTypeFilter,
+  ticketTypeOptions,
+  channelFilter,
+  onChannelFilter,
+  companyFilter,
+  sort,
+  onSort,
+}: ConversationListHeaderProps) {
+  const [composeOpen, setComposeOpen] = useState(false)
+  const searching = searchInput.trim().length > 0
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
+        {/* At lg+ the nav sidebar owns scope selection, so the header is a
+            plain label. Below lg the sidebar is hidden, so offer a dropdown. */}
+        <h2 className="hidden min-w-0 truncate text-sm font-semibold leading-tight lg:block">
+          {scopeLabel}
+        </h2>
+        <div className="min-w-0 lg:hidden">
+          <InboxScopeMenu nav={nav} onSelect={onSelectNav} />
+        </div>
+        <NewButton noun="conversation" onClick={() => setComposeOpen(true)} className="shrink-0" />
+      </div>
+      {headerSlot}
+      <NewConversationDialog open={composeOpen} onOpenChange={setComposeOpen} />
+      <div className="px-3 pt-2">
+        <SearchInput
+          value={searchInput}
+          onChange={onSearchInput}
+          placeholder="Search conversations..."
+          aria-label="Search the inbox"
+          data-search-input
+        />
+      </div>
+      <ConversationListToolbar
+        searching={searching}
+        showRefinements={showRefinements}
+        facet={facet}
+        onFacet={onFacet}
+        priorityFilter={priorityFilter}
+        onPriorityFilter={onPriorityFilter}
+        ticketTypeFilter={ticketTypeFilter}
+        onTicketTypeFilter={onTicketTypeFilter}
+        ticketTypeOptions={ticketTypeOptions}
+        channelFilter={channelFilter}
+        onChannelFilter={onChannelFilter}
+        companyFilter={companyFilter}
+        sort={sort}
+        onSort={onSort}
+      />
+    </>
+  )
+})
+
 /** One skeleton row — mirrors ConversationRow/TicketRow's fixed anatomy
  *  (avatar circle, name line, preview + time line) at the same `py-3` height
  *  and border so the list doesn't reflow when real rows replace it. */
+/**
+ * An empty list's message. The first-run call to action it may carry needs the
+ * workspace's launch status, which is asked for only once a list is empty.
+ */
+function EmptyList({
+  nav,
+  facet,
+  scopeLabel,
+  searchInput,
+  priorityFilter,
+  channelFilter,
+}: Pick<
+  ConversationListColumnProps,
+  'nav' | 'facet' | 'scopeLabel' | 'searchInput' | 'priorityFilter' | 'channelFilter'
+>) {
+  const intl = useIntl()
+  const activationAction = useActivationAction('conversation_empty')
+
+  const isMainConversationQueue =
+    nav.kind === 'view' && (nav.view === 'mine' || nav.view === 'unassigned' || nav.view === 'all')
+  const isFiltered =
+    searchInput.trim().length > 0 ||
+    priorityFilter !== 'all' ||
+    !!channelFilter ||
+    (facet !== 'all' && facet !== 'open')
+  // A workspace that has never had a conversation gets the first-run state in
+  // every main queue, whatever its launch plan says.
+  const { data: history } = useQuery({
+    queryKey: ['inbox', 'has-conversations'],
+    queryFn: () => hasConversationsFn(),
+    enabled: isMainConversationQueue && !isFiltered,
+    staleTime: 60_000,
+  })
+  const firstRun = isMainConversationQueue && !isFiltered && history?.hasConversations === false
+  const isAllClear =
+    isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction && !firstRun
+  const emptyMsg = isFiltered
+    ? intl.formatMessage({
+        id: 'inbox.empty.filtered.title',
+        defaultMessage: 'No conversations match these filters',
+      })
+    : (activationAction || firstRun) && isMainConversationQueue
+      ? intl.formatMessage({
+          id: 'inbox.empty.firstRun.title',
+          defaultMessage: 'No conversations yet',
+        })
+      : isAllClear
+        ? intl.formatMessage({
+            id: 'inbox.empty.allClear.title',
+            defaultMessage: 'Nothing to review',
+          })
+        : emptyStateMessage(nav, facet, scopeLabel)
+  // First-run CTA on the unfiltered main queues (not tickets/labels).
+  const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
+  return (
+    <div
+      className="px-4 py-10 text-center space-y-3"
+      data-tour={isMainConversationQueue && !isFiltered ? 'support-empty' : undefined}
+    >
+      <p className="text-sm font-medium text-foreground">{emptyMsg}</p>
+      {isFiltered && (
+        <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
+          <FormattedMessage
+            id="inbox.empty.filtered.description"
+            defaultMessage="Try changing your search or filters."
+          />
+        </p>
+      )}
+      {isAllClear && (
+        <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
+          <FormattedMessage
+            id="inbox.empty.allClear.description"
+            defaultMessage="No open conversations need your attention."
+          />
+        </p>
+      )}
+      {showMessengerCta && activationAction && (
+        <ActivationActionButton
+          action={activationAction}
+          surface="conversation_empty"
+          variant="outline"
+          className="h-11 sm:h-9"
+        />
+      )}
+    </div>
+  )
+}
+
 function SkeletonRow() {
   return (
     <div className="flex w-full items-start border-b border-border/30">
-      <div className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-1.5 pr-3">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-3 pr-3">
         <Skeleton className="size-8 shrink-0 rounded-full" />
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex items-center justify-between gap-2">
@@ -619,11 +557,15 @@ export const ConversationRow = memo(function ConversationRow({
   id,
   selected,
   onSelect,
+  onPrefetch,
+  onPrefetchCancel,
 }: {
   item: Extract<InboxItemDTO, { kind: 'conversation' }>
   id: string
   selected: boolean
   onSelect: (id: string) => void
+  onPrefetch?: (id: string) => void
+  onPrefetchCancel?: () => void
 }) {
   const c = item.conversation
   return (
@@ -641,7 +583,11 @@ export const ConversationRow = memo(function ConversationRow({
       <button
         type="button"
         onClick={() => onSelect(id)}
-        className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-1.5 pr-3 text-left"
+        onMouseEnter={onPrefetch ? () => onPrefetch(id) : undefined}
+        onMouseLeave={onPrefetchCancel}
+        onFocus={onPrefetch ? () => onPrefetch(id) : undefined}
+        onBlur={onPrefetchCancel}
+        className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-3 pr-3 text-left"
       >
         <Avatar
           src={c.visitor.avatarUrl}
@@ -661,9 +607,7 @@ export const ConversationRow = memo(function ConversationRow({
               )}
               {item.searchSnippet && (
                 <>
-                  <span className="text-xs text-muted-foreground">
-                    {relativeTime(c.lastMessageAt)}
-                  </span>
+                  <TimeAgo date={c.lastMessageAt} short className="text-xs text-muted-foreground" />
                   {/* Rightmost on the row, so the column's left edge is the
                       same constant offset from the right edge on every row. */}
                   {assigneeColumn(c)}
@@ -692,13 +636,16 @@ export const ConversationRow = memo(function ConversationRow({
                     filed the thread, so an agent scanning the list can spot a
                     false positive's source without opening it. */}
                 {c.endReason === 'spam' && c.spamReason && (
-                  <Badge size="sm" shape="pill" variant="outline">
+                  <Badge size="sm" variant="outline">
                     {CONVERSATION_SPAM_FILED_BY_LABELS[c.spamReason]}
                   </Badge>
                 )}
-                <span className="text-xs text-muted-foreground">
-                  {relativeTime(c.lastMessageAt)}
-                </span>
+                {c.isTest && (
+                  <Badge size="sm" variant="outline">
+                    <FormattedMessage id="inbox.row.test" defaultMessage="Test" />
+                  </Badge>
+                )}
+                <TimeAgo date={c.lastMessageAt} short className="text-xs text-muted-foreground" />
                 {/* Rightmost on the row, so the column's left edge is the
                     same constant offset from the right edge on every row. */}
                 {assigneeColumn(c)}
@@ -716,11 +663,15 @@ const TicketRow = memo(function TicketRow({
   id,
   selected,
   onSelect,
+  onPrefetch,
+  onPrefetchCancel,
 }: {
   item: Extract<InboxItemDTO, { kind: 'ticket' }>
   id: string
   selected: boolean
   onSelect: (id: string) => void
+  onPrefetch?: (id: string) => void
+  onPrefetchCancel?: () => void
 }) {
   const t = item.ticket
   return (
@@ -730,7 +681,11 @@ const TicketRow = memo(function TicketRow({
       <button
         type="button"
         onClick={() => onSelect(id)}
-        className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-1.5 pr-3 text-left"
+        onMouseEnter={onPrefetch ? () => onPrefetch(id) : undefined}
+        onMouseLeave={onPrefetchCancel}
+        onFocus={onPrefetch ? () => onPrefetch(id) : undefined}
+        onBlur={onPrefetchCancel}
+        className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-3 pr-3 text-left"
       >
         <TicketTypeGlyph type={t.type} />
         <div className="min-w-0 flex-1">
@@ -753,9 +708,7 @@ const TicketRow = memo(function TicketRow({
             <p className="min-w-0 truncate text-xs text-muted-foreground">
               {t.lastMessagePreview ?? 'No messages yet'}
             </p>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {relativeTime(t.updatedAt)}
-            </span>
+            <TimeAgo date={t.updatedAt} short className="shrink-0 text-xs text-muted-foreground" />
           </div>
         </div>
       </button>

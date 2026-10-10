@@ -13,6 +13,7 @@ import type { Actor } from '@/lib/server/policy/types'
 import { canActAsAgent } from '@/lib/server/policy/conversation'
 import { assertConversationViewable } from './conversation.service'
 import type { ConversationAuthorInput } from './conversation.types'
+import { isTestCustomer } from '@/lib/server/test-data'
 
 export interface ConvertConversationToPostInput {
   conversationId: ConversationId
@@ -41,6 +42,12 @@ export async function createPostFromConversation(
 
   const conversation = await assertConversationViewable(input.conversationId, ctx.agentActor)
   const visitorPrincipalId = conversation.visitorPrincipalId
+  if (await isTestCustomer(visitorPrincipalId)) {
+    throw new ForbiddenError(
+      'CANNOT_CONVERT_TEST_CONVERSATION',
+      'Test conversations cannot be tracked as feedback'
+    )
+  }
   const externalUrl = `${config.baseUrl.replace(/\/$/, '')}/admin/inbox?i=${input.conversationId}`
 
   let postId: PostId

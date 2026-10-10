@@ -1,6 +1,6 @@
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
-import { createFileRoute, notFound, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { BackLink } from '@/components/ui/back-link'
 import { portalDetailQueries, type PublicPostDetailView } from '@/lib/client/queries/portal-detail'
@@ -16,13 +16,13 @@ import {
   CommentsSection,
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
-import { DeletePostDialog } from '@/components/public/post-detail/delete-post-dialog'
 import { usePostPermissions, postPermissionsKeys } from '@/lib/client/hooks/use-portal-posts-query'
 import { getPostPermissionsFn } from '@/lib/server/functions/public-posts'
-import { usePostActions } from '@/lib/client/mutations'
+import { usePostActions } from '@/lib/client/mutations/portal-post-actions'
 import { usePortalTeamPostActions } from '@/lib/client/mutations/portal-team-post-actions'
-import { MergeIntoDialog, MergeOthersDialog } from '@/components/admin/feedback/merge-section'
-import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+import { usePortalMediaUpload } from '@/lib/client/hooks/use-image-upload'
+import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import {
   useDeleteComment,
   usePinComment,
@@ -40,6 +40,24 @@ import { isProductEnabled } from '@/lib/shared/types/settings'
 import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
+
+// Dialogs the post's author or the team open from its menu; they load on first use.
+const DeletePostDialog = lazy(() =>
+  import('@/components/public/post-detail/delete-post-dialog').then((m) => ({
+    default: m.DeletePostDialog,
+  }))
+)
+const MergeIntoDialog = lazy(() =>
+  import('@/components/admin/feedback/merge-section').then((m) => ({
+    default: m.MergeIntoDialog,
+  }))
+)
+const MergeOthersDialog = lazy(() =>
+  import('@/components/admin/feedback/merge-section').then((m) => ({
+    default: m.MergeOthersDialog,
+  }))
+)
 
 export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
   loader: async ({ params, context }) => {
@@ -126,13 +144,16 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
 
 function PostDetailPage() {
   const { postId, slug } = Route.useLoaderData()
-  const { session } = useRouteContext({ from: '__root__' })
+  const session = useSessionContext()
 
   const intl = useIntl()
   const [isEditingPost, setIsEditingPost] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [mergeIntoDialogOpen, setMergeIntoDialogOpen] = useState(false)
   const [mergeOthersDialogOpen, setMergeOthersDialogOpen] = useState(false)
+  const deleteDialogMounted = useOpenedOnce(deleteDialogOpen)
+  const mergeIntoDialogMounted = useOpenedOnce(mergeIntoDialogOpen)
+  const mergeOthersDialogMounted = useOpenedOnce(mergeOthersDialogOpen)
 
   // Post detail already includes board data (JOINed in query)
   const postQuery = useSuspenseQuery(portalDetailQueries.postDetail(postId))
@@ -163,10 +184,16 @@ function PostDetailPage() {
   const approvePost = useApprovePost(postId)
   const rejectPost = useRejectPost(postId)
 
-  const isAnonymousSession = session?.user?.principalType === 'anonymous'
-  const canUploadImages = effectiveCanEdit && !isAnonymousSession && !!session?.user
-  const canUploadCommentImages = !isAnonymousSession && !!session?.user
-  const { upload: uploadImage } = usePortalImageUpload()
+  const { upload: uploadMedia } = usePortalMediaUpload()
+  const ensureAnonSession = useEnsureAnonSession()
+  const uploadMediaWithSession = useCallback(
+    async (file: File) => {
+      if (!(await ensureAnonSession())) throw new Error('Could not create upload session')
+      return uploadMedia(file)
+    },
+    [ensureAnonSession, uploadMedia]
+  )
+  const canUploadPostMedia = effectiveCanEdit && !!session?.user
 
   const {
     editPost,
@@ -317,7 +344,7 @@ function PostDetailPage() {
             onEditStart={() => setIsEditingPost(true)}
             onEditSave={canEdit ? editPost : (team.saveEditAsTeam ?? editPost)}
             onEditCancel={() => setIsEditingPost(false)}
-            onImageUpload={canUploadImages ? uploadImage : undefined}
+            onImageUpload={canUploadPostMedia ? uploadMediaWithSession : undefined}
             isSaving={isSavingEdit || team.isTeamSavingEdit}
             canModerate={canModerate}
             moderationBusy={approvePost.isPending || rejectPost.isPending}
@@ -397,30 +424,32 @@ function PostDetailPage() {
                 ? Math.max(0, post.commentsTotalRootCount - post.comments.length)
                 : undefined
             }
-            onImageUpload={canUploadCommentImages ? uploadImage : undefined}
+            onImageUpload={uploadMediaWithSession}
             canModerate={canModerate}
           />
         </Suspense>
       </div>
 
-      <DeletePostDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        postTitle={post.title}
-        onConfirm={() => {
-          if (canDelete) {
-            deletePost()
-          } else {
-            void team.deletePostAsTeam?.()
-          }
-        }}
-        isPending={isDeleting || team.isTeamDeleting}
-      />
+      <Suspense fallback={null}>
+        {deleteDialogMounted && (
+          <DeletePostDialog
+            open={deleteDialogOpen}
+            onOpenChange={setDeleteDialogOpen}
+            postTitle={post.title}
+            onConfirm={() => {
+              if (canDelete) {
+                deletePost()
+              } else {
+                void team.deletePostAsTeam?.()
+              }
+            }}
+            isPending={isDeleting || team.isTeamDeleting}
+          />
+        )}
 
-      {/* Merge dialogs — team members holding post.merge only. Invalidate on
-          close so a completed merge is reflected on the portal page. */}
-      {team.canMerge && (
-        <>
+        {/* Merge dialogs, for team members holding post.merge only. Invalidate
+            on close so a completed merge is reflected on the portal page. */}
+        {team.canMerge && mergeIntoDialogMounted && (
           <MergeIntoDialog
             postId={postId}
             postTitle={post.title}
@@ -430,6 +459,8 @@ function PostDetailPage() {
               if (!open) team.invalidatePortal()
             }}
           />
+        )}
+        {team.canMerge && mergeOthersDialogMounted && (
           <MergeOthersDialog
             postId={postId}
             postTitle={post.title}
@@ -439,8 +470,8 @@ function PostDetailPage() {
               if (!open) team.invalidatePortal()
             }}
           />
-        </>
-      )}
+        )}
+      </Suspense>
     </div>
   )
 }

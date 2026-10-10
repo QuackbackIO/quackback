@@ -4,8 +4,10 @@ import { ssoUpgradePlanName } from '../sso-upgrade-notice'
 import { describeEntitlementUpgrade } from '@/lib/shared/describe-upgrade'
 
 describe('SsoUpgradeNotice', () => {
-  it('names Scale as the cheapest plan that grants SSO', () => {
-    expect(ssoUpgradePlanName()).toBe('Scale')
-    expect(describeEntitlementUpgrade('sso').body).toMatch(/Single sign-on is a Scale feature/)
+  it('names Enterprise as the cheapest plan that grants SSO', () => {
+    expect(ssoUpgradePlanName()).toBe('Enterprise')
+    expect(describeEntitlementUpgrade('sso').body).toMatch(
+      /Single sign-on is an Enterprise feature/
+    )
   })
 })

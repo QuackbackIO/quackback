@@ -5,6 +5,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 export interface IntercomOAuthState {
   type: 'intercom_oauth'
@@ -26,7 +27,8 @@ export const getIntercomConnectUrl = createServerFn({ method: 'GET' }).handler(
     const { hasPlatformCredentials } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
     if (!(await hasPlatformCredentials('intercom'))) {
-      throw new Error(
+      throw new ValidationError(
+        'PLATFORM_CREDENTIALS_NOT_CONFIGURED',
         'Intercom platform credentials not configured. Configure them in integration settings first.'
       )
     }
@@ -50,7 +52,7 @@ export const searchIntercomContactFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
     const { searchContact } = await import('@/integrations/intercom/server/context')
 
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_VIEW })
@@ -63,6 +65,6 @@ export const searchIntercomContactFn = createServerFn({ method: 'POST' })
       throw new Error('Intercom not connected')
     }
 
-    const secrets = decryptSecrets<{ accessToken: string }>(integration.secrets)
+    const secrets = { accessToken: await getValidAccessToken(integration.id) }
     return searchContact(secrets.accessToken, data.email)
   })

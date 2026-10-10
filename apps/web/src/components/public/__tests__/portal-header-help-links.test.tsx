@@ -9,10 +9,15 @@ const { mockPathname, mockGetRouteContext } = vi.hoisted(() => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  useRouter: () => ({ invalidate: vi.fn(), navigate: vi.fn() }),
+  useRouter: () => ({
+    invalidate: vi.fn(),
+    navigate: vi.fn(),
+    state: { location: { pathname: mockPathname.value } },
+  }),
   useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
     select({ location: { pathname: mockPathname.value } }),
-  useRouteContext: () => mockGetRouteContext(),
+  useRouteContext: (opts?: { select?: (context: unknown) => unknown }) =>
+    opts?.select ? opts.select(mockGetRouteContext()) : mockGetRouteContext(),
   Link: ({
     to,
     children,
@@ -41,11 +46,12 @@ vi.mock('@/components/auth/auth-popover-context', () => ({
 vi.mock('@/components/auth/oauth-buttons', () => ({
   hasAnyPortalAuthMethod: () => false,
   resolveSoleOidcProvider: () => null,
+  hasDistinctSignup: () => true,
 }))
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: null }),
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn(), removeQueries: vi.fn() }),
 }))
 
 vi.mock('@/lib/server/functions/conversation', () => ({
@@ -58,7 +64,7 @@ vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
 
 vi.mock('@/lib/client/auth-client', () => ({
   signOut: vi.fn(),
-  authClient: { signIn: { oauth2: vi.fn() } },
+  authClient: { signIn: { social: vi.fn() } },
 }))
 
 vi.mock('@/components/notifications', () => ({

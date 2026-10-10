@@ -26,13 +26,22 @@ const JITTER_FLOOR = 0.9
 const JITTER_SPREAD = 0.2
 
 /**
+ * Jitter band applied to the fast retries: 0.5x to 1.5x. A bulk send that
+ * meets a provider rate limit fails dozens of jobs in the same second, and
+ * without a spread their retries all land in the same second again.
+ */
+const FAST_JITTER_FLOOR = 0.5
+
+/**
  * BullMQ backoff strategy: given the failures so far (1-based `attemptsMade`),
  * returns the delay in ms before the next attempt. The job's `backoff` option
  * still selects the strategy; this function is the strategy. `random` is
  * injectable so tests can pin the jitter draw.
  */
 export function hookRetryDelayMs(attemptsMade: number, random: () => number = Math.random): number {
-  if (attemptsMade <= 2) return 1_000 * 2 ** (attemptsMade - 1)
+  if (attemptsMade <= 2) {
+    return Math.round(1_000 * 2 ** (attemptsMade - 1) * (FAST_JITTER_FLOOR + random()))
+  }
   const index = Math.min(attemptsMade - 3, SLOW_RETRY_BASE_DELAYS_MS.length - 1)
   const base = SLOW_RETRY_BASE_DELAYS_MS[index]
   return Math.round(base * (JITTER_FLOOR + random() * JITTER_SPREAD))

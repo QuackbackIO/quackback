@@ -36,6 +36,8 @@ export interface TierFeatureFlags {
 export interface PlanNotice {
   /** Short badge text, e.g. "Free trial". */
   label: string
+  /** A running trial's plan name, so the trial line can be worded per language. */
+  trialPlan?: string
   /** Optional supporting copy. */
   message?: string
   /** ISO timestamp; when set the banner renders a countdown. */
@@ -43,8 +45,8 @@ export interface PlanNotice {
   /** When set the banner renders an action button linking here. */
   actionUrl?: string
   actionLabel?: string
-  /** Ended-trial banner only: per-admin localStorage dismiss. */
-  dismissible?: boolean
+  /** Expired-trial strip: persistent red, no countdown. */
+  ended?: boolean
 }
 
 export interface TierLimits {

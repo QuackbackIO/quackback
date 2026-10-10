@@ -19,6 +19,7 @@ import type {
   UpdateAttributeOptionInput,
 } from './conversation-attribute.types'
 import { logger } from '@/lib/server/logger'
+import { normalizeAttributeKey } from '@/lib/shared/normalize-attribute-key'
 
 const log = logger.child({ component: 'conversation-attributes' })
 
@@ -26,10 +27,7 @@ const SELECT_TYPES: ReadonlySet<string> = new Set(['select', 'multi_select'])
 
 export const ASSISTANT_ESCALATION_REASON_KEY = 'assistant_escalation_reason'
 
-/** Normalize a machine key: trimmed, lowercased, whitespace to underscores. */
-export function normalizeAttributeKey(key: string): string {
-  return key.trim().toLowerCase().replace(/\s+/g, '_')
-}
+export { normalizeAttributeKey }
 
 function rowToAttribute(
   row: typeof conversationAttributeDefinitions.$inferSelect

@@ -2,7 +2,7 @@
  * Server Functions for Help Center Operations
  */
 
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { KbCategoryId, KbArticleId, KbArticleFeedbackId, PrincipalId } from '@quackback/ids'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
@@ -63,6 +63,7 @@ import {
 import { z } from 'zod'
 import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 import { logger } from '@/lib/server/logger'
+import { formatHcIdSlug, parseHcIdSlug } from '@/lib/shared/help-center-url'
 
 const log = logger.child({ component: 'help-center' })
 
@@ -72,39 +73,51 @@ const log = logger.child({ component: 'help-center' })
  * invisible); signed-in requests resolve segment memberships via the
  * standard policy-actor path.
  */
-async function publicViewer(): Promise<Actor> {
-  // Cookie (portal) or Bearer (widget iframe) — anything else is anonymous
-  // without a DB round-trip, and fails closed on gated content.
+export const resolveHelpPublicViewer = createServerOnlyFn(async function resolveHelpPublicViewer(
+  auth?: Awaited<ReturnType<typeof getOptionalAuth>> | undefined
+): Promise<Actor> {
+  if (auth !== undefined) return policyActorFromAuth(auth)
   if (!hasAuthCredentials()) return ANONYMOUS_ACTOR
   return policyActorFromAuth(await getOptionalAuth())
+})
+
+async function publicViewer(): Promise<Actor> {
+  return resolveHelpPublicViewer()
 }
 
 // ============================================================================
 // Helper: serialize article dates
 // ============================================================================
 
-function serializeArticle<
+export const serializeArticle = createServerOnlyFn(function serializeArticle<
   T extends { createdAt: Date; updatedAt: Date; publishedAt: Date | null; deletedAt?: Date | null },
 >(article: T) {
+  // embedding (pgvector) and searchVector (tsvector) are not JSON-serializable
+  // through the server-fn boundary and 404 the public article page if spread.
+  const {
+    embedding: _embedding,
+    searchVector: _searchVector,
+    ...rest
+  } = article as T & { embedding?: unknown; searchVector?: unknown }
   return {
-    ...article,
+    ...rest,
     createdAt: toIsoString(article.createdAt),
     updatedAt: toIsoString(article.updatedAt),
     publishedAt: toIsoStringOrNull(article.publishedAt),
     deletedAt: toIsoStringOrNull(article.deletedAt ?? null),
   }
-}
+})
 
-function serializeCategory<T extends { createdAt: Date; updatedAt: Date; deletedAt?: Date | null }>(
-  cat: T
-) {
+export const serializeCategory = createServerOnlyFn(function serializeCategory<
+  T extends { createdAt: Date; updatedAt: Date; deletedAt?: Date | null },
+>(cat: T) {
   return {
     ...cat,
     createdAt: toIsoString(cat.createdAt),
     updatedAt: toIsoString(cat.updatedAt),
     deletedAt: 'deletedAt' in cat ? toIsoStringOrNull(cat.deletedAt ?? null) : undefined,
   }
-}
+})
 
 // ============================================================================
 // Category Server Functions
@@ -309,6 +322,111 @@ export const getPublicCategoryPageFn = createServerFn({ method: 'GET' })
     }
   })
 
+const publicIdSlugSchema = z.object({
+  idSlug: z.string().min(1),
+  locale: z.string().optional(),
+})
+
+/**
+ * Composed public article page: lookup by numeric urlId (`{urlId}-{slug}`),
+ * plus siblings, breadcrumbs, and related articles. Related-article failures
+ * must not 404 the page — they degrade to an empty list.
+ */
+export const getPublicArticlePageFn = createServerFn({ method: 'GET' })
+  .validator(publicIdSlugSchema)
+  .handler(async ({ data }) => {
+    const parsed = parseHcIdSlug(data.idSlug)
+    if (!parsed) {
+      const { NotFoundError } = await import('@/lib/shared/errors')
+      throw new NotFoundError('ARTICLE_NOT_FOUND', 'Article not found')
+    }
+
+    const {
+      getPublicArticleByUrlIdForLocale,
+      listPublicCategoriesForLocale,
+      listPublicArticlesForCategoryLocale,
+    } = await import('@/lib/server/domains/help-center/help-center-locale.query')
+    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const { getRelatedArticles, RELATED_ARTICLES_LIMIT } =
+      await import('@/lib/server/domains/help-center/help-center-related.service')
+    const locale = data.locale ?? DEFAULT_LOCALE
+    const viewer = await publicViewer()
+
+    const article = await getPublicArticleByUrlIdForLocale(parsed.urlId, locale, viewer)
+    const canonicalIdSlug = formatHcIdSlug(article.urlId, article.slug)
+
+    const [allCategories, siblings] = await Promise.all([
+      listPublicCategoriesForLocale(locale, viewer),
+      listPublicArticlesForCategoryLocale(article.category.id, locale, viewer),
+    ])
+
+    let related: Awaited<ReturnType<typeof getRelatedArticles>> = []
+    try {
+      related = await getRelatedArticles(article.id, RELATED_ARTICLES_LIMIT, viewer)
+    } catch (err) {
+      log.warn({ err, article_id: article.id }, 'related articles failed; rendering without them')
+    }
+
+    const { helpfulCount: _h, notHelpfulCount: _n, ...publicArticle } = serializeArticle(article)
+
+    return {
+      canonicalIdSlug,
+      article: publicArticle,
+      category: article.category,
+      articles: siblings.map((a) => ({
+        ...a,
+        publishedAt: toIsoStringOrNull(a.publishedAt),
+      })),
+      allCategories: allCategories.map(serializeCategory),
+      related,
+    }
+  })
+
+/** Composed collection page looked up by numeric urlId. */
+export const getPublicCollectionPageFn = createServerFn({ method: 'GET' })
+  .validator(publicIdSlugSchema)
+  .handler(async ({ data }) => {
+    const parsed = parseHcIdSlug(data.idSlug)
+    if (!parsed) {
+      const { NotFoundError } = await import('@/lib/shared/errors')
+      throw new NotFoundError('CATEGORY_NOT_FOUND', 'Collection not found')
+    }
+
+    const {
+      getPublicCategoryByUrlIdForLocale,
+      listPublicCategoriesForLocale,
+      listPublicArticlesForCategoriesLocale,
+    } = await import('@/lib/server/domains/help-center/help-center-locale.query')
+    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const locale = data.locale ?? DEFAULT_LOCALE
+    const viewer = await publicViewer()
+
+    const category = await getPublicCategoryByUrlIdForLocale(parsed.urlId, locale, viewer)
+    const allCategories = await listPublicCategoriesForLocale(locale, viewer)
+    const subcategories = allCategories.filter((c) => c.parentId === category.id)
+    const articlesByCategory = await listPublicArticlesForCategoriesLocale(
+      [category.id, ...subcategories.map((s) => s.id)],
+      locale,
+      viewer
+    )
+    const serializeArticles = (categoryId: string) =>
+      (articlesByCategory.get(categoryId) ?? []).map((a) => ({
+        ...a,
+        publishedAt: toIsoStringOrNull(a.publishedAt),
+      }))
+
+    return {
+      canonicalIdSlug: formatHcIdSlug(category.urlId, category.slug),
+      category: serializeCategory(category),
+      articles: serializeArticles(category.id),
+      subcategories: subcategories.map((sub) => ({
+        ...serializeCategory(sub),
+        articles: serializeArticles(sub.id),
+      })),
+      allCategories: allCategories.map(serializeCategory),
+    }
+  })
+
 export const listPublicCategoryEditorsFn = createServerFn({ method: 'GET' })
   .validator(z.object({}))
   .handler(async () => {
@@ -469,4 +587,41 @@ export const searchPublicArticlesFn = createServerFn({ method: 'GET' })
       config.locales.default
     )
     return hybridSearchForLocale(data.query, locale, data.limit ?? 10, await publicViewer())
+  })
+
+/**
+ * Public article by widget `open({ articleId })` ref — same shape as
+ * getPublicArticleBySlugFn. `article_` and `kb_article_` TypeIDs look up by
+ * id (same UUID); anything else is a slug. Missing or gated → null.
+ * Appended so existing help-center handler indices stay put.
+ */
+export const resolvePublicArticleRefFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ref: z.string().min(1), locale: z.string().optional() }))
+  .handler(async ({ data }) => {
+    const { canonicalArticleTypeId } = await import('@/lib/shared/widget/article-ref')
+    const { getPublicArticleByIdForLocale, getPublicArticleBySlugForLocale } =
+      await import('@/lib/server/domains/help-center/help-center-locale.query')
+    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    const { withDefaultLocaleFallback } = await import('@/lib/shared/widget/article-locale')
+    const viewer = await publicViewer()
+    const locale = data.locale ?? DEFAULT_LOCALE
+    try {
+      const kbId = canonicalArticleTypeId(data.ref)
+      const load = (loc: string) =>
+        kbId
+          ? getPublicArticleByIdForLocale(kbId, loc, viewer)
+          : getPublicArticleBySlugForLocale(data.ref, loc, viewer)
+      const { value: article, locale: resolvedLocale } = await withDefaultLocaleFallback(
+        locale,
+        DEFAULT_LOCALE,
+        load,
+        (err) => err instanceof NotFoundError
+      )
+      const { helpfulCount: _h, notHelpfulCount: _n, ...publicArticle } = serializeArticle(article)
+      return { ...publicArticle, resolvedLocale }
+    } catch (err) {
+      if (err instanceof NotFoundError) return null
+      throw err
+    }
   })

@@ -46,7 +46,7 @@ export function usePersonBlockActions(principalId: PrincipalId | undefined) {
     mutationFn: () => blockPersonFn({ data: { principalId: principalId as PrincipalId } }),
     onSuccess: async () => {
       await invalidate()
-      toast.success('Person blocked')
+      toast.success('User blocked')
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to block'),
   })
@@ -54,7 +54,7 @@ export function usePersonBlockActions(principalId: PrincipalId | undefined) {
     mutationFn: () => unblockPersonFn({ data: { principalId: principalId as PrincipalId } }),
     onSuccess: async () => {
       await invalidate()
-      toast.success('Person unblocked')
+      toast.success('User unblocked')
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to unblock'),
   })
@@ -112,7 +112,7 @@ export function BlockPersonControl({
         <DropdownMenuItem
           variant={blocked ? 'default' : 'destructive'}
           disabled={busy}
-          onSelect={() => trigger()}
+          onClick={() => trigger()}
         >
           <NoSymbolIcon className="h-4 w-4" />
           {blocked ? 'Unblock' : 'Block'}
@@ -133,7 +133,7 @@ export function BlockPersonControl({
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title={`Block ${personName || 'this person'}?`}
+        title={`Block ${personName || 'this user'}?`}
         description="They will not be able to send new messages or sign in again. Their existing activity stays, and you can unblock them at any time."
         confirmLabel="Block"
         variant="destructive"

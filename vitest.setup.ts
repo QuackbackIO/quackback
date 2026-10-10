@@ -1,6 +1,11 @@
 import '@testing-library/jest-dom'
 import { AsyncLocalStorage } from 'node:async_hooks'
 
+// Base UI ScrollArea calls getAnimations(); happy-dom does not implement it.
+if (typeof Element !== 'undefined' && typeof Element.prototype.getAnimations !== 'function') {
+  Element.prototype.getAnimations = () => []
+}
+
 // Since @tanstack/react-start 1.168, executing a createServerFn runs the global
 // request middleware, which reads the "Start context" from an AsyncLocalStorage
 // keyed by this well-known global Symbol. Outside the server runtime (i.e. unit

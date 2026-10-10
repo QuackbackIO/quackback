@@ -1,11 +1,12 @@
+import { deliveryError, httpDeliveryFailure } from '@/lib/server/integrations/sync/outcomes'
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Discord hook handler.
  * Sends messages to Discord channels when events occur.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { buildDiscordMessage } from '@/integrations/discord/server/message'
 import { logger } from '@/lib/server/logger'
 
@@ -22,8 +23,8 @@ export interface DiscordConfig {
   rootUrl: string
 }
 
-export const discordHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
+export const discordHook: IntegrationHook = {
+  async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId } = target as DiscordTarget
     const { accessToken, rootUrl } = config as DiscordConfig
 
@@ -32,7 +33,7 @@ export const discordHook: HookHandler = {
     const message = buildDiscordMessage(event, rootUrl)
 
     try {
-      const response = await fetch(`${DISCORD_API}/channels/${channelId}/messages`, {
+      const response = await integrationFetch(`${DISCORD_API}/channels/${channelId}/messages`, {
         method: 'POST',
         headers: {
           Authorization: `Bot ${accessToken}`,
@@ -42,53 +43,24 @@ export const discordHook: HookHandler = {
       })
 
       if (!response.ok) {
-        const errorBody = await response.text()
-        const status = response.status
-
-        // Auth errors — don't retry
-        if (status === 401 || status === 403) {
-          log.error({ status_code: status, channel_id: channelId, body: errorBody }, 'auth error')
-          return {
-            success: false,
-            error: `Authentication failed (${status}). Please reconnect Discord.`,
-            shouldRetry: false,
-          }
-        }
-
-        // Rate limit
-        if (status === 429) {
-          log.warn({ status_code: status, channel_id: channelId, body: errorBody }, 'rate limited')
-          return { success: false, error: 'Rate limited', shouldRetry: true }
-        }
-
-        log.error({ status_code: status, channel_id: channelId, body: errorBody }, 'api error')
-        return {
-          success: false,
-          error: `Discord API error: ${status}`,
-          shouldRetry: status >= 500,
-        }
+        return httpDeliveryFailure(response)
       }
 
       const data = (await response.json()) as { id: string }
       log.info({ channel_id: channelId, message_id: data.id }, 'message posted')
 
-      return { success: true, externalId: data.id }
+      return { state: 'succeeded', result: { externalId: data.id } }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       log.error({ err: error, channel_id: channelId }, 'message delivery failed')
 
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: isRetryableError(error),
-      }
+      return deliveryError(error)
     }
   },
 
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken } = config as DiscordConfig
     try {
-      const response = await fetch(`${DISCORD_API}/users/@me`, {
+      const response = await integrationFetch(`${DISCORD_API}/users/@me`, {
         headers: { Authorization: `Bot ${accessToken}` },
       })
       return { ok: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` }

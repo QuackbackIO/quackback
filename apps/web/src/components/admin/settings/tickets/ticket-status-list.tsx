@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
+import { AUTOSAVE } from '@/lib/client/autosave'
 import { toast } from 'sonner'
 import {
   DndContext,
@@ -18,11 +19,11 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { PlusIcon, Bars3Icon, TrashIcon, PencilSquareIcon } from '@heroicons/react/24/solid'
+import { Bars3Icon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Select,
   SelectContent,
@@ -39,8 +40,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { RowDot, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { cn } from '@/lib/shared/utils'
 import { TICKET_STAGES, TICKET_STATUS_CATEGORIES } from '@/lib/shared/db-types'
 import type { TicketStatusEntity, TicketStatusCategory, TicketStage } from '@/lib/shared/db-types'
 import { TICKET_STATUS_CATEGORY_LABELS } from '@/lib/shared/tickets'
@@ -55,21 +56,12 @@ import { ticketStatusesQuery, ticketStageLabelsQuery } from './queries'
 
 const HIDDEN = 'hidden'
 
-/** Category presentation: effect on an SLA clock and chip colours (label comes
- *  from the shared TICKET_STATUS_CATEGORY_LABELS). */
-const CATEGORY_META: Record<TicketStatusCategory, { sla: string; chip: string }> = {
-  open: {
-    sla: 'SLA runs',
-    chip: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
-  },
-  pending: {
-    sla: 'SLA pauses',
-    chip: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-  },
-  closed: {
-    sla: 'SLA stops',
-    chip: 'bg-slate-500/15 text-slate-600 dark:text-slate-400',
-  },
+/** Each category's effect on an SLA clock, shown in its card title (the label
+ *  comes from the shared TICKET_STATUS_CATEGORY_LABELS). */
+const CATEGORY_SLA: Record<TicketStatusCategory, string> = {
+  open: 'SLA runs',
+  pending: 'SLA pauses',
+  closed: 'SLA stops',
 }
 
 const KEY = ticketStatusesQuery.queryKey
@@ -81,15 +73,22 @@ type StatusDraft = {
   publicStage: TicketStage | null
 }
 
-export function TicketStatusList() {
+export function TicketStatusList({
+  creating,
+  onCreatingChange,
+}: {
+  /** The page header's "New status" button opens the editor for a fresh status. */
+  creating: boolean
+  onCreatingChange: (creating: boolean) => void
+}) {
   const qc = useQueryClient()
   const { data: statuses } = useSuspenseQuery(ticketStatusesQuery)
   const { data: stageLabels } = useSuspenseQuery(ticketStageLabelsQuery)
 
   const [pendingId, setPendingId] = useState<string | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<TicketStatusEntity | null>(null)
   const [toDelete, setToDelete] = useState<TicketStatusEntity | null>(null)
+  const dialogOpen = creating || editing !== null
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -108,7 +107,19 @@ export function TicketStatusList() {
     qc.setQueryData(KEY, next)
   }
 
-  async function handleDragEnd(event: DragEndEvent) {
+  // Reorders and stage changes save on change; the global handler toasts a
+  // failure, so these only restore the previous order or stage.
+  const reorderMutation = useMutation({
+    meta: AUTOSAVE,
+    mutationFn: (orderedIds: string[]) => reorderTicketStatusesFn({ data: { orderedIds } }),
+  })
+  const stageMutation = useMutation({
+    meta: AUTOSAVE,
+    mutationFn: (input: { id: string; publicStage: TicketStage | null }) =>
+      updateTicketStatusFn({ data: input }),
+  })
+
+  function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
     const activeStatus = statuses.find((s) => s.id === active.id)
@@ -121,31 +132,32 @@ export function TicketStatusList() {
     const reordered = arrayMove(group, oldIndex, newIndex)
     const others = statuses.filter((s) => s.category !== activeStatus.category)
     writeCache([...others, ...reordered.map((s, i) => ({ ...s, position: i }))])
-    try {
-      await reorderTicketStatusesFn({
-        data: { orderedIds: reordered.map((s) => s.id) },
-      })
-    } catch {
-      writeCache(statuses)
-      toast.error('Failed to reorder statuses')
-    }
+    reorderMutation.mutateAsync(reordered.map((s) => s.id)).catch(() => writeCache(statuses))
   }
 
-  async function setPublicStage(status: TicketStatusEntity, value: string) {
+  function setPublicStage(status: TicketStatusEntity, value: string) {
     const publicStage = value === HIDDEN ? null : (value as TicketStage)
     setPendingId(status.id)
     writeCache(statuses.map((s) => (s.id === status.id ? { ...s, publicStage } : s)))
-    try {
-      const saved = await updateTicketStatusFn({ data: { id: status.id, publicStage } })
-      writeCache(
-        qc.getQueryData<TicketStatusEntity[]>(KEY)!.map((s) => (s.id === status.id ? saved : s))
+    // Per-call rollback: each save restores only its own status, so overlapping
+    // saves on the shared mutation cannot drop one another's rollback.
+    stageMutation
+      .mutateAsync({ id: status.id, publicStage })
+      .then((saved) =>
+        writeCache(
+          (qc.getQueryData<TicketStatusEntity[]>(KEY) ?? statuses).map((s) =>
+            s.id === status.id ? saved : s
+          )
+        )
       )
-    } catch (error) {
-      writeCache(statuses)
-      toast.error(error instanceof Error ? error.message : 'Failed to update customer stage')
-    } finally {
-      setPendingId(null)
-    }
+      .catch(() =>
+        writeCache(
+          (qc.getQueryData<TicketStatusEntity[]>(KEY) ?? statuses).map((s) =>
+            s.id === status.id ? { ...s, publicStage: status.publicStage } : s
+          )
+        )
+      )
+      .finally(() => setPendingId((id) => (id === status.id ? null : id)))
   }
 
   async function handleSubmit(draft: StatusDraft) {
@@ -177,65 +189,50 @@ export function TicketStatusList() {
   }
 
   return (
-    <SettingsCard
-      title="Statuses"
-      description="The lifecycle states a ticket moves through. Category sets whether an SLA clock runs, and the customer stage controls what requesters see."
-      action={
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditing(null)
-            setDialogOpen(true)
-          }}
-        >
-          <PlusIcon className="h-4 w-4" /> New status
-        </Button>
-      }
-      contentClassName="p-0"
-    >
-      <div className="hidden sm:flex items-center gap-3 px-4 sm:px-6 py-2 border-b border-border/50 text-xs font-medium text-muted-foreground">
-        <span className="w-4 shrink-0" />
-        <span className="flex-1 min-w-0">Status</span>
-        <span className="w-28 shrink-0">Category</span>
-        <span className="w-44 shrink-0">Customer stage</span>
-        <span className="w-14 shrink-0" />
-      </div>
-
+    <>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <div className="divide-y divide-border/40">
-          {TICKET_STATUS_CATEGORIES.map((category) => {
-            const group = byCategory[category]
-            if (group.length === 0) return null
-            return (
+        {TICKET_STATUS_CATEGORIES.map((category) => {
+          const group = byCategory[category]
+          if (group.length === 0) return null
+          return (
+            <SettingsCard
+              key={category}
+              title={`${TICKET_STATUS_CATEGORY_LABELS[category]} · ${CATEGORY_SLA[category]}`}
+              flush
+            >
               <SortableContext
-                key={category}
                 items={group.map((s) => s.id)}
                 strategy={verticalListSortingStrategy}
               >
-                {group.map((status) => (
-                  <StatusRow
-                    key={status.id}
-                    status={status}
-                    stageLabels={stageLabels}
-                    canDelete={!status.isDefault && group.length > 1}
-                    busy={pendingId === status.id}
-                    onStageChange={(v) => setPublicStage(status, v)}
-                    onEdit={() => {
-                      setEditing(status)
-                      setDialogOpen(true)
-                    }}
-                    onDelete={() => setToDelete(status)}
-                  />
-                ))}
+                <SettingsList>
+                  {group.map((status) => (
+                    <StatusRow
+                      key={status.id}
+                      status={status}
+                      stageLabels={stageLabels}
+                      canDelete={!status.isDefault}
+                      lastInCategory={group.length === 1}
+                      busy={pendingId === status.id}
+                      onStageChange={(v) => setPublicStage(status, v)}
+                      onEdit={() => setEditing(status)}
+                      onDelete={() => setToDelete(status)}
+                    />
+                  ))}
+                </SettingsList>
               </SortableContext>
-            )
-          })}
-        </div>
+            </SettingsCard>
+          )
+        })}
       </DndContext>
 
       <StatusDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditing(null)
+            onCreatingChange(false)
+          }
+        }}
         status={editing}
         stageLabels={stageLabels}
         onSubmit={handleSubmit}
@@ -244,13 +241,13 @@ export function TicketStatusList() {
       <ConfirmDialog
         open={!!toDelete}
         onOpenChange={() => setToDelete(null)}
-        title="Delete status"
+        title="Delete status?"
         description={`Delete "${toDelete?.name}"? Tickets using it must be reassigned first.`}
-        confirmLabel="Delete"
+        confirmLabel="Delete status"
         variant="destructive"
         onConfirm={handleDelete}
       />
-    </SettingsCard>
+    </>
   )
 }
 
@@ -258,6 +255,7 @@ interface StatusRowProps {
   status: TicketStatusEntity
   stageLabels: Record<TicketStage, string>
   canDelete: boolean
+  lastInCategory: boolean
   busy: boolean
   onStageChange: (value: string) => void
   onEdit: () => void
@@ -268,6 +266,7 @@ function StatusRow({
   status,
   stageLabels,
   canDelete,
+  lastInCategory,
   busy,
   onStageChange,
   onEdit,
@@ -281,93 +280,78 @@ function StatusRow({
     transition,
     opacity: isDragging ? 0.5 : 1,
   }
-  const meta = CATEGORY_META[status.category]
-  const deleteTitle = status.isDefault
-    ? 'Cannot delete the default status'
-    : !canDelete
-      ? 'Cannot delete the last status in a category'
-      : 'Delete status'
-
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="group flex items-center gap-3 px-4 sm:px-6 py-2.5 hover:bg-muted/40"
-    >
-      <button
-        {...attributes}
-        {...listeners}
-        className="w-4 shrink-0 touch-none cursor-grab active:cursor-grabbing"
-        aria-label="Reorder"
-      >
-        <Bars3Icon className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100" />
-      </button>
-
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        <span
-          className="h-3 w-3 rounded-full shrink-0"
-          style={{ backgroundColor: status.color }}
-          aria-hidden
-        />
-        <span className="truncate text-sm">{status.name}</span>
-        {status.isDefault && (
-          <Badge variant="subtle" className="shrink-0">
-            Default
-          </Badge>
-        )}
-      </div>
-
-      <div className="w-28 shrink-0">
-        <span className={cn('inline-flex rounded-full px-2 py-0.5 text-xs font-medium', meta.chip)}>
-          {TICKET_STATUS_CATEGORY_LABELS[status.category]}
-        </span>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">{meta.sla}</p>
-      </div>
-
-      <div className="w-44 shrink-0">
-        <Select value={status.publicStage ?? HIDDEN} onValueChange={onStageChange} disabled={busy}>
-          <SelectTrigger
-            size="sm"
-            className="w-full"
-            aria-label={`Customer stage for ${status.name}`}
+    <div ref={setNodeRef} style={style}>
+      <SettingsListRow
+        grip={
+          <button
+            {...attributes}
+            {...listeners}
+            className="touch-none cursor-grab active:cursor-grabbing"
+            aria-label={`Reorder ${status.name}`}
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={HIDDEN}>Hidden</SelectItem>
-            {TICKET_STAGES.map((stage) => (
-              <SelectItem key={stage} value={stage}>
-                {stageLabels[stage]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="w-14 shrink-0 flex items-center justify-end gap-0.5">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100"
-          onClick={onEdit}
-          title="Edit status"
-        >
-          <PencilSquareIcon className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            'h-7 w-7 text-muted-foreground hover:text-destructive',
-            !canDelete && 'opacity-40 cursor-not-allowed'
-          )}
-          onClick={onDelete}
-          disabled={!canDelete}
-          title={deleteTitle}
-        >
-          <TrashIcon className="h-3.5 w-3.5" />
-        </Button>
-      </div>
+            <Bars3Icon className="size-4 text-muted-foreground/70" />
+          </button>
+        }
+        leading={<RowDot color={status.color} />}
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            {status.name}
+            {status.isDefault && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span role="img" aria-label="Default status">
+                      <LockClosedIcon className="h-3 w-3 text-muted-foreground" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>The default status for new tickets. It can't be deleted.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </span>
+        }
+        actionsLabel={status.name}
+        trailing={
+          <Select
+            value={status.publicStage ?? HIDDEN}
+            onValueChange={onStageChange}
+            disabled={busy}
+          >
+            <SelectTrigger
+              size="sm"
+              className="w-44"
+              aria-label={`Customer stage for ${status.name}`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={HIDDEN}>Hidden</SelectItem>
+              {TICKET_STAGES.map((stage) => (
+                <SelectItem key={stage} value={stage}>
+                  {stageLabels[stage]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+        actions={[
+          { label: 'Edit', onSelect: onEdit },
+          ...(canDelete
+            ? [
+                {
+                  label: 'Delete',
+                  destructive: true,
+                  onSelect: onDelete,
+                  disabled: lastInCategory,
+                  hint: lastInCategory ? 'Keep at least one status in each category' : undefined,
+                },
+              ]
+            : []),
+        ]}
+      />
     </div>
   )
 }
@@ -461,7 +445,7 @@ function StatusDialog({ open, onOpenChange, status, stageLabels, onSubmit }: Sta
                 <SelectContent>
                   {TICKET_STATUS_CATEGORIES.map((c) => (
                     <SelectItem key={c} value={c}>
-                      {TICKET_STATUS_CATEGORY_LABELS[c]} · {CATEGORY_META[c].sla}
+                      {TICKET_STATUS_CATEGORY_LABELS[c]} · {CATEGORY_SLA[c]}
                     </SelectItem>
                   ))}
                 </SelectContent>

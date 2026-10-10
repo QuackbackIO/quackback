@@ -61,6 +61,10 @@ vi.mock('@quackback/db/client', async (importOriginal) => {
   return { ...actual, createDbFromSql: vi.fn((sql: unknown) => ({ boundTo: sql })) }
 })
 
+vi.mock('@/lib/server/fleet/ensure-schema-current', () => ({
+  ensureWorkspaceSchemaCurrent: vi.fn(async () => {}),
+}))
+
 vi.mock('../fingerprint', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return {

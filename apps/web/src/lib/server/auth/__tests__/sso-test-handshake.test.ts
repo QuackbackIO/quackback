@@ -20,7 +20,7 @@ const baseInput: HandshakeInput = {
   discoveryUrl: 'https://idp.example/.well-known/openid-configuration',
   clientId: 'cid',
   clientSecret: 'csecret',
-  redirectUri: 'https://qb/api/auth/oauth2/callback/sso',
+  redirectUri: 'https://qb/api/auth/callback/sso',
   codeVerifier: 'test-code-verifier',
   expectedNonce: 'nonce789',
   expectedState: 'state123',
@@ -213,6 +213,80 @@ describe('runHandshake', () => {
   })
 })
 
+/**
+ * Avatar is optional. The test reports whether the IdP released a `picture`,
+ * but a missing one is informational — the connection still passes.
+ */
+describe('runHandshake — avatar / picture claim', () => {
+  async function runWithUserinfo(userinfoBody: Record<string, unknown>) {
+    const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
+    const publicJwk = await exportJWK(publicKey)
+    publicJwk.kid = 'test-key'
+    publicJwk.alg = 'RS256'
+    const issuer = 'https://idp.example'
+    // email + name in the ID token; the avatar (if any) only at userinfo.
+    const idToken = await new SignJWT({
+      email: 'alice@idp.example',
+      name: 'Alice Example',
+      nonce: 'nonce789',
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
+      .setIssuer(issuer)
+      .setAudience('cid')
+      .setSubject('user-sub-123')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey)
+
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer,
+          token_endpoint: `${issuer}/token`,
+          jwks_uri: `${issuer}/jwks`,
+          userinfo_endpoint: `${issuer}/userinfo`,
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 })
+    )
+    safeFetchMock.mockResolvedValue(new Response(JSON.stringify(userinfoBody), { status: 200 }))
+
+    return runHandshake(baseInput)
+  }
+
+  it('reports a green "Avatar resolved" step and the URL when the IdP returns `picture`', async () => {
+    const result = await runWithUserinfo({
+      sub: 'user-sub-123',
+      picture: 'https://cdn.idp.example/alice.png',
+    })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}`)
+    expect(result.identity?.image).toBe('https://cdn.idp.example/alice.png')
+    expect(result.identity?.sources.image).toBe('userinfo')
+    const step = result.steps.find((s) => s.label === 'Avatar resolved')
+    expect(step).toMatchObject({ ok: true, detail: 'from userinfo' })
+    expect(step?.severity).toBeUndefined()
+  })
+
+  it('reports a muted "No avatar released" step — not a failure — when there is no picture', async () => {
+    const result = await runWithUserinfo({ sub: 'user-sub-123' })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}`)
+    expect(result.identity?.image).toBeUndefined()
+    const step = result.steps.find((s) => s.label === 'No avatar released')
+    expect(step).toMatchObject({ ok: true, severity: 'info' })
+    // The overall handshake still succeeds.
+    expect(result.ok).toBe(true)
+  })
+})
+
 describe('runHandshake — provider that releases no email', () => {
   it('fails when the placeholder option is off, naming both remedies', async () => {
     const result = await runWorldCHandshake({ allowMissingEmail: false })
@@ -231,8 +305,8 @@ describe('runHandshake — provider that releases no email', () => {
   })
 })
 
-describe('runHandshake — default sources still require an id_token', () => {
-  it('fails when there is only an access_token and identity still reads the ID token', async () => {
+describe('runHandshake — source availability without an ID token', () => {
+  it('fails mapping when there is only an opaque access token and no userinfo', async () => {
     safeFetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -252,8 +326,71 @@ describe('runHandshake — default sources still require an id_token', () => {
     const result = await runHandshake({ ...baseInput })
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.stage).toBe('token-exchange')
-    expect(result.hint).toMatch(/id_token/i)
+    expect(result.stage).toBe('claim-check')
+    expect(result.capture?.outcome).toBe('mapping_failed')
+  })
+
+  it('userinfo-only identity without an ID token agrees across all paths', async () => {
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer: 'https://idp.example',
+          token_endpoint: 'https://idp.example/token',
+          jwks_uri: 'https://idp.example/jwks',
+          userinfo_endpoint: 'https://idp.example/userinfo',
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ access_token: 'opaque', token_type: 'Bearer' }), {
+        status: 200,
+      })
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ sub: 'from-userinfo', email: 'u@x.com', name: 'Userinfo' }), {
+        status: 200,
+      })
+    )
+
+    const result = await runHandshake({ ...baseInput })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.identity?.id).toBe('from-userinfo')
+    expect(result.identity?.email).toBe('u@x.com')
+    expect(result.identity?.sources.id).toBe('userinfo')
+    expect(
+      result.capture?.replay.sources.some(
+        (s: { source: string; unavailable?: string }) =>
+          s.source === 'idToken' && Boolean(s.unavailable)
+      )
+    ).toBe(true)
+  })
+
+  it('present invalid ID token still fails handshake validation', async () => {
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer: 'https://idp.example',
+          token_endpoint: 'https://idp.example/token',
+          jwks_uri: 'https://idp.example/jwks',
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id_token: 'not-a-jwt', access_token: 'opaque', token_type: 'Bearer' }),
+        {
+          status: 200,
+        }
+      )
+    )
+
+    const result = await runHandshake({ ...baseInput })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.stage).toBe('id-token-decode')
+    expect(result.capture).toBeUndefined()
   })
 })
 
@@ -346,5 +483,283 @@ describe('runHandshake — access-token-only IdP', () => {
     if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
     expect(safeFetchMock.mock.calls.some((c) => String(c[0]).includes('/jwks'))).toBe(true)
     expect(result.tokenInfo.idTokenAlg).toBe('RS256')
+  })
+})
+
+describe('runHandshake — capture and production replay', () => {
+  it('exhaustive diagnostic capture cannot alter production outcome', async () => {
+    const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
+    const publicJwk = await exportJWK(publicKey)
+    publicJwk.kid = 'test-key'
+    publicJwk.alg = 'RS256'
+    const issuer = 'https://idp.example'
+    const idToken = await new SignJWT({
+      nonce: 'nonce789',
+      email: 'from-token@x.com',
+      name: 'From Token',
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
+      .setIssuer(issuer)
+      .setAudience('cid')
+      .setSubject('from-token')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey)
+
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer,
+          token_endpoint: `${issuer}/token`,
+          jwks_uri: `${issuer}/jwks`,
+          userinfo_endpoint: `${issuer}/userinfo`,
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+        {
+          status: 200,
+        }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 })
+    )
+    safeFetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sub: 'from-token',
+          email: 'from-userinfo@x.com',
+          extra: 'only-userinfo',
+        }),
+        { status: 200 }
+      )
+    )
+
+    const result = await runHandshake({ ...baseInput, registrationId: 'oidc_x' })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.identity?.email).toBe('from-token@x.com')
+    expect(result.mappingOutcome?.email).toBe('from-token@x.com')
+    expect(result.allClaims?.extra).toBe('only-userinfo')
+    expect(result.capture?.claims.extra).toBe('only-userinfo')
+    expect(JSON.stringify(result.capture)).not.toMatch(/id_token|access_token/)
+    expect(JSON.stringify(result.capture)).not.toContain(idToken)
+  })
+
+  it('stores binder-accepted claims so nested mapped leaves survive source merge', async () => {
+    const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
+    const publicJwk = await exportJWK(publicKey)
+    publicJwk.kid = 'test-key'
+    publicJwk.alg = 'RS256'
+    const issuer = 'https://idp.example'
+    const idToken = await new SignJWT({
+      nonce: 'nonce789',
+      email: 'from-token@x.com',
+      name: 'From Token',
+      org: { department: 'from-token' },
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
+      .setIssuer(issuer)
+      .setAudience('cid')
+      .setSubject('from-token')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey)
+
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer,
+          token_endpoint: `${issuer}/token`,
+          jwks_uri: `${issuer}/jwks`,
+          userinfo_endpoint: `${issuer}/userinfo`,
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 })
+    )
+    safeFetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sub: 'from-token',
+          org: { costCenter: 'cc-9', department: 'from-userinfo' },
+          extra: 'only-userinfo',
+        }),
+        { status: 200 }
+      )
+    )
+
+    const result = await runHandshake({
+      ...baseInput,
+      registrationId: 'oidc_x',
+      claimMapping: {
+        attributes: { map: [{ claimPath: 'org.costCenter', attributeKey: 'cost_center' }] },
+      },
+    })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.capture?.claims.org).toEqual({ department: 'from-token', costCenter: 'cc-9' })
+    expect(result.allClaims?.org).toEqual({ department: 'from-token' })
+  })
+
+  it('omits userinfo claims the binder discarded for a subject mismatch', async () => {
+    const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
+    const publicJwk = await exportJWK(publicKey)
+    publicJwk.kid = 'test-key'
+    publicJwk.alg = 'RS256'
+    const issuer = 'https://idp.example'
+    const idToken = await new SignJWT({
+      nonce: 'nonce789',
+      email: 'from-token@x.com',
+      name: 'From Token',
+      org: { department: 'from-token' },
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
+      .setIssuer(issuer)
+      .setAudience('cid')
+      .setSubject('from-token')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey)
+
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer,
+          token_endpoint: `${issuer}/token`,
+          jwks_uri: `${issuer}/jwks`,
+          userinfo_endpoint: `${issuer}/userinfo`,
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 })
+    )
+    safeFetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sub: 'other-subject',
+          org: { costCenter: 'cc-9' },
+          extra: 'only-userinfo',
+        }),
+        { status: 200 }
+      )
+    )
+
+    const result = await runHandshake({
+      ...baseInput,
+      registrationId: 'oidc_x',
+      claimMapping: {
+        attributes: { map: [{ claimPath: 'org.costCenter', attributeKey: 'cost_center' }] },
+      },
+    })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.capture?.claims.org).toEqual({ department: 'from-token' })
+    expect(result.capture?.claims.extra).toBeUndefined()
+    expect(result.allClaims?.extra).toBe('only-userinfo')
+    expect(result.mappingOutcome?.warnings).toContain('subject_mismatch')
+  })
+})
+
+describe('runHandshake: ID token nonce', () => {
+  /** A signed exchange whose ID token carries `tokenNonce`, or no nonce at all. */
+  async function exchange(opts: { tokenNonce?: string; expectedNonce?: string }) {
+    const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
+    const publicJwk = await exportJWK(publicKey)
+    publicJwk.kid = 'nonce-key'
+    publicJwk.alg = 'RS256'
+
+    const issuer = 'https://idp.example'
+    const idToken = await new SignJWT({
+      email: 'you@example.com',
+      ...(opts.tokenNonce ? { nonce: opts.tokenNonce } : {}),
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'nonce-key' })
+      .setIssuer(issuer)
+      .setAudience('cid')
+      .setSubject('user-1')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey)
+
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer,
+          token_endpoint: `${issuer}/token`,
+          jwks_uri: `${issuer}/jwks`,
+          userinfo_endpoint: `${issuer}/userinfo`,
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+        {
+          status: 200,
+        }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 })
+    )
+    safeFetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ sub: 'user-1' }), { status: 200 })
+    )
+
+    return runHandshake({ ...baseInput, expectedNonce: opts.expectedNonce })
+  }
+
+  it('passes and records that a provider which leaves out the nonce should not be sent one', async () => {
+    // Signature, issuer and audience all verify; only the echo is missing. That
+    // is a provider that never returns a nonce, so the test records it and
+    // sign-in stops sending one.
+    const result = await exchange({ expectedNonce: 'nonce789' })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.idTokenNonce).toBe('off')
+    const step = result.steps.find((s) => s.stage === 'claim-check')
+    expect(step?.severity).toBe('info')
+    expect(step?.label).toMatch(/does not return the nonce/i)
+  })
+
+  it('records the nonce check as working when the provider echoes it', async () => {
+    const result = await exchange({ tokenNonce: 'nonce789', expectedNonce: 'nonce789' })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.idTokenNonce).toBe('check')
+  })
+
+  it('still fails a nonce that does not match', async () => {
+    const result = await exchange({ tokenNonce: 'someone-elses', expectedNonce: 'nonce789' })
+    if (result.ok) throw new Error('expected failure')
+    expect(result.stage).toBe('claim-check')
+    expect(result.hint).toMatch(/mismatch/i)
+  })
+
+  it('records nothing about the nonce when none was sent', async () => {
+    // Sign-in never binds a nonce for this provider, so there is nothing to learn.
+    const result = await exchange({ expectedNonce: undefined })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.idTokenNonce).toBeUndefined()
+    expect(result.steps.some((s) => s.stage === 'claim-check' && /not used/i.test(s.label))).toBe(
+      true
+    )
   })
 })

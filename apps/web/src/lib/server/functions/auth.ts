@@ -23,7 +23,7 @@ const lookupAuthMethodsInput = z.object({
 export type LookupAuthMethodsResult =
   /** Verified-domain email AND enforcement is on — must use the owning
    *  provider, no escape. `providerId` is that provider's registrationId
-   *  (Task 14 threads it to the client's `signIn.oauth2({ providerId })`). */
+   *  (Task 14 threads it to the client's `signIn.social({ provider })`). */
   | { kind: 'sso-redirect'; providerId: string }
   /** Verified-domain email AND enforcement is off — the owning provider is
    *  the default CTA, but the methods form is available as a fallback so

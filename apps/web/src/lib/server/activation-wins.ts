@@ -1,31 +1,46 @@
-import type { BoardId } from '@quackback/ids'
+import type { BoardId, PrincipalId } from '@quackback/ids'
 import {
   db,
   and,
   asc,
   boards,
+  conversationMessages,
   conversations,
   eq,
+  helpCenterArticleFeedback,
   helpCenterArticles,
+  inArray,
   isNotNull,
   isNull,
-  lte,
+  ne,
   or,
   posts,
   postVotes,
   principal,
   sql,
+  statusSubscriptions,
   type OnboardingOutcome,
   type SetupState,
 } from '@/lib/server/db'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
+/**
+ * Evidence for a first win. Every win is something a person outside the
+ * team did; what the team sets up itself (a service, an article, an idea of
+ * the owner's own) never counts.
+ */
 export interface FirstWinFacts {
   customerOriginatedConversation?: boolean
-  publishedArticle?: boolean
+  /** Someone outside the team subscribed to status updates themselves. */
+  visitorSubscribed?: boolean
+  /** Someone outside the team marked an article helpful. */
+  visitorFoundHelpful?: boolean
   deleted?: boolean
   externalPost?: boolean
   externalVote?: boolean
   onInternalBoard?: boolean
+  /** The idea is the owner's own. */
+  byOwner?: boolean
   onboardingGenerated?: boolean
   testRecord?: boolean
 }
@@ -36,10 +51,13 @@ export function qualifiesAsFirstWin(outcome: OnboardingOutcome, facts: FirstWinF
   switch (outcome) {
     case 'customer_support':
       return facts.customerOriginatedConversation === true
+    case 'status_page':
+      return facts.visitorSubscribed === true
     case 'help_center':
-      return facts.publishedArticle === true
+      return facts.visitorFoundHelpful === true
     case 'internal':
-      return facts.onInternalBoard === true
+      // A private board has no customers: its win is a teammate who is not the owner.
+      return facts.onInternalBoard === true && facts.byOwner !== true
     case 'product_feedback':
     default:
       return facts.externalPost === true || facts.externalVote === true
@@ -51,77 +69,160 @@ export interface FirstWinResult {
   reachedAt: string | null
 }
 
-const notGeneratedPost = sql`coalesce(${posts.widgetMetadata}->>'onboardingGenerated', 'false') <> 'true'`
-const externalPrincipal = or(eq(principal.role, 'user'), eq(principal.type, 'anonymous'))
+const notGeneratedPost = and(
+  sql`coalesce(${posts.widgetMetadata}->>'onboardingGenerated', 'false') <> 'true'`,
+  notTestPrincipal(posts.principalId)
+)!
+
+/** A person outside the team: a customer or a signed-out visitor, never a test customer. */
+const outsidePerson = and(
+  or(eq(principal.role, 'user'), eq(principal.type, 'anonymous')),
+  notTestPrincipal(principal.id)
+)!
+
+/**
+ * The win rules, as where clauses. Home's celebration card names the record
+ * with these same clauses, so the card and the win can never disagree.
+ */
+export const winRules = {
+  outsidePerson,
+  /**
+   * A conversation the customer opened, by Messenger or email: its first
+   * message is theirs. One a teammate starts does not count. Keyed on
+   * `source` alone, deliberately: `channel` is current state (a thread
+   * promotes to 'email' when the customer replies by mail) and this is
+   * evaluated at read time, so filtering on it would un-reach a genuine win.
+   */
+  customerConversation: and(
+    inArray(conversations.source, ['widget', 'email']),
+    sql`(select ${conversationMessages.senderType} from ${conversationMessages}
+      where ${conversationMessages.conversationId} = ${conversations.id}
+      order by ${conversationMessages.createdAt} asc, ${conversationMessages.id} asc
+      limit 1) = 'visitor'`,
+    isNotNull(conversations.visitorPrincipalId),
+    sql`coalesce(${conversations.customAttributes}->>'onboardingGenerated', 'false') <> 'true'`,
+    sql`coalesce(${conversations.customAttributes}->>'test', 'false') <> 'true'`,
+    notTestPrincipal(conversations.visitorPrincipalId)
+  )!,
+  /** A customer subscribing themselves; subscribers the team adds or imports do not count. Joins principal. */
+  selfServeSubscriber: and(
+    eq(statusSubscriptions.source, 'self_serve'),
+    isNull(statusSubscriptions.unsubscribedAt),
+    outsidePerson
+  )!,
+  /**
+   * A visitor finding an article helpful; publishing one is the team's own
+   * act. A signed-out visitor's vote carries no principal and still counts,
+   * so principal must be LEFT joined.
+   */
+  helpfulVote: and(
+    eq(helpCenterArticleFeedback.helpful, true),
+    isNull(helpCenterArticles.deletedAt),
+    or(isNull(helpCenterArticleFeedback.principalId), outsidePerson)
+  )!,
+  /** An idea by someone outside the team, never one onboarding wrote. Joins principal. */
+  outsideIdea: and(isNull(posts.deletedAt), outsidePerson, notGeneratedPost)!,
+  /** A vote by someone outside the team on a real idea. Joins the voter's principal and the post. */
+  outsideVote: and(isNull(posts.deletedAt), outsidePerson, notGeneratedPost)!,
+}
+
+/** The outcome whose win counts: the primary goal, or the private team board. */
+export function winOutcome(state: SetupState | null): OnboardingOutcome {
+  const primary = state?.goals?.[0] ?? state?.useCase ?? 'product_feedback'
+  return primary === 'product_feedback' && state?.feedbackPrivate ? 'internal' : primary
+}
+
+/** The private team board whose ideas count, and the owner whose own ideas do not. */
+export interface InternalWinScope {
+  boardId: BoardId
+  ownerId: PrincipalId | null
+}
+
+/** Which board and owner a private-board win is judged on. Null with no team board. */
+export async function internalWinScope(state: SetupState | null): Promise<InternalWinScope | null> {
+  const resource = state?.steps.startingPoint
+  const storedBoard =
+    resource?.outcome === 'internal' && resource.resourceType === 'board' && resource.resourceId
+      ? await db.query.boards.findFirst({
+          where: and(eq(boards.id, resource.resourceId as BoardId), isNull(boards.deletedAt)),
+          columns: { id: true },
+        })
+      : null
+  const internalBoard =
+    storedBoard ??
+    (await db.query.boards.findFirst({
+      where: and(isNull(boards.deletedAt), sql`${boards.access}->>'view' = 'team'`),
+      columns: { id: true },
+    }))
+  if (!internalBoard) return null
+  // The owner's own ideas do not count. The owner is who set the workspace
+  // up, recorded once in setup state, so a later change of role does not move
+  // it. Workspaces set up before that was recorded fall back to the earliest
+  // human teammate, whatever role they hold now.
+  const [owner] = state?.ownerPrincipalId
+    ? [{ id: state.ownerPrincipalId as PrincipalId }]
+    : await db
+        .select({ id: principal.id })
+        .from(principal)
+        .where(and(inArray(principal.role, ['admin', 'member']), eq(principal.type, 'user')))
+        .orderBy(asc(principal.createdAt))
+        .limit(1)
+  return { boardId: internalBoard.id as BoardId, ownerId: owner?.id ?? null }
+}
+
+/** A teammate's idea on the scope's board: never the owner's, never one onboarding wrote. */
+export function internalWinPost(scope: InternalWinScope) {
+  return and(
+    eq(posts.boardId, scope.boardId),
+    isNull(posts.deletedAt),
+    notGeneratedPost,
+    scope.ownerId ? ne(posts.principalId, scope.ownerId) : undefined
+  )!
+}
 
 /** Query the first real outcome; onboarding-generated/test records never qualify. */
 export async function detectFirstWin(state: SetupState | null): Promise<FirstWinResult> {
-  const outcome = state?.useCase ?? 'product_feedback'
+  const outcome = winOutcome(state)
   if (outcome === 'customer_support') {
     const [row] = await db
       .select({ reachedAt: conversations.createdAt })
       .from(conversations)
-      .where(
-        and(
-          // Keyed on `source` alone, deliberately. `channel` is now current
-          // state (a thread promotes to 'email' when the customer replies by
-          // mail), and this is evaluated at read time — so filtering on it would
-          // silently UN-REACH a genuine first win the moment that customer
-          // answered from their inbox. `source` is immutable provenance, which
-          // is the question this actually asks.
-          eq(conversations.source, 'widget'),
-          isNotNull(conversations.visitorPrincipalId),
-          sql`coalesce(${conversations.customAttributes}->>'onboardingGenerated', 'false') <> 'true'`,
-          sql`coalesce(${conversations.customAttributes}->>'test', 'false') <> 'true'`
-        )
-      )
+      .where(winRules.customerConversation)
       .orderBy(asc(conversations.createdAt))
+      .limit(1)
+    return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
+  }
+
+  if (outcome === 'status_page') {
+    const [row] = await db
+      .select({ reachedAt: statusSubscriptions.createdAt })
+      .from(statusSubscriptions)
+      .innerJoin(principal, eq(principal.id, statusSubscriptions.principalId))
+      .where(winRules.selfServeSubscriber)
+      .orderBy(asc(statusSubscriptions.createdAt))
       .limit(1)
     return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
   }
 
   if (outcome === 'help_center') {
     const [row] = await db
-      .select({ reachedAt: helpCenterArticles.publishedAt })
-      .from(helpCenterArticles)
-      .where(
-        and(
-          isNull(helpCenterArticles.deletedAt),
-          isNotNull(helpCenterArticles.publishedAt),
-          lte(helpCenterArticles.publishedAt, new Date())
-        )
-      )
-      .orderBy(asc(helpCenterArticles.publishedAt))
+      .select({ reachedAt: helpCenterArticleFeedback.createdAt })
+      .from(helpCenterArticleFeedback)
+      .innerJoin(helpCenterArticles, eq(helpCenterArticles.id, helpCenterArticleFeedback.articleId))
+      .leftJoin(principal, eq(principal.id, helpCenterArticleFeedback.principalId))
+      .where(winRules.helpfulVote)
+      .orderBy(asc(helpCenterArticleFeedback.createdAt))
       .limit(1)
-    return { reached: Boolean(row), reachedAt: row?.reachedAt?.toISOString() ?? null }
+    return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
   }
 
   if (outcome === 'internal') {
-    const resource = state?.steps.startingPoint
-    const storedBoard =
-      resource?.outcome === 'internal' && resource.resourceType === 'board' && resource.resourceId
-        ? await db.query.boards.findFirst({
-            where: and(eq(boards.id, resource.resourceId as BoardId), isNull(boards.deletedAt)),
-            columns: { id: true },
-          })
-        : null
-    const internalBoard =
-      storedBoard ??
-      (await db.query.boards.findFirst({
-        where: and(isNull(boards.deletedAt), sql`${boards.access}->>'view' = 'team'`),
-        columns: { id: true },
-      }))
-    if (!internalBoard) return { reached: false, reachedAt: null }
+    const scope = await internalWinScope(state)
+    if (!scope) return { reached: false, reachedAt: null }
     const [row] = await db
       .select({ reachedAt: posts.createdAt })
       .from(posts)
-      .where(
-        and(
-          eq(posts.boardId, internalBoard.id as BoardId),
-          isNull(posts.deletedAt),
-          notGeneratedPost
-        )
-      )
+      .where(internalWinPost(scope))
       .orderBy(asc(posts.createdAt))
       .limit(1)
     return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
@@ -132,7 +233,7 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
       .select({ reachedAt: posts.createdAt })
       .from(posts)
       .innerJoin(principal, eq(principal.id, posts.principalId))
-      .where(and(isNull(posts.deletedAt), externalPrincipal, notGeneratedPost))
+      .where(winRules.outsideIdea)
       .orderBy(asc(posts.createdAt))
       .limit(1),
     db
@@ -140,7 +241,7 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
       .from(postVotes)
       .innerJoin(principal, eq(principal.id, postVotes.principalId))
       .innerJoin(posts, eq(posts.id, postVotes.postId))
-      .where(and(isNull(posts.deletedAt), externalPrincipal, notGeneratedPost))
+      .where(winRules.outsideVote)
       .orderBy(asc(postVotes.createdAt))
       .limit(1),
   ])

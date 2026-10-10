@@ -8,7 +8,21 @@ const PORTAL_LAYOUT_ROUTE_ID = '/_portal'
 // from their first paint. Everything NOT in this set and NOT under the portal
 // layout renders hard-coded English: the admin app, onboarding, and the auth
 // utility pages like /auth/two-factor and /admin/login.
-const LOCALIZED_ROUTE_IDS = new Set(['/auth/recovery', '/auth/reset-password', '/widget'])
+const LOCALIZED_ROUTE_IDS = new Set([
+  '/auth/recovery',
+  '/auth/reset-password',
+  '/widget',
+  '/unsubscribe',
+  // The AI & Automation pages under settings. The settings layout and the other
+  // settings pages stay English.
+  '/admin/settings/agent',
+  '/admin/settings/copilot',
+  '/admin/settings/skills',
+  '/admin/settings/connectors',
+  '/admin/settings/connectors_/$connectorId',
+  '/admin/settings/workflows',
+  '/admin/settings_/workflows/$workflowId',
+])
 
 /**
  * The locale the SSR document's `<html lang>`/`dir` should advertise, decided
@@ -24,8 +38,7 @@ export function documentLocale(
   resolved: SupportedLocale
 ): SupportedLocale {
   const localized =
-    routeIds.includes(PORTAL_LAYOUT_ROUTE_ID) ||
-    routeIds.some((id) => LOCALIZED_ROUTE_IDS.has(id) || id.startsWith('/admin/automation'))
+    routeIds.includes(PORTAL_LAYOUT_ROUTE_ID) || routeIds.some((id) => LOCALIZED_ROUTE_IDS.has(id))
   return localized ? resolved : DEFAULT_LOCALE
 }
 

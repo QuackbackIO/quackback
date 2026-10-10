@@ -6,10 +6,13 @@
  * challenge that our inbound handler echoes back via X-Hook-Secret.
  */
 
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
+
 const ASANA_API = 'https://app.asana.com/api/1.0'
 
 interface AsanaWebhookResult {
   webhookId: string
+  webhookSecret: string
 }
 
 /**
@@ -20,7 +23,7 @@ export async function registerAsanaWebhook(
   projectGid: string,
   callbackUrl: string
 ): Promise<AsanaWebhookResult> {
-  const response = await fetch(`${ASANA_API}/webhooks`, {
+  const response = await integrationFetch(`${ASANA_API}/webhooks`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -46,20 +49,23 @@ export async function registerAsanaWebhook(
     throw new Error(`Asana API error ${response.status}: ${body}`)
   }
 
-  const result = (await response.json()) as { data?: { gid?: string } }
+  const result = (await response.json()) as { data?: { gid?: string }; 'X-Hook-Secret'?: string }
   const webhookId = result.data?.gid
   if (!webhookId) {
     throw new Error('No webhook ID returned from Asana')
   }
 
-  return { webhookId }
+  const webhookSecret = result['X-Hook-Secret']
+  if (typeof webhookSecret !== 'string' || !webhookSecret)
+    throw new Error('No signing secret returned from Asana')
+  return { webhookId, webhookSecret }
 }
 
 /**
  * Delete a webhook from Asana.
  */
 export async function deleteAsanaWebhook(accessToken: string, webhookId: string): Promise<void> {
-  await fetch(`${ASANA_API}/webhooks/${webhookId}`, {
+  await integrationFetch(`${ASANA_API}/webhooks/${webhookId}`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${accessToken}`,

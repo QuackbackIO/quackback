@@ -11,6 +11,7 @@ import type { Actor } from '@/lib/server/policy/types'
 
 const publish = vi.hoisted(() => ({
   publishConversationEvent: vi.fn(),
+  publishConversationMessage: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
   publishTyping: vi.fn(),

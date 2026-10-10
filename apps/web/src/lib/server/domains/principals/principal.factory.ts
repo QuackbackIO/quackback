@@ -52,7 +52,7 @@ function shouldSyncMembership(args: {
   fromRole?: string | null
   toRole: string
 }): boolean {
-  if (args.type === 'service' || args.type === 'anonymous') return false
+  if (args.type === 'service' || args.type === 'anonymous' || args.type === 'support') return false
   return isTeamMember(args.toRole) || isTeamMember(args.fromRole)
 }
 
@@ -80,6 +80,7 @@ export interface CreatePrincipalInput extends ProfileFields {
   type?: PrincipalType
   userId?: UserId | null
   id?: PrincipalId
+  testOwnerPrincipalId?: PrincipalId | null
 }
 
 /** The one place principal column defaults live. createdAt is always stamped
@@ -89,6 +90,7 @@ function toRow(input: CreatePrincipalInput): typeof principal.$inferInsert {
     id: input.id ?? generateId('principal'),
     userId: input.userId ?? null,
     role: input.role,
+    testOwnerPrincipalId: input.testOwnerPrincipalId ?? null,
     type: input.type ?? 'user',
     displayName: input.displayName ?? null,
     avatarUrl: input.avatarUrl ?? null,
@@ -149,7 +151,8 @@ export interface EnsurePrincipalInput extends ProfileFields {
  * it inserts with `onConflictDoNothing` (the partial unique index on `user_id`
  * is the backstop) and re-reads the winner on a lost race. Returns the existing
  * or newly-created principal plus whether it inserted. Busts the principal cache
- * only when it actually inserts.
+ * only when it actually inserts. An existing row is returned as-is — including
+ * `type='support'` — and is never rewritten to `type='user'`.
  */
 export async function ensurePrincipalForUser(
   input: EnsurePrincipalInput,
@@ -159,6 +162,18 @@ export async function ensurePrincipalForUser(
     where: eq(principal.userId, input.userId),
   })
   if (existing) return { principal: existing, created: false }
+
+  const profile = await exec.query.user.findFirst({
+    where: eq(user.id, input.userId),
+    columns: { metadata: true },
+  })
+  let testOwner: unknown
+  try {
+    testOwner = JSON.parse(profile?.metadata ?? '{}')?.onboarding?.testOwnerPrincipalId
+  } catch {
+    /* Invalid profile metadata has no test identity. */
+  }
+  if (testOwner) throw new Error('A deleted test customer cannot become an ordinary customer')
 
   const [inserted] = await exec
     .insert(principal)
@@ -242,6 +257,12 @@ export interface SetRoleOpts extends MutateOpts {
    * legacy-preset reconciles (system-derived rows stay heal-eligible).
    */
   assignGrantedBy?: PrincipalId
+  /**
+   * Rewrite the workspace assignment to the preset for `role` even when the
+   * role column does not move: clears an explicit grant (a custom role) back
+   * to the plain tier. Ignored with `assignRoleId`.
+   */
+  resetAssignment?: boolean
 }
 
 /**
@@ -318,13 +339,17 @@ export async function setPrincipalRole(
       .limit(1)
       .for('update')
   }
+  if (target?.type === 'support' || current?.type === 'support') {
+    throw new ForbiddenError('SUPPORT_PRINCIPAL', 'Cannot change the role of a support principal')
+  }
   await exec.update(principal).set({ role }).where(whereClause)
   // Reconcile only when the role actually changed or an explicit assignment
   // was requested — a redundant same-role save must not clobber an explicit
   // workspace grant (a custom role) with the legacy preset. A guard-filtered
   // no-op update (no target row) reconciles nothing.
   const roleMoved = !target || target.role !== role || opts.assignRoleId != null
-  if (reconcilable && target && (opts.assignRoleId != null || target.role !== role)) {
+  const reassign = opts.assignRoleId != null || opts.resetAssignment === true
+  if (reconcilable && target && (reassign || target.role !== role)) {
     await reconcileWorkspaceAssignment(
       exec,
       target.id,

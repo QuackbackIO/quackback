@@ -16,6 +16,8 @@ export interface AutocompleteSuggestion {
   value: string
   label?: string
   description?: string
+  /** Shown but not selectable (e.g. non-bindable identity claims). */
+  disabled?: boolean
 }
 
 interface AutocompleteProps {
@@ -89,7 +91,7 @@ export function Autocomplete({
           <ChevronUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-0">
+      <PopoverContent align="start" className="w-(--anchor-width) p-0">
         {open && (
           <Command>
             <CommandInput
@@ -112,7 +114,11 @@ export function Autocomplete({
                     <CommandItem
                       key={s.value}
                       value={[s.value, s.label, s.description].filter(Boolean).join(' ')}
-                      onSelect={() => commit(s.value)}
+                      disabled={s.disabled}
+                      onSelect={() => {
+                        if (s.disabled) return
+                        commit(s.value)
+                      }}
                     >
                       <CheckIcon
                         className={cn(

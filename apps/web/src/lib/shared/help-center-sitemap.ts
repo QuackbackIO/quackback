@@ -3,13 +3,18 @@
  * Builds SitemapUrl[] from categories and articles for the help center sitemap.
  */
 import type { SitemapUrl, SitemapAlternate } from '@/lib/server/sitemap'
-import { localizedHcPath } from './help-center-url'
+import { hcArticlePath, hcCollectionPath, localizedHcPath } from './help-center-url'
+import { DEFAULT_LOCALE } from './i18n'
 
 export interface SitemapCategory {
+  id: string
+  urlId: number
   slug: string
 }
 
 export interface SitemapArticle {
+  id: string
+  urlId: number
   slug: string
   updatedAt: string
   category: { slug: string }
@@ -27,22 +32,25 @@ export interface SitemapArticle {
 export function buildHelpCenterSitemapUrls(
   baseUrl: string,
   categories: SitemapCategory[],
-  articles: SitemapArticle[]
+  articles: SitemapArticle[],
+  locale: string = DEFAULT_LOCALE
 ): SitemapUrl[] {
   const urls: SitemapUrl[] = []
 
   // Landing page
   urls.push({ loc: `${baseUrl}/hc` })
 
-  // Category pages
+  // Collection pages
   for (const cat of categories) {
-    urls.push({ loc: `${baseUrl}/hc/categories/${cat.slug}` })
+    urls.push({
+      loc: `${baseUrl}${hcCollectionPath({ locale, urlId: cat.urlId, slug: cat.slug })}`,
+    })
   }
 
   // Article pages
   for (const article of articles) {
     urls.push({
-      loc: `${baseUrl}/hc/articles/${article.category.slug}/${article.slug}`,
+      loc: `${baseUrl}${hcArticlePath({ locale, urlId: article.urlId, slug: article.slug })}`,
       lastmod: article.updatedAt.split('T')[0],
     })
   }
@@ -56,11 +64,13 @@ export function buildHelpCenterSitemapUrls(
 
 export interface LocaleSitemapCategory {
   id: string
+  urlId: number
   slug: string
 }
 
 export interface LocaleSitemapArticle {
   id: string
+  urlId: number
   slug: string
   updatedAt: string
   category: { slug: string }
@@ -103,13 +113,16 @@ export function buildHelpCenterSitemapUrlsMultiLocale(
     perLocale.map(({ locale }) => [locale, `${baseUrl}${localizedHcPath(locale, '/hc')}`])
   )
   for (const locale of landingByLocale.keys()) {
-    urls.push({ loc: landingByLocale.get(locale)!, alternates: buildAlternates(landingByLocale, defaultLocale) })
+    urls.push({
+      loc: landingByLocale.get(locale)!,
+      alternates: buildAlternates(landingByLocale, defaultLocale),
+    })
   }
 
   const categoryPathsById = new Map<string, Map<string, string>>()
   for (const { locale, categories } of perLocale) {
     for (const cat of categories) {
-      const path = `${baseUrl}${localizedHcPath(locale, `/hc/categories/${cat.slug}`)}`
+      const path = `${baseUrl}${hcCollectionPath({ locale, urlId: cat.urlId, slug: cat.slug })}`
       if (!categoryPathsById.has(cat.id)) categoryPathsById.set(cat.id, new Map())
       categoryPathsById.get(cat.id)!.set(locale, path)
     }
@@ -124,11 +137,9 @@ export function buildHelpCenterSitemapUrlsMultiLocale(
   const articlesById = new Map<string, Map<string, { path: string; lastmod: string }>>()
   for (const { locale, articles } of perLocale) {
     for (const article of articles) {
-      const path = `${baseUrl}${localizedHcPath(locale, `/hc/articles/${article.category.slug}/${article.slug}`)}`
+      const path = `${baseUrl}${hcArticlePath({ locale, urlId: article.urlId, slug: article.slug })}`
       if (!articlesById.has(article.id)) articlesById.set(article.id, new Map())
-      articlesById
-        .get(article.id)!
-        .set(locale, { path, lastmod: article.updatedAt.split('T')[0] })
+      articlesById.get(article.id)!.set(locale, { path, lastmod: article.updatedAt.split('T')[0] })
     }
   }
   for (const byLocale of articlesById.values()) {

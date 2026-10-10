@@ -94,6 +94,25 @@ function emailKeyedResolver(fallback: PrincipalId): ImportUserResolver {
   } as unknown as ImportUserResolver
 }
 
+/** Resolves each distinct author name (when email is empty) to its own principal. */
+function nameKeyedResolver(fallback: PrincipalId): ImportUserResolver {
+  const byName = new Map<string, PrincipalId>()
+  return {
+    resolve: vi.fn(async (email: string | null, name: string | null) => {
+      if (email) return fallback
+      const trimmed = name?.trim()
+      if (!trimmed) return fallback
+      const key = trimmed.toLowerCase()
+      if (!byName.has(key)) byName.set(key, `principal_${key}` as PrincipalId)
+      return byName.get(key)!
+    }),
+    flushPendingCreates: vi.fn().mockResolvedValue(0),
+    get pendingCount() {
+      return byName.size
+    },
+  } as unknown as ImportUserResolver
+}
+
 describe('processBatch', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -107,16 +126,47 @@ describe('processBatch', () => {
     hoisted.deleteWhere.mockResolvedValue(undefined)
   })
 
+  describe('name-only authors', () => {
+    it('attributes a name-only row to the resolved author, not the importer', async () => {
+      const rows = [{ title: 'Row one', content: 'Body one', author_name: 'Jane Doe' }]
+
+      await processBatch(
+        rows,
+        'board_1' as never,
+        0,
+        nameKeyedResolver('principal_fallback' as PrincipalId)
+      )
+
+      const postsInsert = hoisted.insertValues.mock.calls[0][0] as { principalId: string }[]
+      expect(postsInsert[0].principalId).toBe('principal_jane doe')
+    })
+
+    it('skips a row with neither author_name nor author_email', async () => {
+      const result = await processBatch(
+        [{ title: 'Row one', content: 'Body one' }],
+        'board_1' as never,
+        0,
+        fakeResolver('principal_fallback' as PrincipalId)
+      )
+
+      expect(result.imported).toBe(0)
+      expect(result.skipped).toBe(1)
+      expect(result.errors).toEqual([
+        { row: 1, message: 'Author name or email is required', field: 'author_name' },
+      ])
+      expect(hoisted.insertValues).not.toHaveBeenCalled()
+    })
+  })
+
   describe('batch auto-tag', () => {
     it('applies the batch tag to every created post alongside its own tags', async () => {
-      const rows = [{ title: 'Row one', content: 'Body one', tags: 'feature' }]
+      const rows = [{ title: 'Row one', content: 'Body one', tags: 'feature', author_name: 'Jane' }]
 
       await processBatch(
         rows,
         'board_1' as never,
         0,
         fakeResolver('principal_fallback' as PrincipalId),
-        'principal_fallback' as PrincipalId,
         'post_tag_batch' as never
       )
 
@@ -132,14 +182,13 @@ describe('processBatch', () => {
     })
 
     it('omits the batch tag entirely when none is passed (dry-run / legacy path)', async () => {
-      const rows = [{ title: 'Row one', content: 'Body one' }]
+      const rows = [{ title: 'Row one', content: 'Body one', author_name: 'Jane' }]
 
       await processBatch(
         rows,
         'board_1' as never,
         0,
-        fakeResolver('principal_fallback' as PrincipalId),
-        'principal_fallback' as PrincipalId
+        fakeResolver('principal_fallback' as PrincipalId)
       )
 
       // No row tags and no batch tag: the assignments insert never runs, so
@@ -159,6 +208,7 @@ describe('processBatch', () => {
           content: 'Body one',
           status: 'In Progress',
           board: 'Feature Requests',
+          author_name: 'Jane',
         },
       ]
 
@@ -166,8 +216,7 @@ describe('processBatch', () => {
         rows,
         'board_default' as never,
         0,
-        fakeResolver('principal_fallback' as PrincipalId),
-        'principal_fallback' as PrincipalId
+        fakeResolver('principal_fallback' as PrincipalId)
       )
 
       expect(result.createdStatuses).toEqual(['In Progress'])
@@ -193,16 +242,15 @@ describe('processBatch', () => {
       ])
       hoisted.findManyBoards.mockResolvedValue([{ id: 'board_bugs', slug: 'bugs', name: 'Bugs' }])
       const rows = [
-        { title: 'A', content: 'Body', status: 'Open', board: 'Bugs' },
-        { title: 'B', content: 'Body', status: 'open', board: 'bugs' },
+        { title: 'A', content: 'Body', status: 'Open', board: 'Bugs', author_name: 'Jane' },
+        { title: 'B', content: 'Body', status: 'open', board: 'bugs', author_name: 'Jane' },
       ]
 
       const result = await processBatch(
         rows,
         'board_bugs' as never,
         0,
-        fakeResolver('principal_fallback' as PrincipalId),
-        'principal_fallback' as PrincipalId
+        fakeResolver('principal_fallback' as PrincipalId)
       )
 
       expect(result.createdStatuses).toEqual([])
@@ -219,14 +267,15 @@ describe('processBatch', () => {
   describe('source-id idempotence', () => {
     it('creates a new post and an external link when the source_id has not been seen before', async () => {
       hoisted.findManyPostExternalLinks.mockResolvedValue([])
-      const rows = [{ title: 'Row one', content: 'Body one', source_id: 'ext-1' }]
+      const rows = [
+        { title: 'Row one', content: 'Body one', source_id: 'ext-1', author_name: 'Jane' },
+      ]
 
       const result = await processBatch(
         rows,
         'board_1' as never,
         0,
-        fakeResolver('principal_fallback' as PrincipalId),
-        'principal_fallback' as PrincipalId
+        fakeResolver('principal_fallback' as PrincipalId)
       )
 
       expect(result.imported).toBe(1)
@@ -245,14 +294,20 @@ describe('processBatch', () => {
       hoisted.findManyPostExternalLinks.mockResolvedValue([
         { externalId: 'ext-1', postId: 'post_existing' },
       ])
-      const rows = [{ title: 'Updated title', content: 'Updated body', source_id: 'ext-1' }]
+      const rows = [
+        {
+          title: 'Updated title',
+          content: 'Updated body',
+          source_id: 'ext-1',
+          author_name: 'Jane',
+        },
+      ]
 
       const result = await processBatch(
         rows,
         'board_1' as never,
         0,
-        fakeResolver('principal_fallback' as PrincipalId),
-        'principal_fallback' as PrincipalId
+        fakeResolver('principal_fallback' as PrincipalId)
       )
 
       expect(result.imported).toBe(0)
@@ -268,7 +323,13 @@ describe('processBatch', () => {
     it('creates real post_votes rows and sets voteCount from the deduped voter count', async () => {
       hoisted.findManyPostExternalLinks.mockResolvedValue([])
       const rows = [
-        { title: 'Dark mode', content: 'Please', source_id: 'idea-1', vote_count: '99' },
+        {
+          title: 'Dark mode',
+          content: 'Please',
+          source_id: 'idea-1',
+          vote_count: '99',
+          author_name: 'Jane',
+        },
       ]
       const voters = {
         'idea-1': [
@@ -283,7 +344,6 @@ describe('processBatch', () => {
         'board_1' as never,
         0,
         emailKeyedResolver('principal_fallback' as PrincipalId),
-        'principal_fallback' as PrincipalId,
         undefined,
         voters
       )
@@ -308,7 +368,13 @@ describe('processBatch', () => {
     it('falls back to vote-count backfill when no voters entry exists for the row', async () => {
       hoisted.findManyPostExternalLinks.mockResolvedValue([])
       const rows = [
-        { title: 'No voters here', content: 'Body', source_id: 'idea-2', vote_count: '5' },
+        {
+          title: 'No voters here',
+          content: 'Body',
+          source_id: 'idea-2',
+          vote_count: '5',
+          author_name: 'Jane',
+        },
       ]
 
       await processBatch(
@@ -316,7 +382,6 @@ describe('processBatch', () => {
         'board_1' as never,
         0,
         emailKeyedResolver('principal_fallback' as PrincipalId),
-        'principal_fallback' as PrincipalId,
         undefined,
         { 'idea-1': [{ email: 'alice@example.com' }] } // keyed to a different row
       )
@@ -332,7 +397,9 @@ describe('processBatch', () => {
       hoisted.findManyPostExternalLinks.mockResolvedValue([
         { externalId: 'idea-1', postId: 'post_existing' },
       ])
-      const rows = [{ title: 'Dark mode v2', content: 'Please', source_id: 'idea-1' }]
+      const rows = [
+        { title: 'Dark mode v2', content: 'Please', source_id: 'idea-1', author_name: 'Jane' },
+      ]
       const voters = { 'idea-1': [{ email: 'carol@example.com' }] }
 
       const result = await processBatch(
@@ -340,7 +407,6 @@ describe('processBatch', () => {
         'board_1' as never,
         0,
         emailKeyedResolver('principal_fallback' as PrincipalId),
-        'principal_fallback' as PrincipalId,
         undefined,
         voters
       )
@@ -353,6 +419,33 @@ describe('processBatch', () => {
         return Array.isArray(arg) && arg[0]?.sourceType === 'import'
       })
       expect(voteInsertCall).toBeDefined()
+    })
+
+    it('skips voters that have neither email nor name rather than attributing them to the importer', async () => {
+      hoisted.findManyPostExternalLinks.mockResolvedValue([])
+      const rows = [
+        { title: 'Dark mode', content: 'Please', source_id: 'idea-1', author_name: 'Jane' },
+      ]
+      const voters = {
+        'idea-1': [{ email: 'alice@example.com' }, { email: '', name: '' }],
+      }
+
+      await processBatch(
+        rows,
+        'board_1' as never,
+        0,
+        emailKeyedResolver('principal_fallback' as PrincipalId),
+        undefined,
+        voters
+      )
+
+      const voteInsertCall = hoisted.insertValues.mock.calls.find((call) => {
+        const arg = call[0] as { sourceType?: string }[]
+        return Array.isArray(arg) && arg[0]?.sourceType === 'import'
+      })
+      const voteRows = voteInsertCall![0] as { principalId: string }[]
+      expect(voteRows).toHaveLength(1)
+      expect(voteRows[0].principalId).toBe('principal_alice@example.com')
     })
   })
 })

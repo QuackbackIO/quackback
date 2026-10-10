@@ -12,6 +12,7 @@ import type { McpAuthContext } from '../types'
 import {
   registerTool,
   agentFromMcpAuth,
+  attachmentsFromFileIds,
   mcpAgentActor,
   jsonResult,
   compactJsonResult,
@@ -120,6 +121,7 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
           before: args.cursor,
           includeInternal: args.includeInternal ?? false,
           limit: 30,
+          preferAccountName: true,
         }),
       ])
       return jsonResult({
@@ -150,14 +152,21 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
     },
   })
 
-  registerTool<{ conversationId: string; content: string }>(server, auth, {
+  registerTool<{ conversationId: string; content: string; fileIds?: string[] }>(server, auth, {
     name: 'reply_to_conversation',
     description: `Send an agent reply in a conversation (visible to the visitor). Auto-assigns the conversation to the calling agent if unassigned.
+
+Attach files already uploaded with upload_file by passing their ids in fileIds (max 10).
 
 Example: reply_to_conversation({ conversationId: "conversation_01abc...", content: "Thanks for reaching out — we're on it." })`,
     schema: {
       conversationId: z.string().describe('Conversation TypeID'),
       content: z.string().min(1).max(4000).describe('Reply text sent to the visitor'),
+      fileIds: z
+        .array(z.string())
+        .max(10)
+        .optional()
+        .describe('File ids from upload_file to attach to this reply (max 10)'),
     },
     annotations: WRITE,
     scope: 'write:chat',
@@ -170,7 +179,8 @@ Example: reply_to_conversation({ conversationId: "conversation_01abc...", conten
         args.conversationId as ConversationId,
         args.content,
         agent,
-        mcpAgentActor(auth)
+        mcpAgentActor(auth),
+        attachmentsFromFileIds(args.fileIds)
       )
       return jsonResult({
         id: result.message.id,

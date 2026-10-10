@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { getMessengerUnreadFn } from '@/lib/server/functions/conversation'
+import { widgetGetMessengerUnreadFn } from '@/lib/server/functions/widget/conversation'
 
 /**
  * Total unread across ALL the visitor's conversations, for the messenger tab
@@ -14,7 +14,7 @@ export function useMessengerUnread(enabled: boolean): number {
   const { sessionVersion } = useWidgetAuth()
   const { data } = useQuery({
     queryKey: ['widget', 'messenger-unread', sessionVersion],
-    queryFn: () => getMessengerUnreadFn({ headers: getWidgetAuthHeaders() }),
+    queryFn: () => widgetGetMessengerUnreadFn({ headers: getWidgetAuthHeaders() }),
     enabled,
     staleTime: 15_000,
     refetchInterval: 30_000,

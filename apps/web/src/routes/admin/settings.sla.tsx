@@ -11,13 +11,7 @@ import {
   useSuspenseQuery,
 } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ShieldCheckIcon } from '@heroicons/react/24/solid'
-import {
-  CalendarDaysIcon,
-  EllipsisHorizontalIcon,
-  MoonIcon,
-  PauseIcon,
-} from '@heroicons/react/24/outline'
+import { ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { slaTargetsSummary } from '@/lib/shared/conversation/sla'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -31,8 +25,14 @@ import {
   updateSlaPolicyFn,
   type SlaPolicyDTO,
 } from '@/lib/server/functions/sla'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
+import { SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
+import { SlaRulesPopover } from '@/components/admin/settings/sla-rules-popover'
+import { EmptyState } from '@/components/shared/empty-state'
+import { NewButton } from '@/components/shared/new-button'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -47,18 +47,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { warmQuery } from '@/lib/client/queries/warm-query'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const slaPoliciesQuery = queryOptions({
   queryKey: ['settings', 'slaPolicies'],
@@ -73,6 +70,7 @@ const slaOfficeHoursQuery = queryOptions({
 })
 
 export const Route = createFileRoute('/admin/settings/sla')({
+  head: adminPageHead('SLA settings'),
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'support')) {
       throw redirect({ to: '/admin/settings/general' })
@@ -83,6 +81,8 @@ export const Route = createFileRoute('/admin/settings/sla')({
     await Promise.all([
       context.queryClient.ensureQueryData(slaPoliciesQuery),
       context.queryClient.ensureQueryData(settingsQueries.defaultSlaPolicy()),
+      // The policies' office-hours note reads these on first paint.
+      warmQuery(context.queryClient, slaOfficeHoursQuery),
     ])
     return {}
   },
@@ -176,102 +176,83 @@ function SlaSettingsPage() {
   })
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
-      </div>
-      <PageHeader
-        icon={ShieldCheckIcon}
-        title="SLA policies"
-        description="Response and resolution targets your team commits to. A default can apply when a conversation starts; workflows can still replace it."
-      />
-
+    <SettingsPage page="/admin/settings/sla" description="Response and resolution targets.">
       <SettingsCard>
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <div className="text-sm font-medium">
-              {intl.formatMessage({
-                id: 'settings.sla.defaultPolicy',
-                defaultMessage: 'Default policy',
-              })}
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {intl.formatMessage({
-                id: 'settings.sla.defaultPolicyHint',
-                defaultMessage: 'Applied when a conversation starts',
-              })}
-            </p>
-          </div>
-          <Select
-            value={defaultSla?.policyId ?? DEFAULT_SLA_NONE}
-            onValueChange={(value) =>
-              updateDefaultSla.mutate({ policyId: value === DEFAULT_SLA_NONE ? null : value })
+        <SettingRows>
+          <SettingRow
+            label={intl.formatMessage({
+              id: 'settings.sla.defaultPolicy',
+              defaultMessage: 'Default policy',
+            })}
+            description={intl.formatMessage({
+              id: 'settings.sla.defaultPolicyHint',
+              defaultMessage: 'Applied when a conversation starts',
+            })}
+            control={
+              <>
+                <SlaRulesPopover />
+                <Select
+                  value={defaultSla?.policyId ?? DEFAULT_SLA_NONE}
+                  onValueChange={(value) =>
+                    updateDefaultSla.mutate({ policyId: value === DEFAULT_SLA_NONE ? null : value })
+                  }
+                  disabled={updateDefaultSla.isPending}
+                >
+                  <SelectTrigger size="sm" className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={DEFAULT_SLA_NONE}>
+                      {intl.formatMessage({
+                        id: 'settings.sla.defaultPolicyNone',
+                        defaultMessage: 'None',
+                      })}
+                    </SelectItem>
+                    {live.map((policy) => (
+                      <SelectItem key={policy.id} value={policy.id}>
+                        {policy.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
             }
-            disabled={updateDefaultSla.isPending}
-          >
-            <SelectTrigger size="sm" className="w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={DEFAULT_SLA_NONE}>
-                {intl.formatMessage({
-                  id: 'settings.sla.defaultPolicyNone',
-                  defaultMessage: 'None',
-                })}
-              </SelectItem>
-              {live.map((policy) => (
-                <SelectItem key={policy.id} value={policy.id}>
-                  {policy.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          />
+        </SettingRows>
       </SettingsCard>
 
       <SettingsCard
         title="Policies"
-        description="Live policies can be applied by workflows; archived ones keep their history."
         action={
-          <Button type="button" size="sm" onClick={() => setEditor({ mode: 'create', seed: null })}>
-            New policy
-          </Button>
+          <NewButton noun="policy" onClick={() => setEditor({ mode: 'create', seed: null })} />
         }
-        contentClassName="p-0 sm:p-0"
+        flush
       >
-        <div className="flex gap-1 border-b border-border/50 px-4 pt-2 sm:px-6">
-          {(
-            [
-              { id: 'live', label: `Live${live.length ? ` (${live.length})` : ''}` },
-              {
-                id: 'archived',
-                label: `Archived${archived.length ? ` (${archived.length})` : ''}`,
-              },
-            ] as const
-          ).map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={
-                tab === t.id
-                  ? 'border-b-2 border-primary px-2 pb-2 text-sm font-medium text-foreground'
-                  : 'border-b-2 border-transparent px-2 pb-2 text-sm text-muted-foreground hover:text-foreground'
-              }
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          value={tab}
+          onValueChange={(value) => setTab(value as 'live' | 'archived')}
+          variant="line"
+          className="gap-0 px-4 sm:px-6"
+        >
+          <TabsList className="h-9">
+            <TabsTrigger value="live" className="pb-2">
+              {`Live${live.length ? ` (${live.length})` : ''}`}
+            </TabsTrigger>
+            <TabsTrigger value="archived" className="pb-2">
+              {`Archived${archived.length ? ` (${archived.length})` : ''}`}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {rows.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-muted-foreground sm:px-6">
-            {tab === 'live'
-              ? 'No SLA policies yet. Create one, then apply it from a workflow.'
-              : 'No archived policies.'}
-          </p>
+          <EmptyState
+            size="compact"
+            icon={ShieldCheckIcon}
+            title={tab === 'live' ? 'No SLA policies yet' : 'No archived policies'}
+            description={tab === 'live' ? 'Create one, then apply it from a workflow.' : undefined}
+          />
         ) : (
-          <div className="divide-y divide-border/40">
+          <SettingsList>
             {rows.map((p) => (
               <PolicyRow
                 key={p.id}
@@ -283,41 +264,8 @@ function SlaSettingsPage() {
                 onRestore={() => restoreMutation.mutate(p.id)}
               />
             ))}
-          </div>
+          </SettingsList>
         )}
-      </SettingsCard>
-
-      <SettingsCard
-        title="How SLAs apply"
-        description="The rules the clock engine follows once a policy is on a conversation."
-      >
-        <ul className="list-disc space-y-1.5 pl-4 text-xs text-muted-foreground">
-          <li>
-            A default policy can be applied when a conversation starts. Workflows can still apply a
-            different policy through the Apply SLA action.
-          </li>
-          <li>
-            A conversation carries one active SLA. Applying another policy replaces it and restarts
-            the reply clocks; re-applying the same policy keeps the elapsed time.
-          </li>
-          <li>
-            The time-to-resolve target runs on the linked customer ticket, not the conversation. It
-            is applied by a workflow (Apply SLA → Linked ticket), or automatically when a customer
-            ticket is linked to a conversation that already carries the policy.
-          </li>
-          <li>
-            Targets are snapshotted at apply time. Editing a policy affects future applications
-            only, never clocks already running.
-          </li>
-          <li>
-            Clocks count only your workspace office hours when they are configured — holidays pause
-            them too; otherwise they run around the clock.
-          </li>
-          <li>
-            Archived policies can no longer be applied, but they stay on conversations that already
-            carry them and in reports.
-          </li>
-        </ul>
       </SettingsCard>
 
       {editor && (
@@ -331,7 +279,7 @@ function SlaSettingsPage() {
           }}
         />
       )}
-    </div>
+    </SettingsPage>
   )
 }
 
@@ -354,64 +302,37 @@ function PolicyRow({
 }) {
   const isArchived = !!policy.archivedAt
   const usedBy = policy.usedByWorkflows
+  const details = [
+    slaTargetsSummary(policy),
+    policy.pauseOnSnooze ? 'Pauses on snooze' : null,
+    // Only shown when the ticket clock exists; the flag is inert otherwise.
+    policy.pauseOnPending && policy.timeToResolveTargetSecs ? 'Pauses while pending' : null,
+  ].filter(Boolean)
   return (
-    <div className="flex items-start justify-between gap-3 px-4 py-3 sm:px-6">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium">{policy.name}</span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-            <CalendarDaysIcon className="h-3 w-3" aria-hidden />
-            {officeHoursEnabled ? 'Office hours' : '24/7'}
-          </span>
-          {policy.pauseOnSnooze && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-              <MoonIcon className="h-3 w-3" aria-hidden />
-              Pauses on snooze
-            </span>
-          )}
-          {/* Only shown when the ticket clock exists — the flag is inert otherwise. */}
-          {policy.pauseOnPending && policy.timeToResolveTargetSecs && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-              <PauseIcon className="h-3 w-3" aria-hidden />
-              Pauses while pending
-            </span>
-          )}
-        </div>
-        <p className="mt-0.5 text-xs text-muted-foreground">{slaTargetsSummary(policy)}</p>
-        {usedBy.length > 0 && (
-          <p
-            className="mt-0.5 cursor-default text-[11px] text-muted-foreground/80 underline decoration-dotted underline-offset-2"
+    <SettingsListRow
+      title={policy.name}
+      meta={details.join(' · ')}
+      badges={officeHoursEnabled && <Badge variant="secondary">Office hours</Badge>}
+      trailing={
+        usedBy.length > 0 && (
+          <span
+            className="cursor-default underline decoration-dotted underline-offset-2"
             title={usedBy.map((w) => `${w.name} (${w.status})`).join('\n')}
           >
             Used by {usedBy.length} {usedBy.length === 1 ? 'workflow' : 'workflows'}
-          </p>
-        )}
-      </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label={`Actions for ${policy.name}`}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <EllipsisHorizontalIcon className="h-4 w-4" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {isArchived ? (
-            <DropdownMenuItem onClick={onRestore}>Restore</DropdownMenuItem>
-          ) : (
-            <>
-              <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
-              <DropdownMenuItem onClick={onClone}>Clone</DropdownMenuItem>
-              <DropdownMenuItem onClick={onArchive} className="text-destructive">
-                Archive
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+          </span>
+        )
+      }
+      actions={
+        isArchived
+          ? [{ label: 'Restore', onSelect: onRestore }]
+          : [
+              { label: 'Edit', onSelect: onEdit },
+              { label: 'Clone', onSelect: onClone },
+              { label: 'Archive', onSelect: onArchive },
+            ]
+      }
+    />
   )
 }
 
@@ -444,7 +365,7 @@ function PolicyEditorDialog({
 
   const { data: officeHours } = useQuery(slaOfficeHoursQuery)
   const officeHoursEnabled = officeHours?.officeHoursEnabled ?? false
-  // The pending pause only moves the ticket's resolve clock — without a
+  // The pending pause only moves the ticket's resolve clock; without a
   // time-to-resolve target the flag is inert (the policy row likewise hides
   // its chip then), so the switch stays off-limits until one is set.
   const hasResolveTarget = toSecs(targets.timeToResolveTargetSecs) != null
@@ -611,7 +532,7 @@ function PolicyEditorDialog({
               ) : (
                 <>
                   Clocks run around the clock.{' '}
-                  <Link to="/admin/settings/office-hours" className="font-medium text-primary">
+                  <Link to="/admin/settings/office-hours" className={INLINE_LINK}>
                     Set office hours
                   </Link>{' '}
                   to make clocks count only open time.

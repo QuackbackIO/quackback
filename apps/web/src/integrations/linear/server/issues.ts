@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Linear issue-tracker capability: issue creation. No `parseRef` on purpose —
  * Linear's inbound webhook identifies issues by internal UUID (`data.id`),
@@ -32,7 +33,7 @@ async function linearGraphql(
   query: string,
   variables?: Record<string, unknown>
 ): Promise<{ data?: Record<string, unknown>; errors?: Array<{ message: string }> }> {
-  const response = await fetch(LINEAR_API, {
+  const response = await integrationFetch(LINEAR_API, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -55,6 +56,36 @@ async function linearGraphql(
 }
 
 export const linearIssues: IssueTrackerCapability = {
+  async inspect({ auth, reference }) {
+    if (!/^(?:[a-zA-Z][a-zA-Z0-9]*-\d+|[a-fA-F0-9-]{36})$/.test(reference))
+      throw new Error('Use the Linear issue identifier or model UUID')
+    const result = await linearGraphql(
+      String(auth.accessToken),
+      'query SyncIssue($id: String!) { issue(id: $id) { id identifier url title description updatedAt team { id } } }',
+      { id: reference }
+    )
+    const issue = result.data?.issue as
+      | {
+          id: string
+          identifier: string
+          url: string
+          title: string
+          description: string | null
+          updatedAt: string
+          team: { id: string }
+        }
+      | undefined
+    if (result.errors?.length || !issue || issue.team.id !== auth.channelId)
+      throw new Error('Issue is unavailable in this destination')
+    return {
+      externalId: issue.id,
+      externalDisplayId: issue.identifier,
+      externalUrl: issue.url,
+      title: issue.title,
+      content: issue.description ?? '',
+      version: issue.updatedAt,
+    }
+  },
   async create({ auth, title, bodyMarkdown }): Promise<ParsedIssueRef> {
     const teamId = auth.channelId as string
     const accessToken = auth.accessToken as string

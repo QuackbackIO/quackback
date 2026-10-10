@@ -65,6 +65,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 })
 
 import { handleTransform } from '../transform'
+import { SSE_KEEPALIVE_INTERVAL_MS } from '@/lib/server/domains/assistant/agui'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { NotFoundError } from '@/lib/shared/errors'
 import { generateId } from '@quackback/ids'
@@ -363,5 +364,37 @@ describe('POST /api/admin/assistant/transform: ticket-scoped (unified inbox §2.
     expect(mockRunCopilotTransform).toHaveBeenCalledWith(
       expect.objectContaining({ transform: 'more_friendly', text: SOURCE_TEXT })
     )
+  })
+
+  it('keeps a transform that is still thinking alive with SSE comments', async () => {
+    let release!: () => void
+    mockRunCopilotTransform.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ text: 'Rewritten.' })
+        })
+    )
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    try {
+      const res = await handleTransform({ request: makeRequest(validBody()) })
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      expect(decoder.decode((await reader.read()).value)).toContain('RUN_STARTED')
+
+      const next = reader.read()
+      await vi.advanceTimersByTimeAsync(SSE_KEEPALIVE_INTERVAL_MS)
+      expect(decoder.decode((await next).value)).toBe(': keepalive\n\n')
+
+      release()
+      let rest = ''
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        rest += decoder.decode(value)
+      }
+      expect(parseAguiSse(rest).at(-1)).toMatchObject({ type: 'RUN_FINISHED' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

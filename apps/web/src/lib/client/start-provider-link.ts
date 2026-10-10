@@ -17,15 +17,9 @@ export async function startProviderLink(args: {
   providerType: 'oidc' | 'social'
   callbackURL: string
 }): Promise<string | null> {
-  const result =
-    args.providerType === 'oidc'
-      ? await authClient.oauth2.link({
-          providerId: args.providerId,
-          callbackURL: args.callbackURL,
-        })
-      : await authClient.linkSocial({
-          provider: args.providerId,
-          callbackURL: args.callbackURL,
-        })
+  const result = await authClient.linkSocial({
+    provider: args.providerId,
+    callbackURL: args.callbackURL,
+  })
   return (result.data as { url?: string } | null)?.url ?? null
 }

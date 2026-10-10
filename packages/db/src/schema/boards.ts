@@ -4,6 +4,7 @@ import {
   timestamp,
   jsonb,
   integer,
+  boolean,
   index,
   uniqueIndex,
   check,
@@ -129,6 +130,9 @@ export const postTags = pgTable(
     // Matching rule for AI auto-tagging: new posts are evaluated against every
     // tag whose prompt is set, and matching tags are assigned automatically.
     aiPrompt: text('ai_prompt'),
+    // Portal visibility: when false the tag is internal — non-team portal
+    // viewers never see it in filter lists or on posts. Team actors see all.
+    isPublic: boolean('is_public').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

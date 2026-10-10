@@ -61,16 +61,19 @@ export function randomColor(): string {
 interface ColorPickerGridProps {
   selectedColor: string
   onColorChange: (color: string) => void
+  /** Defaults to the full preset palette. Pass a slice for a compact row. */
+  colors?: readonly string[]
 }
 
 /** An 8-column grid of preset swatches, the current color ringed. */
 export function ColorPickerGrid({
   selectedColor,
   onColorChange,
+  colors = PRESET_COLORS,
 }: ColorPickerGridProps): React.ReactElement {
   return (
     <div className="grid grid-cols-8 gap-1.5">
-      {PRESET_COLORS.map((c) => (
+      {colors.map((c) => (
         <button
           key={c}
           type="button"

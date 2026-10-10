@@ -56,13 +56,6 @@ vi.mock('@/lib/server/integrations/encryption', () => ({
   decryptSecrets: vi.fn((s: string) => JSON.parse(s)),
 }))
 
-vi.mock('@/lib/server/integrations/jira/access-token', () => ({
-  getJiraAccessToken: vi.fn(async (integration: { secrets: unknown }) => {
-    const parsed = JSON.parse(integration.secrets as string) as { accessToken?: string }
-    return parsed.accessToken
-  }),
-}))
-
 vi.mock('@/lib/server/domains/webhooks/encryption', () => ({
   decryptWebhookSecret: vi.fn((s: string) => s),
 }))
@@ -150,6 +143,7 @@ describe('integration mapping caching', () => {
       {
         eventType: 'post.created',
         integrationType: 'slack',
+        integrationId: 'integration-slack',
         secrets: JSON.stringify({ accessToken: 'xoxb-test' }),
         integrationConfig: { channelId: 'C123' },
         actionConfig: { channelId: 'C123' },
@@ -183,6 +177,7 @@ describe('integration mapping caching', () => {
       {
         eventType: 'post.created',
         integrationType: 'slack',
+        integrationId: 'integration-slack',
         secrets: JSON.stringify({ accessToken: 'xoxb-test' }),
         integrationConfig: {},
         actionConfig: { channelId: 'C123' },
@@ -191,6 +186,7 @@ describe('integration mapping caching', () => {
       {
         eventType: 'post.status_changed',
         integrationType: 'slack',
+        integrationId: 'integration-slack',
         secrets: JSON.stringify({ accessToken: 'xoxb-test' }),
         integrationConfig: {},
         actionConfig: { channelId: 'C456' },
@@ -208,11 +204,41 @@ describe('integration mapping caching', () => {
     expect(slackTargets[0].target).toEqual({ channelId: 'C123' })
   })
 
+  it('reloads legacy mappings that do not identify their connection', async () => {
+    cacheByKey({
+      mappings: [
+        { eventType: 'post.created', integrationType: 'slack', actionConfig: { channelId: 'OLD' } },
+      ],
+      webhooks: [],
+    })
+    const current = [
+      {
+        eventType: 'post.created',
+        integrationType: 'slack',
+        integrationId: 'integration-current',
+        integrationConfig: {},
+        actionConfig: { channelId: 'CURRENT' },
+        filters: null,
+      },
+    ]
+    setupIntegrationDbChain(current)
+    const targets = await getHookTargets(makePostCreatedEvent())
+    expect(targets.filter((t) => t.type === 'slack')).toEqual([
+      {
+        type: 'slack',
+        target: { channelId: 'CURRENT' },
+        config: { integrationId: 'integration-current' },
+      },
+    ])
+    expect(mockCacheSet).toHaveBeenCalledWith('hooks:integration-mappings', current, 300)
+  })
+
   it('queries DB and caches on miss', async () => {
     const dbRows = [
       {
         eventType: 'post.created',
         integrationType: 'slack',
+        integrationId: 'integration-slack',
         secrets: JSON.stringify({ accessToken: 'xoxb-test' }),
         integrationConfig: {},
         actionConfig: { channelId: 'C789' },
@@ -240,6 +266,7 @@ describe('integration hook config', () => {
   function mapping(overrides: Record<string, unknown>) {
     return {
       eventType: 'post.created',
+      integrationId: 'integration-test',
       secrets: JSON.stringify({ accessToken: 'tok' }),
       actionConfig: { channelId: 'chan' },
       filters: null,
@@ -253,7 +280,7 @@ describe('integration hook config', () => {
     return getHookTargets(makePostCreatedEvent())
   }
 
-  it('forwards stored integration config and lets accessToken/rootUrl win', async () => {
+  it('keeps stale cached credentials and provider configuration out of queued jobs', async () => {
     const [jira] = (
       await targetsFor(
         mapping({
@@ -269,15 +296,11 @@ describe('integration hook config', () => {
       )
     ).filter((t) => t.type === 'jira')
 
-    expect(jira.config).toMatchObject({
-      cloudId: 'cloud-1',
-      siteUrl: 'https://ex.atlassian.net',
-      accessToken: 'tok',
-      rootUrl: 'https://test.quackback.io',
-    })
+    expect(jira.config).toEqual({ integrationId: 'integration-test' })
+    expect(jira.target).toEqual({ channelId: '10000:10001' })
   })
 
-  it('forwards organizationName, apiKey, and teamId from stored config', async () => {
+  it('queues connection references consistently across providers', async () => {
     cacheByKey({
       mappings: [
         mapping({
@@ -300,12 +323,11 @@ describe('integration hook config', () => {
     })
 
     const targets = await getHookTargets(makePostCreatedEvent())
-    expect(targets.find((t) => t.type === 'azure_devops')?.config).toMatchObject({
-      organizationName: 'acme',
-      accessToken: 'tok',
-    })
-    expect(targets.find((t) => t.type === 'trello')?.config).toMatchObject({ apiKey: 'key-1' })
-    expect(targets.find((t) => t.type === 'teams')?.config).toMatchObject({ teamId: 'team-1' })
+    for (const provider of ['azure_devops', 'trello', 'teams']) {
+      expect(targets.find((t) => t.type === provider)?.config).toEqual({
+        integrationId: 'integration-test',
+      })
+    }
   })
 
   it('does not put inbound webhook fields on the hook job', async () => {
@@ -325,7 +347,7 @@ describe('integration hook config', () => {
       )
     ).filter((t) => t.type === 'jira')
 
-    expect(jira.config).toMatchObject({ cloudId: 'cloud-1', accessToken: 'tok' })
+    expect(jira.config).toEqual({ integrationId: 'integration-test' })
     expect(jira.config).not.toHaveProperty('webhookSecret')
     expect(jira.config).not.toHaveProperty('statusMappings')
     expect(jira.config).not.toHaveProperty('statusSyncEnabled')

@@ -1,16 +1,16 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PlanNoticeBanner } from '../plan-notice-banner'
 
 const ENDED = {
-  label: 'Pro trial',
-  message: "You're on the Free plan. Nothing was deleted.",
+  label: 'Pro trial ended',
+  message: 'Your trial has come to an end.',
   expiresAt: '2026-08-18T00:00:00.000Z',
-  actionLabel: 'Continue with Pro',
+  actionLabel: 'Update billing',
   actionUrl: '/admin/settings/billing',
-  dismissible: true,
+  ended: true,
 }
 
 const OPERATOR = {
@@ -23,13 +23,33 @@ describe('PlanNoticeBanner', () => {
     cleanup()
   })
 
-  it('still shows an operator notice after an ended-trial dismiss', async () => {
-    const { rerender } = render(<PlanNoticeBanner notice={ENDED} />)
-    expect(await screen.findByText('Pro trial')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    expect(screen.queryByText('Pro trial')).not.toBeInTheDocument()
+  it('renders an ended-trial strip with no dismiss control', () => {
+    render(<PlanNoticeBanner notice={ENDED} />)
+    expect(screen.getByText('Pro trial ended')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Update billing/ })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing'
+    )
+    expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument()
+  })
 
-    rerender(<PlanNoticeBanner notice={OPERATOR} />)
-    expect(await screen.findByText('Scheduled maintenance')).toBeInTheDocument()
+  it('renders a self-host operator notice', () => {
+    render(<PlanNoticeBanner notice={OPERATOR} />)
+    expect(screen.getByText('Scheduled maintenance')).toBeInTheDocument()
+  })
+
+  it('waits for the last three days of a trial before it shows', () => {
+    const days = (n: number) => ({
+      label: 'Pro trial',
+      message: 'When this ends, pick a plan.',
+      expiresAt: new Date(Date.now() + n * 86_400_000 - 60_000).toISOString(),
+      actionLabel: 'See plans',
+      actionUrl: '/admin/settings/billing',
+    })
+    render(<PlanNoticeBanner notice={days(14)} />)
+    expect(screen.queryByText('Pro trial')).not.toBeInTheDocument()
+    cleanup()
+    render(<PlanNoticeBanner notice={days(3)} />)
+    expect(screen.getByText('Pro trial')).toBeInTheDocument()
   })
 })

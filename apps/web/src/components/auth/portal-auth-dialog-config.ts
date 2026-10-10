@@ -1,5 +1,6 @@
 import type { OrgAuthConfig } from './auth-dialog'
 import { DEFAULT_AUTH_CONFIG } from '@/lib/shared/types/settings'
+import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 
 /**
  * Everything the portal's sign-in dialog needs to know about this workspace.
@@ -19,7 +20,7 @@ export interface PortalAuthDialogConfigInput {
     twoFactor?: { required?: boolean }
   } | null
   publicPortalConfig?: {
-    oidcProviders?: { id: string; name: string }[]
+    oidcProviders?: OidcSignInButton[]
     openSignup?: boolean
   } | null
   registeredAuthProviders: string[]

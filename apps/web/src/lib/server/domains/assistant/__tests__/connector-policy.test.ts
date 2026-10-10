@@ -44,4 +44,17 @@ describe('connector approvalPolicy', () => {
       'autonomous'
     )
   })
+
+  it('workspace create/assign feedback with always runs as the asking teammate', () => {
+    const workspace = {
+      role: 'workspace_assistant',
+      writeToolPolicy: 'propose',
+    } as AssistantToolContext
+    expect(
+      resolveEffectiveToolMode(spec({ name: 'create_post', approvalPolicy: 'always' }), workspace)
+    ).toBe('autonomous')
+    expect(
+      resolveEffectiveToolMode(spec({ name: 'delete_post', approvalPolicy: 'approval' }), workspace)
+    ).toBe('propose')
+  })
 })

@@ -16,6 +16,7 @@ are opt-in: a webhook only receives the event types listed in its subscription.
 | `message.created`                 | A visitor or agent sends a public message.                                                                       |
 | `message.note_created`            | An agent adds an **internal note**. Private content — subscribe only if your endpoint should receive it.         |
 | `message.deleted`                 | A public message is soft-deleted.                                                                                |
+| `message.updated`                 | The author edits a public message. The payload carries the new body. Internal-note edits are not emitted.       |
 
 Internal-note deletions are not emitted. System messages (e.g. "chat ended") are
 represented by `conversation.*` events, not `message.created`. Anonymous visitors'

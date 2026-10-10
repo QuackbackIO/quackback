@@ -5,6 +5,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 export interface TrelloOAuthState {
   type: 'trello_oauth'
@@ -39,7 +40,8 @@ export const getTrelloConnectUrl = createServerFn({ method: 'GET' }).handler(
     const { hasPlatformCredentials } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
     if (!(await hasPlatformCredentials('trello'))) {
-      throw new Error(
+      throw new ValidationError(
+        'PLATFORM_CREDENTIALS_NOT_CONFIGURED',
         'Trello platform credentials not configured. Configure them in integration settings first.'
       )
     }
@@ -65,7 +67,7 @@ export const fetchTrelloBoardsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<TrelloBoard[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
     const { listTrelloBoards } = await import('@/integrations/trello/server/boards')
     const { logger } = await import('@/lib/server/logger')
     const log = logger.child({ component: 'trello' })
@@ -85,8 +87,9 @@ export const fetchTrelloBoardsFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('Trello secrets missing')
     }
 
-    const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
-    const cfg = (integration.config ?? {}) as { apiKey?: string }
+    const auth = await getIntegrationAuth(integration.id)
+    const secrets = { accessToken: auth.accessToken }
+    const cfg = (auth.config ?? {}) as { apiKey?: string }
 
     if (!secrets.accessToken || !cfg.apiKey) {
       throw new Error('Trello credentials missing')
@@ -106,7 +109,7 @@ export const fetchTrelloListsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<TrelloList[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
     const { listTrelloLists } = await import('@/integrations/trello/server/boards')
     const { logger } = await import('@/lib/server/logger')
     const log = logger.child({ component: 'trello' })
@@ -122,8 +125,9 @@ export const fetchTrelloListsFn = createServerFn({ method: 'POST' })
       throw new Error('Trello not connected')
     }
 
-    const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets!)
-    const cfg = (integration.config ?? {}) as { apiKey?: string }
+    const auth = await getIntegrationAuth(integration.id)
+    const secrets = { accessToken: auth.accessToken }
+    const cfg = (auth.config ?? {}) as { apiKey?: string }
 
     if (!secrets.accessToken || !cfg.apiKey) {
       throw new Error('Trello credentials missing')

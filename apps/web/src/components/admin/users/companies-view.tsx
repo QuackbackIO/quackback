@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import {
   BuildingOffice2Icon,
-  PlusIcon,
   ChevronRightIcon,
   ArrowDownTrayIcon,
   BanknotesIcon,
@@ -9,13 +8,16 @@ import {
 } from '@heroicons/react/24/solid'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { cn } from '@/lib/shared/utils'
 import { EmptyState } from '@/components/shared/empty-state'
-import { SearchInput } from '@/components/shared/search-input'
-import { FilterChip } from '@/components/shared/filter-chip'
+import { FilterAddButton, FilterChip } from '@/components/shared/filter-chip'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
+import { AdminListHeader } from '@/components/admin/admin-list-header'
+import { NewButton } from '@/components/shared/new-button'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { MENU_LABEL } from '@/components/ui/menu'
+import { cn } from '@/lib/shared/utils'
 import { Label } from '@/components/ui/label'
 import {
   Dialog,
@@ -49,19 +51,13 @@ export function formatMonthlySpend(mrrCents: number | null): string {
   })
 }
 
-/** Record-origin badge: 'api' (SDK/REST sync) vs 'manual' (agent qualification). */
+/** Record-origin token: only the synced source (SDK or REST) is marked; the default, manual, shows nothing. */
 export function SourceBadge({ source }: { source: 'api' | 'manual' }) {
+  if (source === 'manual') return null
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide',
-        source === 'manual'
-          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-500'
-          : 'bg-muted text-muted-foreground'
-      )}
-    >
-      {source}
-    </span>
+    <Badge variant="secondary" size="sm">
+      API
+    </Badge>
   )
 }
 
@@ -178,6 +174,7 @@ const STANDARD_FILTER_CATEGORIES: { key: string; label: string; kind: 'string' |
   { key: 'industry', label: 'Industry', kind: 'string' },
 ]
 
+/** The Filter control that opens the category menu; lives in the list toolbar. */
 function AddCompanyFilterButton({
   companyAttrs,
   onChange,
@@ -230,17 +227,7 @@ function AddCompanyFilterButton({
       }}
     >
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs',
-            'border border-dashed border-border/50 text-muted-foreground',
-            'hover:text-foreground hover:border-border hover:bg-muted/30 transition-colors'
-          )}
-        >
-          <PlusIcon className="h-3 w-3" />
-          Add filter
-        </button>
+        <FilterAddButton />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-52 p-0">
         {category === null ? (
@@ -342,6 +329,7 @@ function CompanyFiltersBar({
   onChange: (encoded: string | undefined) => void
 }) {
   const parts = splitParts(companyAttrs)
+  if (parts.length === 0) return null
 
   const removePart = (part: string) => {
     const remaining = parts.filter((p) => p !== part)
@@ -373,7 +361,6 @@ function CompanyFiltersBar({
           />
         )
       })}
-      <AddCompanyFilterButton companyAttrs={companyAttrs} onChange={onChange} />
       {parts.length > 1 && (
         <button
           type="button"
@@ -521,41 +508,37 @@ export function CompaniesView({
 
   return (
     <div className="max-w-5xl w-full">
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <SearchInput
-            value={searchValue}
-            onChange={setSearchValue}
-            placeholder="Search companies..."
-            data-search-input
-          />
-          <div className="flex-1" />
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
-            <a href={buildCompaniesExportUrl(search, companyAttrs)} download>
-              <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-              Export CSV
-            </a>
-          </Button>
-          {canManage && (
-            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
-              <PlusIcon className="h-3.5 w-3.5" />
-              New company
+      <AdminListHeader
+        searchValue={searchValue}
+        onSearchChange={setSearchValue}
+        searchPlaceholder="Search companies..."
+        filters={
+          <AddCompanyFilterButton companyAttrs={companyAttrs} onChange={onCompanyAttrsChange} />
+        }
+        action={
+          <>
+            <Button variant="outline" size="sm" asChild>
+              <a href={buildCompaniesExportUrl(search, companyAttrs)} download>
+                <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+                Export CSV
+              </a>
             </Button>
-          )}
-        </div>
-
-        <div className="mt-2">
+            {canManage && <NewButton noun="company" onClick={() => setCreateOpen(true)} />}
+          </>
+        }
+      >
+        <div className="mt-2 empty:hidden">
           <CompanyFiltersBar companyAttrs={companyAttrs} onChange={onCompanyAttrsChange} />
         </div>
 
         <div className="mt-2 text-xs text-muted-foreground">
           {total} {total === 1 ? 'company' : 'companies'}
         </div>
-      </div>
+      </AdminListHeader>
 
       <div className="p-3">
         {isLoading ? (
-          <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+          <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3 p-3">
                 <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
@@ -575,7 +558,7 @@ export function CompaniesView({
               description={
                 hasActiveFilters
                   ? "Try adjusting your filters to find what you're looking for."
-                  : 'Companies appear here when people are linked to one, via the API or an agent.'
+                  : 'Companies appear here when users are linked to one, via the API or an agent.'
               }
               action={
                 hasActiveFilters ? (
@@ -595,14 +578,17 @@ export function CompaniesView({
             />
           </div>
         ) : (
-          <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+          <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
             {/* Column header */}
-            <div className="hidden sm:flex items-center gap-3 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-muted/30">
-              <span className="flex-1 min-w-0">Company</span>
-              <span className="w-24 text-left">Plan</span>
-              <span className="w-24 text-right">Monthly spend</span>
-              <span className="w-16 text-right">People</span>
-              <span className="w-16 text-right">Source</span>
+            <div className="hidden sm:flex items-center gap-3 px-3 py-2">
+              <div className="h-9 w-9 shrink-0" aria-hidden="true" />
+              <span className={cn('min-w-0 flex-1', MENU_LABEL)}>Company</span>
+              <span className={cn('w-24 text-left', MENU_LABEL)}>Plan</span>
+              <span className={cn('w-28 whitespace-nowrap text-right', MENU_LABEL)}>
+                Monthly spend
+              </span>
+              <span className={cn('w-16 text-right', MENU_LABEL)}>Users</span>
+              <span className={cn('w-16 text-right', MENU_LABEL)}>Source</span>
             </div>
             {companies.map((company) => (
               <button
@@ -629,7 +615,12 @@ export function CompaniesView({
                     <span className="text-xs text-muted-foreground/60">-</span>
                   )}
                 </span>
-                <span className="w-24 shrink-0 text-right text-xs tabular-nums text-foreground hidden sm:block">
+                <span
+                  className={cn(
+                    'w-28 shrink-0 text-right text-xs tabular-nums hidden sm:block',
+                    company.mrrCents == null ? 'text-muted-foreground/60' : 'text-foreground'
+                  )}
+                >
                   {formatMonthlySpend(company.mrrCents)}
                 </span>
                 <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">

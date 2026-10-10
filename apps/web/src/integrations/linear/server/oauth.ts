@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Linear OAuth utilities.
  */
@@ -127,7 +128,7 @@ export async function refreshLinearToken(
     throw new Error('Linear credentials not configured')
   }
 
-  const response = await fetch(`${LINEAR_API}/oauth/token`, {
+  const response = await integrationFetch(`${LINEAR_API}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

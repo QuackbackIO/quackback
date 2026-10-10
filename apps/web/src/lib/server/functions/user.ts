@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import type { Role } from '@/lib/shared/roles'
-import { createServerFn } from '@tanstack/react-start'
+import { assertNotWidgetScope, toSessionScope, type Role } from '@/lib/shared/roles'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import { type UserId, type PrincipalId } from '@quackback/ids'
 import { getSession } from '@/lib/server/auth/session'
 import { requireAuth } from './auth-helpers'
@@ -180,18 +180,24 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
   }
 )
 
+function requireNonWidgetSession(session: Awaited<ReturnType<typeof getSession>>) {
+  if (!session?.user) {
+    throw new Error('Authentication required')
+  }
+  assertNotWidgetScope(toSessionScope(session.session.scope))
+  return session
+}
+
 /**
  * Update current user's display name.
- * Only requires authentication - any logged-in user can update their own name.
+ * Widget Bearers cannot rename a shared teammate row; portal-scoped
+ * customers after widget handoff still can.
  */
 export const updateProfileNameFn = createServerFn({ method: 'POST' })
   .validator(updateProfileNameSchema)
   .handler(async ({ data }: { data: UpdateProfileNameInput }): Promise<UserProfile> => {
     log.debug('update profile name')
-    const session = await getSession()
-    if (!session?.user) {
-      throw new Error('Authentication required')
-    }
+    const session = requireNonWidgetSession(await getSession())
     const { name } = data
 
     const [updated] = await db
@@ -210,15 +216,12 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
 
 /**
  * Remove custom avatar.
- * Only requires authentication - any logged-in user can remove their own avatar.
+ * Widget Bearers cannot clear a teammate avatar; portal-scoped customers can.
  */
 export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<UserProfile> => {
     log.debug('remove avatar')
-    const session = await getSession()
-    if (!session?.user) {
-      throw new Error('Authentication required')
-    }
+    const session = requireNonWidgetSession(await getSession())
 
     await deleteExistingAvatar(session.user.id)
 
@@ -245,10 +248,7 @@ export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
   .validator(saveAvatarKeySchema)
   .handler(async ({ data }: { data: z.infer<typeof saveAvatarKeySchema> }) => {
     log.debug('save avatar key')
-    const session = await getSession()
-    if (!session?.user) {
-      throw new Error('Authentication required')
-    }
+    const session = requireNonWidgetSession(await getSession())
 
     await deleteExistingAvatar(session.user.id)
 
@@ -305,7 +305,8 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
       data: UpdateNotificationPreferencesInput
     }): Promise<NotificationPreferences> => {
       log.debug('update notification preferences')
-      const principalId = await requirePrincipalId()
+      const ctx = await requireAuth()
+      const principalId = ctx.principal.id
       const { emailStatusChange, emailNewComment, emailMuted, matrix } = data
 
       const updates: {
@@ -344,27 +345,31 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
 // User Engagement Stats
 // ============================================
 
+export const runGetUserStats = createServerOnlyFn(async function runGetUserStats(
+  principalId: PrincipalId
+): Promise<UserEngagementStats> {
+  log.debug('get user stats')
+  const [ideasResult, votesResult, commentsResult] = await Promise.all([
+    db
+      .select({ count: count() })
+      .from(posts)
+      .where(and(eq(posts.principalId, principalId), isNull(posts.deletedAt))),
+    db.select({ count: count() }).from(postVotes).where(eq(postVotes.principalId, principalId)),
+    db
+      .select({ count: count() })
+      .from(postComments)
+      .where(and(eq(postComments.principalId, principalId), isNull(postComments.deletedAt))),
+  ])
+
+  return {
+    ideas: ideasResult[0]?.count ?? 0,
+    votes: votesResult[0]?.count ?? 0,
+    comments: commentsResult[0]?.count ?? 0,
+  }
+})
+
 export const getUserStatsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<UserEngagementStats> => {
-    log.debug('get user stats')
-    const principalId = await requirePrincipalId()
-
-    const [ideasResult, votesResult, commentsResult] = await Promise.all([
-      db
-        .select({ count: count() })
-        .from(posts)
-        .where(and(eq(posts.principalId, principalId), isNull(posts.deletedAt))),
-      db.select({ count: count() }).from(postVotes).where(eq(postVotes.principalId, principalId)),
-      db
-        .select({ count: count() })
-        .from(postComments)
-        .where(and(eq(postComments.principalId, principalId), isNull(postComments.deletedAt))),
-    ])
-
-    return {
-      ideas: ideasResult[0]?.count ?? 0,
-      votes: votesResult[0]?.count ?? 0,
-      comments: commentsResult[0]?.count ?? 0,
-    }
+    return runGetUserStats(await requirePrincipalId())
   }
 )

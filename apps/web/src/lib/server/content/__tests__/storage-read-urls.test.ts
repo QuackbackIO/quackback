@@ -91,10 +91,26 @@ describe('withCurrentStorageReadTokens', () => {
     expect(rewritten?.content?.[0]?.attrs?.src).toBe(minted)
   })
 
+  it('never mints a link for a pipeline file named inline', () => {
+    const src = '/api/storage/files/2026/10/0b1c-report.png?read=old&exp=1'
+    const rewritten = withWorkspace(
+      'workspace-alpha',
+      () => withCurrentStorageReadTokens(doc([{ type: 'chatImage', attrs: { src } }])),
+      { secrets: SHARED_SECRET }
+    )
+    expect(rewritten.content?.[0]?.attrs?.src).toBe(src)
+  })
+
   it('leaves a foreign CDN src untouched', () => {
     const rewritten = withCurrentStorageReadTokens(
       doc([{ type: 'image', attrs: { src: 'https://cdn.example.com/b.png' } }])
     )
     expect(rewritten.content?.[0]?.attrs?.src).toBe('https://cdn.example.com/b.png')
+  })
+
+  it('leaves an unsigned public portal-images src unsigned', () => {
+    const src = 'https://feedback.example.com/api/storage/portal-images/2026/04/shot.png'
+    const rewritten = withCurrentStorageReadTokens(doc([{ type: 'image', attrs: { src } }]))
+    expect(rewritten.content?.[0]?.attrs?.src).toBe('/api/storage/portal-images/2026/04/shot.png')
   })
 })

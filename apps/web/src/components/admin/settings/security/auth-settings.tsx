@@ -1,9 +1,5 @@
+import { FORM_WIDTH_CLASS } from '@/components/admin/settings/settings-page'
 import { useNavigate } from '@tanstack/react-router'
-import {
-  ArrowRightOnRectangleIcon,
-  GlobeAltIcon,
-  DocumentTextIcon,
-} from '@heroicons/react/24/solid'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PortalAuthTab } from './portal-auth-tab'
 import { SignInProvidersTab } from './sign-in-providers-tab'
@@ -76,19 +72,10 @@ export function AuthSettings({
       variant="line"
       className="space-y-6"
     >
-      <TabsList>
-        <TabsTrigger value="portal-access">
-          <GlobeAltIcon />
-          Portal access
-        </TabsTrigger>
-        <TabsTrigger value="sign-in">
-          <ArrowRightOnRectangleIcon />
-          Sign-in
-        </TabsTrigger>
-        <TabsTrigger value="audit-log">
-          <DocumentTextIcon />
-          Audit log
-        </TabsTrigger>
+      <TabsList className={FORM_WIDTH_CLASS}>
+        <TabsTrigger value="portal-access">Portal access</TabsTrigger>
+        <TabsTrigger value="sign-in">Sign-in</TabsTrigger>
+        <TabsTrigger value="audit-log">Audit log</TabsTrigger>
       </TabsList>
 
       <TabsContent value="portal-access">

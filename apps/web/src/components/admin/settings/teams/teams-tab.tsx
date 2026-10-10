@@ -1,16 +1,17 @@
 import { useState } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { UserGroupIcon, PencilSquareIcon, TrashIcon, PlusIcon } from '@heroicons/react/24/solid'
+import { UserGroupIcon } from '@heroicons/react/24/solid'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { deleteTeamFn, type TeamDTO } from '@/lib/server/functions/teams'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
+import { NewButton } from '@/components/shared/new-button'
+import { EmptyState } from '@/components/shared/empty-state'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TeamDialog } from '@/components/admin/settings/teams/team-dialog'
 import type { FeatureFlags } from '@/lib/shared/types'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 const METHOD_LABELS: Record<string, string> = {
   manual: 'Manual',
@@ -23,7 +24,7 @@ const METHOD_LABELS: Record<string, string> = {
  *  shows when the support inbox is enabled. */
 export function TeamsTab() {
   const queryClient = useQueryClient()
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const showAssignmentMethod = !!flags?.supportInbox
 
@@ -63,75 +64,54 @@ export function TeamsTab() {
     <div className="space-y-6">
       <SettingsCard
         title="Teams"
-        description="Group teammates into named teams"
-        action={
-          <Button size="sm" onClick={openCreate}>
-            <PlusIcon className="h-4 w-4" />
-            New team
-          </Button>
-        }
-        contentClassName="p-0 sm:p-0 divide-y divide-border/50"
+        description="Group teammates into named teams."
+        action={teams.length > 0 ? <NewButton noun="team" onClick={openCreate} /> : undefined}
+        flush
       >
         {teams.length === 0 ? (
-          <p className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-            No teams yet
-          </p>
+          <EmptyState
+            size="compact"
+            icon={UserGroupIcon}
+            title="No teams yet"
+            description="Group teammates so work can be assigned to a team."
+            action={<NewButton noun="team" onClick={openCreate} />}
+          />
         ) : (
-          teams.map((team) => (
-            <div key={team.id} className="flex items-center gap-3 p-4">
-              <div
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg"
-                style={{ backgroundColor: team.color ? `${team.color}22` : undefined }}
-              >
-                {team.icon || <UserGroupIcon className="h-4 w-4 text-muted-foreground" />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-foreground truncate">
-                  {team.name}
-                  {team.isDefault && (
-                    <Badge variant="outline" className="ml-2 bg-muted/50">
-                      Default
-                    </Badge>
-                  )}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {team.memberCount} {team.memberCount === 1 ? 'member' : 'members'}
-                  {showAssignmentMethod && (
-                    <>
-                      <span className="mx-1">&middot;</span>
-                      {METHOD_LABELS[team.assignmentMethod] ?? team.assignmentMethod}
-                    </>
-                  )}
-                  {team.description ? (
-                    <>
-                      <span className="mx-1">&middot;</span>
-                      {team.description}
-                    </>
-                  ) : null}
-                </p>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => openEdit(team)}
-                  aria-label="Edit team"
-                >
-                  <PencilSquareIcon className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setDeleting(team)}
-                  disabled={team.isDefault}
-                  aria-label="Delete team"
-                  title={team.isDefault ? 'The default team cannot be deleted' : 'Delete team'}
-                >
-                  <TrashIcon className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ))
+          <SettingsList>
+            {teams.map((team) => (
+              <SettingsListRow
+                key={team.id}
+                leading={
+                  <div
+                    className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-base"
+                    style={{ backgroundColor: team.color ? `${team.color}22` : undefined }}
+                  >
+                    {team.icon || <UserGroupIcon className="size-4 text-muted-foreground" />}
+                  </div>
+                }
+                title={team.name}
+                meta={[
+                  `${team.memberCount} ${team.memberCount === 1 ? 'member' : 'members'}`,
+                  showAssignmentMethod
+                    ? (METHOD_LABELS[team.assignmentMethod] ?? team.assignmentMethod)
+                    : null,
+                  team.description || null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+                actions={[
+                  { label: 'Edit', onSelect: () => openEdit(team) },
+                  {
+                    label: 'Delete',
+                    destructive: true,
+                    disabled: team.isDefault,
+                    hint: team.isDefault ? 'The default team cannot be deleted' : undefined,
+                    onSelect: () => setDeleting(team),
+                  },
+                ]}
+              />
+            ))}
+          </SettingsList>
         )}
       </SettingsCard>
 
@@ -145,14 +125,14 @@ export function TeamsTab() {
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
-        title="Delete team"
+        title="Delete team?"
         description={
           deleting
             ? `Delete "${deleting.name}"? Conversations assigned to it will become team-unassigned.`
             : ''
         }
         variant="destructive"
-        confirmLabel="Delete"
+        confirmLabel="Delete team"
         isPending={deletePending}
         onConfirm={handleDelete}
       />

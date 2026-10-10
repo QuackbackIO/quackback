@@ -152,6 +152,43 @@ describe('PortalAuthFormInline — OAuth-only Stage 1 (#231)', () => {
     fireEvent.click(screen.getByRole('button', { name: /sign in with custom oidc/i }))
     expect(await screen.findByText(/failed to initiate sign in/i)).toBeInTheDocument()
   })
+
+  it('renders the uploaded provider logo on the OAuth tile', () => {
+    getEnabledOAuthProvidersMock.mockReturnValue([
+      {
+        id: 'oidc_acme',
+        name: 'Acme',
+        type: 'generic-oauth',
+        logoUrl: 'https://cdn.test/idp-logos/acme.png',
+      },
+    ])
+    render(
+      <PortalAuthFormInline
+        mode="login"
+        authConfig={{ found: true, oauth: { password: false, magicLink: false, oidc_acme: true } }}
+      />
+    )
+    const button = screen.getByRole('button', { name: /sign in with acme/i })
+    expect(button.querySelector('img')).toHaveAttribute(
+      'src',
+      'https://cdn.test/idp-logos/acme.png'
+    )
+  })
+
+  it('falls back to no image when a provider has no logo and no bundled icon', () => {
+    getEnabledOAuthProvidersMock.mockReturnValue([
+      { id: 'oidc_acme', name: 'Acme', type: 'generic-oauth', logoUrl: null },
+    ])
+    render(
+      <PortalAuthFormInline
+        mode="login"
+        authConfig={{ found: true, oauth: { password: false, magicLink: false, oidc_acme: true } }}
+      />
+    )
+    expect(
+      screen.getByRole('button', { name: /sign in with acme/i }).querySelector('img')
+    ).toBeNull()
+  })
 })
 
 describe('PortalAuthFormInline — recovery-code break-glass link', () => {

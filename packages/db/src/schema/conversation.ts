@@ -15,6 +15,7 @@ import {
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
+import { workspaceAssistantThreads } from './workspace-assistant'
 import { teams } from './teams'
 import { channelAccounts } from './channel-accounts'
 // conversation <-> tickets is a mutual import cycle (tickets FKs conversations,
@@ -262,6 +263,7 @@ export const conversationMessages = pgTable(
     // below guarantees precisely one is set.
     conversationId: typeIdColumnNullable('conversation')('conversation_id'),
     ticketId: typeIdColumnNullable('ticket')('ticket_id'),
+    workspaceThreadKey: text('workspace_thread_key'),
     // Nullable: system events (e.g. assignment notices) have no human author.
     principalId: typeIdColumnNullable('principal')('principal_id'),
     // Explicit sender side for rendering + authorization, independent of the
@@ -288,6 +290,10 @@ export const conversationMessages = pgTable(
     ),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
+    // Set when a person edits the message body. Distinct from updatedAt, which
+    // also moves on soft-delete. Null until the first edit; the thread renders
+    // it as a small "(edited)" mark beside the timestamp.
+    editedAt: timestamp('edited_at', { withTimezone: true }),
     // Soft delete support, mirroring comments.
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     deletedByPrincipalId: typeIdColumnNullable('principal')('deleted_by_principal_id'),
@@ -307,8 +313,27 @@ export const conversationMessages = pgTable(
     // Exactly one parent: a message belongs to a conversation XOR a ticket.
     check(
       'conversation_messages_parent_check',
-      sql`num_nonnulls(${table.conversationId}, ${table.ticketId}) = 1`
+      sql`num_nonnulls(${table.conversationId}, ${table.ticketId}, ${table.workspaceThreadKey}) = 1`
     ),
+    foreignKey({
+      name: 'conversation_messages_workspace_thread_key_fkey',
+      columns: [table.workspaceThreadKey],
+      foreignColumns: [workspaceAssistantThreads.key],
+    }).onDelete('cascade'),
+    check(
+      'conversation_messages_workspace_internal_check',
+      sql`${table.workspaceThreadKey} IS NULL OR ${table.isInternal} = true`
+    ),
+    index('conversation_messages_workspace_created_idx')
+      .on(table.workspaceThreadKey, table.createdAt, table.id)
+      .where(sql`${table.workspaceThreadKey} IS NOT NULL`),
+    uniqueIndex('conversation_messages_workspace_run_sender_idx')
+      .on(
+        table.workspaceThreadKey,
+        sql`(${table.metadata}->'workspaceTurn'->>'runId')`,
+        table.senderType
+      )
+      .where(sql`${table.workspaceThreadKey} IS NOT NULL`),
     foreignKey({
       name: 'conversation_messages_principal_id_fkey',
       columns: [table.principalId],
@@ -365,6 +390,10 @@ export const conversationMessages = pgTable(
     uniqueIndex('conversation_messages_email_message_id_idx')
       .using('btree', sql`(metadata ->> 'emailMessageId')`)
       .where(sql`(metadata ->> 'emailMessageId') IS NOT NULL`),
+    // Inbound GitHub comment dedupe: one message per REST comment id.
+    uniqueIndex('conversation_messages_github_comment_id_idx')
+      .using('btree', sql`(metadata ->> 'githubCommentId')`)
+      .where(sql`(metadata ->> 'githubCommentId') IS NOT NULL`),
     // Inbound-webhook dedupe: one external-status system note per (ticket,
     // delivery) — a redelivered tracker webhook no-ops instead of double-noting
     // (same idiom as emailMessageId above; one delivery fans to many tickets,

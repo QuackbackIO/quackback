@@ -1,3 +1,4 @@
+import { DEFAULT_WORKSPACE_ASSISTANT } from '@/lib/shared/assistant/config'
 import { describe, expect, it } from 'vitest'
 import type { StoredAssistantConfig } from '@/lib/shared/db-types'
 import {
@@ -58,12 +59,13 @@ const _assistantConfigTwinsAgree: _AssistantConfigTwinsAgree = true
 describe('assistantConfigSchema', () => {
   it('accepts and preserves the V3 default', () => {
     expect(assistantConfigSchema.parse(DEFAULT_ASSISTANT_CONFIG)).toEqual({
-      version: 3,
+      version: 4,
       identity: {
         name: 'Quinn',
         avatarUrl: null,
       },
       agents: {
+        workspace: structuredClone(DEFAULT_WORKSPACE_ASSISTANT),
         agent: {
           voice: {
             tone: 'balanced',
@@ -238,6 +240,7 @@ describe('assistant configuration normalization', () => {
     expect(normalizeAssistantConfig(input)).toMatchObject({
       identity: { name: 'Quinn وكيل' },
       agents: {
+        workspace: structuredClone(DEFAULT_WORKSPACE_ASSISTANT),
         agent: {
           voice: {
             additionalInstructions: 'Use café ☕.\nاكتب بالعربية.\nכתוב בעברית.',
@@ -377,6 +380,13 @@ describe('assistant role catalogue', () => {
 })
 
 describe('roleToAgent', () => {
+  it('uses the existing Copilot configuration for workspace chat while preserving Slack', () => {
+    expect(roleToAgent('workspace_assistant', 'workspace')).toBe('copilot')
+    expect(roleToAgent('workspace_assistant', 'slack')).toBe('workspace')
+    expect(roleToAgent('workspace_assistant')).toBe('workspace')
+    expect(roleToAgent('copilot_qa', 'copilot')).toBe('copilot')
+    expect(roleToAgent('customer_support', 'widget')).toBe('agent')
+  })
   it('maps customer-facing roles to the Agent and copilot_qa to the Copilot (D9)', () => {
     expect(roleToAgent('customer_support')).toBe('agent')
     expect(roleToAgent('copilot_qa')).toBe('copilot')

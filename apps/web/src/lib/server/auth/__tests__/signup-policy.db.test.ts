@@ -36,7 +36,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { settings, principal, user, invitation, sql } from '@/lib/server/db'
+import { settings, principal, user, invitation, sql, DEFAULT_SETUP_STATE } from '@/lib/server/db'
+import { finishIdentityOnboarding } from '@/lib/server/setup-state'
+import { mergeSetupState } from '@/lib/server/config-file/reconciler'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -48,7 +50,15 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getWorkspaceSettings: hoisted.getWorkspaceSettings,
 }))
 
+// The real lookup, watched, so a test can tell whether the gate asked it.
+vi.mock('@/lib/server/domains/principals/bootstrap-admin', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/server/domains/principals/bootstrap-admin')>()
+  return { ...actual, findSetupClaimant: vi.fn(actual.findSetupClaimant) }
+})
+
 const { isAccountCreationAllowed } = await import('../signup-policy')
+const { findSetupClaimant } = await import('@/lib/server/domains/principals/bootstrap-admin')
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -60,12 +70,15 @@ const fixture = await createDbTestFixture({
   },
 })
 
-async function seedSettings(opts: { stamp?: string; metadataStamp?: string } = {}): Promise<void> {
+async function seedSettings(
+  opts: { stamp?: string; metadataStamp?: string; setupState?: string } = {}
+): Promise<void> {
   await testDb.insert(settings).values({
     id: createId('workspace'),
     name: 'Acme',
     slug: `acme-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date(),
+    setupState: opts.setupState ?? null,
     metadata: opts.metadataStamp
       ? JSON.stringify({ cloudTenant: { v: 1, workspaceKey: opts.metadataStamp, stampedAt: '' } })
       : null,
@@ -86,6 +99,18 @@ async function seedUser(email: string): Promise<UserId> {
     updatedAt: new Date(),
   })
   return id
+}
+
+/** An account as sign-up leaves it, or a widget visitor's anonymous one. */
+async function seedAccount(email: string, type: 'user' | 'anonymous' = 'user'): Promise<void> {
+  const userId = await seedUser(email)
+  await testDb.insert(principal).values({
+    id: createId('principal') as PrincipalId,
+    userId,
+    role: 'user',
+    type,
+    createdAt: new Date(),
+  })
 }
 
 async function seedAdmin(email: string): Promise<void> {
@@ -367,6 +392,153 @@ describe.skipIf(!fixture.available)('isAccountCreationAllowed', () => {
       })
 
       expect(await isAccountCreationAllowed('first@acme.example', 'portal')).toBe(true)
+    })
+
+    // A finished install whose human admins are gone is not waiting for a
+    // first user. Its closed setting stands, as the workspace step would
+    // refuse the claim anyway.
+    it('keeps sign-ups closed on a finished install with only a service admin', async () => {
+      await seedSettings({
+        setupState: JSON.stringify(
+          finishIdentityOnboarding(
+            { ...DEFAULT_SETUP_STATE, steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true } },
+            'product_feedback'
+          )
+        ),
+      })
+      await testDb.insert(principal).values({
+        id: createId('principal') as PrincipalId,
+        userId: null,
+        role: 'admin',
+        type: 'service',
+        createdAt: new Date(),
+      })
+
+      expect(await isAccountCreationAllowed('stranger@evil.example', 'portal')).toBe(false)
+    })
+
+    // The first account created while setup is open claims it. Nothing but
+    // the wizard is reachable yet, so nobody else needs an account, and one
+    // made now could only be a second claim on the install.
+    it('takes no second account once the first has claimed setup', async () => {
+      hoisted.getWorkspaceSettings.mockResolvedValue(null)
+      await seedAccount('owner@acme.example')
+
+      expect(await isAccountCreationAllowed('second@elsewhere.example', 'portal')).toBe(false)
+    })
+
+    it('takes no second account while setup is claimed, even with sign-ups open', async () => {
+      await seedSettings()
+      hoisted.getWorkspaceSettings.mockResolvedValue({ ...OPEN, settings: { setupState: null } })
+      await seedAccount('owner@acme.example')
+
+      expect(await isAccountCreationAllowed('second@elsewhere.example', 'portal')).toBe(false)
+      expect(findSetupClaimant).toHaveBeenCalled()
+    })
+
+    it('still lets the account that claimed setup sign back in', async () => {
+      hoisted.getWorkspaceSettings.mockResolvedValue(null)
+      await seedAccount('owner@acme.example')
+
+      expect(await isAccountCreationAllowed('owner@acme.example', 'portal')).toBe(true)
+    })
+
+    it('is not closed by an anonymous visitor who arrived first', async () => {
+      hoisted.getWorkspaceSettings.mockResolvedValue(null)
+      await seedAccount('temp-visitor@anon.quackback.io', 'anonymous')
+
+      expect(await isAccountCreationAllowed('first@acme.example', 'portal')).toBe(true)
+    })
+
+    // A workspace the config file stamped complete has a live portal, so its
+    // accounts are customers and its own signup setting governs.
+    it('keeps a workspace stamped complete open to sign-ups it allows', async () => {
+      await seedSettings({
+        setupState: JSON.stringify(
+          mergeSetupState(null, { name: 'Acme', onboardingComplete: true })
+        ),
+      })
+      hoisted.getWorkspaceSettings.mockResolvedValue(OPEN)
+      await seedAccount('customer@elsewhere.example')
+
+      expect(await isAccountCreationAllowed('another@elsewhere.example', 'portal')).toBe(true)
+    })
+
+    // The operator's way out of a stranded install: SETUP_OWNER_EMAIL names
+    // whose setup it is, and only that address may create an account until
+    // setup is finished.
+    describe('with a named setup owner', () => {
+      beforeEach(() => {
+        process.env.SETUP_OWNER_EMAIL = 'Owner@Acme.Example'
+        hoisted.getWorkspaceSettings.mockResolvedValue(null)
+      })
+      afterEach(() => {
+        delete process.env.SETUP_OWNER_EMAIL
+      })
+
+      it('lets the named address create its account after another claimed setup', async () => {
+        await seedAccount('smoke-test@elsewhere.example')
+
+        expect(await isAccountCreationAllowed('owner@acme.example', 'portal')).toBe(true)
+      })
+
+      it('takes no account from anyone else, first or not', async () => {
+        expect(await isAccountCreationAllowed('first@elsewhere.example', 'portal')).toBe(false)
+
+        await seedAccount('smoke-test@elsewhere.example')
+        expect(await isAccountCreationAllowed('second@elsewhere.example', 'portal')).toBe(false)
+      })
+
+      it('still lets an existing account sign in', async () => {
+        await seedAccount('smoke-test@elsewhere.example')
+
+        expect(await isAccountCreationAllowed('smoke-test@elsewhere.example', 'portal')).toBe(true)
+      })
+
+      // Read on every workspace a process serves, so it must not open one a
+      // control plane created.
+      it('opens no provisioned workspace to the named address', async () => {
+        await seedSettings({ stamp: 'ws_acme' })
+        hoisted.getWorkspaceSettings.mockResolvedValue(CLOSED)
+
+        expect(await isAccountCreationAllowed('owner@acme.example', 'portal')).toBe(false)
+      })
+    })
+
+    // Every portal email sign-in asks this gate, and a finished install is the
+    // steady state. Its cached settings already say setup is done, which is
+    // the one state in which nobody can hold a setup claim.
+    describe('once setup is complete', () => {
+      const finished = JSON.stringify(
+        finishIdentityOnboarding(
+          { ...DEFAULT_SETUP_STATE, steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true } },
+          'product_feedback'
+        )
+      )
+
+      it('does not look for a setup claim', async () => {
+        await seedSettings({ setupState: finished })
+        await seedAdmin('owner@acme.example')
+        hoisted.getWorkspaceSettings.mockResolvedValue({
+          ...OPEN,
+          settings: { setupState: finished },
+        })
+
+        expect(await isAccountCreationAllowed('customer@elsewhere.example', 'portal')).toBe(true)
+        expect(findSetupClaimant).not.toHaveBeenCalled()
+      })
+
+      it('still refuses by its own setting, without looking for a setup claim', async () => {
+        await seedSettings({ setupState: finished })
+        await seedAdmin('owner@acme.example')
+        hoisted.getWorkspaceSettings.mockResolvedValue({
+          ...CLOSED,
+          settings: { setupState: finished },
+        })
+
+        expect(await isAccountCreationAllowed('stranger@evil.example', 'portal')).toBe(false)
+        expect(findSetupClaimant).not.toHaveBeenCalled()
+      })
     })
 
     it('lets an existing account sign in on a closed workspace', async () => {

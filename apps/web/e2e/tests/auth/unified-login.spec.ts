@@ -216,7 +216,7 @@ test('(3) private portal gate: sign-in in the gate lands on /admin', async ({ pa
 // the break-glass recovery-code link (callbackUrl=/admin satisfies isTeamCallback).
 //
 // DEFERRED — anonymous `/` → IdP redirect: requires a live OIDC discovery
-// document. The instant-SSO resolver calls auth.api.signInWithOAuth2 which
+// document. The instant-SSO resolver calls auth.api.signInSocial which
 // fetches the provider's discovery URL; with a synthetic URL this returns null
 // and no redirect fires. Tracking: run this sub-case against the CI environment
 // where a mock-OIDC container is available.

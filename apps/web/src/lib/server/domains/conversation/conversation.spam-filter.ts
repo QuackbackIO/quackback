@@ -17,6 +17,9 @@
  * TRUSTED-SENDER BYPASS. A sender on the workspace trust list
  * (settings.spam) never reaches the model at all: the workspace's explicit
  * "never spam" list outranks any classifier verdict.
+ *
+ * WORKSPACE SWITCH. `aiClassifier` in the same settings turns the model call
+ * off entirely. The deterministic sender signals are not AI and still run.
  */
 import { chat } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
@@ -32,6 +35,7 @@ import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-midd
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { logger } from '@/lib/server/logger'
+import type { SpamFilterConfig } from '@/lib/server/domains/settings/settings.spam'
 import type { SpamSignalHints } from './conversation.spam-signals'
 
 const log = logger.child({ component: 'spam-filter' })
@@ -92,9 +96,23 @@ async function isTrustedInboundSender(senderEmail: string | null): Promise<boole
  * Never throws.
  */
 export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Promise<boolean> {
-  // Trusted senders bypass classification entirely — checked first so a
-  // trusted sender never even spends a completion.
-  if (await isTrustedInboundSender(input.senderEmail)) return false
+  // The workspace switch and the trust list are both read before any
+  // completion. An unreadable config cannot show the workspace opted in, so
+  // it skips the model and the message stays in triage.
+  const { getSpamFilterConfig, isTrustedSender } =
+    await import('@/lib/server/domains/settings/settings.spam')
+  let spamConfig: SpamFilterConfig
+  try {
+    spamConfig = await getSpamFilterConfig()
+  } catch (err) {
+    log.warn({ err }, 'spam classification skipped: spam filter config unreadable')
+    return false
+  }
+  if (!spamConfig.aiClassifier) return false
+  if (isTrustedSender(input.senderEmail, spamConfig.trustedSenders)) {
+    log.info({ sender: input.senderEmail }, 'spam filing bypassed: trusted sender')
+    return false
+  }
 
   const model = getChatModel('classification')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return false
@@ -161,6 +179,9 @@ export async function maybeAutoFileSpam(
   input: ClassifyInboundSpamInput & { signals?: SpamSignalHints }
 ): Promise<boolean> {
   try {
+    // A teammate's test thread is never spam, and spends no classification.
+    const { isTestConversation } = await import('@/lib/server/test-data')
+    if (await isTestConversation(conversationId)) return false
     if (await isTrustedInboundSender(input.senderEmail)) return false
     const { detectSpamSignal } = await import('./conversation.spam-signals')
     const signal = await detectSpamSignal({ senderEmail: input.senderEmail, ...input.signals })

@@ -1,7 +1,10 @@
 import { defineConfig } from 'vitest/config'
 import path from 'path'
+import { serverWorkers } from './apps/web/src/lib/build/server-workers'
 
 export default defineConfig({
+  // Server code imports its worker-thread scripts with `?server-worker`.
+  plugins: [serverWorkers()],
   test: {
     globals: true,
     environment: 'node',
@@ -38,7 +41,9 @@ export default defineConfig({
       enabled: false,
     },
     env: {
-      DATABASE_URL: 'postgresql://postgres:password@localhost:5432/quackback_test',
+      DATABASE_URL:
+        process.env.TEST_DATABASE_URL ??
+        'postgresql://postgres:password@localhost:5432/quackback_test',
     },
     deps: {
       optimizer: {
@@ -65,6 +70,10 @@ export default defineConfig({
       '@quackback/db/migrate': path.resolve(__dirname, './packages/db/src/migrate-runtime.ts'),
       '@quackback/db/schema': path.resolve(__dirname, './packages/db/src/schema/index.ts'),
       '@quackback/db/types': path.resolve(__dirname, './packages/db/src/types.ts'),
+      '@quackback/db/email/personal-email-domains': path.resolve(
+        __dirname,
+        './packages/db/src/email/personal-email-domains.ts'
+      ),
       '@quackback/db': path.resolve(__dirname, './packages/db/index.ts'),
       // Path alias for apps/web (matches tsconfig.json baseUrl: "./src" + "@/*": ["./*"])
       '@': path.resolve(__dirname, './apps/web/src'),

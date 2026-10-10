@@ -19,7 +19,7 @@ const REPLY: EditorFeatures = {
   taskLists: false,
   dividers: false,
   codeBlocks: true,
-  images: true,
+  images: false,
   blockquotes: true,
   embeds: true,
   quackbackEmbeds: true,

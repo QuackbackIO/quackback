@@ -48,6 +48,7 @@ describe('REPOINT_STEPS registry', () => {
     await repointPrincipalActivity(tx, FROM, TO)
 
     for (const table of [
+      'slack_user_links',
       'post_votes',
       'post_comment_reactions',
       'post_comments',
@@ -57,6 +58,7 @@ describe('REPOINT_STEPS registry', () => {
       'post_activity',
       'conversations',
       'conversation_messages',
+      'files',
       'post_subscriptions',
       'in_app_notifications',
       'page_views',
@@ -195,6 +197,17 @@ describe('REPOINT_STEPS registry', () => {
 
       expect(isNull).toHaveBeenCalledWith('principal.blockedAt')
       expect(isNull).toHaveBeenCalledWith('principal.blockedByPrincipalId')
+    })
+
+    it('skips blocked_at transfer onto a teammate target', async () => {
+      await repointPrincipalActivity(tx, FROM, TO, { skipBlockTransfer: true })
+
+      expect(mockUpdateSet).not.toHaveBeenCalledWith({
+        blockedAt: expect.anything(),
+      })
+      expect(mockUpdateSet).not.toHaveBeenCalledWith({
+        blockedByPrincipalId: expect.anything(),
+      })
     })
   })
 })

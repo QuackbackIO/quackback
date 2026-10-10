@@ -34,6 +34,7 @@ export const Route = createFileRoute('/api/widget/session')({
                       email: session.user.email,
                       avatarUrl: session.user.image,
                     },
+                canPortalHandoff: session.canPortalHandoff,
               },
             },
             { headers: noStoreHeaders() }

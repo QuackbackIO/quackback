@@ -38,9 +38,10 @@ import {
 import type { PrincipalId, SegmentId } from '@quackback/ids'
 import { InternalError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
-import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { postViewFilter, type Actor } from '@/lib/server/policy'
 import { logger } from '@/lib/server/logger'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'user-public-profile' })
 
@@ -133,7 +134,8 @@ export async function getPublicUserProfile(
         and(
           eq(principal.id, principalId),
           eq(principal.type, 'user'),
-          inArray(principal.role, [...PROFILE_ROLES])
+          inArray(principal.role, [...PROFILE_ROLES]),
+          notTestPrincipal(principal.id)
         )
       )
       .limit(1)
@@ -145,7 +147,7 @@ export async function getPublicUserProfile(
     // (anonymous/authenticated/segments/team) + moderation state, from the
     // VIEWER's perspective. Requires the boards join (boardViewFilter reads
     // boards.access) — postViewFilter's own contract.
-    const viewerFilter = postViewFilter(actor)
+    const viewerFilter = and(postViewFilter(actor), notTestPrincipal(posts.principalId))
 
     const activityColumns = {
       postId: posts.id,
@@ -244,10 +246,11 @@ export async function getPublicUserProfile(
     return {
       principalId: owner.principalId,
       displayName: owner.displayName ?? owner.userName ?? '',
-      // Canonical avatar precedence (matches loadAuthors): user.image →
-      // uploaded key's public URL → principal's synced copy.
-      avatarUrl:
-        owner.userImage ?? getPublicUrlOrNull(owner.userImageKey) ?? owner.principalAvatarUrl,
+      avatarUrl: resolveUserAvatarUrl({
+        userImage: owner.userImage,
+        userImageKey: owner.userImageKey,
+        principalAvatarUrl: owner.principalAvatarUrl,
+      }),
       isTeamMember: owner.role === 'admin' || owner.role === 'member',
       joinedAt: owner.joinedAt,
       postCount,
@@ -316,7 +319,8 @@ export async function getProfileTeamContext(
         and(
           eq(principal.id, principalId),
           eq(principal.type, 'user'),
-          inArray(principal.role, [...PROFILE_ROLES])
+          inArray(principal.role, [...PROFILE_ROLES]),
+          notTestPrincipal(principal.id)
         )
       )
       .limit(1)

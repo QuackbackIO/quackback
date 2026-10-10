@@ -44,4 +44,20 @@ describe('blankOmittedSearchKeys', () => {
   it('keeps a valid admin sort', () => {
     expect(parse({ sort: 'priority' }).sort).toBe('priority')
   })
+
+  it('preserves layout-owned entity peeks a child schema does not declare', () => {
+    expect(
+      mergeLikeRouter({
+        sort: 'newest',
+        post: 'post_1',
+        entry: 'changelog_1',
+        article: 'article_1',
+      })
+    ).toEqual({
+      sort: 'newest',
+      post: 'post_1',
+      entry: 'changelog_1',
+      article: 'article_1',
+    })
+  })
 })

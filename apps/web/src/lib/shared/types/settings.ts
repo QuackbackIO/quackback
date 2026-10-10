@@ -46,10 +46,12 @@ export {
   enableFlagsForUseCase,
   PRODUCT_DEFINITIONS,
   getFirstEnabledAdminProductPath,
+  newWorkspaceFlagsForGoals,
   getProductFlagUpdate,
   isProductEnabled,
   DEFAULT_AUTH_CONFIG,
   DEFAULT_PORTAL_CONFIG,
+  DEFAULT_HELP_CENTER_CONFIG,
   DEFAULT_WIDGET_HOME_CARDS,
   EMPTY_WELCOME_BODY,
 } from '@/lib/server/domains/settings/settings.types'

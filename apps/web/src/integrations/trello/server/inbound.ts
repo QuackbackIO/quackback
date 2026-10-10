@@ -10,6 +10,7 @@ import type {
 } from '@/lib/server/integrations/inbound-types'
 
 export const trelloInboundHandler: InboundWebhookHandler = {
+  statusMode: 'review',
   async verifySignature(request: Request, body: string, secret: string): Promise<true | Response> {
     // Trello HEAD request for webhook verification
     if (request.method === 'HEAD') {

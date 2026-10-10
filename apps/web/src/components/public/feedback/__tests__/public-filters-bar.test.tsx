@@ -88,6 +88,11 @@ describe('PublicFiltersBar', () => {
     expect(screen.getByText('Bugs')).toBeInTheDocument()
   })
 
+  it('does not render a board chip when the board is locked', () => {
+    renderBar({ filters: { sort: 'top', board: 'bugs' }, boardLocked: true })
+    expect(screen.queryByText(/^Board:$/)).not.toBeInTheDocument()
+  })
+
   it('does not render a board chip when only one board exists', () => {
     renderBar({
       filters: { sort: 'top', board: 'bugs' },
@@ -183,6 +188,24 @@ describe('PublicFiltersToolbarButton', () => {
     // cmdk's CommandItem renders with role="option"
     fireEvent.click(screen.getByRole('option', { name: 'Bugs' }))
     expect(setFilters).toHaveBeenCalledWith({ board: 'bugs' })
+  })
+
+  it('hides the Board category when the board is locked', () => {
+    const setFilters = vi.fn()
+    render(
+      <Providers>
+        <PublicFiltersToolbarButton
+          filters={{ sort: 'top', board: 'bugs' }}
+          setFilters={setFilters}
+          statuses={statuses}
+          tags={tags}
+          boards={boards}
+          boardLocked
+        />
+      </Providers>
+    )
+    fireEvent.click(screen.getByRole('button', { name: /filter/i }))
+    expect(screen.queryByRole('button', { name: /^Board$/i })).not.toBeInTheDocument()
   })
 
   it('hides the Board category when only a single board exists', () => {

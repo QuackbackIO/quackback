@@ -35,20 +35,32 @@ vi.mock('@/lib/server/db', () => ({
 }))
 
 // previewImport constructs its own resolver internally (no injection point),
-// so the resolver itself is faked: a brand-new email increments pendingCount
-// exactly once, mirroring the real class's queue-for-creation behavior.
+// so the resolver itself is faked: a brand-new email or name increments
+// pendingCount exactly once, mirroring the real class's queue-for-creation
+// behavior.
 vi.mock('../user-resolver', () => {
   class FakeImportUserResolver {
     private seen = new Map<string, string>()
     private pending = 0
-    async resolve(email: string | null, _name: string | null, fallback: string) {
-      if (!email) return fallback
-      const key = email.toLowerCase()
-      if (this.seen.has(key)) return this.seen.get(key)!
-      this.pending++
-      const id = `principal_${key}`
-      this.seen.set(key, id)
-      return id
+    async resolve(email: string | null, name: string | null, fallback: string) {
+      const normalizedEmail = email?.toLowerCase().trim() ?? ''
+      if (normalizedEmail) {
+        if (this.seen.has(normalizedEmail)) return this.seen.get(normalizedEmail)!
+        this.pending++
+        const id = `principal_${normalizedEmail}`
+        this.seen.set(normalizedEmail, id)
+        return id
+      }
+      const trimmedName = name?.trim() ?? ''
+      if (trimmedName) {
+        const key = `name:${trimmedName.toLowerCase()}`
+        if (this.seen.has(key)) return this.seen.get(key)!
+        this.pending++
+        const id = `principal_${key}`
+        this.seen.set(key, id)
+        return id
+      }
+      return fallback
     }
     async flushPendingCreates() {
       return 0
@@ -85,7 +97,7 @@ describe('previewImport', () => {
   })
 
   it('never writes to the database', async () => {
-    const csv = 'title,content\nFirst,Body\n'
+    const csv = 'title,content,author_name\nFirst,Body,Jane\n'
     await previewImport({ ...BASE_INPUT, csvContent: csvContent(csv), totalRows: 1 })
     expect(hoisted.insert).not.toHaveBeenCalled()
   })
@@ -132,7 +144,7 @@ describe('previewImport', () => {
   })
 
   it('reports per-row validation errors without throwing', async () => {
-    const csv = 'title,content\n,Body without a title\n'
+    const csv = 'title,content,author_name\n,Body without a title,Jane\n'
     const preview = await previewImport({
       ...BASE_INPUT,
       csvContent: csvContent(csv),
@@ -145,9 +157,9 @@ describe('previewImport', () => {
 
   it('reports to-be-created statuses, boards, and tags without writing them', async () => {
     const csv =
-      'title,content,status,board,tags\n' +
-      'First,Body one,In Progress,Feature Requests,"ui,theme"\n' +
-      'Second,Body two,open,bugs,ui\n'
+      'title,content,status,board,tags,author_name\n' +
+      'First,Body one,In Progress,Feature Requests,"ui,theme",Jane\n' +
+      'Second,Body two,open,bugs,ui,Jane\n'
 
     const preview = await previewImport({
       ...BASE_INPUT,
@@ -173,7 +185,7 @@ describe('previewImport', () => {
     hoisted.findManyPostExternalLinks.mockResolvedValue([
       { externalId: 'ext-1', postId: 'post_existing' },
     ])
-    const csv = 'title,content,source_id\nExisting,Body,ext-1\n'
+    const csv = 'title,content,source_id,author_name\nExisting,Body,ext-1,Jane\n'
 
     const preview = await previewImport({
       ...BASE_INPUT,
@@ -183,5 +195,42 @@ describe('previewImport', () => {
 
     expect(preview.sample[0].action).toBe('update')
     expect(preview.updatedCount).toBe(1)
+  })
+
+  it('treats author_name without email as a new author and reuses it on repeats', async () => {
+    const csv =
+      'title,content,author_name\n' + 'First,Body one,Jane Doe\n' + 'Second,Body two,jane doe\n'
+
+    const preview = await previewImport({
+      ...BASE_INPUT,
+      csvContent: csvContent(csv),
+      totalRows: 2,
+    })
+
+    expect(preview.counts.byAuthor).toEqual({ 'Jane Doe': 1, 'jane doe': 1 })
+    expect(preview.sample[0]).toMatchObject({
+      author: 'Jane Doe',
+      isNewAuthor: true,
+    })
+    expect(preview.sample[1]).toMatchObject({
+      author: 'jane doe',
+      isNewAuthor: false,
+    })
+  })
+
+  it('skips rows with neither author_name nor author_email', async () => {
+    const csv = 'title,content\nFirst,Body\n'
+
+    const preview = await previewImport({
+      ...BASE_INPUT,
+      csvContent: csvContent(csv),
+      totalRows: 1,
+    })
+
+    expect(preview.sample).toEqual([])
+    expect(preview.counts.byAuthor).toEqual({})
+    expect(preview.errors).toEqual([
+      { row: 1, message: 'Author name or email is required', field: 'author_name' },
+    ])
   })
 })

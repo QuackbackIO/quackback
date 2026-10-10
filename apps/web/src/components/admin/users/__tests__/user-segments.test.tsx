@@ -205,7 +205,7 @@ describe('<UserSegmentBadges>', () => {
     const [, mutateOptions] = assignMutate.mock.calls[0] as [unknown, { onError: () => void }]
     mutateOptions.onError()
 
-    expect(toastError).toHaveBeenCalledWith('Failed to undo — Beta Testers was not restored')
+    expect(toastError).toHaveBeenCalledWith('Failed to undo: Beta Testers was not restored')
   })
 
   it('shows an error toast when removal fails', async () => {

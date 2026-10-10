@@ -1,11 +1,12 @@
+import { deliveryError, httpDeliveryFailure } from '@/lib/server/integrations/sync/outcomes'
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Asana hook handler.
  * Creates Asana tasks when feedback events occur.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { buildAsanaTaskBody } from '@/integrations/asana/server/message'
 import { logger } from '@/lib/server/logger'
 
@@ -23,14 +24,14 @@ export interface AsanaConfig {
   workspaceGid: string
 }
 
-export const asanaHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
+export const asanaHook: IntegrationHook = {
+  async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId: projectId } = target as AsanaTarget
     const { accessToken, rootUrl, workspaceGid } = config as AsanaConfig
 
     // Only create tasks for new feedback
     if (event.type !== 'post.created') {
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     log.debug({ event_type: event.type, project_id: projectId }, 'creating task')
@@ -38,7 +39,7 @@ export const asanaHook: HookHandler = {
     const { name, htmlNotes } = buildAsanaTaskBody(event, rootUrl)
 
     try {
-      const response = await fetch(`${ASANA_API}/tasks`, {
+      const response = await integrationFetch(`${ASANA_API}/tasks`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -55,42 +56,7 @@ export const asanaHook: HookHandler = {
       })
 
       if (!response.ok) {
-        const status = response.status
-
-        if (status === 401) {
-          return {
-            success: false,
-            error: 'Authentication failed. Please reconnect Asana.',
-            shouldRetry: false,
-          }
-        }
-
-        if (status === 429) {
-          log.warn({ status }, 'rate limited')
-          return {
-            success: false,
-            error: 'Rate limited by Asana',
-            shouldRetry: true,
-          }
-        }
-
-        if (status >= 500) {
-          const errorText = await response.text()
-          log.error({ status, error_text: errorText }, 'server error')
-          return {
-            success: false,
-            error: `Asana server error: HTTP ${status}`,
-            shouldRetry: true,
-          }
-        }
-
-        const errorText = await response.text()
-        log.error({ status, error_text: errorText }, 'api error')
-        return {
-          success: false,
-          error: `Asana API error: HTTP ${status}`,
-          shouldRetry: false,
-        }
+        return httpDeliveryFailure(response)
       }
 
       const body = (await response.json()) as {
@@ -99,20 +65,18 @@ export const asanaHook: HookHandler = {
 
       const task = body.data
       if (!task) {
-        return { success: false, error: 'No task returned', shouldRetry: false }
+        return { state: 'uncertain', errorCode: 'outcome_unknown' }
       }
 
       log.info({ task_id: task.gid }, 'task created')
-      return { success: true, externalId: task.gid, externalUrl: task.permalink_url }
+      return {
+        state: 'succeeded',
+        result: { externalId: task.gid, externalUrl: task.permalink_url },
+      }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       log.error({ err: error }, 'task creation failed')
 
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: isRetryableError(error),
-      }
+      return deliveryError(error)
     }
   },
 }

@@ -1,5 +1,5 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { archiveTrelloCard } from '@/integrations/trello/server/archive'
 import { listTrelloBoards, listTrelloLists } from '@/integrations/trello/server/boards'
 import { fetchTrelloStatuses } from '@/integrations/trello/server/statuses'
 import { trelloHook } from '@/integrations/trello/server/hook'
@@ -9,15 +9,17 @@ import { trelloInboundHandler } from '@/integrations/trello/server/inbound'
 
 export const trelloIntegration: IntegrationDefinition = {
   id: 'trello',
+  destination: channelDestination(['boardId']),
   catalog: trelloCatalog,
   oauth: {
+    callbackMode: 'fragment',
     stateType: 'trello_oauth',
     buildAuthUrl: getTrelloOAuthUrl,
     exchangeCode: exchangeTrelloCode,
   },
   hook: trelloHook,
   inbound: trelloInboundHandler,
-  archive: archiveTrelloCard,
+  linkedItems: true,
   webhookRegistration: 'manual',
   listExternalStatuses: fetchTrelloStatuses,
   destinations: {

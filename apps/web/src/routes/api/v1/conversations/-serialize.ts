@@ -29,5 +29,6 @@ export function serializeMessage(dto: ConversationMessageDTO) {
     authorName: dto.author?.displayName ?? null,
     content: dto.content,
     createdAt: dto.createdAt,
+    editedAt: dto.editedAt ?? null,
   }
 }

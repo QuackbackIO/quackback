@@ -42,6 +42,7 @@ const JOB = {
   maxAttempts: 10,
   leaseToken: 'tok',
   lockedUntil: new Date(),
+  runAt: new Date(),
 }
 
 describe('runMembershipSync', () => {

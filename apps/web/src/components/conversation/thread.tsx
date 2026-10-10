@@ -12,11 +12,14 @@ import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
 import type { JSONContent } from '@tiptap/core'
 import type { ConversationId } from '@quackback/ids'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { useVisitorSurfaceRpc, type VisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
+import { useHostShown } from '@/lib/client/hooks/use-host-shown'
 import {
-  listConversationMessagesFn,
-  markConversationReadFn,
-  sendConversationTypingFn,
-} from '@/lib/server/functions/conversation'
+  createValueStore,
+  useDebouncedStoreValue,
+  useStoreValue,
+  type ReadableStore,
+} from '@/lib/client/value-store'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 /** True when the composer doc carries an inline image or post embed, which makes
@@ -25,37 +28,78 @@ import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 export function docHasContentNode(doc: JSONContent | null): boolean {
   if (!doc) return false
   const walk = (nodes: JSONContent[] | undefined): boolean =>
-    !!nodes?.some((n) => n.type === 'chatImage' || n.type === 'quackbackEmbed' || walk(n.content))
+    !!nodes?.some(
+      (n) =>
+        n.type === 'resizableImage' ||
+        n.type === 'image' ||
+        n.type === 'quackbackEmbed' ||
+        walk(n.content)
+    )
   return walk(doc.content)
 }
 
+/** What the composer holds: the editor's plain text and its TipTap doc. */
+export interface ComposerDocDraft {
+  /** Plain text: gates send, drives typing and help search. */
+  text: string
+  /** The doc, sent as contentJson. */
+  doc: JSONContent | null
+  /** The doc carries an inline image or embed, so it is worth sending without text. */
+  hasContentNode: boolean
+}
+
 /**
- * Composer-doc state: the rich editor's plain text (gates send + drives
- * typing/help-search), the TipTap doc persisted as contentJson (held in a ref —
- * it changes on every keystroke), a reactive "doc carries an inline
- * image/embed" mirror so the send gate enables for a no-text message, and the
- * reset signal that clears the editor after a send.
+ * The composer's draft, held outside React state. The editor writes it on
+ * every keystroke, and a state update there would re-render the whole thread
+ * around the composer. What the thread draws from the draft subscribes to just
+ * that value (useComposerDocValue); everything else reads the latest draft
+ * when it acts.
+ */
+export interface ComposerDocStore extends ReadableStore<ComposerDocDraft> {
+  set(text: string, doc: JSONContent | null): void
+}
+
+function createComposerDocStore(): ComposerDocStore {
+  const store = createValueStore<ComposerDocDraft>({ text: '', doc: null, hasContentNode: false })
+  return {
+    ...store,
+    set: (text, doc) => store.set({ text, doc, hasContentNode: docHasContentNode(doc) }),
+  }
+}
+
+/**
+ * The composer's draft store and the reset signal that clears the editor
+ * after a send (it keys the editor, so a bump remounts it empty).
  */
 export function useComposerDoc() {
-  const [text, setText] = useState('')
-  const docRef = useRef<JSONContent | null>(null)
-  const [hasContentNode, setHasContentNode] = useState(false)
+  const [draft] = useState(createComposerDocStore)
   const [resetSignal, setResetSignal] = useState(0)
 
-  const onChange = useCallback((nextText: string, doc: JSONContent | null) => {
-    setText(nextText)
-    docRef.current = doc
-    setHasContentNode(docHasContentNode(doc))
-  }, [])
-
   const clear = useCallback(() => {
-    setText('')
-    docRef.current = null
-    setHasContentNode(false)
+    draft.set('', null)
     setResetSignal((n) => n + 1)
-  }, [])
+  }, [draft])
 
-  return { text, docRef, hasContentNode, resetSignal, onChange, clear }
+  return { draft, resetSignal, clear }
+}
+
+/**
+ * One value drawn from the composer's draft. The component re-renders only
+ * when the value changes (compared with Object.is), so `select` should return
+ * a primitive.
+ */
+export function useComposerDocValue<T>(
+  draft: ComposerDocStore,
+  select: (draft: ComposerDocDraft) => T
+): T {
+  return useStoreValue(draft, select)
+}
+
+const selectText = (draft: ComposerDocDraft) => draft.text
+
+/** The draft's text, updated once its changes have paused for `delayMs`. */
+export function useDebouncedComposerText(draft: ComposerDocStore, delayMs: number): string {
+  return useDebouncedStoreValue(draft, selectText, delayMs)
 }
 
 /** Near-end slack for the tail-follow effect below: within ~a row and a half
@@ -189,16 +233,17 @@ export function useOlderMessages({
   conversationId: ConversationId | null
   messages: ConversationMessageDTO[]
   getHeaders?: () => Record<string, string>
-  onPage: (page: Awaited<ReturnType<typeof listConversationMessagesFn>>) => void
+  onPage: (page: Awaited<ReturnType<VisitorSurfaceRpc['listConversationMessages']>>) => void
   onError?: () => void
 }) {
+  const { listConversationMessages } = useVisitorSurfaceRpc()
   const [loadingOlder, setLoadingOlder] = useState(false)
 
   const loadOlder = async () => {
     if (!conversationId || loadingOlder || messages.length === 0) return
     setLoadingOlder(true)
     try {
-      const page = await listConversationMessagesFn({
+      const page = await listConversationMessages({
         data: { conversationId, before: messages[0].id },
         ...(getHeaders ? { headers: getHeaders() } : {}),
       })
@@ -218,42 +263,64 @@ export function useOlderMessages({
  * side (`whenLastFrom`) — opening + reading marks read, not only replying, and
  * a surface's own outbound sends never trigger a write. Keyed on the last
  * message id so benign array re-creation doesn't re-fire it.
+ *
+ * `readThrough` is the caller's current read watermark. When it already covers
+ * the newest message there is nothing to clear, so reopening a read thread
+ * writes nothing. It is read when the newest message changes, never tracked:
+ * a watermark moved back by "mark unread" must not re-mark the thread read.
  */
 export function useMarkReadOnIncoming({
   conversationId,
   messages,
   whenLastFrom,
   enabled = true,
+  readThrough,
   getHeaders,
   onMarked,
+  recheck = 0,
 }: {
   conversationId: ConversationId | null
   messages: ConversationMessageDTO[]
   whenLastFrom: 'visitor' | 'agent'
   enabled?: boolean
+  readThrough?: string | null
   getHeaders?: () => Record<string, string>
   onMarked?: () => void
+  /** Bump to check again with no new message, e.g. when a hidden thread is shown. */
+  recheck?: number
 }) {
   const lastMessage = messages.at(-1)
   const lastMessageId = lastMessage?.id
   const lastSenderType = lastMessage?.senderType
+  const lastCreatedAtRef = useRef(lastMessage?.createdAt)
+  lastCreatedAtRef.current = lastMessage?.createdAt
+  const { markConversationRead } = useVisitorSurfaceRpc()
   const getHeadersRef = useRef(getHeaders)
   getHeadersRef.current = getHeaders
   const onMarkedRef = useRef(onMarked)
   onMarkedRef.current = onMarked
+  const readThroughRef = useRef(readThrough)
+  readThroughRef.current = readThrough
+  // A frame its host is hiding is not being read: what arrives meanwhile stays
+  // unread until the frame is shown again, and is read then.
+  const hostShown = useHostShown()
+  if (!hostShown) enabled = false
 
   useEffect(() => {
     if (!conversationId || !enabled) return
     if (lastSenderType !== whenLastFrom) return
+    const through = readThroughRef.current
+    const lastCreatedAt = lastCreatedAtRef.current
+    if (through && lastCreatedAt && Date.parse(through) >= Date.parse(lastCreatedAt)) return
     const headers = getHeadersRef.current?.()
-    void markConversationReadFn({
+    void markConversationRead({
       data: { conversationId },
       ...(headers ? { headers } : {}),
     })
       .then(() => onMarkedRef.current?.())
       .catch(() => {})
     // lastSenderType is derived from lastMessageId (same message, same sender).
-  }, [conversationId, lastMessageId, enabled, whenLastFrom, lastSenderType])
+  }, [conversationId, lastMessageId, enabled, whenLastFrom, lastSenderType, recheck])
 }
 
 /** Throttled-typing sender for the composer (wired into useConversationTyping). */
@@ -261,11 +328,12 @@ export function useTypingSender(
   conversationId: ConversationId | null,
   getHeaders?: () => Record<string, string>
 ) {
+  const { sendConversationTyping } = useVisitorSurfaceRpc()
   return useCallback(() => {
     if (!conversationId) return
-    void sendConversationTypingFn({
+    void sendConversationTyping({
       data: { conversationId },
       ...(getHeaders ? { headers: getHeaders() } : {}),
     }).catch(() => {})
-  }, [conversationId, getHeaders])
+  }, [conversationId, getHeaders, sendConversationTyping])
 }

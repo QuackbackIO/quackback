@@ -12,8 +12,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 
 vi.mock('@tanstack/react-router', () => ({
+  Link: ({ to, children }: { to: string; children: unknown }) => (
+    <a href={to}>{children as never}</a>
+  ),
   useNavigate: () => vi.fn(),
-  useRouteContext: () => ({ settings: { featureFlags: {}, publicWidgetConfig: {} } }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = { settings: { featureFlags: {}, publicWidgetConfig: {} } }
+    return opts?.select ? opts.select(context as never) : context
+  },
 }))
 
 const hoisted = vi.hoisted(() => ({
@@ -166,7 +172,7 @@ describe('WorkflowsManager class list', () => {
     hoisted.workflowEffectivenessFn.mockResolvedValue([])
     renderManager()
 
-    await userEvent.type(await screen.findByLabelText('Search workflows…'), 'i')
+    await userEvent.type(await screen.findByLabelText('Search workflows...'), 'i')
     const handle = await screen.findByLabelText('Reorder Billing triage')
     expect(handle.getAttribute('disabled')).not.toBeNull()
     expect(screen.queryByLabelText('Reorder Welcome tour')).toBeNull()

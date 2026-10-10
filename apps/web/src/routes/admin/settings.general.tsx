@@ -3,15 +3,12 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Cog6ToothIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
-import { toast } from 'sonner'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { z } from 'zod'
 import { Badge } from '@/components/ui/badge'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
+import { AUTOSAVE } from '@/lib/client/autosave'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { LogoUploader } from '@/components/admin/settings/logo-uploader'
 import { updateWorkspaceNameFn } from '@/lib/server/functions/settings'
 import { getCloudIdentityFn, updateCloudIdentityFn } from '@/lib/server/functions/cloud-identity'
 import { updateFeatureFlagsFn } from '@/lib/server/functions/feature-flags'
@@ -27,14 +24,27 @@ import {
   type ProductId,
 } from '@/lib/shared/types'
 import { Switch } from '@/components/ui/switch'
+import { WorkspaceDataCard } from '@/components/admin/settings/workspace-data-card'
 import { WorkspaceDangerCard } from '@/components/admin/settings/workspace-danger-card'
+import { WorkspaceIdentityCard } from '@/components/admin/settings/workspace-identity-card'
+import { readBatch } from '@/lib/client/queries/read-batch'
+import { useManagedFieldPaths, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { adminPageHead } from '@/lib/client/admin-head'
+
+const searchSchema = z.object({
+  /** `logo` scrolls to the workspace logo and highlights it. */
+  focus: z.enum(['logo']).optional().catch(undefined),
+})
 
 export const Route = createFileRoute('/admin/settings/general')({
+  head: adminPageHead('General settings'),
+  validateSearch: searchSchema,
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
+    const ensure = readBatch(context.queryClient)
     const [cloudIdentity] = await Promise.all([
       getCloudIdentityFn(),
-      context.queryClient.ensureQueryData(settingsQueries.logo()),
+      ensure(settingsQueries.logo()),
     ])
     return { cloudIdentity }
   },
@@ -42,8 +52,10 @@ export const Route = createFileRoute('/admin/settings/general')({
 })
 
 function GeneralSettingsPage() {
-  const { settings, managedFieldPaths } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
+  const managedFieldPaths = useManagedFieldPaths()
   const { cloudIdentity } = Route.useLoaderData()
+  const { focus } = Route.useSearch()
   const workspaceNameManaged = isPathManagedFromBootstrap(
     MANAGED_PATHS.WORKSPACE_NAME,
     managedFieldPaths ?? []
@@ -52,7 +64,6 @@ function GeneralSettingsPage() {
   const [workspaceName, setWorkspaceName] = useState(
     cloudIdentity?.displayName ?? settings?.name ?? ''
   )
-  const [isSavingName, setIsSavingName] = useState(false)
   const [localFlags, setLocalFlags] = useState<FeatureFlags>(
     (settings?.featureFlags as FeatureFlags | undefined) ?? DEFAULT_FEATURE_FLAGS
   )
@@ -60,6 +71,7 @@ function GeneralSettingsPage() {
   const router = useRouter()
 
   const productMutation = useMutation({
+    meta: AUTOSAVE,
     mutationFn: (update: Partial<FeatureFlags>) => updateFeatureFlagsFn({ data: update }),
     onMutate: (update) => {
       let previous = localFlags
@@ -79,19 +91,14 @@ function GeneralSettingsPage() {
       void router.invalidate()
       void queryClient.invalidateQueries({ queryKey: ['settings', 'portalConfig'] })
     },
-    onError: (error, _update, context) => {
+    onError: (_error, _update, context) => {
       if (context?.previous) setLocalFlags(context.previous)
-      toast.error(error instanceof Error ? error.message : "Couldn't update product. Try again.")
     },
   })
 
-  // Debounced workspace name save. `useDebouncedSave` flushes any pending
-  // value on unmount, so navigating away mid-debounce no longer drops it.
-  const { queue: queueNameSave } = useDebouncedSave<string>(async (value) => {
-    const trimmed = value.trim()
-    if (!trimmed) return
-    setIsSavingName(true)
-    try {
+  const nameMutation = useMutation({
+    meta: AUTOSAVE,
+    mutationFn: async (trimmed: string) => {
       if (cloudIdentity) {
         if (trimmed !== cloudIdentity.displayName) {
           await updateCloudIdentityFn({ data: { displayName: trimmed } })
@@ -100,11 +107,16 @@ function GeneralSettingsPage() {
       } else if (trimmed !== settings?.name) {
         await updateWorkspaceNameFn({ data: { name: trimmed } })
       }
-    } catch {
-      toast.error('Failed to update workspace name')
-    } finally {
-      setIsSavingName(false)
-    }
+    },
+  })
+
+  // Debounced workspace name save. `useDebouncedSave` flushes any pending
+  // value on unmount, so navigating away mid-debounce does not drop it.
+  const { queue: queueNameSave } = useDebouncedSave<string>((value) => {
+    const trimmed = value.trim()
+    if (!trimmed) return
+    // The global autosave handler reports a failure.
+    nameMutation.mutate(trimmed)
   }, 800)
 
   const handleNameChange = (value: string) => {
@@ -117,110 +129,56 @@ function GeneralSettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
-      </div>
-      <PageHeader
-        icon={Cog6ToothIcon}
-        title="General"
-        description="Workspace identity and products"
-      />
-
+    <SettingsPage page="/admin/settings/general">
       <WorkspaceIdentityCard
         workspaceName={workspaceName}
-        saving={isSavingName}
         managed={!cloudIdentity && workspaceNameManaged}
         onWorkspaceNameChange={handleNameChange}
         maxLength={cloudIdentity ? 80 : undefined}
+        focusLogo={focus === 'logo'}
       />
 
       <SettingsCard
-        title="Products"
-        description="Choose the Quackback products available to your team and customers"
+        title="Modules"
+        description="Choose the Quackback modules available to your team and customers."
       >
-        <div className="divide-y divide-border/50">
+        <SettingRows>
           {PRODUCT_DEFINITIONS.map((product) => {
             // The public portal homepage is the feedback board, so turning this
             // one off leaves the portal root with nothing to render.
             const alwaysOn = product.id === 'feedback'
             return (
-              <div
+              <SettingRow
                 key={product.id}
-                className="flex items-center justify-between gap-6 py-3 first:pt-0 last:pb-0"
-              >
-                <div className="min-w-0 space-y-0.5">
-                  <Label
-                    htmlFor={alwaysOn ? undefined : `product-${product.id}`}
-                    className={
-                      alwaysOn ? 'text-sm font-medium' : 'cursor-pointer text-sm font-medium'
-                    }
-                  >
-                    {product.label}
-                  </Label>
-                  <p className="text-xs text-muted-foreground">{product.description}</p>
-                </div>
-                {alwaysOn ? (
-                  <Badge id={`product-${product.id}`} variant="outline">
-                    Always on
-                  </Badge>
-                ) : (
-                  <Switch
-                    id={`product-${product.id}`}
-                    checked={isProductEnabled(localFlags, product.id)}
-                    onCheckedChange={(checked) => handleProductToggle(product.id, checked)}
-                    disabled={productMutation.isPending}
-                  />
-                )}
-              </div>
+                label={product.label}
+                description={product.description}
+                htmlFor={alwaysOn ? undefined : `product-${product.id}`}
+                control={
+                  alwaysOn ? (
+                    <Badge id={`product-${product.id}`} variant="secondary">
+                      Always on
+                    </Badge>
+                  ) : (
+                    <Switch
+                      id={`product-${product.id}`}
+                      checked={isProductEnabled(localFlags, product.id)}
+                      onCheckedChange={(checked) => handleProductToggle(product.id, checked)}
+                      disabled={productMutation.isPending}
+                    />
+                  )
+                }
+              />
             )
           })}
-        </div>
+        </SettingRows>
       </SettingsCard>
 
-      <WorkspaceDangerCard cloudEnabled={Boolean(cloudIdentity)} />
-    </div>
-  )
-}
+      <WorkspaceDataCard />
 
-export function WorkspaceIdentityCard(props: {
-  workspaceName: string
-  saving: boolean
-  managed: boolean
-  onWorkspaceNameChange: (value: string) => void
-  maxLength?: number
-}) {
-  return (
-    <SettingsCard
-      title="Workspace"
-      description="Your logo and name, shown across the portal, widget, and emails"
-    >
-      <div className="flex items-center gap-4">
-        <LogoUploader workspaceName={props.workspaceName} />
-        <div className="min-w-0 flex-1 max-w-md space-y-1.5">
-          <Label htmlFor="workspace-name" className="text-xs text-muted-foreground">
-            Workspace Name
-          </Label>
-          <div className="relative">
-            <Input
-              id="workspace-name"
-              value={props.workspaceName}
-              onChange={(e) => props.onWorkspaceNameChange(e.target.value)}
-              placeholder="My Workspace"
-              disabled={props.managed}
-              maxLength={props.maxLength}
-            />
-            {props.saving && (
-              <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-            )}
-          </div>
-          {props.managed && (
-            <p className="text-xs text-muted-foreground">
-              Managed by your administrator&apos;s config &mdash; edit there.
-            </p>
-          )}
-        </div>
-      </div>
-    </SettingsCard>
+      <WorkspaceDangerCard
+        cloudEnabled={Boolean(cloudIdentity)}
+        workspaceName={cloudIdentity?.displayName ?? settings?.name ?? ''}
+      />
+    </SettingsPage>
   )
 }

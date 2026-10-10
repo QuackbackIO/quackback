@@ -36,7 +36,7 @@ const hoisted = vi.hoisted(() => ({
   isSignInMethodEnabled: vi.fn(),
   getRegisteredOidcProviderIds: vi.fn(),
   getRegisteredAuthProviders: vi.fn(),
-  signInWithOAuth2: vi.fn(),
+  signInSocial: vi.fn(),
 }))
 
 vi.mock('@/lib/server/auth/session', () => ({
@@ -59,7 +59,7 @@ vi.mock('@/lib/server/auth/registered-providers', () => ({
 vi.mock('@/lib/server/auth', () => ({
   auth: {
     api: {
-      signInWithOAuth2: hoisted.signInWithOAuth2,
+      signInSocial: hoisted.signInSocial,
     },
   },
 }))
@@ -101,7 +101,7 @@ function soleOidcWorkspace(over?: {
 }
 
 describe('resolveInstantSsoRedirectFn', () => {
-  it('(a) returns null without calling signInWithOAuth2 when a non-anonymous user is signed in', async () => {
+  it('(a) returns null without calling signInSocial when a non-anonymous user is signed in', async () => {
     hoisted.getSession.mockResolvedValueOnce({
       user: { principalType: 'user', id: 'user_1', email: 'alice@example.com' },
     })
@@ -109,19 +109,19 @@ describe('resolveInstantSsoRedirectFn', () => {
     const result = await resolveHandler({ data: {} })
 
     expect(result).toBeNull()
-    expect(hoisted.signInWithOAuth2).not.toHaveBeenCalled()
+    expect(hoisted.signInSocial).not.toHaveBeenCalled()
   })
 
   it('(b) redirects to the sole registered OIDC provider for an anonymous visitor', async () => {
     soleOidcWorkspace()
-    hoisted.signInWithOAuth2.mockResolvedValueOnce({ url: 'https://idp.example.com/auth' })
+    hoisted.signInSocial.mockResolvedValueOnce({ url: 'https://idp.example.com/auth' })
 
     const result = await resolveHandler({ data: { callbackUrl: '/portal' } })
 
     expect(result).toEqual({ url: 'https://idp.example.com/auth' })
-    expect(hoisted.signInWithOAuth2).toHaveBeenCalledWith(
+    expect(hoisted.signInSocial).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: expect.objectContaining({ providerId: 'oidc_acme', disableRedirect: true }),
+        body: expect.objectContaining({ provider: 'oidc_acme', disableRedirect: true }),
       })
     )
   })
@@ -132,7 +132,7 @@ describe('resolveInstantSsoRedirectFn', () => {
     const result = await resolveHandler({ data: {} })
 
     expect(result).toBeNull()
-    expect(hoisted.signInWithOAuth2).not.toHaveBeenCalled()
+    expect(hoisted.signInSocial).not.toHaveBeenCalled()
   })
 
   it('(d) returns null when a social provider is also registered', async () => {
@@ -141,7 +141,7 @@ describe('resolveInstantSsoRedirectFn', () => {
     const result = await resolveHandler({ data: {} })
 
     expect(result).toBeNull()
-    expect(hoisted.signInWithOAuth2).not.toHaveBeenCalled()
+    expect(hoisted.signInSocial).not.toHaveBeenCalled()
   })
 
   it('(e) returns null when more than one IdP is registered (the user has a choice)', async () => {
@@ -150,12 +150,12 @@ describe('resolveInstantSsoRedirectFn', () => {
     const result = await resolveHandler({ data: {} })
 
     expect(result).toBeNull()
-    expect(hoisted.signInWithOAuth2).not.toHaveBeenCalled()
+    expect(hoisted.signInSocial).not.toHaveBeenCalled()
   })
 
   it('(f) reads unified authConfig: sole OIDC + password/magicLink OFF => redirects', async () => {
     soleOidcWorkspace({ oauth: { password: false, magicLink: false } })
-    hoisted.signInWithOAuth2.mockResolvedValueOnce({ url: 'https://idp.example.com/sso' })
+    hoisted.signInSocial.mockResolvedValueOnce({ url: 'https://idp.example.com/sso' })
 
     const result = await resolveHandler({ data: {} })
 
@@ -169,6 +169,6 @@ describe('resolveInstantSsoRedirectFn', () => {
     const result = await resolveHandler({ data: {} })
 
     expect(result).toBeNull()
-    expect(hoisted.signInWithOAuth2).not.toHaveBeenCalled()
+    expect(hoisted.signInSocial).not.toHaveBeenCalled()
   })
 })

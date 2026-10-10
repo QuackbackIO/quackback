@@ -1,20 +1,12 @@
+import { useState } from 'react'
+import { toast } from 'sonner'
 import { useRouter, useNavigate } from '@tanstack/react-router'
-import { useForm } from 'react-hook-form'
-import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { deleteBoardSchema, type DeleteBoardInput } from '@/lib/shared/schemas/boards'
 import { useDeleteBoard } from '@/lib/client/mutations'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { WarningBox } from '@/components/shared/warning-box'
-import { FormError } from '@/components/shared/form-error'
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import type { BoardId } from '@quackback/ids'
 
 interface Board {
@@ -27,73 +19,76 @@ interface DeleteBoardFormProps {
   board: Board
 }
 
+/** The danger zone row: one outline-red button, with the board name asked for in the dialog. */
 export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
   const router = useRouter()
   const navigate = useNavigate()
   const mutation = useDeleteBoard()
+  const [open, setOpen] = useState(false)
+  const [confirmName, setConfirmName] = useState('')
 
-  const form = useForm<DeleteBoardInput>({
-    resolver: standardSchemaResolver(deleteBoardSchema),
-    defaultValues: {
-      confirmName: '',
-    },
-  })
+  function handleOpenChange(next: boolean) {
+    setOpen(next)
+    if (!next) setConfirmName('')
+  }
 
-  const confirmName = form.watch('confirmName')
-  const canDelete = confirmName === board.name
-
-  function onSubmit() {
-    if (!canDelete) return
-
+  function onConfirm() {
+    if (confirmName !== board.name) return
     mutation.mutate(
       { id: board.id },
       {
         onSuccess: () => {
-          // Navigate to boards page without board param - will auto-select first remaining board
-          void navigate({
-            to: '/admin/settings/boards',
-            search: {},
-          })
+          setOpen(false)
+          void navigate({ to: '/admin/settings/boards', search: {} })
           router.invalidate()
         },
+        onError: () => toast.error("Couldn't delete the board. Try again."),
       }
     )
   }
 
   return (
-    <div className="space-y-4">
-      <WarningBox
-        title="Delete this board"
-        description="Once you delete a board, there is no going back. All feedback, votes, and comments associated with this board will be permanently deleted."
-      />
-
-      {mutation.isError && <FormError message={mutation.error?.message ?? 'An error occurred'} />}
-
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          <FormField
-            control={form.control}
-            name="confirmName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  Type <span className="font-mono font-semibold">{board.name}</span> to confirm
-                </FormLabel>
-                <FormControl>
-                  <Input placeholder={board.name} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Button type="submit" variant="destructive" disabled={!canDelete || mutation.isPending}>
-              {mutation.isPending ? 'Deleting...' : 'Delete board'}
+    <>
+      <SettingRows>
+        <SettingRow
+          label="Delete this board"
+          description="Removes the board and its posts, votes and comments."
+          control={
+            <Button
+              type="button"
+              variant="outline-destructive"
+              size="sm"
+              onClick={() => setOpen(true)}
+            >
+              Delete board
             </Button>
-          </div>
-        </form>
-      </Form>
-    </div>
+          }
+        />
+      </SettingRows>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={handleOpenChange}
+        title="Delete board?"
+        description="This permanently deletes the board and everything on it. It cannot be undone."
+        variant="destructive"
+        confirmLabel="Delete board"
+        confirmDisabled={confirmName !== board.name}
+        isPending={mutation.isPending}
+        onConfirm={onConfirm}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="confirm-board-name">
+            Type <span className="font-mono font-semibold">{board.name}</span> to confirm
+          </Label>
+          <Input
+            id="confirm-board-name"
+            placeholder={board.name}
+            value={confirmName}
+            onChange={(e) => setConfirmName(e.target.value)}
+            autoComplete="off"
+          />
+        </div>
+      </ConfirmDialog>
+    </>
   )
 }

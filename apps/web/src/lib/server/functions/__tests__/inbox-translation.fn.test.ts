@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // createServerFn → directly-callable fns (mirrors conversation-transcript-export.test.ts).
 vi.mock('@tanstack/react-start', () => ({
+  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     let handler: ((args: { data: unknown }) => Promise<unknown>) | null = null
     const fn = (args: { data: unknown }) => {
@@ -40,6 +41,7 @@ const hoisted = vi.hoisted(() => ({
   dismissInboxTranslationSuggestion: vi.fn(),
   getInboxTranslationContext: vi.fn(),
   translateIncomingMessage: vi.fn(),
+  inboxTranslationOverAllowance: vi.fn(async () => false),
   maybeDetectCustomerLanguage: vi.fn(),
   assertConversationViewable: vi.fn(),
   conversationToDTO: vi.fn(),
@@ -91,6 +93,7 @@ vi.mock('@/lib/server/domains/conversation/conversation-translation.service', ()
   dismissInboxTranslationSuggestion: hoisted.dismissInboxTranslationSuggestion,
   getInboxTranslationContext: hoisted.getInboxTranslationContext,
   translateIncomingMessage: hoisted.translateIncomingMessage,
+  inboxTranslationOverAllowance: hoisted.inboxTranslationOverAllowance,
   maybeDetectCustomerLanguage: hoisted.maybeDetectCustomerLanguage,
   TranslationUnavailableError: hoisted.TranslationUnavailableError,
 }))
@@ -267,7 +270,7 @@ describe('translateConversationMessagesFn', () => {
     const result = await translateConversationMessagesFn({
       data: { conversationId: 'conversation_1', messageIds: ['conversation_msg_1'] },
     })
-    expect(result).toEqual({})
+    expect(result).toEqual({ translations: {}, overAllowance: false })
     expect(hoisted.translateIncomingMessage).not.toHaveBeenCalled()
   })
 
@@ -281,7 +284,27 @@ describe('translateConversationMessagesFn', () => {
       data: { conversationId: 'conversation_1', messageIds: ['conversation_msg_1'] },
     })
 
-    expect(result).toEqual({ conversation_msg_1: { content: 'Hello', sourceLocale: 'fr' } })
+    expect(result).toEqual({
+      translations: { conversation_msg_1: { content: 'Hello', sourceLocale: 'fr' } },
+      overAllowance: false,
+    })
+  })
+
+  it('still translates past the AI allowance and flags it for the notice', async () => {
+    hoisted.isFeatureEnabled.mockResolvedValue(true)
+    hoisted.assertConversationViewable.mockResolvedValue({ id: 'conversation_1' })
+    hoisted.getInboxTranslationContext.mockResolvedValue({ enabled: true, customerLocale: 'fr' })
+    hoisted.translateIncomingMessage.mockResolvedValue({ content: 'Hello', cached: false })
+    hoisted.inboxTranslationOverAllowance.mockResolvedValueOnce(true)
+
+    const result = await translateConversationMessagesFn({
+      data: { conversationId: 'conversation_1', messageIds: ['conversation_msg_1'] },
+    })
+
+    expect(result).toEqual({
+      translations: { conversation_msg_1: { content: 'Hello', sourceLocale: 'fr' } },
+      overAllowance: true,
+    })
   })
 
   it('server-side: skips internal / non-visitor / contentJson-bearing messages in a mixed batch', async () => {
@@ -337,7 +360,10 @@ describe('translateConversationMessagesFn', () => {
       },
     })
 
-    expect(result).toEqual({ conversation_msg_eligible: { content: 'Hello', sourceLocale: 'fr' } })
+    expect(result).toEqual({
+      translations: { conversation_msg_eligible: { content: 'Hello', sourceLocale: 'fr' } },
+      overAllowance: false,
+    })
     expect(hoisted.translateIncomingMessage).toHaveBeenCalledTimes(1)
   })
 })

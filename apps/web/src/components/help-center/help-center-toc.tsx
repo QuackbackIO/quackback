@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import type { TocHeading } from './help-center-article-utils'
 
@@ -37,7 +38,7 @@ export function HelpCenterToc({ headings }: HelpCenterTocProps) {
   return (
     <aside className="sticky top-14 h-[calc(100vh-3.5rem)] hidden flex-col py-8 pl-6 pr-6 xl:flex">
       <p className="mb-3 shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        On this page
+        <FormattedMessage id="portal.hc.toc.title" defaultMessage="On this page" />
       </p>
       <nav className="min-h-0 flex-1 overflow-y-auto">
         <ul className="border-l border-border space-y-0.5">

@@ -3,7 +3,8 @@
  */
 
 import type { EventData } from '@/lib/server/events/types'
-import { stripHtml, truncate } from '@/lib/server/events/hook-utils'
+import { buildIntegrationPostContent } from '@/lib/server/integrations/post-content'
+import { truncate } from '@/lib/server/events/hook-utils'
 import { getAuthorName, buildPostUrl } from '@/lib/server/integrations/message-utils'
 
 /**
@@ -20,7 +21,7 @@ export function buildShortcutStoryBody(
 
   const { post } = event.data
   const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
-  const content = truncate(stripHtml(post.content), 2000)
+  const content = buildIntegrationPostContent(post.content, rootUrl)
   const author = getAuthorName(post)
 
   const description = [

@@ -112,4 +112,17 @@ describe('AUTH_BLOCK_MESSAGES', () => {
       expect(AUTH_BLOCK_MESSAGES[code]).toBeTruthy()
     }
   })
+
+  it('explains Better-Auth user_info_is_missing for both missing profile and mapped email', () => {
+    expect(AUTH_BLOCK_MESSAGES.user_info_is_missing).toMatch(/usable profile/i)
+    expect(AUTH_BLOCK_MESSAGES.user_info_is_missing).toMatch(/email/i)
+    expect(AUTH_BLOCK_MESSAGES.user_info_is_missing).toMatch(/map/i)
+  })
+
+  it('keeps both email-mismatch spellings after the 1.7 rename', () => {
+    expect(AUTH_BLOCK_MESSAGES.email_does_not_match).toMatch(/different email/i)
+    expect(AUTH_BLOCK_MESSAGES["email_doesn't_match"]).toBe(
+      AUTH_BLOCK_MESSAGES.email_does_not_match
+    )
+  })
 })

@@ -529,6 +529,19 @@ export async function dispatchMessageDeleted(
   })
 }
 
+export async function dispatchMessageUpdated(
+  actor: EventActor,
+  message: EventMessageData,
+  conversation: EventConversationRef,
+  editedAt: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'message.updated',
+    data: { message, conversation, editedAt },
+  })
+}
+
 export async function dispatchTicketCreated(
   actor: EventActor,
   ticket: EventTicketData
@@ -735,21 +748,34 @@ export async function dispatchConversationTeammateUnresponsive(
  * caller still derives a stable id (conversationId + clock + the SLA
  * application's own `appliedAt`) so a duplicate BullMQ job is never queued
  * for the same claim within the queue's retention window either.
+ *
+ * Rethrows on failure: workflow-sweep.ts only claims its own fire-once
+ * marker (claimSlaTimerTriggerMarker) AFTER this dispatch resolves
+ * (claim-after-enqueue). Left best-effort, an enqueue failure here would
+ * resolve normally and the marker would be claimed anyway, losing the
+ * trigger for good instead of leaving it for a later tick to retry.
  */
 export async function dispatchSlaApproachingBreach(id: string, payload: SlaTimerPayload) {
-  await dispatchEvent({
-    ...timerEventEnvelope(id),
-    type: 'sla.approaching_breach',
-    data: payload,
-  })
+  await dispatchEvent(
+    {
+      ...timerEventEnvelope(id),
+      type: 'sla.approaching_breach',
+      data: payload,
+    },
+    { rethrow: true }
+  )
 }
 
 /** Fire sla.breached once a conversation's clock passes its due date with no
- *  settling event. Mirrors dispatchSlaApproachingBreach; see that doc. */
+ *  settling event. Mirrors dispatchSlaApproachingBreach, including the
+ *  rethrow (see that doc) — its caller claims a fire-once marker post-dispatch too. */
 export async function dispatchSlaBreached(id: string, payload: SlaTimerPayload) {
-  await dispatchEvent({
-    ...timerEventEnvelope(id),
-    type: 'sla.breached',
-    data: payload,
-  })
+  await dispatchEvent(
+    {
+      ...timerEventEnvelope(id),
+      type: 'sla.breached',
+      data: payload,
+    },
+    { rethrow: true }
+  )
 }

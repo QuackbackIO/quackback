@@ -462,7 +462,7 @@ export function MergeOthersDialog({
             </>
           )}
 
-          {/* Search Results section */}
+          {/* Search results section */}
           {isLoading && searchQuery.length >= 3 && (
             <p className="text-sm text-muted-foreground py-6 text-center">Searching...</p>
           )}
@@ -471,7 +471,7 @@ export function MergeOthersDialog({
             <>
               {(hasAiSuggestions || searchQuery.length >= 3) && (
                 <div className="px-4 py-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-wider bg-muted/20">
-                  Search Results
+                  Search results
                 </div>
               )}
               <div className="divide-y divide-border/50">

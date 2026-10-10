@@ -5,6 +5,7 @@ import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types
 
 export interface PlanNoticeView {
   label: string
+  trialPlan?: string
   message?: string
   /** Whole days until expiry (ceil), clamped to >= 0. Null when the
    *  notice has no (valid) expiresAt. */
@@ -13,7 +14,7 @@ export interface PlanNoticeView {
   urgent: boolean
   actionUrl?: string
   actionLabel?: string
-  dismissible: boolean
+  ended: boolean
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -27,16 +28,29 @@ export function presentPlanNotice(
   if (notice.expiresAt) {
     const expires = Date.parse(notice.expiresAt)
     if (!Number.isNaN(expires)) {
+      // Compare the raw instant first. Math.ceil of a negative fraction
+      // (expired less than a day ago) rounds to 0, which used to keep the
+      // banner as "ends today". Persistent trial-ended strips set `ended`.
+      if (expires <= now.getTime() && !notice.ended) return null
       daysLeft = Math.max(0, Math.ceil((expires - now.getTime()) / DAY_MS))
     }
   }
   return {
     label: notice.label,
+    ...(notice.trialPlan ? { trialPlan: notice.trialPlan } : {}),
     message: notice.message,
     daysLeft,
     urgent: daysLeft !== null && daysLeft <= 3,
     actionUrl: notice.actionUrl,
     actionLabel: notice.actionLabel,
-    dismissible: Boolean(notice.dismissible),
+    ended: Boolean(notice.ended),
   }
+}
+
+/**
+ * A running trial with more than three days left. It stays out of the banner
+ * and shows quietly in the sidebar until its last days.
+ */
+export function isQuietTrial(view: PlanNoticeView | null): boolean {
+  return Boolean(view && !view.ended && view.daysLeft !== null && view.daysLeft > 3)
 }

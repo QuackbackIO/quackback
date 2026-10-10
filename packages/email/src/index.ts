@@ -1,18 +1,14 @@
 /**
  * Email sending module for Quackback
  *
- * Uses the Amazon SES v2 API or Nodemailer for SMTP, with React Email
- * components. No build step required - React components are rendered at
- * runtime.
+ * Sends through the Amazon SES v2 API, Nodemailer for SMTP, or the Resend API,
+ * with React Email components. No build step required - React components are
+ * rendered at runtime.
  *
- * Priority: SES (if EMAIL_SES_ACCESS_KEY_ID + EMAIL_SES_SECRET_ACCESS_KEY set)
- * → SMTP (if EMAIL_SMTP_HOST set) → Console logging (dev mode).
- *
- * The order is deliberate rather than incidental. An install that has set
- * `EMAIL_SMTP_HOST` has named the mail server it wants used and keeps it,
- * because a self-hoster with a mail server of their own has no SES credentials
- * to be overtaken by; only an install that has been given both halves of an SES
- * credential gets that path, which is a pair nobody sets by accident.
+ * Exactly one provider: SES (EMAIL_SES_ACCESS_KEY_ID + EMAIL_SES_SECRET_ACCESS_KEY),
+ * SMTP (EMAIL_SMTP_HOST) or Resend (EMAIL_RESEND_API_KEY / RESEND_API_KEY), and
+ * console logging (dev mode) when none is set. More than one is refused rather
+ * than ranked; see ./provider for the rule and its one inbound exception.
  */
 
 import { render } from '@react-email/components'
@@ -21,7 +17,23 @@ import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
-import { applyDisplayName, isSesEmailConfigured, sendViaSes } from './ses'
+import { applyDisplayName, sendViaSes } from './ses'
+import { sendViaResend } from './resend'
+import { listUnsubscribeHeaders } from './list-unsubscribe'
+import { currentEmailIdempotencyKey } from './idempotency'
+import { EmailConfigError, resendApiKey, resolveEmailProvider } from './provider'
+import type { EmailProvider } from './provider'
+export {
+  EmailConfigError,
+  EmailProviderConflictError,
+  assertEmailProviderConfigured,
+} from './provider'
+export type { EmailProvider } from './provider'
+export { ResendEmailError } from './resend'
+export { withEmailIdempotencyKey } from './idempotency'
+import type { EmailAttachment } from './attachment'
+export type { EmailAttachment } from './attachment'
+export { MAX_EMAIL_ATTACHMENT_BYTES } from './attachment'
 // Capability-bearing senders declare `to: SecureRecipient` so a contact address
 // cannot be passed to one. See ./recipient for why the classes are shaped this
 // way, and why the guarantee belongs here rather than at the call sites.
@@ -34,9 +46,11 @@ import type { SendingIdentity } from './sender'
 export type { SendingIdentity } from './sender'
 import { MagicLinkEmail } from './templates/magic-link'
 import { SignupNotAllowedEmail } from './templates/signup-not-allowed'
-import { InvitationEmail } from './templates/invitation'
+import { InvitationEmail, type InvitationEmailCopy } from './templates/invitation'
 import { PortalInviteEmail } from './templates/portal-invite'
 import { WelcomeEmail } from './templates/welcome'
+import { MessengerInstallEmail } from './templates/messenger-install'
+import { OnboardingEmail, type OnboardingEmailContent } from './templates/onboarding-email'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
 import { ConversationMessageEmail } from './templates/conversation-message'
@@ -71,25 +85,6 @@ function getEnv(key: string): string | undefined {
   return process.env[key]
 }
 
-/**
- * A send refused because the install is not configured for it.
- *
- * Declares itself permanent for the same reason the transport's own errors do.
- * The conversation send path retries anything that does not say otherwise —
- * deliberately, so a new provider error name cannot quietly stop being retried
- * — and a missing environment variable is not something a second attempt
- * supplies. Without the marker a misconfiguration spends the whole backoff
- * before failing exactly as it did on the first try.
- */
-export class EmailConfigError extends Error {
-  readonly retryable = false
-
-  constructor(message: string) {
-    super(message)
-    this.name = 'EmailConfigError'
-  }
-}
-
 export function getEmailFrom(): string {
   const from = resolvedDefaultFrom() ?? getEnv('EMAIL_FROM')
   if (!from) {
@@ -99,18 +94,17 @@ export function getEmailFrom(): string {
 }
 
 /**
- * Credential for the inbound body fetch below. Nothing outbound reads it: the
- * provider that owns this key does not carry any of our mail out, only the
- * metadata-only inbound webhook's missing body back in.
+ * The Resend key. It sends when Resend is the outbound provider, and it always
+ * fetches inbound bodies for the metadata-only Resend webhook below.
  */
 function getResendApiKey(): string | undefined {
   // Support both EMAIL_RESEND_API_KEY and RESEND_API_KEY
-  return getEnv('EMAIL_RESEND_API_KEY') || getEnv('RESEND_API_KEY')
+  return resendApiKey(process.env)
 }
 
 // Lazy-initialized transports
 let smtpTransporter: Transporter | null = null
-let inboundFetchClient: Resend | null = null
+let resendClient: { key: string | undefined; client: Resend } | null = null
 
 /**
  * Why a send did not happen. Present only when `sent` is false. Both cases are
@@ -133,7 +127,7 @@ export type EmailResult = {
    * Who owns the outbound `Message-ID` for this send, in three states.
    *
    * - **absent** — we set it, so the caller's own minted id is what went on the
-   *   wire and is what a reply will quote. Every rung but SES.
+   *   wire and is what a reply will quote. SMTP.
    * - **a string** — the transport generated the id and told us which one, in
    *   whatever form the transport reports it. Store THIS, not the minted one:
    *   the minted one was never sent. It is not necessarily the literal token a
@@ -144,11 +138,10 @@ export type EmailResult = {
    *   There is nothing to store, and no reply can be matched back by
    *   `Message-ID`. Callers must not fall back to their minted id here; it would
    *   record an id that exists nowhere and can only ever produce a miss.
+   *   Resend: its send response names only its own email id.
    */
   messageId?: string | null
 }
-
-type EmailProvider = 'ses' | 'smtp' | 'console'
 
 export function isEmailConfigured(): boolean {
   return getProvider() !== 'console'
@@ -160,17 +153,17 @@ export function getEmailProvider(): EmailProvider {
 }
 
 /**
- * The ladder, per process.
+ * The provider, per process.
  *
  * Whole-process and nothing else: SES verifies a sending identity from a DNS
  * record its owner publishes rather than from a zone we host, so a workspace
- * sending as its own branded domain is on the same rung as everything else and
- * there is no identity this ladder has to route around.
+ * sending as its own branded domain uses the same provider as everything else
+ * and there is no identity this has to route around. Throws
+ * `EmailProviderConflictError` when more than one provider is configured; boot
+ * refuses that environment, so a send only meets it when nothing booted.
  */
 function getProvider(): EmailProvider {
-  if (isSesEmailConfigured()) return 'ses'
-  if (getEnv('EMAIL_SMTP_HOST')) return 'smtp'
-  return 'console'
+  return resolveEmailProvider(process.env)
 }
 
 // Recipient addresses (PII) are never logged here — log provider + ids only.
@@ -203,13 +196,14 @@ function getSmtpTransporter(): Transporter {
   return smtpTransporter
 }
 
-/** Client for the inbound body fetch below, never for sending. */
-function getInboundFetchClient(): Resend {
-  if (!inboundFetchClient) {
-    log.info('initializing inbound email fetch client')
-    inboundFetchClient = new Resend(getResendApiKey())
+/** The Resend client, for sending and for the inbound body fetch below. */
+function getResendClient(): Resend {
+  const key = getResendApiKey()
+  if (!resendClient || resendClient.key !== key) {
+    log.info('initializing resend client')
+    resendClient = { key, client: new Resend(key) }
   }
-  return inboundFetchClient
+  return resendClient.client
 }
 
 /** Wrap a bare Message-ID in angle brackets for a header value (idempotent). */
@@ -289,14 +283,14 @@ function buildThreadingHeaders(options: ThreadingOptions): Record<string, string
  * no inbound API key is configured or the email cannot be found; throws on
  * other errors so the webhook route can 500 and let the provider redeliver.
  *
- * The only consumer of the inbound credential. Outbound mail leaves by the
- * ladder above and never touches this client.
+ * Reads the Resend key whichever provider sends, so an install that sends
+ * through SES or SMTP can still receive through Resend.
  */
 export async function getReceivedEmail(
   emailId: string
 ): Promise<{ text: string | null; html: string | null } | null> {
   if (!getResendApiKey()) return null
-  const { data, error } = await getInboundFetchClient().emails.receiving.get(emailId)
+  const { data, error } = await getResendClient().emails.receiving.get(emailId)
   if (error) {
     log.warn({ emailId, error: error.name }, 'received-email fetch failed')
     if (error.name === 'not_found') return null
@@ -306,7 +300,7 @@ export async function getReceivedEmail(
 }
 
 /**
- * The single low-level send: provider selection (SES → SMTP → console), the
+ * The single low-level send: provider selection (SES, SMTP, Resend or console), the
  * anon-address guard, and RFC 5322 threading. Takes EITHER a
  * prerendered `html` body or a `react` element (the branded senders pass
  * `react`; the raw sender passes `html`). Falls back to console when
@@ -334,6 +328,8 @@ async function dispatch(
     conversationId?: string | null
     ticketId?: string | null
     postId?: string | null
+    /** Real files to carry as MIME attachments, on every rung. */
+    attachments?: EmailAttachment[]
   } & ThreadingOptions
 ): Promise<EmailResult> {
   const threadingHeaders = buildThreadingHeaders(options)
@@ -365,7 +361,7 @@ async function dispatch(
   const billable = isEmailBillable(emailType)
 
   if (provider === 'console') {
-    // Said out loud, once per dropped message. The other two rungs announce
+    // Said out loud, once per dropped message. The other rungs announce
     // themselves when they initialize; this one delivers nothing and its
     // preview sits at `debug`, so a production deploy that dropped every
     // notification used to emit no line at all while callers read `sent: false`
@@ -376,7 +372,16 @@ async function dispatch(
       'no email provider configured: message logged as a preview and not delivered'
     )
     log.debug(
-      { email_type: emailType, to: options.to, ...options.preview },
+      {
+        email_type: emailType,
+        to: options.to,
+        ...options.preview,
+        // Filenames only — never the bytes, and this is the one rung where
+        // nothing is ever actually carried anywhere.
+        ...(options.attachments && options.attachments.length > 0
+          ? { attachments: options.attachments.map((a) => a.filename) }
+          : {}),
+      },
       '[dev] email preview (console provider)'
     )
     recordOutboundLog({
@@ -415,6 +420,9 @@ async function dispatch(
       ...(text !== undefined ? { text } : {}),
       ...(options.replyTo !== undefined ? { replyTo: options.replyTo } : {}),
       ...(Object.keys(threadingHeaders).length > 0 ? { headers: threadingHeaders } : {}),
+      ...(options.attachments && options.attachments.length > 0
+        ? { attachments: options.attachments }
+        : {}),
     })
     // The id as the provider reported it, which is what its delivery events and
     // the threading map both name the message by. A raw inbound header quotes
@@ -435,7 +443,62 @@ async function dispatch(
     return { sent: true, messageId: result.messageId }
   }
 
-  // SMTP is the last rung: console and SES both returned above.
+  if (provider === 'resend') {
+    // Resend assigns the wire Message-ID and the send response names only its
+    // own email id, so the result reports the id as the transport's and
+    // undisclosed (null): nothing records the minted id as one a reply could
+    // quote. The plus-addressed Reply-To carries the reply home, and
+    // In-Reply-To and References keep the recipient's client threading.
+    const idempotencyKey = currentEmailIdempotencyKey()
+    try {
+      const result = await sendViaResend(
+        {
+          from,
+          to: options.to,
+          subject: options.subject,
+          ...(html !== undefined ? { html } : {}),
+          ...(text !== undefined ? { text } : {}),
+          ...(options.replyTo !== undefined ? { replyTo: options.replyTo } : {}),
+          ...(Object.keys(threadingHeaders).length > 0 ? { headers: threadingHeaders } : {}),
+          ...(options.attachments && options.attachments.length > 0
+            ? { attachments: options.attachments }
+            : {}),
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+        },
+        getResendClient()
+      )
+      log.info({ provider: 'resend', provider_message_id: result.id }, 'email sent')
+      recordOutboundLog({
+        direction: 'outbound',
+        emailType,
+        provider: 'resend',
+        to: options.to,
+        subject: options.subject,
+        status: 'sent',
+        messageId: null,
+        providerMessageId: result.id,
+        billable,
+        ...entityIds(options),
+      })
+    } catch (error) {
+      log.error({ err: error, provider: 'resend' }, 'email send failed')
+      recordOutboundLog({
+        direction: 'outbound',
+        emailType,
+        provider: 'resend',
+        to: options.to,
+        subject: options.subject,
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'send failed',
+        billable,
+        ...entityIds(options),
+      })
+      throw error
+    }
+    return { sent: true, messageId: null }
+  }
+
+  // SMTP is the last rung: console, SES and Resend all returned above.
   try {
     const result = await getSmtpTransporter().sendMail({
       from,
@@ -448,6 +511,11 @@ async function dispatch(
       inReplyTo: threadingHeaders['In-Reply-To'],
       references: threadingHeaders['References'],
       headers: options.extraHeaders,
+      attachments: options.attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        content: Buffer.from(attachment.content),
+      })),
     })
     log.info({ provider: 'smtp', message_id: result.messageId }, 'email sent')
     recordOutboundLog({
@@ -509,6 +577,7 @@ async function sendEmail(
     conversationId?: string | null
     ticketId?: string | null
     postId?: string | null
+    attachments?: EmailAttachment[]
   } & ThreadingOptions
 ): Promise<EmailResult> {
   const showPoweredBy = await resolveEmailPoweredBy()
@@ -530,6 +599,7 @@ export interface RawEmailOptions extends ThreadingOptions {
   html: string
   text?: string
   replyTo?: string
+  attachments?: EmailAttachment[]
 }
 
 /**
@@ -546,6 +616,8 @@ export async function sendRawEmail(options: RawEmailOptions): Promise<EmailResul
 // Invitation Email
 // ============================================================================
 
+export type { InvitationEmailCopy }
+
 interface SendInvitationParams {
   to: SecureRecipient
   invitedByName: string
@@ -553,20 +625,23 @@ interface SendInvitationParams {
   workspaceName: string
   inviteLink: string
   logoUrl?: string
+  /** The invitation in the team's language, subject included. English without it. */
+  copy?: InvitationEmailCopy & { subject: string }
 }
 
 export async function sendInvitationEmail(params: SendInvitationParams): Promise<EmailResult> {
-  const { to, invitedByName, inviteeName, workspaceName, inviteLink, logoUrl } = params
+  const { to, invitedByName, inviteeName, workspaceName, inviteLink, logoUrl, copy } = params
 
   return sendEmail({
     to,
-    subject: `You've been invited to join ${workspaceName} on Quackback`,
+    subject: copy?.subject ?? `${invitedByName} invited you to ${workspaceName}`,
     react: InvitationEmail({
       invitedByName,
       inviteeName,
       organizationName: workspaceName,
       inviteLink,
       logoUrl,
+      copy,
     }),
     emailType: 'InvitationEmail',
     preview: { inviteLink },
@@ -622,6 +697,66 @@ export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<Email
 }
 
 // ============================================================================
+// Going live: install instructions and the onboarding welcome / nudge
+// ============================================================================
+
+export async function sendMessengerInstallEmail(params: {
+  to: string
+  senderName: string
+  workspaceName: string
+  snippet: string
+  logoUrl?: string
+}): Promise<EmailResult> {
+  const { to, senderName, workspaceName, snippet, logoUrl } = params
+  return sendEmail({
+    to,
+    subject: `Add ${workspaceName} Messenger to the website`,
+    react: MessengerInstallEmail({ senderName, workspaceName, snippet, logoUrl }),
+    emailType: 'MessengerInstallEmail',
+    preview: { workspaceName },
+  })
+}
+
+export type { OnboardingEmailContent }
+
+interface SendOnboardingEmailParams extends OnboardingEmailContent {
+  to: string
+  subject: string
+  workspaceName: string
+  unsubscribeUrl: string
+  logoUrl?: string
+}
+
+function sendOnboardingEmail(
+  params: SendOnboardingEmailParams,
+  emailType: 'OnboardingWelcomeEmail' | 'OnboardingNudgeEmail'
+): Promise<EmailResult> {
+  const { to, subject, ...content } = params
+  return sendEmail({
+    to,
+    subject,
+    react: OnboardingEmail(content),
+    extraHeaders: listUnsubscribeHeaders(params.unsubscribeUrl),
+    emailType,
+    preview: { cta: params.cta.url, lang: params.lang },
+  })
+}
+
+/** The one "workspace is ready" email, sent when a new workspace's owner first lands. */
+export async function sendOnboardingWelcomeEmail(
+  params: SendOnboardingEmailParams
+): Promise<EmailResult> {
+  return sendOnboardingEmail(params, 'OnboardingWelcomeEmail')
+}
+
+/** The day-two nudge, sent at most once while no customer has acted yet. */
+export async function sendOnboardingNudgeEmail(
+  params: SendOnboardingEmailParams
+): Promise<EmailResult> {
+  return sendOnboardingEmail(params, 'OnboardingNudgeEmail')
+}
+
+// ============================================================================
 // Sign-in Email (magic link + 6-digit code combined)
 // ============================================================================
 
@@ -630,16 +765,24 @@ interface SendMagicLinkParams {
   signInUrl: string
   code: string
   logoUrl?: string
+  /** The workspace being signed in to, named in the subject beside the code. */
+  workspaceName?: string
+}
+
+/** The code first, so the inbox list alone is enough to sign in. */
+export function magicLinkSubject(code: string, workspaceName?: string): string {
+  const name = workspaceName?.trim()
+  return name ? `${code} is your code for ${name}` : `${code} is your sign-in code`
 }
 
 export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<EmailResult> {
-  const { to, signInUrl, code, logoUrl } = params
+  const { to, signInUrl, code, logoUrl, workspaceName } = params
 
   log.debug('sending sign-in email')
   return sendEmail({
     to,
-    subject: 'Your Quackback sign-in link',
-    react: MagicLinkEmail({ signInUrl, code, logoUrl }),
+    subject: magicLinkSubject(code, workspaceName),
+    react: MagicLinkEmail({ signInUrl, code, logoUrl, workspaceName }),
     emailType: 'MagicLinkEmail',
     preview: { signInUrl, code },
   })
@@ -748,20 +891,43 @@ interface SendNewSignInParams {
   occurredAt: string
   ipAddress?: string | null
   userAgent?: string | null
+  location?: string | null
+  settingsUrl?: string | null
+  ssoEnforced?: boolean
   logoUrl?: string
 }
 
-/** First-sight new-device sign-in alert. Triggered by
+/** Additional-device sign-in alert. Triggered by
  * `handleNewDeviceNotification` after a successful sign-in lands on
- * an unseen (UA, /24 IP) combination. */
+ * an unseen signed device cookie for that account. IP and browser/OS
+ * are shown, not used as the claim key. */
 export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<EmailResult> {
-  const { to, workspaceName, occurredAt, ipAddress, userAgent, logoUrl } = params
+  const {
+    to,
+    workspaceName,
+    occurredAt,
+    ipAddress,
+    userAgent,
+    location,
+    settingsUrl,
+    ssoEnforced,
+    logoUrl,
+  } = params
 
   log.debug('sending new-sign-in alert')
   return sendEmail({
     to,
     subject: 'New sign-in to your account',
-    react: NewSignInEmail({ workspaceName, occurredAt, ipAddress, userAgent, logoUrl }),
+    react: NewSignInEmail({
+      workspaceName,
+      occurredAt,
+      ipAddress,
+      userAgent,
+      location,
+      settingsUrl: ssoEnforced ? undefined : settingsUrl,
+      ssoEnforced,
+      logoUrl,
+    }),
     emailType: 'NewSignInEmail',
     preview: { occurredAt },
   })
@@ -811,6 +977,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
       preferencesUrl,
       logoUrl,
     }),
+    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'StatusChangeEmail',
     preview: { postUrl },
   })
@@ -861,6 +1028,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
       preferencesUrl,
       logoUrl,
     }),
+    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'NewCommentEmail',
     preview: { postUrl },
   })
@@ -914,6 +1082,8 @@ interface SendConversationMessageEmailParams {
   /** Display name for the From header (`Alex (Acme)`). */
   fromDisplayName?: string
   conversationId?: string | null
+  /** Real files to carry as MIME attachments. */
+  attachments?: EmailAttachment[]
 }
 
 /**
@@ -944,6 +1114,7 @@ export async function sendConversationMessageEmail(
     quotedPrevious,
     fromDisplayName,
     conversationId,
+    attachments,
   } = params
 
   const copy = conversationMessageCopy({
@@ -990,6 +1161,7 @@ export async function sendConversationMessageEmail(
     from,
     fromDisplayName,
     conversationId,
+    attachments,
     emailType: copy.useHumanTemplate ? 'ConversationReplyEmail' : 'ConversationMessageEmail',
     preview: { ctaUrl },
   })
@@ -1161,7 +1333,7 @@ function ticketEventCopy(p: SendTicketEventEmailParams): TicketEmailCopy {
           subject: `Your ticket ${p.ticketLabel} was closed`,
           heading: 'Your ticket was closed',
           intro: `${p.ticketLabel} "${p.title}" has been closed by the ${p.workspaceName} team.`,
-          note: 'If you have a follow-up, reply on the ticket thread — replying reopens it.',
+          note: 'If you have a follow-up, reply on the ticket thread. Replying reopens it.',
           ctaLabel: 'View your ticket',
           reason: requesterReason,
         }
@@ -1298,6 +1470,7 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
       preferencesUrl,
       logoUrl,
     }),
+    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'PostMentionEmail',
     preview: { postUrl },
   })
@@ -1414,6 +1587,7 @@ export async function sendChangelogPublishedEmail(
       logoUrl,
     }),
     from,
+    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'ChangelogPublishedEmail',
     preview: { changelogUrl },
   })
@@ -1463,6 +1637,7 @@ export async function sendFeedbackLinkedEmail(
       attributedByName,
       logoUrl,
     }),
+    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'FeedbackLinkedEmail',
     preview: { postUrl },
   })
@@ -1519,6 +1694,7 @@ export async function sendStatusIncidentPublishedEmail(
       preferencesUrl,
       logoUrl,
     }),
+    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'StatusIncidentPublishedEmail',
     preview: { incidentUrl },
   })
@@ -1577,6 +1753,7 @@ export async function sendStatusMaintenanceScheduledEmail(
       preferencesUrl,
       logoUrl,
     }),
+    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'StatusMaintenanceScheduledEmail',
     preview: { incidentUrl },
   })
@@ -1636,6 +1813,8 @@ export async function sendCsatRequestEmail(
 export { InvitationEmail } from './templates/invitation'
 export { PortalInviteEmail } from './templates/portal-invite'
 export { WelcomeEmail } from './templates/welcome'
+export { MessengerInstallEmail } from './templates/messenger-install'
+export { OnboardingEmail } from './templates/onboarding-email'
 export { MagicLinkEmail } from './templates/magic-link'
 export { SignupNotAllowedEmail } from './templates/signup-not-allowed'
 export { StatusChangeEmail } from './templates/status-change'
@@ -1661,7 +1840,7 @@ export {
   teamAlertSubject,
 } from './conversation-copy'
 export { ConversationClosedEmail } from './templates/conversation-closed'
-export { EMAIL_BILLABLE, isEmailBillable } from './mail-class'
+export { EMAIL_BILLABLE, METERED_EMAIL_TYPES, isEmailBillable } from './mail-class'
 
 // ============================================================================
 // Address verification (add or change)

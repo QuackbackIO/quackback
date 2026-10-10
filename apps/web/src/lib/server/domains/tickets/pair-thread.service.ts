@@ -269,10 +269,14 @@ function compareNewestFirst(a: ConversationMessage, b: ConversationMessage): num
  *  turns are flagged (`isAssistant`) via the shared memoized assistant id —
  *  the same resolution `listMessages` applies on the conversation side. */
 async function toPairDtos(
-  sourced: Array<{ row: ConversationMessage; source: PairThreadMessageSource }>
+  sourced: Array<{ row: ConversationMessage; source: PairThreadMessageSource }>,
+  preferAccountName: boolean
 ): Promise<PairThreadMessageDTO[]> {
   const [authors, assistantPrincipalId] = await Promise.all([
-    loadAuthors(sourced.map((s) => s.row.principalId)),
+    loadAuthors(
+      sourced.map((s) => s.row.principalId),
+      { preferAccountName }
+    ),
     assistantPrincipalIdOnce(),
   ])
   return sourced.map(({ row, source }) => ({
@@ -296,9 +300,16 @@ async function toPairDtos(
  */
 export async function listPairThreadMessages(
   ticketId: TicketId,
-  opts: { before?: string; includeInternal?: boolean; all?: boolean } = {}
+  opts: {
+    before?: string
+    includeInternal?: boolean
+    all?: boolean
+    /** Agent reads can prefer account names while excluding internal notes. */
+    preferAccountName?: boolean
+  } = {}
 ): Promise<PairThreadMessagePage> {
   const includeInternal = opts.includeInternal ?? false
+  const preferAccountName = opts.preferAccountName ?? includeInternal
   const conversationId = await resolvePairConversationId(ticketId)
   const parents: PairParent[] = [
     { source: 'ticket', ticketId },
@@ -316,7 +327,7 @@ export async function listPairThreadMessages(
     )
     // Oldest-first across both parents (the `all` read's rendering order).
     const merged = perParent.flat().sort((a, b) => compareNewestFirst(b.row, a.row))
-    return { messages: await toPairDtos(merged), hasMore: false }
+    return { messages: await toPairDtos(merged, preferAccountName), hasMore: false }
   }
 
   const cursor = await resolvePairCursor(opts.before)
@@ -334,5 +345,5 @@ export async function listPairThreadMessages(
   const page = hasMore ? merged.slice(0, MESSAGE_PAGE_SIZE) : merged
   // Oldest-first for rendering; the parents pulled newest-first for the keyset.
   page.reverse()
-  return { messages: await toPairDtos(page), hasMore }
+  return { messages: await toPairDtos(page, preferAccountName), hasMore }
 }

@@ -28,10 +28,29 @@ export function ssoTestResultKey(testId: string): string {
 export const SSO_TEST_POSTMESSAGE_SOURCE = 'quackback-sso-test' as const
 
 /**
- * Path prefix shared by every genericOAuth callback. The test flow uses
- * the provider's own production callback (`<prefix><registrationId>`) so
- * admins register exactly one redirect URI per provider. The auth catch-all
- * intercepts all paths under this prefix before handing off to Better-Auth
- * — a KV miss for the OAuth `state` still falls through cleanly.
+ * Legacy generic OAuth callback, still sent by providers on the `legacy`
+ * redirect style (see oidc-redirect.ts). The catch-all intercepts it so a
+ * return here can finish a test or be rewritten onto Better Auth.
  */
 export const SSO_OAUTH_CALLBACK_PREFIX = '/api/auth/oauth2/callback/' as const
+
+/**
+ * Callback for social providers and OIDC providers on the `current`
+ * redirect style. Test sign-in sends whichever the provider uses, so one IdP
+ * registration covers both.
+ */
+export const SSO_SOCIAL_CALLBACK_PREFIX = '/api/auth/callback/' as const
+
+export function isSsoTestCallbackPath(pathname: string): boolean {
+  return (
+    pathname.startsWith(SSO_OAUTH_CALLBACK_PREFIX) ||
+    pathname.startsWith(SSO_SOCIAL_CALLBACK_PREFIX)
+  )
+}
+
+/**
+ * Label of the Test sign-in step reporting a provider that leaves the nonce
+ * out. The callback rewrites that step's detail when the finding could not be
+ * saved, so both sides name it here.
+ */
+export const SSO_TEST_NONCE_NOT_RETURNED_LABEL = 'Provider does not return the nonce'

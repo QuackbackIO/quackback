@@ -74,6 +74,7 @@ function buildAuth(overrides: {
           ? SYSTEM_ROLE_PERMISSIONS.manager
           : []),
     ],
+    scope: 'dashboard',
   }
 }
 

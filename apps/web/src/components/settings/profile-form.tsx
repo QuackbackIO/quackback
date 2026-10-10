@@ -1,11 +1,12 @@
 import { useState, useRef } from 'react'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import { CameraIcon, ArrowPathIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import type { UserId } from '@quackback/ids'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar } from '@/components/ui/avatar'
 import { ImageCropper } from '@/components/ui/image-cropper'
 import { authClient } from '@/lib/client/auth-client'
 import { useRouter } from '@tanstack/react-router'
@@ -13,7 +14,6 @@ import { updateProfileNameFn } from '@/lib/server/functions/user'
 import { useUploadAvatar, useDeleteAvatar } from '@/lib/client/mutations/avatar'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { PasswordForm } from '@/components/settings/password-form'
-import { getInitials } from '@/lib/shared/utils'
 import { EmailField } from '@/components/settings/email-field'
 
 interface ProfileFormProps {
@@ -25,6 +25,7 @@ interface ProfileFormProps {
 }
 
 export function ProfileForm({ user }: ProfileFormProps) {
+  const intl = useIntl()
   const router = useRouter()
   const userId = user.id as UserId
 
@@ -47,10 +48,6 @@ export function ProfileForm({ user }: ProfileFormProps) {
   const [showCropper, setShowCropper] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
 
-  const initials = getInitials(name)
-
-  const avatarSrc = avatarUrl || undefined
-
   const handleAvatarClick = () => {
     fileInputRef.current?.click()
   }
@@ -62,13 +59,23 @@ export function ProfileForm({ user }: ProfileFormProps) {
     // Validate file type
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
     if (!allowedTypes.includes(file.type)) {
-      toast.error('Invalid file type. Allowed: JPEG, PNG, GIF, WebP')
+      toast.error(
+        intl.formatMessage({
+          id: 'portal.settings.profile.avatar.invalidType',
+          defaultMessage: 'Invalid file type. Allowed: JPEG, PNG, GIF, WebP',
+        })
+      )
       return
     }
 
     // Validate file size (5MB) - basic check before cropping
     if (file.size > 5 * 1024 * 1024) {
-      toast.error('File too large. Maximum size is 5MB')
+      toast.error(
+        intl.formatMessage({
+          id: 'portal.settings.profile.avatar.tooLarge',
+          defaultMessage: 'File too large. Maximum size is 5MB',
+        })
+      )
       return
     }
 
@@ -92,10 +99,22 @@ export function ProfileForm({ user }: ProfileFormProps) {
     uploadMutation.mutate(croppedBlob, {
       onSuccess: () => {
         router.invalidate()
-        toast.success('Avatar updated')
+        toast.success(
+          intl.formatMessage({
+            id: 'portal.settings.profile.avatar.updated',
+            defaultMessage: 'Avatar updated',
+          })
+        )
       },
       onError: (error) => {
-        toast.error(error instanceof Error ? error.message : 'Failed to upload avatar')
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : intl.formatMessage({
+                id: 'portal.settings.profile.avatar.uploadFailed',
+                defaultMessage: 'Failed to upload avatar',
+              })
+        )
       },
     })
   }
@@ -112,10 +131,22 @@ export function ProfileForm({ user }: ProfileFormProps) {
     deleteMutation.mutate(undefined, {
       onSuccess: () => {
         router.invalidate()
-        toast.success('Avatar removed')
+        toast.success(
+          intl.formatMessage({
+            id: 'portal.settings.profile.avatar.removed',
+            defaultMessage: 'Avatar removed',
+          })
+        )
       },
       onError: (error) => {
-        toast.error(error instanceof Error ? error.message : 'Failed to remove avatar')
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : intl.formatMessage({
+                id: 'portal.settings.profile.avatar.removeFailed',
+                defaultMessage: 'Failed to remove avatar',
+              })
+        )
       },
     })
   }
@@ -124,12 +155,22 @@ export function ProfileForm({ user }: ProfileFormProps) {
     e.preventDefault()
 
     if (name.trim().length < 2) {
-      toast.error('Name must be at least 2 characters')
+      toast.error(
+        intl.formatMessage({
+          id: 'portal.settings.profile.name.tooShort',
+          defaultMessage: 'Name must be at least 2 characters',
+        })
+      )
       return
     }
 
     if (name === user.name) {
-      toast.info('No changes to save')
+      toast.info(
+        intl.formatMessage({
+          id: 'portal.settings.profile.noChanges',
+          defaultMessage: 'No changes to save',
+        })
+      )
       return
     }
 
@@ -147,9 +188,21 @@ export function ProfileForm({ user }: ProfileFormProps) {
           },
         }
       )
-      toast.success('Profile updated')
+      toast.success(
+        intl.formatMessage({
+          id: 'portal.settings.profile.updated',
+          defaultMessage: 'Profile updated',
+        })
+      )
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update profile')
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : intl.formatMessage({
+              id: 'portal.settings.profile.updateFailed',
+              defaultMessage: 'Failed to update profile',
+            })
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -162,14 +215,18 @@ export function ProfileForm({ user }: ProfileFormProps) {
     <div className="space-y-6">
       {/* Avatar Section */}
       <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium mb-1">Avatar</h2>
-        <p className="text-sm text-muted-foreground mb-4">Your profile picture</p>
+        <h2 className="font-medium mb-1">
+          <FormattedMessage id="portal.settings.profile.avatar.title" defaultMessage="Avatar" />
+        </h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          <FormattedMessage
+            id="portal.settings.profile.avatar.description"
+            defaultMessage="Your profile picture"
+          />
+        </p>
         <div className="flex items-center gap-4">
           <div className="relative group">
-            <Avatar className="h-16 w-16">
-              <AvatarImage src={avatarSrc} alt={name} />
-              <AvatarFallback className="text-lg">{initials}</AvatarFallback>
-            </Avatar>
+            <Avatar className="h-16 w-16" src={avatarUrl} name={name} fallbackClassName="text-lg" />
             {isUploadingAvatar && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
                 <ArrowPathIcon className="h-6 w-6 animate-spin text-white" />
@@ -186,12 +243,18 @@ export function ProfileForm({ user }: ProfileFormProps) {
               {isUploadingAvatar ? (
                 <>
                   <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
-                  Uploading...
+                  <FormattedMessage
+                    id="portal.settings.profile.avatar.uploading"
+                    defaultMessage="Uploading..."
+                  />
                 </>
               ) : (
                 <>
                   <CameraIcon className="h-4 w-4 mr-2" />
-                  Change avatar
+                  <FormattedMessage
+                    id="portal.settings.profile.avatar.change"
+                    defaultMessage="Change avatar"
+                  />
                 </>
               )}
             </Button>
@@ -224,13 +287,26 @@ export function ProfileForm({ user }: ProfileFormProps) {
       {/* Personal Information */}
       <form onSubmit={handleSubmit}>
         <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-          <h2 className="font-medium mb-1">Personal Information</h2>
-          <p className="text-sm text-muted-foreground mb-4">Update your personal details</p>
+          <h2 className="font-medium mb-1">
+            <FormattedMessage
+              id="portal.settings.profile.personal.title"
+              defaultMessage="Personal Information"
+            />
+          </h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            <FormattedMessage
+              id="portal.settings.profile.personal.description"
+              defaultMessage="Update your personal details"
+            />
+          </p>
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <label htmlFor="name" className="text-sm font-medium">
-                  Full name
+                  <FormattedMessage
+                    id="portal.settings.profile.personal.fullName"
+                    defaultMessage="Full name"
+                  />
                 </label>
                 <Input
                   id="name"
@@ -239,17 +315,23 @@ export function ProfileForm({ user }: ProfileFormProps) {
                   disabled={isSubmitting}
                 />
               </div>
-              <EmailField />
+              <EmailField ssoManaged={ssoEnforced} onChanged={() => router.invalidate()} />
             </div>
             <div className="flex justify-end">
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <>
                     <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
-                    Saving...
+                    <FormattedMessage
+                      id="portal.settings.profile.personal.saving"
+                      defaultMessage="Saving..."
+                    />
                   </>
                 ) : (
-                  'Save changes'
+                  <FormattedMessage
+                    id="portal.settings.profile.personal.save"
+                    defaultMessage="Save changes"
+                  />
                 )}
               </Button>
             </div>

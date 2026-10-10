@@ -164,6 +164,10 @@ export const channelAccounts = pgTable(
     uniqueIndex('channel_accounts_one_inbound_uq')
       .on(table.owningTeamId)
       .where(sql`role = 'inbound' AND channel = 'email' AND deleted_at IS NULL`),
+    // One live GitHub inbox connection per workspace (v1, one repo).
+    uniqueIndex('channel_accounts_one_github_connection_uq')
+      .on(table.owningTeamId)
+      .where(sql`role = 'connection' AND channel = 'github' AND deleted_at IS NULL`),
     // A sending address is unique per team + channel.
     uniqueIndex('channel_accounts_sending_address_uq')
       .on(table.owningTeamId, table.channel, table.address)

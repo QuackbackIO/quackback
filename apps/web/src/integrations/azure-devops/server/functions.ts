@@ -63,7 +63,7 @@ export const fetchAzureDevOpsProjectsFn = createServerFn({ method: 'GET' }).hand
   async (): Promise<AzureDevOpsProject[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
 
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
@@ -75,8 +75,9 @@ export const fetchAzureDevOpsProjectsFn = createServerFn({ method: 'GET' }).hand
       throw new Error('Azure DevOps not connected')
     }
 
-    const secrets = decryptSecrets<{ accessToken: string }>(integration.secrets as string)
-    const config = integration.config as { organizationName?: string }
+    const auth = await getIntegrationAuth(integration.id)
+    const secrets = { accessToken: auth.accessToken }
+    const config = auth.config as { organizationName?: string }
     if (!config?.organizationName) {
       throw new Error('Organization name not found in integration config')
     }
@@ -94,7 +95,7 @@ export const fetchAzureDevOpsWorkItemTypesFn = createServerFn({ method: 'POST' }
   .handler(async ({ data }): Promise<AzureDevOpsWorkItemType[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
 
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
@@ -106,8 +107,9 @@ export const fetchAzureDevOpsWorkItemTypesFn = createServerFn({ method: 'POST' }
       throw new Error('Azure DevOps not connected')
     }
 
-    const secrets = decryptSecrets<{ accessToken: string }>(integration.secrets as string)
-    const config = integration.config as { organizationName?: string }
+    const auth = await getIntegrationAuth(integration.id)
+    const secrets = { accessToken: auth.accessToken }
+    const config = auth.config as { organizationName?: string }
     if (!config?.organizationName) {
       throw new Error('Organization name not found in integration config')
     }

@@ -1,15 +1,16 @@
 import { type ReactNode } from 'react'
+import { FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
-import { format } from 'date-fns'
+import { LocalDate } from '@/components/ui/local-date'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import type { PostId } from '@quackback/ids'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar } from '@/components/ui/avatar'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { getEmbedPreviewFn } from '@/lib/server/functions/embeds'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
-import { cn, getInitials } from '@/lib/shared/utils'
+import { cn } from '@/lib/shared/utils'
 
 const voteBoxCls =
   'flex w-11 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border py-1.5'
@@ -58,7 +59,7 @@ function InteractiveVoteBox({
         voteBoxCls,
         'transition-colors',
         hasVoted
-          ? 'border-post-card-voted/60 bg-post-card-voted/15 text-post-card-voted'
+          ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
           : 'border-border/50 bg-muted/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground/80',
         isPending && 'cursor-wait opacity-70'
       )}
@@ -197,17 +198,29 @@ export function QuackbackEmbedCard({
   }
 
   if ('unavailable' in data) {
-    const label =
-      kind === 'post'
-        ? 'post'
-        : kind === 'article'
-          ? 'article'
-          : kind === 'ticket'
-            ? 'ticket'
-            : 'update'
     return (
       <div className={`${shellCls} px-3 py-2.5 text-xs text-muted-foreground`}>
-        This {label} is unavailable
+        {kind === 'post' ? (
+          <FormattedMessage
+            id="ui.embedCard.unavailable.post"
+            defaultMessage="This post is unavailable"
+          />
+        ) : kind === 'article' ? (
+          <FormattedMessage
+            id="ui.embedCard.unavailable.article"
+            defaultMessage="This article is unavailable"
+          />
+        ) : kind === 'ticket' ? (
+          <FormattedMessage
+            id="ui.embedCard.unavailable.ticket"
+            defaultMessage="This ticket is unavailable"
+          />
+        ) : (
+          <FormattedMessage
+            id="ui.embedCard.unavailable.update"
+            defaultMessage="This update is unavailable"
+          />
+        )}
       </div>
     )
   }
@@ -254,15 +267,17 @@ export function QuackbackEmbedCard({
           )}
 
           <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <Avatar className="size-4">
-              {data.authorAvatarUrl && (
-                <AvatarImage src={data.authorAvatarUrl} alt={data.authorName ?? 'Anonymous'} />
+            <Avatar
+              className="size-4"
+              src={data.authorAvatarUrl}
+              name={data.authorName}
+              fallbackClassName="bg-muted text-xs"
+            />
+            <span className="truncate">
+              {data.authorName ?? (
+                <FormattedMessage id="ui.embedCard.anonymous" defaultMessage="Anonymous" />
               )}
-              <AvatarFallback className="bg-muted text-xs">
-                {getInitials(data.authorName)}
-              </AvatarFallback>
-            </Avatar>
-            <span className="truncate">{data.authorName ?? 'Anonymous'}</span>
+            </span>
             {data.createdAt && (
               <>
                 <span className="text-muted-foreground/40">·</span>
@@ -291,7 +306,7 @@ export function QuackbackEmbedCard({
     const articleInner = (
       <div className="p-3">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-          Help article
+          <FormattedMessage id="ui.embedCard.article" defaultMessage="Help article" />
         </p>
         <h3 className="mt-0.5 line-clamp-1 text-sm font-semibold text-foreground">{data.title}</h3>
         {data.excerpt && (
@@ -303,8 +318,7 @@ export function QuackbackEmbedCard({
     // Help-center articles have no "open in modal" concept — modal surfaces
     // open them in a new tab rather than navigating away from the inbox.
     const arOpenMode = openMode === 'modal' ? 'newTab' : openMode
-    const arHref =
-      arOpenMode === 'newTab' ? data.url : `/hc/articles/${data.categorySlug}/${data.articleId}`
+    const arHref = data.url
     return (
       <EmbedShell href={arHref} openMode={arOpenMode}>
         {articleInner}
@@ -317,7 +331,9 @@ export function QuackbackEmbedCard({
     const ticketInner = (
       <div className="p-3">
         <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-          <span>Support ticket</span>
+          <span>
+            <FormattedMessage id="ui.embedCard.ticket" defaultMessage="Support ticket" />
+          </span>
           <span className="text-muted-foreground/40">·</span>
           <span className="font-mono normal-case tracking-normal">{data.reference}</span>
         </div>
@@ -360,12 +376,15 @@ export function QuackbackEmbedCard({
   const changelogInner = (
     <div className="p-3">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-        Changelog
+        <FormattedMessage id="ui.embedCard.changelog" defaultMessage="Changelog" />
       </p>
       <h3 className="mt-0.5 line-clamp-1 text-sm font-semibold text-foreground">{data.title}</h3>
       {data.publishedAt && (
         <p className="mt-1 text-[11px] text-muted-foreground">
-          {format(new Date(data.publishedAt), 'MMM d, yyyy')}
+          <LocalDate
+            date={data.publishedAt}
+            options={{ month: 'short', day: 'numeric', year: 'numeric' }}
+          />
         </p>
       )}
     </div>

@@ -10,6 +10,9 @@ import type {
   Unsubscribe,
 } from './types'
 
+import { SDK_VERSION } from './version'
+
+export { SDK_VERSION }
 export type {
   InitOptions,
   Identity,
@@ -24,6 +27,7 @@ export type {
 const sdk = createSDK()
 
 export const Quackback = {
+  version: SDK_VERSION,
   init(options: InitOptions): void {
     sdk.dispatch('init', options)
   },

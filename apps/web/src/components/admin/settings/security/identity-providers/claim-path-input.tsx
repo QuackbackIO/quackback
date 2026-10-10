@@ -5,8 +5,13 @@
  */
 
 import { Autocomplete } from '@/components/ui/autocomplete'
-import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
-import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
+import { cn } from '@/lib/shared/utils'
+import {
+  deriveAttributeClaimPaths,
+  deriveClaimSuggestions,
+  deriveIdentityClaimPaths,
+} from '@/lib/shared/claim-suggestions'
+import { captureSuggestionClaims, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
 
@@ -27,6 +32,10 @@ export function ClaimPathInput({
   ariaLabel,
   disabled,
   capture,
+  suggestionsFor = 'role',
+  providerKind,
+  identityField,
+  className,
 }: {
   value: string
   onChange: (next: string) => void
@@ -35,13 +44,46 @@ export function ClaimPathInput({
   placeholder?: string
   ariaLabel: string
   disabled?: boolean
-  /** Session or persisted fixture. Falls back to the sitting's lastSuccess. */
+  /** Session or persisted fixture. Shared with the preview rail. */
   capture?: SsoTestCapture | null
+  /** Role suggestions are array-of-string paths; attribute suggestions are
+   *  scalar and array leaves, including profile claims. Identity includes
+   *  `sub` and may mark array candidates unsuitable. */
+  suggestionsFor?: 'role' | 'attribute' | 'identity'
+  providerKind?: string | null
+  identityField?: 'id' | 'email' | 'name'
+  /** Extra classes for the trigger. */
+  className?: string
 }) {
-  const { lastSuccess } = useSsoTestSignIn()
-  const fixture = fixtureFor(registrationId, capture) ?? fixtureFor(registrationId, lastSuccess)
-  const suggestions = fixture ? deriveClaimSuggestions(fixture.claims) : null
-  const pathSuggestions = (suggestions?.paths ?? []).map((p) => ({ value: p }))
+  const { lastSuccess, lastCapture } = useSsoTestSignIn()
+  const fixture =
+    fixtureFor(registrationId, capture) ??
+    fixtureFor(registrationId, lastCapture) ??
+    fixtureFor(registrationId, lastSuccess)
+  const pathSuggestions = (() => {
+    if (suggestionsFor === 'identity') {
+      const claims = fixture ? captureSuggestionClaims(fixture) : {}
+      return deriveIdentityClaimPaths(claims, {
+        kind: providerKind,
+        field: identityField,
+      }).map((s) => ({
+        value: s.path,
+        description: s.unsuitable
+          ? [s.description, 'Not a scalar identity claim'].filter(Boolean).join(' · ')
+          : s.description,
+        disabled: s.unsuitable === true,
+      }))
+    }
+    if (!fixture) return []
+    const claims = captureSuggestionClaims(fixture)
+    if (suggestionsFor === 'attribute') {
+      return deriveAttributeClaimPaths(claims).map((s) => ({
+        value: s.path,
+        description: s.description,
+      }))
+    }
+    return deriveClaimSuggestions(claims).paths.map((p) => ({ value: p }))
+  })()
 
   return (
     <Autocomplete
@@ -63,14 +105,17 @@ export function ClaimPathInput({
         </div>
       }
       disabled={disabled}
-      className="w-full"
+      className={cn('w-full', className)}
     />
   )
 }
 
 export function useClaimSuggestions(registrationId: string, capture?: SsoTestCapture | null) {
-  const { lastSuccess } = useSsoTestSignIn()
-  const fixture = fixtureFor(registrationId, capture) ?? fixtureFor(registrationId, lastSuccess)
+  const { lastSuccess, lastCapture } = useSsoTestSignIn()
+  const fixture =
+    fixtureFor(registrationId, lastCapture) ??
+    fixtureFor(registrationId, lastSuccess) ??
+    fixtureFor(registrationId, capture)
   if (!fixture) return null
-  return deriveClaimSuggestions(fixture.claims)
+  return deriveClaimSuggestions(captureSuggestionClaims(fixture))
 }

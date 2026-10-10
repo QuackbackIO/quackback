@@ -279,7 +279,16 @@ describe.skipIf(!fixture.available)('inbox.query (real DB, rolled back)', () => 
         { type: 'customer', title: 'Closed ticket' },
         writeActor()
       )
-      const closedTicket = await setTicketStatus(closedTicketDraft.id, closed.id, writeActor())
+      // A status move records its actor in the same write, so the actor must exist.
+      const closedTicket = await setTicketStatus(
+        closedTicketDraft.id,
+        closed.id,
+        buildActor({
+          principalId: await seedTeammate(),
+          role: 'admin',
+          permissions: resolveActorPermissions('admin'),
+        })
+      )
 
       const page = await listInboxItems(serviceActor(), { facet: 'open', limit: 50 })
       const ids = page.items.map((i) =>

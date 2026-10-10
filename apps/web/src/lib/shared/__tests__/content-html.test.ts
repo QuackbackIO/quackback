@@ -10,6 +10,69 @@ import type { JSONContent } from '@tiptap/core'
 import { generateContentHTML } from '../content-html'
 
 describe('generateContentHTML', () => {
+  it('preserves an ordered list start while refusing invalid attribute values', () => {
+    expect(generateContentHTML({ type: 'orderedList', attrs: { start: 7 } })).toBe(
+      '<ol start="7"></ol>'
+    )
+    for (const start of ['7" onclick="alert(1)', Infinity, 1000000000, 1.5]) {
+      expect(generateContentHTML({ type: 'orderedList', attrs: { start } })).toBe('<ol></ol>')
+    }
+  })
+  it('preserves zero and negative list starts', () => {
+    for (const start of [0, -3, 999999999]) {
+      expect(generateContentHTML({ type: 'orderedList', attrs: { start } })).toBe(
+        `<ol start="${start}"></ol>`
+      )
+    }
+  })
+
+  it('renders an uploaded video with native controls', () => {
+    const html = generateContentHTML({
+      type: 'doc',
+      content: [
+        {
+          type: 'video',
+          attrs: {
+            src: '/api/storage/portal-media/recording.mp4',
+            mimeType: 'video/mp4',
+            title: 'Bug recording',
+          },
+        },
+      ],
+    })
+    expect(html).toContain('<video')
+    expect(html).toContain('controls')
+    expect(html).toContain('preload="metadata"')
+    expect(html).toContain('/api/storage/portal-media/recording.mp4')
+  })
+
+  it('renders QuickTime and M4V recordings with browser playback MIME types', () => {
+    const quickTime = generateContentHTML({
+      type: 'video',
+      attrs: {
+        src: '/api/storage/portal-media/recording.mov',
+        mimeType: 'video/quicktime',
+      },
+    })
+    const m4v = generateContentHTML({
+      type: 'video',
+      attrs: {
+        src: '/api/storage/portal-media/recording.m4v',
+        mimeType: 'video/x-m4v',
+      },
+    })
+    expect(quickTime).toContain('type="video/quicktime"')
+    expect(m4v).toContain('type="video/mp4"')
+  })
+
+  it('refuses executable video sources', () => {
+    expect(
+      generateContentHTML({
+        type: 'doc',
+        content: [{ type: 'video', attrs: { src: 'javascript:alert(1)' } }],
+      })
+    ).toBe('')
+  })
   it('renders paragraphs with bold and italic marks', () => {
     const html = generateContentHTML({
       type: 'doc',
@@ -99,6 +162,15 @@ describe('generateContentHTML', () => {
     expect(html).toContain('alt="shot"')
   })
 
+  it('does not force a 1:1 aspect-ratio when width and height are absent', () => {
+    const html = generateContentHTML({
+      type: 'doc',
+      content: [{ type: 'resizableImage', attrs: { src: 'https://cdn.example.com/a.png' } }],
+    })
+    expect(html).toContain('<img')
+    expect(html).not.toContain('aspect-ratio')
+  })
+
   it('drops an image with an unsafe (javascript:) src', () => {
     const html = generateContentHTML({
       type: 'doc',
@@ -169,7 +241,22 @@ describe('generateContentHTML', () => {
       '<p>Intro <strong>strong</strong></p>' +
         '<ul><li>item</li></ul>' +
         '<pre class="not-prose rounded-lg bg-muted p-4 overflow-x-auto"><code class="language-js">x()</code></pre>' +
-        '<img src="https://cdn.example.com/z.png" alt="" class="max-w-full h-auto rounded-lg"  />'
+        '<img src="https://cdn.example.com/z.png" alt="" loading="lazy" decoding="async" class="max-w-full h-auto rounded-lg"  />'
     )
+  })
+
+  it('emits the Unicode char when an emoji node carries attrs.emoji', () => {
+    const html = generateContentHTML({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'emoji', attrs: { name: 'crossed_fingers', emoji: '🤞' } }],
+        },
+      ],
+    })
+    expect(html).toContain('🤞')
+    expect(html).toContain('data-type="emoji"')
+    expect(html).not.toContain(':crossed_fingers:')
   })
 })

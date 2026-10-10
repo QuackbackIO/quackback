@@ -84,7 +84,7 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
             className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-muted/10 transition-colors rounded-t-lg"
           >
             <SparklesIcon className="size-3.5 text-amber-500/80 shrink-0" />
-            <p className="text-xs font-medium text-muted-foreground/70">Similar Posts</p>
+            <p className="text-xs font-medium text-muted-foreground/70">Similar posts</p>
             <span className="text-xs tabular-nums text-muted-foreground/50 font-medium">
               {suggestions.length}
             </span>
@@ -99,7 +99,7 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
         </CollapsibleTrigger>
 
         {/* Body */}
-        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+        <CollapsibleContent>
           <div className="divide-y divide-border/20">
             {suggestions.map((suggestion) => {
               const isSource = suggestion.sourcePostId === postId
@@ -127,6 +127,7 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
                             size="icon"
                             className="h-7 w-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                             disabled={isPending}
+                            aria-label="Merge"
                           >
                             <IconGitMerge className="size-4" strokeWidth={1.5} />
                           </Button>
@@ -153,6 +154,7 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
                         size="icon"
                         className="h-7 w-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
                         disabled={isPending}
+                        aria-label="Dismiss"
                         onClick={() => handleDismiss(suggestion.id)}
                       >
                         <XMarkIcon className="size-3.5" />

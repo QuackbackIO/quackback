@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { FORM_WIDTH_CLASS } from '@/components/admin/settings/settings-page'
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import type { AuthConfig, PortalConfig } from '@/lib/shared/types/settings'
@@ -19,7 +20,7 @@ vi.mock('../audit-log-page', () => ({
   AuditLogPage: () => <div>audit-feed</div>,
 }))
 vi.mock('@/components/admin/upgrade', () => ({
-  UpgradeScreen: () => <div>The audit log is a Scale feature</div>,
+  UpgradeScreen: () => <div>The audit log is an Enterprise feature</div>,
 }))
 
 const { AuthSettings } = await import('../auth-settings')
@@ -41,7 +42,7 @@ describe('AuthSettings audit tab', () => {
     )
     expect(screen.getByText('portal-access-body')).toBeDefined()
     expect(screen.queryByText('audit-feed')).toBeNull()
-    expect(screen.queryByText(/The audit log is a Scale feature/)).toBeNull()
+    expect(screen.queryByText(/The audit log is an Enterprise feature/)).toBeNull()
   })
 
   it('shows an upgrade notice on the audit tab instead of the feed', () => {
@@ -55,7 +56,7 @@ describe('AuthSettings audit tab', () => {
         auditEntitled={false}
       />
     )
-    expect(screen.getByText(/The audit log is a Scale feature/)).toBeDefined()
+    expect(screen.getByText(/The audit log is an Enterprise feature/)).toBeDefined()
     expect(screen.queryByText('audit-feed')).toBeNull()
   })
 
@@ -71,7 +72,7 @@ describe('AuthSettings audit tab', () => {
       />
     )
     expect(screen.getByText('audit-feed')).toBeDefined()
-    expect(screen.queryByText(/The audit log is a Scale feature/)).toBeNull()
+    expect(screen.queryByText(/The audit log is an Enterprise feature/)).toBeNull()
   })
 
   it('keeps the audit tab reachable so the upgrade is discoverable', () => {
@@ -86,5 +87,22 @@ describe('AuthSettings audit tab', () => {
       />
     )
     expect(screen.getByRole('tab', { name: /Audit log/i })).toBeDefined()
+  })
+
+  it('keeps the tab bar at form width on every tab', () => {
+    for (const tab of ['portal-access', 'sign-in', 'audit-log'] as const) {
+      const { unmount } = render(
+        <AuthSettings
+          tab={tab}
+          teamAuthConfig={TEAM_AUTH}
+          portalConfig={PORTAL}
+          credentialStatus={{}}
+          customOidcProviderTier
+          auditEntitled
+        />
+      )
+      expect(screen.getByRole('tablist').className).toContain(FORM_WIDTH_CLASS)
+      unmount()
+    }
   })
 })

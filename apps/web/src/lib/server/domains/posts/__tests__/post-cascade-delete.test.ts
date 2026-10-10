@@ -1,278 +1,173 @@
-/**
- * Tests for cascade delete service.
- */
-
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { PostId } from '@quackback/ids'
-
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
-
-const mockSelectFrom = vi.fn()
-const mockSelectWhere = vi.fn()
-const mockInnerJoin = vi.fn()
-const mockUpdateSet = vi.fn()
-const mockUpdateWhere = vi.fn()
-
-vi.mock('@/lib/server/db', () => ({
-  db: {
-    select: () => ({
-      from: (table: unknown) => {
-        mockSelectFrom(table)
-        return {
-          innerJoin: (...args: unknown[]) => {
-            mockInnerJoin(...args)
-            return { where: mockSelectWhere }
-          },
-          where: mockSelectWhere,
-        }
-      },
-    }),
-    update: () => ({
-      set: (values: unknown) => {
-        mockUpdateSet(values)
-        return { where: mockUpdateWhere }
-      },
-    }),
-  },
-  eq: vi.fn((_col, val) => `eq:${val}`),
-  and: vi.fn((...args: unknown[]) => `and:${args.join(',')}`),
-  inArray: vi.fn((_col, vals) => `inArray:${vals}`),
-  postExternalLinks: {
-    id: 'pel.id',
-    postId: 'pel.postId',
-    integrationId: 'pel.integrationId',
-    integrationType: 'pel.integrationType',
-    externalId: 'pel.externalId',
-    externalUrl: 'pel.externalUrl',
-    status: 'pel.status',
-  },
-  integrations: {
-    id: 'int.id',
-    status: 'int.status',
-    config: 'int.config',
-    secrets: 'int.secrets',
-  },
+import { getIntegration } from '@/lib/server/integrations'
+/** Selected archive intents and source deletion are one durable transaction. */
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { randomUUID } from 'node:crypto'
+import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
+import {
+  boards,
+  posts,
+  principal,
+  integrations,
+  postExternalLinks,
+  integrationSyncOperations as operations,
+  eq,
+} from '@/lib/server/db'
+import {
+  installationIdentity,
+  syncHash,
+  syncDestination,
+} from '@/lib/server/integrations/sync/identity'
+import { executeCascadeDelete } from '../post.cascade-delete'
+import { readSyncPayload } from '@/lib/server/integrations/sync/ledger'
+import { listSyncHistory } from '@/lib/server/integrations/sync/history'
+import { resolveActorPermissions } from '@/lib/server/policy/permissions'
+import type { Actor } from '@/lib/server/policy/types'
+vi.mock('@/lib/server/db', async (original) => ({
+  ...(await original<typeof import('@/lib/server/db')>()),
+  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
-
-const mockArchiveExternalIssue = vi.fn()
-vi.mock('@/lib/server/integrations/archive', () => ({
-  archiveExternalIssue: (...args: unknown[]) => mockArchiveExternalIssue(...args),
+vi.mock('@/lib/server/secret-key', () => ({
+  activeSecretKey: () => 'integration-sync-test-key-32-characters-only',
 }))
-
-const mockGetValidAccessToken = vi.fn()
-vi.mock('@/lib/server/integrations/token-refresh', () => ({
-  getValidAccessToken: (...args: unknown[]) => mockGetValidAccessToken(...args),
-}))
-
-import { executeCascadeDelete, type CascadeChoice } from '../post.cascade-delete'
-
-const POST_ID = 'post_test123' as PostId
-
-beforeEach(() => {
-  vi.clearAllMocks()
+const fixture = await createDbTestFixture()
+beforeEach(fixture.begin)
+afterEach(async () => {
+  vi.restoreAllMocks()
+  await fixture.rollback()
 })
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Standard joined row returned from the single links+integrations query */
-function linkRow(
-  id: string,
-  integrationType: string,
-  externalId: string,
-  opts?: {
-    integrationId?: string
-    externalUrl?: string | null
-    integrationSecrets?: string | null
-    integrationConfig?: Record<string, unknown> | null
-  }
-) {
+afterAll(fixture.close)
+async function seed() {
+  const [actor] = await testDb
+    .insert(principal)
+    .values({ role: 'admin', type: 'service', createdAt: new Date() })
+    .returning()
+  const [board] = await testDb
+    .insert(boards)
+    .values({ name: 'Archive test', slug: `archive-${randomUUID()}` })
+    .returning()
+  const [post] = await testDb
+    .insert(posts)
+    .values({
+      principalId: actor.id,
+      boardId: board.id,
+      title: 'Private source title',
+      content: 'Private source body',
+    })
+    .returning()
+  const [integration] = await testDb
+    .insert(integrations)
+    .values({ integrationType: 'github', status: 'active', config: { channelId: 'acme/widgets' } })
+    .returning()
+  const [link] = await testDb
+    .insert(postExternalLinks)
+    .values({
+      postId: post.id,
+      integrationId: integration.id,
+      integrationType: 'github',
+      externalId: '42',
+      syncScope: `${installationIdentity(integration)}:${syncHash(syncDestination({ channelId: 'acme/widgets' }, integration.config, getIntegration(integration.integrationType)))}`,
+      externalDisplayId: '#42',
+      externalUrl: 'https://github.com/acme/widgets/issues/42',
+    })
+    .returning()
   return {
-    id,
-    integrationId: opts?.integrationId ?? 'int-1',
-    integrationType,
-    externalId,
-    externalUrl: opts?.externalUrl ?? null,
-    integrationSecrets:
-      opts && 'integrationSecrets' in opts ? opts.integrationSecrets : 'encrypted-blob',
-    integrationConfig: opts?.integrationConfig ?? {},
+    post,
+    integration,
+    link,
+    actor: {
+      principalId: actor.id,
+      role: 'admin',
+      principalType: 'service',
+      segmentIds: new Set(),
+      permissions: resolveActorPermissions('admin'),
+    } as Actor,
   }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-describe('executeCascadeDelete', () => {
-  it('returns empty array when no choices have shouldArchive=true', async () => {
-    const choices: CascadeChoice[] = [{ linkId: 'link-1', shouldArchive: false }]
-    const results = await executeCascadeDelete(POST_ID, choices)
-    expect(results).toEqual([])
-    expect(mockSelectFrom).not.toHaveBeenCalled()
-  })
-
-  it('returns empty array for empty choices', async () => {
-    const results = await executeCascadeDelete(POST_ID, [])
-    expect(results).toEqual([])
-  })
-
-  it('returns failure when link is not found for this post', async () => {
-    // Link query returns nothing (link doesn't belong to this post)
-    mockSelectWhere.mockResolvedValueOnce([])
-
-    const results = await executeCascadeDelete(POST_ID, [{ linkId: 'link-1', shouldArchive: true }])
-    expect(results).toHaveLength(1)
-    expect(results[0].success).toBe(false)
-    expect(results[0].error).toContain('Link not found')
-  })
-
-  it('returns failure when integration secrets are not available', async () => {
-    mockSelectWhere.mockResolvedValueOnce([
-      linkRow('link-1', 'linear', 'LIN-1', { integrationSecrets: null }),
-    ])
-
-    const results = await executeCascadeDelete(POST_ID, [{ linkId: 'link-1', shouldArchive: true }])
-    expect(results).toHaveLength(1)
-    expect(results[0]).toEqual({
-      linkId: 'link-1',
-      integrationType: 'linear',
-      externalId: 'LIN-1',
-      success: false,
-      error: 'Integration secrets not available',
+describe('archive review (PostgreSQL)', () => {
+  it('captures selected requests, preserves a usable review after soft deletion and sends no remote request', async () => {
+    const { post, link, actor } = await seed()
+    const network = vi.spyOn(globalThis, 'fetch')
+    await testDb.transaction(async (tx) => {
+      expect(
+        await executeCascadeDelete(post.id, [{ linkId: link.id, shouldArchive: true }], {
+          executor: tx,
+          requestedBy: actor.principalId!,
+        })
+      ).toMatchObject([{ success: true, action: 'queued' }])
+      await tx.update(posts).set({ deletedAt: new Date() }).where(eq(posts.id, post.id))
     })
-  })
-
-  it('uses DB-stored link data, not client-supplied values', async () => {
-    mockSelectWhere.mockResolvedValueOnce([
-      linkRow('link-1', 'github', '42', {
-        externalUrl: 'https://github.com/org/repo/issues/42',
-        integrationConfig: { cloudId: 'abc' },
-      }),
-    ])
-
-    mockGetValidAccessToken.mockResolvedValue('ghp_test')
-    mockArchiveExternalIssue.mockResolvedValue({ success: true, action: 'closed' })
-    mockUpdateWhere.mockResolvedValue(undefined)
-
-    const results = await executeCascadeDelete(POST_ID, [{ linkId: 'link-1', shouldArchive: true }])
-
-    // Token comes from the unified refresh helper, keyed by integration id.
-    expect(mockGetValidAccessToken).toHaveBeenCalledWith('int-1')
-    expect(mockArchiveExternalIssue).toHaveBeenCalledWith('github', {
-      externalId: '42',
-      externalUrl: 'https://github.com/org/repo/issues/42',
-      accessToken: 'ghp_test',
-      integrationConfig: { cloudId: 'abc' },
+    const op = (await testDb.query.integrationSyncOperations.findFirst({
+      where: eq(operations.sourceId, post.id),
+    }))!
+    expect(op.state).toBe('conflict')
+    expect(readSyncPayload(op).data).toEqual({
+      linkId: link.id,
+      proposedStatus: 'Archive or close this remote item',
     })
-    expect(results[0]).toMatchObject({
-      linkId: 'link-1',
-      integrationType: 'github',
-      externalId: '42',
-      success: true,
+    expect(JSON.stringify(readSyncPayload(op))).not.toContain('Private source')
+    const history = await listSyncHistory({ provider: 'github', filter: 'attention' }, actor)
+    expect(history.items[0]).toMatchObject({
+      sourceTitle: 'Deleted feedback',
+      remoteUrl: link.externalUrl,
+      remoteDisplayId: '#42',
     })
+    expect(network).not.toHaveBeenCalled()
+    network.mockRestore()
   })
-
-  it('updates link status to action value on success', async () => {
-    mockSelectWhere.mockResolvedValueOnce([linkRow('link-1', 'linear', 'LIN-1')])
-
-    mockGetValidAccessToken.mockResolvedValue('tok')
-    mockArchiveExternalIssue.mockResolvedValue({ success: true, action: 'archived' })
-    mockUpdateWhere.mockResolvedValue(undefined)
-
-    await executeCascadeDelete(POST_ID, [{ linkId: 'link-1', shouldArchive: true }])
-
-    expect(mockUpdateSet).toHaveBeenCalledWith({ status: 'archived' })
+  it('rolls back the source delete and every intent together', async () => {
+    const { post, link, actor } = await seed()
+    await expect(
+      testDb.transaction(async (tx) => {
+        await executeCascadeDelete(post.id, [{ linkId: link.id, shouldArchive: true }], {
+          executor: tx,
+          requestedBy: actor.principalId!,
+        })
+        await tx.update(posts).set({ deletedAt: new Date() }).where(eq(posts.id, post.id))
+        throw new Error('Simulated transaction failure')
+      })
+    ).rejects.toThrow('Simulated transaction failure')
+    expect(
+      await testDb.select().from(operations).where(eq(operations.sourceId, post.id))
+    ).toHaveLength(0)
+    expect(
+      (await testDb.query.posts.findFirst({ where: eq(posts.id, post.id) }))?.deletedAt
+    ).toBeNull()
   })
-
-  it('updates link status to error on failure', async () => {
-    mockSelectWhere.mockResolvedValueOnce([linkRow('link-1', 'linear', 'LIN-1')])
-
-    mockGetValidAccessToken.mockResolvedValue('tok')
-    mockArchiveExternalIssue.mockResolvedValue({ success: false, error: 'Auth expired' })
-    mockUpdateWhere.mockResolvedValue(undefined)
-
-    const results = await executeCascadeDelete(POST_ID, [{ linkId: 'link-1', shouldArchive: true }])
-
-    expect(mockUpdateSet).toHaveBeenCalledWith({ status: 'error' })
-    expect(results[0].success).toBe(false)
-    expect(results[0].error).toBe('Auth expired')
+  it('does not accept a link from a different post', async () => {
+    const { link, actor, post } = await seed()
+    const [other] = await testDb
+      .insert(posts)
+      .values({
+        boardId: post.boardId,
+        principalId: actor.principalId!,
+        title: 'Other source',
+        content: 'Other',
+      })
+      .returning()
+    await expect(
+      testDb.transaction((tx) =>
+        executeCascadeDelete(other.id, [{ linkId: link.id, shouldArchive: true }], {
+          executor: tx,
+          requestedBy: actor.principalId!,
+        })
+      )
+    ).rejects.toThrow('no longer available')
+    expect(
+      await testDb.select().from(operations).where(eq(operations.sourceId, post.id))
+    ).toHaveLength(0)
   })
-
-  it('preserves link metadata when promise rejects (allSettled fallback)', async () => {
-    mockSelectWhere.mockResolvedValueOnce([
-      linkRow('link-A', 'github', '10', { integrationId: 'int-1' }),
-      linkRow('link-B', 'linear', 'LIN-5', { integrationId: 'int-2' }),
-    ])
-
-    mockGetValidAccessToken.mockResolvedValue('tok')
-
-    mockArchiveExternalIssue
-      .mockResolvedValueOnce({ success: true, action: 'closed' })
-      .mockRejectedValueOnce(new Error('Unexpected DB crash'))
-
-    mockUpdateWhere.mockResolvedValue(undefined)
-
-    const results = await executeCascadeDelete(POST_ID, [
-      { linkId: 'link-A', shouldArchive: true },
-      { linkId: 'link-B', shouldArchive: true },
-    ])
-
-    expect(results).toHaveLength(2)
-    expect(results[0]).toMatchObject({
-      linkId: 'link-A',
-      integrationType: 'github',
-      externalId: '10',
-      success: true,
-    })
-    expect(results[1]).toEqual({
-      linkId: 'link-B',
-      integrationType: 'linear',
-      externalId: 'LIN-5',
-      success: false,
-      error: 'Unexpected DB crash',
-    })
-  })
-
-  it('filters out choices with shouldArchive=false', async () => {
-    mockSelectWhere.mockResolvedValueOnce([linkRow('link-1', 'linear', 'LIN-1')])
-
-    mockGetValidAccessToken.mockResolvedValue('tok')
-    mockArchiveExternalIssue.mockResolvedValue({ success: true, action: 'archived' })
-    mockUpdateWhere.mockResolvedValue(undefined)
-
-    const results = await executeCascadeDelete(POST_ID, [
-      { linkId: 'link-1', shouldArchive: true },
-      { linkId: 'link-2', shouldArchive: false },
-    ])
-    expect(results).toHaveLength(1)
-    expect(mockArchiveExternalIssue).toHaveBeenCalledTimes(1)
-  })
-
-  it('dedupes token retrieval per integration across links', async () => {
-    // Two links on the same integration: the helper is called once, its
-    // token reused (the access_token-key fallback itself now lives in the
-    // helper and is covered by token-refresh.test.ts).
-    mockSelectWhere.mockResolvedValueOnce([
-      linkRow('link-A', 'notion', 'page-1', { integrationId: 'int-9' }),
-      linkRow('link-B', 'notion', 'page-2', { integrationId: 'int-9' }),
-    ])
-
-    mockGetValidAccessToken.mockResolvedValue('notion_secret')
-    mockArchiveExternalIssue.mockResolvedValue({ success: true, action: 'archived' })
-    mockUpdateWhere.mockResolvedValue(undefined)
-
-    await executeCascadeDelete(POST_ID, [
-      { linkId: 'link-A', shouldArchive: true },
-      { linkId: 'link-B', shouldArchive: true },
-    ])
-
-    expect(mockGetValidAccessToken).toHaveBeenCalledTimes(1)
-    expect(mockArchiveExternalIssue).toHaveBeenCalledWith(
-      'notion',
-      expect.objectContaining({ accessToken: 'notion_secret' })
-    )
+  it('ignores unselected links', async () => {
+    const { post, link, actor } = await seed()
+    expect(
+      await testDb.transaction((tx) =>
+        executeCascadeDelete(post.id, [{ linkId: link.id, shouldArchive: false }], {
+          executor: tx,
+          requestedBy: actor.principalId!,
+        })
+      )
+    ).toEqual([])
+    expect(
+      await testDb.select().from(operations).where(eq(operations.sourceId, post.id))
+    ).toHaveLength(0)
   })
 })

@@ -85,7 +85,7 @@ export function Combobox<T extends string>({
           aria-label={ariaLabel}
           aria-expanded={open}
           disabled={disabled}
-          className={cn('justify-between font-normal', className)}
+          className={cn('justify-between', className)}
         >
           <span className={cn('truncate', !selected && 'text-muted-foreground')}>
             {selected ? selected.label : (placeholder ?? fallbackPlaceholder)}
@@ -93,10 +93,7 @@ export function Combobox<T extends string>({
           <ChevronUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className={cn('w-(--radix-popover-trigger-width) p-0', contentClassName)}
-      >
+      <PopoverContent align="start" className={cn('w-(--anchor-width) p-0', contentClassName)}>
         {/* Remount Command on each open so the search input is empty. */}
         {open && (
           <Command>

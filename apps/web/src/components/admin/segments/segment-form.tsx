@@ -33,14 +33,12 @@ import {
 import type { FieldOperator } from '@/lib/shared/segment-builtin-fields'
 import { SearchableInput } from '@/components/ui/searchable-input'
 import { fetchSegmentAttributeValuesFn } from '@/lib/server/functions/admin'
+import { CUSTOM_ATTR_PREFIX, COMPANY_ATTR_PREFIX } from './segment-utils'
 
 // Attributes with DB-backed value typeahead. Matches SEARCHABLE_ATTRIBUTES
 // in segment-attribute-values.ts; kept duplicated here to avoid pulling
 // a server-only module into the client bundle.
 const SEARCHABLE_VALUE_ATTRIBUTES = new Set(['country', 'locale', 'name', 'email', 'signup_source'])
-
-export const CUSTOM_ATTR_PREFIX = '__custom__'
-export const COMPANY_ATTR_PREFIX = '__company_attr__'
 
 type RuleOperator = FieldOperator
 
@@ -81,7 +79,7 @@ const CUSTOM_ATTR_OPERATORS: Record<
   ],
 }
 
-/** Operators for the metadata_key (Custom Metadata Key) escape hatch */
+/** Operators for the metadata_key (Custom metadata key) escape hatch */
 const METADATA_KEY_OPERATORS: { value: RuleOperator; label: string }[] = [
   { value: 'eq', label: 'equals' },
   { value: 'neq', label: 'not equals' },
@@ -220,7 +218,7 @@ function RuleConditionRow({
               <React.Fragment key={group}>
                 {i > 0 && <SelectSeparator />}
                 <SelectGroup>
-                  <SelectLabel className="text-xs uppercase tracking-wider px-2 py-1.5">
+                  <SelectLabel className="uppercase tracking-wider px-2 py-1.5">
                     {label}
                   </SelectLabel>
                   {fields.map((field) => (
@@ -229,7 +227,7 @@ function RuleConditionRow({
                     </SelectItem>
                   ))}
                   {group === 'attribute' && (
-                    <SelectItem value="metadata_key">Custom Metadata Key</SelectItem>
+                    <SelectItem value="metadata_key">Custom metadata key</SelectItem>
                   )}
                 </SelectGroup>
               </React.Fragment>
@@ -239,7 +237,7 @@ function RuleConditionRow({
             <>
               <SelectSeparator />
               <SelectGroup>
-                <SelectLabel className="text-xs uppercase tracking-wider px-2 py-1.5">
+                <SelectLabel className="uppercase tracking-wider px-2 py-1.5">
                   Custom attributes
                 </SelectLabel>
                 {customAttributes.map((attr) => (
@@ -257,7 +255,7 @@ function RuleConditionRow({
             <>
               <SelectSeparator />
               <SelectGroup>
-                <SelectLabel className="text-xs uppercase tracking-wider px-2 py-1.5">
+                <SelectLabel className="uppercase tracking-wider px-2 py-1.5">
                   Company attributes
                 </SelectLabel>
                 {companyAttributes.map((attr) => (
@@ -341,11 +339,7 @@ function RuleConditionRow({
             const res = await fetchSegmentAttributeValuesFn({
               data: {
                 attribute: condition.attribute as
-                  | 'country'
-                  | 'locale'
-                  | 'name'
-                  | 'email'
-                  | 'signup_source',
+                  'country' | 'locale' | 'name' | 'email' | 'signup_source',
                 query,
                 limit: 20,
               },
@@ -521,7 +515,7 @@ export function SegmentFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit Segment' : 'Create Segment'}</DialogTitle>
+          <DialogTitle>{isEditing ? 'Edit segment' : 'Create segment'}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -585,7 +579,7 @@ export function SegmentFormDialog({
                 trigger evaluation.
               </p>
               <p className="text-xs text-muted-foreground">
-                Heads up: segments only include people in your audience. Your team and admins won't
+                Heads up: segments only include users in your audience. Your team and admins won't
                 show up here, even if they match the rules.
               </p>
               <RuleBuilder

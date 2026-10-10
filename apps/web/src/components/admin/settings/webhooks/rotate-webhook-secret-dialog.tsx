@@ -57,7 +57,7 @@ export function RotateWebhookSecretDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Rotate Signing Secret</DialogTitle>
+          <DialogTitle>Rotate signing secret</DialogTitle>
           <DialogDescription>
             Generate a new signing secret for this webhook endpoint.
           </DialogDescription>
@@ -90,7 +90,7 @@ export function RotateWebhookSecretDialog({
             Cancel
           </Button>
           <Button onClick={handleRotate} disabled={isPending}>
-            {isPending ? 'Rotating...' : 'Rotate Secret'}
+            {isPending ? 'Rotating...' : 'Rotate secret'}
           </Button>
         </DialogFooter>
       </DialogContent>

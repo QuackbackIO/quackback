@@ -159,7 +159,7 @@ describe('buildFlowNodes / buildFlowEdges — no branch', () => {
     )
     expect(capped.find((n) => n.id === tree.triggerId)?.data.sections).toEqual([
       { label: 'Channels', chips: [{ label: 'All channels' }] },
-      { label: 'Frequency cap', chips: [{ label: 'At most 3 times per person' }] },
+      { label: 'Frequency cap', chips: [{ label: 'At most 3 times per user' }] },
     ])
 
     const unlimited = buildFlowNodes(

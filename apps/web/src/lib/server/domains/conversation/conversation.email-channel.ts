@@ -1049,3 +1049,78 @@ export function mintTicketOutboundMessageId(
   const nonce = randomBytes(6).toString('base64url')
   return `ticket-${idSuffix(ticketId, TICKET_PREFIX)}.${nonce}@${domain}`
 }
+
+// ============================================================================
+// The test alias: `<slug>+test-<token>@<inbound-domain>`, one per teammate.
+// Mail to it belongs to that teammate's test customer whoever sends it, so
+// "email this address" demonstrates the round trip without turning the
+// teammate's own mail to the support address into test data.
+//
+// The token is an HMAC of (workspace slug, teammate) under the inbound secret,
+// so it is stable per teammate, needs no storage, and is unguessable: 80 bits,
+// lower-case hex so a receiving server folding case cannot change it. It is
+// shorter than a sub-address with a dot, so the conversation and ticket
+// families never read it as theirs.
+// ============================================================================
+
+const TEST_ALIAS_TAG = 'test-'
+const TEST_ALIAS_TOKEN_RE = /^[0-9a-f]{20}$/
+
+function testAliasToken(ownerPrincipalId: string, slug: string, env: EnvLike): string | null {
+  const key = signingKey(env)
+  if (!key) return null
+  return createHmac('sha256', key)
+    .update(`${slug}\0test-alias\0${ownerPrincipalId}`)
+    .digest('hex')
+    .slice(0, 20)
+}
+
+/** A teammate's test alias, or null without a slug, an inbound domain or a secret. */
+export function testEmailAlias(
+  ownerPrincipalId: string,
+  slug: string | null,
+  env: EnvLike = process.env
+): string | null {
+  if (slug === null) return null
+  const label = slug.trim().toLowerCase()
+  if (!isValidMailSlug(label)) return null
+  const domain = inboundMintDomain(env)
+  const token = testAliasToken(ownerPrincipalId, label, env)
+  return domain && token ? `${label}+${TEST_ALIAS_TAG}${token}@${domain}` : null
+}
+
+/** Alias tokens this workspace's addresses carry in `value`; each still has to match a teammate. */
+export function testAliasTokensIn(
+  value: string,
+  slug: string | null,
+  env: EnvLike = process.env
+): string[] {
+  if (slug === null) return []
+  const label = slug.trim().toLowerCase()
+  const accepted = inboundAcceptDomains(env)
+  const tokens: string[] = []
+  for (const { local, domain } of addrSpecs(value)) {
+    const host = normalizeMailDomain(domain)
+    if (!host || !accepted.has(host)) continue
+    const lower = local.trim().toLowerCase()
+    const prefix = `${label}+${TEST_ALIAS_TAG}`
+    if (!lower.startsWith(prefix)) continue
+    const token = lower.slice(prefix.length)
+    if (TEST_ALIAS_TOKEN_RE.test(token)) tokens.push(token)
+  }
+  return tokens
+}
+
+/** Constant-time check that `token` is this teammate's alias token. */
+export function testAliasTokenMatches(
+  token: string,
+  ownerPrincipalId: string,
+  slug: string,
+  env: EnvLike = process.env
+): boolean {
+  const expected = testAliasToken(ownerPrincipalId, slug.trim().toLowerCase(), env)
+  if (!expected) return false
+  const a = Buffer.from(token)
+  const b = Buffer.from(expected)
+  return a.byteLength === b.byteLength && timingSafeEqual(a, b)
+}

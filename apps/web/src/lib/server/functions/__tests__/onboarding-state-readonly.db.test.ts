@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vites
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { principal, user, eq, sql } from '@/lib/server/db'
+import { isSetupBlocked, pickOnboardingStep } from '@/routes/onboarding/-onboarding-step'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -63,16 +64,27 @@ async function seedUser(email: string): Promise<UserId> {
 async function seedPrincipal(input: {
   userId: UserId
   role: 'admin' | 'member' | 'user'
+  type?: 'user' | 'anonymous'
+  createdAt?: Date
 }): Promise<PrincipalId> {
   const id = createId('principal') as PrincipalId
   await testDb.insert(principal).values({
     id,
     userId: input.userId,
     role: input.role,
-    type: 'user',
-    createdAt: new Date(),
+    type: input.type ?? 'user',
+    createdAt: input.createdAt ?? new Date(),
   })
   return id
+}
+
+/** Two accounts on an install still being set up, created in this order. */
+async function seedTwoAccounts(): Promise<{ firstId: UserId; secondId: UserId }> {
+  const firstId = await seedUser('first@acme.example')
+  await seedPrincipal({ userId: firstId, role: 'user', createdAt: new Date('2026-10-01T09:00Z') })
+  const secondId = await seedUser('second@elsewhere.example')
+  await seedPrincipal({ userId: secondId, role: 'user', createdAt: new Date('2026-10-01T09:05Z') })
+  return { firstId, secondId }
 }
 
 async function principalCount(): Promise<number> {
@@ -166,6 +178,101 @@ describe.skipIf(!fixture.available)('checkOnboardingState reports without mutati
       createdAt: new Date(),
     })
     const firstId = await seedUser('first@acme.example')
+    hoisted.getSession.mockResolvedValue({ user: { id: firstId } })
+
+    const state = await checkOnboardingState()
+
+    expect(state.setupClaimedByOther).toBe(false)
+  })
+
+  // A finished self-hosted install whose only admin is an API principal. A
+  // portal user who signs in from the account screen is routed by this state;
+  // routing them to the workspace step would end in its refusal.
+  it('reports a finished install with no human admin as closed to the claim', async () => {
+    await testDb.execute(sql`
+      INSERT INTO settings (id, name, slug, created_at, setup_state)
+      VALUES (
+        gen_random_uuid(), 'Acme', ${'acme-' + Math.random().toString(36).slice(2, 8)}, now(),
+        ${JSON.stringify({
+          version: 2,
+          steps: {
+            core: true,
+            workspace: true,
+            startingPoint: {
+              outcome: 'product_feedback',
+              resourceType: 'none',
+              source: 'wizard',
+              resolution: 'deferred',
+              completedAt: '2026-08-01T00:00:00.000Z',
+            },
+          },
+          useCase: 'product_feedback',
+          completionSource: 'wizard',
+        })}
+      )
+    `)
+    await testDb.insert(principal).values({
+      id: createId('principal') as PrincipalId,
+      userId: null,
+      role: 'admin',
+      type: 'service',
+      createdAt: new Date(),
+    })
+    const visitorId = await seedUser('visitor@elsewhere.example')
+    await seedPrincipal({ userId: visitorId, role: 'user' })
+    hoisted.getSession.mockResolvedValue({ user: { id: visitorId } })
+
+    const state = await checkOnboardingState()
+
+    expect(state.setupClaimedByOther).toBe(false)
+    // Not provisioned: the workspace step's control-plane branch stays off.
+    expect(state.setupOpenToClaim).toBe(true)
+    expect(state.setupClosedReason).toBe('setupComplete')
+    expect(isSetupBlocked(state)).toBe(true)
+    expect(pickOnboardingStep({ session: { userId: visitorId }, state })).toBe(
+      '/onboarding/no-access'
+    )
+  })
+
+  // The first account created on an install still being set up has claimed
+  // it, so a second account is routed to the refusal rather than walked to a
+  // workspace form that would refuse it at the end.
+  it('reports a second account on an install being set up as blocked', async () => {
+    const { secondId } = await seedTwoAccounts()
+    hoisted.getSession.mockResolvedValue({ user: { id: secondId } })
+
+    const state = await checkOnboardingState()
+
+    expect(state.setupClaimedByOther).toBe(true)
+    expect(pickOnboardingStep({ session: { userId: secondId }, state })).toBe(
+      '/onboarding/no-access'
+    )
+  })
+
+  // The claimant signing back in, after the wizard's Sign out or a lost
+  // session, goes back to the workspace step to finish.
+  it('sends the account that claimed setup back to the workspace step', async () => {
+    const { firstId } = await seedTwoAccounts()
+    hoisted.getSession.mockResolvedValue({ user: { id: firstId } })
+
+    const state = await checkOnboardingState()
+
+    expect(state.setupClaimedByOther).toBe(false)
+    expect(pickOnboardingStep({ session: { userId: firstId }, state })).toBe(
+      '/onboarding/workspace'
+    )
+    expect(await roleOf(firstId)).toBe('user')
+  })
+
+  it('does not count an anonymous visitor who arrived first as the claimant', async () => {
+    const visitorId = await seedUser('temp-visitor@anon.quackback.io')
+    await seedPrincipal({
+      userId: visitorId,
+      role: 'user',
+      type: 'anonymous',
+      createdAt: new Date('2026-10-01T08:00Z'),
+    })
+    const { firstId } = await seedTwoAccounts()
     hoisted.getSession.mockResolvedValue({ user: { id: firstId } })
 
     const state = await checkOnboardingState()

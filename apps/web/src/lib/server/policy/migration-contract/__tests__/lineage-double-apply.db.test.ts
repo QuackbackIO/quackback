@@ -138,8 +138,11 @@ async function applyAgain(sql: postgres.Sql, tag: string): Promise<number> {
  * here even though the index's own name never changed.
  */
 async function catalogueDigest(db: string): Promise<string> {
-  return withSql(db, async (sql) => {
-    const rows = await sql.unsafe<{ digest: string }[]>(`
+  return withSql(db, catalogueDigestWithSql)
+}
+
+async function catalogueDigestWithSql(sql: postgres.Sql): Promise<string> {
+  const rows = await sql.unsafe<{ digest: string }[]>(`
       SELECT md5(string_agg(x, '|' ORDER BY x)) AS digest FROM (
         SELECT 'col:'||table_schema||'.'||table_name||'.'||column_name||':'||data_type||':'||
                coalesce(column_default,'')||':'||is_nullable AS x
@@ -156,8 +159,7 @@ async function catalogueDigest(db: string): Promise<string> {
          WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
       ) t
     `)
-    return rows[0]!.digest
-  })
+  return rows[0]!.digest
 }
 
 beforeAll(async () => {
@@ -254,7 +256,10 @@ describe('the second application of the lineage', () => {
       const error = await withSql(db, (sql) =>
         sql
           .begin(async (tx) => {
-            await applyAgain(tx as unknown as postgres.Sql, override.tag)
+            const sql = tx as unknown as postgres.Sql
+            const before = await catalogueDigestWithSql(sql)
+            await applyAgain(sql, override.tag)
+            if ((await catalogueDigestWithSql(sql)) !== before) throw new Error('catalogue changed')
           })
           .then(
             () => null,

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fetchServerConfig } from '../src/core/config'
+import { SDK_VERSION } from '../src/version'
 
 describe('config.fetchServerConfig', () => {
   beforeEach(() => {
@@ -13,7 +14,9 @@ describe('config.fetchServerConfig', () => {
     }))
     vi.stubGlobal('fetch', mock)
     const cfg = await fetchServerConfig('https://feedback.acme.com')
-    expect(mock).toHaveBeenCalledWith('https://feedback.acme.com/api/widget/config.json')
+    expect(mock).toHaveBeenCalledWith(
+      `https://feedback.acme.com/api/widget/config.json?sdk=${SDK_VERSION}`
+    )
     expect(cfg.theme?.lightPrimary).toBe('#ff0000')
   })
 

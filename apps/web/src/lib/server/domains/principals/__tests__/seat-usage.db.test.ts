@@ -74,6 +74,17 @@ async function seedServiceAdmin(): Promise<void> {
   })
 }
 
+async function seedSupportAdmin(): Promise<void> {
+  const userId = await seedUserOnly()
+  await testDb.insert(principal).values({
+    id: createId('principal') as PrincipalId,
+    userId,
+    role: 'admin',
+    type: 'support',
+    createdAt: new Date(),
+  })
+}
+
 async function seedInvite(
   kind: 'team' | 'portal',
   inviterId: UserId,
@@ -92,7 +103,7 @@ async function seedInvite(
 }
 
 async function projectMaxTeamSeats(maxTeamSeats: number): Promise<void> {
-  const cloud = storedCloud('pro')
+  const cloud = storedCloud('business')
   const projection = {
     ...cloud,
     projection: {
@@ -123,7 +134,7 @@ describe.skipIf(!fixture.available)('countSeatUsage', () => {
     await fixture.begin()
     hoisted.getCloudConfig.mockResolvedValue({
       enabled: true,
-      plan: 'pro',
+      plan: 'business',
       trialActive: false,
     })
     invalidateTierLimitsCache()
@@ -137,6 +148,7 @@ describe.skipIf(!fixture.available)('countSeatUsage', () => {
     await seedHuman('member')
     await seedHuman('user')
     await seedServiceAdmin()
+    await seedSupportAdmin()
     await seedInvite('team', inviterId)
     await seedInvite('team', inviterId)
     await seedInvite('portal', inviterId)
@@ -156,7 +168,7 @@ describe.skipIf(!fixture.available)('countSeatUsage', () => {
     await seedInvite('team', inviterId)
     await expect(enforceSeatLimit()).rejects.toBeInstanceOf(TierLimitError)
     await expect(enforceSeatLimit()).rejects.toThrow(
-      /All \d+ seats are in use\. Add a seat to invite more\./
+      /You've reached your plan's team seats limit \(\d+\)\. Upgrade to add more\./
     )
   })
 

@@ -4,11 +4,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { getPortalInviteLinkFn } from '@/lib/server/functions/portal-invites'
 import { cn } from '@/lib/shared/utils'
+import { LocalDate } from '@/components/ui/local-date'
 import type { PortalInvite } from './use-portal-invites'
 
-function formatInviteDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
+const INVITE_DATE: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
 
 export function InviteStatusBadge({ status }: { status: string | null }) {
   switch (status) {
@@ -136,7 +135,9 @@ export function InviteRow({ invite, onRevoke, onResend, revoking, resending }: I
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm">{invite.email}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">Sent {formatInviteDate(sentDate)}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Sent <LocalDate date={sentDate} options={INVITE_DATE} locale="en-US" />
+          </p>
         </div>
         <InviteStatusBadge status={invite.status} />
         {invite.status === 'pending' && (

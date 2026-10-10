@@ -328,14 +328,23 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     )
     const page = await listTicketMessages(dto.id, { includeInternal: true })
     const stored = page.messages[0]
-    const types = stored.contentJson?.content?.map((n) => n.type)
-    expect(types).not.toContain('script')
-    expect(types).toEqual(['paragraph', 'image'])
-    const imageNode = stored.contentJson?.content?.find((n) => n.type === 'image')
-    expect(imageNode?.attrs?.src).toBe('')
     // Derived from the sanitized doc: the surviving paragraph's text, plus the
     // `[image]` placeholder for the (now-neutralized) image node.
     expect(stored.content).toBe('Safe text.\n[image]')
+    // Empty-src image is stripped on read (it would not render) and is not
+    // lifted onto attachments.
+    expect(stored.contentJson?.content?.map((n) => n.type)).toEqual(['paragraph'])
+    expect(stored.attachments).toEqual([])
+
+    const [row] = await testDb
+      .select({ contentJson: conversationMessages.contentJson })
+      .from(conversationMessages)
+      .where(eq(conversationMessages.id, stored.id))
+    const types = row?.contentJson?.content?.map((n) => n.type)
+    expect(types).not.toContain('script')
+    expect(types).toEqual(['paragraph', 'image'])
+    const imageNode = row?.contentJson?.content?.find((n) => n.type === 'image')
+    expect(imageNode?.attrs?.src).toBe('')
   })
 
   it('persists attachments on the opening message', async () => {
@@ -372,7 +381,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
   it('a public_stage crossing posts a status event into the ticket thread', async () => {
     await seedSettings()
     const { closed } = await seedStatuses() // default open projects 'received'; closed projects 'resolved'
-    const actor = adminActor()
+    const actor = await messageAuthorActor()
     const created = await createTicket({ type: 'customer', title: 'Crossing' }, actor)
     await setTicketStatus(created.id, closed.id, actor) // received -> resolved
     const page = await listTicketMessages(created.id, { includeInternal: true })
@@ -385,7 +394,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
   it('a same-stage status change stays silent', async () => {
     await seedSettings()
     await seedStatuses() // default open projects 'received'
-    const actor = adminActor()
+    const actor = await messageAuthorActor()
     // Another open status projecting the SAME public stage.
     const [sameStage] = await testDb
       .insert(ticketStatuses)
@@ -408,7 +417,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
   it('B22: closing a CUSTOMER ticket via a null-stage status posts the generic "Ticket closed" event', async () => {
     await seedSettings()
     await seedStatuses() // default open projects 'received'
-    const actor = adminActor()
+    const actor = await messageAuthorActor()
     // A closed status with no public stage — the "Won't do"/"Duplicate" shape.
     const [wontDo] = await testDb
       .insert(ticketStatuses)
@@ -513,7 +522,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
   it('a status change with no requester enriches the hook with a null requesterPrincipalId', async () => {
     await seedSettings()
     const { closed } = await seedStatuses()
-    const actor = adminActor()
+    const actor = await messageAuthorActor()
     const created = await createTicket({ type: 'back_office', title: 'No requester' }, actor)
     webhooks.emitTicketStatusChanged.mockClear()
     await setTicketStatus(created.id, closed.id, actor)
@@ -524,7 +533,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
   it('closing stamps resolvedAt + firstResponseAt; reopening clears resolvedAt and counts the reopen', async () => {
     await seedSettings()
     const { open, closed } = await seedStatuses()
-    const actor = adminActor()
+    const actor = await messageAuthorActor()
     const created = await createTicket({ type: 'customer', title: 'Billing issue' }, actor)
     const id = created.id
 
@@ -599,7 +608,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
   it('setTicketStatus fires the ticket.status_changed hook with the category move', async () => {
     await seedSettings()
     const { closed } = await seedStatuses()
-    const actor = adminActor()
+    const actor = await messageAuthorActor()
     const created = await createTicket({ type: 'customer', title: 'Move me' }, actor)
     webhooks.emitTicketStatusChanged.mockClear() // ignore any create-time noise
     await setTicketStatus(created.id, closed.id, actor)
@@ -711,7 +720,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     it('setTicketStatus publishes ticket_updated with the new status', async () => {
       await seedSettings()
       const { closed } = await seedStatuses()
-      const actor = adminActor()
+      const actor = await messageAuthorActor()
       const created = await createTicket({ type: 'customer', title: 'Move me' }, actor)
       realtime.publishTicketEvent.mockClear()
       await setTicketStatus(created.id, closed.id, actor)
@@ -1464,7 +1473,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     it('routes a set_status action to setTicketStatus', async () => {
       await seedSettings()
       const { closed } = await seedStatuses()
-      const actor = adminActor()
+      const actor = await messageAuthorActor()
       const created = await createTicket({ type: 'customer', title: 'Bulk status' }, actor)
 
       const result = await bulkUpdateTickets(

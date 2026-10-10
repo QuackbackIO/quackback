@@ -36,7 +36,18 @@ const triagePostSchema = {
     .string()
     .nullable()
     .optional()
-    .describe('Assign to member TypeID, or null to unassign'),
+    .describe(
+      'Assign to member TypeID, the token "me" for the authenticated teammate, or null to unassign'
+    ),
+}
+
+/** Map the "me" token to the authenticated teammate; leave TypeIDs and null unchanged. */
+export function resolveOwnerPrincipalId(
+  value: string | null | undefined,
+  selfPrincipalId: PrincipalId
+): PrincipalId | null | undefined {
+  if (value === 'me') return selfPrincipalId
+  return value as PrincipalId | null | undefined
 }
 
 const createPostSchema = {
@@ -143,6 +154,7 @@ export function registerPostTools(server: McpServer, auth: McpAuthContext) {
 Examples:
 - Change status: triage_post({ postId: "post_01abc...", statusId: "post_status_01xyz..." })
 - Assign owner: triage_post({ postId: "post_01abc...", ownerPrincipalId: "principal_01xyz..." })
+- Assign to the authenticated teammate: triage_post({ postId: "post_01abc...", ownerPrincipalId: "me" })
 - Replace tags: triage_post({ postId: "post_01abc...", tagIds: ["tag_01a...", "tag_01b..."] })`,
     schema: triagePostSchema,
     annotations: WRITE,
@@ -154,7 +166,7 @@ Examples:
         {
           statusId: args.statusId as PostStatusId | undefined,
           tagIds: args.tagIds as PostTagId[] | undefined,
-          ownerPrincipalId: args.ownerPrincipalId as PrincipalId | null | undefined,
+          ownerPrincipalId: resolveOwnerPrincipalId(args.ownerPrincipalId, auth.principalId),
         },
         {
           principalId: auth.principalId,

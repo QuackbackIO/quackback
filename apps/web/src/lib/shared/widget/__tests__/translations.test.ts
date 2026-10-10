@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest'
 import { widgetTranslationFor } from '../translations'
 
 const T = {
-  de: { welcomeMessage: 'Hallo', greeting: 'Willkommen' },
+  de: { welcomeMessage: 'Hallo', offlineMessage: 'Wir sind offline' },
   'fr-CA': { welcomeMessage: 'Bonjour' },
 }
 
@@ -17,7 +17,7 @@ describe('widgetTranslationFor', () => {
   })
 
   it('falls back from a regional locale to its base language', () => {
-    expect(widgetTranslationFor(T, 'de-AT').greeting).toBe('Willkommen')
+    expect(widgetTranslationFor(T, 'de-AT').offlineMessage).toBe('Wir sind offline')
   })
 
   it('returns empty when no locale, no map, or no match', () => {

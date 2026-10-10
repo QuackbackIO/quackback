@@ -1,11 +1,11 @@
+import { deliveryError } from '@/lib/server/integrations/sync/outcomes'
 /**
  * Azure DevOps hook handler.
  * Creates work items when feedback events occur.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { createWorkItem } from '@/integrations/azure-devops/server/api'
 import { buildAzureDevOpsWorkItemBody } from '@/integrations/azure-devops/server/message'
 import { logger } from '@/lib/server/logger'
@@ -23,37 +23,25 @@ export interface AzureDevOpsConfig {
   rootUrl: string
 }
 
-export const azureDevOpsHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
+export const azureDevOpsHook: IntegrationHook = {
+  async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     const { channelId } = target as AzureDevOpsTarget
     const { accessToken, organizationName, rootUrl } = config as AzureDevOpsConfig
 
     if (event.type !== 'post.created') {
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     if (!organizationName) {
-      return {
-        success: false,
-        error: 'Azure DevOps organization name is missing from integration config',
-        shouldRetry: false,
-      }
+      return { state: 'failed', errorCode: 'provider_failed' }
     }
     if (!accessToken) {
-      return {
-        success: false,
-        error: 'Azure DevOps access token is missing',
-        shouldRetry: false,
-      }
+      return { state: 'failed', errorCode: 'provider_failed' }
     }
 
     const [project, workItemType] = channelId.split(':')
     if (!project || !workItemType) {
-      return {
-        success: false,
-        error: 'Invalid configuration: missing project or work item type',
-        shouldRetry: false,
-      }
+      return { state: 'failed', errorCode: 'provider_failed' }
     }
 
     log.debug(
@@ -71,27 +59,11 @@ export const azureDevOpsHook: HookHandler = {
 
       log.info({ work_item_id: result.id }, 'work item created')
       return {
-        success: true,
-        externalId: String(result.id),
-        externalUrl: result.url,
+        state: 'succeeded',
+        result: { externalId: String(result.id), externalUrl: result.url },
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      const status = (error as { status?: number }).status
-
-      if (status === 401 || status === 403) {
-        return {
-          success: false,
-          error: 'Authentication failed. Please reconnect Azure DevOps.',
-          shouldRetry: false,
-        }
-      }
-
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: isRetryableError(error),
-      }
+      return deliveryError(error)
     }
   },
 }

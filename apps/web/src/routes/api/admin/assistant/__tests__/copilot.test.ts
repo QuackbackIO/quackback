@@ -70,6 +70,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 })
 
 import { handleCopilot } from '../copilot'
+import { SSE_KEEPALIVE_INTERVAL_MS } from '@/lib/server/domains/assistant/agui'
 import type { StreamAssistantTurnOptions } from '@/lib/server/domains/assistant/assistant.runtime'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { NotFoundError } from '@/lib/shared/errors'
@@ -291,6 +292,48 @@ describe('POST /api/admin/assistant/copilot', () => {
       // The runtime's answerType classification is relayed verbatim.
       answerType: 'analysis',
     })
+  })
+
+  it('keeps a turn that goes quiet between frames alive with SSE comments', async () => {
+    let release!: () => void
+    const quiet = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    mockStreamAssistantTurn.mockImplementation((options: StreamAssistantTurnOptions) =>
+      (async function* () {
+        yield { type: 'RUN_STARTED', ...options.wire }
+        // A model or tool step that writes nothing for a while.
+        await quiet
+        yield {
+          type: 'RUN_FINISHED',
+          ...options.wire,
+          finishReason: 'stop',
+          result: options.buildFinalPayload(nextTurnResult as never),
+        }
+      })()
+    )
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    try {
+      const res = await handleCopilot({ request: makeRequest(validBody()) })
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      expect(decoder.decode((await reader.read()).value)).toContain('RUN_STARTED')
+
+      const next = reader.read()
+      await vi.advanceTimersByTimeAsync(SSE_KEEPALIVE_INTERVAL_MS)
+      expect(decoder.decode((await next).value)).toBe(': keepalive\n\n')
+
+      release()
+      let rest = ''
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        rest += decoder.decode(value)
+      }
+      expect(parseAguiSse(rest).at(-1)).toMatchObject({ type: 'RUN_FINISHED' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('maps a suppressed turn onto the muted final payload', async () => {

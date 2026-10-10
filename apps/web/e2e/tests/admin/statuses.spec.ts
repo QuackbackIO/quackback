@@ -34,9 +34,9 @@ test.describe('Admin Status Management', () => {
     await expect(statusToggles.first()).toBeVisible({ timeout: 10000 })
   })
 
-  test('can open add status dialog with form fields', async ({ page }) => {
-    // Find the "Add new status" text button
-    const addButton = page.getByText('Add new status').first()
+  test('can open new status dialog with form fields', async ({ page }) => {
+    // The "New status" button lives in the page header
+    const addButton = page.getByRole('button', { name: 'New status' })
 
     if ((await addButton.count()) > 0) {
       await addButton.click()
@@ -48,6 +48,7 @@ test.describe('Admin Status Management', () => {
       // Verify dialog has expected form fields
       await expect(dialog.getByRole('textbox', { name: 'Name' })).toBeVisible()
       await expect(dialog.getByRole('textbox', { name: /slug/i })).toBeVisible()
+      await expect(dialog.getByText('Category')).toBeVisible()
       await expect(dialog.getByText('Color')).toBeVisible()
 
       // Verify buttons exist
@@ -71,7 +72,7 @@ test.describe('Admin Status Management', () => {
       await colorButtons.first().click()
 
       // May show popover with color options
-      const colorPopover = page.locator('[data-radix-popover-content]')
+      const colorPopover = page.locator('[data-slot="popover-content"]')
 
       if ((await colorPopover.count()) > 0) {
         await expect(colorPopover).toBeVisible()
@@ -89,14 +90,14 @@ test.describe('Admin Status Management', () => {
       const firstToggle = roadmapToggles.first()
 
       // Get current state
-      const isChecked = await firstToggle.getAttribute('data-state')
+      const isChecked = await firstToggle.getAttribute('aria-checked')
 
       // Click to toggle
       await firstToggle.click()
 
       // State should change
       await page.waitForTimeout(500)
-      const newState = await firstToggle.getAttribute('data-state')
+      const newState = await firstToggle.getAttribute('aria-checked')
 
       // Should be different from initial state
       expect(newState).not.toBe(isChecked)
@@ -104,26 +105,33 @@ test.describe('Admin Status Management', () => {
   })
 
   test('shows default status indicator', async ({ page }) => {
-    // Default status is indicated by a LockClosedIcon (Heroicons, not Lucide).
-    // The icon renders with className "h-3 w-3 text-muted-foreground" which is unique
-    // to the lock icon within the status list on this page.
-    const defaultIndicator = page.locator('svg.h-3.w-3.text-muted-foreground').or(page.getByText(/default/i))
+    // The default status shows a lock next to its name.
+    const defaultIndicator = page.getByLabel('Locked')
 
     await expect(defaultIndicator.first()).toBeVisible({ timeout: 10000 })
   })
 
   test('can delete a non-default status', async ({ page }) => {
-    // Find enabled delete buttons only (non-default statuses can be deleted)
-    // Default statuses have disabled delete buttons
-    const deleteButtons = page.locator('button:not([disabled])').filter({
-      has: page.locator('svg.lucide-trash-2'),
-    })
+    // Non-default statuses have a Delete item in their row menu
+    const rowMenus = page.getByRole('button', { name: /^Actions for / })
+    await expect(rowMenus.first()).toBeVisible({ timeout: 10000 })
 
-    // Only run if enabled delete buttons exist
-    if ((await deleteButtons.count()) > 0) {
-      // Click the first enabled delete button
-      await deleteButtons.first().click()
+    let opened = false
+    for (let i = 0; i < (await rowMenus.count()) && !opened; i++) {
+      await rowMenus.nth(i).click()
+      await expect(page.getByRole('menuitem').first()).toBeVisible()
+      const deleteItem = page.getByRole('menuitem', { name: 'Delete' })
+      if ((await deleteItem.count()) > 0 && (await deleteItem.isEnabled())) {
+        await deleteItem.click()
+        opened = true
+      } else {
+        await page.keyboard.press('Escape')
+        // The closing menu still covers the next row's button until it unmounts
+        await expect(page.getByRole('menuitem')).toHaveCount(0)
+      }
+    }
 
+    if (opened) {
       // Should show confirmation dialog - wait for any dialog type
       const confirmDialog = page.getByRole('alertdialog').or(page.getByRole('dialog'))
       await expect(confirmDialog).toBeVisible({ timeout: 5000 })

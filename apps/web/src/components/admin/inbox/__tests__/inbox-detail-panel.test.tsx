@@ -12,6 +12,7 @@
  */
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -50,6 +51,16 @@ vi.mock('@/lib/server/functions/conversation', () => ({
   listConversationsForUserFn: vi.fn().mockResolvedValue({ conversations: [], hasMore: false }),
   getConversationAssistantActivityFn: vi.fn().mockResolvedValue(null),
 }))
+const filesHoisted = vi.hoisted(() => ({
+  listConversationFilesFn: vi.fn().mockResolvedValue([]),
+  openViewer: vi.fn(),
+}))
+vi.mock('@/lib/server/functions/conversation-files', () => ({
+  listConversationFilesFn: filesHoisted.listConversationFilesFn,
+}))
+vi.mock('@/components/shared/files/file-viewer-context', () => ({
+  useFileViewer: () => ({ open: filesHoisted.openViewer }),
+}))
 vi.mock('@/lib/server/functions/admin', () => ({
   getPortalUserFn: vi.fn().mockResolvedValue(null),
 }))
@@ -82,9 +93,11 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
     <a href={to}>{children}</a>
   ),
-  useRouteContext: () => routeContextState,
+  useRouteContext: (opts?: { select?: (context: typeof routeContextState) => unknown }) =>
+    opts?.select ? opts.select(routeContextState) : routeContextState,
 }))
 
+import { getPortalUserFn } from '@/lib/server/functions/admin'
 import { InboxDetailPanel } from '../inbox-detail-panel'
 
 function makeConversation(overrides: Partial<ConversationDTO> = {}): ConversationDTO {
@@ -118,29 +131,41 @@ function makeConversation(overrides: Partial<ConversationDTO> = {}): Conversatio
   }
 }
 
+// Whether the viewport shows the panel, as the inbox route reads it.
+let panelShown = false
+
 function renderPanel(
   conversation: ConversationDTO = makeConversation(),
-  extra: { openCopilotToken?: number } = {}
+  extra: {
+    openCopilotToken?: number
+    issuePeople?: { principalId: string; displayName: string; avatarUrl: string | null }[]
+  } = {}
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const ui = (props: { openCopilotToken?: number }) => (
-    <QueryClientProvider client={client}>
-      <InboxDetailPanel
-        item={{ kind: 'conversation', id: conversation.id }}
-        conversation={conversation}
-        onChanged={vi.fn()}
-        onSelectItem={vi.fn()}
-        onTrackAsFeedback={vi.fn()}
-        onCreateTicket={vi.fn()}
-        onInsertFromCopilot={vi.fn()}
-        {...props}
-      />
-    </QueryClientProvider>
+    <IntlProvider locale="en-US" messages={{}}>
+      <QueryClientProvider client={client}>
+        <InboxDetailPanel
+          item={{ kind: 'conversation', id: conversation.id }}
+          conversation={conversation}
+          onChanged={vi.fn()}
+          onSelectItem={vi.fn()}
+          onTrackAsFeedback={vi.fn()}
+          onCreateTicket={vi.fn()}
+          onInsertFromCopilot={vi.fn()}
+          visible={panelShown}
+          {...props}
+        />
+      </QueryClientProvider>
+    </IntlProvider>
   )
   const result = render(ui(extra))
   return {
     ...result,
-    rerenderWith: (props: { openCopilotToken?: number }) => result.rerender(ui(props)),
+    rerenderWith: (props: {
+      openCopilotToken?: number
+      issuePeople?: { principalId: string; displayName: string; avatarUrl: string | null }[]
+    }) => result.rerender(ui(props)),
   }
 }
 
@@ -182,10 +207,10 @@ describe('<InboxDetailPanel> tab host', () => {
 
     const { container } = renderPanel()
     const aside = screen.getByRole('complementary', { name: 'Item details' })
-    const detailsTab = container.querySelector('[data-slot="tabs-content"][data-state="active"]')
+    const detailsTab = container.querySelector('[data-slot="tabs-content"]:not([data-hidden])')
 
     expect(aside).toHaveClass('h-full', 'min-h-0', 'overflow-hidden')
-    expect(detailsTab).toHaveClass('data-[state=active]:flex', 'min-h-0', 'overflow-hidden')
+    expect(detailsTab).toHaveClass('flex', 'min-h-0', 'overflow-hidden')
     expect(detailsTab?.querySelector('[data-slot="scroll-area"]')).toHaveClass('min-h-0', 'flex-1')
   })
 })
@@ -198,11 +223,11 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
   it('a token bump switches from Details to the Copilot tab and focuses the ask input', async () => {
     enableCopilot()
     const { rerenderWith } = renderPanel(makeConversation(), { openCopilotToken: 0 })
-    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-active')
 
     rerenderWith({ openCopilotToken: 1 })
 
-    expect(screen.getByRole('tab', { name: /copilot/i })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('tab', { name: /copilot/i })).toHaveAttribute('data-active')
     // Focus lands after the rAF that waits for the tab content to un-hide.
     await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
   })
@@ -211,7 +236,7 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
     enableCopilot()
     renderPanel(makeConversation(), { openCopilotToken: 0 })
 
-    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-active')
     expect(screen.getByTestId('copilot-ask-stub')).not.toHaveFocus()
   })
 
@@ -223,7 +248,7 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
     enableCopilot()
     renderPanel(makeConversation(), { openCopilotToken: 5 })
 
-    expect(screen.getByRole('tab', { name: /copilot/i })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('tab', { name: /copilot/i })).toHaveAttribute('data-active')
     await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
   })
 
@@ -234,10 +259,10 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
     await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
 
     // Back to Details, then the route resets the token (selection changed).
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Details' }), { button: 0 })
+    fireEvent.click(screen.getByRole('tab', { name: 'Details' }))
     rerenderWith({ openCopilotToken: 0 })
 
-    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-active')
   })
 
   it('tabs stay user-switchable after a token bump (controlled Tabs round-trip)', async () => {
@@ -246,10 +271,9 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
     rerenderWith({ openCopilotToken: 1 })
     await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
 
-    // Radix TabsTrigger activates on mousedown, not click.
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Details' }), { button: 0 })
+    fireEvent.click(screen.getByRole('tab', { name: 'Details' }))
 
-    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-active')
   })
 
   it('a token bump is a clean no-op when the Copilot tab is unavailable (no copilot.use)', () => {
@@ -260,5 +284,166 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
 
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
     expect(screen.getByText('Properties')).toBeInTheDocument()
+  })
+})
+
+describe('<InboxDetailPanel> GitHub issue people', () => {
+  it('lists distinct people on a GitHub issue', () => {
+    routeContextState.principal = undefined
+    renderPanel(
+      makeConversation({
+        channel: 'github',
+        visitorEmail: null,
+        customAttributes: { githubUrl: 'https://github.com/acme/api/issues/201' },
+      }),
+      {
+        issuePeople: [
+          { principalId: 'p1', displayName: 'jane', avatarUrl: null },
+          { principalId: 'p2', displayName: 'bob', avatarUrl: null },
+        ],
+      }
+    )
+    expect(screen.getByText('On this issue')).toBeInTheDocument()
+    expect(screen.getByText('jane')).toBeInTheDocument()
+    expect(screen.getByText('bob')).toBeInTheDocument()
+  })
+
+  it('hides the people list when the thread is not GitHub', () => {
+    routeContextState.principal = undefined
+    renderPanel(makeConversation(), {
+      issuePeople: [{ principalId: 'p1', displayName: 'jane', avatarUrl: null }],
+    })
+    expect(screen.queryByText('On this issue')).not.toBeInTheDocument()
+  })
+})
+
+describe('<InboxDetailPanel> contact name', () => {
+  afterEach(() => {
+    vi.mocked(getPortalUserFn).mockResolvedValue(null)
+    panelShown = false
+  })
+
+  function showPanel() {
+    panelShown = true
+  }
+
+  it('shows the account name instead of the generic public name', async () => {
+    routeContextState.principal = undefined
+    showPanel()
+    vi.mocked(getPortalUserFn).mockResolvedValue({
+      name: 'Ada Lovelace',
+      email: 'ada@example.com',
+      emailVerified: true,
+      segments: [],
+      postCount: 0,
+      commentCount: 0,
+      voteCount: 0,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    } as never)
+
+    renderPanel(
+      makeConversation({
+        visitor: {
+          principalId: 'principal_visitor',
+          displayName: 'Quiet Otter',
+          avatarUrl: null,
+        },
+      })
+    )
+
+    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
+    expect(screen.getByText('ada@example.com')).toBeInTheDocument()
+    expect(screen.getByText('Posts')).toBeInTheDocument()
+    expect(screen.getByText('Comments')).toBeInTheDocument()
+    expect(screen.queryByText('Quiet Otter')).not.toBeInTheDocument()
+  })
+
+  it('does not replace the public name on the card when the account name is still the stock anonymous label', async () => {
+    routeContextState.principal = undefined
+    showPanel()
+    vi.mocked(getPortalUserFn).mockResolvedValue({
+      name: 'Anonymous',
+      email: 'ada@example.com',
+      emailVerified: false,
+      segments: [],
+      postCount: 1,
+      commentCount: 2,
+      voteCount: 3,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    } as never)
+
+    renderPanel(
+      makeConversation({
+        visitor: {
+          principalId: 'principal_visitor',
+          displayName: 'Quiet Otter',
+          avatarUrl: null,
+        },
+      })
+    )
+
+    expect(await screen.findByText('Quiet Otter')).toBeInTheDocument()
+    expect(screen.queryByText('Anonymous')).not.toBeInTheDocument()
+  })
+})
+
+describe('<InboxDetailPanel> Files section', () => {
+  afterEach(() => {
+    panelShown = false
+    filesHoisted.listConversationFilesFn.mockReset().mockResolvedValue([])
+    filesHoisted.openViewer.mockClear()
+  })
+
+  it('renders no section at all for a conversation with no files', async () => {
+    routeContextState.principal = undefined
+    panelShown = true
+
+    renderPanel()
+
+    await waitFor(() => expect(filesHoisted.listConversationFilesFn).toHaveBeenCalled())
+    expect(screen.queryByText('Files')).not.toBeInTheDocument()
+  })
+
+  it('lists files newest first with a right-aligned count, and opens the viewer at the clicked row', async () => {
+    routeContextState.principal = undefined
+    panelShown = true
+    filesHoisted.listConversationFilesFn.mockResolvedValue([
+      {
+        attachment: {
+          url: '/f/b.pdf',
+          name: 'b.pdf',
+          contentType: 'application/pdf',
+          size: 10,
+          family: 'pdf',
+        },
+        messageId: 'm2',
+        senderName: 'Dana',
+        sentAt: '2026-01-01T01:00:00.000Z',
+      },
+      {
+        attachment: {
+          url: '/f/a.pdf',
+          name: 'a.pdf',
+          contentType: 'application/pdf',
+          size: 10,
+          family: 'pdf',
+        },
+        messageId: 'm1',
+        senderName: 'Dana',
+        sentAt: '2026-01-01T00:00:00.000Z',
+      },
+    ])
+
+    renderPanel()
+
+    expect(await screen.findByText('Files')).toBeInTheDocument()
+    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getAllByText(/\.pdf$/).map((el) => el.textContent)).toEqual(['b.pdf', 'a.pdf'])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open b.pdf, PDF, 10 B' }))
+    expect(filesHoisted.openViewer).toHaveBeenCalledTimes(1)
+    const [files, index] = filesHoisted.openViewer.mock.calls[0] as [{ name: string }[], number]
+    expect(files.map((f) => f.name)).toEqual(['b.pdf', 'a.pdf'])
+    expect(index).toBe(0)
   })
 })

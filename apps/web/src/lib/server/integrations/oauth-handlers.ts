@@ -10,6 +10,7 @@ import type { PrincipalId, UserId } from '@quackback/ids'
 import { getIntegration } from '.'
 import { verifyOAuthState } from '@/lib/server/auth/oauth-state'
 import { auth } from '@/lib/server/auth'
+import { toSessionScope } from '@/lib/shared/roles'
 import { db, principal, eq } from '@/lib/server/db'
 import {
   STATE_EXPIRY_MS,
@@ -23,6 +24,9 @@ import {
   isValidWorkspaceDomain,
 } from './oauth'
 import { logger } from '@/lib/server/logger'
+import { readTextBodyOr413 } from '@/lib/server/utils/read-body'
+import { oauthFragmentBridge } from './oauth-fragment'
+import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
 
 const log = logger.child({ component: 'oauth' })
 
@@ -37,6 +41,8 @@ interface OAuthState {
   ts: number
   /** Pre-auth fields collected before OAuth (e.g. Zendesk subdomain) */
   preAuthFields?: Record<string, string>
+  /** Allowlisted path to return to after connect (GitHub channel page). */
+  returnPath?: string
 }
 
 function buildSettingsUrl(
@@ -122,11 +128,24 @@ export async function handleOAuthCallback(
   }
 
   const settingsPath = definition.catalog.settingsPath
-  const errorUrl = (base: string, reason: string) =>
-    buildSettingsUrl(base, settingsPath, integrationType, 'error', reason)
+  const errorUrl = (base: string, reason: string, path = settingsPath) =>
+    `${buildSettingsUrl(base, path, integrationType, 'error', reason)}#`
 
   const url = new URL(request.url)
-  const code = url.searchParams.get('code')
+  const fragment = definition.oauth.callbackMode === 'fragment'
+  let code = fragment ? null : url.searchParams.get('code')
+  if (request.method === 'POST') {
+    if (!fragment) return new Response(null, { status: 405 })
+    if (!isSameOriginFormPost(request)) return new Response(null, { status: 403 })
+    const body = await readTextBodyOr413(request, 16_384)
+    if (body instanceof Response) return body
+    try {
+      const data = JSON.parse(body)
+      code = typeof data.token === 'string' && data.token.length > 0 ? data.token : null
+    } catch {
+      return new Response(null, { status: 400 })
+    }
+  }
   const state = url.searchParams.get('state')
   const errorParam = definition.oauth.errorParam ?? 'error'
   const providerError = url.searchParams.get(errorParam)
@@ -142,40 +161,49 @@ export async function handleOAuthCallback(
 
   const { returnDomain, principalId } = stateData
   const workspaceUrl = `https://${returnDomain}`
+  const returnPath =
+    stateData.returnPath === '/admin/settings/channels/github' ? stateData.returnPath : settingsPath
+  const fail = (reason: string) => errorUrl(workspaceUrl, reason, returnPath)
 
   if (!isValidWorkspaceDomain(returnDomain)) {
     return redirectResponse(errorUrl(FALLBACK_URL, 'invalid_workspace'))
   }
 
   if (providerError) {
-    return redirectResponse(errorUrl(workspaceUrl, `${integrationType}_denied`))
+    return redirectResponse(fail(`${integrationType}_denied`))
   }
 
-  if (!code) {
-    return redirectResponse(errorUrl(workspaceUrl, 'invalid_request'))
+  if (!code && !(fragment && request.method === 'GET')) {
+    return redirectResponse(fail('invalid_request'))
   }
 
   const cookieName = getStateCookieName(integrationType, request)
   const cookies = parseCookies(request.headers.get('cookie') || '')
   if (cookies[cookieName] !== state) {
-    return redirectResponse(errorUrl(workspaceUrl, 'state_mismatch'))
+    return redirectResponse(fail('state_mismatch'))
   }
 
   // Verify the current session matches the member who initiated the flow
   try {
     const session = await auth.api.getSession({ headers: request.headers })
     if (!session?.user) {
-      return redirectResponse(errorUrl(workspaceUrl, 'auth_required'))
+      return redirectResponse(fail('auth_required'))
+    }
+    // Credential-linking is dashboard-only.
+    if (toSessionScope(session.session.scope) !== 'dashboard') {
+      return redirectResponse(fail('auth_required'))
     }
     const principalRecord = await db.query.principal.findFirst({
       where: eq(principal.userId, session.user.id as UserId),
     })
     if (!principalRecord || (principalRecord.id as PrincipalId) !== principalId) {
-      return redirectResponse(errorUrl(workspaceUrl, 'session_mismatch'))
+      return redirectResponse(fail('session_mismatch'))
     }
   } catch {
-    return redirectResponse(errorUrl(workspaceUrl, 'auth_required'))
+    return redirectResponse(fail('auth_required'))
   }
+
+  if (fragment && request.method === 'GET') return oauthFragmentBridge()
 
   // Fetch platform credentials from DB for exchange
   let credentials: Record<string, string> | undefined
@@ -184,7 +212,7 @@ export async function handleOAuthCallback(
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
     const creds = await getPlatformCredentials(integrationType)
     if (!creds) {
-      return redirectResponse(errorUrl(workspaceUrl, 'credentials_not_configured'))
+      return redirectResponse(fail('credentials_not_configured'))
     }
     credentials = creds
   }
@@ -193,7 +221,7 @@ export async function handleOAuthCallback(
   try {
     const callbackUri = buildCallbackUri(integrationType, request)
     const exchangeResult = await definition.oauth.exchangeCode(
-      code,
+      code!,
       callbackUri,
       stateData.preAuthFields,
       credentials
@@ -203,7 +231,7 @@ export async function handleOAuthCallback(
     const { saveIntegration } = await import('./save')
     await saveIntegration(integrationType, { principalId, ...exchangeResult })
 
-    const successUrl = buildSettingsUrl(workspaceUrl, settingsPath, integrationType, 'connected')
+    const successUrl = buildSettingsUrl(workspaceUrl, returnPath, integrationType, 'connected')
     return redirectResponse(successUrl, [clearCookie(cookieName, isSecureRequest(request))])
   } catch (err) {
     log.error({ err, integration_type: integrationType }, 'oauth exchange/save failed')
@@ -220,6 +248,13 @@ export async function handleOAuthCallback(
       }
     }
 
-    return redirectResponse(errorUrl(workspaceUrl, 'exchange_failed'))
+    const { InstallBoundElsewhereError } = await import('./install-registry')
+    return redirectResponse(
+      fail(
+        err instanceof InstallBoundElsewhereError
+          ? 'already_connected_elsewhere'
+          : 'exchange_failed'
+      )
+    )
   }
 }

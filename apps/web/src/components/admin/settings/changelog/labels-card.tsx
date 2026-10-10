@@ -1,15 +1,25 @@
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
-  PlusIcon,
-  TrashIcon,
-  PencilSquareIcon,
-  ArrowPathIcon,
-  ChevronUpIcon,
-  ChevronDownIcon,
-} from '@heroicons/react/24/solid'
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { Bars3Icon, TagIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -22,10 +32,14 @@ import {
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { EmptyState } from '@/components/shared/empty-state'
+import { NewButton } from '@/components/shared/new-button'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { RowDot, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
+import { AUTOSAVE } from '@/lib/client/autosave'
 import { SegmentMultiSelect } from '@/components/admin/segments/segment-multi-select'
 import { cn } from '@/lib/shared/utils'
-import { listSegmentsFn } from '@/lib/server/functions/admin'
+import { changelogCategoryQueries } from '@/lib/client/queries/changelog'
 import {
   createChangelogCategoryFn,
   updateChangelogCategoryFn,
@@ -134,7 +148,7 @@ function CategoryDialog({ open, onOpenChange, category, segments, onSaved }: Cat
       onSaved(saved)
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save category')
+      setError(err instanceof Error ? err.message : 'Failed to save label')
     } finally {
       setIsSaving(false)
     }
@@ -144,7 +158,7 @@ function CategoryDialog({ open, onOpenChange, category, segments, onSaved }: Cat
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit category' : 'New category'}</DialogTitle>
+          <DialogTitle>{isEdit ? 'Edit label' : 'Create label'}</DialogTitle>
         </DialogHeader>
 
         <div className="flex justify-center py-3 bg-muted/30 rounded-lg">
@@ -152,7 +166,7 @@ function CategoryDialog({ open, onOpenChange, category, segments, onSaved }: Cat
             className="inline-flex items-center px-3 py-0.5 rounded-md text-sm font-medium"
             style={{ backgroundColor: color + '20', color }}
           >
-            {name.trim() || 'Category name'}
+            {name.trim() || 'Label name'}
           </span>
         </div>
 
@@ -197,11 +211,77 @@ function CategoryDialog({ open, onOpenChange, category, segments, onSaved }: Cat
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : isEdit ? 'Save changes' : 'Create category'}
+            {isSaving ? 'Saving...' : isEdit ? 'Save changes' : 'Create label'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function SortableLabelRow({
+  category,
+  segments,
+  onEdit,
+  onDelete,
+}: {
+  category: ChangelogCategory
+  segments: { id: string; name: string }[]
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: category.id,
+  })
+  const gated = category.segmentIds.length > 0
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+      }}
+    >
+      <SettingsListRow
+        grip={
+          <button
+            {...attributes}
+            {...listeners}
+            aria-label={`Reorder ${category.name}`}
+            className="touch-none cursor-grab active:cursor-grabbing"
+          >
+            <Bars3Icon className="size-4 text-muted-foreground/70" />
+          </button>
+        }
+        leading={<RowDot color={category.color} />}
+        title={category.name}
+        badges={
+          gated && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/70">
+                  {category.segmentIds.length} segment
+                  {category.segmentIds.length === 1 ? '' : 's'}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 text-xs" align="start">
+                Only visible to members of{' '}
+                {category.segmentIds
+                  .map((id) => segments.find((s) => s.id === id)?.name ?? id)
+                  .join(', ')}
+                .
+              </PopoverContent>
+            </Popover>
+          )
+        }
+        actions={[
+          { label: 'Edit', onSelect: onEdit },
+          { label: 'Delete', onSelect: onDelete, destructive: true },
+        ]}
+      />
+    </div>
   )
 }
 
@@ -216,13 +296,8 @@ export function LabelsCard({ initialCategories }: LabelsCardProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<ChangelogCategory | null>(null)
   const [deletingCategory, setDeletingCategory] = useState<ChangelogCategory | null>(null)
-  const [reordering, setReordering] = useState(false)
 
-  const segmentsQuery = useQuery({
-    queryKey: ['admin', 'segments'] as const,
-    queryFn: () => listSegmentsFn(),
-    staleTime: 60_000,
-  })
+  const segmentsQuery = useQuery(changelogCategoryQueries.segments())
   const segments = (segmentsQuery.data ?? []).map((s) => ({ id: s.id, name: s.name }))
 
   function handleCategorySaved(saved: ChangelogCategory) {
@@ -251,128 +326,72 @@ export function LabelsCard({ initialCategories }: LabelsCardProps) {
       setCategories((prev) => prev.filter((c) => c.id !== deletingCategory.id))
       startTransition(() => router.invalidate())
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete category')
+      toast.error(error instanceof Error ? error.message : 'Failed to delete label')
     } finally {
       setDeletingCategory(null)
     }
   }
 
-  async function move(index: number, direction: -1 | 1) {
-    const target = index + direction
-    if (target < 0 || target >= categories.length) return
-    const next = [...categories]
-    ;[next[index], next[target]] = [next[target], next[index]]
+  // A reorder saves on drop. A failure restores the previous order; the
+  // autosave handler shows the one toast.
+  const reorderMutation = useMutation({
+    mutationFn: (ids: string[]) => reorderChangelogCategoriesFn({ data: { ids } }),
+    meta: AUTOSAVE,
+    onSuccess: () => startTransition(() => router.invalidate()),
+    onError: (_error, _ids, previous) => setCategories(previous ?? initialCategories),
+    onMutate: () => categories,
+  })
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = categories.findIndex((c) => c.id === active.id)
+    const newIndex = categories.findIndex((c) => c.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+    const next = arrayMove(categories, oldIndex, newIndex)
     setCategories(next)
-    setReordering(true)
-    try {
-      await reorderChangelogCategoriesFn({ data: { ids: next.map((c) => c.id) } })
-      startTransition(() => router.invalidate())
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to reorder categories')
-      setCategories(categories)
-    } finally {
-      setReordering(false)
-    }
+    reorderMutation.mutate(next.map((c) => c.id))
   }
 
   return (
-    <div className="space-y-8">
+    <>
       <SettingsCard
         title="Labels"
-        description="Categorize changelog entries. Gate a label to specific segments to show it only to the customers it applies to."
-        contentClassName="p-4"
+        description="Group entries by label."
+        action={<NewButton noun="label" onClick={openCreate} />}
+        flush
       >
-        <div className="space-y-1">
-          {categories.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No labels yet. Create your first label to get started.
-            </p>
-          )}
-
-          {categories.map((category, index) => (
-            <div
-              key={category.id}
-              className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 group"
-            >
-              <div className="flex flex-col -my-1">
-                <button
-                  type="button"
-                  className="text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30"
-                  onClick={() => move(index, -1)}
-                  disabled={index === 0 || reordering}
-                  aria-label={`Move ${category.name} up`}
-                >
-                  <ChevronUpIcon className="h-3 w-3" />
-                </button>
-                <button
-                  type="button"
-                  className="text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30"
-                  onClick={() => move(index, 1)}
-                  disabled={index === categories.length - 1 || reordering}
-                  aria-label={`Move ${category.name} down`}
-                >
-                  <ChevronDownIcon className="h-3 w-3" />
-                </button>
-              </div>
-
-              <span
-                className="h-3 w-3 rounded-full shrink-0"
-                style={{ backgroundColor: category.color }}
-              />
-
-              <span className="text-sm font-medium">{category.name}</span>
-
-              {category.segmentIds.length > 0 && (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full hover:bg-muted/70">
-                      {category.segmentIds.length} segment
-                      {category.segmentIds.length === 1 ? '' : 's'}
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-64 text-xs" align="start">
-                    Only visible to members of{' '}
-                    {category.segmentIds
-                      .map((id) => segments.find((s) => s.id === id)?.name ?? id)
-                      .join(', ')}
-                    .
-                  </PopoverContent>
-                </Popover>
-              )}
-
-              <span className="flex-1" />
-
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100"
-                onClick={() => openEdit(category)}
-                title="Edit label"
-              >
-                <PencilSquareIcon className="h-3.5 w-3.5" />
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
-                onClick={() => setDeletingCategory(category)}
-                title="Delete label"
-              >
-                <TrashIcon className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ))}
-
-          <button
-            className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 w-full text-muted-foreground"
-            onClick={openCreate}
+        {categories.length === 0 ? (
+          <EmptyState icon={TagIcon} title="No labels yet" size="compact" />
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            <PlusIcon className="h-3 w-3" />
-            <span className="text-sm">Add new label</span>
-            {reordering && <ArrowPathIcon className="h-3 w-3 animate-spin ms-1" />}
-          </button>
-        </div>
+            <SettingsList>
+              <SortableContext
+                items={categories.map((c) => c.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {categories.map((category) => (
+                  <SortableLabelRow
+                    key={category.id}
+                    category={category}
+                    segments={segments}
+                    onEdit={() => openEdit(category)}
+                    onDelete={() => setDeletingCategory(category)}
+                  />
+                ))}
+              </SortableContext>
+            </SettingsList>
+          </DndContext>
+        )}
       </SettingsCard>
 
       <CategoryDialog
@@ -386,12 +405,12 @@ export function LabelsCard({ initialCategories }: LabelsCardProps) {
       <ConfirmDialog
         open={!!deletingCategory}
         onOpenChange={() => setDeletingCategory(null)}
-        title="Delete label"
-        description={`Are you sure you want to delete "${deletingCategory?.name}"? This will remove it from every changelog entry.`}
-        confirmLabel="Delete"
+        title="Delete label?"
+        description={`Delete "${deletingCategory?.name}"? This removes it from every changelog entry.`}
+        confirmLabel="Delete label"
         variant="destructive"
         onConfirm={handleDelete}
       />
-    </div>
+    </>
   )
 }

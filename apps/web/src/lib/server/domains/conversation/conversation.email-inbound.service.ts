@@ -46,13 +46,12 @@ import { currentMailSlug } from './conversation.mail-slug'
 import { loadTicketOr404 } from '@/lib/server/domains/tickets/ticket.service'
 import { appendInboundTicketReply } from '@/lib/server/domains/tickets/requester.service'
 import { emailHtmlToContent } from '@/lib/server/content/email-html-to-content'
+import { isS3Usable, uploadImageBuffer, MAX_FILE_SIZE } from '@/lib/server/storage/s3'
 import {
-  isS3Usable,
-  uploadImageBuffer,
-  uploadObject,
-  generateStorageKey,
-  MAX_FILE_SIZE,
-} from '@/lib/server/storage/s3'
+  storeFile,
+  attachmentFromFile,
+  FileRejectedError,
+} from '@/lib/server/domains/files/files.service'
 import { sniffImageMime, canonicalizeImageMime } from '@/lib/server/content/magic-bytes'
 import { MAX_CONVERSATION_ATTACHMENTS } from '@/lib/shared/conversation/types'
 import {
@@ -76,6 +75,7 @@ import {
   cleanupColdInboundLead,
 } from './conversation.email-cold-inbound'
 import { maybeAutoFileSpam } from './conversation.spam-filter'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { senderAuthSpamSignal } from './conversation.spam-signals'
 
 export type IngestInboundResult =
@@ -191,10 +191,9 @@ function logRefusal(cause: InboundRefusalCause, retained: boolean): void {
   log.warn({ cause, retained }, 'inbound email refused')
 }
 
-/** Own-storage prefixes for rehosted inbound media (mirror the composer upload
- *  routes: images share `chat-images`; non-image files get a sibling prefix). */
+/** Own-storage prefix for inline images rehosted into an email's body. Discrete
+ *  attachments go through the file pipeline under its own prefix. */
 const INBOUND_IMAGE_PREFIX = 'chat-images'
-const INBOUND_FILE_PREFIX = 'chat-files'
 // Hard ceiling on how many parts a single inbound email may rehost to storage,
 // covering inline images AND discrete attachments together. The discrete
 // attachment tray is separately capped at MAX_CONVERSATION_ATTACHMENTS; this
@@ -237,16 +236,18 @@ function rewriteCidReferences(html: string, cidMap: Map<string, string>): string
  * inline images once `emailHtmlToContent` runs on the rewritten HTML); every
  * other part becomes a discrete `attachments[]` entry.
  *
- * Fail-soft by design: a part over the size cap, a declared image whose bytes
- * don't match (magic-byte check), an over-count attachment, or a failed upload is
- * dropped with a log line — a single bad part never fails the whole ingest.
- * Images upload via `uploadImageBuffer` (allow-list + `chat-images` prefix, the
- * same primitive the content rehoster uses); other files upload via the raw
- * `uploadObject` under `chat-files`, capped at `MAX_FILE_SIZE` (5 MB) — the same
- * limit the composer's image upload endpoint enforces (no discrete non-image
- * upload endpoint exists to mirror, so the shared 5 MB file cap applies).
+ * Fail-soft by design: an inline image over the size cap or whose bytes don't
+ * match its declared type, a refused or over-count attachment, or a failed
+ * upload is dropped with a log line — a single bad part never fails the whole
+ * ingest. Inline images upload via `uploadImageBuffer` (the allow-list primitive
+ * the content rehoster uses); discrete attachments go through `storeFile`, the
+ * same pipeline as the composers, recorded as the sender's files so the
+ * message write can attach them.
  */
-async function rehostInboundMedia(parsed: ParsedInboundEmail): Promise<RehostedInboundMedia> {
+async function rehostInboundMedia(
+  parsed: ParsedInboundEmail,
+  senderPrincipalId: PrincipalId | null
+): Promise<RehostedInboundMedia> {
   const parts = parsed.attachments ?? []
   if (parts.length === 0) return { html: parsed.html, attachments: [] }
   if (!isS3Usable()) {
@@ -267,71 +268,60 @@ async function rehostInboundMedia(parsed: ParsedInboundEmail): Promise<RehostedI
       log.warn({ name: part.filename }, 'inbound email part dropped: over upload budget')
       continue
     }
-    if (part.bytes.length > MAX_FILE_SIZE) {
-      log.warn(
-        { name: part.filename, size: part.bytes.length },
-        'inbound email part dropped: over size cap'
-      )
-      continue
-    }
     const declared = canonicalizeImageMime((part.contentType || '').toLowerCase())
-    const isImage = declared.startsWith('image/')
     const referenced = !!part.contentId && !!html && htmlReferencesCid(html, part.contentId)
 
-    if (isImage) {
+    if (referenced && part.contentId) {
+      // An inline image lands in the body, not the attachment tray.
+      if (part.bytes.length > MAX_FILE_SIZE) {
+        log.warn(
+          { name: part.filename, size: part.bytes.length },
+          'inbound email inline image dropped: over size cap'
+        )
+        continue
+      }
       const sniffed = sniffImageMime(part.bytes)
       if (!sniffed || sniffed !== declared) {
         log.warn(
           { name: part.filename, declared, sniffed },
-          'inbound email image dropped: bytes do not match declared type'
+          'inbound email inline image dropped: bytes do not match declared type'
         )
         continue
       }
-      // A discrete image consumes an attachment slot; a cid-referenced inline one
-      // does not (it lands in the body), so only gate discrete images on the cap.
-      if (!referenced && attachments.length >= MAX_CONVERSATION_ATTACHMENTS) {
-        log.warn({ name: part.filename }, 'inbound email attachment dropped: over count cap')
-        continue
-      }
-      let url: string
       try {
-        ;({ url } = await uploadImageBuffer(part.bytes, sniffed, INBOUND_IMAGE_PREFIX))
+        const { url } = await uploadImageBuffer(part.bytes, sniffed, INBOUND_IMAGE_PREFIX)
+        cidMap.set(part.contentId, url)
+        uploads++
       } catch (err) {
         log.warn({ err, name: part.filename }, 'inbound email image upload failed; skipped')
-        continue
       }
-      uploads++
-      if (referenced && part.contentId) {
-        cidMap.set(part.contentId, url)
-      } else {
-        attachments.push({
-          url,
-          name: part.filename || `image.${sniffed.split('/')[1] ?? 'img'}`,
-          contentType: sniffed,
-          size: part.bytes.length,
-        })
-      }
-    } else {
-      if (attachments.length >= MAX_CONVERSATION_ATTACHMENTS) {
-        log.warn({ name: part.filename }, 'inbound email attachment dropped: over count cap')
-        continue
-      }
-      const contentType = declared || 'application/octet-stream'
-      let url: string
-      try {
-        const key = generateStorageKey(INBOUND_FILE_PREFIX, part.filename || 'attachment')
-        url = await uploadObject(key, part.bytes, contentType)
-      } catch (err) {
-        log.warn({ err, name: part.filename }, 'inbound email attachment upload failed; skipped')
-        continue
-      }
-      uploads++
-      attachments.push({
-        url,
-        name: part.filename || 'attachment',
-        contentType,
-        size: part.bytes.length,
+      continue
+    }
+
+    // Every other part is a discrete attachment, stored through the file
+    // pipeline: typed from its bytes, capped per type, and refused when it is
+    // an executable or script (an email sender is not a verified identity).
+    if (attachments.length >= MAX_CONVERSATION_ATTACHMENTS) {
+      log.warn({ name: part.filename }, 'inbound email attachment dropped: over count cap')
+      continue
+    }
+    try {
+      const row = await storeFile({
+        bytes: part.bytes,
+        name: part.filename || (declared.startsWith('image/') ? 'image' : 'attachment'),
+        declaredType: declared || null,
+        source: 'email',
+        uploadedById: senderPrincipalId,
+        unverifiedSender: true,
       })
+      uploads++
+      attachments.push(attachmentFromFile(row))
+    } catch (err) {
+      if (err instanceof FileRejectedError) {
+        log.warn({ name: part.filename, reason: err.reason }, 'inbound email attachment refused')
+      } else {
+        log.warn({ err, name: part.filename }, 'inbound email attachment upload failed; skipped')
+      }
     }
   }
 
@@ -585,7 +575,7 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   // rich doc + its plaintext mirror: text/plain keeps precedence for `content`
   // (the sender's own quote-trimmed words); the HTML supplies `contentJson` and,
   // for an HTML-only message, the `content` fallback.
-  const media = await rehostInboundMedia(parsed)
+  const media = await rehostInboundMedia(parsed, visitorPrincipalId)
   const converted = media.html ? emailHtmlToContent(media.html) : null
   const content =
     plainText || converted?.text || (media.attachments.length > 0 ? '' : '(no plain-text body)')
@@ -682,6 +672,19 @@ async function ingestColdInbound(
     throw err
   }
 
+  // A teammate's test alias: the mail belongs to that teammate's test
+  // customer, whoever sent it, and never to the sender's own identity.
+  const { testAliasOwnerFor } = await import('@/lib/server/test-email-alias')
+  const testOwner = await testAliasOwnerFor(recipients, currentMailSlug())
+  if (testOwner) {
+    return ingestTestAliasMail(parsed, testOwner, {
+      inboundRoute,
+      recipients,
+      plainText,
+      quarantineCause: opts.quarantineCause ?? null,
+    })
+  }
+
   const resolution = await resolveColdInboundSender(parsed.from, parsed.authenticationResults)
 
   // Blocked people cannot open a new thread by email either. Unconditional
@@ -721,7 +724,7 @@ async function ingestColdInbound(
   // Rehost media after the drop gates (never upload for a blocked sender). Same
   // precedence as the reply path: text/plain owns `content`; the rewritten HTML
   // supplies `contentJson` and the HTML-only `content` fallback.
-  const media = await rehostInboundMedia(parsed)
+  const media = await rehostInboundMedia(parsed, resolution.principalId)
   const converted = media.html ? emailHtmlToContent(media.html) : null
   const content =
     plainText || converted?.text || (media.attachments.length > 0 ? '' : '(no plain-text body)')
@@ -800,6 +803,58 @@ async function ingestColdInbound(
         })
       )
       .catch((err) => log.error({ err, conversationId }, 'cold-inbound auto-ack failed'))
+  }
+  return { status: 'ingested', conversationId }
+}
+
+/**
+ * Mail to a teammate's test alias opens a test conversation as that
+ * teammate's test customer. The sender's authentication confers nothing here,
+ * because the alias, not the sender, decides the identity; the thread is test
+ * data, so it raises no spam classification and no acknowledgement mail.
+ */
+async function ingestTestAliasMail(
+  parsed: ParsedInboundEmail,
+  ownerPrincipalId: PrincipalId,
+  opts: {
+    inboundRoute: Awaited<ReturnType<typeof resolveChannelAccountByRecipient>> | null
+    recipients: string[]
+    plainText: string
+    quarantineCause: QuarantineCause | null
+  }
+): Promise<IngestInboundResult> {
+  const { getOrCreateTestCustomer } = await import('@/lib/server/test-customer')
+  const customer = await getOrCreateTestCustomer(ownerPrincipalId, DEFAULT_LOCALE)
+  const channelAccount = opts.inboundRoute ?? (await ensurePlatformInboundRoute(opts.recipients))
+  if (!channelAccount) {
+    log.warn({ reason: 'no_inbound_route' }, 'test alias mail dropped')
+    return { status: 'no_conversation' }
+  }
+  const media = await rehostInboundMedia(parsed, customer.id)
+  const converted = media.html ? emailHtmlToContent(media.html) : null
+  const content =
+    opts.plainText ||
+    converted?.text ||
+    (media.attachments.length > 0 ? '' : '(no plain-text body)')
+  const quarantine = opts.quarantineCause
+  const conversationId = await createEmailConversation({
+    parsed,
+    channelAccountId: channelAccount.id,
+    principalId: customer.id,
+    unverified: false,
+    content,
+    contentJson: converted?.contentJson ?? null,
+    attachments: media.attachments,
+    quarantine: quarantine
+      ? {
+          cause: quarantine,
+          note: 'Refused as a suspected mail loop: the message carried a reply address this workspace minted.',
+        }
+      : null,
+  })
+  if (quarantine) {
+    logRefusal(quarantine, true)
+    return { status: 'quarantined', conversationId, cause: quarantine }
   }
   return { status: 'ingested', conversationId }
 }
@@ -918,7 +973,7 @@ async function ingestTicketReply(
   // spends an upload. Same content precedence as the conversation path: text/plain
   // (quote-trimmed) owns `content`; the rewritten HTML supplies `contentJson` and
   // the HTML-only `content` fallback.
-  const media = await rehostInboundMedia(parsed)
+  const media = await rehostInboundMedia(parsed, requesterPrincipalId)
   const converted = media.html ? emailHtmlToContent(media.html) : null
   const content =
     plainText || converted?.text || (media.attachments.length > 0 ? '' : '(no plain-text body)')

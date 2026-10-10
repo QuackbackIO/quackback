@@ -11,12 +11,12 @@ import {
   ChatBubbleOvalLeftIcon,
   Square2StackIcon,
   TrashIcon,
-  PlusIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
+import { formatCalendarDate } from '@/lib/shared/utils/date'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
+import { FilterAddButton, FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import {
   VOTE_THRESHOLDS,
   DATE_PRESETS,
@@ -60,9 +60,6 @@ interface ActiveFiltersBarProps {
   statuses: PostStatusEntity[]
   members: TeamMember[]
   segments?: SegmentListItem[]
-  onToggleStatus: (slug: string) => void
-  onToggleBoard: (id: string) => void
-  onToggleSegment?: (id: string) => void
 }
 
 type FilterCategory =
@@ -82,7 +79,7 @@ type IconComponent = React.ComponentType<{ className?: string }>
 const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconComponent }[] = [
   { key: 'status', label: 'Status', icon: CircleIcon },
   { key: 'board', label: 'Board', icon: Squares2X2Icon },
-  { key: 'tags', label: 'PostTag', icon: TagIcon },
+  { key: 'tags', label: 'Tag', icon: TagIcon },
   { key: 'segment', label: 'Segment', icon: UserGroupIcon },
   { key: 'owner', label: 'Assigned to', icon: UserIcon },
   { key: 'date', label: 'Created date', icon: CalendarIcon },
@@ -100,7 +97,8 @@ const COMMENT_THRESHOLDS = [
   { value: 50, label: '50+ comments' },
 ]
 
-function AddFilterButton({
+/** The Filter control that opens the category menu; lives in the list toolbar. */
+export function AddFilterButton({
   filters,
   boards,
   tags,
@@ -188,20 +186,7 @@ function AddFilterButton({
       }}
     >
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'inline-flex items-center gap-1 px-2 py-0.5',
-            'rounded-full text-[13px]',
-            'border border-dashed border-border/50',
-            'text-muted-foreground hover:text-foreground',
-            'hover:border-border hover:bg-muted/30',
-            'transition-colors'
-          )}
-        >
-          <PlusIcon className="h-3 w-3" />
-          Add filter
-        </button>
+        <FilterAddButton />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-48 p-0">
         {activeCategory === null ? (
@@ -364,13 +349,9 @@ function getFilterIcon(type: ActiveFilter['type']): IconComponent {
   return icons[type]
 }
 
+/** A date filter ("2026-10-01") as the calendar day it names, for every viewer. */
 function formatDate(dateStr: string): string {
-  try {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch {
-    return dateStr
-  }
+  return formatCalendarDate(dateStr) ?? dateStr
 }
 
 function computeActiveFilters(
@@ -476,7 +457,7 @@ function computeActiveFilters(
           result.push({
             key: `tag-${id}`,
             type: 'tags',
-            label: 'PostTag:',
+            label: 'Tag:',
             value: tag.name,
             valueId: id,
             options: tagOptions,
@@ -672,34 +653,20 @@ export function ActiveFiltersBar({
   statuses,
   members,
   segments,
-  onToggleStatus,
-  onToggleBoard,
-  onToggleSegment,
 }: ActiveFiltersBarProps) {
   const activeFilters = useMemo(
     () => computeActiveFilters(filters, boards, tags, statuses, members, segments, onFiltersChange),
     [filters, boards, tags, statuses, members, segments, onFiltersChange]
   )
 
+  if (activeFilters.length === 0) return null
+
   return (
-    <div className="bg-card/50" role="region" aria-label="Active filters">
+    <div className="mt-2 bg-card/50" role="region" aria-label="Active filters">
       <div className="flex flex-wrap gap-1 items-center">
         {activeFilters.map(({ key, type, ...filterProps }) => (
           <FilterChip key={key} icon={getFilterIcon(type)} {...filterProps} />
         ))}
-
-        <AddFilterButton
-          filters={filters}
-          boards={boards}
-          tags={tags}
-          statuses={statuses}
-          members={members}
-          segments={segments}
-          onToggleStatus={onToggleStatus}
-          onToggleBoard={onToggleBoard}
-          onToggleSegment={onToggleSegment}
-          onFiltersChange={onFiltersChange}
-        />
 
         {activeFilters.length > 1 && (
           <button

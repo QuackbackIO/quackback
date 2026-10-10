@@ -6,7 +6,12 @@ import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/
 const searchSchema = z.object({
   board: z.array(z.string()).optional().catch(undefined),
   tags: z.array(z.string()).optional().catch(undefined),
-  status: z.array(z.string()).optional().catch(undefined),
+  // Status slugs are words people type: a hand-written `?status=open` means
+  // that one status, not an invalid filter the route drops.
+  status: z
+    .preprocess((value) => (typeof value === 'string' ? [value] : value), z.array(z.string()))
+    .optional()
+    .catch(undefined),
   segments: z.array(z.string()).optional().catch(undefined),
   owner: z.string().optional(),
   search: z.string().optional(),

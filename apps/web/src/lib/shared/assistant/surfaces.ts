@@ -4,7 +4,14 @@
  * workflow step) is a new member plus a caller that passes it — no schema
  * change. Client-safe: settings UI renders the catalogue.
  */
-export const ASSISTANT_SURFACES = ['widget', 'email', 'workflow_step', 'copilot'] as const
+export const ASSISTANT_SURFACES = [
+  'widget',
+  'email',
+  'workflow_step',
+  'copilot',
+  'slack',
+  'workspace',
+] as const
 
 export type AssistantSurface = (typeof ASSISTANT_SURFACES)[number]
 
@@ -13,6 +20,8 @@ export const ASSISTANT_SURFACE_LABELS: Record<
   AssistantSurface,
   { label: string; description: string }
 > = {
+  slack: { label: 'Slack', description: 'The workspace assistant in Slack.' },
+  workspace: { label: 'Workspace', description: 'The workspace assistant.' },
   widget: {
     label: 'Messenger',
     description: 'Conversations started from the widget on your site or app.',

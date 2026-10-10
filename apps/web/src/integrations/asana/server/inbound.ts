@@ -12,23 +12,19 @@ import type {
   InboundWebhookHandler,
   InboundWebhookResult,
 } from '@/lib/server/integrations/inbound-types'
-import { logger } from '@/lib/server/logger'
-
-const log = logger.child({ component: 'asana' })
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 
 const ASANA_API = 'https://app.asana.com/api/1.0'
 
 export const asanaInboundHandler: InboundWebhookHandler = {
+  statusMode: 'review',
+  handshake(request) {
+    const secret = request.headers.get('X-Hook-Secret')
+    // The authenticated registration response supplies the trusted signing secret.
+    // Echoing a challenge must never overwrite an existing subscription's secret.
+    return secret ? new Response('', { status: 200, headers: { 'X-Hook-Secret': secret } }) : null
+  },
   async verifySignature(request: Request, body: string, secret: string): Promise<true | Response> {
-    // Handshake: Asana sends X-Hook-Secret on initial webhook setup
-    const hookSecret = request.headers.get('X-Hook-Secret')
-    if (hookSecret) {
-      return new Response('', {
-        status: 200,
-        headers: { 'X-Hook-Secret': hookSecret },
-      })
-    }
-
     const signature = request.headers.get('X-Hook-Signature')
     if (!signature) {
       return new Response('Missing signature', { status: 401 })
@@ -48,61 +44,46 @@ export const asanaInboundHandler: InboundWebhookHandler = {
 
   async parseStatusChange(
     body: string,
-    _config: Record<string, unknown>,
+    config: Record<string, unknown>,
     secrets: Record<string, unknown>
-  ): Promise<InboundWebhookResult | null> {
+  ): Promise<InboundWebhookResult[]> {
     const payload = JSON.parse(body)
-    const events = payload.events
-    if (!Array.isArray(events) || events.length === 0) return null
-
-    // Find task change events (Asana sends compact events)
-    const taskEvent = events.find(
-      (e: { resource?: { resource_type?: string }; action?: string }) =>
-        e.resource?.resource_type === 'task' && e.action === 'changed'
-    )
-    if (!taskEvent) return null
-
-    const taskGid = taskEvent.resource?.gid
-    if (!taskGid) return null
-
-    // Asana compact events don't include the actual data — must fetch the task
-    const accessToken = secrets.accessToken as string | undefined
-    if (!accessToken) {
-      log.error('no access token in secrets for api fetch')
-      return null
-    }
-
-    try {
-      const response = await fetch(
-        `${ASANA_API}/tasks/${taskGid}?opt_fields=memberships.section.name`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
+    if (!Array.isArray(payload.events)) return []
+    const tasks = new Set<string>()
+    for (const event of payload.events) {
+      if (
+        event.resource?.resource_type === 'task' &&
+        event.action === 'changed' &&
+        typeof event.resource.gid === 'string'
       )
-
-      if (!response.ok) {
-        log.error({ status_code: response.status }, 'task api fetch failed')
-        return null
-      }
-
-      const task = (await response.json()) as {
-        data?: {
-          memberships?: Array<{ section?: { name?: string } }>
-        }
-      }
-
-      // Asana uses sections as status — get the first section name
-      const sectionName = task.data?.memberships?.[0]?.section?.name
-      if (!sectionName) return null
-
-      return {
-        externalId: taskGid,
-        externalStatus: sectionName,
-        eventType: 'task.changed',
-      }
-    } catch (error) {
-      log.error({ err: error }, 'failed to fetch task')
-      return null
+        tasks.add(event.resource.gid)
     }
+    const results: InboundWebhookResult[] = []
+    for (const taskGid of tasks) {
+      const response = await integrationFetch(
+        `${ASANA_API}/tasks/${encodeURIComponent(taskGid)}?opt_fields=memberships.project.gid,memberships.section.name`,
+        { headers: { Authorization: `Bearer ${secrets.accessToken}` } }
+      )
+      // Deleted tasks no longer have a status. Other failures must retain the receipt for retry.
+      if (response.status === 404) continue
+      if (!response.ok)
+        throw Object.assign(new Error('Could not read Asana task status'), {
+          status: response.status,
+        })
+      const task = (await response.json()) as {
+        data?: { memberships?: Array<{ project?: { gid?: string }; section?: { name?: string } }> }
+      }
+      const membership = task.data?.memberships?.find(
+        (member) => member.project?.gid === config.channelId
+      )
+      if (!membership?.section?.name) continue
+      results.push({
+        externalId: taskGid,
+        externalStatus: membership.section.name,
+        destinationId: membership.project!.gid,
+        eventType: 'task.changed',
+      })
+    }
+    return results
   },
 }

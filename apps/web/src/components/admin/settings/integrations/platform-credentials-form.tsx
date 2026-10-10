@@ -4,10 +4,12 @@ import { useState } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { useSavePlatformCredentials, useDeletePlatformCredentials } from '@/lib/client/mutations'
-import { Button } from '@/components/ui/button'
+import { Button, NewTabHint } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CopyButton } from '@/components/shared/copy-button'
 import type { PlatformCredentialField } from '@/lib/shared/integration-types'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 
 interface PlatformCredentialsFormProps {
   integrationType: string
@@ -65,7 +67,28 @@ export function PlatformCredentialsForm({
     )
   }
 
-  const allFieldsFilled = fields.every((f) => values[f.key]?.trim())
+  const requiredFilled = fields
+    .filter((f) => f.required !== false)
+    .every((f) => values[f.key]?.trim())
+
+  const redirectUri =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/oauth/${integrationType}/callback`
+      : `/oauth/${integrationType}/callback`
+
+  const redirectCallout = (
+    <div className="rounded-lg border border-border/50 bg-muted/20 p-3 space-y-1.5">
+      <Label className="text-xs font-medium text-muted-foreground">
+        Redirect URI to register in your OAuth application
+      </Label>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 rounded bg-muted px-3 py-2 text-xs font-mono break-all">
+          {redirectUri}
+        </code>
+        <CopyButton value={redirectUri} variant="outline" size="sm" />
+      </div>
+    </div>
+  )
 
   // Managed cloud: credentials are platform-provided and not editable per-workspace.
   if (isManaged) {
@@ -77,7 +100,7 @@ export function PlatformCredentialsForm({
               <div key={field.key}>
                 <Label className="text-sm font-medium text-muted-foreground">{field.label}</Label>
                 <div className="mt-1 rounded-md border border-border/50 bg-muted/30 px-3 py-2 text-sm font-mono text-muted-foreground">
-                  {maskedFields?.[field.key] ?? '—'}
+                  {maskedFields?.[field.key] ?? 'Not set'}
                 </div>
               </div>
             ))}
@@ -94,12 +117,13 @@ export function PlatformCredentialsForm({
   if (isConfigured && !isEditing) {
     return (
       <div className="space-y-4">
+        {redirectCallout}
         <div className="space-y-3">
           {fields.map((field) => (
             <div key={field.key}>
               <Label className="text-sm font-medium text-muted-foreground">{field.label}</Label>
               <div className="mt-1 rounded-md border border-border/50 bg-muted/30 px-3 py-2 text-sm font-mono text-muted-foreground">
-                {maskedFields?.[field.key] ?? '—'}
+                {maskedFields?.[field.key] ?? 'Not set'}
               </div>
             </div>
           ))}
@@ -125,15 +149,19 @@ export function PlatformCredentialsForm({
   // Show input form when not configured or editing
   return (
     <div className="space-y-4">
+      {redirectCallout}
       <div className="space-y-3">
         {fields.map((field) => (
           <div key={field.key}>
             <Label htmlFor={`cred-${field.key}`} className="text-sm font-medium">
               {field.label}
+              {field.required === false ? (
+                <span className="ml-1 font-normal text-muted-foreground">(optional)</span>
+              ) : null}
             </Label>
             <Input
               id={`cred-${field.key}`}
-              type={field.sensitive ? 'password' : 'text'}
+              type={field.sensitive ? 'password' : field.url ? 'url' : 'text'}
               placeholder={field.placeholder ?? ''}
               value={values[field.key] ?? ''}
               onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
@@ -147,20 +175,17 @@ export function PlatformCredentialsForm({
                 href={field.helpUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-1 inline-block text-xs text-primary hover:underline"
+                className={`${INLINE_LINK} mt-1 inline-block text-xs`}
               >
                 Get credentials from provider
+                <NewTabHint />
               </a>
             )}
           </div>
         ))}
       </div>
       <div className="flex gap-2">
-        <Button
-          size="sm"
-          onClick={handleSave}
-          disabled={!allFieldsFilled || saveMutation.isPending}
-        >
+        <Button size="sm" onClick={handleSave} disabled={!requiredFilled || saveMutation.isPending}>
           {saveMutation.isPending ? 'Saving...' : 'Save'}
         </Button>
         {isEditing && (

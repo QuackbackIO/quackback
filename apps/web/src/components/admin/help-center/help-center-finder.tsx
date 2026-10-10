@@ -1,8 +1,6 @@
-import { useMemo, useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import {
-  PlusIcon,
-  FolderPlusIcon,
   QuestionMarkCircleIcon,
   PencilIcon,
   TrashIcon,
@@ -11,6 +9,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { CategoryIcon } from '@/components/help-center/category-icon'
 import { Button } from '@/components/ui/button'
+import { NewButton } from '@/components/shared/new-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -24,18 +23,31 @@ import {
 import { HelpCenterListItem } from './help-center-list-item'
 import { ArticlePerformanceTable } from './article-performance-table'
 import { SearchTermsTable } from './search-terms-table'
-import { CreateArticleDialog } from './create-article-dialog'
 import type { CategoryActions } from './help-center-category-tree'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import { useRestoreCategory, useRestoreArticle } from '@/lib/client/mutations/help-center'
 import { buildAncestorChain } from '@/lib/shared/help-center-tree'
 import { useHelpCenterFilters } from './use-help-center-filters'
 import { Route } from '@/routes/admin/help-center'
-import { HelpCenterActiveFiltersBar } from './help-center-active-filters-bar'
+import {
+  HelpCenterActiveFiltersBar,
+  HelpCenterFilterButton,
+} from './help-center-active-filters-bar'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+import { lazyWithPreload } from '@/lib/client/lazy-with-preload'
+
+// The create dialog carries the editor and the article form, which outweigh
+// the list; it loads on first open, or ahead of it when the pointer or focus
+// reaches a New button.
+const { Component: CreateArticleDialog, preload: preloadCreateArticleDialog } = lazyWithPreload(
+  () => import('./create-article-dialog'),
+  'CreateArticleDialog'
+)
 import { TimeAgo } from '@/components/ui/time-ago'
+import { FormattedMessage, useIntl } from 'react-intl'
 import type { KbArticleId } from '@quackback/ids'
 
 const SORT_OPTIONS = [
@@ -45,7 +57,7 @@ const SORT_OPTIONS = [
 
 function HelpCenterListSkeleton() {
   return (
-    <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+    <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
       {Array.from({ length: 5 }).map((_, i) => (
         <div key={i} className="p-4">
           <Skeleton className="h-5 w-16 rounded-full mb-1" />
@@ -93,9 +105,12 @@ function LiveHelpCenterFinder({
   onDeleteArticle,
   categoryActions,
 }: HelpCenterFinderProps) {
+  const intl = useIntl()
   const { filters, setFilters, clearFilters, hasActiveFilters } = useHelpCenterFilters()
 
   const [createArticleOpen, setCreateArticleOpen] = useState(false)
+  // Kept mounted after the first open so closing animates.
+  const createArticleOpened = useOpenedOnce(createArticleOpen)
 
   const { data: allCategories = [] } = useQuery(helpCenterQueries.categories())
 
@@ -138,29 +153,25 @@ function LiveHelpCenterFinder({
 
   const articles = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data])
 
+  const newArticleButton = (
+    <NewButton
+      noun="article"
+      onPointerEnter={preloadCreateArticleDialog}
+      onFocus={preloadCreateArticleDialog}
+      onClick={() => setCreateArticleOpen(true)}
+    />
+  )
   const headerActions = currentCategory ? (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-2">
       <CategoryActionsDropdown
         onEdit={() => categoryActions.onEdit(currentCategory)}
         onDelete={() => categoryActions.onDelete(currentCategory)}
       />
-      <NewDropdown
-        onNewArticle={() => setCreateArticleOpen(true)}
-        onNewFolder={() => categoryActions.onNew(currentCategory.id)}
-        folderLabel="New sub-category"
-      />
+      {newArticleButton}
     </div>
   ) : (
-    <NewDropdown
-      onNewArticle={() => setCreateArticleOpen(true)}
-      onNewFolder={() => categoryActions.onNew(null)}
-      folderLabel="New category"
-    />
+    newArticleButton
   )
-
-  const articleListTitle = currentCategory
-    ? `Articles in ${currentCategory.name}`
-    : 'Recent articles'
 
   return (
     <div className="max-w-5xl w-full">
@@ -168,11 +179,20 @@ function LiveHelpCenterFinder({
         searchValue={searchValue}
         onSearchChange={setSearchValue}
         searchPlaceholder={
-          currentCategory ? `Search in ${currentCategory.name}...` : 'Search all articles...'
+          currentCategory ? `Search in ${currentCategory.name}...` : 'Search articles...'
         }
         sortOptions={SORT_OPTIONS}
         activeSort={filters.sort}
         onSortChange={(sort) => setFilters({ sort: sort as 'newest' | 'oldest' })}
+        filters={
+          <HelpCenterFilterButton
+            canAddStatus={filters.status === 'all'}
+            canAddCategory={!filters.category}
+            categories={allCategories}
+            onSetStatus={(s) => setFilters({ status: s })}
+            onSetCategory={(id) => setFilters({ category: id })}
+          />
+        }
         action={headerActions}
       >
         <HelpCenterActiveFiltersBar
@@ -191,25 +211,27 @@ function LiveHelpCenterFinder({
       </AdminListHeader>
 
       <div className="px-3 pb-4 space-y-3">
-        <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {articleListTitle}
-            </span>
-            {!isLoading && articles.length > 0 && (
-              <span className="text-xs text-muted-foreground ml-auto shrink-0">
-                {articles.length}
-                {hasNextPage && filters.category ? '+' : ''} article
-                {articles.length === 1 ? '' : 's'}
-              </span>
-            )}
-          </div>
+        <div>
+          {!isLoading && articles.length > 0 && (
+            <div className="flex items-center justify-end px-4 pt-3 text-xs text-muted-foreground">
+              {articles.length}
+              {hasNextPage && filters.category ? '+' : ''} article
+              {articles.length === 1 ? '' : 's'}
+            </div>
+          )}
           {isLoading ? (
             <div className="p-3">
               <HelpCenterListSkeleton />
             </div>
           ) : articles.length === 0 ? (
-            <div className="px-4 py-8">
+            <div
+              className="px-4 py-8"
+              data-tour={
+                !filters.search && !hasActiveFilters && !currentCategory
+                  ? 'help-center-empty'
+                  : undefined
+              }
+            >
               <EmptyState
                 icon={QuestionMarkCircleIcon}
                 title={
@@ -219,23 +241,30 @@ function LiveHelpCenterFinder({
                       ? 'No articles match your filters'
                       : currentCategory
                         ? 'No articles in this category yet'
-                        : 'Write your first article'
-                }
-                description={
-                  !filters.search && !hasActiveFilters && !currentCategory
-                    ? 'Answers customers can find without opening a ticket.'
-                    : undefined
+                        : intl.formatMessage({
+                            id: 'admin.empty.helpCenter.title',
+                            defaultMessage: 'No articles yet',
+                          })
                 }
                 action={
                   hasActiveFilters ? (
                     <Button variant="outline" size="sm" onClick={clearFilters}>
                       Clear all filters
                     </Button>
+                  ) : !filters.search && !currentCategory ? (
+                    <NewButton
+                      noun="article"
+                      onPointerEnter={preloadCreateArticleDialog}
+                      onFocus={preloadCreateArticleDialog}
+                      onClick={() => setCreateArticleOpen(true)}
+                    >
+                      <FormattedMessage
+                        id="admin.empty.helpCenter.action"
+                        defaultMessage="Write your first article"
+                      />
+                    </NewButton>
                   ) : (
-                    <Button size="sm" onClick={() => setCreateArticleOpen(true)}>
-                      <PlusIcon className="h-4 w-4 mr-1" />
-                      New article
-                    </Button>
+                    newArticleButton
                   )
                 }
                 className="h-32"
@@ -283,7 +312,11 @@ function LiveHelpCenterFinder({
         </div>
       </div>
 
-      <CreateArticleDialog open={createArticleOpen} onOpenChange={setCreateArticleOpen} />
+      {createArticleOpened && (
+        <Suspense fallback={null}>
+          <CreateArticleDialog open={createArticleOpen} onOpenChange={setCreateArticleOpen} />
+        </Suspense>
+      )}
     </div>
   )
 }
@@ -330,7 +363,7 @@ function DeletedItemsView() {
             className="h-32"
           />
         ) : (
-          <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+          <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
             {deletedCategories.map((cat) => (
               <div key={cat.id} className="flex items-center gap-3 px-4 py-3">
                 <CategoryIcon icon={cat.icon} className="w-5 h-5 shrink-0" />
@@ -338,7 +371,7 @@ function DeletedItemsView() {
                   <p className="text-sm font-medium text-foreground truncate">{cat.name}</p>
                   {cat.deletedAt && (
                     <p className="text-xs text-muted-foreground">
-                      Deleted <TimeAgo date={cat.deletedAt as string} />
+                      Deleted <TimeAgo date={cat.deletedAt as string} locale="en" />
                     </p>
                   )}
                 </div>
@@ -369,7 +402,7 @@ function DeletedItemsView() {
         ) : deletedArticles.length === 0 ? (
           <EmptyState icon={QuestionMarkCircleIcon} title="No deleted articles" className="h-32" />
         ) : (
-          <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+          <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
             {deletedArticles.map((article) => (
               <div key={article.id} className="flex items-center gap-3 px-4 py-3">
                 <div className="flex-1 min-w-0">
@@ -378,7 +411,7 @@ function DeletedItemsView() {
                     <span className="mr-2">{article.category.name}</span>
                     {article.deletedAt && (
                       <>
-                        &middot; Deleted <TimeAgo date={article.deletedAt} />
+                        &middot; Deleted <TimeAgo date={article.deletedAt} locale="en" />
                       </>
                     )}
                   </p>
@@ -427,35 +460,6 @@ function CategoryActionsDropdown({ onEdit, onDelete }: CategoryActionsDropdownPr
         <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
           <TrashIcon className="h-4 w-4 mr-2" />
           Delete category
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-interface NewDropdownProps {
-  onNewArticle: () => void
-  onNewFolder: () => void
-  folderLabel: string
-}
-
-function NewDropdown({ onNewArticle, onNewFolder, folderLabel }: NewDropdownProps) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size="sm">
-          <PlusIcon className="h-4 w-4 mr-1" />
-          New
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onNewArticle}>
-          <PlusIcon className="h-4 w-4 mr-2" />
-          New article
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onNewFolder}>
-          <FolderPlusIcon className="h-4 w-4 mr-2" />
-          {folderLabel}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, type ReactNode } from 'react'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { Spinner } from '@/components/shared/spinner'
@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
-import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
+import { ActiveFiltersBar, AddFilterButton } from '@/components/admin/feedback/active-filters-bar'
 import { FeedbackRow } from './feedback-row'
 import type { PostListItem, PostStatusEntity, Board, PostTag } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/shared/types'
@@ -26,10 +26,14 @@ interface FeedbackTableViewProps {
   hasMore: boolean
   isLoading: boolean
   isLoadingMore: boolean
+  /** Opens a post from its row; keep it stable, or every row renders again. */
   onNavigateToPost: (id: string) => void
   onLoadMore: () => void
   hasActiveFilters: boolean
   onClearFilters: () => void
+  /** Extra controls after the Filter control (e.g. saved views) */
+  headerFilters?: React.ReactNode
+  /** The primary action, on the right of the toolbar */
   headerAction?: React.ReactNode
   onToggleStatus: (slug: string) => void
   onToggleBoard: (id: string) => void
@@ -38,10 +42,63 @@ interface FeedbackTableViewProps {
   duplicateCountByPostId?: Map<PostId, number>
 }
 
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'votes', label: 'Top votes' },
+  { value: 'priority', label: 'Priority' },
+]
+
+interface FeedbackListHeaderProps {
+  search: string | undefined
+  sort: InboxFilters['sort']
+  onFiltersChange: (updates: Partial<InboxFilters>) => void
+  filters?: ReactNode
+  action?: ReactNode
+  children?: ReactNode
+}
+
+/**
+ * The search box's text lives here, so a keystroke renders the header and not
+ * the list below it; the debounced value reaches the URL through the filters.
+ */
+function FeedbackListHeader({
+  search,
+  sort,
+  onFiltersChange,
+  filters,
+  action,
+  children,
+}: FeedbackListHeaderProps) {
+  const handleSortChange = useCallback(
+    (value: string) => onFiltersChange({ sort: value as InboxFilters['sort'] }),
+    [onFiltersChange]
+  )
+  const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
+    externalValue: search,
+    onChange: (next) => onFiltersChange({ search: next }),
+  })
+
+  return (
+    <AdminListHeader
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      searchPlaceholder="Search posts..."
+      sortOptions={SORT_OPTIONS}
+      activeSort={sort}
+      onSortChange={handleSortChange}
+      filters={filters}
+      action={action}
+    >
+      {children}
+    </AdminListHeader>
+  )
+}
+
 function TableSkeleton() {
   return (
     <div className="p-3">
-      <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+      <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
         {Array.from({ length: 6 }).map((_, rowIdx) => (
           <div key={rowIdx} className="flex py-1 px-3">
             {/* Vote button */}
@@ -90,18 +147,13 @@ export function FeedbackTableView({
   onLoadMore,
   hasActiveFilters,
   onClearFilters,
+  headerFilters,
   headerAction,
   onToggleStatus,
   onToggleBoard,
   duplicateCountByPostId,
   onToggleSegment,
 }: FeedbackTableViewProps): React.ReactElement {
-  const sort = filters.sort
-  const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
-    externalValue: filters.search,
-    onChange: (search) => onFiltersChange({ search }),
-  })
-
   const loadMoreRef = useInfiniteScroll({
     hasMore,
     isFetching: isLoading || isLoadingMore,
@@ -138,39 +190,41 @@ export function FeedbackTableView({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const sortOptions = [
-    { value: 'newest', label: 'Newest' },
-    { value: 'oldest', label: 'Oldest' },
-    { value: 'votes', label: 'Top Votes' },
-    { value: 'priority', label: 'Priority' },
-  ]
-
   const headerContent = (
-    <AdminListHeader
-      searchValue={searchValue}
-      onSearchChange={setSearchValue}
-      sortOptions={sortOptions}
-      activeSort={sort}
-      onSortChange={(value) => onFiltersChange({ sort: value as InboxFilters['sort'] })}
+    <FeedbackListHeader
+      search={filters.search}
+      sort={filters.sort}
+      onFiltersChange={onFiltersChange}
+      filters={
+        <>
+          <AddFilterButton
+            filters={filters}
+            boards={boards}
+            tags={tags}
+            statuses={statuses}
+            members={members}
+            segments={segments}
+            onToggleStatus={onToggleStatus}
+            onToggleBoard={onToggleBoard}
+            onToggleSegment={onToggleSegment}
+            onFiltersChange={onFiltersChange}
+          />
+          {headerFilters}
+        </>
+      }
       action={headerAction}
     >
-      {/* Active Filters Bar - Always visible */}
-      <div className="mt-2">
-        <ActiveFiltersBar
-          filters={filters}
-          onFiltersChange={onFiltersChange}
-          onClearAll={onClearFilters}
-          boards={boards}
-          tags={tags}
-          statuses={statuses}
-          members={members}
-          segments={segments}
-          onToggleStatus={onToggleStatus}
-          onToggleBoard={onToggleBoard}
-          onToggleSegment={onToggleSegment}
-        />
-      </div>
-    </AdminListHeader>
+      <ActiveFiltersBar
+        filters={filters}
+        onFiltersChange={onFiltersChange}
+        onClearAll={onClearFilters}
+        boards={boards}
+        tags={tags}
+        statuses={statuses}
+        members={members}
+        segments={segments}
+      />
+    </FeedbackListHeader>
   )
 
   // Filter posts by duplicates if active
@@ -226,7 +280,7 @@ export function FeedbackTableView({
 
       {/* Post List */}
       <div className="p-3">
-        <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+        <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
           {filteredPosts.map((post, index) => (
             <div
               key={post.id}
@@ -237,7 +291,7 @@ export function FeedbackTableView({
                 post={post}
                 statuses={statuses}
                 duplicateCount={duplicateCountByPostId?.get(post.id)}
-                onClick={() => onNavigateToPost(post.id)}
+                onOpen={onNavigateToPost}
               />
             </div>
           ))}

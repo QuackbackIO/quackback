@@ -5,6 +5,7 @@
  * roles, and standard identity claims are never mappable. Pure + client-safe.
  */
 import type { JsonValue } from '@/lib/shared/json'
+import { getClaimByPath } from '@/lib/shared/oidc-claim-mapping'
 
 export type ClaimSuggestions = {
   /** Dotted (or literal URL) claim paths whose value is a non-empty string[]. */
@@ -57,6 +58,17 @@ function dedupeStrings(arr: JsonValue[]): string[] {
   return out
 }
 
+/**
+ * The distinct string values one claim path holds: every string member of an
+ * array claim, or a lone string. These are the values a role rule at that path
+ * can match.
+ */
+export function claimValuesAt(claims: Record<string, unknown>, path: string): string[] {
+  const value = getClaimByPath(claims, path)
+  if (Array.isArray(value)) return dedupeStrings(value as JsonValue[])
+  return typeof value === 'string' && value !== '' ? [value] : []
+}
+
 export function deriveClaimSuggestions(allClaims: Record<string, JsonValue>): ClaimSuggestions {
   const paths: string[] = []
   const valuesByPath: Record<string, string[]> = {}
@@ -80,7 +92,7 @@ export function deriveClaimSuggestions(allClaims: Record<string, JsonValue>): Cl
       record(key, value)
     } else if (value !== null && typeof value === 'object') {
       // Depth-2 only, e.g. realm_access.roles. Skip URL-shaped child keys so
-      // the dotted path stays resolvable by getNestedClaim at sign-in.
+      // the dotted path stays resolvable by getClaimByPath at sign-in.
       for (const [childKey, childValue] of Object.entries(value)) {
         if (childKey.includes('://')) continue
         record(`${key}.${childKey}`, childValue as JsonValue)
@@ -89,4 +101,229 @@ export function deriveClaimSuggestions(allClaims: Record<string, JsonValue>): Cl
   }
 
   return { paths, valuesByPath }
+}
+
+/**
+ * Protocol claims that are never useful as person-attribute sources.
+ * Profile claims (`email`, `name`, `preferred_username`, …) stay — mapping
+ * `preferred_username` onto a username attribute is legitimate.
+ */
+const PROTOCOL_CLAIMS = new Set([
+  'iss',
+  'aud',
+  'exp',
+  'iat',
+  'nbf',
+  'jti',
+  'nonce',
+  'azp',
+  'at_hash',
+  'c_hash',
+  'sid',
+  'rh',
+  'uti',
+  'aio',
+  'ver',
+  'amr',
+  'acr',
+  'sub',
+])
+
+export type AttributeClaimPathSuggestion = {
+  path: string
+  description?: string
+}
+
+export type IdentityClaimPathSuggestion = {
+  path: string
+  description?: string
+  /** Arrays, booleans, and null cannot bind identity scalars. Shown, never unwrapped. */
+  unsuitable?: boolean
+}
+
+/** Protocol claims that are never identity paths. `sub` is kept. */
+const IDENTITY_PROTOCOL_CLAIMS = new Set([
+  'iss',
+  'aud',
+  'exp',
+  'iat',
+  'nbf',
+  'jti',
+  'nonce',
+  'azp',
+  'at_hash',
+  'c_hash',
+  'sid',
+  'rh',
+  'uti',
+  'aio',
+  'ver',
+  'amr',
+  'acr',
+])
+
+const IDENTITY_KIND_HINTS: Record<string, { id: string[]; email: string[]; name: string[] }> = {
+  entra: {
+    id: ['oid', 'sub'],
+    email: ['email', 'upn', 'preferred_username'],
+    name: ['name'],
+  },
+  okta: {
+    id: ['sub'],
+    email: ['email', 'preferred_username'],
+    name: ['name'],
+  },
+  auth0: {
+    id: ['sub'],
+    email: ['email'],
+    name: ['name'],
+  },
+  keycloak: {
+    id: ['sub'],
+    email: ['email'],
+    name: ['name', 'preferred_username'],
+  },
+  google: {
+    id: ['sub'],
+    email: ['email'],
+    name: ['name'],
+  },
+  other: {
+    id: ['sub'],
+    email: ['email', 'mail', 'upn'],
+    name: ['name', 'preferred_username'],
+  },
+}
+
+/** Kind-specific aliases only. Never written automatically. */
+export function identityClaimHints(
+  kind?: string | null,
+  field?: 'id' | 'email' | 'name'
+): string[] {
+  const hints = IDENTITY_KIND_HINTS[kind ?? ''] ?? IDENTITY_KIND_HINTS.other
+  if (!hints) return field === 'id' || !field ? ['sub'] : []
+  if (field === 'id') return hints.id
+  if (field === 'email') return hints.email
+  if (field === 'name') return hints.name
+  return [...new Set([...hints.id, ...hints.email, ...hints.name])]
+}
+
+function truncatePreview(value: JsonValue, max = 48): string {
+  let text: string
+  if (Array.isArray(value)) {
+    text = value
+      .map((v) => (typeof v === 'string' || typeof v === 'number' ? String(v) : JSON.stringify(v)))
+      .join(', ')
+  } else if (value !== null && typeof value === 'object') {
+    text = JSON.stringify(value)
+  } else {
+    text = String(value)
+  }
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
+function isLeaf(value: JsonValue): boolean {
+  return value === null || typeof value !== 'object' || Array.isArray(value)
+}
+
+/**
+ * Leaf claim paths (scalars and arrays) at depth ≤ 2, for mapping onto
+ * person attributes. URL-shaped keys are literal. Each suggestion carries a
+ * truncated observed value as `description`.
+ */
+export function deriveAttributeClaimPaths(
+  allClaims: Record<string, JsonValue>
+): AttributeClaimPathSuggestion[] {
+  const out: AttributeClaimPathSuggestion[] = []
+
+  const record = (path: string, value: JsonValue) => {
+    if (!isLeaf(value)) return
+    out.push({ path, description: truncatePreview(value) })
+  }
+
+  for (const [key, value] of Object.entries(allClaims)) {
+    if (PROTOCOL_CLAIMS.has(key)) continue
+    if (key.includes('://')) {
+      record(key, value)
+      continue
+    }
+    if (isLeaf(value)) {
+      record(key, value)
+    } else if (value !== null && typeof value === 'object') {
+      for (const [childKey, childValue] of Object.entries(value)) {
+        if (childKey.includes('://')) continue
+        record(`${key}.${childKey}`, childValue as JsonValue)
+      }
+    }
+  }
+
+  return out
+}
+
+/**
+ * Scalar claim paths for Account ID / Email / Name.
+ * Always includes `sub` (attribute suggestions exclude it). Array leaves are
+ * returned as unsuitable rather than unwrapped.
+ */
+export function deriveIdentityClaimPaths(
+  allClaims: Record<string, JsonValue>,
+  opts?: { kind?: string | null; field?: 'id' | 'email' | 'name' }
+): IdentityClaimPathSuggestion[] {
+  const out: IdentityClaimPathSuggestion[] = []
+  const seen = new Set<string>()
+
+  const record = (path: string, value: JsonValue | undefined) => {
+    if (seen.has(path)) return
+    seen.add(path)
+    if (value === undefined) {
+      out.push({ path })
+      return
+    }
+    if (Array.isArray(value)) {
+      out.push({
+        path,
+        description: truncatePreview(value),
+        unsuitable: true,
+      })
+      return
+    }
+    if (!isLeaf(value)) return
+    if (typeof value === 'boolean' || value === null) {
+      out.push({
+        path,
+        description: truncatePreview(value),
+        unsuitable: true,
+      })
+      return
+    }
+    out.push({ path, description: truncatePreview(value) })
+  }
+
+  for (const [key, value] of Object.entries(allClaims)) {
+    if (IDENTITY_PROTOCOL_CLAIMS.has(key)) continue
+    if (key.includes('://')) {
+      record(key, value)
+      continue
+    }
+    if (isLeaf(value)) {
+      record(key, value)
+    } else if (value !== null && typeof value === 'object') {
+      for (const [childKey, childValue] of Object.entries(value)) {
+        if (childKey.includes('://')) continue
+        record(`${key}.${childKey}`, childValue as JsonValue)
+      }
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(allClaims, 'sub')) {
+    record('sub', allClaims.sub)
+  } else {
+    record('sub', undefined)
+  }
+
+  for (const hint of identityClaimHints(opts?.kind, opts?.field)) {
+    if (!seen.has(hint)) record(hint, undefined)
+  }
+
+  return out
 }

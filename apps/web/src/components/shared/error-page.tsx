@@ -1,8 +1,13 @@
+import { lazy, Suspense, useContext } from 'react'
+import { IntlContext, useIntl, type MessageDescriptor } from 'react-intl'
+import { DocumentLocaleContext } from '@/components/shared/document-locale-context'
 import { Button } from '@/components/ui/button'
+import { describePlanRefusal } from '@/lib/shared/describe-upgrade'
+import { DEFAULT_LOCALE, messageArea, normalizeLocale } from '@/lib/shared/i18n'
 import { cn } from '@/lib/shared/utils'
 
 interface ErrorPageProps {
-  error: Error
+  error: unknown
   reset?: () => void
   fullPage?: boolean
 }
@@ -10,6 +15,52 @@ interface ErrorPageProps {
 interface FriendlyShellProps {
   children: React.ReactNode
   fullPage?: boolean
+}
+
+type Copy = (message: MessageDescriptor & { defaultMessage: string }) => string
+
+const english: Copy = (message) => message.defaultMessage
+
+// Error pages render under every route, so the module that loads their strings
+// is fetched when one shows rather than shipped in the chunk every page loads
+// (the notification list does the same).
+const AreaMessages = lazy(() =>
+  import('@/components/shared/area-messages').then((m) => ({ default: m.AreaMessages }))
+)
+
+/**
+ * Words an error page in the document's language, so it matches the page
+ * around it: translated on localized pages, English on the ones that stay
+ * English (most of admin, whose IntlProvider still follows the browser). Its
+ * strings stay out of the catalog every page seeds and load as the page shows,
+ * so it reads in English until they arrive. The router's default not-found and
+ * error pages can also render above every IntlProvider; with none mounted they
+ * stay English rather than throwing the way `useIntl` would.
+ */
+function ErrorPageCopy({ children }: { children: (copy: Copy) => React.ReactNode }) {
+  const intl = useContext(IntlContext)
+  const documentLocale = useContext(DocumentLocaleContext)
+  if (!intl || documentLocale === DEFAULT_LOCALE) return children(english)
+  // English needs nothing loaded, and a catalog loaded whole already holds the
+  // strings: word the page now rather than waiting on the loader's chunk.
+  if (
+    normalizeLocale(intl.locale) === DEFAULT_LOCALE ||
+    Object.keys(intl.messages).some((key) => messageArea(key) === 'errorPage')
+  ) {
+    return <PageLanguage>{children}</PageLanguage>
+  }
+  return (
+    <Suspense fallback={children(english)}>
+      <AreaMessages area="errorPage" fallback={children(english)}>
+        <PageLanguage>{children}</PageLanguage>
+      </AreaMessages>
+    </Suspense>
+  )
+}
+
+function PageLanguage({ children }: { children: (copy: Copy) => React.ReactNode }) {
+  const intl = useIntl()
+  return children((message) => intl.formatMessage(message))
 }
 
 export function FriendlyShell({ children, fullPage = true }: FriendlyShellProps) {
@@ -29,24 +80,44 @@ export function FriendlyShell({ children, fullPage = true }: FriendlyShellProps)
 }
 
 /**
+ * Router error boundaries deliver `unknown` (and sometimes a serialized
+ * `{ message }` payload rather than an Error). Read the diagnostic text
+ * without requiring `instanceof Error`.
+ */
+export function errorMessage(error: unknown): string {
+  if (typeof error === 'string') return error
+  if (
+    error !== null &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message
+  }
+  return 'An unexpected error occurred'
+}
+
+export function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(errorMessage(error))
+}
+
+/**
  * True for the role-gate failures thrown by requireAuth / requireWorkspaceRole
  * (e.g. "Access denied: Requires [admin], got member"). These are expected
  * outcomes, not crashes, so they get a calm permission notice rather than the
  * scary generic error treatment.
  */
-export function isAuthorizationError(error: Error): boolean {
-  return /access denied/i.test(error.message)
+export function isAuthorizationError(error: unknown): boolean {
+  return /access denied/i.test(errorMessage(error))
 }
 
 /**
  * True for a plan entitlement refusal that leaked into a route error
  * boundary. Those sentences are commercial outcomes, not crashes.
  */
-export function isEntitlementError(error: Error): boolean {
-  return (
-    /upgrade to \w+ to enable it/i.test(error.message) ||
-    /not included in your plan/i.test(error.message)
-  )
+export function isEntitlementError(error: unknown): boolean {
+  const message = errorMessage(error)
+  return /upgrade to \w+ to enable it/i.test(message) || /not included in your plan/i.test(message)
 }
 
 export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }) {
@@ -88,19 +159,30 @@ export function EntitlementRequiredPage({
   error,
   fullPage = true,
 }: {
-  error: Error
+  error: unknown
   fullPage?: boolean
 }) {
+  const normalized = toError(error)
   const isAdminArea = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
+  const refusal = describePlanRefusal(error, {
+    entitlement: null,
+    feature: 'This feature',
+    requiredPlan: null,
+    requiredPlanName: null,
+    headline: 'This is a plan feature',
+    body: normalized.message,
+  })
 
   return (
     <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">This is a plan feature</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+      <h1 className="text-2xl font-semibold tracking-tight">{refusal.headline}</h1>
+      <p className="mt-2 text-sm text-muted-foreground">{normalized.message}</p>
       <div className="mt-6 flex items-center justify-center gap-3">
         {isAdminArea ? (
           <Button asChild>
-            <a href="/admin/settings/billing">See plans</a>
+            <a href="/admin/settings/billing">
+              {refusal.requiredPlanName ? `Upgrade to ${refusal.requiredPlanName}` : 'See plans'}
+            </a>
           </Button>
         ) : null}
         <Button variant="outline" asChild>
@@ -119,32 +201,48 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
     return <EntitlementRequiredPage error={error} fullPage={fullPage} />
   }
 
+  const message = errorMessage(error)
   return (
     <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">Something went wrong</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        An unexpected error occurred. Try again, or return to the home page.
-      </p>
+      <ErrorPageCopy>
+        {(copy) => (
+          <>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {copy({ id: 'common.errorPage.error.title', defaultMessage: 'Something went wrong' })}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {copy({
+                id: 'common.errorPage.error.description',
+                defaultMessage:
+                  'An unexpected error occurred. Try again, or return to the home page.',
+              })}
+            </p>
 
-      {error.message && (
-        <details className="mt-4 rounded-md border bg-muted/40 px-4 py-3 text-left">
-          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-            Technical details
-          </summary>
-          <p className="mt-2 break-words text-sm text-muted-foreground">{error.message}</p>
-        </details>
-      )}
+            {message && (
+              <details className="mt-4 rounded-md border bg-muted/40 px-4 py-3 text-left">
+                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                  {copy({
+                    id: 'common.errorPage.technicalDetails',
+                    defaultMessage: 'Technical details',
+                  })}
+                </summary>
+                <p className="mt-2 break-words text-sm text-muted-foreground">{message}</p>
+              </details>
+            )}
 
-      <div className="mt-6 flex items-center justify-center gap-3">
-        {reset && (
-          <Button onClick={reset} variant="default">
-            Try again
-          </Button>
+            <div className="mt-6 flex items-center justify-center gap-3">
+              {reset && (
+                <Button onClick={reset} variant="default">
+                  {copy({ id: 'common.errorPage.tryAgain', defaultMessage: 'Try again' })}
+                </Button>
+              )}
+              <Button variant="outline" asChild>
+                <a href="/">{copy({ id: 'common.errorPage.goHome', defaultMessage: 'Go home' })}</a>
+              </Button>
+            </div>
+          </>
         )}
-        <Button variant="outline" asChild>
-          <a href="/">Go home</a>
-        </Button>
-      </div>
+      </ErrorPageCopy>
     </FriendlyShell>
   )
 }
@@ -152,17 +250,28 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
 export function NotFoundPage() {
   return (
     <FriendlyShell>
-      <h1 className="text-2xl font-semibold tracking-tight">Page not found</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        The page you're looking for doesn't exist. It may have been moved or deleted, or the link
-        may be incorrect.
-      </p>
+      <ErrorPageCopy>
+        {(copy) => (
+          <>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {copy({ id: 'common.errorPage.notFound.title', defaultMessage: 'Page not found' })}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {copy({
+                id: 'common.errorPage.notFound.description',
+                defaultMessage:
+                  "The page you're looking for doesn't exist. It may have been moved or deleted, or the link may be incorrect.",
+              })}
+            </p>
 
-      <div className="mt-6">
-        <Button variant="outline" asChild>
-          <a href="/">Go home</a>
-        </Button>
-      </div>
+            <div className="mt-6">
+              <Button variant="outline" asChild>
+                <a href="/">{copy({ id: 'common.errorPage.goHome', defaultMessage: 'Go home' })}</a>
+              </Button>
+            </div>
+          </>
+        )}
+      </ErrorPageCopy>
     </FriendlyShell>
   )
 }

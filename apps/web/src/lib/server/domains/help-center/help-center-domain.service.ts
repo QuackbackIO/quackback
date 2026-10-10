@@ -128,7 +128,7 @@ export async function verifyHelpCenterDomain(): Promise<{
   status: HelpCenterDomainStatus
 }> {
   await refuseCloudLocalWriter()
-  const current = await getHelpCenterConfig()
+  const current = await getHelpCenterConfig('fresh')
   const domain = current.domain?.domain
   if (!domain) {
     throw new ValidationError('HC_DOMAIN_NOT_SET', 'Set a domain before verifying it')

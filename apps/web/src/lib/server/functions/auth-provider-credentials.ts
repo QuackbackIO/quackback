@@ -49,7 +49,7 @@ export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
 
     // Built-in social providers (Google/GitHub/etc.) are operator-level
     // infrastructure for self-hosters and not gated. Only generic-oauth
-    // (the customer's own IdP via custom OIDC) hits the Scale paywall.
+    // (the customer's own IdP via custom OIDC) hits the Enterprise paywall.
     if (provider.type === 'generic-oauth') {
       const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
       await assertTierFeature('customOidcProvider', 'Single sign-on (custom OIDC)')
@@ -125,7 +125,7 @@ export const deleteAuthProviderCredentialsFn = createServerFn({ method: 'POST' }
     // enabled method (disabling an already-off provider can't cause a lockout).
     const { getAuthConfig, updateAuthConfig } =
       await import('@/lib/server/domains/settings/settings.service')
-    const authConfig = await getAuthConfig()
+    const authConfig = await getAuthConfig('fresh')
     const oauthConfig = (authConfig.oauth ?? {}) as Record<string, boolean | undefined>
     if (oauthConfig[provider.id]) {
       const { wouldLeaveNoWorkingSignInMethod } =
@@ -162,7 +162,8 @@ export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GE
     log.debug({ credential_type: data.credentialType }, 'fetch masked auth provider credentials')
     await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
-    const { getAuthProvider } = await import('@/lib/server/auth/auth-providers')
+    const { getAuthProvider, normalizeStoredAuthCredentials } =
+      await import('@/lib/server/auth/auth-providers')
     const provider = getAuthProvider(data.credentialType)
     if (!provider) {
       throw new Error(`Unknown auth provider: ${data.credentialType}`)
@@ -171,10 +172,11 @@ export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GE
     const { getBaseUrl } = await import('@/lib/server/config')
     const baseUrl = getBaseUrl()
 
-    const credentials = await getPlatformCredentials(data.credentialType)
-    if (!credentials) {
+    const stored = await getPlatformCredentials(data.credentialType)
+    if (!stored) {
       return { configured: false as const, fields: null, baseUrl }
     }
+    const credentials = normalizeStoredAuthCredentials(data.credentialType, stored)
 
     const fieldDefs = new Map<string, PlatformCredentialField>(
       provider.platformCredentials.map((f) => [f.key, f])

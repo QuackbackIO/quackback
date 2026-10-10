@@ -33,3 +33,42 @@ export function widgetOriginVerifiedLabel(host: string | null | undefined): stri
   if (isLocalWidgetOrigin(host)) return 'First request came from a local page.'
   return `First request came from ${host}.`
 }
+
+export type WidgetInstallPresenceTone = 'idle' | 'detected' | 'live'
+
+export type WidgetInstallPresence = {
+  title: string
+  description: string
+  tone: WidgetInstallPresenceTone
+}
+
+/**
+ * Install status as shown to admins. Observing the SDK is not the same as the
+ * widget being visible — `enabled` is the Show on your website switch.
+ */
+export function widgetInstallPresence(input: {
+  connected: boolean
+  enabled: boolean
+  originHost?: string | null
+}): WidgetInstallPresence {
+  if (!input.connected) {
+    return {
+      title: 'Not on your site yet',
+      description: 'Copy a prompt for your agent, then open a page to confirm it loaded.',
+      tone: 'idle',
+    }
+  }
+  const origin = widgetOriginVerifiedLabel(input.originHost)
+  if (!input.enabled) {
+    return {
+      title: 'On your site, but hidden',
+      description: `${origin} Turn on Show on your website so visitors can see it.`,
+      tone: 'detected',
+    }
+  }
+  return {
+    title: 'Widget connected',
+    description: origin,
+    tone: 'live',
+  }
+}

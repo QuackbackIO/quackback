@@ -76,7 +76,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         try {
           await withApiKeyAuth(request)
 
-          const articleId = parseTypeId<KbArticleId>(params.articleId, 'kb_article', 'article ID')
+          const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
 
           const article = await getArticleById(articleId)
           return successResponse(formatArticle(article))
@@ -91,7 +91,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         try {
           await withApiKeyAuth(request, { permission: PERMISSIONS.HELP_CENTER_MANAGE })
 
-          const articleId = parseTypeId<KbArticleId>(params.articleId, 'kb_article', 'article ID')
+          const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
 
           const body = await request.json()
           const parsed = updateArticleBody.safeParse(body)
@@ -146,7 +146,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
           // Soft delete (deleteArticle sets deletedAt).
           await withApiKeyAuth(request, { permission: PERMISSIONS.HELP_CENTER_MANAGE })
 
-          const articleId = parseTypeId<KbArticleId>(params.articleId, 'kb_article', 'article ID')
+          const articleId = parseTypeId<KbArticleId>(params.articleId, 'article', 'article ID')
 
           await deleteArticle(articleId)
           return noContentResponse()

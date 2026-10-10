@@ -1,5 +1,12 @@
-import { FilterSection } from '@/components/shared/filter-section'
+import { useMemo, useState } from 'react'
+import { defineMessages, useIntl } from 'react-intl'
+import { MegaphoneIcon } from '@heroicons/react/16/solid'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { MENU_ROW } from '@/components/ui/menu'
+import { FilterAddButton } from '@/components/shared/filter-chip'
 import { cn } from '@/lib/shared/utils'
+import { FilterSection } from '@/components/shared/filter-section'
+import { FilterList } from '@/components/admin/feedback/single-select-filter-list'
 import type { ChangelogStatusFilter } from './use-changelog-filters'
 
 interface ChangelogFiltersProps {
@@ -7,49 +14,104 @@ interface ChangelogFiltersProps {
   onStatusChange: (status: ChangelogStatusFilter) => void
 }
 
-const CHANGELOG_STATUSES = [
-  { id: 'all', name: 'All', color: undefined },
-  { id: 'draft', name: 'Draft', color: '#6b7280' }, // gray
-  { id: 'scheduled', name: 'Scheduled', color: '#3b82f6' }, // blue
-  { id: 'published', name: 'Published', color: '#22c55e' }, // green
-] as const
+const messages = defineMessages({
+  all: { id: 'admin.changelog.status.all', defaultMessage: 'All' },
+  draft: { id: 'admin.changelog.status.draft', defaultMessage: 'Draft' },
+  scheduled: { id: 'admin.changelog.status.scheduled', defaultMessage: 'Scheduled' },
+  published: { id: 'admin.changelog.status.published', defaultMessage: 'Published' },
+  status: { id: 'admin.changelog.filters.status', defaultMessage: 'Status' },
+  filter: { id: 'admin.changelog.filters.add', defaultMessage: 'Filter' },
+  newest: { id: 'admin.changelog.sort.newest', defaultMessage: 'Newest' },
+  oldest: { id: 'admin.changelog.sort.oldest', defaultMessage: 'Oldest' },
+})
+
+const STATUS_COLORS: Array<{ id: ChangelogStatusFilter; color?: string }> = [
+  { id: 'all' },
+  { id: 'draft', color: '#6b7280' },
+  { id: 'scheduled', color: '#3b82f6' },
+  { id: 'published', color: '#22c55e' },
+]
+
+/** The entry statuses to filter by, named in the viewer's language. */
+function useChangelogStatuses() {
+  const intl = useIntl()
+  return useMemo(
+    () => STATUS_COLORS.map((item) => ({ ...item, name: intl.formatMessage(messages[item.id]) })),
+    [intl]
+  )
+}
 
 export function ChangelogFiltersPanel({ status, onStatusChange }: ChangelogFiltersProps) {
+  const intl = useIntl()
+  const statuses = useChangelogStatuses()
   return (
     <div className="space-y-0">
-      <FilterSection title="Status">
-        <div className="space-y-1" role="listbox" aria-label="Status filter">
-          {CHANGELOG_STATUSES.map((item) => {
-            const isSelected = status === item.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                onClick={() => onStatusChange(item.id as ChangelogStatusFilter)}
-                className={cn(
-                  'w-full text-left px-2.5 py-1.5 rounded-md text-[13px] font-normal transition-colors',
-                  isSelected
-                    ? 'bg-muted text-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+      <FilterSection title={intl.formatMessage(messages.status)}>
+        <FilterList
+          items={statuses}
+          selectedIds={[status]}
+          onSelect={(id) => onStatusChange(id as ChangelogStatusFilter)}
+          renderItem={(item) => (
+            <span className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+                {item.color ? (
+                  <span className="size-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                ) : (
+                  <MegaphoneIcon className="size-4" />
                 )}
-              >
-                <span className="flex items-center gap-2">
-                  {item.color && (
-                    <span
-                      className="h-2 w-2 rounded-full shrink-0"
-                      style={{ backgroundColor: item.color }}
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="truncate">{item.name}</span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
+              </span>
+              <span className="truncate">{item.name}</span>
+            </span>
+          )}
+        />
       </FilterSection>
     </div>
+  )
+}
+
+export type ChangelogSort = 'newest' | 'oldest'
+
+/** The list's sort choices, named in the viewer's language. */
+export function useChangelogSortOptions(): Array<{ value: ChangelogSort; label: string }> {
+  const intl = useIntl()
+  return useMemo(
+    () => [
+      { value: 'newest', label: intl.formatMessage(messages.newest) },
+      { value: 'oldest', label: intl.formatMessage(messages.oldest) },
+    ],
+    [intl]
+  )
+}
+
+/** The Filter control for the list toolbar: picks an entry status. */
+export function ChangelogFilterButton({ status, onStatusChange }: ChangelogFiltersProps) {
+  const intl = useIntl()
+  const statuses = useChangelogStatuses()
+  const [open, setOpen] = useState(false)
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <FilterAddButton>{intl.formatMessage(messages.filter)}</FilterAddButton>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-44 p-1">
+        {statuses.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => {
+              onStatusChange(item.id)
+              setOpen(false)
+            }}
+            className={cn(
+              MENU_ROW,
+              'w-full hover:bg-muted/50',
+              item.id === status ? 'bg-muted font-medium' : 'text-muted-foreground'
+            )}
+          >
+            {item.name}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   )
 }

@@ -3,7 +3,7 @@ import type { IntegrationCatalogEntry } from '@/lib/server/integrations/types'
 export const mondayCatalog: IntegrationCatalogEntry = {
   id: 'monday',
   name: 'Monday.com',
-  description: 'Create items in Monday.com from feedback and sync statuses.',
+  description: 'Create items in Monday.com from feedback.',
   category: 'issue_tracking',
   iconBg: 'bg-[#FF3D57]',
   settingsPath: '/admin/settings/integrations/monday',

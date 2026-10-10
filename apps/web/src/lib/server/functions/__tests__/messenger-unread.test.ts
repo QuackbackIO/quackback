@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@tanstack/react-start', () => ({
+  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     let handler: (() => Promise<unknown>) | null = null
     const fn = () => {
@@ -54,6 +55,7 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 vi.mock('@/lib/shared/roles', () => ({ isTeamMember: hoisted.isTeamMember }))
 vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isConversationsEnabled: hoisted.isConversationsEnabled,
+  isConversationsEnabledFor: () => hoisted.isConversationsEnabled(),
 }))
 vi.mock('@/lib/server/functions/portal-access', () => ({
   resolvePortalAccessForRequest: hoisted.resolvePortalAccess,

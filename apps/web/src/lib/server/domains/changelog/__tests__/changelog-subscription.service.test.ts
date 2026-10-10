@@ -94,12 +94,21 @@ describe('subscribeSelfServe / subscribeAdmin', () => {
 })
 
 describe('unsubscribeChangelog', () => {
-  it('stamps unsubscribedAt without deleting the row', async () => {
+  // Behaviour against real rows (a principal with no row, and keeping an
+  // existing row's source) is covered by changelog-unsubscribe-targets.db.test.ts.
+  it('upserts an opted-out row, stamping only unsubscribedAt on conflict', async () => {
     const { unsubscribeChangelog } = await import('../changelog-subscription.service')
 
     await unsubscribeChangelog(PRINCIPAL_ID)
 
-    expect(mockUpdateSet).toHaveBeenCalledWith({ unsubscribedAt: expect.any(Date) })
+    expect(mockInsertValues).toHaveBeenCalledWith({
+      principalId: PRINCIPAL_ID,
+      source: 'self_serve',
+      unsubscribedAt: expect.any(Date),
+    })
+    expect(mockOnConflictDoUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ set: { unsubscribedAt: expect.any(Date) } })
+    )
   })
 })
 
@@ -149,9 +158,8 @@ describe('getChangelogSubscriptionStatus', () => {
 
 describe('importChangelogSubscribersFromEmails', () => {
   it('returns all-zero result for an empty input', async () => {
-    const { importChangelogSubscribersFromEmails } = await import(
-      '../changelog-subscription.service'
-    )
+    const { importChangelogSubscribersFromEmails } =
+      await import('../changelog-subscription.service')
 
     const result = await importChangelogSubscribersFromEmails([])
 

@@ -36,7 +36,11 @@ export async function bustWorkspaceSettings(sql: postgres.Sql): Promise<void> {
  * — a cache that was never busted looks exactly like a cache that was.
  */
 export async function deleteCacheKeys(sql: postgres.Sql, keys: string[]): Promise<number> {
-  const rows = await sql`DELETE FROM kv_store WHERE key = ANY(${sql.array(keys)}) RETURNING key`
+  if (keys.length === 0) return 0
+  // postgres.js `IN ${sql(keys)}` expands to `IN ('a', 'b')`. `= ANY(sql.array())`
+  // serializes as a scalar here and Postgres rejects it with
+  // "op ANY/ALL (array) requires array on right side".
+  const rows = await sql`DELETE FROM kv_store WHERE key IN ${sql(keys)} RETURNING key`
   return rows.length
 }
 

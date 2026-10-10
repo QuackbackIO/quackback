@@ -37,7 +37,7 @@ describe('integration UI manifest parity', () => {
 
   it('gives every tracker (archive-capable provider) a verb and noun', () => {
     for (const type of listIntegrationTypes()) {
-      if (!getIntegration(type)?.archive) continue
+      if (!getIntegration(type)?.linkedItems) continue
       const manifest = INTEGRATION_UI[type]
       expect(manifest?.actionVerb, `${type} archives but has no actionVerb`).toBeDefined()
       expect(manifest?.itemNoun, `${type} archives but has no itemNoun`).toBeDefined()

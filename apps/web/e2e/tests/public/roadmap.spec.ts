@@ -38,7 +38,7 @@ test.describe('Public Roadmap', () => {
 
   test('empty state is shown when no roadmaps exist', async ({ page }) => {
     const emptyState = page.getByText(/no roadmaps available/i)
-    const columns = page.locator('[data-radix-scroll-area-viewport]')
+    const columns = page.locator('[data-slot="scroll-area-viewport"]')
 
     if ((await emptyState.count()) > 0) {
       await expect(emptyState).toBeVisible()

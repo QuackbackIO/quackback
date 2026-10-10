@@ -60,6 +60,7 @@ export async function handleKbSearch({ request }: { request: Request }): Promise
 
     const articles = results.map((a) => ({
       id: a.id,
+      urlId: a.urlId,
       slug: a.slug,
       title: a.title,
       content: a.content?.slice(0, 200) ?? '',

@@ -288,7 +288,7 @@ describe('TriggerEditor — Audience unreachable-field warning', () => {
       channels: [],
       audience: { field: 'message.body', op: 'contains', value: 'refund' },
     })
-    expect(screen.getByText(/never carries one — it will never match/)).toBeInTheDocument()
+    expect(screen.getByText(/never carries one, so it will never match/)).toBeInTheDocument()
   })
 
   it('does not warn when the audience has no message.* rule', () => {
@@ -296,7 +296,7 @@ describe('TriggerEditor — Audience unreachable-field warning', () => {
       channels: [],
       audience: { field: 'conversation.priority', op: 'eq', value: 'high' },
     })
-    expect(screen.queryByText(/never carries one — it will never match/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/never carries one, so it will never match/)).not.toBeInTheDocument()
   })
 
   it('clears the warning once the trigger is switched to one that does carry a message', () => {
@@ -304,10 +304,10 @@ describe('TriggerEditor — Audience unreachable-field warning', () => {
       channels: [],
       audience: { field: 'message.body', op: 'contains', value: 'refund' },
     })
-    expect(screen.getByText(/never carries one — it will never match/)).toBeInTheDocument()
+    expect(screen.getByText(/never carries one, so it will never match/)).toBeInTheDocument()
 
     fireEvent.change(triggerTypeSelect(), { target: { value: 'message.created' } })
-    expect(screen.queryByText(/never carries one — it will never match/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/never carries one, so it will never match/)).not.toBeInTheDocument()
   })
 })
 

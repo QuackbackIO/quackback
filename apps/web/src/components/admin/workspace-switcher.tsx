@@ -1,3 +1,4 @@
+import { railControlClass } from '@/components/admin/rail-item'
 import { ArrowsRightLeftIcon } from '@heroicons/react/24/solid'
 import {
   DropdownMenu,
@@ -6,7 +7,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { MENU_LABEL, MENU_ROW } from '@/components/ui/menu'
 import type { OwnerWorkspace } from '@/lib/server/control-plane/client'
 
@@ -37,22 +37,12 @@ export function WorkspaceSwitcher({
 
   return (
     <DropdownMenu defaultOpen={defaultOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="relative flex size-9 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <ArrowsRightLeftIcon className="size-5" />
-              <span className="sr-only">Switch workspace</span>
-            </button>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="right" sideOffset={8}>
-          Switch workspace
-        </TooltipContent>
-      </Tooltip>
+      <DropdownMenuTrigger asChild>
+        <button type="button" data-admin-rail-item="" className={railControlClass()}>
+          <ArrowsRightLeftIcon className="size-5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate text-left">Switch workspace</span>
+        </button>
+      </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">
         <DropdownMenuLabel className={MENU_LABEL}>Workspaces</DropdownMenuLabel>
         {siblings.map((sibling) => {

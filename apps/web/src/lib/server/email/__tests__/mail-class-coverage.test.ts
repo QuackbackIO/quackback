@@ -48,6 +48,13 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
   // says only that the workspace will not open one. That absence is what makes
   // the class honest, and `signup-not-allowed.test.tsx` is what pins it.
   sendSignupNotAllowedEmail: 'contact',
+  // Setup tips to a teammate's own address. No link grants anything: every
+  // step link lands on a page behind sign-in.
+  sendOnboardingWelcomeEmail: 'contact',
+  sendOnboardingNudgeEmail: 'contact',
+  // The install snippet, to an address a teammate typed. The snippet is the
+  // public script tag every visitor's browser already loads; it grants nothing.
+  sendMessengerInstallEmail: 'contact',
 
   // Exported with no production caller. Classified rather than deleted so the
   // decision to remove them is a separate, deliberate change.

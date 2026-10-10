@@ -12,9 +12,19 @@
 
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import type { Role } from '@/lib/shared/roles'
-import { verifyAccessToken } from 'better-auth/oauth2'
+import { requestToResourceInput, verifyAccessTokenRequest } from 'better-auth/oauth2'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
-import { API_KEY_SCOPES, effectiveScopes } from '@/lib/server/domains/api-keys/api-key-scopes'
+import {
+  API_KEY_SCOPES,
+  effectiveScopes,
+  hasApiScope,
+} from '@/lib/server/domains/api-keys/api-key-scopes'
+import {
+  insufficientScopeChallenge,
+  unauthenticatedMcpChallenge,
+  unauthenticatedMcpResponse,
+} from './oauth-challenge'
+import { requiredScopesForMcpRpc } from './required-scope'
 import { DomainException, RateLimitError } from '@/lib/shared/errors'
 import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 import { getDeveloperConfig } from '@/lib/server/domains/settings/settings.service'
@@ -70,11 +80,14 @@ function extractBearerToken(request: Request): string | null {
  * take effect immediately rather than at token expiry.
  * Returns McpAuthContext if valid, null if not an OAuth token or verification fails.
  */
-async function resolveOAuthContext(token: string): Promise<McpAuthContext | null> {
+async function resolveOAuthContext(
+  request: Request,
+  token: string
+): Promise<McpAuthContext | null> {
   if (token.startsWith(API_KEY_PREFIX)) return null
 
   try {
-    const payload = await verifyAccessToken(token, {
+    const payload = await verifyAccessTokenRequest(requestToResourceInput(request), {
       verifyOptions: {
         audience: `${config.baseUrl}/api/mcp`,
         issuer: `${config.baseUrl}/api/auth`,
@@ -127,7 +140,7 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
 
   // 1. Try OAuth access token
   if (token) {
-    const oauthContext = await resolveOAuthContext(token)
+    const oauthContext = await resolveOAuthContext(request, token)
     if (oauthContext) return oauthContext
   }
 
@@ -143,8 +156,7 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (err instanceof RateLimitError) headers['Retry-After'] = String(err.retryAfter)
       if (err.statusCode === 401) {
-        headers['WWW-Authenticate'] =
-          `Bearer resource_metadata="${config.baseUrl}/.well-known/oauth-protected-resource"`
+        headers['WWW-Authenticate'] = unauthenticatedMcpChallenge()
       }
       return new Response(JSON.stringify({ error: err.message }), {
         status: err.statusCode,
@@ -192,13 +204,27 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
   }
 
   // 3. No valid auth — return 401 with OAuth discovery hint
-  return new Response(JSON.stringify({ error: 'Authentication required' }), {
-    status: 401,
-    headers: {
-      'Content-Type': 'application/json',
-      'WWW-Authenticate': `Bearer resource_metadata="${config.baseUrl}/.well-known/oauth-protected-resource"`,
-    },
-  })
+  return unauthenticatedMcpResponse()
+}
+
+/**
+ * OAuth-only: if this JSON-RPC call needs a scope the token lacks, return
+ * HTTP 403 + `insufficient_scope` so the client can step up. API keys never
+ * enter this path.
+ */
+async function oauthScopeStepUp(request: Request, auth: McpAuthContext): Promise<Response | null> {
+  if (request.method !== 'POST') return null
+  const contentType = request.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) return null
+  let body: unknown
+  try {
+    body = await request.clone().json()
+  } catch {
+    return null
+  }
+  const missing = requiredScopesForMcpRpc(body).find((scope) => !hasApiScope(auth.scopes, scope))
+  if (!missing) return null
+  return insufficientScopeChallenge(missing)
 }
 
 /** Create a stateless transport + server, handle the request, clean up */
@@ -216,6 +242,11 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
   // API key auth paths, and the API key path converts failures to Response
   // objects internally rather than throwing.
   if (auth instanceof Response) return auth
+
+  if (auth.authMethod === 'oauth') {
+    const denied = await oauthScopeStepUp(request, auth)
+    if (denied) return denied
+  }
 
   // Plan gate, deliberately after auth: a 402 names the workspace's plan, which
   // is an answer only a caller who has already identified itself should get.

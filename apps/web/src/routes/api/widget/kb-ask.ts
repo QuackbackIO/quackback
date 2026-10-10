@@ -41,6 +41,7 @@ import {
   runFinishedChunk,
   runErrorChunk,
   stateSnapshotChunk,
+  withSseKeepalive,
 } from '@/lib/server/domains/assistant/agui'
 import type {
   KbAskFinalPayload,
@@ -73,6 +74,7 @@ const KB_ASK_RELATED_TOP_K = 3
 function toSourceMeta(a: RetrievedKbArticle): KbAskSourceMeta {
   return {
     articleId: a.id,
+    urlId: a.urlId,
     title: a.title,
     slug: a.slug,
     categorySlug: a.categorySlug,
@@ -307,7 +309,9 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
     }
   })()
 
-  return toServerSentEventsResponse(queue.stream(), { headers: widgetCorsHeaders() })
+  return withSseKeepalive(
+    toServerSentEventsResponse(queue.stream(), { headers: widgetCorsHeaders() })
+  )
 }
 
 export const Route = createFileRoute('/api/widget/kb-ask')({

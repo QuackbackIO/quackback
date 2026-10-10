@@ -214,6 +214,9 @@ describe('agentEventChangesInboxList', () => {
   const ticketMsg = baseMessage('tm9', { conversationId: null, ticketId: TICKET_ID })
   it.each([
     [{ kind: 'message', conversationId: CONV_ID, message: msg }, true],
+    // The write that added it also sent the conversation's own event, and
+    // that one refreshes the list: one refresh per write, not two.
+    [{ kind: 'message', conversationId: CONV_ID, message: msg, conversationUpdated: true }, false],
     [{ kind: 'conversation', conversation: conversation() }, true],
     [{ kind: 'message_deleted', conversationId: CONV_ID, messageId: msg.id }, true],
     [{ kind: 'read', conversationId: CONV_ID, side: 'agent', at: 'x' }, true],
@@ -221,6 +224,7 @@ describe('agentEventChangesInboxList', () => {
     [{ kind: 'typing', conversationId: CONV_ID, side: 'visitor', at: 'x' }, false],
     [{ kind: 'message_updated', conversationId: CONV_ID, message: agentMessage('m9') }, false],
     [{ kind: 'ticket_message', ticketId: TICKET_ID, message: ticketMsg }, true],
+    [{ kind: 'ticket_message_updated', ticketId: TICKET_ID, message: ticketMsg }, true],
     [{ kind: 'ticket_updated', ticket: { id: TICKET_ID } as never }, true],
     [{ kind: 'ticket_read', ticketId: TICKET_ID, side: 'agent', at: 'x' }, true],
     [{ kind: 'ticket_read', ticketId: TICKET_ID, side: 'visitor', at: 'x' }, false],
@@ -331,6 +335,65 @@ describe('applyAgentThreadEvent', () => {
     const next = applyAgentThreadEvent(prev, evt, CONV_ID)!
     expect(next.messages[0].reactions).toEqual([{ emoji: '👍', count: 2, hasReacted: true }])
     expect(next.messages[0].flaggedAt).toBe('flag-t')
+  })
+
+  it('patches channelDelivery on message_updated so ticks move pending to sent', () => {
+    const prev = agentCache({
+      messages: [
+        agentMessage('m1', {
+          channelDelivery: { status: 'pending', channel: 'github', at: 't0' },
+        }),
+      ],
+    })
+    const next = applyAgentThreadEvent(
+      prev,
+      {
+        kind: 'message_updated',
+        conversationId: CONV_ID,
+        message: agentMessage('m1', {
+          channelDelivery: {
+            status: 'sent',
+            channel: 'github',
+            at: 't1',
+            externalId: '444',
+          },
+        }),
+      },
+      CONV_ID
+    )!
+    expect(next.messages[0].channelDelivery).toEqual({
+      status: 'sent',
+      channel: 'github',
+      at: 't1',
+      externalId: '444',
+    })
+  })
+
+  it('patches an edited body on message_updated and keeps the viewer reaction', () => {
+    const prev = agentCache({
+      messages: [
+        agentMessage('m1', {
+          content: 'typo',
+          reactions: [{ emoji: '👍', count: 1, hasReacted: true }],
+        }),
+      ],
+    })
+    const next = applyAgentThreadEvent(
+      prev,
+      {
+        kind: 'message_updated',
+        conversationId: CONV_ID,
+        message: agentMessage('m1', {
+          content: 'fixed',
+          editedAt: '2026-07-01T11:00:00.000Z',
+          reactions: [{ emoji: '👍', count: 1, hasReacted: false }],
+        }),
+      },
+      CONV_ID
+    )!
+    expect(next.messages[0].content).toBe('fixed')
+    expect(next.messages[0].editedAt).toBe('2026-07-01T11:00:00.000Z')
+    expect(next.messages[0].reactions[0].hasReacted).toBe(true)
   })
 
   it('returns prev untouched on message_updated for a message outside the loaded page', () => {
@@ -463,6 +526,32 @@ describe('applyVisitorThreadEvent', () => {
         {
           kind: 'conversation',
           conversation: conversation({ id: OTHER_CONV_ID, status: 'closed' }),
+        },
+        CONV_ID
+      )
+    ).toBe(prev)
+  })
+
+  it('patches a customer-visible edit in place', () => {
+    const prev = visitorCache()
+    const next = applyVisitorThreadEvent(
+      prev,
+      {
+        kind: 'message_edited',
+        conversationId: CONV_ID,
+        message: baseMessage('m1', { content: 'fixed', editedAt: '2026-07-01T11:00:00.000Z' }),
+      },
+      CONV_ID
+    )!
+    expect(next.messages[0].content).toBe('fixed')
+    expect(next.messages[0].editedAt).toBe('2026-07-01T11:00:00.000Z')
+    expect(
+      applyVisitorThreadEvent(
+        prev,
+        {
+          kind: 'message_edited',
+          conversationId: CONV_ID,
+          message: baseMessage('missing', { content: 'nope' }),
         },
         CONV_ID
       )
@@ -631,6 +720,46 @@ describe('applyTicketThreadEvent', () => {
       kind: 'ticket_message',
       ticketId: OTHER_TICKET_ID,
       message: ticketMessage('tm2'),
+    }
+    expect(applyTicketThreadEvent(prev, evt, TICKET_ID)).toBe(prev)
+  })
+
+  it('patches an edited message body in place, keeping its position', () => {
+    const prev = ticketCache({ messages: [ticketMessage('tm1'), ticketMessage('tm2')] })
+    const edited = {
+      ...ticketMessage('tm1'),
+      content: 'Edited',
+      editedAt: '2026-07-02T00:00:00.000Z',
+    }
+    const next = applyTicketThreadEvent(
+      prev,
+      { kind: 'ticket_message_updated', ticketId: TICKET_ID, message: edited },
+      TICKET_ID
+    )!
+    expect(next.messages.map((m) => m.id)).toEqual(['tm1', 'tm2'])
+    expect(next.messages[0]).toMatchObject({
+      content: 'Edited',
+      editedAt: '2026-07-02T00:00:00.000Z',
+    })
+    expect(next.messages[1]).toBe(prev.messages[1])
+  })
+
+  it('does not append an edit for a message outside the loaded page', () => {
+    const prev = ticketCache()
+    const next = applyTicketThreadEvent(
+      prev,
+      { kind: 'ticket_message_updated', ticketId: TICKET_ID, message: ticketMessage('tm9') },
+      TICKET_ID
+    )!
+    expect(next.messages.map((m) => m.id)).toEqual(['tm1'])
+  })
+
+  it('ignores an edit for another ticket', () => {
+    const prev = ticketCache()
+    const evt: ConversationStreamEvent = {
+      kind: 'ticket_message_updated',
+      ticketId: OTHER_TICKET_ID,
+      message: ticketMessage('tm1'),
     }
     expect(applyTicketThreadEvent(prev, evt, TICKET_ID)).toBe(prev)
   })

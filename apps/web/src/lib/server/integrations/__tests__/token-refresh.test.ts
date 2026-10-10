@@ -94,7 +94,11 @@ describe('getValidAccessToken', () => {
     })
 
     await expect(getValidAccessToken(id)).resolves.toBe('fresh-token')
-    expect(refreshJiraTokenMock).toHaveBeenCalledWith('stored-refresh', undefined)
+    expect(refreshJiraTokenMock).toHaveBeenCalledWith(
+      'stored-refresh',
+      undefined,
+      expect.objectContaining({ cloudId: 'cloud-1' })
+    )
     expect(cacheDel).toHaveBeenCalledWith(CACHE_KEYS.INTEGRATION_MAPPINGS)
 
     const row = await testDb.query.integrations.findFirst({ where: eq(integrations.id, id) })

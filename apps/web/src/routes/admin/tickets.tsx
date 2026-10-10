@@ -1,6 +1,7 @@
-import { createFileRoute, Navigate } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { isValidTypeId } from '@quackback/ids'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 /**
  * Retired route (UNIFIED-INBOX-SPEC.md §2.2/§4): tickets are now rows in the
@@ -8,6 +9,9 @@ import type { FeatureFlags } from '@/lib/shared/types/settings'
  * permanently as a redirect (not deleted) so old bookmarks/links keep working:
  * `?t=<id>` deep-links become `?i=<id>`; a bare visit opens the Tickets >
  * Customer scope. Mirrors the `c=` → `i=` alias `/admin/inbox` itself accepts.
+ *
+ * The redirect is thrown from `beforeLoad`, so a document request answers
+ * with the redirect itself and the browser loads the inbox directly.
  *
  * The standalone ticket components (`TicketListColumn`, `TicketDetailPanel`, …)
  * are no longer imported here. `TicketDetail`/`ticket-thread.tsx` were deleted
@@ -22,24 +26,20 @@ interface TicketsRedirectSearch {
 }
 
 export const Route = createFileRoute('/admin/tickets')({
+  head: adminPageHead('Tickets'),
   validateSearch: (search: Record<string, unknown>): TicketsRedirectSearch => ({
     t: typeof search.t === 'string' && isValidTypeId(search.t, 'ticket') ? search.t : undefined,
   }),
-  // Auth is enforced by the parent `/admin` guard; this route only redirects.
-  component: TicketsRedirectRoute,
+  // Auth is enforced by the parent `/admin` guard; this route only redirects,
+  // gated on the `supportTickets` flag.
+  beforeLoad: ({ context, search }) => {
+    const flags = context.settings?.featureFlags as FeatureFlags | undefined
+    if (!flags?.supportTickets) {
+      throw redirect({ to: '/admin/feedback' })
+    }
+    if (search.t) {
+      throw redirect({ to: '/admin/inbox', search: { i: search.t }, replace: true })
+    }
+    throw redirect({ to: '/admin/inbox', search: { view: 'tickets_customer' }, replace: true })
+  },
 })
-
-/** Gate on the `supportTickets` flag (matching today's behavior) and redirect
- *  into the unified inbox. */
-function TicketsRedirectRoute() {
-  const { settings } = Route.useRouteContext()
-  const { t } = Route.useSearch()
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-  if (!flags?.supportTickets) {
-    return <Navigate to="/admin/feedback" />
-  }
-  if (t) {
-    return <Navigate to="/admin/inbox" search={{ i: t }} replace />
-  }
-  return <Navigate to="/admin/inbox" search={{ view: 'tickets_customer' }} replace />
-}

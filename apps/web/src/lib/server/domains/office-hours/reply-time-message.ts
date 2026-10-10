@@ -24,5 +24,5 @@ export function buildReplyTimeMessage(
       content: "We're away right now. We'll get back to you as soon as we're back online.",
     }
   }
-  return { status: 'online', content: "We're online — typically replies in under an hour." }
+  return { status: 'online', content: "We're online, typically replies in under an hour." }
 }

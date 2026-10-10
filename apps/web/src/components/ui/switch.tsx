@@ -1,27 +1,35 @@
 import * as React from 'react'
-import * as SwitchPrimitives from '@radix-ui/react-switch'
+import { Switch as SwitchPrimitive } from '@base-ui/react/switch'
 
 import { cn } from '@/lib/shared/utils'
 
-const Switch = React.forwardRef<
-  React.ElementRef<typeof SwitchPrimitives.Root>,
-  React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>
->(({ className, ...props }, ref) => (
-  <SwitchPrimitives.Root
-    className={cn(
-      'peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input',
-      className
-    )}
-    {...props}
-    ref={ref}
-  >
-    <SwitchPrimitives.Thumb
+const Switch = React.forwardRef<HTMLButtonElement, SwitchPrimitive.Root.Props>(
+  ({ className, onClick, ...props }, ref) => (
+    <SwitchPrimitive.Root
+      data-slot="switch"
+      nativeButton
+      render={<button type="button" />}
       className={cn(
-        'pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0'
+        'peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-checked:bg-primary data-unchecked:bg-input',
+        className
       )}
-    />
-  </SwitchPrimitives.Root>
-))
-Switch.displayName = SwitchPrimitives.Root.displayName
+      {...props}
+      onClick={(event) => {
+        // Same label-loop guard as Checkbox: a button control nested in a
+        // <label> re-dispatches the click onto itself and loops.
+        event.stopPropagation()
+        onClick?.(event)
+      }}
+      ref={ref}
+    >
+      <SwitchPrimitive.Thumb
+        className={cn(
+          'pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform data-checked:translate-x-4 data-unchecked:translate-x-0'
+        )}
+      />
+    </SwitchPrimitive.Root>
+  )
+)
+Switch.displayName = 'Switch'
 
 export { Switch }

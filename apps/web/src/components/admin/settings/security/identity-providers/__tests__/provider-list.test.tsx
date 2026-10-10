@@ -21,7 +21,9 @@ const { upsertSpy } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/components/admin/upgrade', () => ({
-  UpgradeNotice: () => <p>Single sign-on is a Scale feature. Upgrade to Scale to enable it.</p>,
+  UpgradeNotice: () => (
+    <p>Single sign-on is an Enterprise feature. Upgrade to Enterprise to enable it.</p>
+  ),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -109,11 +111,15 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     scopes: null,
     prompt: null,
     tokenEndpointAuthMethod: null,
+    idTokenNonce: null,
     enabled: true,
     autoCreateUsers: true,
     autoProvisionRole: 'user',
     claimMapping: null,
+    redirectStyle: 'current',
     showButton: false,
+    logoKey: null,
+    logoUrl: null,
     detailsChangedAt: null,
     lastSuccessfulTestAt: null,
     createdAt: '2026-05-01T00:00:00.000Z',
@@ -179,6 +185,12 @@ describe('<IdentityProvidersSection>', () => {
     expect(screen.getByTitle('SSO enforced for beta.com')).toBeInTheDocument()
   })
 
+  it('draws providers as hairline list rows, not boxed cards', () => {
+    renderSection()
+    expect(document.querySelectorAll('[data-slot="settings-list-row"]')).toHaveLength(2)
+    expect(document.querySelector('[data-slot="settings-list"]')).not.toBeNull()
+  })
+
   it('shows no domain chips for a provider with no verified domains', () => {
     renderSection()
     // The old "no domains" filler is gone; button providers show no domain text.
@@ -187,7 +199,7 @@ describe('<IdentityProvidersSection>', () => {
 })
 
 describe('plan gate', () => {
-  it('hides Add provider and names Scale when SSO is not entitled', () => {
+  it('hides New provider and names Enterprise when SSO is not entitled', () => {
     const qc = new QueryClient()
     qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
     render(
@@ -195,15 +207,15 @@ describe('plan gate', () => {
         <IdentityProvidersSection tierEnabled={false} enabledMethodCount={5} />
       </QueryClientProvider>
     )
-    expect(screen.queryByRole('link', { name: /add provider/i })).toBeNull()
-    expect(screen.getByText(/Single sign-on is a Scale feature/)).toBeTruthy()
+    expect(screen.queryByRole('link', { name: /new provider/i })).toBeNull()
+    expect(screen.getByText(/Single sign-on is an Enterprise feature/)).toBeTruthy()
   })
 })
 
 describe('links to the provider pages', () => {
-  it('sends Add provider to the create page', () => {
+  it('sends New provider to the create page', () => {
     renderSection()
-    expect(screen.getByRole('link', { name: /add provider/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /new provider/i })).toHaveAttribute(
       'href',
       '/admin/settings/security/sso/new'
     )
@@ -250,5 +262,19 @@ describe('enable toggle on the list row', () => {
   it('allows disabling a provider when other methods remain', () => {
     renderSection(3)
     expect(screen.getByRole('switch', { name: /enable acme sso/i })).not.toBeDisabled()
+  })
+})
+
+describe('empty list', () => {
+  it('shows the shared empty state with a New provider action', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(['settings', 'identityProviders'], [])
+    render(
+      <QueryClientProvider client={qc}>
+        <IdentityProvidersSection tierEnabled enabledMethodCount={5} />
+      </QueryClientProvider>
+    )
+    expect(screen.getByText('No providers yet')).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /new provider/i }).length).toBeGreaterThan(0)
   })
 })

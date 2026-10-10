@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
-import { publicChangelogQueries } from '@/lib/client/queries/changelog'
+import { widgetChangelogListQuery } from './widget-changelog-query'
+import { useWidgetAuth } from './widget-auth-provider'
 import {
   countUnreadChangelogs,
   getChangelogSeenAt,
@@ -18,8 +19,9 @@ export function useChangelogUnread(enabled: boolean): {
   unread: number
   markSeen: (publishedAt: string) => void
 } {
+  const { sessionVersion } = useWidgetAuth()
   const { data } = useInfiniteQuery({
-    ...publicChangelogQueries.list(),
+    ...widgetChangelogListQuery(sessionVersion),
     enabled,
     refetchInterval: 60_000,
   })

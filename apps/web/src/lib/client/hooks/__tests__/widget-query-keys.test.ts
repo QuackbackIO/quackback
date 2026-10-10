@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '../use-widget-vote'
+import {
+  widgetQueryKeys,
+  widgetQueryKeyEquals,
+  widgetQueryKeyPrefixEquals,
+  widgetQueryKeySameSession,
+  INITIAL_SESSION_VERSION,
+} from '../use-widget-vote'
 
 describe('widgetQueryKeys', () => {
   describe('votedPosts', () => {
@@ -43,6 +49,128 @@ describe('widgetQueryKeys', () => {
       const key1 = widgetQueryKeys.postDetail.byId('post_1', 0)
       const key2 = widgetQueryKeys.postDetail.byId('post_1', 1)
       expect(key1).not.toEqual(key2)
+    })
+  })
+
+  describe('articleDetail', () => {
+    it('byRef includes ref, locale, and version', () => {
+      expect(widgetQueryKeys.articleDetail.byRef('article_1', 0, 'en')).toEqual([
+        'widget',
+        'article',
+        'article_1',
+        'en',
+        0,
+      ])
+    })
+
+    it('same ref with different locales produce different keys', () => {
+      const en = widgetQueryKeys.articleDetail.byRef('article_1', 0, 'en')
+      const de = widgetQueryKeys.articleDetail.byRef('article_1', 0, 'de')
+      expect(en).not.toEqual(de)
+    })
+  })
+
+  describe('changelogDetail', () => {
+    it('byId includes entryId and version', () => {
+      expect(widgetQueryKeys.changelogDetail.byId('changelog_1', 2)).toEqual([
+        'widget',
+        'changelog',
+        'changelog_1',
+        2,
+      ])
+    })
+  })
+
+  describe('changelogList', () => {
+    it('bySession includes version', () => {
+      expect(widgetQueryKeys.changelogList.all).toEqual(['widget', 'changelogs'])
+      expect(widgetQueryKeys.changelogList.bySession(0)).toEqual(['widget', 'changelogs', 0])
+      expect(widgetQueryKeys.changelogList.bySession(2)).toEqual(['widget', 'changelogs', 2])
+    })
+  })
+
+  describe('widgetQueryKeyEquals', () => {
+    it('matches a factory key without depending on slot indexes', () => {
+      const key = widgetQueryKeys.articleDetail.byRef('article_1', 3, 'de')
+      expect(
+        widgetQueryKeyEquals(widgetQueryKeys.articleDetail.byRef('article_1', 3, 'de'), key)
+      ).toBe(true)
+      expect(
+        widgetQueryKeyEquals(widgetQueryKeys.articleDetail.byRef('article_1', 4, 'de'), key)
+      ).toBe(false)
+      expect(widgetQueryKeyEquals(key, undefined)).toBe(false)
+    })
+
+    it('prefix match keeps the same entity across trailing key slots', () => {
+      const key = widgetQueryKeys.postDetail.byId('post_1', 4)
+      expect(widgetQueryKeyPrefixEquals([...widgetQueryKeys.postDetail.all, 'post_1'], key)).toBe(
+        true
+      )
+      expect(widgetQueryKeyPrefixEquals([...widgetQueryKeys.postDetail.all, 'post_2'], key)).toBe(
+        false
+      )
+    })
+  })
+
+  describe('helpCategories', () => {
+    it('bySession includes locale and version', () => {
+      expect(widgetQueryKeys.helpCategories.bySession(0, 'en')).toEqual([
+        'widget',
+        'help',
+        'categories',
+        'en',
+        0,
+      ])
+      expect(widgetQueryKeys.helpCategories.bySession(2, 'de')).toEqual([
+        'widget',
+        'help',
+        'categories',
+        'de',
+        2,
+      ])
+    })
+  })
+
+  describe('helpCategoryArticles', () => {
+    it('byCategory includes category, locale, and version', () => {
+      expect(widgetQueryKeys.helpCategoryArticles.byCategory('cat_1', 1, 'en')).toEqual([
+        'widget',
+        'help',
+        'category-articles',
+        'cat_1',
+        'en',
+        1,
+      ])
+    })
+  })
+
+  describe('widgetQueryKeySameSession', () => {
+    it('matches when the last key slot is the current session', () => {
+      const key = widgetQueryKeys.popularSearch.query('bugs', null, 3)
+      expect(widgetQueryKeySameSession(key, 3)).toBe(true)
+      expect(widgetQueryKeySameSession(key, 4)).toBe(false)
+      expect(widgetQueryKeySameSession(undefined, 3)).toBe(false)
+    })
+  })
+
+  describe('popularPosts', () => {
+    it('list includes board slug and version', () => {
+      expect(widgetQueryKeys.popularPosts.list(null, 0)).toEqual([
+        'widget',
+        'posts',
+        'popular',
+        'top',
+        'all',
+        0,
+      ])
+      expect(widgetQueryKeys.popularPosts.list('bugs', 1)).toEqual([
+        'widget',
+        'posts',
+        'popular',
+        'top',
+        'bugs',
+        1,
+      ])
     })
   })
 

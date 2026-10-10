@@ -33,19 +33,26 @@ vi.mock('@tanstack/react-start', () => ({
 }))
 
 vi.mock('@tanstack/react-start/server', () => ({
-  getRequestHeaders: () => ({ 'x-forwarded-for': '203.0.113.7' }),
+  // The client also writes the private client-IP header Better Auth trusts;
+  // nothing it forwards may carry that copy.
+  getRequestHeaders: () =>
+    new Headers({ 'x-forwarded-for': '9.9.9.9', 'x-quackback-client-ip': '9.9.9.9' }),
 }))
 
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   findFirst: vi.fn(),
   sendVerificationOTP: vi.fn().mockResolvedValue({ success: true }),
+  createVerificationOTP: vi.fn().mockResolvedValue('654321'),
+  sendVerifyAddressCode: vi.fn(async (..._args: unknown[]) => {}),
   requestEmailChangeEmailOTP: vi.fn().mockResolvedValue({ success: true }),
   changeEmailEmailOTP: vi.fn().mockResolvedValue({ success: true }),
   checkVerificationOTP: vi.fn().mockResolvedValue({ success: true }),
   deleteVerificationByIdentifier: vi.fn().mockResolvedValue(undefined),
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
   enqueueMembershipSync: vi.fn(async (..._args: unknown[]) => {}),
+  providers: [] as unknown[],
+  accountFindFirst: vi.fn(),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
@@ -53,16 +60,24 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 }))
 
 vi.mock('@/lib/server/db', () => ({
-  db: { query: { user: { findFirst: hoisted.findFirst } } },
+  db: {
+    query: {
+      user: { findFirst: hoisted.findFirst },
+      account: { findFirst: (...a: unknown[]) => hoisted.accountFindFirst(...a) },
+    },
+  },
   user: { id: 'user.id', email: 'user.email' },
+  account: { userId: 'account.userId', providerId: 'account.providerId' },
   sql: (strings: TemplateStringsArray, ...vals: unknown[]) => ({ kind: 'sql', strings, vals }),
   eq: (col: unknown, val: unknown) => ({ kind: 'eq', col, val }),
+  and: (...parts: unknown[]) => ({ kind: 'and', parts }),
 }))
 
 vi.mock('@/lib/server/auth', () => ({
   getAuth: async () => ({
     api: {
       sendVerificationOTP: hoisted.sendVerificationOTP,
+      createVerificationOTP: hoisted.createVerificationOTP,
       requestEmailChangeEmailOTP: hoisted.requestEmailChangeEmailOTP,
       changeEmailEmailOTP: hoisted.changeEmailEmailOTP,
       checkVerificationOTP: hoisted.checkVerificationOTP,
@@ -86,6 +101,15 @@ vi.mock('@/lib/server/domains/principals/contact-email', async () => {
 })
 
 vi.mock('@/lib/server/domains/api/rate-limit', () => ({ getClientIp: () => '203.0.113.7' }))
+vi.mock('@/lib/server/auth/verify-address-email', () => ({
+  sendVerifyAddressCode: (...a: unknown[]) => hoisted.sendVerifyAddressCode(...a),
+}))
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: async () => hoisted.providers,
+}))
+vi.mock('@/lib/server/auth/registered-providers', () => ({
+  getRegisteredOidcProviderIds: async () => new Set(['oidc_acme']),
+}))
 vi.mock('@/lib/server/auth/signin-rate-limit', () => ({
   checkContactEmailSendRateLimit: hoisted.checkRateLimit,
 }))
@@ -115,14 +139,23 @@ const accountIs = (email: string) => {
   hoisted.findFirst.mockResolvedValueOnce({ id: 'usr_1', email })
 }
 
+/** Confirm re-reads the account first, then looks for another holder of the address. */
+const confirmingFrom = (email: string, holder?: { id: string }) => {
+  hoisted.findFirst.mockReset()
+  hoisted.findFirst.mockResolvedValueOnce({ id: 'usr_1', email }).mockResolvedValueOnce(holder)
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.requireAuth.mockResolvedValue({
     user: { id: 'usr_1' },
     principal: { type: 'user', role: 'user' },
+    scope: 'dashboard',
   })
   hoisted.checkRateLimit.mockResolvedValue({ allowed: true })
   hoisted.checkVerificationOTP.mockResolvedValue({ success: true })
+  hoisted.providers = []
+  hoisted.accountFindFirst.mockResolvedValue(undefined)
 })
 
 describe('requestEmailChangeFn', () => {
@@ -204,14 +237,31 @@ describe('sendCurrentAddressCodeFn', () => {
     hoisted.checkRateLimit.mockResolvedValueOnce({ allowed: false })
 
     await expect(call(sendCurrentAddressCodeFn)).rejects.toThrow(/too many/i)
+    expect(hoisted.createVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.sendVerifyAddressCode).not.toHaveBeenCalled()
+  })
+
+  // The routed endpoint runs the sign-in hook chain, whose email-sign-in toggle
+  // and Require SSO rule would refuse this code for reasons that are not this
+  // flow's. The path-less mint skips that chain (otp-endpoint-hooks.test.ts).
+  it('mints the code without the sign-in hooks and mails it', async () => {
+    accountIs(REAL)
+
+    await call(sendCurrentAddressCodeFn)
+
+    expect(hoisted.createVerificationOTP).toHaveBeenCalledWith({
+      body: { email: REAL, type: 'email-verification' },
+    })
     expect(hoisted.sendVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.sendVerifyAddressCode).toHaveBeenCalledWith(REAL, '654321')
   })
 
   it('refuses when there is no reachable address to prove', async () => {
     accountIs(PLACEHOLDER)
 
     await expect(call(sendCurrentAddressCodeFn)).rejects.toThrow(/no confirmed address/i)
-    expect(hoisted.sendVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.createVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.sendVerifyAddressCode).not.toHaveBeenCalled()
   })
 })
 
@@ -220,8 +270,7 @@ describe('confirmEmailChangeFn', () => {
     // Better Auth lowercases the address it searches for but compares it
     // against stored values as-is, and the unique index is case-sensitive, so
     // without this check one address ends up with two identities.
-    hoisted.findFirst.mockReset()
-    hoisted.findFirst.mockResolvedValueOnce({ id: 'usr_other' })
+    confirmingFrom('old@example.com', { id: 'usr_other' })
 
     const res = await call<{ ok: boolean; reason?: string }>(confirmEmailChangeFn, {
       email: 'Pat@Example.com',
@@ -233,8 +282,7 @@ describe('confirmEmailChangeFn', () => {
   })
 
   it('writes the address when the code checks out', async () => {
-    hoisted.findFirst.mockReset()
-    hoisted.findFirst.mockResolvedValueOnce(undefined)
+    confirmingFrom('old@example.com')
 
     const res = await call<{ ok: boolean; email?: string }>(confirmEmailChangeFn, {
       email: REAL,
@@ -248,8 +296,7 @@ describe('confirmEmailChangeFn', () => {
   })
 
   it('reports a bad code and a taken address identically', async () => {
-    hoisted.findFirst.mockReset()
-    hoisted.findFirst.mockResolvedValueOnce(undefined)
+    confirmingFrom('old@example.com')
     hoisted.changeEmailEmailOTP.mockRejectedValueOnce(new Error('INVALID_OTP'))
 
     const res = await call<{ ok: boolean; reason?: string }>(confirmEmailChangeFn, {
@@ -265,9 +312,9 @@ describe('confirmEmailChangeFn', () => {
     hoisted.requireAuth.mockResolvedValue({
       user: { id: 'usr_1' },
       principal: { type: 'user', role: 'member' },
+      scope: 'dashboard',
     })
-    hoisted.findFirst.mockReset()
-    hoisted.findFirst.mockResolvedValueOnce(undefined)
+    confirmingFrom('old@example.com')
 
     await call(confirmEmailChangeFn, { email: REAL, code: '123456' })
 
@@ -275,11 +322,177 @@ describe('confirmEmailChangeFn', () => {
   })
 
   it('does not enqueue membership-sync for an end-user address change', async () => {
-    hoisted.findFirst.mockReset()
-    hoisted.findFirst.mockResolvedValueOnce(undefined)
+    confirmingFrom('old@example.com')
 
     await call(confirmEmailChangeFn, { email: REAL, code: '123456' })
 
     expect(hoisted.enqueueMembershipSync).not.toHaveBeenCalled()
+  })
+})
+
+describe('widget-scoped sessions cannot change email', () => {
+  beforeEach(() => {
+    hoisted.requireAuth.mockRejectedValue(
+      new Error('Access denied: Widget sessions cannot access this resource')
+    )
+  })
+
+  it('rejects requestEmailChangeFn', async () => {
+    accountIs(PLACEHOLDER)
+    await expect(call(requestEmailChangeFn, { email: REAL })).rejects.toThrow(/Widget sessions/)
+    expect(hoisted.requestEmailChangeEmailOTP).not.toHaveBeenCalled()
+  })
+
+  it('rejects confirmEmailChangeFn', async () => {
+    await expect(call(confirmEmailChangeFn, { email: REAL, code: '123456' })).rejects.toThrow(
+      /Widget sessions/
+    )
+    expect(hoisted.changeEmailEmailOTP).not.toHaveBeenCalled()
+  })
+})
+
+describe('headers forwarded to Better Auth', () => {
+  /** The client-IP header each Better Auth call received. */
+  const forwardedIps = (fn: ReturnType<typeof vi.fn>) =>
+    fn.mock.calls.map(([arg]) => (arg as { headers: Headers }).headers.get('x-quackback-client-ip'))
+
+  it('carry the resolved client address, never the client-supplied one', async () => {
+    accountIs(REAL)
+    await call(sendCurrentAddressCodeFn)
+
+    accountIs(REAL)
+    await call(requestEmailChangeFn, { email: 'new@example.com', currentCode: '123456' })
+
+    confirmingFrom('old@example.com')
+    await call(confirmEmailChangeFn, { email: REAL, code: '123456' })
+
+    for (const fn of [
+      hoisted.checkVerificationOTP,
+      hoisted.requestEmailChangeEmailOTP,
+      hoisted.changeEmailEmailOTP,
+    ]) {
+      expect(forwardedIps(fn)).toEqual(['203.0.113.7'])
+    }
+  })
+})
+
+// A verified domain that requires SSO owns its addresses. Moving off one would
+// let the person sign in with an email link instead of the provider; moving
+// onto one would put the account behind a provider it may not use.
+describe('a domain that requires SSO', () => {
+  const SSO = 'sam@acme.com'
+
+  beforeEach(() => {
+    hoisted.providers = [
+      {
+        id: 'idp_acme',
+        registrationId: 'oidc_acme',
+        showButton: true,
+        domains: [{ name: 'acme.com', enforced: true, verifiedAt: '2026-01-01T00:00:00Z' }],
+      },
+    ]
+  })
+
+  it('sends no current-address code for a managed address', async () => {
+    accountIs(SSO)
+
+    await expect(call(sendCurrentAddressCodeFn)).rejects.toThrow(/single sign-on/i)
+    expect(hoisted.createVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.sendVerifyAddressCode).not.toHaveBeenCalled()
+  })
+
+  it('refuses to move off a managed address, even with a good current code', async () => {
+    accountIs(SSO)
+
+    await expect(
+      call(requestEmailChangeFn, { email: 'sam@gmail.com', currentCode: '123456' })
+    ).rejects.toThrow(/single sign-on/i)
+    expect(hoisted.requestEmailChangeEmailOTP).not.toHaveBeenCalled()
+  })
+
+  it('refuses to move onto a managed domain', async () => {
+    accountIs(PLACEHOLDER)
+
+    await expect(call(requestEmailChangeFn, { email: 'new@acme.com' })).rejects.toThrow(
+      /single sign-on/i
+    )
+    expect(hoisted.requestEmailChangeEmailOTP).not.toHaveBeenCalled()
+  })
+
+  it('refuses to write a managed address at confirm time', async () => {
+    confirmingFrom(PLACEHOLDER)
+
+    const res = await call<{ ok: boolean }>(confirmEmailChangeFn, {
+      email: 'new@acme.com',
+      code: '123456',
+    })
+
+    expect(res.ok).toBe(false)
+    expect(hoisted.changeEmailEmailOTP).not.toHaveBeenCalled()
+  })
+
+  // Someone whose provider released no email signs in through the domain's own
+  // provider; the rule is there to keep them on it, not to stop them naming
+  // their address there.
+  it('lets an account that signs in through the owning provider add an address there', async () => {
+    accountIs(PLACEHOLDER)
+    hoisted.accountFindFirst.mockResolvedValue({ id: 'acc_1' })
+
+    await call(requestEmailChangeFn, { email: 'new@acme.com' })
+
+    expect(hoisted.requestEmailChangeEmailOTP).toHaveBeenCalled()
+  })
+
+  // The SSO answer is checked before the holder lookup, so it cannot tell a
+  // caller which addresses at the domain hold accounts.
+  it('answers the same at confirm whether or not the managed address is taken', async () => {
+    confirmingFrom(PLACEHOLDER, { id: 'usr_other' })
+    const taken = await call<{ ok: boolean; reason?: string }>(confirmEmailChangeFn, {
+      email: 'ceo@acme.com',
+      code: '000000',
+    })
+    confirmingFrom(PLACEHOLDER, undefined)
+    const free = await call<{ ok: boolean; reason?: string }>(confirmEmailChangeFn, {
+      email: 'nobody@acme.com',
+      code: '000000',
+    })
+
+    expect(taken).toEqual({ ok: false, reason: 'sso_managed' })
+    expect(free).toEqual(taken)
+  })
+
+  it('lets an account on the owning provider correct its address within the domain', async () => {
+    accountIs(SSO)
+    hoisted.accountFindFirst.mockResolvedValue({ id: 'acc_1' })
+
+    await call(requestEmailChangeFn, { email: 'sam.lee@acme.com', currentCode: '123456' })
+
+    expect(hoisted.requestEmailChangeEmailOTP).toHaveBeenCalled()
+  })
+
+  it('still keeps that account from moving off the domain', async () => {
+    accountIs(SSO)
+    hoisted.accountFindFirst.mockResolvedValue({ id: 'acc_1' })
+
+    await expect(
+      call(requestEmailChangeFn, { email: 'sam@gmail.com', currentCode: '123456' })
+    ).rejects.toThrow(/single sign-on/i)
+  })
+
+  it('sends a current-address code to a managed address on the owning provider', async () => {
+    accountIs(SSO)
+    hoisted.accountFindFirst.mockResolvedValue({ id: 'acc_1' })
+
+    await call(sendCurrentAddressCodeFn)
+
+    expect(hoisted.sendVerifyAddressCode).toHaveBeenCalledWith(SSO, '654321')
+  })
+
+  it('still moves between addresses at other domains', async () => {
+    accountIs(REAL)
+
+    await call(requestEmailChangeFn, { email: 'pat@example.org', currentCode: '123456' })
+
+    expect(hoisted.requestEmailChangeEmailOTP).toHaveBeenCalled()
   })
 })

@@ -5,6 +5,7 @@ import { ReactRenderer } from '@tiptap/react'
 import tippy, { type Instance } from 'tippy.js'
 import 'tippy.js/dist/tippy.css'
 import { MentionPicker, type MentionItem, type MentionPickerHandle } from './mention-picker'
+import { markSuggestionPopup } from './suggestion-popup-marker'
 
 const DEBOUNCE_MS = 200
 
@@ -40,6 +41,7 @@ const renderSuggestion: SuggestionOptions<MentionItem>['render'] = () => {
         props: {
           items: props.items,
           command: props.command,
+          query: props.query,
         },
         editor: props.editor,
       })
@@ -47,11 +49,16 @@ const renderSuggestion: SuggestionOptions<MentionItem>['render'] = () => {
       popup = tippy(document.body, {
         getReferenceClientRect: () => props.clientRect?.() ?? new DOMRect(),
         appendTo: () => document.body,
-        content: component.element,
+        content: markSuggestionPopup(component.element),
         showOnCreate: true,
         interactive: true,
         trigger: 'manual',
-        placement: 'bottom-start',
+        placement: 'top-start',
+        // Prefer above the caret, but flip below near the top of the
+        // viewport — @ works in tall editors too, not just the composer.
+        popperOptions: {
+          modifiers: [{ name: 'preventOverflow', options: { mainAxis: true, altAxis: true } }],
+        },
         arrow: false,
         // Custom theme so our CSS can strip tippy's default chrome and
         // let .mention-picker be the only visible surface.
@@ -63,6 +70,7 @@ const renderSuggestion: SuggestionOptions<MentionItem>['render'] = () => {
       component?.updateProps({
         items: props.items,
         command: props.command,
+        query: props.query,
       })
       popup?.setProps({
         getReferenceClientRect: () => props.clientRect?.() ?? new DOMRect(),

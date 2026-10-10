@@ -10,6 +10,7 @@ import type {
 } from '@/lib/server/integrations/inbound-types'
 
 export const gitlabInboundHandler: InboundWebhookHandler = {
+  statusMode: 'review',
   async verifySignature(request: Request, _body: string, secret: string): Promise<true | Response> {
     // GitLab uses a shared secret token in the X-Gitlab-Token header
     const token = request.headers.get('X-Gitlab-Token')

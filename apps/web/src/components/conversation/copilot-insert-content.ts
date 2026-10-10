@@ -1,92 +1,90 @@
-/**
- * The Tiptap-facing half of the Copilot insert-fidelity fix (the pure parse
- * half lives in lib/shared/assistant/copilot-format.ts): turns a Copilot
- * answer / transform result into real editor nodes — bold, italic, and code
- * marks, bullet/ordered lists, code blocks — instead of the literal text
- * nodes `textToParagraphs` (agent-conversation-thread.tsx) builds for
- * plain-text seams like macros and emoji. Node/mark names follow the
- * composer's StarterKit schema (rich-text-editor.tsx): paragraph, bulletList,
- * orderedList, listItem, codeBlock, text with bold/italic/code marks.
- */
+import type { PhrasingContent, RootContent } from 'mdast'
 import {
-  answerMarkdownForInsert,
-  parseAnswerMarkdown,
+  prepareAnswerMarkdown,
   type AnswerInsertOptions,
-  type AnswerInsertSpan,
 } from '@/lib/shared/assistant/copilot-format'
 import type { TiptapContent } from '@/lib/shared/db-types'
 
-function spansToTextNodes(spans: AnswerInsertSpan[]): TiptapContent[] {
-  const nodes: TiptapContent[] = []
-  for (const span of spans) {
-    if (!span.text) continue
-    const marks: { type: string }[] = []
-    if (span.bold) marks.push({ type: 'bold' })
-    if (span.italic) marks.push({ type: 'italic' })
-    if (span.code) marks.push({ type: 'code' })
-    nodes.push(
-      marks.length > 0
-        ? { type: 'text', text: span.text, marks }
-        : { type: 'text', text: span.text }
-    )
-  }
-  return nodes
+type Marks = NonNullable<TiptapContent['marks']>
+
+/** Convert parsed Markdown to the conversation editor's existing node schema. */
+function inlineNodes(nodes: PhrasingContent[], marks: Marks = []): TiptapContent[] {
+  return nodes.flatMap((node): TiptapContent[] => {
+    switch (node.type) {
+      case 'text':
+        return node.value
+          .split('\n')
+          .flatMap((text, index) => [
+            ...(index ? [{ type: 'hardBreak' }] : []),
+            ...(text ? [{ type: 'text', text, ...(marks.length ? { marks } : {}) }] : []),
+          ])
+      case 'break':
+        return [{ type: 'hardBreak' }]
+      case 'inlineCode':
+        return [{ type: 'text', text: node.value, marks: [...marks, { type: 'code' }] }]
+      case 'strong':
+        return inlineNodes(node.children, [...marks, { type: 'bold' }])
+      case 'emphasis':
+        return inlineNodes(node.children, [...marks, { type: 'italic' }])
+      case 'delete':
+        return inlineNodes(node.children, [...marks, { type: 'strike' }])
+      case 'link':
+        return inlineNodes(node.children, [...marks, { type: 'link', attrs: { href: node.url } }])
+      default:
+        return [] // References, images and HTML were normalized before conversion.
+    }
+  })
 }
 
-function paragraphNode(spans: AnswerInsertSpan[]): TiptapContent {
-  const content = spansToTextNodes(spans)
-  return content.length > 0 ? { type: 'paragraph', content } : { type: 'paragraph' }
+function blockNodes(nodes: RootContent[]): TiptapContent[] {
+  return nodes.flatMap((node): TiptapContent[] => {
+    switch (node.type) {
+      case 'paragraph': {
+        const content = inlineNodes(node.children)
+        return [content.length ? { type: 'paragraph', content } : { type: 'paragraph' }]
+      }
+      case 'code':
+        return [
+          {
+            type: 'codeBlock',
+            ...(node.lang ? { attrs: { language: node.lang } } : {}),
+            ...(node.value ? { content: [{ type: 'text', text: node.value }] } : {}),
+          },
+        ]
+      case 'blockquote': {
+        const content = blockNodes(node.children)
+        return [{ type: 'blockquote', content: content.length ? content : [{ type: 'paragraph' }] }]
+      }
+      case 'list':
+        return [
+          {
+            type: node.ordered ? 'orderedList' : 'bulletList',
+            ...(node.ordered && node.start !== null && node.start !== undefined && node.start !== 1
+              ? { attrs: { start: node.start } }
+              : {}),
+            content: node.children.map((item) => ({
+              type: 'listItem',
+              content: blockNodes(item.children),
+            })),
+          },
+        ]
+      default:
+        return [] // Unsupported document structures were normalized to paragraphs.
+    }
+  })
 }
 
 export interface AnswerInsertContent {
-  /** The answer as composer nodes: one paragraph node per line (matching
-   *  textToParagraphs' line handling), one bulletList/orderedList node per
-   *  list block, and one codeBlock per fenced block. Never empty — an answer
-   *  that parses to nothing (e.g. only citation markers) yields a single
-   *  empty paragraph, same as inserting "". */
   nodes: TiptapContent[]
-  /** The matching markdown mirror (the composer's `content` field),
-   *  guaranteed consistent with `nodes` — both come from one pass. */
   markdown: string
 }
 
-/**
- * A Copilot answer (or a Format-chip transform of the teammate's own draft —
- * see `AnswerInsertOptions` for which strip rules apply to which path)
- * converted for the composer in a single pass: the markdown mirror is
- * prepared once (answerMarkdownForInsert) and the editor nodes are parsed
- * from it, rather than each side re-running the strip/parse.
- */
+/** Parse once for both the rich draft and its Markdown projection. */
 export function answerToInsertContent(
   text: string,
   options: AnswerInsertOptions = {}
 ): AnswerInsertContent {
-  const markdown = answerMarkdownForInsert(text, options)
-  const nodes: TiptapContent[] = []
-  for (const block of parseAnswerMarkdown(markdown)) {
-    if (block.kind === 'codeBlock') {
-      // StarterKit codeBlock: verbatim text, no inline parsing.
-      nodes.push(
-        block.text
-          ? { type: 'codeBlock', content: [{ type: 'text', text: block.text }] }
-          : { type: 'codeBlock' }
-      )
-      continue
-    }
-    if (block.kind === 'list') {
-      nodes.push({
-        type: block.ordered ? 'orderedList' : 'bulletList',
-        // StarterKit orderedList supports a start attribute; only a list that
-        // doesn't begin at 1 needs it spelled out.
-        ...(block.ordered && block.start !== undefined ? { attrs: { start: block.start } } : {}),
-        content: block.items.map((item) => ({
-          type: 'listItem',
-          content: [paragraphNode(item)],
-        })),
-      })
-      continue
-    }
-    for (const line of block.lines) nodes.push(paragraphNode(line))
-  }
-  return { nodes: nodes.length > 0 ? nodes : [{ type: 'paragraph' }], markdown }
+  const { tree, markdown } = prepareAnswerMarkdown(text, options)
+  const nodes = blockNodes(tree.children)
+  return { nodes: nodes.length ? nodes : [{ type: 'paragraph' }], markdown }
 }

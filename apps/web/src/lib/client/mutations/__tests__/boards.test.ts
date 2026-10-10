@@ -25,6 +25,7 @@ vi.mock('@tanstack/react-query', async () => {
 vi.mock('@/lib/server/functions/boards', () => ({
   createBoardFn: vi.fn(),
   updateBoardFn: vi.fn(),
+  updateBoardAccessFn: vi.fn(),
   deleteBoardFn: vi.fn(),
 }))
 
@@ -33,6 +34,9 @@ vi.mock('@/lib/client/queries/admin', () => ({
   adminQueries: {
     boardsForSettings: () => ({
       queryKey: ['admin', 'settings', 'boards'],
+    }),
+    boardsWithCounts: () => ({
+      queryKey: ['admin', 'boards', 'with-counts'],
     }),
   },
 }))
@@ -52,6 +56,9 @@ describe('board mutations cache invalidation', () => {
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['admin', 'settings', 'boards'],
     })
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['admin', 'boards', 'with-counts'],
+    })
   })
 
   it('useUpdateBoard.onSettled invalidates board list, detail, and admin settings caches', async () => {
@@ -69,6 +76,9 @@ describe('board mutations cache invalidation', () => {
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['admin', 'settings', 'boards'],
     })
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['admin', 'boards', 'with-counts'],
+    })
   })
 
   it('useDeleteBoard.onSettled invalidates both board list and admin settings caches', async () => {
@@ -80,6 +90,9 @@ describe('board mutations cache invalidation', () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['boards', 'list'] })
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['admin', 'settings', 'boards'],
+    })
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['admin', 'boards', 'with-counts'],
     })
   })
 
@@ -138,5 +151,14 @@ describe('board mutations cache invalidation', () => {
       name: 'Кириллица',
       slug: 'kirillica',
     })
+  })
+})
+
+describe('board settings mutations autosave', () => {
+  it('tags the update and access mutations as autosave so failures toast', async () => {
+    const { useUpdateBoard, useUpdateBoardAccess, useDeleteBoard } = await import('../boards')
+    expect((useUpdateBoard() as { meta?: unknown }).meta).toEqual({ autosave: true })
+    expect((useUpdateBoardAccess() as { meta?: unknown }).meta).toEqual({ autosave: true })
+    expect((useDeleteBoard() as { meta?: unknown }).meta).toBeUndefined()
   })
 })
