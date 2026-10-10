@@ -493,3 +493,65 @@ describe('createComment content holds', () => {
     expect(insertedComments[0]).toMatchObject({ moderationState: 'published' })
   })
 })
+
+describe('createComment — a post merged into another', () => {
+  beforeEach(() => {
+    insertedComments.length = 0
+    vi.clearAllMocks()
+  })
+
+  // The portal hides the comment box on a merged post, and the thread shows on
+  // the post it was merged into, so a direct call must not slip one in.
+  async function mockMergedPost() {
+    const { db } = await import('@/lib/server/db')
+    vi.mocked(db.query.posts.findFirst).mockResolvedValueOnce({
+      id: 'post_p',
+      title: 'P',
+      boardId: 'board_b',
+      statusId: 'post_status_open',
+      isCommentsLocked: false,
+      moderationState: 'published',
+      principalId: null,
+      canonicalPostId: 'post_canonical',
+      board: {
+        id: 'board_b',
+        slug: 'b',
+        deletedAt: null,
+        access: {
+          view: 'anonymous',
+          vote: 'anonymous',
+          comment: 'anonymous',
+          submit: 'anonymous',
+          segments: { view: [], vote: [], comment: [], submit: [] },
+          moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
+        },
+      },
+    } as unknown as Awaited<ReturnType<typeof db.query.posts.findFirst>>)
+  }
+
+  it('rejects a portal user and inserts nothing', async () => {
+    await mockMergedPost()
+    const { createComment } = await import('../comment.service')
+    await expect(
+      createComment(
+        { postId: 'post_p' as unknown as PostId, content: 'Hi' },
+        { principalId: 'principal_uv' as unknown as PrincipalId, role: 'user' },
+        portalActor,
+        { skipDispatch: true }
+      )
+    ).rejects.toThrow(/merged/i)
+    expect(insertedComments).toHaveLength(0)
+  })
+
+  it('still lets a team member comment', async () => {
+    await mockMergedPost()
+    const { createComment } = await import('../comment.service')
+    await createComment(
+      { postId: 'post_p' as unknown as PostId, content: 'Hi' },
+      { principalId: 'principal_admin' as unknown as PrincipalId, role: 'admin' },
+      teamActor,
+      { skipDispatch: true }
+    )
+    expect(insertedComments).toHaveLength(1)
+  })
+})

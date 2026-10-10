@@ -170,6 +170,9 @@ function tierDenyMessage(action: 'comment' | 'vote' | 'submit', tier: AccessTier
  * 3. On an `author-only` board, only the post's own author and team members
  *    may reply — everyone else reads the thread without being able to answer.
  * 4. If comments are locked, only team members may bypass.
+ * 5. If the post was merged into another, only team members may comment. Its
+ *    thread shows on the post it was merged into, which is where the portal
+ *    sends everyone else.
  *
  * On the allowed branch, `requiresApproval` is true when the actor is not
  * a team member AND the board's `moderation.comments` rule (resolved
@@ -177,7 +180,7 @@ function tierDenyMessage(action: 'comment' | 'vote' | 'submit', tier: AccessTier
  */
 export function canCreateComment(
   actor: Actor,
-  post: PostShape & { isCommentsLocked: boolean },
+  post: PostShape & { isCommentsLocked: boolean; isMerged: boolean },
   board: BoardShape,
   workspaceApproval: RequireApproval | undefined
 ): CommentCreateDecision {
@@ -205,6 +208,9 @@ export function canCreateComment(
   }
   if (post.isCommentsLocked && !isTeam(actor)) {
     return { allowed: false, reason: 'Comments are locked on this post' }
+  }
+  if (post.isMerged && !isTeam(actor)) {
+    return { allowed: false, reason: 'This post was merged into another post' }
   }
   return {
     allowed: true,
@@ -324,8 +330,8 @@ export function boardCapabilitiesForActor(
   const canSubmit = canCreatePost(actor, board, undefined).allowed
   // canVotePost / canCreateComment compose canViewPost; pass a published,
   // unauthored post so each decision reflects its own tier (callers already
-  // filtered to viewable). isCommentsLocked is a per-post UI concern, not a
-  // board capability, so it stays false here.
+  // filtered to viewable). isCommentsLocked and isMerged are per-post UI
+  // concerns, not board capabilities, so they stay false here.
   const canVote = canVotePost(
     actor,
     { moderationState: 'published', principalId: null },
@@ -338,7 +344,7 @@ export function boardCapabilitiesForActor(
   const { replyPolicy: _replyPolicy, ...commentAccess } = board.access
   const canComment = canCreateComment(
     actor,
-    { moderationState: 'published', principalId: null, isCommentsLocked: false },
+    { moderationState: 'published', principalId: null, isCommentsLocked: false, isMerged: false },
     { access: commentAccess },
     undefined
   ).allowed
@@ -360,10 +366,10 @@ export function boardCapabilitiesForActor(
  * the one input a board-level answer structurally cannot have: the post's own
  * author, which an `author-only` board's reply policy turns on.
  *
- * `isCommentsLocked` stays false here deliberately. The lock is surfaced by
- * its own UI affordance (the "comments are locked" notice), not by collapsing
- * the viewer's permission state — the write path re-checks it via
- * `canCreateComment` with the real flag.
+ * `isCommentsLocked` and `isMerged` stay false here deliberately. Each is
+ * surfaced by its own UI affordance (the "comments are locked" notice, the
+ * merge banner), not by collapsing the viewer's permission state — the write
+ * path re-checks both via `canCreateComment` with the real flags.
  *
  * Callers pass a post they have ALREADY proved viewable for this actor
  * (assertPostViewable / getPublicPostDetail); the inner view check is then a
@@ -377,7 +383,7 @@ export function canCommentOnPost(
 ): boolean {
   const allowed = canCreateComment(
     actor,
-    { ...post, isCommentsLocked: false },
+    { ...post, isCommentsLocked: false, isMerged: false },
     { access: normalizeBoardAccess(access) },
     undefined
   ).allowed
