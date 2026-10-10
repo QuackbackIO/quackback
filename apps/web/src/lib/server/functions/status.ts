@@ -692,14 +692,15 @@ export const getStatusSubscriptionCountsFn = createServerFn({ method: 'GET' }).h
 const addStatusSubscriberSchema = z.object({ email: z.string().trim().email() })
 
 /** Manually subscribe an existing account by email (admin add flow). 404s a
- *  clear message when no account matches; never creates a portal account. */
+ *  clear message when no account matches; never creates a portal account.
+ *  `subscribed: false` means the person had unsubscribed and was skipped. */
 export const addStatusSubscriberFn = createServerFn({ method: 'POST' })
   .validator(addStatusSubscriberSchema)
   .handler(async ({ data }) => {
     log.debug({ email: data.email }, 'add status subscriber')
     await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-    await addStatusSubscriberByEmail(data.email)
-    return { success: true }
+    const { subscribed } = await addStatusSubscriberByEmail(data.email)
+    return { success: true, subscribed }
   })
 
 const importStatusSubscribersSchema = z.object({
@@ -707,8 +708,9 @@ const importStatusSubscribersSchema = z.object({
 })
 
 /** Admin CSV bulk import of subscriber emails. Matches EXISTING accounts only;
- *  unmatched emails are reported as skipped (the consent copy is shown in the
- *  UI before this runs — the manage gate bounds who can reach it). */
+ *  unmatched emails, and people who unsubscribed, are reported as skipped
+ *  (the consent copy is shown in the UI before this runs — the manage gate
+ *  bounds who can reach it). */
 export const importStatusSubscribersFn = createServerFn({ method: 'POST' })
   .validator(importStatusSubscribersSchema)
   .handler(async ({ data }) => {

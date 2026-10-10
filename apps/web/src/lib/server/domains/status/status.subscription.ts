@@ -36,7 +36,9 @@ import type {
 const log = logger.child({ component: 'status-subscriptions' })
 
 /** Subscribe (or re-subscribe) a principal. Idempotent: clears a prior
- *  unsubscribe but always applies the new scope/componentIds/source. */
+ *  unsubscribe but always applies the new scope/componentIds/source. Only for
+ *  the person's own action (self-serve); admin paths use
+ *  `subscribeUnlessOptedOut`, which never overrides an opt-out. */
 export async function subscribe(
   principalId: PrincipalId,
   scope: StatusSubscriptionScope,
@@ -51,6 +53,26 @@ export async function subscribe(
       target: statusSubscriptions.principalId,
       set: { scope, componentIds, unsubscribedAt: null },
     })
+}
+
+/** Admin-side subscribe (manual add, CSV import), page-wide. Someone who
+ *  unsubscribed stays unsubscribed: the conflict update only applies to an
+ *  active row, so an opted-out row returns nothing. Returns whether the
+ *  person is now subscribed. */
+async function subscribeUnlessOptedOut(
+  principalId: PrincipalId,
+  source: StatusSubscriptionSource
+): Promise<boolean> {
+  const rows = await db
+    .insert(statusSubscriptions)
+    .values({ principalId, scope: 'page', componentIds: [], source, unsubscribedAt: null })
+    .onConflictDoUpdate({
+      target: statusSubscriptions.principalId,
+      set: { scope: 'page', componentIds: [] },
+      setWhere: isNull(statusSubscriptions.unsubscribedAt),
+    })
+    .returning({ id: statusSubscriptions.id })
+  return rows.length > 0
 }
 
 /** Soft opt-out — keeps the row (and its `source` provenance) for audit. */
@@ -173,8 +195,10 @@ export async function getStatusSubscriptionCounts(): Promise<StatusSubscriptionC
 
 /** Admin "add a subscriber" by a single email. Matches an EXISTING account
  *  (case-insensitive) and subscribes the principal page-wide; never creates a
- *  portal account. 404s a clear message when no account matches the email. */
-export async function addStatusSubscriberByEmail(email: string): Promise<void> {
+ *  portal account. 404s a clear message when no account matches the email.
+ *  Someone who unsubscribed is skipped, not re-subscribed: returns
+ *  `{ subscribed: false }`. */
+export async function addStatusSubscriberByEmail(email: string): Promise<{ subscribed: boolean }> {
   const normalized = email.trim().toLowerCase()
   const matched = await db
     .select({ principalId: principal.id })
@@ -188,25 +212,27 @@ export async function addStatusSubscriberByEmail(email: string): Promise<void> {
     throw new NotFoundError('STATUS_SUBSCRIBER_NOT_FOUND', 'No matching user for that email')
   }
 
-  await subscribe(row.principalId, 'page', [], 'admin')
+  return { subscribed: await subscribeUnlessOptedOut(row.principalId, 'admin') }
 }
 
 /**
  * Admin CSV bulk import of subscriber emails. Mirrors
  * `importChangelogSubscribersFromEmails`: normalize + dedupe, match EXISTING
  * accounts by lower(email), skip (never create) unmatched, and upsert each
- * match page-wide with the `csv_import` source. Returns the imported/skipped
- * tallies so the UI can surface the skipped count.
+ * match page-wide with the `csv_import` source. A matched person who
+ * unsubscribed is skipped too: an import never overrides an opt-out. Returns
+ * the tallies so the UI can say what was skipped and why.
  */
 export async function importStatusSubscribersFromEmails(
   emails: string[]
 ): Promise<StatusSubscriptionCsvImportResult> {
   const normalized = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))]
   if (normalized.length === 0) {
-    return { imported: 0, skipped: 0, total: 0 }
+    return { imported: 0, skipped: 0, optedOut: 0, total: 0 }
   }
 
   let imported = 0
+  let optedOut = 0
   for (const email of normalized) {
     const matched = await db
       .select({ principalId: principal.id })
@@ -218,11 +244,16 @@ export async function importStatusSubscribersFromEmails(
     const row = matched[0]
     if (!row) continue
 
-    await subscribe(row.principalId, 'page', [], 'csv_import')
-    imported++
+    if (await subscribeUnlessOptedOut(row.principalId, 'csv_import')) imported++
+    else optedOut++
   }
 
-  return { imported, skipped: normalized.length - imported, total: normalized.length }
+  return {
+    imported,
+    skipped: normalized.length - imported - optedOut,
+    optedOut,
+    total: normalized.length,
+  }
 }
 
 /** Full unpaginated subscriber set for the admin CSV export — the same

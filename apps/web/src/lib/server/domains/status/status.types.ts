@@ -271,6 +271,8 @@ export interface StatusSubscriptionCsvImportResult {
   imported: number
   /** Emails that didn't match an existing user account. */
   skipped: number
+  /** Matched people who had unsubscribed; left unsubscribed. */
+  optedOut: number
   total: number
 }
 
