@@ -268,8 +268,8 @@ function AddSubscribersDialog() {
         <DialogHeader>
           <DialogTitle>New subscriber</DialogTitle>
           <DialogDescription>
-            Subscribe existing accounts to status updates. Emails without a matching account are
-            skipped; no new accounts are created.
+            Subscribe existing accounts to status updates. Emails without a matching account, and
+            people who unsubscribed, are skipped; no new accounts are created.
           </DialogDescription>
         </DialogHeader>
 
@@ -299,8 +299,12 @@ function AddByEmailTab({ onDone }: { onDone: () => void }) {
     const trimmed = email.trim()
     if (!trimmed) return
     try {
-      await addMutation.mutateAsync(trimmed)
-      toast.success(`Subscribed ${trimmed}.`)
+      const result = await addMutation.mutateAsync(trimmed)
+      if (result.subscribed) {
+        toast.success(`Subscribed ${trimmed}.`)
+      } else {
+        toast.info(`Skipped ${trimmed}: they unsubscribed from status updates.`)
+      }
       setEmail('')
       onDone()
     } catch (error) {
@@ -366,7 +370,8 @@ function CsvImportTab({ onDone }: { onDone: () => void }) {
       const result = await importMutation.mutateAsync(emails)
       toast.success(
         `Imported ${result.imported}.` +
-          (result.skipped > 0 ? ` Skipped ${result.skipped} without a matching account.` : '')
+          (result.skipped > 0 ? ` Skipped ${result.skipped} without a matching account.` : '') +
+          (result.optedOut > 0 ? ` Skipped ${result.optedOut} who unsubscribed.` : '')
       )
       onDone()
     } catch (err) {

@@ -7,5 +7,10 @@ export type { StatusComponentData, StatusComponentGroupData } from './status-com
 export { StatusIncidentCard } from './status-incident-card'
 export type { StatusIncidentCardData } from './status-incident-card'
 export { StatusIncidentTimeline } from './status-incident-timeline'
+export {
+  StatusIncidentTiming,
+  formatMaintenanceWindow,
+  statusIncidentDate,
+} from './status-incident-timing'
 export type { StatusIncidentTimelineUpdate } from './status-incident-timeline'
 export { StatusSubscribeButton } from './status-subscribe-button'

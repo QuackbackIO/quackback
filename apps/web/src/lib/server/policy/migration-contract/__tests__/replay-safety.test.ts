@@ -307,6 +307,9 @@ describe('the real corpus', () => {
     // migration regression also verifies existing parent rows and constraint OIDs.
     // 0295 marks a settings row only while its metadata lacks brandingLookup,
     // so a second run writes zero rows.
+    // 0298 moves a maintenance started_at only while it is earlier than the
+    // window's first start update (or, with none, its scheduled start), and
+    // leaves the two equal, so a second run writes zero rows.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -332,6 +335,7 @@ describe('the real corpus', () => {
       '0294_workspace_copilot.sql',
       '0295_website_branding_existing_workspaces.sql',
       '0296_validate_workspace_copilot_checks.sql',
+      '0298_status_maintenance_started_at.sql',
     ])
   })
 

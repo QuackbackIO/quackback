@@ -18,6 +18,7 @@ import type { StatusComponentId, StatusIncidentId } from '@quackback/ids'
 // --- Mock tracking for status.components.ts ---
 const mockSelectWhere = vi.fn()
 const mockComponentFindFirst = vi.fn()
+const mockLockMode = vi.fn()
 const mockUpdateSet = vi.fn()
 const mockInsertValues = vi.fn()
 
@@ -26,6 +27,19 @@ function createSelectChain() {
   chain.from = vi.fn(() => chain)
   chain.innerJoin = vi.fn(() => chain)
   chain.where = vi.fn((...args: unknown[]) => mockSelectWhere(...args))
+  return chain
+}
+
+/** The component lookup, which locks the row (`select().from().where().for('update')`). */
+function createLockedLookupChain() {
+  const chain: Record<string, unknown> = {}
+  chain.from = vi.fn(() => chain)
+  chain.where = vi.fn(() => chain)
+  chain.for = vi.fn(async (mode: unknown) => {
+    mockLockMode(mode)
+    const component = await mockComponentFindFirst()
+    return component ? [component] : []
+  })
   return chain
 }
 
@@ -52,10 +66,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   return {
     ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
-      select: () => createSelectChain(),
-      query: {
-        statusComponents: { findFirst: (...args: unknown[]) => mockComponentFindFirst(...args) },
-      },
+      // A bare select() is the locked component lookup; select({ status })
+      // reads the active links.
+      select: (fields?: unknown) => (fields ? createSelectChain() : createLockedLookupChain()),
       update: () => createUpdateChain(),
       insert: () => createInsertChain(),
     },
@@ -75,6 +88,25 @@ const INCIDENT_B = 'status_incident_b' as StatusIncidentId
 describe('reconcileComponentStatus', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('locks the component row before reading which incidents hold it', async () => {
+    // Two writes sharing a component must serialise on it: the second reads
+    // the active links only after the first has committed.
+    const order: string[] = []
+    mockComponentFindFirst.mockImplementation(async () => {
+      order.push('lock')
+      return { id: COMPONENT_ID, name: 'API', status: 'operational' }
+    })
+    mockSelectWhere.mockImplementation(async () => {
+      order.push('read active links')
+      return []
+    })
+
+    await reconcileComponentStatus(COMPONENT_ID, 'incident', INCIDENT_A)
+
+    expect(mockLockMode).toHaveBeenCalledWith('update')
+    expect(order).toEqual(['lock', 'read active links'])
   })
 
   it('(a) resolving one of two overlapping incidents keeps the component non-operational', async () => {

@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
-import { Cog6ToothIcon, EnvelopeIcon } from '@heroicons/react/24/outline'
+import { Cog6ToothIcon, EnvelopeIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import type { StatusIncidentId } from '@quackback/ids'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,6 +25,7 @@ import { useFormatNumber } from '@/components/ui/format-number'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { ModalFooter } from '@/components/shared/modal-footer'
+import { EmptyState } from '@/components/shared/empty-state'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
@@ -85,6 +86,12 @@ function detailsFromIncident(incident: StatusIncidentAdminDetail): DetailsState 
   }
 }
 
+/** A window's end must come after its start (the server rejects it too). */
+function windowInOrder(details: Pick<DetailsState, 'scheduledStart' | 'scheduledEnd'>): boolean {
+  const { scheduledStart, scheduledEnd } = details
+  return !scheduledStart || !scheduledEnd || scheduledEnd.getTime() > scheduledStart.getTime()
+}
+
 function formatDuration(startIso: string, endIso: string | null): string {
   const start = new Date(startIso).getTime()
   const end = endIso ? new Date(endIso).getTime() : Date.now()
@@ -113,7 +120,13 @@ function StatusIncidentEditorContent({
   incidentId: StatusIncidentId
   onClose: () => void
 }) {
-  const { data: incident, isLoading } = useQuery(statusIncidentQueries.detail(incidentId))
+  const {
+    data: incident,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useQuery(statusIncidentQueries.detail(incidentId))
   const updateMutation = useUpdateStatusIncident()
   const postMutation = usePostStatusIncidentUpdate()
 
@@ -140,6 +153,7 @@ function StatusIncidentEditorContent({
   const { mutateAsync: saveDetailsAsync } = updateMutation
   async function flushSave(next: DetailsState, kind: 'incident' | 'maintenance') {
     if (next.title.trim().length === 0 || next.affected.length === 0) return
+    if (kind === 'maintenance' && !windowInOrder(next)) return
     setSaveState('saving')
     try {
       await saveDetailsAsync({
@@ -192,13 +206,31 @@ function StatusIncidentEditorContent({
   async function handlePost() {
     if (!incident || !body.trim() || postMutation.isPending) return
     try {
-      await postMutation.mutateAsync({
+      const posted = await postMutation.mutateAsync({
         id: incidentId,
         status: effectiveTarget,
         body: body.trim(),
         skipRestore: terminal ? !restore : undefined,
         ...(templateId ? { templateId } : {}),
       })
+      // Starting, reopening or moving a window back can move its start bound
+      // or switch its automation off server-side. Take those into the
+      // sidebar, or the next autosave would write the stale values back.
+      if (posted.kind === 'maintenance') {
+        setDetails((prev) =>
+          prev
+            ? {
+                ...prev,
+                scheduledStart: posted.scheduledStartAt
+                  ? new Date(posted.scheduledStartAt)
+                  : undefined,
+                scheduledEnd: posted.scheduledEndAt ? new Date(posted.scheduledEndAt) : undefined,
+                autoStart: posted.autoStart,
+                autoComplete: posted.autoComplete,
+              }
+            : prev
+        )
+      }
       setBody('')
       setRestore(true)
       setTemplateId(null)
@@ -210,6 +242,32 @@ function StatusIncidentEditorContent({
   }
 
   const handleKeyDown = useKeyboardSubmit(handlePost)
+
+  // A failed load would otherwise spin forever; say so and offer a retry.
+  if (isError && !incident) {
+    return (
+      <EditorUnavailable
+        onClose={onClose}
+        title="Couldn't load this incident"
+        description="Something went wrong loading it. Check your connection and try again."
+        action={
+          <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+            {isFetching ? 'Retrying…' : 'Try again'}
+          </Button>
+        }
+      />
+    )
+  }
+
+  if (incident === null) {
+    return (
+      <EditorUnavailable
+        onClose={onClose}
+        title="Incident not found"
+        description="It may have been deleted, or the link is wrong."
+      />
+    )
+  }
 
   if (isLoading || !incident || !details) {
     return (
@@ -233,7 +291,9 @@ function StatusIncidentEditorContent({
         ? 'Post update & resolve'
         : effectiveTarget === 'completed'
           ? 'Post update & complete'
-          : `Post update & mark as ${LIFECYCLE_LABELS[effectiveTarget]}`
+          : currentStatus && isTerminalLifecycle(currentStatus)
+            ? `Post update & reopen as ${LIFECYCLE_LABELS[effectiveTarget]}`
+            : `Post update & mark as ${LIFECYCLE_LABELS[effectiveTarget]}`
 
   const sidebar = (
     <EditorSidebarContent
@@ -306,9 +366,11 @@ function StatusIncidentEditorContent({
               <EnvelopeIcon className="h-3.5 w-3.5 mt-px shrink-0" />
               {incident.backfilled
                 ? 'Backfilled incident: subscribers were never emailed.'
-                : incident.notifiedAt
-                  ? 'Subscribers were emailed once, when this was published. Updates appear on the status page and in-app.'
-                  : 'Subscribers are emailed once at publish. Updates appear on the status page and in-app.'}
+                : !incident.notifySubscribers
+                  ? 'Subscribers were not emailed: "Email subscribers" was off when this was published. Updates appear on the status page and in-app.'
+                  : incident.notifiedAt
+                    ? 'Subscribers were emailed once, when this was published. Updates appear on the status page and in-app.'
+                    : 'Subscribers are emailed once at publish. Updates appear on the status page and in-app.'}
             </p>
           </div>
 
@@ -348,6 +410,31 @@ function StatusIncidentEditorContent({
           </SheetContent>
         </Sheet>
       </ModalFooter>
+    </div>
+  )
+}
+
+function EditorUnavailable({
+  onClose,
+  title,
+  description,
+  action,
+}: {
+  onClose: () => void
+  title: string
+  description: string
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      <ModalHeader section="Incidents" title={title} onClose={onClose} hideCopyLink />
+      <EmptyState
+        icon={ExclamationTriangleIcon}
+        title={title}
+        description={description}
+        action={action}
+        className="flex-1"
+      />
     </div>
   )
 }
@@ -455,6 +542,11 @@ function EditorSidebarContent({
                 onChange={(d) => onPatch({ scheduledEnd: d })}
               />
             </div>
+            {!windowInOrder(details) && (
+              <p className="text-[11px] text-destructive">
+                The end must be after the start. Changes are not saved until it is.
+              </p>
+            )}
             <label className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
               Auto-start at scheduled time
               <Switch
@@ -487,14 +579,21 @@ function EditorSidebarContent({
       </SideSection>
 
       <SideSection label="Started">
-        <p className="text-sm">
-          <TimeAgo date={incident.startedAt} />
-        </p>
-        <p className="text-[11px] text-muted-foreground">
-          {incident.resolvedAt
-            ? `Lasted ${formatDuration(incident.startedAt, incident.resolvedAt)}`
-            : `Ongoing for ${formatDuration(incident.startedAt, null)}`}
-        </p>
+        {incident.kind === 'maintenance' && incident.status === 'scheduled' ? (
+          // Until a window starts, startedAt only holds its planned start.
+          <p className="text-sm text-muted-foreground">Not started yet</p>
+        ) : (
+          <>
+            <p className="text-sm">
+              <TimeAgo date={incident.startedAt} />
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {incident.resolvedAt
+                ? `Lasted ${formatDuration(incident.startedAt, incident.resolvedAt)}`
+                : `Ongoing for ${formatDuration(incident.startedAt, null)}`}
+            </p>
+          </>
+        )}
       </SideSection>
 
       <SideSection label="Title">
@@ -566,6 +665,11 @@ function IncidentTimeline({ incident }: { incident: StatusIncidentAdminDetail })
                   {typeof incident.notifiedSubscriberCount === 'number' &&
                     incident.notifiedSubscriberCount > 0 &&
                     ` · emailed ~${formatNumber(incident.notifiedSubscriberCount)} subscribers`}
+                </span>
+              )}
+              {isPublishRow && !incident.notifySubscribers && !incident.backfilled && (
+                <span className="inline-flex items-center gap-1.5 mt-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  Published · subscribers not emailed
                 </span>
               )}
               {isPublishRow && incident.backfilled && (

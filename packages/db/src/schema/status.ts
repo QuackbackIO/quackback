@@ -26,11 +26,7 @@ import { principal } from './auth'
 
 /** Component status values (industry-standard 5-state model). */
 export type StatusComponentStatus =
-  | 'operational'
-  | 'degraded_performance'
-  | 'partial_outage'
-  | 'major_outage'
-  | 'under_maintenance'
+  'operational' | 'degraded_performance' | 'partial_outage' | 'major_outage' | 'under_maintenance'
 
 /** Incident lifecycle. Maintenance rows use the maintenance lifecycle instead. */
 export type StatusIncidentStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved'
@@ -119,6 +115,10 @@ export const statusIncidents = pgTable(
     backfilled: boolean('backfilled').default(false).notNull(),
     // Publish-email claim column (changelog notify pattern); null until sent.
     notifiedAt: timestamp('notified_at', { withTimezone: true }),
+    // The publisher's "Email subscribers" choice. False means the publish
+    // email is never sent, so notified_at stays null rather than recording a
+    // send that didn't happen.
+    notifySubscribers: boolean('notify_subscribers').default(true).notNull(),
     createdBy: typeIdColumnNullable('principal')('created_by').references(() => principal.id, {
       onDelete: 'set null',
     }),

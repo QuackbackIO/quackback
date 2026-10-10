@@ -38,6 +38,7 @@ import {
   deleteIncident,
   clearStatusHistory,
   getStatusIncidentById,
+  findStatusIncidentById,
   listStatusIncidents,
   countStatusIncidentsSince,
   countStatusSubscriptionsSince,
@@ -146,7 +147,8 @@ function serializeSnapshot(snapshot: StatusPageSnapshot) {
 }
 
 // ============================================================================
-// Admin: Components / Groups (gate: STATUS_PAGE_MANAGE)
+// Admin: Components / Groups (gate: STATUS_PAGE_MANAGE, except the
+// publish-gated picker list)
 // ============================================================================
 
 export const listStatusComponentsAdminFn = createServerFn({ method: 'GET' }).handler(async () => {
@@ -156,6 +158,23 @@ export const listStatusComponentsAdminFn = createServerFn({ method: 'GET' }).han
     listUngroupedStatusComponents(),
   ])
   return { groups, ungrouped }
+})
+
+/** Read-only service list for the incident composers' affected-services
+ *  picker. Gated on STATUS_PAGE_PUBLISH (not manage) so anyone who can report
+ *  an incident can choose what it affects; id + name only, nothing a
+ *  publisher couldn't already see on the overview. */
+export const listStatusComponentChoicesFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
+  const [groups, ungrouped] = await Promise.all([
+    listStatusComponentGroupsWithComponents(),
+    listUngroupedStatusComponents(),
+  ])
+  const choice = (c: { id: StatusComponentId; name: string }) => ({ id: c.id, name: c.name })
+  return {
+    groups: groups.map((g) => ({ id: g.id, name: g.name, components: g.components.map(choice) })),
+    ungrouped: ungrouped.map(choice),
+  }
 })
 
 const createStatusComponentSchema = z.object({
@@ -429,7 +448,11 @@ export const getStatusIncidentAdminFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ incident_id: data.id }, 'get status incident admin')
     await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
-    const incident = await getStatusIncidentById(data.id as StatusIncidentId)
+    // null, not a thrown 404, for an incident that was deleted or never
+    // existed: the editor shows that as "not found" and keeps its error state
+    // (with retry) for failures that are worth retrying.
+    const incident = await findStatusIncidentById(data.id as StatusIncidentId)
+    if (!incident) return null
 
     // Approximate "emailed N subscribers" for the editor's publish marker.
     // The recipient count is not persisted at publish time (the claim only
@@ -674,14 +697,15 @@ export const getStatusSubscriptionCountsFn = createServerFn({ method: 'GET' }).h
 const addStatusSubscriberSchema = z.object({ email: z.string().trim().email() })
 
 /** Manually subscribe an existing account by email (admin add flow). 404s a
- *  clear message when no account matches; never creates a portal account. */
+ *  clear message when no account matches; never creates a portal account.
+ *  `subscribed: false` means the person had unsubscribed and was skipped. */
 export const addStatusSubscriberFn = createServerFn({ method: 'POST' })
   .validator(addStatusSubscriberSchema)
   .handler(async ({ data }) => {
     log.debug({ email: data.email }, 'add status subscriber')
     await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-    await addStatusSubscriberByEmail(data.email)
-    return { success: true }
+    const { subscribed } = await addStatusSubscriberByEmail(data.email)
+    return { success: true, subscribed }
   })
 
 const importStatusSubscribersSchema = z.object({
@@ -689,8 +713,9 @@ const importStatusSubscribersSchema = z.object({
 })
 
 /** Admin CSV bulk import of subscriber emails. Matches EXISTING accounts only;
- *  unmatched emails are reported as skipped (the consent copy is shown in the
- *  UI before this runs — the manage gate bounds who can reach it). */
+ *  unmatched emails, and people who unsubscribed, are reported as skipped
+ *  (the consent copy is shown in the UI before this runs — the manage gate
+ *  bounds who can reach it). */
 export const importStatusSubscribersFn = createServerFn({ method: 'POST' })
   .validator(importStatusSubscribersSchema)
   .handler(async ({ data }) => {

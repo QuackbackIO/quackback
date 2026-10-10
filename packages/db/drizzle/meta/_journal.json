@@ -1926,6 +1926,20 @@
       "when": 1791000200000,
       "tag": "0297_onboarding_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 275,
+      "version": "7",
+      "when": 1791000300000,
+      "tag": "0298_status_maintenance_started_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 276,
+      "version": "7",
+      "when": 1791000400000,
+      "tag": "0299_status_incident_notify_subscribers",
+      "breakpoints": true
     }
   ]
 }

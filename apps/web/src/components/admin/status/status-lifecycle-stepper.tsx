@@ -12,6 +12,7 @@ import { cn } from '@/lib/shared/utils'
 import {
   LIFECYCLE_COLORS,
   LIFECYCLE_LABELS,
+  isTerminalLifecycle,
   lifecycleValuesForKind,
   type StatusIncidentKind,
   type StatusIncidentLifecycle,
@@ -47,6 +48,8 @@ export function StatusLifecycleStepper({
 }: StatusLifecycleStepperProps) {
   const stages = lifecycleValuesForKind(kind)
   const currentIndex = stages.indexOf(current)
+  // Picking an earlier stage on a resolved/completed row reopens it.
+  const reopening = isTerminalLifecycle(current) && stages.indexOf(target) < currentIndex
 
   return (
     <div className="flex items-start" role="radiogroup" aria-label="Lifecycle stage">
@@ -114,7 +117,9 @@ export function StatusLifecycleStepper({
               {isCurrent
                 ? 'current'
                 : isTarget
-                  ? 'next update posts here'
+                  ? reopening
+                    ? 'reopens here'
+                    : 'next update posts here'
                   : (isDone && reachedAt?.[stage] && shortTime(reachedAt[stage])) || ' '}
             </span>
           </button>

@@ -13,6 +13,7 @@ import {
   asc,
   gte,
   ilike,
+  inArray,
   lt,
   or,
   sql,
@@ -22,6 +23,8 @@ import {
   statusComponents,
   statusComponentEvents,
   statusIncidentTemplates,
+  type Database,
+  type Transaction,
 } from '@/lib/server/db'
 import type {
   StatusIncidentId,
@@ -33,7 +36,7 @@ import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { buildEventActor, type EventActor } from '@/lib/server/events/dispatch'
 import { deriveImpact } from './status.calc'
-import { reconcileComponentStatus, dispatchStatusEvent } from './status.components'
+import { reconcileComponentStatuses, dispatchStatusEvent } from './status.components'
 import { enqueueMaintenanceJobs, cancelMaintenanceJobs } from './status.maintenance'
 import type {
   CreateStatusIncidentInput,
@@ -45,10 +48,12 @@ import type {
   StatusIncidentTemplateRow,
   ListStatusIncidentsParams,
   StatusIncidentListResult,
-  StatusComponentStatus,
 } from './status.types'
 
 const log = logger.child({ component: 'status-service' })
+
+/** The global handle, or the transaction a lifecycle write is running in. */
+type Executor = Database | Transaction
 
 function validateTitle(title: string): string {
   const trimmed = title.trim()
@@ -63,6 +68,34 @@ function validateBody(body: string): string {
   const trimmed = body.trim()
   if (!trimmed) throw new ValidationError('VALIDATION_ERROR', 'Update body is required')
   return trimmed
+}
+
+const LIFECYCLE_STATUSES: Record<'incident' | 'maintenance', readonly string[]> = {
+  incident: ['investigating', 'identified', 'monitoring', 'resolved'],
+  maintenance: ['scheduled', 'in_progress', 'verifying', 'completed'],
+}
+
+/** The two kinds share one status column but not one vocabulary: a
+ *  maintenance status on an incident (or the reverse) would never match any
+ *  lifecycle check and strand the row, so reject it as bad input. */
+function assertStatusMatchesKind(kind: 'incident' | 'maintenance', status: string): void {
+  const allowed = LIFECYCLE_STATUSES[kind]
+  if (allowed.includes(status)) return
+  throw new ValidationError(
+    'VALIDATION_ERROR',
+    `"${status}" is not ${kind === 'incident' ? 'an incident' : 'a maintenance'} status. Use one of: ${allowed.join(', ')}.`
+  )
+}
+
+/** A window must end after it starts. Checked server-side so the API and a
+ *  stale editor can't store a window that auto-completes before it begins. */
+function assertWindowOrder(start: Date | null | undefined, end: Date | null | undefined): void {
+  if (start && end && end.getTime() <= start.getTime()) {
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      'The scheduled end must be after the scheduled start'
+    )
+  }
 }
 
 /** A maintenance row applies its component statuses at window start
@@ -80,6 +113,26 @@ function appliesComponentStatusNow(input: {
   return true
 }
 
+/** Whether a row in this status holds its services at their affected status.
+ *  Mirrors the active-set filter in reconcileComponentStatus's query. */
+function holdsComponents(kind: string, status: string): boolean {
+  if (kind === 'incident') return status !== 'resolved'
+  return status === 'in_progress' || status === 'verifying'
+}
+
+/** The subset of `ids` that are live (not soft-deleted) services. */
+async function liveComponentIds(
+  ids: StatusComponentId[],
+  executor: Executor
+): Promise<Set<StatusComponentId>> {
+  if (ids.length === 0) return new Set()
+  const rows = await executor
+    .select({ id: statusComponents.id })
+    .from(statusComponents)
+    .where(and(inArray(statusComponents.id, ids), isNull(statusComponents.deletedAt)))
+  return new Set(rows.map((r) => r.id))
+}
+
 // ============================================================================
 // Create
 // ============================================================================
@@ -90,6 +143,7 @@ export async function createIncident(
 ): Promise<StatusIncidentWithDetails> {
   const title = validateTitle(input.title)
   const body = validateBody(input.body)
+  assertStatusMatchesKind(input.kind, input.status)
   if (input.affectedComponents.length === 0) {
     throw new ValidationError('VALIDATION_ERROR', 'At least one affected component is required')
   }
@@ -103,61 +157,96 @@ export async function createIncident(
         ? (input.impact ?? 'none')
         : deriveImpact(componentStatuses)
 
-  const startedAt = input.backfill?.startedAt ?? new Date()
-  const resolvedAt = input.backfill?.resolvedAt ?? null
-
-  const [incident] = await db
-    .insert(statusIncidents)
-    .values({
-      kind: input.kind,
-      title,
-      status: input.status,
-      impact,
-      impactOverride: input.kind === 'incident' && !!input.impactOverride,
-      scheduledStartAt: input.scheduledStartAt ?? null,
-      scheduledEndAt: input.scheduledEndAt ?? null,
-      autoStart: input.autoStart ?? true,
-      autoComplete: input.autoComplete ?? true,
-      startedAt,
-      resolvedAt,
-      backfilled,
-      createdBy: author.principalId,
-    })
-    .returning()
-
-  await db.insert(statusIncidentComponents).values(
-    input.affectedComponents.map((c) => ({
-      incidentId: incident.id,
-      componentId: c.componentId,
-      componentStatus: c.componentStatus,
-    }))
-  )
-
-  await db.insert(statusIncidentUpdates).values({
-    incidentId: incident.id,
-    status: input.status,
-    body,
-    createdBy: author.principalId,
-    templateId: input.templateId ?? null,
-  })
-
-  if (appliesComponentStatusNow({ kind: incident.kind, status: incident.status, backfilled })) {
-    const source = incident.kind === 'incident' ? 'incident' : 'maintenance'
-    for (const c of input.affectedComponents) {
-      await reconcileComponentStatus(c.componentId, source, incident.id)
-    }
+  assertWindowOrder(input.scheduledStartAt, input.scheduledEndAt)
+  if (input.backfill && input.backfill.resolvedAt.getTime() <= input.backfill.startedAt.getTime()) {
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      'A past incident must be resolved after it started'
+    )
   }
 
+  // started_at is when the row actually started. A window still 'scheduled'
+  // hasn't, so until it does the column (NOT NULL) holds its planned start;
+  // handleMaintenanceStart / a manual start overwrite it with the real one.
+  const startedAt =
+    input.backfill?.startedAt ??
+    (input.kind === 'maintenance' && input.status === 'scheduled' && input.scheduledStartAt
+      ? input.scheduledStartAt
+      : new Date())
+  const resolvedAt = input.backfill?.resolvedAt ?? null
+
+  // One transaction: the row, its links, the first update and the component
+  // statuses it applies land together or not at all, so a failure part-way
+  // can't leave a published incident with no timeline or no services.
+  const incident = await db.transaction(async (tx) => {
+    const requested = input.affectedComponents.map((c) => c.componentId)
+    const live = await liveComponentIds(requested, tx)
+    if (requested.some((id) => !live.has(id))) {
+      throw new ValidationError(
+        'VALIDATION_ERROR',
+        'An affected service no longer exists. Refresh the page and choose the services again.'
+      )
+    }
+
+    const [created] = await tx
+      .insert(statusIncidents)
+      .values({
+        kind: input.kind,
+        title,
+        status: input.status,
+        impact,
+        impactOverride: input.kind === 'incident' && !!input.impactOverride,
+        scheduledStartAt: input.scheduledStartAt ?? null,
+        scheduledEndAt: input.scheduledEndAt ?? null,
+        autoStart: input.autoStart ?? true,
+        autoComplete: input.autoComplete ?? true,
+        startedAt,
+        resolvedAt,
+        backfilled,
+        notifySubscribers: !backfilled && (input.notifySubscribers ?? true),
+        createdBy: author.principalId,
+      })
+      .returning()
+
+    await tx.insert(statusIncidentComponents).values(
+      input.affectedComponents.map((c) => ({
+        incidentId: created.id,
+        componentId: c.componentId,
+        componentStatus: c.componentStatus,
+      }))
+    )
+
+    await tx.insert(statusIncidentUpdates).values({
+      incidentId: created.id,
+      status: input.status,
+      body,
+      createdBy: author.principalId,
+      templateId: input.templateId ?? null,
+    })
+
+    if (appliesComponentStatusNow({ kind: created.kind, status: created.status, backfilled })) {
+      const source = created.kind === 'incident' ? 'incident' : 'maintenance'
+      await reconcileComponentStatuses(
+        input.affectedComponents.map((c) => c.componentId),
+        source,
+        created.id,
+        tx
+      )
+    }
+    return created
+  })
+
+  // Jobs and the publish notification reach outside this database, so they
+  // run only once the rows above are committed.
   if (incident.kind === 'maintenance') {
     await enqueueMaintenanceJobs(incident).catch((err) =>
       log.error({ err, incident_id: incident.id }, 'failed to enqueue maintenance jobs')
     )
   }
 
-  if (!backfilled) {
+  if (incident.notifySubscribers) {
     const actor = buildEventActor({ principalId: author.principalId })
-    const notify = input.notifySubscribers ?? true
-    notifyStatusIncidentPublished(incident.id, actor, notify).catch((err) =>
+    notifyStatusIncidentPublished(incident.id, actor).catch((err) =>
       log.error({ err, incident_id: incident.id }, 'failed to dispatch status publish event')
     )
   }
@@ -182,36 +271,81 @@ export async function updateIncident(
   if (input.autoStart !== undefined) updateData.autoStart = input.autoStart
   if (input.autoComplete !== undefined) updateData.autoComplete = input.autoComplete
 
-  let newComponentStatuses: StatusComponentStatus[] | null = null
-  if (input.affectedComponents !== undefined) {
-    if (input.affectedComponents.length === 0) {
-      throw new ValidationError('VALIDATION_ERROR', 'At least one affected component is required')
-    }
-    newComponentStatuses = input.affectedComponents.map((c) => c.componentStatus)
+  if (input.affectedComponents !== undefined && input.affectedComponents.length === 0) {
+    throw new ValidationError('VALIDATION_ERROR', 'At least one affected component is required')
   }
-
+  if (input.scheduledStartAt !== undefined || input.scheduledEndAt !== undefined) {
+    assertWindowOrder(
+      input.scheduledStartAt !== undefined ? input.scheduledStartAt : existing.scheduledStartAt,
+      input.scheduledEndAt !== undefined ? input.scheduledEndAt : existing.scheduledEndAt
+    )
+  }
+  // A window that hasn't started keeps its planned start in started_at, so a
+  // reschedule moves it along.
+  if (
+    existing.kind === 'maintenance' &&
+    existing.status === 'scheduled' &&
+    input.scheduledStartAt
+  ) {
+    updateData.startedAt = input.scheduledStartAt
+  }
   if (input.impactOverride !== undefined) {
     updateData.impactOverride = existing.kind === 'incident' && input.impactOverride
   }
   const impactOverride =
     (updateData.impactOverride as boolean | undefined) ?? existing.impactOverride
-  if (existing.kind === 'incident') {
-    if (impactOverride && input.impact !== undefined) {
-      updateData.impact = input.impact
-    } else if (!impactOverride && newComponentStatuses) {
-      updateData.impact = deriveImpact(newComponentStatuses)
+
+  await db.transaction(async (tx) => {
+    // A link to a service deleted since is history: it stays as it is, and a
+    // stale editor that sends the deleted service back doesn't relink it.
+    let previousLinks: { componentId: StatusComponentId }[] = []
+    let nextComponents = input.affectedComponents
+    let live = new Set<StatusComponentId>()
+    if (input.affectedComponents !== undefined) {
+      previousLinks = await tx.query.statusIncidentComponents.findMany({
+        where: eq(statusIncidentComponents.incidentId, id),
+      })
+      live = await liveComponentIds(
+        [
+          ...new Set([
+            ...previousLinks.map((link) => link.componentId),
+            ...input.affectedComponents.map((c) => c.componentId),
+          ]),
+        ],
+        tx
+      )
+      nextComponents = input.affectedComponents.filter((c) => live.has(c.componentId))
+      if (nextComponents.length === 0) {
+        throw new ValidationError('VALIDATION_ERROR', 'At least one affected component is required')
+      }
     }
-  }
 
-  await db.update(statusIncidents).set(updateData).where(eq(statusIncidents.id, id))
+    if (existing.kind === 'incident') {
+      if (impactOverride && input.impact !== undefined) {
+        updateData.impact = input.impact
+      } else if (!impactOverride && nextComponents) {
+        updateData.impact = deriveImpact(nextComponents.map((c) => c.componentStatus))
+      }
+    }
 
-  if (input.affectedComponents !== undefined) {
-    const previousLinks = await db.query.statusIncidentComponents.findMany({
-      where: eq(statusIncidentComponents.incidentId, id),
-    })
-    await db.delete(statusIncidentComponents).where(eq(statusIncidentComponents.incidentId, id))
-    await db.insert(statusIncidentComponents).values(
-      input.affectedComponents.map((c) => ({
+    await tx.update(statusIncidents).set(updateData).where(eq(statusIncidents.id, id))
+
+    if (nextComponents === undefined) return
+    const replaced = previousLinks
+      .map((link) => link.componentId)
+      .filter((componentId) => live.has(componentId))
+    if (replaced.length > 0) {
+      await tx
+        .delete(statusIncidentComponents)
+        .where(
+          and(
+            eq(statusIncidentComponents.incidentId, id),
+            inArray(statusIncidentComponents.componentId, replaced)
+          )
+        )
+    }
+    await tx.insert(statusIncidentComponents).values(
+      nextComponents.map((c) => ({
         incidentId: id,
         componentId: c.componentId,
         componentStatus: c.componentStatus,
@@ -228,14 +362,12 @@ export async function updateIncident(
     if (nowLive) {
       const source = existing.kind === 'incident' ? 'incident' : 'maintenance'
       const affected = new Set([
-        ...previousLinks.map((link) => link.componentId),
-        ...input.affectedComponents.map((component) => component.componentId),
+        ...replaced,
+        ...nextComponents.map((component) => component.componentId),
       ])
-      for (const componentId of affected) {
-        await reconcileComponentStatus(componentId, source, id)
-      }
+      await reconcileComponentStatuses(affected, source, id, tx)
     }
-  }
+  })
 
   if (
     existing.kind === 'maintenance' &&
@@ -272,62 +404,115 @@ export async function postIncidentUpdate(
 ): Promise<StatusIncidentWithDetails> {
   const existing = await requireIncident(id)
   const body = validateBody(input.body)
+  assertStatusMatchesKind(existing.kind, input.status)
 
-  await db.insert(statusIncidentUpdates).values({
-    incidentId: id,
-    status: input.status,
-    body,
-    createdBy: author.principalId,
-    templateId: input.templateId ?? null,
-  })
-
+  const wasTerminal = existing.status === TERMINAL_STATUS[existing.kind]
   const becomesTerminal = input.status === TERMINAL_STATUS[existing.kind]
-  // Posting 'in_progress' on a still-'scheduled' window is a real start:
-  // pull the start bound to now (job guards + uptime derivation read it),
-  // apply component statuses, and reschedule the auto-complete job — same
-  // effects as handleMaintenanceStart, but with the admin's own words as
-  // the single timeline row instead of the scheduler's canned copy.
+  // Moving a resolved incident or completed window back to an earlier stage
+  // reopens it: clearing resolvedAt takes it out of resolved history and puts
+  // it back in the open lists (and an incident in the public active list),
+  // and it holds its services again. Resolving it later stamps a fresh
+  // resolvedAt.
+  const reopens = wasTerminal && !becomesTerminal
+  // Posting 'in_progress' (or 'verifying') on a still-'scheduled' window is
+  // a real start: pull the start bound to now (job guards + uptime
+  // derivation read it), apply component statuses, and reschedule the
+  // auto-complete job — same effects as handleMaintenanceStart, but with the
+  // admin's own words as the single timeline row instead of the scheduler's
+  // canned copy.
   const startsMaintenance =
     existing.kind === 'maintenance' &&
     existing.status === 'scheduled' &&
-    input.status === 'in_progress'
+    holdsComponents(existing.kind, input.status)
+  const unschedulesMaintenance =
+    existing.kind === 'maintenance' &&
+    existing.status !== 'scheduled' &&
+    input.status === 'scheduled'
+  // A terminal update restores services unless the partial-recovery box was
+  // ticked; any other move recomputes them only when it changes whether the
+  // row holds them (a start, a reopen, a window moved back to scheduled).
+  const recomputesComponents = becomesTerminal
+    ? !input.skipRestore
+    : holdsComponents(existing.kind, existing.status) !==
+      holdsComponents(existing.kind, input.status)
 
-  const updateData: Record<string, unknown> = { status: input.status, updatedAt: new Date() }
-  if (becomesTerminal && !existing.resolvedAt) {
-    updateData.resolvedAt = new Date()
+  const now = new Date()
+  const updateData: Record<string, unknown> = { status: input.status, updatedAt: now }
+  if (becomesTerminal && (!wasTerminal || !existing.resolvedAt)) {
+    updateData.resolvedAt = now
   }
+  if (reopens) {
+    updateData.resolvedAt = null
+  }
+  if (startsMaintenance) {
+    updateData.scheduledStartAt = now
+    updateData.startedAt = now
+  }
+  // A window moved back across a boundary that has already passed would be
+  // pushed straight forward again by the scheduler's sweep (re-completed, or
+  // re-started). Switch that automation off; the admin moves it on from the
+  // editor instead.
+  if (existing.kind === 'maintenance' && (reopens || unschedulesMaintenance)) {
+    if (existing.autoComplete && existing.scheduledEndAt && existing.scheduledEndAt <= now) {
+      updateData.autoComplete = false
+    }
+    if (
+      input.status === 'scheduled' &&
+      existing.autoStart &&
+      existing.scheduledStartAt &&
+      existing.scheduledStartAt <= now
+    ) {
+      updateData.autoStart = false
+    }
+  }
+
+  // The timeline row, the status change and the component statuses it moves
+  // commit together, so a failure part-way can't leave an incident marked
+  // resolved while some of its services were never restored.
+  await db.transaction(async (tx) => {
+    await tx.insert(statusIncidentUpdates).values({
+      incidentId: id,
+      status: input.status,
+      body,
+      createdBy: author.principalId,
+      templateId: input.templateId ?? null,
+    })
+    await tx.update(statusIncidents).set(updateData).where(eq(statusIncidents.id, id))
+
+    if (recomputesComponents) {
+      const links = await tx.query.statusIncidentComponents.findMany({
+        where: eq(statusIncidentComponents.incidentId, id),
+      })
+      const source = existing.kind === 'incident' ? 'incident' : 'maintenance'
+      await reconcileComponentStatuses(
+        links.map((link) => link.componentId),
+        source,
+        id,
+        tx
+      )
+    }
+  })
+
   if (startsMaintenance) {
     await cancelMaintenanceJobs(existing).catch((err) =>
       log.error({ err, incident_id: id }, 'failed to cancel maintenance jobs on manual start')
     )
-    updateData.scheduledStartAt = new Date()
-  }
-  await db.update(statusIncidents).set(updateData).where(eq(statusIncidents.id, id))
-
-  if (startsMaintenance) {
-    const links = await db.query.statusIncidentComponents.findMany({
-      where: eq(statusIncidentComponents.incidentId, id),
-    })
-    for (const link of links) {
-      await reconcileComponentStatus(link.componentId, 'maintenance', id)
-    }
     await enqueueMaintenanceJobs({
       ...existing,
-      status: 'in_progress',
+      status: input.status,
       scheduledStartAt: updateData.scheduledStartAt as Date,
     }).catch((err) =>
       log.error({ err, incident_id: id }, 'failed to re-enqueue maintenance jobs on manual start')
     )
-  }
-
-  if (becomesTerminal && !input.skipRestore) {
-    const links = await db.query.statusIncidentComponents.findMany({
-      where: eq(statusIncidentComponents.incidentId, id),
-    })
-    const source = existing.kind === 'incident' ? 'incident' : 'maintenance'
-    for (const link of links) {
-      await reconcileComponentStatus(link.componentId, source, id)
-    }
+  } else if (existing.kind === 'maintenance' && (reopens || unschedulesMaintenance)) {
+    // Reopened or moved back: queue whichever boundaries are still ahead.
+    await enqueueMaintenanceJobs({
+      ...existing,
+      ...(updateData as Partial<typeof existing>),
+      status: input.status,
+    }).catch((err) =>
+      log.error({ err, incident_id: id }, 'failed to re-enqueue maintenance jobs on reopen')
+    )
   }
 
   const actor: EventActor = author.principalId
@@ -345,7 +530,8 @@ export async function postIncidentUpdate(
   return getStatusIncidentById(id)
 }
 
-/** Soft delete. Cancels any pending maintenance automation jobs. */
+/** Soft delete. Cancels any pending maintenance automation jobs and releases
+ *  the services the incident was holding. */
 export async function deleteIncident(id: StatusIncidentId): Promise<void> {
   const existing = await requireIncident(id)
 
@@ -355,15 +541,31 @@ export async function deleteIncident(id: StatusIncidentId): Promise<void> {
     )
   }
 
-  const result = await db
-    .update(statusIncidents)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(statusIncidents.id, id), isNull(statusIncidents.deletedAt)))
-    .returning()
+  await db.transaction(async (tx) => {
+    const result = await tx
+      .update(statusIncidents)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(statusIncidents.id, id), isNull(statusIncidents.deletedAt)))
+      .returning()
 
-  if (result.length === 0) {
-    throw new NotFoundError('STATUS_INCIDENT_NOT_FOUND', `Status incident ${id} not found`)
-  }
+    if (result.length === 0) {
+      throw new NotFoundError('STATUS_INCIDENT_NOT_FOUND', `Status incident ${id} not found`)
+    }
+
+    // A deleted incident no longer holds its services down: recompute each
+    // one from whatever is still open (reconcile's active set skips deleted
+    // rows), or an active incident's services would stay degraded forever.
+    const links = await tx.query.statusIncidentComponents.findMany({
+      where: eq(statusIncidentComponents.incidentId, id),
+    })
+    const source = existing.kind === 'incident' ? 'incident' : 'maintenance'
+    await reconcileComponentStatuses(
+      links.map((link) => link.componentId),
+      source,
+      id,
+      tx
+    )
+  })
 }
 
 /**
@@ -418,7 +620,9 @@ export async function getStatusIncidentById(
     })
     .from(statusIncidentComponents)
     .innerJoin(statusComponents, eq(statusIncidentComponents.componentId, statusComponents.id))
-    .where(eq(statusIncidentComponents.incidentId, id))
+    // A deleted service is off the page and out of the picker; leaving it out
+    // here keeps the editor from resubmitting it on every autosave.
+    .where(and(eq(statusIncidentComponents.incidentId, id), isNull(statusComponents.deletedAt)))
 
   const updates = await db.query.statusIncidentUpdates.findMany({
     where: eq(statusIncidentUpdates.incidentId, id),
@@ -440,11 +644,25 @@ export async function getStatusIncidentById(
     resolvedAt: incident.resolvedAt,
     backfilled: incident.backfilled,
     notifiedAt: incident.notifiedAt,
+    notifySubscribers: incident.notifySubscribers,
     createdBy: incident.createdBy,
     createdAt: incident.createdAt,
     updatedAt: incident.updatedAt,
     affectedComponents: links,
     updates,
+  }
+}
+
+/** Like getStatusIncidentById, but null for a deleted or unknown incident
+ *  instead of a NotFoundError, for a reader that shows "not found" itself. */
+export async function findStatusIncidentById(
+  id: StatusIncidentId
+): Promise<StatusIncidentWithDetails | null> {
+  try {
+    return await getStatusIncidentById(id)
+  } catch (err) {
+    if (err instanceof NotFoundError) return null
+    throw err
   }
 }
 
@@ -531,14 +749,13 @@ export async function countStatusIncidentsSince(date: Date): Promise<number> {
 /**
  * Announce a published incident/maintenance exactly once. Atomically claims
  * via `notified_at`, gated on `backfilled = false` so a backfilled row can
- * never be claimed (Status Product Spec §2). `notify=false` still performs
- * the claim (idempotence preserved) but skips the actual dispatch — mirrors
- * the changelog publish-checkbox semantics exactly.
+ * never be claimed (Status Product Spec §2), and on `notify_subscribers` so a
+ * row published with "Email subscribers" unchecked is never claimed either:
+ * its notified_at stays null instead of recording a send that didn't happen.
  */
 export async function notifyStatusIncidentPublished(
   id: StatusIncidentId,
-  actor: EventActor,
-  notify: boolean = true
+  actor: EventActor
 ): Promise<boolean> {
   const now = new Date()
   const [claimed] = await db
@@ -549,13 +766,13 @@ export async function notifyStatusIncidentPublished(
         eq(statusIncidents.id, id),
         isNull(statusIncidents.notifiedAt),
         eq(statusIncidents.backfilled, false),
+        eq(statusIncidents.notifySubscribers, true),
         isNull(statusIncidents.deletedAt)
       )
     )
     .returning()
 
   if (!claimed) return false
-  if (!notify) return true
 
   try {
     const links = await db.query.statusIncidentComponents.findMany({
@@ -597,7 +814,8 @@ export async function notifyStatusIncidentPublished(
 /**
  * Safety net for publish notifications — mirrors
  * `reconcileChangelogNotifications`. Finds live, unclaimed, non-backfilled
- * incidents/maintenance and announces each.
+ * incidents/maintenance whose publisher asked for the email, and announces
+ * each.
  */
 export async function reconcileStatusNotifications(): Promise<number> {
   const due = await db
@@ -607,6 +825,7 @@ export async function reconcileStatusNotifications(): Promise<number> {
       and(
         isNull(statusIncidents.notifiedAt),
         eq(statusIncidents.backfilled, false),
+        eq(statusIncidents.notifySubscribers, true),
         isNull(statusIncidents.deletedAt)
       )
     )
@@ -659,7 +878,20 @@ export async function listStatusIncidentTemplates(): Promise<StatusIncidentTempl
     .groupBy(statusIncidentUpdates.templateId)
   const usageByTemplate = new Map(usageRows.map((r) => [r.templateId, r.count]))
 
-  return rows.map((row) => toTemplateRow(row, usageByTemplate.get(row.id) ?? 0))
+  // A template can still name a service deleted after it was saved. Offer
+  // only the live ones, or applying it would submit a service that no longer
+  // exists.
+  const live = await liveComponentIds(
+    [...new Set(rows.flatMap((r) => r.componentIds))] as StatusComponentId[],
+    db
+  )
+
+  return rows.map((row) =>
+    toTemplateRow(
+      { ...row, componentIds: row.componentIds.filter((id) => live.has(id as StatusComponentId)) },
+      usageByTemplate.get(row.id) ?? 0
+    )
+  )
 }
 
 export async function createStatusIncidentTemplate(

@@ -92,11 +92,13 @@ export function ReportIncidentDialog({
 
   const derivedImpact = deriveImpact(affected.map((a) => a.componentStatus))
   const effectiveImpact = templateImpact ?? derivedImpact
+  const backfillOutOfOrder =
+    !!backfillStart && !!backfillEnd && backfillEnd.getTime() <= backfillStart.getTime()
   const canSubmit =
     title.trim().length > 0 &&
     body.trim().length > 0 &&
     affected.length > 0 &&
-    (!backfill || (!!backfillStart && !!backfillEnd))
+    (!backfill || (!!backfillStart && !!backfillEnd && !backfillOutOfOrder))
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -149,7 +151,7 @@ export function ReportIncidentDialog({
           <DialogTitle>{backfill ? 'Log a past incident' : 'Report an incident'}</DialogTitle>
           <DialogDescription>
             {backfill
-              ? 'Adds to incident history and uptime. Subscribers are not emailed.'
+              ? 'Adds a resolved incident to your incident history. It does not change uptime or service status, and subscribers are not emailed.'
               : 'Publishes to your status page and emails subscribers once.'}
           </DialogDescription>
         </DialogHeader>
@@ -230,9 +232,15 @@ export function ReportIncidentDialog({
                 <DateTimePicker
                   value={backfillEnd}
                   onChange={setBackfillEnd}
+                  minDate={backfillStart}
                   maxDate={new Date()}
                 />
               </div>
+              {backfillOutOfOrder && (
+                <p className="col-span-2 text-xs text-destructive">
+                  It must be resolved after it started.
+                </p>
+              )}
             </div>
           ) : (
             <label className="flex items-start gap-2 cursor-pointer">

@@ -6,6 +6,7 @@ import { publicStatusIncidentQueries } from '@/lib/client/queries/status'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
 import {
   StatusIncidentTimeline,
+  StatusIncidentTiming,
   StatusSubscribeButton,
   IMPACT_STYLE,
   IMPACT_LABEL,
@@ -98,23 +99,7 @@ function StatusIncidentPage() {
           >
             {intl.formatMessage(LIFECYCLE_LABEL[incident.status])}
           </span>
-          <span className="text-xs text-muted-foreground">
-            {intl.formatMessage(
-              { id: 'portal.status.incidentDetail.started', defaultMessage: 'Started {date}' },
-              {
-                date:
-                  new Date(incident.startedAt).toLocaleString(intl.locale, {
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                    timeZone: 'UTC',
-                  }) + ' UTC',
-              }
-            )}
-          </span>
+          <StatusIncidentTiming incident={incident} />
         </div>
 
         {incident.affectedComponents.length > 0 && (

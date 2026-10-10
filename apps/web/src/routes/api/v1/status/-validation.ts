@@ -16,9 +16,9 @@ export const STATUS_COMPONENT_STATUSES = [
 /** Union of the incident and maintenance lifecycles — the domain's
  *  `CreateStatusIncidentInput.status` type accepts either, disambiguated by
  *  `kind`. We validate against the union rather than re-deriving the
- *  kind -> vocabulary mapping here; an incompatible (kind, status) pair is
- *  still a client input error, but not one this thin layer needs to police
- *  ahead of the domain. */
+ *  kind -> vocabulary mapping here: the domain rejects an incompatible
+ *  (kind, status) pair with a VALIDATION_ERROR, which `handleDomainError`
+ *  returns as a 400 for both create and post-update. */
 export const STATUS_INCIDENT_LIFECYCLE_STATUSES = [
   'investigating',
   'identified',

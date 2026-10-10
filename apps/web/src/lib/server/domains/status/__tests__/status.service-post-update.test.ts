@@ -21,9 +21,10 @@ const mockDispatchStatusEvent = vi.fn().mockResolvedValue(undefined)
 const mockEnqueueMaintenanceJobs = vi.fn()
 const mockCancelMaintenanceJobs = vi.fn()
 
-vi.mock('@/lib/server/db', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/server/db')>()),
-  db: {
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  // Lifecycle writes run in a transaction; the mock hands the same stubs in
+  // as the transaction handle.
+  const db = {
     query: {
       statusIncidents: { findFirst: (...args: unknown[]) => mockIncidentFindFirst(...args) },
       statusIncidentComponents: {
@@ -50,12 +51,18 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
       chain.where = () => Promise.resolve([])
       return chain
     },
-  },
-}))
+    transaction: (fn: (tx: unknown) => unknown) => fn(db),
+  }
+  return { ...(await importOriginal<typeof import('@/lib/server/db')>()), db }
+})
 
 vi.mock('../status.components', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../status.components')>()),
   reconcileComponentStatus: (...args: unknown[]) => mockReconcileComponentStatus(...args),
+  // The batch form recomputes each component in id order through the single one.
+  reconcileComponentStatuses: async (ids: Iterable<string>, ...rest: unknown[]) => {
+    for (const id of [...new Set(ids)].sort()) await mockReconcileComponentStatus(id, ...rest)
+  },
   dispatchStatusEvent: (...args: unknown[]) => mockDispatchStatusEvent(...args),
 }))
 
@@ -128,7 +135,8 @@ describe('postIncidentUpdate: scheduled maintenance started via the stepper', ()
     expect(mockReconcileComponentStatus).toHaveBeenCalledWith(
       COMPONENT_ID,
       'maintenance',
-      INCIDENT_ID
+      INCIDENT_ID,
+      expect.anything()
     )
     // Auto-complete job re-enqueued for the rewritten schedule.
     expect(mockEnqueueMaintenanceJobs).toHaveBeenCalledWith(

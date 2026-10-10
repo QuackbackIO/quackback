@@ -15,17 +15,20 @@ import {
   and,
   isNull,
   lte,
+  ne,
   or,
   statusIncidents,
   statusIncidentComponents,
   statusIncidentUpdates,
+  type Database,
+  type Transaction,
 } from '@/lib/server/db'
 import type { StatusIncidentId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { scheduleDispatch, cancelScheduledDispatch } from '@/lib/server/events/scheduler'
 import type { EventActor } from '@/lib/server/events/dispatch'
-import { reconcileComponentStatus, dispatchStatusEvent } from './status.components'
+import { reconcileComponentStatuses, dispatchStatusEvent } from './status.components'
 
 const log = logger.child({ component: 'status-maintenance' })
 
@@ -107,8 +110,11 @@ export async function cancelMaintenanceJobs(incident: MaintenanceScheduleFields)
   await cancelScheduledDispatch(completeJobId(incident.id, hash))
 }
 
-async function affectedComponentIds(incidentId: StatusIncidentId) {
-  const links = await db.query.statusIncidentComponents.findMany({
+async function affectedComponentIds(
+  incidentId: StatusIncidentId,
+  executor: Database | Transaction = db
+) {
+  const links = await executor.query.statusIncidentComponents.findMany({
     where: eq(statusIncidentComponents.incidentId, incidentId),
   })
   return links
@@ -123,21 +129,29 @@ export async function handleMaintenanceStart(incidentId: StatusIncidentId): Prom
   if (!incident || incident.kind !== 'maintenance' || incident.status !== 'scheduled') return
   if (!incident.scheduledStartAt || incident.scheduledStartAt.getTime() > Date.now()) return
 
-  await db
-    .update(statusIncidents)
-    .set({ status: 'in_progress', updatedAt: new Date() })
-    .where(eq(statusIncidents.id, incidentId))
+  const links = await db.transaction(async (tx) => {
+    // started_at becomes the real start; until now it held the planned one.
+    const now = new Date()
+    await tx
+      .update(statusIncidents)
+      .set({ status: 'in_progress', startedAt: now, updatedAt: now })
+      .where(eq(statusIncidents.id, incidentId))
 
-  const links = await affectedComponentIds(incidentId)
-  for (const link of links) {
-    await reconcileComponentStatus(link.componentId, 'maintenance', incidentId)
-  }
+    const links = await affectedComponentIds(incidentId, tx)
+    await reconcileComponentStatuses(
+      links.map((link) => link.componentId),
+      'maintenance',
+      incidentId,
+      tx
+    )
 
-  await db.insert(statusIncidentUpdates).values({
-    incidentId,
-    status: 'in_progress',
-    body: 'This scheduled maintenance is now in progress.',
-    createdBy: null,
+    await tx.insert(statusIncidentUpdates).values({
+      incidentId,
+      status: 'in_progress',
+      body: 'This scheduled maintenance is now in progress.',
+      createdBy: null,
+    })
+    return links
   })
 
   await dispatchStatusEvent('status.maintenance_started', SCHEDULER_ACTOR, {
@@ -160,25 +174,34 @@ export async function handleMaintenanceComplete(incidentId: StatusIncidentId): P
   if (!incident || incident.kind !== 'maintenance' || incident.status === 'completed') return
   if (!incident.scheduledEndAt || incident.scheduledEndAt.getTime() > Date.now()) return
 
-  await db
-    .update(statusIncidents)
-    .set({
+  // Status, restored components and the timeline row commit together: a
+  // failure can't leave the window completed with its services still under
+  // maintenance.
+  const links = await db.transaction(async (tx) => {
+    await tx
+      .update(statusIncidents)
+      .set({
+        status: 'completed',
+        resolvedAt: incident.resolvedAt ?? new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(statusIncidents.id, incidentId))
+
+    const links = await affectedComponentIds(incidentId, tx)
+    await reconcileComponentStatuses(
+      links.map((link) => link.componentId),
+      'maintenance',
+      incidentId,
+      tx
+    )
+
+    await tx.insert(statusIncidentUpdates).values({
+      incidentId,
       status: 'completed',
-      resolvedAt: incident.resolvedAt ?? new Date(),
-      updatedAt: new Date(),
+      body: 'This scheduled maintenance is complete.',
+      createdBy: null,
     })
-    .where(eq(statusIncidents.id, incidentId))
-
-  const links = await affectedComponentIds(incidentId)
-  for (const link of links) {
-    await reconcileComponentStatus(link.componentId, 'maintenance', incidentId)
-  }
-
-  await db.insert(statusIncidentUpdates).values({
-    incidentId,
-    status: 'completed',
-    body: 'This scheduled maintenance is complete.',
-    createdBy: null,
+    return links
   })
 
   await dispatchStatusEvent('status.maintenance_completed', SCHEDULER_ACTOR, {
@@ -240,7 +263,9 @@ export async function startMaintenanceNow(incidentId: StatusIncidentId): Promise
  * Boot-time safety net for maintenance windows missed while the process was
  * down (a delayed BullMQ job only fires if something is listening). Finds
  * overdue scheduled starts and overdue completions and runs each handler,
- * which is idempotent via the guards above.
+ * which is idempotent via the guards above. Only windows that can still need
+ * action are loaded: a completed window is done, so the query leaves out the
+ * ever-growing pile of past ones rather than reading them every sweep.
  */
 export async function reconcileMaintenanceWindows(): Promise<{
   started: number
@@ -257,7 +282,11 @@ export async function reconcileMaintenanceWindows(): Promise<{
           eq(statusIncidents.autoStart, true),
           lte(statusIncidents.scheduledStartAt, now)
         ),
-        and(eq(statusIncidents.autoComplete, true), lte(statusIncidents.scheduledEndAt, now))
+        and(
+          ne(statusIncidents.status, 'completed'),
+          eq(statusIncidents.autoComplete, true),
+          lte(statusIncidents.scheduledEndAt, now)
+        )
       )
     ),
   })
