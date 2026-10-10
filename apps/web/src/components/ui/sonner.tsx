@@ -27,6 +27,7 @@ const REGION_LABEL: Record<SupportedLocale, string> = {
   nl: 'Meldingen',
   pl: 'Powiadomienia',
   th: 'การแจ้งเตือน',
+  uk: 'Сповіщення',
 }
 
 // A surface whose language the document does not carry (the admin picks its

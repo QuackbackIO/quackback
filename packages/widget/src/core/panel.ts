@@ -30,6 +30,7 @@ const FRAME_TITLE: Record<string, string> = {
   pl: 'Pomoc',
   pt: 'Ajuda',
   ru: 'Помощь',
+  uk: 'Допомога',
   zh: '帮助',
   'zh-tw': '說明',
 }

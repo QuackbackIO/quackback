@@ -21,6 +21,7 @@ export const WIDGET_LOCALES = [
   'nl',
   'pl',
   'th',
+  'uk',
 ] as const
 
 /** Passed to `Quackback("init", ...)` or `Quackback.init(...)`. */

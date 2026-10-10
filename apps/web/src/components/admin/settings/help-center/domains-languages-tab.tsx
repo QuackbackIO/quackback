@@ -51,6 +51,7 @@ const LOCALE_LABELS: Record<string, string> = {
   nl: 'Nederlands',
   pl: 'Polski',
   th: 'ภาษาไทย',
+  uk: 'Українська',
 }
 
 const HOSTNAME_PATTERN =

@@ -110,6 +110,16 @@ describe('normalizeLocale', () => {
     expect(normalizeLocale('th-TH')).toBe('th')
     expect(normalizeLocale('TH-th')).toBe('th')
   })
+  it('maps Ukrainian tags to uk', () => {
+    expect(normalizeLocale('uk')).toBe('uk')
+    expect(normalizeLocale('uk-UA')).toBe('uk')
+    expect(normalizeLocale('UK-ua')).toBe('uk')
+  })
+  it('keeps "uk" (Ukrainian) and "en-GB" (British English) apart', () => {
+    // "uk" is the ISO 639-1 language code for Ukrainian, not a region subtag —
+    // British English arrives as "en-GB" and strips to "en", never to "uk".
+    expect(normalizeLocale('en-GB')).toBe('en')
+  })
   it('maps every Portuguese tag to pt-br, the only Portuguese catalog', () => {
     expect(normalizeLocale('pt-BR')).toBe('pt-br')
     expect(normalizeLocale('pt')).toBe('pt-br')
@@ -204,6 +214,9 @@ describe('SUPPORTED_LOCALES', () => {
   })
   it('includes pl', () => {
     expect(SUPPORTED_LOCALES).toContain('pl')
+  })
+  it('includes uk', () => {
+    expect(SUPPORTED_LOCALES).toContain('uk')
   })
   it('DEFAULT_LOCALE is en', () => {
     expect(DEFAULT_LOCALE).toBe('en')

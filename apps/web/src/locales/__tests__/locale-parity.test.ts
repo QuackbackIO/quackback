@@ -290,6 +290,9 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Test',
     'Widget',
   ],
+  // Messenger is the product's name for the chat surface; the catalog keeps it
+  // in Latin script in running text too.
+  uk: ['Messenger'],
 }
 
 // A message with nothing to translate once its placeholders are removed, such
