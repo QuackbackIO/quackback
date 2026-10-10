@@ -16,6 +16,7 @@ import {
   loadAskMessages,
   isAskMessage,
   adminSeedMessages,
+  loadAdminMessages,
   isServerOnlyMessage,
   isTourMessage,
   loadTourMessages,
@@ -347,6 +348,25 @@ describe('admin seed', () => {
     expect(tour['onboarding.tour.next']).toBe(all['onboarding.tour.next'])
     expect(Object.keys(tour).every(isTourMessage)).toBe(true)
     expect(Object.keys(tour).length).toBeGreaterThan(20)
+  })
+})
+
+describe('admin catalog in English', () => {
+  // Every message's code English is its en.json English (the default-messages
+  // guard), so an English admin page renders from the code and seeds nothing.
+  it('seeds nothing on an admin page in English', async () => {
+    expect(await loadAdminMessages(DEFAULT_LOCALE)).toEqual({})
+  })
+
+  it('seeds the admin catalog in any other language', async () => {
+    const [all, seeded] = await Promise.all([loadMessages('de'), loadAdminMessages('de')])
+    expect(seeded).toEqual(adminSeedMessages(all))
+    expect(Object.keys(seeded).length).toBeGreaterThan(1000)
+  })
+
+  it("leaves Home's and the Launch plan's strings to the code in English", async () => {
+    expect(await loadLaunchMessages(DEFAULT_LOCALE)).toEqual({})
+    expect(Object.keys(await loadLaunchMessages('de')).length).toBeGreaterThan(60)
   })
 })
 

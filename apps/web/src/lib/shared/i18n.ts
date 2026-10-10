@@ -392,8 +392,12 @@ export function isLaunchMessage(key: string): boolean {
   )
 }
 
-/** Home's and the Launch plan page's strings in a locale. */
+/**
+ * Home's and the Launch plan page's strings in a locale. None in English, which
+ * these admin pages render from the code (see {@link loadAdminMessages}).
+ */
 export async function loadLaunchMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  if (locale === DEFAULT_LOCALE) return {}
   const all = await loadMessages(locale)
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
@@ -431,6 +435,17 @@ export function adminSeedMessages(all: Record<string, string>): Record<string, s
     subset[key] = value
   }
   return subset
+}
+
+/**
+ * The catalog an admin page seeds in a locale. None in English: every message's
+ * English in code is its en.json English, word for word (the default-messages
+ * guard in `locales/__tests__`), so an English admin page renders from the code
+ * instead of carrying the catalog in every document.
+ */
+export async function loadAdminMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  if (locale === DEFAULT_LOCALE) return {}
+  return adminSeedMessages(await loadMessages(locale))
 }
 
 /**
