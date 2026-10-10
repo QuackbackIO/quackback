@@ -84,7 +84,10 @@ function pairsIn(fields: Map<string, Node>, at: string, out: Pair[]): void {
   for (const [name, value] of fields) {
     if (name !== 'id' && !/^[a-z]\w*Id$/.test(name)) continue
     const id = stringOf(value)
-    if (id === null || !(id in CATALOG)) continue
+    if (id === null) continue
+    // `id` beside a `defaultMessage` is a message wherever it sits; a `<x>Id`
+    // counts only once the catalog knows it (it could name anything else).
+    if (name !== 'id' && !(id in CATALOG)) continue
     for (const englishName of englishNames(name)) {
       const english = stringOf(fields.get(englishName))
       if (english !== null) {
@@ -171,12 +174,20 @@ describe('message pairs', () => {
     ])
   })
 
-  it('skips ids outside the catalog and English it cannot read', () => {
+  it('reads a message the catalog lacks, but not an <x>Id it does not know', () => {
     expect(
       ids(`
         const a = { id: 'not.a.catalog.key', defaultMessage: 'Nope' }
-        const b = { id: 'admin.nav.home', defaultMessage: label }
-        const c = { id: 'admin.nav.users', defaultMessage: \`Hi \${name}\` }
+        const b = { labelId: 'not.a.catalog.key', label: 'Nope' }
+      `)
+    ).toEqual([['not.a.catalog.key', 'Nope']])
+  })
+
+  it('skips English it cannot read', () => {
+    expect(
+      ids(`
+        const a = { id: 'admin.nav.home', defaultMessage: label }
+        const b = { id: 'admin.nav.users', defaultMessage: \`Hi \${name}\` }
       `)
     ).toEqual([])
   })
@@ -190,9 +201,17 @@ describe('code English', () => {
     expect(pairs.length).toBeGreaterThan(1500)
   })
 
+  it('has an en.json entry for every message', () => {
+    // Without one, no catalog can translate it: it reads in English everywhere.
+    const missing = pairs
+      .filter((pair) => !(pair.id in CATALOG))
+      .map((pair) => `${pair.at} ${pair.id}: ${pair.english}`)
+    expect(missing).toEqual([])
+  })
+
   it('matches en.json for every message', () => {
     const drift = pairs
-      .filter((pair) => CATALOG[pair.id] !== pair.english)
+      .filter((pair) => pair.id in CATALOG && CATALOG[pair.id] !== pair.english)
       .map((pair) => `${pair.at} ${pair.id}\n  code: ${pair.english}\n  en:   ${CATALOG[pair.id]}`)
     expect(drift).toEqual([])
   })
