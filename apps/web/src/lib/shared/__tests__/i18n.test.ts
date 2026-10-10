@@ -292,7 +292,11 @@ describe('setup wizard strings', () => {
   // the wizard renders them.
   it('are rendered by the wizard alone', () => {
     const src = join(__dirname, '../../..')
-    const wizardDirs = ['routes/onboarding', 'components/onboarding/goal-selector']
+    const wizardDirs = [
+      'routes/onboarding',
+      'components/onboarding/goal-selector',
+      'components/onboarding/setup-steps',
+    ]
     const offenders: string[] = []
     const walk = (dir: string) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {

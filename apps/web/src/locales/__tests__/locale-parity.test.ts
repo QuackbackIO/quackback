@@ -103,6 +103,7 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Video',
     'Widget',
     'Workflows',
+    'Workspace',
     'Zoom',
   ],
   fr: [
@@ -213,6 +214,7 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
   'zh-tw': [],
   nl: [
     'Accent',
+    'Account',
     'Agent',
     'Agents',
     'Audio',

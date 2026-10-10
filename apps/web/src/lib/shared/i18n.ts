@@ -202,6 +202,10 @@ export const SETUP_WIZARD_MESSAGE_PREFIXES = [
   'onboarding.workspace.',
   'onboarding.goals.',
   'onboarding.error.',
+  'onboarding.ready.',
+  'onboarding.noAccess.',
+  'onboarding.steps.',
+  'onboarding.signOut',
 ] as const
 
 export function isSetupWizardMessage(key: string): boolean {
