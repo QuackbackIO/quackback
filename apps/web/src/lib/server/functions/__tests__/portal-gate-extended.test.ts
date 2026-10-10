@@ -131,6 +131,14 @@ vi.mock('@/lib/server/domains/statuses/status.service', () => ({
   getDefaultStatus: vi.fn(),
 }))
 
+// getCommentsSectionDataFn proves view, then loads the post's author and board
+// access for the per-post comment capability.
+const mockLoadCommentContextForPost = vi.fn()
+vi.mock('@/lib/server/domains/posts/post.access', () => ({
+  assertPostViewable: vi.fn().mockResolvedValue(undefined),
+  loadCommentContextForPost: (...args: unknown[]) => mockLoadCommentContextForPost(...args),
+}))
+
 vi.mock('@/lib/server/domains/post-tags/post-tag.service', () => ({
   listPublicPostTags: (...a: unknown[]) => mockListPublicTags(...a),
 }))
@@ -519,6 +527,91 @@ describe('portal.ts fetchPublicPostDetail — portal-visibility gate', () => {
     expect(result?.canVote).toBe(true)
     expect(result?.canComment).toBe(true)
     expect(result?.boardAccess).toBeUndefined()
+  })
+
+  it('decides canComment per post on an author-only board and reports the rule', async () => {
+    mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'public' })
+    mockGetPublicPostDetail.mockResolvedValue({
+      id: 'post_1',
+      title: 'Hello',
+      content: 'body',
+      contentJson: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      comments: [],
+      statusId: null,
+      voteCount: 0,
+      boardId: 'board_1',
+      principalId: 'principal_author',
+      boardAccess: {
+        view: 'anonymous',
+        vote: 'authenticated',
+        comment: 'authenticated',
+        submit: 'authenticated',
+        segments: { view: [], vote: [], comment: [], submit: [] },
+        moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
+        replyPolicy: 'author-only',
+      },
+    })
+    mockGetPostMergeInfo.mockResolvedValue(null)
+    mockGetMergedPosts.mockResolvedValue([])
+    const viewer = (principalId: string) => ({
+      principalId,
+      role: 'user',
+      principalType: 'user',
+      segmentIds: new Set(),
+    })
+    const h = await loadModule(PORTAL)
+    type Detail = { canVote?: boolean; canComment?: boolean; replyPolicy?: string } | null
+
+    vi.mocked(policyActorFromAuth).mockResolvedValueOnce(viewer('principal_other') as never)
+    const other = (await h[FETCH_PUBLIC_POST_DETAIL]({ data: { postId: 'post_1' } })) as Detail
+    expect(other?.canVote).toBe(true)
+    expect(other?.canComment).toBe(false)
+    expect(other?.replyPolicy).toBe('author-only')
+
+    vi.mocked(policyActorFromAuth).mockResolvedValueOnce(viewer('principal_author') as never)
+    const author = (await h[FETCH_PUBLIC_POST_DETAIL]({ data: { postId: 'post_1' } })) as Detail
+    expect(author?.canComment).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// portal.ts — getCommentsSectionDataFn
+// ---------------------------------------------------------------------------
+
+describe('portal.ts getCommentsSectionDataFn — per-post comment capability', () => {
+  it('opens the composer only for the post author on an author-only board', async () => {
+    mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'public' })
+    mockLoadCommentContextForPost.mockResolvedValue({
+      moderationState: 'published',
+      principalId: 'principal_author',
+      access: {
+        view: 'anonymous',
+        vote: 'authenticated',
+        comment: 'authenticated',
+        submit: 'authenticated',
+        segments: { view: [], vote: [], comment: [], submit: [] },
+        moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
+        replyPolicy: 'author-only',
+      },
+    })
+    const viewer = (principalId: string) => ({
+      principalId,
+      role: 'user',
+      principalType: 'user',
+      segmentIds: new Set(),
+    })
+    const handler = await loadExportedHandler(PORTAL, 'getCommentsSectionDataFn')
+    type Section = { canComment: boolean; replyPolicy: string }
+
+    vi.mocked(policyActorFromAuth).mockResolvedValueOnce(viewer('principal_other') as never)
+    const other = (await handler({ data: { postId: 'post_1' } })) as Section
+    expect(other.canComment).toBe(false)
+    expect(other.replyPolicy).toBe('author-only')
+
+    vi.mocked(policyActorFromAuth).mockResolvedValueOnce(viewer('principal_author') as never)
+    const author = (await handler({ data: { postId: 'post_1' } })) as Section
+    expect(author.canComment).toBe(true)
   })
 })
 
