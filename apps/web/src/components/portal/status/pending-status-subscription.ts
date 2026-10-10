@@ -5,9 +5,11 @@
  * visitor through the portal's sign-in flow first. That flow can leave the
  * page (an SSO redirect returns to it later) or finish in another tab (a
  * magic link opened from the email), so the chosen scope is kept in
- * localStorage, which both survive, and the button completes the
- * subscription once it sees a signed-in visitor. It expires so a sign-in
- * long after an abandoned attempt doesn't subscribe anyone by surprise.
+ * localStorage, which both survive. It is completed only by a sign-in that
+ * came from the subscribe flow: one that finishes in the dialog, or a return
+ * through the sign-in callback URL, which carries {@link RESUME_PARAM}. A
+ * visitor who closes the dialog and signs in some other way later is never
+ * subscribed by surprise, and the choice expires after half an hour.
  */
 import type { StatusComponentId } from '@quackback/ids'
 
@@ -54,4 +56,25 @@ export function takePendingStatusSubscription(): PendingStatusSubscription | nul
     // Not ours, or corrupted: drop it.
   }
   return null
+}
+
+/** Marks the sign-in callback URL as a return from subscribing. */
+export const RESUME_PARAM = 'subscribe'
+const RESUME_VALUE = 'resume'
+
+/** This page's URL, marked as the place a subscribe sign-in returns to. */
+export function resumeSubscribeUrl(): string {
+  const url = new URL(window.location.href)
+  url.searchParams.set(RESUME_PARAM, RESUME_VALUE)
+  return url.pathname + url.search
+}
+
+/** Whether this page was reached by returning from a subscribe sign-in. The
+ *  marker is removed from the address bar as it is read. */
+export function takeResumeMarker(): boolean {
+  const url = new URL(window.location.href)
+  if (url.searchParams.get(RESUME_PARAM) !== RESUME_VALUE) return false
+  url.searchParams.delete(RESUME_PARAM)
+  window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash)
+  return true
 }

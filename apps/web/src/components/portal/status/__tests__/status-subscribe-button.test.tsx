@@ -141,21 +141,43 @@ describe('signed out', () => {
     await user.click(screen.getByRole('button', { name: 'Subscribe' }))
 
     expect(hoisted.subscribeStatusFn).not.toHaveBeenCalled()
-    expect(hoisted.openAuthPopover).toHaveBeenCalledWith({ mode: 'login', callbackUrl: '/status' })
+    expect(hoisted.openAuthPopover).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'login', callbackUrl: '/status?subscribe=resume' })
+    )
     expect(pendingSubscription()).toMatchObject({
       scope: 'components',
       componentIds: ['status_component_web'],
     })
     expect(hoisted.toast.error).not.toHaveBeenCalled()
   })
+
+  it('subscribes as soon as a sign-in finishes in the dialog', async () => {
+    const user = await openDialog()
+    await user.click(screen.getByRole('button', { name: 'Subscribe' }))
+    const { onSuccess } = hoisted.openAuthPopover.mock.calls[0][0] as { onSuccess: () => void }
+
+    onSuccess()
+
+    await waitFor(() =>
+      expect(hoisted.subscribeStatusFn).toHaveBeenCalledWith({
+        data: { scope: 'page', componentIds: [] },
+      })
+    )
+    expect(localStorage.getItem(PENDING_KEY)).toBeNull()
+  })
 })
 
 describe('back from signing in', () => {
+  afterEach(() => {
+    window.history.replaceState(null, '', '/')
+  })
+
   it('completes the subscription the visitor chose before signing in', async () => {
     localStorage.setItem(
       PENDING_KEY,
       JSON.stringify({ scope: 'page', componentIds: [], savedAt: Date.now() })
     )
+    window.history.replaceState(null, '', '/status?subscribe=resume')
     hoisted.session = signedInUser
     renderButton()
     await waitFor(() =>
@@ -164,7 +186,22 @@ describe('back from signing in', () => {
       })
     )
     expect(localStorage.getItem(PENDING_KEY)).toBeNull()
+    expect(window.location.search).toBe('')
     await waitFor(() => expect(hoisted.toast.success).toHaveBeenCalled())
+  })
+
+  it('leaves a choice alone after a sign-in that did not come from subscribing', async () => {
+    // The visitor closed the sign-in dialog, then signed in from the header.
+    localStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({ scope: 'page', componentIds: [], savedAt: Date.now() })
+    )
+    window.history.replaceState(null, '', '/status')
+    hoisted.session = signedInUser
+    renderButton()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(hoisted.subscribeStatusFn).not.toHaveBeenCalled()
+    expect(hoisted.toast.success).not.toHaveBeenCalled()
   })
 
   it('drops a choice left from a sign-in abandoned long ago', async () => {
@@ -172,6 +209,7 @@ describe('back from signing in', () => {
       PENDING_KEY,
       JSON.stringify({ scope: 'page', componentIds: [], savedAt: Date.now() - 31 * 60 * 1000 })
     )
+    window.history.replaceState(null, '', '/status?subscribe=resume')
     hoisted.session = signedInUser
     renderButton()
     await new Promise((resolve) => setTimeout(resolve, 0))

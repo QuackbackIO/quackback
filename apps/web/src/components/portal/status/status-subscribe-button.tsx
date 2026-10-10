@@ -26,8 +26,10 @@ import {
 import { subscribeStatusFn, unsubscribeStatusFn } from '@/lib/server/functions/status-subscriptions'
 import type { StatusComponentId } from '@quackback/ids'
 import {
+  resumeSubscribeUrl,
   savePendingStatusSubscription,
   takePendingStatusSubscription,
+  takeResumeMarker,
   type PendingStatusSubscription,
 } from './pending-status-subscription'
 
@@ -104,8 +106,19 @@ export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps)
   function requestSignIn(pending: PendingStatusSubscription) {
     savePendingStatusSubscription(pending)
     setOpen(false)
-    // An SSO redirect returns here (not to the portal home) once it's done.
-    authPopover?.openAuthPopover({ mode: 'login', callbackUrl: window.location.pathname })
+    authPopover?.openAuthPopover({
+      mode: 'login',
+      // A sign-in that leaves the page (an SSO redirect, a magic link) comes
+      // back here, marked as a return from subscribing.
+      callbackUrl: resumeSubscribeUrl(),
+      // One that finishes in the dialog subscribes straight away.
+      onSuccess: completePendingSubscription,
+    })
+  }
+
+  function completePendingSubscription() {
+    const pending = takePendingStatusSubscription()
+    if (pending) subscribe(pending)
   }
 
   const subscribeMutation = useMutation({
@@ -135,11 +148,13 @@ export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps)
     },
   })
 
-  // Back from signing in (here, or in the tab a magic link opened): finish
-  // the subscription the visitor asked for before they left.
+  // Back from a subscribe sign-in that left the page (the SSO redirect, or
+  // the tab a magic link opened): finish what the visitor asked for. Any
+  // other sign-in leaves a saved choice alone, so a visitor who closed the
+  // dialog and signs in later for some other reason isn't subscribed.
   const { mutate: subscribe } = subscribeMutation
   useEffect(() => {
-    if (!signedIn) return
+    if (!signedIn || !takeResumeMarker()) return
     const pending = takePendingStatusSubscription()
     if (pending) subscribe(pending)
   }, [signedIn, subscribe])
