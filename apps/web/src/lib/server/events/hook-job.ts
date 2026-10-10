@@ -59,7 +59,6 @@ export interface HookJobData {
 export async function runHookJob(job: ClaimedJob): Promise<void> {
   const data = job.payload as unknown as HookJobData
   const { hookType, event, target, config: hookConfig } = data
-  if (await isTestEvent({ payload: event.data, actorId: event.actor.principalId })) return
 
   // Integration delivery belongs exclusively to the durable sync worker.
   // Enforce the queue boundary even if an invalid job is submitted.
@@ -93,6 +92,10 @@ export async function runHookJob(job: ClaimedJob): Promise<void> {
     await handleStatusMaintenanceJob(hookConfig, 'complete')
     return
   }
+
+  // Only a relayed event carries one to check. The scheduler's sentinel jobs
+  // above are queued with `event: null` and read their payload from config.
+  if (await isTestEvent({ payload: event.data, actorId: event.actor.principalId })) return
 
   const hook = await getHook(hookType)
   if (!hook) throw new TerminalJobError(`Unknown hook: ${hookType}`)
