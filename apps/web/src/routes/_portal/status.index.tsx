@@ -13,6 +13,8 @@ import {
   StatusIncidentCard,
   StatusIncidentTimeline,
   StatusSubscribeButton,
+  StatusSignInPrompt,
+  useStatusSignInCouldGrantAccess,
   LIFECYCLE_STYLE,
   LIFECYCLE_LABEL,
 } from '@/components/portal/status'
@@ -381,6 +383,16 @@ function cnLifecycle(textClass: string): string {
 }
 
 function StatusPageNotFound() {
+  // Gated pages 404 like missing ones; a signed-out visitor who could get in
+  // by signing in is told so instead.
+  const signInCouldGrantAccess = useStatusSignInCouldGrantAccess()
+  if (signInCouldGrantAccess) {
+    return (
+      <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-16 text-center">
+        <StatusSignInPrompt />
+      </div>
+    )
+  }
   return (
     <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-16 text-center">
       <h1 className="text-2xl font-bold mb-2">

@@ -7,6 +7,8 @@ import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cac
 import {
   StatusIncidentTimeline,
   StatusSubscribeButton,
+  StatusSignInPrompt,
+  useStatusSignInCouldGrantAccess,
   IMPACT_STYLE,
   IMPACT_LABEL,
   LIFECYCLE_STYLE,
@@ -146,6 +148,16 @@ function StatusIncidentPage() {
 }
 
 function StatusIncidentNotFound() {
+  // An incident link from an email lands here too: when the page is for
+  // signed-in visitors, signing in is the way through.
+  const signInCouldGrantAccess = useStatusSignInCouldGrantAccess()
+  if (signInCouldGrantAccess) {
+    return (
+      <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-16 text-center">
+        <StatusSignInPrompt />
+      </div>
+    )
+  }
   return (
     <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-16 text-center">
       <h1 className="text-2xl font-bold mb-2">
