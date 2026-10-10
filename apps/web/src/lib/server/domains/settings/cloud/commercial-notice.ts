@@ -57,7 +57,7 @@ export function trialEndedNotice(
   if (options.canManageBilling === false) {
     return {
       ...base,
-      message: 'A workspace admin needs to choose a plan. Until then, Free limits apply.',
+      message: 'The workspace owner needs to choose a plan. Until then, Free limits apply.',
     }
   }
   const actionUrl = plansActionUrl(config)

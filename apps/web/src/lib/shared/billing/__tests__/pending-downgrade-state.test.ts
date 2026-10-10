@@ -22,4 +22,10 @@ describe('pendingDowngradeIsLive', () => {
       pendingDowngradeIsLive({ currentPlan: 'free', pendingPlan: 'free', trialUndecided: true })
     ).toBe(true)
   })
+
+  it('does not keep any other pending plan alive after an ended trial', () => {
+    expect(
+      pendingDowngradeIsLive({ currentPlan: 'free', pendingPlan: 'pro', trialUndecided: true })
+    ).toBe(false)
+  })
 })

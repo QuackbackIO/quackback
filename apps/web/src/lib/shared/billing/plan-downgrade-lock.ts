@@ -37,24 +37,36 @@ export function isAdminPathAllowedDuringTrialChoice(pathname: string): boolean {
 
 export type AdminBillingLock = 'downgrade' | 'trial_choice'
 
+/** A downgrade a billing manager has started, and the pages that resolve its issues. */
+export interface PendingDowngradeLock {
+  planId: string
+  cleanupPaths: readonly string[]
+}
+
 /**
  * Which billing lock keeps a billing manager off this path, if any.
  *
- * A pending downgrade wins. It is a choice already made, and its pages are
- * where the resources over the new plan's limits get removed, so it leaves
- * more of admin open than the trial choice does.
+ * An ended trial nobody has chosen for holds nothing during its grace period.
+ * After it, admin waits on a plan choice: the plan picker and exports stay
+ * open, and someone who chose Free keeps the pages that remove what is over
+ * Free's limits, and only those, so the clean-up is not a way around the choice.
+ *
+ * Otherwise a pending downgrade keeps its billing manager to settings and the
+ * feedback inbox, where resources over the new plan's limits are removed.
  */
 export function adminBillingLock(input: {
   pathname: string
-  pendingDowngrade: boolean
+  pending: PendingDowngradeLock | null
   trialChoiceDueAt: Date | null
   now: Date
 }): AdminBillingLock | null {
-  if (input.pendingDowngrade) {
-    return isAdminPathAllowedDuringDowngradeLock(input.pathname) ? null : 'downgrade'
+  const { pathname, pending } = input
+  if (input.trialChoiceDueAt) {
+    if (input.now.getTime() < input.trialChoiceDueAt.getTime()) return null
+    if (isAdminPathAllowedDuringTrialChoice(pathname)) return null
+    if (pending?.cleanupPaths.some((page) => isUnder(pathname, page))) return null
+    return 'trial_choice'
   }
-  if (input.trialChoiceDueAt && input.now.getTime() >= input.trialChoiceDueAt.getTime()) {
-    return isAdminPathAllowedDuringTrialChoice(input.pathname) ? null : 'trial_choice'
-  }
+  if (pending) return isAdminPathAllowedDuringDowngradeLock(pathname) ? null : 'downgrade'
   return null
 }

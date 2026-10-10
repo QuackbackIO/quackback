@@ -16,47 +16,54 @@ import { SubscribeDialog } from './subscribe-dialog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import { LocalDate } from '@/components/ui/local-date'
 import { CHOICE_DUE_FORMAT } from '@/components/admin/plan-notice-banner'
-import { TRIAL_CHOICE_GRACE_MS } from '@/lib/shared/billing/trial-state'
+import { TRIAL_CHOICE_GATE_FROM, TRIAL_CHOICE_GRACE_MS } from '@/lib/shared/billing/trial-state'
+import { useHydrated } from '@tanstack/react-router'
 
 /**
  * What happened and what is being asked. Billing managers land here from every
- * admin page once the grace period is over, so this says why, and that the
- * rest of admin opens again as soon as a plan is chosen.
+ * admin page once the grace period is over, so this says why, and what opens
+ * the rest of admin again. Whether the grace is still running depends on the
+ * viewer's clock, so that sentence waits for hydration rather than flashing.
  */
-function TrialChoiceLead(props: { trialName: string; trialExpiresAt: string | null }) {
+function TrialChoiceLead(props: {
+  trialPlanName: string | null
+  trialExpiresAt: string | null
+  choseFree: boolean
+}) {
+  const hydrated = useHydrated()
   const expires = props.trialExpiresAt ? Date.parse(props.trialExpiresAt) : Number.NaN
-  const dueAt = Number.isNaN(expires) ? null : new Date(expires + TRIAL_CHOICE_GRACE_MS)
-  const graceLeft = useGraceLeft(dueAt)
+  const dueAt = Number.isNaN(expires)
+    ? null
+    : new Date(Math.max(expires + TRIAL_CHOICE_GRACE_MS, TRIAL_CHOICE_GATE_FROM))
+  const graceLeft = hydrated && dueAt !== null && dueAt.getTime() > Date.now()
+  const name = props.trialPlanName
   return (
     <div className="space-y-1.5">
-      <h2 className="text-base font-semibold">Your {props.trialName} trial has ended</h2>
+      <h2 className="text-base font-semibold">
+        {name ? `Your ${name} trial has ended` : 'Your trial has ended'}
+      </h2>
       <p className="text-sm text-muted-foreground">
-        Choose how this workspace continues: keep {props.trialName}, or switch to Free once anything
-        over Free's limits is removed. Everything you built is still here.
+        {props.choseFree
+          ? "You chose Free. Remove what's over Free's limits, then confirm the switch."
+          : `Choose how this workspace continues: ${name ? `keep ${name}` : 'pick a paid plan'}, or switch to Free once anything over Free's limits is removed. Everything you built is still here.`}
       </p>
-      <p className="text-sm text-muted-foreground">
-        {dueAt && graceLeft ? (
-          <>
-            The rest of admin stays open until{' '}
-            <LocalDate date={dueAt} options={CHOICE_DUE_FORMAT} locale="en-US" />. After that it
-            waits until a plan is chosen.
-          </>
-        ) : (
-          'The rest of admin opens again as soon as you choose a plan.'
-        )}
-      </p>
+      {hydrated ? (
+        <p className="text-sm text-muted-foreground">
+          {dueAt && graceLeft ? (
+            <>
+              The rest of admin stays open until{' '}
+              <LocalDate date={dueAt} options={CHOICE_DUE_FORMAT} locale="en-US" />. After that it
+              waits until a plan is chosen.
+            </>
+          ) : props.choseFree ? (
+            'Until you switch, only this page and the pages that fix those limits are open.'
+          ) : (
+            'The rest of admin opens again as soon as you choose a plan.'
+          )}
+        </p>
+      ) : null}
     </div>
   )
-}
-
-/** Whether the grace period is still running, read after hydration so both renders agree. */
-function useGraceLeft(dueAt: Date | null): boolean {
-  const [graceLeft, setGraceLeft] = useState(false)
-  const dueMs = dueAt?.getTime() ?? null
-  useEffect(() => {
-    setGraceLeft(dueMs !== null && dueMs > Date.now())
-  }, [dueMs])
-  return graceLeft
 }
 
 export function TrialExpiredBilling(props: {
@@ -80,11 +87,14 @@ export function TrialExpiredBilling(props: {
   const plans = catalogue?.plans ?? []
   const selected = plans.find((plan) => plan.id === selectedId)
   const paidSelected = selected && selected.id !== 'free' ? selected : null
-  const trialName = overview.trialPlanName ?? 'your plan'
 
   return (
     <div className="space-y-6">
-      <TrialChoiceLead trialName={trialName} trialExpiresAt={overview.trialExpiresAt} />
+      <TrialChoiceLead
+        trialPlanName={overview.trialPlanName ?? null}
+        trialExpiresAt={overview.trialExpiresAt}
+        choseFree={props.pending?.planId === 'free'}
+      />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="space-y-5">

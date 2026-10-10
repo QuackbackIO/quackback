@@ -52,13 +52,15 @@ describe('PlanNoticeBanner', () => {
       <PlanNoticeBanner
         notice={{
           label: 'Pro trial ended',
-          message: 'A workspace admin needs to choose a plan. Until then, Free limits apply.',
+          message: 'The workspace owner needs to choose a plan. Until then, Free limits apply.',
           expiresAt: ENDED.expiresAt,
           ended: true,
         }}
       />
     )
     expect(screen.getByText('Pro trial ended')).toBeInTheDocument()
+    // Its message is all it has to say, so it is not hidden on a phone.
+    expect(screen.getByText(/workspace owner needs to choose/).className).not.toMatch(/hidden/)
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
     expect(container.firstElementChild?.className).not.toMatch(/bg-red-600/)
   })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { daysUntil, isTrialEnded, trialChoiceDueAt } from '../trial-state'
+import { daysUntil, isTrialEnded, TRIAL_CHOICE_GATE_FROM, trialChoiceDueAt } from '../trial-state'
 
 const NOW = new Date('2026-08-20T12:00:00.000Z')
 
@@ -60,21 +60,30 @@ describe('daysUntil', () => {
 })
 
 describe('trialChoiceDueAt', () => {
-  const ended = {
+  const ended = (trialExpiresAt: string, now: string) => ({
     plan: 'free',
     trialActive: false,
-    trialExpiresAt: '2026-08-19T12:00:00.000Z',
+    trialExpiresAt,
     status: null,
-    now: NOW,
-  }
+    now: new Date(now),
+  })
 
   it('is two days after an ended trial nobody has chosen for', () => {
-    expect(trialChoiceDueAt(ended)?.toISOString()).toBe('2026-08-21T12:00:00.000Z')
+    expect(
+      trialChoiceDueAt(ended('2026-11-02T12:00:00.000Z', '2026-11-03T00:00:00.000Z'))?.toISOString()
+    ).toBe('2026-11-04T12:00:00.000Z')
+  })
+
+  it('gives trials that ended before the choice existed until the cutover', () => {
+    expect(trialChoiceDueAt(ended('2026-08-19T12:00:00.000Z', '2026-10-12T00:00:00.000Z'))).toEqual(
+      new Date(TRIAL_CHOICE_GATE_FROM)
+    )
   })
 
   it('is null while the trial runs, once Free closed it, and once they subscribe', () => {
-    expect(trialChoiceDueAt({ ...ended, plan: 'pro', trialActive: true })).toBeNull()
-    expect(trialChoiceDueAt({ ...ended, trialExpiresAt: null })).toBeNull()
-    expect(trialChoiceDueAt({ ...ended, status: 'active' })).toBeNull()
+    const base = ended('2026-11-02T12:00:00.000Z', '2026-11-03T00:00:00.000Z')
+    expect(trialChoiceDueAt({ ...base, plan: 'pro', trialActive: true })).toBeNull()
+    expect(trialChoiceDueAt({ ...base, trialExpiresAt: null })).toBeNull()
+    expect(trialChoiceDueAt({ ...base, status: 'active' })).toBeNull()
   })
 })

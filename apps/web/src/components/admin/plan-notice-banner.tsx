@@ -4,13 +4,17 @@ import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types
 import { isQuietTrial, presentPlanNotice } from '@/lib/shared/plan-notice'
 import { LocalDate } from '@/components/ui/local-date'
 
-/** "Mon, Oct 12, 2:00 PM": the copy around it is English. */
+/**
+ * "Mon, Oct 12, 2:00 PM BST": the copy around it is English. The zone is named
+ * because the first render is in UTC until the page hydrates.
+ */
 export const CHOICE_DUE_FORMAT: Intl.DateTimeFormatOptions = {
   weekday: 'short',
   month: 'short',
   day: 'numeric',
   hour: 'numeric',
   minute: '2-digit',
+  timeZoneName: 'short',
 }
 
 interface PlanNoticeBannerProps {
@@ -44,7 +48,7 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
 
   return (
     <div className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm border-b ${tone}`}>
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
         <span className={`font-medium shrink-0 ${ended ? 'text-white' : 'text-foreground'}`}>
           {view.label}
         </span>
@@ -66,7 +70,11 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
         )}
         {ended && view.choiceDueAt && <ChoiceDue at={view.choiceDueAt} />}
         {view.message && (
-          <span className={`${muted} hidden sm:inline truncate`}>{view.message}</span>
+          // A strip with no button has nothing but its message to say, so it
+          // keeps it on a phone too.
+          <span className={`${muted} ${view.actionUrl ? 'hidden sm:inline truncate' : ''}`}>
+            {view.message}
+          </span>
         )}
       </div>
       {view.actionUrl && (
@@ -90,7 +98,7 @@ function ChoiceDue({ at }: { at: Date }) {
   return (
     <>
       <span className="text-white/80">·</span>
-      <span className="shrink-0 font-medium text-white">
+      <span className="font-medium text-white">
         Choose by <LocalDate date={at} options={CHOICE_DUE_FORMAT} locale="en-US" />
       </span>
     </>

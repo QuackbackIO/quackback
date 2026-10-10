@@ -1,9 +1,5 @@
 import { kvDel, kvGet, kvSet } from '@/lib/server/kv/pg-kv'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import {
-  adminBillingLock,
-  isAdminPathAllowedDuringTrialChoice,
-} from '@/lib/shared/billing/plan-downgrade-lock'
 import { pendingDowngradeIsLive } from '@/lib/shared/billing/pending-downgrade-state'
 import { trialChoiceDueAt } from '@/lib/shared/billing/trial-state'
 import {
@@ -16,20 +12,33 @@ import {
 const PENDING_KEY = 'billing:pending-downgrade'
 const PENDING_TTL_SECONDS = 30 * 24 * 60 * 60
 
-export type PendingDowngrade = { planId: PlanId }
+/** A started downgrade, and the admin pages that resolve what is over its limits. */
+export type PendingDowngrade = { planId: PlanId; cleanupPaths: string[] }
 
 function parsePending(value: unknown): PendingDowngrade | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const planId = canonicalPlanId(String((value as { planId?: unknown }).planId ?? ''))
-  return isPlanId(planId) ? { planId } : null
+  const raw = value as { planId?: unknown; cleanupPaths?: unknown }
+  const planId = canonicalPlanId(String(raw.planId ?? ''))
+  if (!isPlanId(planId)) return null
+  const cleanupPaths = Array.isArray(raw.cleanupPaths)
+    ? raw.cleanupPaths.filter(
+        (path): path is string => typeof path === 'string' && path.startsWith('/admin/')
+      )
+    : []
+  return { planId, cleanupPaths }
 }
 
 export async function getPendingDowngrade(): Promise<PendingDowngrade | null> {
   return parsePending(await kvGet<unknown>(PENDING_KEY))
 }
 
-export async function setPendingDowngrade(planId: PlanId): Promise<void> {
-  await kvSet(PENDING_KEY, { planId }, PENDING_TTL_SECONDS)
+export async function setPendingDowngrade(
+  planId: PlanId,
+  cleanupHrefs: string[] = []
+): Promise<void> {
+  // Paths only: an issue link may carry a query, and the lock matches pages.
+  const cleanupPaths = [...new Set(cleanupHrefs.map((href) => href.split(/[?#]/)[0]!))]
+  await kvSet(PENDING_KEY, { planId, cleanupPaths }, PENDING_TTL_SECONDS)
 }
 
 export async function clearPendingDowngrade(): Promise<void> {
@@ -40,25 +49,29 @@ export function pendingPlanName(planId: PlanId, catalogueName?: string | null): 
   return catalogueName && catalogueName.length > 0 ? catalogueName : PLAN_CATALOGUE[planId].name
 }
 
+/** What the admin layout needs to decide, per path, whether to hold a billing manager on billing. */
+export interface AdminBillingLockInputs {
+  pending: { planId: PlanId; cleanupPaths: string[] } | null
+  /** ISO. Set only while an ended trial waits on a choice the plan picker can take. */
+  trialChoiceDueAt: string | null
+}
+
 /**
- * True when a billing manager must stay on billing pages: a quota-blocked
- * downgrade is pending and this path is outside the pages that resolve it, or
- * a trial ended two days ago and nobody has chosen a plan. Stale pending rows,
- * for a plan the workspace already sits on or below, are dropped.
+ * The billing lock's inputs for this viewer, or null when nothing can lock
+ * them: they cannot manage billing, or the workspace has no plan billing.
+ * Stale pending rows, for a plan the workspace already sits on or below, are
+ * dropped here. The admin layout decides per path with `adminBillingLock`.
  */
-export async function shouldLockAdminToBilling(
-  pathname: string,
+export async function loadAdminBillingLock(
   permissions: readonly string[],
   now: Date = new Date()
-): Promise<boolean> {
-  if (!permissions.includes(PERMISSIONS.BILLING_MANAGE)) return false
-  // Both locks leave the plan picker open, so skip the reads there.
-  if (isAdminPathAllowedDuringTrialChoice(pathname)) return false
+): Promise<AdminBillingLockInputs | null> {
+  if (!permissions.includes(PERMISSIONS.BILLING_MANAGE)) return null
   const { getCloudConfig } = await import('../settings/cloud/cloud.service')
   const [cloud, stored] = await Promise.all([getCloudConfig(), getPendingDowngrade()])
   if (!cloud.enabled || !cloud.plan) {
     if (stored) await clearPendingDowngrade()
-    return false
+    return null
   }
   const dueAt = trialChoiceDueAt({
     plan: cloud.plan,
@@ -79,12 +92,9 @@ export async function shouldLockAdminToBilling(
     await clearPendingDowngrade()
     pending = null
   }
-  const lock = adminBillingLock({
-    pathname,
-    pendingDowngrade: pending !== null,
-    // Only gate when the plan picker can act on the choice.
-    trialChoiceDueAt: cloud.canUpgrade ? dueAt : null,
-    now,
-  })
-  return lock !== null
+  return {
+    pending,
+    // Only hold anyone when the plan picker can act on the choice.
+    trialChoiceDueAt: dueAt && cloud.canUpgrade ? dueAt.toISOString() : null,
+  }
 }

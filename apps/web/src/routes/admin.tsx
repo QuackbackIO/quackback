@@ -22,7 +22,11 @@ import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/f
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
-import { isAdminPathAllowedDuringTrialChoice } from '@/lib/shared/billing/plan-downgrade-lock'
+import {
+  adminBillingLock,
+  isAdminPathAllowedDuringTrialChoice,
+} from '@/lib/shared/billing/plan-downgrade-lock'
+import type { AdminBillingLockInputs } from '@/lib/server/domains/billing/pending-downgrade'
 import type { requireWorkspaceRole } from '@/lib/server/functions/workspace-utils'
 import { useFeatureFlag, useProductEnabled } from '@/lib/client/hooks/use-root-context'
 import { useToasterLocale } from '@/components/ui/use-toaster-locale'
@@ -39,6 +43,7 @@ type AdminGuard = Pick<
  * route-context-memo.ts for what expires it).
  */
 const adminGuard = createRouteContextMemo<AdminGuard>()
+const billingLock = createRouteContextMemo<AdminBillingLockInputs | null>()
 
 async function loadAdminGuard(callbackUrl: string): Promise<AdminGuard> {
   const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
@@ -78,17 +83,31 @@ export const Route = createFileRoute('/admin')({
 
     // Two billing locks keep billing managers on billing pages: a pending plan
     // downgrade (to the pages where they get under the new plan's limits), and
-    // a trial that ended two days ago with no plan chosen (to the plan picker).
-    // Only a billing manager of a workspace with plan billing (cloudEnabled)
-    // can be locked, so only they pay for the check, and it runs on every
-    // navigation because the path decides it. Both locks leave the picker open.
+    // a trial that ended with no plan chosen, once its grace period is over (to
+    // the plan picker). Only a billing manager of a workspace with plan billing
+    // (cloudEnabled) can be held, so only they pay for the check. Its inputs
+    // are fetched once per route context and the path is decided here, so a
+    // click does not ask the server again; a failed read holds nobody.
     if (
       context.cloudEnabled &&
       permissions.includes(PERMISSIONS.BILLING_MANAGE) &&
       !isAdminPathAllowedDuringTrialChoice(location.pathname)
     ) {
-      const { shouldLockAdminToBillingFn } = await import('@/lib/server/functions/billing')
-      if (await shouldLockAdminToBillingFn({ data: { pathname: location.pathname } })) {
+      const lock = await billingLock
+        .get(async () => {
+          const { getAdminBillingLockFn } = await import('@/lib/server/functions/billing')
+          return getAdminBillingLockFn()
+        })
+        .catch(() => null)
+      if (
+        lock &&
+        adminBillingLock({
+          pathname: location.pathname,
+          pending: lock.pending,
+          trialChoiceDueAt: lock.trialChoiceDueAt ? new Date(lock.trialChoiceDueAt) : null,
+          now: new Date(),
+        })
+      ) {
         throw redirect({ href: '/admin/settings/billing' })
       }
     }
