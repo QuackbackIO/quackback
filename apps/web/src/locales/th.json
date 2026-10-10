@@ -889,6 +889,7 @@
   "portal.status.uptime.daysAgo": "{days} วันที่แล้ว",
   "portal.status.uptime.pct": "พร้อมใช้งาน {pct}%",
   "portal.status.uptime.today": "วันนี้",
+  "portal.status.uptime.barLabel": "การพร้อมใช้งานของ {component} ในช่วง {days} วันที่ผ่านมา",
   "portal.status.incidentCard.lastUpdate": "อัปเดตล่าสุด",
   "portal.status.subscribe.success": "ติดตามอัปเดตสถานะแล้ว",
   "portal.status.subscribe.error": "ติดตามไม่ได้ กรุณาลองอีกครั้ง",

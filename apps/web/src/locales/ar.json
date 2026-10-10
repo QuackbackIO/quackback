@@ -695,6 +695,7 @@
   "portal.status.uptime.daysAgo": "قبل {days} يومًا",
   "portal.status.uptime.pct": "{pct}% وقت تشغيل",
   "portal.status.uptime.today": "اليوم",
+  "portal.status.uptime.barLabel": "وقت تشغيل {component} خلال آخر {days} يومًا",
   "portal.status.incidentCard.lastUpdate": "آخر تحديث",
   "portal.status.subscribe.success": "تم الاشتراك في تحديثات الحالة",
   "portal.status.subscribe.error": "تعذّر الاشتراك. يرجى المحاولة مرة أخرى.",

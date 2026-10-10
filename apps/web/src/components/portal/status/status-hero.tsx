@@ -36,18 +36,12 @@ export function StatusHero({ status, lastUpdatedAt, className }: StatusHeroProps
   const headline = intl.formatMessage(HERO_HEADLINE[status])
 
   return (
-    <div
-      className={cn(
-        'flex items-center gap-3 rounded-lg px-4 py-3.5 text-white',
-        style.solid,
-        className
-      )}
-    >
+    <div className={cn('flex items-center gap-3 rounded-lg px-4 py-3.5', style.solid, className)}>
       <Icon className="h-5 w-5 shrink-0" />
       <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
         <h2 className="text-[15px] font-semibold tracking-tight">{headline}</h2>
         {lastUpdatedAt && (
-          <span className="text-xs text-white/80">
+          <span className="text-xs">
             <FormattedMessage
               id="portal.status.hero.updated"
               defaultMessage="Updated {time}"

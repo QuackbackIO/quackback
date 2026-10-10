@@ -695,6 +695,7 @@
   "portal.status.uptime.daysAgo": "{days} 天前",
   "portal.status.uptime.pct": "運作率 {pct}%",
   "portal.status.uptime.today": "今天",
+  "portal.status.uptime.barLabel": "{component} 過去 {days} 天的運作率",
   "portal.status.incidentCard.lastUpdate": "最後更新",
   "portal.status.subscribe.success": "已訂閱狀態更新",
   "portal.status.subscribe.error": "無法訂閱，請再試一次。",

@@ -695,6 +695,7 @@
   "portal.status.uptime.daysAgo": "{days} dni temu",
   "portal.status.uptime.pct": "Dostępność: {pct}%",
   "portal.status.uptime.today": "Dzisiaj",
+  "portal.status.uptime.barLabel": "Dostępność {component} w ciągu ostatnich {days} dni",
   "portal.status.incidentCard.lastUpdate": "Ostatnia aktualizacja",
   "portal.status.subscribe.success": "Zasubskrybowano aktualizacje statusu",
   "portal.status.subscribe.error": "Nie udało się zasubskrybować. Spróbuj ponownie.",

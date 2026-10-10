@@ -695,6 +695,7 @@
   "portal.status.uptime.daysAgo": "{days} days ago",
   "portal.status.uptime.pct": "{pct}% uptime",
   "portal.status.uptime.today": "Today",
+  "portal.status.uptime.barLabel": "{component} uptime, last {days} days",
   "portal.status.incidentCard.lastUpdate": "Last update",
   "portal.status.subscribe.success": "Subscribed to status updates",
   "portal.status.subscribe.error": "Could not subscribe. Please try again.",

@@ -695,6 +695,7 @@
   "portal.status.uptime.daysAgo": "{days} dagen geleden",
   "portal.status.uptime.pct": "{pct}% uptime",
   "portal.status.uptime.today": "Vandaag",
+  "portal.status.uptime.barLabel": "Uptime van {component}, afgelopen {days} dagen",
   "portal.status.incidentCard.lastUpdate": "Laatste update",
   "portal.status.subscribe.success": "Geabonneerd op statusupdates",
   "portal.status.subscribe.error": "Abonneren mislukt. Probeer het opnieuw.",

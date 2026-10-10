@@ -695,6 +695,7 @@
   "portal.status.uptime.daysAgo": "{days} дн. назад",
   "portal.status.uptime.pct": "Доступность {pct}%",
   "portal.status.uptime.today": "Сегодня",
+  "portal.status.uptime.barLabel": "Доступность {component} за последние {days} дн.",
   "portal.status.incidentCard.lastUpdate": "Последнее обновление",
   "portal.status.subscribe.success": "Вы подписались на обновления статуса",
   "portal.status.subscribe.error": "Не удалось подписаться. Попробуйте ещё раз.",

@@ -5,6 +5,11 @@
  * recolor `--primary`, but incident severity needs to read the same way on
  * every workspace (emerald=ok, amber=degraded, orange=partial, red=major,
  * blue=maintenance) — mirroring the approved mockup's fixed status ramp.
+ *
+ * Every text pairing meets WCAG AA for small text (4.5:1) in both themes:
+ * `text` is a 700 shade on light surfaces and its soft chip (400 in dark
+ * mode), and `solid` names its own foreground, since white only clears 4.5:1
+ * on the darker fills (amber keeps its yellow and takes dark text instead).
  */
 import type {
   StatusComponentStatus,
@@ -18,12 +23,14 @@ export type LifecycleStatus = StatusIncidentStatus | StatusMaintenanceStatus
 export interface StatusColorStyle {
   /** Tailwind class for a solid dot/bar (`bg-*-500`). */
   dot: string
-  /** Tailwind class for text (`text-*-600 dark:text-*-400`). */
+  /** Tailwind class for text (`text-*-700 dark:text-*-400`), on the page or
+   *  on its `soft` chip. */
   text: string
   /** Tailwind class for a soft background chip (`bg-*-500/10`). */
   soft: string
-  /** Tailwind class for a solid banner surface (`bg-*-600`) that carries
-   *  white text — the status/incident header bar. */
+  /** Tailwind classes for a solid banner surface and the text on it (the
+   *  status/incident header bar). Render text on it in that color at full
+   *  strength: a translucent white drops below 4.5:1. */
   solid: string
   /** Raw hex, for the admin palette (`status-admin-colors.ts`) and inline styles. */
   hex: string
@@ -36,44 +43,44 @@ interface I18nLabel {
 
 const emerald: StatusColorStyle = {
   dot: 'bg-emerald-500',
-  text: 'text-emerald-600 dark:text-emerald-400',
+  text: 'text-emerald-700 dark:text-emerald-400',
   soft: 'bg-emerald-500/10',
-  solid: 'bg-emerald-600',
+  solid: 'bg-emerald-700 text-white',
   hex: '#10b981',
 }
 const amber: StatusColorStyle = {
   dot: 'bg-amber-500',
-  text: 'text-amber-600 dark:text-amber-400',
+  text: 'text-amber-700 dark:text-amber-400',
   soft: 'bg-amber-500/10',
-  solid: 'bg-amber-600',
+  solid: 'bg-amber-400 text-amber-950',
   hex: '#f59e0b',
 }
 const orange: StatusColorStyle = {
   dot: 'bg-orange-500',
-  text: 'text-orange-600 dark:text-orange-400',
+  text: 'text-orange-700 dark:text-orange-400',
   soft: 'bg-orange-500/10',
-  solid: 'bg-orange-600',
+  solid: 'bg-orange-700 text-white',
   hex: '#f97316',
 }
 const red: StatusColorStyle = {
   dot: 'bg-red-500',
-  text: 'text-red-600 dark:text-red-400',
+  text: 'text-red-700 dark:text-red-400',
   soft: 'bg-red-500/10',
-  solid: 'bg-red-600',
+  solid: 'bg-red-600 text-white',
   hex: '#ef4444',
 }
 const blue: StatusColorStyle = {
   dot: 'bg-blue-500',
-  text: 'text-blue-600 dark:text-blue-400',
+  text: 'text-blue-700 dark:text-blue-400',
   soft: 'bg-blue-500/10',
-  solid: 'bg-blue-600',
+  solid: 'bg-blue-600 text-white',
   hex: '#3b82f6',
 }
 const gray: StatusColorStyle = {
   dot: 'bg-muted-foreground/50',
   text: 'text-muted-foreground',
   soft: 'bg-muted/60',
-  solid: 'bg-slate-600',
+  solid: 'bg-slate-600 text-white',
   hex: '#94a3b8',
 }
 

@@ -203,7 +203,7 @@ function StatusPage() {
                 return (
                   <div key={incident.id} className="flex gap-3.5 p-4 sm:p-5">
                     <div className="w-11 shrink-0 overflow-hidden rounded-md border border-border/60 text-center">
-                      <div className="bg-blue-500/15 py-0.5 text-[11px] font-semibold tracking-wide text-blue-600 uppercase dark:text-blue-400">
+                      <div className="bg-blue-500/15 py-0.5 text-[11px] font-semibold tracking-wide text-blue-700 uppercase dark:text-blue-400">
                         {start.toLocaleDateString(intl.locale, { month: 'short', timeZone: 'UTC' })}
                       </div>
                       <div className="py-0.5 text-sm font-semibold">

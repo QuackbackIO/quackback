@@ -71,7 +71,7 @@ export function StatusIncidentTimeline({
               <span className="min-w-0 flex-1 whitespace-pre-line text-muted-foreground">
                 {update.body}
               </span>
-              <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground/70">
+              <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground">
                 {formatTimestamp(update.createdAt, true, intl.locale)}
               </span>
             </div>

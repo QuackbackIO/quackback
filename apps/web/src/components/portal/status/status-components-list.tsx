@@ -78,7 +78,7 @@ function ComponentRow({
           {label}
         </span>
       </div>
-      {showBar && <StatusUptimeBar days={uptimeDays} />}
+      {showBar && <StatusUptimeBar days={uptimeDays} componentName={component.name} />}
     </div>
   )
 }
@@ -90,6 +90,7 @@ function ComponentGroupSection({
   group: StatusComponentGroupData
   uptimeByComponentId: Map<string, StatusUptimeDay[]>
 }) {
+  const intl = useIntl()
   const [open, setOpen] = useState(!group.collapsed)
   const worst = worstComponentStatus(group.components.map((c) => c.status))
   const style = COMPONENT_STATUS_STYLE[worst]
@@ -101,8 +102,13 @@ function ComponentGroupSection({
           type="button"
           className="flex w-full items-center gap-2 bg-muted/30 px-4 py-2.5 text-left text-[13px] font-semibold text-muted-foreground hover:bg-muted/50 sm:px-5"
         >
-          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', style.dot)} />
-          {group.name}
+          <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', style.dot)} />
+          {/* The dot shows the group's worst status by color only, so
+              screen readers get that roll-up in words. */}
+          <span>
+            {group.name}{' '}
+            <span className="sr-only">{intl.formatMessage(COMPONENT_STATUS_LABEL[worst])}</span>
+          </span>
           <ChevronDownIcon
             className={cn(
               'ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-200',

@@ -49,16 +49,25 @@ function TooltipTrigger({
   )
 }
 
+/**
+ * `anchor` positions the popup against an element other than a trigger: one
+ * controlled tooltip can then serve many plain elements (e.g. the 90 days of
+ * a status uptime bar) instead of each carrying its own trigger.
+ */
 function TooltipContent({
   className,
   sideOffset = 6,
   side = 'top',
   align = 'center',
   alignOffset = 0,
+  anchor,
   children,
   ...props
 }: TooltipPrimitive.Popup.Props &
-  Pick<TooltipPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'>) {
+  Pick<
+    TooltipPrimitive.Positioner.Props,
+    'align' | 'alignOffset' | 'anchor' | 'side' | 'sideOffset'
+  >) {
   // Nothing to portal until the tooltip first opens.
   const opened = useOverlayOpened()
   if (!opened) return null
@@ -69,6 +78,7 @@ function TooltipContent({
         sideOffset={sideOffset}
         align={align}
         alignOffset={alignOffset}
+        anchor={anchor}
         className="isolate z-50"
       >
         <TooltipPrimitive.Popup
