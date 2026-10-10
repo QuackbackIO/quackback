@@ -197,6 +197,7 @@ export async function createIncident(
         startedAt,
         resolvedAt,
         backfilled,
+        notifySubscribers: !backfilled && (input.notifySubscribers ?? true),
         createdBy: author.principalId,
       })
       .returning()
@@ -234,10 +235,9 @@ export async function createIncident(
     )
   }
 
-  if (!backfilled) {
+  if (incident.notifySubscribers) {
     const actor = buildEventActor({ principalId: author.principalId })
-    const notify = input.notifySubscribers ?? true
-    notifyStatusIncidentPublished(incident.id, actor, notify).catch((err) =>
+    notifyStatusIncidentPublished(incident.id, actor).catch((err) =>
       log.error({ err, incident_id: incident.id }, 'failed to dispatch status publish event')
     )
   }
@@ -631,6 +631,7 @@ export async function getStatusIncidentById(
     resolvedAt: incident.resolvedAt,
     backfilled: incident.backfilled,
     notifiedAt: incident.notifiedAt,
+    notifySubscribers: incident.notifySubscribers,
     createdBy: incident.createdBy,
     createdAt: incident.createdAt,
     updatedAt: incident.updatedAt,
@@ -722,14 +723,13 @@ export async function countStatusIncidentsSince(date: Date): Promise<number> {
 /**
  * Announce a published incident/maintenance exactly once. Atomically claims
  * via `notified_at`, gated on `backfilled = false` so a backfilled row can
- * never be claimed (Status Product Spec §2). `notify=false` still performs
- * the claim (idempotence preserved) but skips the actual dispatch — mirrors
- * the changelog publish-checkbox semantics exactly.
+ * never be claimed (Status Product Spec §2), and on `notify_subscribers` so a
+ * row published with "Email subscribers" unchecked is never claimed either:
+ * its notified_at stays null instead of recording a send that didn't happen.
  */
 export async function notifyStatusIncidentPublished(
   id: StatusIncidentId,
-  actor: EventActor,
-  notify: boolean = true
+  actor: EventActor
 ): Promise<boolean> {
   const now = new Date()
   const [claimed] = await db
@@ -740,13 +740,13 @@ export async function notifyStatusIncidentPublished(
         eq(statusIncidents.id, id),
         isNull(statusIncidents.notifiedAt),
         eq(statusIncidents.backfilled, false),
+        eq(statusIncidents.notifySubscribers, true),
         isNull(statusIncidents.deletedAt)
       )
     )
     .returning()
 
   if (!claimed) return false
-  if (!notify) return true
 
   try {
     const links = await db.query.statusIncidentComponents.findMany({
@@ -788,7 +788,8 @@ export async function notifyStatusIncidentPublished(
 /**
  * Safety net for publish notifications — mirrors
  * `reconcileChangelogNotifications`. Finds live, unclaimed, non-backfilled
- * incidents/maintenance and announces each.
+ * incidents/maintenance whose publisher asked for the email, and announces
+ * each.
  */
 export async function reconcileStatusNotifications(): Promise<number> {
   const due = await db
@@ -798,6 +799,7 @@ export async function reconcileStatusNotifications(): Promise<number> {
       and(
         isNull(statusIncidents.notifiedAt),
         eq(statusIncidents.backfilled, false),
+        eq(statusIncidents.notifySubscribers, true),
         isNull(statusIncidents.deletedAt)
       )
     )

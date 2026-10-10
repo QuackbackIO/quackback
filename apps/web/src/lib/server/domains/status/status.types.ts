@@ -176,6 +176,8 @@ export interface StatusIncidentWithDetails {
   resolvedAt: Date | null
   backfilled: boolean
   notifiedAt: Date | null
+  /** The publisher's "Email subscribers" choice; false means never emailed. */
+  notifySubscribers: boolean
   createdBy: PrincipalId | null
   createdAt: Date
   updatedAt: Date

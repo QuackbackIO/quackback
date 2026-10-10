@@ -333,9 +333,11 @@ function StatusIncidentEditorContent({
               <EnvelopeIcon className="h-3.5 w-3.5 mt-px shrink-0" />
               {incident.backfilled
                 ? 'Backfilled incident: subscribers were never emailed.'
-                : incident.notifiedAt
-                  ? 'Subscribers were emailed once, when this was published. Updates appear on the status page and in-app.'
-                  : 'Subscribers are emailed once at publish. Updates appear on the status page and in-app.'}
+                : !incident.notifySubscribers
+                  ? 'Subscribers were not emailed: "Email subscribers" was off when this was published. Updates appear on the status page and in-app.'
+                  : incident.notifiedAt
+                    ? 'Subscribers were emailed once, when this was published. Updates appear on the status page and in-app.'
+                    : 'Subscribers are emailed once at publish. Updates appear on the status page and in-app.'}
             </p>
           </div>
 
@@ -605,6 +607,11 @@ function IncidentTimeline({ incident }: { incident: StatusIncidentAdminDetail })
                   {typeof incident.notifiedSubscriberCount === 'number' &&
                     incident.notifiedSubscriberCount > 0 &&
                     ` · emailed ~${formatNumber(incident.notifiedSubscriberCount)} subscribers`}
+                </span>
+              )}
+              {isPublishRow && !incident.notifySubscribers && !incident.backfilled && (
+                <span className="inline-flex items-center gap-1.5 mt-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  Published · subscribers not emailed
                 </span>
               )}
               {isPublishRow && incident.backfilled && (

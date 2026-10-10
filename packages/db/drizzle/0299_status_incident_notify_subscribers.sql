@@ -1,0 +1,11 @@
+-- @contract: additive
+-- Records the publisher's "Email subscribers" choice. Publishing with it
+-- unchecked used to stamp notified_at anyway (to stop the reconcile sweep
+-- from sending later), so the editor said subscribers had been emailed when
+-- they hadn't. The sweep and the claim now skip rows with this false, and
+-- notified_at stays null for them.
+--
+-- Existing rows default to true. A row published with the box unchecked
+-- before this change already carries a notified_at that can't be told apart
+-- from a real send, so it keeps reading as sent.
+ALTER TABLE "status_incidents" ADD COLUMN IF NOT EXISTS "notify_subscribers" boolean DEFAULT true NOT NULL;

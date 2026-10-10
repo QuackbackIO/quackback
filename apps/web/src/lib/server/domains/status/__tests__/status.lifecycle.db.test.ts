@@ -27,8 +27,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
+const mockProcessEvent = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/events/process', () => ({
-  processEvent: vi.fn().mockResolvedValue(undefined),
+  processEvent: (...args: unknown[]) => mockProcessEvent(...args),
 }))
 
 vi.mock('@/lib/server/events/scheduler', () => ({
@@ -44,7 +45,9 @@ import {
   getStatusIncidentById,
   listStatusIncidents,
   listStatusIncidentTemplates,
+  notifyStatusIncidentPublished,
   postIncidentUpdate,
+  reconcileStatusNotifications,
   updateIncident,
 } from '../status.service'
 import {
@@ -118,6 +121,7 @@ async function statusOf(id: StatusComponentId) {
 describe('status lifecycle (Postgres)', () => {
   beforeEach(async () => {
     expect(fixture.available).toBe(true)
+    mockProcessEvent.mockReset().mockResolvedValue(undefined)
     await fixture.begin()
     author = createId('principal')
     await testDb
@@ -512,6 +516,33 @@ describe('status lifecycle (Postgres)', () => {
       expect(await startedAt(ids.started)).toBe(rows.started.start)
       expect(await startedAt(ids.createdUnderWay)).toBe(rows.createdUnderWay.created)
       expect(await startedAt(incident.id)).toBe(now - day)
+    })
+  })
+
+  describe('publishing with "Email subscribers" off', () => {
+    it('records no send, and neither the claim nor the sweep sends one later', async () => {
+      const api = await service('API')
+      const quiet = await openIncident([{ componentId: api, componentStatus: 'major_outage' }])
+      expect(quiet.notifySubscribers).toBe(false)
+      expect(quiet.notifiedAt).toBeNull()
+
+      const actor = { type: 'service' as const, displayName: 'test' }
+      expect(await notifyStatusIncidentPublished(quiet.id, actor)).toBe(false)
+
+      // A row that asked for the email and was never claimed (the process
+      // died before the fire-and-forget send) is still picked up.
+      const [pending] = await testDb
+        .insert(statusIncidents)
+        .values({ kind: 'incident', title: 'Pending', status: 'investigating' })
+        .returning({ id: statusIncidents.id })
+      expect(await reconcileStatusNotifications()).toBe(1)
+
+      expect((await getStatusIncidentById(quiet.id)).notifiedAt).toBeNull()
+      expect((await getStatusIncidentById(pending.id)).notifiedAt).not.toBeNull()
+      const published = mockProcessEvent.mock.calls.filter(
+        ([event]) => (event as { type: string }).type === 'status.incident_created'
+      )
+      expect(published).toHaveLength(1)
     })
   })
 })
