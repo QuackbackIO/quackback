@@ -94,7 +94,7 @@ export function AdditionalInstructionsCard() {
         <p role="status" className="text-sm text-muted-foreground">
           {intl.formatMessage({
             id: 'automation.agent.loading',
-            defaultMessage: 'Loading AI agent settings…',
+            defaultMessage: 'Loading AI agent settings...',
           })}
         </p>
       </SettingsCard>
@@ -139,7 +139,7 @@ export function AdditionalInstructionsCard() {
           placeholder={intl.formatMessage({
             id: 'automation.agent.instructions.placeholder',
             defaultMessage:
-              'For example: Call customers “members”, use UK English, and avoid exclamation marks.',
+              'For example: Call customers "members", use UK English, and avoid exclamation marks.',
           })}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}

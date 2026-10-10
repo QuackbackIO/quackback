@@ -92,7 +92,7 @@
   "widget.messages.ask": "اطرح سؤالاً",
   "widget.messages.empty": "لا توجد محادثات بعد",
   "widget.tickets.empty": "لا توجد تذاكر بعد",
-  "widget.tickets.emptyHint": "افتح تذكرة وسنتابعها من أجلك.",
+  "widget.tickets.emptyHint": "ستظهر هنا التذاكر التي يفتحها فريقك.",
   "widget.tickets.new": "تذكرة جديدة",
   "widget.tickets.new.subject": "الموضوع",
   "widget.tickets.new.subjectPlaceholder": "لخّص طلبك...",

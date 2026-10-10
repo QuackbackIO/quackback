@@ -31,7 +31,7 @@ export function ChatComposer({
   const canSend = canAsk && !busy && question.length > 0
   const placeholder = intl.formatMessage({
     id: 'ask.composer.placeholder',
-    defaultMessage: 'Ask or tell Quackback anything',
+    defaultMessage: 'Ask Copilot anything',
   })
   useEffect(() => {
     if (autoFocus) input.current?.focus()

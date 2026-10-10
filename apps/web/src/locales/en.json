@@ -92,7 +92,7 @@
   "widget.messages.ask": "Ask a question",
   "widget.messages.empty": "No conversations yet",
   "widget.tickets.empty": "No tickets yet",
-  "widget.tickets.emptyHint": "Open a ticket and we'll track it for you.",
+  "widget.tickets.emptyHint": "Tickets your team opens will show up here.",
   "widget.tickets.new": "New ticket",
   "widget.tickets.new.subject": "Subject",
   "widget.tickets.new.subjectPlaceholder": "Summarize your request…",

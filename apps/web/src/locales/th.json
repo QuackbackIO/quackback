@@ -96,7 +96,7 @@
   "widget.messages.ask": "ถามคำถาม",
   "widget.messages.empty": "ยังไม่มีการสนทนา",
   "widget.tickets.empty": "ยังไม่มีคำร้อง",
-  "widget.tickets.emptyHint": "เปิดคำร้องแล้วเราจะติดตามให้คุณ",
+  "widget.tickets.emptyHint": "คำร้องที่ทีมของคุณเปิดจะแสดงที่นี่",
   "widget.tickets.new": "คำร้องใหม่",
   "widget.tickets.new.subject": "หัวข้อ",
   "widget.tickets.new.subjectPlaceholder": "สรุปคำร้องของคุณ…",

@@ -92,7 +92,7 @@
   "widget.messages.ask": "Zadaj pytanie",
   "widget.messages.empty": "Nie ma jeszcze rozmów",
   "widget.tickets.empty": "Nie ma jeszcze spraw",
-  "widget.tickets.emptyHint": "Utwórz sprawę, a my będziemy śledzić jej postęp.",
+  "widget.tickets.emptyHint": "Tutaj pojawią się sprawy otwarte przez Twój zespół.",
   "widget.tickets.new": "Nowa sprawa",
   "widget.tickets.new.subject": "Temat",
   "widget.tickets.new.subjectPlaceholder": "Opisz krótko swoją prośbę…",
