@@ -49,6 +49,9 @@ export function StatusUptimeBar({ days, componentName, className }: StatusUptime
   const [shown, setShown] = useState<{ index: number; anchor: HTMLElement } | null>(null)
 
   if (days.length === 0) return null
+  // `days` can arrive after the first render (or change length), so the tab
+  // stop falls back to the latest day whenever the remembered one is gone.
+  const tabStop = focusIndex >= 0 && focusIndex < days.length ? focusIndex : days.length - 1
 
   const avgUptimePct = days.reduce((sum, day) => sum + day.uptimePct, 0) / days.length
 
@@ -68,7 +71,7 @@ export function StatusUptimeBar({ days, componentName, className }: StatusUptime
     const rtl = getComputedStyle(event.currentTarget).direction === 'rtl'
     const step = { ArrowLeft: rtl ? 1 : -1, ArrowRight: rtl ? -1 : 1 }[event.key]
     let next: number | null = null
-    if (step !== undefined) next = Math.min(last, Math.max(0, focusIndex + step))
+    if (step !== undefined) next = Math.min(last, Math.max(0, tabStop + step))
     else if (event.key === 'Home') next = 0
     else if (event.key === 'End') next = last
     if (next === null) return
@@ -101,7 +104,7 @@ export function StatusUptimeBar({ days, componentName, className }: StatusUptime
           <button
             key={day.date}
             type="button"
-            tabIndex={index === focusIndex ? 0 : -1}
+            tabIndex={index === tabStop ? 0 : -1}
             aria-label={dayLabel(day)}
             className={cn(
               'h-full min-w-[2px] flex-1 rounded-xs transition-opacity outline-none hover:opacity-60',

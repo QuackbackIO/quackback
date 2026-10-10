@@ -452,7 +452,14 @@ export async function listStatusFeedItems(
     }),
   ])
 
-  const rows = [...openRows, ...resolvedRows]
+  // A row can match both reads (a window moved back to "scheduled" before
+  // reopening cleared its `resolvedAt`); list it once.
+  const seen = new Set<string>()
+  const rows = [...openRows, ...resolvedRows].filter((row) => {
+    if (seen.has(row.id)) return false
+    seen.add(row.id)
+    return true
+  })
   const links = await getComponentLinksForIncidents(rows.map((r) => r.id))
   const items = await projectIncidents(rows, groupLinksByIncident(links), actor)
 
