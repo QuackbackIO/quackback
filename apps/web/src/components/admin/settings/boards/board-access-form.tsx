@@ -12,7 +12,6 @@ import { useForm } from 'react-hook-form'
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import {
-  ChatBubbleLeftEllipsisIcon,
   ChatBubbleLeftIcon,
   CheckIcon,
   ChevronDownIcon,
@@ -31,6 +30,7 @@ import {
 } from '@heroicons/react/24/solid'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
+import { SettingRow } from '@/components/admin/settings/setting-row'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { useUpdateBoardAccess } from '@/lib/client/mutations'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
@@ -64,9 +64,8 @@ import { INLINE_LINK } from '@/components/admin/settings/inline-link'
  *     ceiling: when off, the `anonymous` cell on vote/comment/submit is
  *     disabled (striped + globe icon) and an effect auto-bumps any cell
  *     currently on `anonymous` up to `authenticated`.
- *   - A "Replies" switch below the matrix edits `access.replyPolicy`
- *     (absent/`anyone` vs `author-only`). It shares this form's dirty
- *     state and save dock — the Access tab has exactly one of each.
+ *   - A switch below the matrix edits `access.replyPolicy` (absent or
+ *     `anyone` vs `author-only`) and autosaves with the rest of the form.
  *
  * The persisted shape is `BoardAccess` (see @/lib/shared/db-types).
  */
@@ -207,6 +206,13 @@ function deriveActivePreset(values: FormShape): PresetName {
 }
 
 const AUTOSAVE_DELAY_MS = 400
+
+/**
+ * `access.replyPolicy` sits beside the matrix rather than in it because it is
+ * not a tier: the Comment row still decides who may comment at all, and this
+ * narrows that set per post.
+ */
+const REPLY_POLICY_LABEL = 'Only the post author and team members can reply'
 
 // ─── Main form ────────────────────────────────────────────────────────
 
@@ -443,13 +449,17 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
         )}
       </div>
 
-      <div className="space-y-4">
-        <span className="text-sm font-semibold">Replies</span>
-        <ReplyPolicyRow
-          authorOnly={resolveReplyPolicy(values) === 'author-only'}
-          onChange={handleReplyPolicyChange}
-        />
-      </div>
+      <SettingRow
+        label={REPLY_POLICY_LABEL}
+        htmlFor="board-reply-policy"
+        control={
+          <Switch
+            id="board-reply-policy"
+            checked={resolveReplyPolicy(values) === 'author-only'}
+            onCheckedChange={handleReplyPolicyChange}
+          />
+        }
+      />
 
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <ShieldCheckIcon className="h-3 w-3" />
@@ -462,51 +472,6 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
         </p>
       )}
     </form>
-  )
-}
-
-// ─── Replies (author-only) row ───────────────────────────────────────
-
-interface ReplyPolicyRowProps {
-  authorOnly: boolean
-  onChange: (authorOnly: boolean) => void
-}
-
-const REPLY_POLICY_LABEL = 'Only the post author and team members can reply'
-
-/**
- * `access.replyPolicy` toggle. It sits beside the matrix rather than in it
- * because it is not a tier: the Comment row still decides who may reply at
- * all, and this narrows that set per post. Rendered inside the access form so
- * it shares one dirty state and one save dock with the matrix.
- */
-function ReplyPolicyRow({ authorOnly, onChange }: ReplyPolicyRowProps) {
-  return (
-    <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 px-4 py-3.5 sm:flex-row sm:items-center">
-      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground">
-        <ChatBubbleLeftEllipsisIcon className="h-3.5 w-3.5" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{REPLY_POLICY_LABEL}</span>
-          {authorOnly && (
-            <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-px text-xs font-semibold uppercase tracking-wider text-primary">
-              On
-            </span>
-          )}
-        </div>
-        <div className="mt-0.5 text-xs leading-snug text-muted-foreground">
-          Anyone the access tiers allow can still view and open posts, but each post&apos;s thread
-          stays between its author and your team.
-        </div>
-      </div>
-      <Switch
-        checked={authorOnly}
-        onCheckedChange={onChange}
-        aria-label={REPLY_POLICY_LABEL}
-        className="shrink-0 sm:ml-3"
-      />
-    </div>
   )
 }
 

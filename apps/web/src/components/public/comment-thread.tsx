@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState, type ComponentProps } from 'react'
-import { FormattedMessage, useIntl } from 'react-intl'
+import { useIntl } from 'react-intl'
 import {
   ArrowRightIcon,
   ArrowUturnLeftIcon,
@@ -248,35 +248,24 @@ export function CommentThread({
       )
     }
 
-    // Signed in but denied because the board only lets each post's own author
-    // (and the team) reply. Name that rule instead of the generic tier denial —
-    // the viewer's account is fine, this thread just isn't theirs. Signed-out
-    // viewers fall through to the sign-in CTA below: they may yet sign in as
-    // the author.
-    if (noAccess && replyPolicy === 'author-only') {
-      return (
-        <div className="flex items-center justify-center gap-3 py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
-          <LockClosedIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-          <p className="text-sm text-muted-foreground">
-            <FormattedMessage
-              id="portal.commentThread.authorOnlyReplies"
-              defaultMessage="Only the post author and team members can reply on this board"
-            />
-          </p>
-        </div>
-      )
-    }
-
     // Signed in but denied by the board's comment tier (segments/team) — an
     // authorization failure, not authentication. State it; no sign-in affordance.
+    // An author-only board names its rule instead: the viewer's account is fine,
+    // this thread just isn't theirs. Signed-out viewers fall through to the
+    // sign-in CTA below, since they may yet sign in as the author.
     if (noAccess) {
       return (
         <div className="flex items-center justify-center gap-3 py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
           <p className="text-sm text-muted-foreground">
-            {intl.formatMessage({
-              id: 'portal.commentThread.noAccess',
-              defaultMessage: "You don't have access to comment on this board",
-            })}
+            {replyPolicy === 'author-only'
+              ? intl.formatMessage({
+                  id: 'portal.commentThread.authorOnlyReplies',
+                  defaultMessage: 'Only the post author and team members can reply on this board',
+                })
+              : intl.formatMessage({
+                  id: 'portal.commentThread.noAccess',
+                  defaultMessage: "You don't have access to comment on this board",
+                })}
           </p>
         </div>
       )
