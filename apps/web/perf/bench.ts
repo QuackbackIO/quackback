@@ -16,6 +16,7 @@
  *   bun perf/bench.ts --repeat 3       run 3 times and flag any count that moved
  *   bun perf/bench.ts --timing 20      add median/p90 wall time per journey
  *   bun perf/bench.ts --throttle ...   browser journeys over a 10 Mbps, 40 ms link
+ *   bun perf/bench.ts --cpu 4 ...      browser journeys with fourfold CPU slowdown
  *   bun perf/bench.ts --core           skip the breadth sweep over every page
  *   bun perf/bench.ts --renders ...    list the components that rendered most (build with
  *                                      PERF_UNMINIFIED=1 for readable names)
@@ -33,6 +34,8 @@
  * has handled nothing else yet.
  *
  * Exit code 1 means a count went over its ceiling (or a journey broke).
+ * Event Timing and long-frame/task samples report responsiveness trends;
+ * they are not gated, and their interaction durations are not field INP.
  */
 import {
   chromium,
@@ -45,6 +48,7 @@ import { parseArgs } from 'node:util'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { journeys, type Actor, type BrowserJourney, type DocumentJourney } from './journeys'
 import { BENCH_URL, signedInContext, startBenchServer } from './config'
+import { LATENCY_INIT_SCRIPT, summarizeLatency, type BrowserLatency } from './browser-latency'
 
 const { values: args } = parseArgs({
   options: {
@@ -58,6 +62,7 @@ const { values: args } = parseArgs({
     throttle: { type: 'boolean', default: false },
     core: { type: 'boolean', default: false },
     renders: { type: 'boolean', default: false },
+    cpu: { type: 'string', default: '1' },
   },
 })
 
@@ -67,6 +72,9 @@ const appDir = process.env.PERF_APP_DIR ?? new URL('..', import.meta.url).pathna
 const perfDir = new URL('.', import.meta.url).pathname
 const budgetsPath = `${perfDir}budgets.json`
 const baseURL = BENCH_URL
+const cpuRate = Number(args.cpu)
+if (!Number.isFinite(cpuRate) || cpuRate < 1 || cpuRate > 20)
+  throw new Error('--cpu must be a number between 1 and 20')
 
 type Metrics = Record<string, number>
 
@@ -189,6 +197,7 @@ const INIT_SCRIPT = `
     checkDCE() {},
   }
   performance.setResourceTimingBufferSize(100000)
+  ${LATENCY_INIT_SCRIPT}
 `
 
 interface FrameSnapshot {
@@ -198,6 +207,7 @@ interface FrameSnapshot {
   byComponent: Record<string, number>
   elements: number
   resources: { name: string; type: string; bytes: number; start: number }[]
+  latency: BrowserLatency
 }
 
 interface PageSnapshot extends FrameSnapshot {
@@ -218,6 +228,7 @@ function frameSnapshot(frame: Frame, withNavigation: boolean): Promise<FrameSnap
         ...(window as unknown as { __perfByComponent: Record<string, number> }).__perfByComponent,
       },
       elements: document.getElementsByTagName('*').length,
+      latency: (window as unknown as { __perfLatency: BrowserLatency }).__perfLatency,
       resources: (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
         .concat(
           navigation
@@ -335,6 +346,7 @@ async function measureBrowser(
   const inflight = trackInflight(page)
   const cdp = await context.newCDPSession(page)
   await cdp.send('Performance.enable')
+  if (cpuRate > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuRate })
   if (args.throttle) {
     // A home broadband link. Localhost has no bandwidth limit, so without this
     // the bytes a change saves never show up as time.
@@ -416,6 +428,7 @@ async function measureBrowser(
       layouts: cdpAfter.LayoutCount - cdpBefore.LayoutCount,
       styleRecalcs: cdpAfter.RecalcStyleCount - cdpBefore.RecalcStyleCount,
       domElements: after.elements,
+      ...summarizeLatency(after.latency, since),
     }
     if (opts.instrument) metrics.jsCalls = jsCalls
     return {

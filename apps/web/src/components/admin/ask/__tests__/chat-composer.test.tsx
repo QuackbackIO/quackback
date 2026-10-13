@@ -35,7 +35,10 @@ describe('the focused chat composer', () => {
   it('sends the entire multiline question once on Enter', () => {
     const props = mount()
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
-    expect(props.onAsk).toHaveBeenCalledExactlyOnceWith('Find our refund policy\nand draft a reply')
+    expect(props.onAsk).toHaveBeenCalledExactlyOnceWith(
+      'Find our refund policy\nand draft a reply',
+      true
+    )
   })
 
   it('lets Shift+Enter create a new line without sending', () => {

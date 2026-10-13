@@ -23,6 +23,13 @@ function mount(overrides: Partial<AskComposerProps> = {}) {
 }
 
 describe('the separate search palette', () => {
+  it('opens the results page when a search is submitted before choosing a row', () => {
+    const submit = vi.fn()
+    const props = mount({ onSubmitSearch: submit })
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' })
+    expect(submit).toHaveBeenCalledExactlyOnceWith('messenger')
+    expect(props.onNavigate).not.toHaveBeenCalled()
+  })
   it('focuses the accessible search input when mounted', () => {
     mount()
     expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Search Quackback' }))

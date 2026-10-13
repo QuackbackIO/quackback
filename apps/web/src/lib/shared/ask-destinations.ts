@@ -79,6 +79,12 @@ const KEYWORDS: Record<string, string[]> = {
   '/admin/settings/widget/install': ['install', 'snippet', 'website', 'embed'],
   '/admin/settings/portal': ['branding', 'logo', 'color', 'theme', 'header'],
   '/admin/settings/general': ['modules', 'workspace', 'name'],
+  '/admin/settings/imports': ['import', 'export', 'csv', 'data', 'migration'],
+  '/admin/settings/who-answers': ['routing', 'assign', 'assignment', 'ai', 'human', 'handoff'],
+  '/admin/settings/ai/teammates': ['home', 'chat', 'copilot', 'draft', 'slack'],
+  '/admin/settings/ai/actions': ['connectors', 'mcp', 'tools', 'credentials'],
+  '/admin/settings/ai/knowledge': ['documents', 'sources', 'articles', 'web', 'upload'],
+  '/admin/settings/ai/guidance': ['instructions', 'skills', 'procedures', 'rules'],
 }
 
 function destination(href: string, label: string): AskDestination {

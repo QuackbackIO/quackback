@@ -20,6 +20,7 @@ const state = vi.hoisted(() => ({
   clear: vi.fn(),
   decisions: [] as Array<[string, string, string]>,
   actionStatus: 'proposed',
+  principalId: 'owner-acme',
 }))
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({
@@ -35,7 +36,11 @@ vi.mock('@tanstack/react-router', () => ({
     },
   }),
 }))
-vi.mock('@/lib/client/hooks/use-root-context', () => ({ usePrincipalId: () => 'owner-acme' }))
+vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  usePrincipalId: () => state.principalId,
+  useFeatureFlags: () => ({ feedback: true }),
+}))
+vi.mock('@/lib/client/use-permissions', () => ({ usePermissions: () => new Set() }))
 vi.mock('@/lib/client/queries/admin', () => ({
   adminQueries: {
     onboardingStatus: () => ({ queryKey: ['onboarding-status'], queryFn: async () => null }),
@@ -116,16 +121,19 @@ function Harness({
   initial,
   canAsk,
   locked,
+  initialQuestion,
 }: {
   initial?: string
   canAsk: boolean
   locked?: boolean
+  initialQuestion?: string
 }) {
   const [threadKey, setThreadKey] = useState(initial)
   state.setThread = setThreadKey
   return (
     <CopilotHome
       threadKey={threadKey}
+      initialQuestion={initialQuestion}
       canAsk={canAsk}
       header={<h1>Welcome, Acme</h1>}
       paused={locked ? <a href="/admin/settings/billing">See usage</a> : undefined}
@@ -137,15 +145,23 @@ function mount({
   thread,
   canAsk = true,
   locked = false,
-}: { thread?: string; canAsk?: boolean; locked?: boolean } = {}) {
+  initialQuestion,
+}: { thread?: string; canAsk?: boolean; locked?: boolean; initialQuestion?: string } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
+  const tree = () => (
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={messages}>
-        <Harness initial={thread} canAsk={canAsk} locked={locked} />
+        <Harness
+          initial={thread}
+          canAsk={canAsk}
+          locked={locked}
+          initialQuestion={initialQuestion}
+        />
       </IntlProvider>
     </QueryClientProvider>
   )
+  const view = render(tree())
+  return { ...view, refresh: () => view.rerender(tree()) }
 }
 const savedThread = (key: string, title: string, text: string): WorkspaceCopilotThread => ({
   key,
@@ -161,6 +177,7 @@ beforeEach(() => {
   state.backs = 0
   state.decisions = []
   state.actionStatus = 'proposed'
+  state.principalId = 'owner-acme'
   state.create.mockImplementation(({ data }: { data: { title: string } }) => {
     throw new Error(`Unexpected creation: ${data.title}`)
   })
@@ -171,6 +188,62 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('Home idle', () => {
+  it('prefills a search question without creating a thread or sending a turn', async () => {
+    mount({ initialQuestion: 'Find feedback about exports' })
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('textbox', { name: 'Ask Copilot' }) as HTMLTextAreaElement).value
+      ).toBe('Find feedback about exports')
+    )
+    expect(state.create).not.toHaveBeenCalled()
+    expect(state.start).not.toHaveBeenCalled()
+  })
+
+  it('keeps an interrupted question ready to retry', async () => {
+    state.threads = [savedThread('workspace:interrupted', 'Interrupted', 'Earlier question')]
+    state.start.mockImplementation(async ({ handlers }: StartAguiTurnOptions) => {
+      handlers?.onStreamEnd?.()
+    })
+    mount({ thread: 'workspace:interrupted' })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Ask Copilot' }), {
+      target: { value: 'Keep this question' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't finish this answer")
+    expect(
+      (screen.getByRole('textbox', { name: 'Ask Copilot' }) as HTMLTextAreaElement).value
+    ).toBe('Keep this question')
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
+  })
+
+  it('clears private drafts and ignores late stream callbacks when the principal changes', async () => {
+    state.threads = [savedThread('workspace:private', 'Private', 'Earlier question')]
+    let handlers: StartAguiTurnOptions['handlers']
+    state.start.mockImplementation((options: StartAguiTurnOptions) => {
+      handlers = options.handlers
+      return new Promise(() => {})
+    })
+    const view = mount({ thread: 'workspace:private' })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Ask Copilot' }), {
+      target: { value: 'Private draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(state.start).toHaveBeenCalledOnce())
+    await act(async () => handlers?.onTextDelta?.('Private answer', 'Private answer'))
+    await screen.findByText('Private answer')
+    state.principalId = 'owner-other'
+    view.refresh()
+    await waitFor(() => expect(screen.queryByText('Private answer')).toBeNull())
+    expect(screen.queryByText('Private draft')).toBeNull()
+    expect(state.stop).toHaveBeenCalled()
+    expect(state.clear).toHaveBeenCalled()
+    await act(async () => handlers?.onTextDelta?.('Late secret', 'Late secret'))
+    expect(screen.queryByText('Late secret')).toBeNull()
+    expect(
+      (screen.getByRole('textbox', { name: 'Ask Copilot' }) as HTMLTextAreaElement).value
+    ).toBe('')
+  })
+
   it('offers Continue for the latest chat but starts a new one from the composer', async () => {
     state.threads = [savedThread('workspace:brand', 'Brand color and Messenger', 'Use green')]
     state.create.mockResolvedValue({ key: 'workspace:new' })
@@ -179,8 +252,8 @@ describe('Home idle', () => {
       expect(options.forwardedProps).toEqual({ threadKey: 'workspace:new' })
     })
     mount()
-    expect(await screen.findByText('Continue: Brand color and Messenger')).toBeTruthy()
-    expect(screen.getByText('· 2 hours ago')).toBeTruthy()
+    expect(await screen.findByText('Brand color and Messenger')).toBeTruthy()
+    expect(screen.getByText('2 hours ago')).toBeTruthy()
     expect(screen.getByText('Launch plan')).toBeTruthy()
     fireEvent.change(screen.getByRole('textbox', { name: 'Ask Copilot' }), {
       target: { value: 'Invite my team' },
@@ -197,7 +270,7 @@ describe('Home idle', () => {
     state.threads = [savedThread('workspace:brand', 'Brand color', 'Use a green brand')]
     mount()
     const composer = screen.getByRole('textbox', { name: 'Ask Copilot' })
-    fireEvent.click(await screen.findByText('Continue: Brand color'))
+    fireEvent.click(await screen.findByText('Brand color'))
     expect(await screen.findByText('Use a green brand')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy()
     expect(overview('Launch plan')).toEqual({ state: 'closed', inert: true })
@@ -250,7 +323,7 @@ function overview(text: string) {
 async function openContinue() {
   state.threads = [savedThread('workspace:brand', 'Brand color', 'Use a green brand')]
   mount()
-  fireEvent.click(await screen.findByText('Continue: Brand color'))
+  fireEvent.click(await screen.findByText('Brand color'))
   await screen.findByText('Use a green brand')
 }
 
@@ -299,7 +372,7 @@ describe('leaving the inline chat', () => {
     const moving = [...regions].filter((element) =>
       /transition-\[[^\]]*(grid-template-rows|flex-grow)/.test(element.className)
     )
-    expect(moving.length).toBe(3)
+    expect(moving.length).toBe(2)
     for (const element of moving)
       expect(element.className).toContain('motion-reduce:transition-none')
   })
@@ -309,11 +382,11 @@ describe('inline chat', () => {
   it('returns Home on Esc, through history when it came from Home', async () => {
     state.threads = [savedThread('workspace:brand', 'Brand color', 'Use a green brand')]
     mount()
-    fireEvent.click(await screen.findByText('Continue: Brand color'))
+    fireEvent.click(await screen.findByText('Brand color'))
     await screen.findByText('Use a green brand')
     fireEvent.keyDown(window, { key: 'Escape' })
     await waitFor(() => expect(state.backs).toBe(1))
-    expect(await screen.findByText('Continue: Brand color')).toBeTruthy()
+    expect(await screen.findByText('Brand color')).toBeTruthy()
   })
 
   it('returns a review link to Home without leaving the app, and leaves Esc to open overlays', async () => {

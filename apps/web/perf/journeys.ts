@@ -279,6 +279,42 @@ export const journeys: Journey[] = [
   { kind: 'document', name: 'doc:admin-help-center', as: 'admin', path: '/admin/help-center' },
   { kind: 'document', name: 'doc:admin-users', as: 'admin', path: '/admin/users?sort=newest' },
   { kind: 'document', name: 'doc:admin-settings', as: 'admin', path: '/admin/settings/general' },
+  {
+    kind: 'document',
+    name: 'doc:admin-search',
+    as: 'admin',
+    path: '/admin/search?q=feedback',
+  },
+  {
+    kind: 'browser',
+    name: 'ui:workspace-search-load',
+    as: 'admin',
+    run: async (page) => {
+      await page.goto('/admin/search?q=feedback')
+      await page.getByRole('navigation', { name: 'Filter results' }).waitFor()
+      await page.getByRole('region', { name: 'Similar meaning' }).waitFor()
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:workspace-search-submit',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/feedback')
+      await page
+        .getByRole('button', { name: /^Search/ })
+        .first()
+        .waitFor()
+    },
+    run: async (page) => {
+      await page.keyboard.press('Control+k')
+      const input = page.getByRole('dialog', { name: 'Search Quackback' }).getByRole('combobox')
+      await input.fill('feedback')
+      await input.press('Enter')
+      await page.waitForURL('**/admin/search?q=feedback')
+      await page.getByRole('navigation', { name: 'Filter results' }).waitFor()
+    },
+  },
 
   // Browser journeys: launch, navigate, open.
   {

@@ -1080,6 +1080,28 @@
       "jsKB": 486.1,
       "htmlTransferKB": 16.3,
       "componentRenders": 667
+    },
+    "doc:admin-search": {
+      "dbQueries": 6,
+      "htmlKB": 46.4
+    },
+    "ui:workspace-search-load": {
+      "dbQueries": 25,
+      "serverRequests": 3,
+      "requests": 76,
+      "jsRequests": 70,
+      "jsKB": 400.6,
+      "htmlTransferKB": 10.5,
+      "componentRenders": 343
+    },
+    "ui:workspace-search-submit": {
+      "dbQueries": 19,
+      "serverRequests": 2,
+      "requests": 8,
+      "jsRequests": 6,
+      "jsKB": 48.3,
+      "htmlTransferKB": 0,
+      "componentRenders": 530
     }
   },
   "$comment": "Ceilings for bun perf/bench.ts. Lowered with --update whenever a journey comes in under; raised only with --update --allow-increase, which a reviewer should question."

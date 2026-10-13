@@ -1,25 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
-import {
-  ArrowLeftIcon,
-  ChatBubbleLeftIcon,
-  ClockIcon,
-  MagnifyingGlassIcon,
-} from '@heroicons/react/24/outline'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/shared/utils'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { getTimeAgo } from '@/components/ui/time-ago'
-import { MessageMarkdown } from '@/components/shared/conversation/message-markdown'
-import { useAguiTurn } from '@/lib/client/hooks/use-agui-turn'
-import { usePrincipalId } from '@/lib/client/hooks/use-root-context'
+import { usePrincipalId, useFeatureFlags } from '@/lib/client/hooks/use-root-context'
+import { usePermissions } from '@/lib/client/use-permissions'
+import { workspaceChatStarters } from '@/lib/shared/workspace-starters'
 import type {
   WorkspaceCopilotFinalPayload,
   WorkspaceCopilotMessage,
@@ -30,19 +16,12 @@ import {
   listWorkspaceCopilotThreadsFn,
 } from '@/lib/server/functions/workspace-copilot'
 import { AskMessages } from './ask-messages'
+import { RecentChats } from './chat-history'
+import { HomeStreamBridge, type HomeStreamTransport } from './home-stream-bridge'
+import { WorkspaceChatThread, type DraftTurn } from './workspace-chat-thread'
+import { Button } from '@/components/ui/button'
 import { ChatComposer } from './chat-composer'
-import { ConnectorCallCard } from './connector-call-card'
-import { useSearchPalette, useSearchShortcutLabel } from './search-palette'
-import { WorkspaceAssistantMessage } from './workspace-assistant-message'
-import { WorkspaceSettingsProposalCard } from './workspace-settings-proposal-card'
 import { HomeColumn, HomeHeaderSpace } from '../home-frame'
-
-type DraftTurn = {
-  threadKey: string
-  question: string
-  text: string
-  final?: WorkspaceCopilotFinalPayload
-}
 
 const threadKeys = (principalId: string | undefined) => ({
   all: ['admin', 'workspace-copilot'] as const,
@@ -63,6 +42,7 @@ function overlayOpen() {
  */
 export interface CopilotHomeProps {
   threadKey?: string
+  initialQuestion?: string
   canAsk: boolean
   header: ReactNode
   /**
@@ -83,17 +63,40 @@ export function CopilotHome(props: CopilotHomeProps) {
   )
 }
 
-function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: CopilotHomeProps) {
+function CopilotHomeView({
+  threadKey,
+  initialQuestion,
+  canAsk,
+  header,
+  paused,
+  waiting,
+  below,
+}: CopilotHomeProps) {
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
   const principalId = usePrincipalId()
+  const privateOwner = useRef(principalId)
+  const sameOwner = privateOwner.current === principalId
+  const permissions = usePermissions()
+  const flags = useFeatureFlags()
+  const starters = workspaceChatStarters(permissions, flags)
   const keys = threadKeys(principalId)
-  const { start, stop, clear } = useAguiTurn({ url: '/api/admin/assistant/workspace' })
+  const transport = useRef<HomeStreamTransport>(null)
+  const stop = useCallback(() => transport.current?.stop(), [])
+  const clear = useCallback(() => transport.current?.clear(), [])
+  const start = useCallback((input: Parameters<HomeStreamTransport['start']>[0]) => {
+    if (!transport.current) return Promise.reject(new Error('Chat is not ready'))
+    return transport.current.start(input)
+  }, [])
   const [query, setQuery] = useState('')
+  useEffect(() => {
+    if (initialQuestion && !threadKey) setQuery(initialQuestion)
+  }, [initialQuestion, threadKey])
   const [draft, setDraft] = useState<DraftTurn | null>(null)
   const [pending, setPending] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [instant, setInstant] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The draft unmounts once the saved thread has the answer, so a finished
   // answer is announced from a region that stays mounted.
@@ -103,6 +106,29 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
   const enteredFromHome = useRef(false)
   const viewport = useRef<HTMLDivElement>(null)
   const following = useRef(true)
+  const [showJump, setShowJump] = useState(false)
+  const textFrame = useRef<number | null>(null)
+  const bufferedText = useRef<{ epoch: number; text: string } | null>(null)
+  const cancelTextFrame = useCallback(() => {
+    if (textFrame.current !== null) cancelAnimationFrame(textFrame.current)
+    textFrame.current = null
+    bufferedText.current = null
+  }, [])
+  useEffect(() => {
+    if (privateOwner.current === principalId) return
+    privateOwner.current = principalId
+    epoch.current++
+    cancelTextFrame()
+    stop()
+    clear()
+    busyRef.current = false
+    setBusy(false)
+    setDraft(null)
+    setPending(null)
+    setQuery('')
+    setError(null)
+    setAnnouncement('')
+  }, [principalId, cancelTextFrame, stop, clear])
 
   const threads = useQuery({
     queryKey: keys.list,
@@ -119,9 +145,10 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
   useEffect(
     () => () => {
       epoch.current++
+      cancelTextFrame()
       stop()
     },
-    [stop]
+    [stop, cancelTextFrame]
   )
   useEffect(() => {
     if (draft?.final && thread.data?.messages.some((m) => m.id === draft.final?.messageId))
@@ -133,16 +160,19 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
     if (threadKey) setPending(null)
   }, [threadKey])
 
-  const goHome = () => {
+  const goHome = useCallback(() => {
     if (enteredFromHome.current) {
       enteredFromHome.current = false
       router.history.back()
     } else void router.navigate({ to: '/admin', search: {} })
-  }
-  const openThread = (key: string) => {
-    if (!threadKey) enteredFromHome.current = true
-    void router.navigate({ to: '/admin', search: { copilotThread: key } })
-  }
+  }, [router])
+  const openThread = useCallback(
+    (key: string) => {
+      if (!threadKey) enteredFromHome.current = true
+      void router.navigate({ to: '/admin', search: { copilotThread: key } })
+    },
+    [router, threadKey]
+  )
 
   useEffect(() => {
     if (!threadKey) return
@@ -156,11 +186,15 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
   })
 
   const messages: WorkspaceCopilotMessage[] = threadKey ? (thread.data?.messages ?? []) : []
-  const liveDraft = draft && draft.threadKey === threadKey ? draft : null
+  const liveDraft = sameOwner && draft && draft.threadKey === threadKey ? draft : null
   // Only a chat follows its latest message; Home itself opens at the top.
   useLayoutEffect(() => {
     const element = viewport.current
-    if (element && inChat && following.current) element.scrollTop = element.scrollHeight
+    if (!element || !inChat || !following.current) return
+    const frame = requestAnimationFrame(() => {
+      if (following.current) element.scrollTop = element.scrollHeight
+    })
+    return () => cancelAnimationFrame(frame)
   }, [inChat, threadKey, messages.length, liveDraft?.text, liveDraft?.final, thread.isSuccess])
 
   const failed = () =>
@@ -169,13 +203,15 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
       defaultMessage: "Couldn't finish this answer. Try again.",
     })
 
-  const ask = async (question: string, target?: string) => {
+  const ask = async (question: string, target?: string, keyboard = false) => {
     const trimmed = question.trim()
     if (!canAsk || !trimmed || busyRef.current) return
     const requestedAt = ++epoch.current
     busyRef.current = true
     setBusy(true)
+    setInstant(keyboard)
     setError(null)
+    cancelTextFrame()
     following.current = true
     let key = target
     try {
@@ -191,25 +227,55 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
         openThread(key)
       } else setQuery('')
       const turnKey = key
+      let terminal = false
       setDraft({ threadKey: turnKey, question: trimmed, text: '' })
       await start({
         question: trimmed,
         forwardedProps: { threadKey: turnKey },
         handlers: {
           onTextDelta: (_delta, text) => {
-            if (epoch.current === requestedAt)
-              setDraft((previous) => (previous ? { ...previous, text } : previous))
+            if (epoch.current !== requestedAt) return
+            bufferedText.current = { epoch: requestedAt, text }
+            if (textFrame.current === null)
+              textFrame.current = requestAnimationFrame(() => {
+                textFrame.current = null
+                const buffered = bufferedText.current
+                bufferedText.current = null
+                if (buffered?.epoch === epoch.current)
+                  setDraft((previous) =>
+                    previous ? { ...previous, text: buffered.text } : previous
+                  )
+              })
           },
           onFinal: (payload) => {
             if (epoch.current !== requestedAt) return
+            terminal = true
+            cancelTextFrame()
             const final = payload as WorkspaceCopilotFinalPayload
             setDraft((previous) => (previous ? { ...previous, text: final.text, final } : previous))
             setAnnouncement(final.text)
           },
+          onActivity: (activity) => {
+            if (epoch.current !== requestedAt) return
+            setDraft((previous) =>
+              previous && !previous.activities?.includes(activity)
+                ? { ...previous, activities: [...(previous.activities ?? []), activity] }
+                : previous
+            )
+          },
           onError: () => {
             if (epoch.current !== requestedAt) return
+            terminal = true
+            cancelTextFrame()
             setError(failed())
             setQuery((previous) => previous || trimmed)
+          },
+          onStreamEnd: () => {
+            if (epoch.current === requestedAt && !terminal) {
+              cancelTextFrame()
+              setError(failed())
+              setQuery((previous) => previous || trimmed)
+            }
           },
         },
       })
@@ -227,8 +293,31 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
       }
     }
   }
+  const askCurrent = useRef(ask)
+  askCurrent.current = ask
+  const currentThread = useRef(threadKey)
+  currentThread.current = threadKey
+  const navigate = useCallback(
+    (href: string) => {
+      void router.navigate({ href })
+    },
+    [router]
+  )
+  const continueConnector = useCallback(
+    (name: string) => {
+      void askCurrent.current(
+        intl.formatMessage(
+          { id: 'ask.connector.continue', defaultMessage: 'Go ahead with {name}.' },
+          { name }
+        ),
+        currentThread.current
+      )
+    },
+    [intl]
+  )
   const stopTurn = () => {
     epoch.current++
+    cancelTextFrame()
     busyRef.current = false
     setBusy(false)
     stop()
@@ -244,12 +333,12 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
     following.current = true
   }, [inChat])
 
-  const latest = threads.data?.[0]
   const title =
     threads.data?.find((item) => item.key === threadKey)?.title ||
-    pending ||
+    (sameOwner ? pending : null) ||
     intl.formatMessage({ id: 'ask.chat.newChat', defaultMessage: 'New chat' })
-  const draftShown = liveDraft ?? (pending ? { threadKey: '', question: pending, text: '' } : null)
+  const draftShown =
+    liveDraft ?? (sameOwner && pending ? { threadKey: '', question: pending, text: '' } : null)
 
   return (
     <div
@@ -257,30 +346,28 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
       data-chat={inChat || undefined}
       className="flex h-full min-h-0 flex-col"
     >
+      <HomeStreamBridge key={principalId} transportRef={transport} />
       <div data-slot="copilot-announcer" aria-live="polite" className="sr-only">
-        {announcement}
+        {sameOwner ? announcement : ''}
       </div>
       <div
         ref={viewport}
         onScroll={(event) => {
           const element = event.currentTarget
           following.current = element.scrollHeight - element.scrollTop - element.clientHeight < 96
+          setShowJump(!following.current)
         }}
         data-slot="copilot-viewport"
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
         <HomeColumn>
-          <Collapse open={!inChat}>
+          <Collapse open={!inChat} instant={instant}>
             <HomeHeaderSpace>{header}</HomeHeaderSpace>
+            {waiting}
           </Collapse>
-          <div
-            className={cn(
-              'flex flex-col transition-[flex-grow,opacity] duration-300 ease-out motion-reduce:transition-none',
-              inChat ? 'grow opacity-100' : 'grow-0 opacity-0'
-            )}
-          >
+          <div className={cn('flex flex-col', inChat ? 'grow opacity-100' : 'grow-0 opacity-0')}>
             {inChat && (
-              <CopilotThread
+              <WorkspaceChatThread
                 title={title}
                 threads={threads.data ?? []}
                 busy={busy}
@@ -291,16 +378,9 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
                 onBack={goHome}
                 onNewChat={goHome}
                 onOpenThread={openThread}
-                onNavigate={(href) => void router.navigate({ href })}
-                onConnectorAllowed={(name) =>
-                  void ask(
-                    intl.formatMessage(
-                      { id: 'ask.connector.continue', defaultMessage: 'Go ahead with {name}.' },
-                      { name }
-                    ),
-                    threadKey
-                  )
-                }
+                onNavigate={navigate}
+                onConnectorAllowed={continueConnector}
+                onRetry={() => void ask(draftShown?.question ?? query, threadKey)}
               />
             )}
           </div>
@@ -315,43 +395,59 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
                   'sticky bottom-0 bg-linear-to-t from-background from-70% to-transparent pt-8 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-6'
               )}
             >
+              {inChat && showJump && (
+                <div className="mb-3 flex justify-center">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      following.current = true
+                      if (viewport.current)
+                        viewport.current.scrollTop = viewport.current.scrollHeight
+                      setShowJump(false)
+                    }}
+                  >
+                    {intl.formatMessage({
+                      id: 'ask.chat.jumpLatest',
+                      defaultMessage: 'Jump to latest',
+                    })}
+                  </Button>
+                </div>
+              )}
               <ChatComposer
-                query={query}
+                query={sameOwner ? query : ''}
                 onQueryChange={setQuery}
                 canAsk={canAsk}
                 busy={busy}
-                onAsk={(question) => void ask(question, threadKey)}
+                onAsk={(question, keyboard) => void ask(question, threadKey, keyboard)}
                 onStop={stopTurn}
                 autoFocus={false}
               />
             </div>
           )}
-          <Collapse open={!inChat}>
+          <Collapse open={!inChat} instant={instant}>
             <div className="space-y-6 pt-6 pb-16">
+              {canAsk && starters.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {starters.map((prompt) => (
+                    <Button
+                      key={prompt.id}
+                      variant="outline"
+                      size="sm"
+                      className="h-auto whitespace-normal py-2 text-start"
+                      onClick={() => void ask(intl.formatMessage(prompt))}
+                    >
+                      {intl.formatMessage(prompt)}
+                    </Button>
+                  ))}
+                </div>
+              )}
               {error && !inChat && (
                 <p role="alert" className="text-sm text-destructive">
                   {error}
                 </p>
               )}
-              {waiting}
-              {latest && (
-                <button
-                  type="button"
-                  onClick={() => openThread(latest.key)}
-                  className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-start text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
-                >
-                  <ChatBubbleLeftIcon className="size-4 shrink-0" aria-hidden="true" />
-                  <span className="min-w-0 truncate">
-                    {intl.formatMessage(
-                      { id: 'ask.chat.continue', defaultMessage: 'Continue: {title}' },
-                      { title: latest.title }
-                    )}
-                  </span>
-                  <span className="shrink-0 text-xs">
-                    · {getTimeAgo(latest.updatedAt, intl.locale)}
-                  </span>
-                </button>
-              )}
+              <RecentChats threads={threads.data ?? []} onOpenThread={openThread} />
               {below}
             </div>
           </Collapse>
@@ -365,218 +461,26 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
  * Overview content that folds away upward while a chat is open. Closed, it
  * is inert, so nothing inside it takes focus or reaches assistive tech.
  */
-function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
+function Collapse({
+  open,
+  children,
+  instant,
+}: {
+  open: boolean
+  children: ReactNode
+  instant?: boolean
+}) {
   return (
     <div
       inert={!open}
       data-state={open ? 'open' : 'closed'}
+      style={instant ? { transitionDuration: '0ms' } : undefined}
       className={cn(
-        'grid transition-[grid-template-rows,opacity,translate,visibility] duration-300 ease-out motion-reduce:transition-none',
+        'grid transition-[grid-template-rows,opacity,translate,visibility] duration-[var(--duration-slow)] ease-[var(--ease-drawer)] motion-reduce:transition-none',
         open ? 'grid-rows-[1fr] opacity-100' : 'invisible grid-rows-[0fr] -translate-y-2 opacity-0'
       )}
     >
       <div className="min-h-0 overflow-hidden">{children}</div>
     </div>
-  )
-}
-
-function CopilotThread({
-  title,
-  threads,
-  busy,
-  messages,
-  draft,
-  loadFailed,
-  error,
-  onBack,
-  onNewChat,
-  onOpenThread,
-  onNavigate,
-  onConnectorAllowed,
-}: {
-  title: string
-  threads: { key: string; title: string }[]
-  busy: boolean
-  messages: WorkspaceCopilotMessage[]
-  draft: DraftTurn | null
-  loadFailed: boolean
-  error: string | null
-  onBack: () => void
-  onNewChat: () => void
-  onOpenThread: (key: string) => void
-  onNavigate: (href: string) => void
-  onConnectorAllowed: (connectorName: string) => void
-}) {
-  const intl = useIntl()
-  const search = useSearchPalette()
-  const shortcut = useSearchShortcutLabel()
-  const payload = (final?: WorkspaceCopilotFinalPayload) =>
-    final ? (
-      <>
-        {final.proposedActions.map((action) =>
-          action.toolName === 'propose_settings_change' ? (
-            <WorkspaceSettingsProposalCard key={action.id} action={action} />
-          ) : action.connector ? (
-            <ConnectorCallCard
-              key={action.id}
-              action={{ ...action, connector: action.connector }}
-              onAllowed={onConnectorAllowed}
-            />
-          ) : (
-            <p key={action.id} className="text-sm text-muted-foreground">
-              {intl.formatMessage({
-                id: 'ask.settings.unavailable',
-                defaultMessage: 'These changes are unavailable.',
-              })}
-            </p>
-          )
-        )}
-        {final.navigation.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {final.navigation.map((link) => (
-              <Button
-                key={link.href}
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => onNavigate(link.href)}
-                className="bg-card shadow-raise transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-px hover:shadow-raise-hover focus-visible:ring-muted-foreground"
-              >
-                {link.messageId
-                  ? intl.formatMessage({ id: link.messageId, defaultMessage: link.label })
-                  : link.label}
-              </Button>
-            ))}
-          </div>
-        )}
-      </>
-    ) : null
-  const userBubble = 'ms-auto w-fit max-w-[90%] rounded-2xl bg-muted px-4 py-3 sm:max-w-[80%]'
-  return (
-    <>
-      <header className="sticky top-0 z-10 -mx-4 flex h-14 shrink-0 items-center gap-2 bg-background px-3 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-4 after:bg-linear-to-b after:from-background after:to-transparent sm:-mx-6 sm:px-5">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="gap-2 text-muted-foreground focus-visible:ring-muted-foreground"
-          onClick={onBack}
-          aria-keyshortcuts="Escape"
-        >
-          <ArrowLeftIcon className="size-4" aria-hidden="true" />
-          {intl.formatMessage({ id: 'ask.chat.back', defaultMessage: 'Back' })}
-        </Button>
-        <h1 className="min-w-0 flex-1 truncate text-center text-sm font-medium">{title}</h1>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="focus-visible:ring-muted-foreground"
-          onClick={search.open}
-          aria-label={intl.formatMessage({ id: 'ask.search.row', defaultMessage: 'Search' })}
-          title={shortcut}
-        >
-          <MagnifyingGlassIcon className="size-4" aria-hidden="true" />
-        </Button>
-        {threads.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="focus-visible:ring-muted-foreground"
-                aria-label={intl.formatMessage({
-                  id: 'ask.chat.history',
-                  defaultMessage: 'Your conversations',
-                })}
-              >
-                <ClockIcon className="size-4" aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72 max-w-[calc(100vw-2rem)]">
-              {threads.map((item) => (
-                <DropdownMenuItem key={item.key} onClick={() => onOpenThread(item.key)}>
-                  <span className="min-w-0 truncate">
-                    {item.title ||
-                      intl.formatMessage({
-                        id: 'ask.chat.untitled',
-                        defaultMessage: 'Untitled chat',
-                      })}
-                  </span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          className="focus-visible:ring-muted-foreground"
-          onClick={onNewChat}
-        >
-          {intl.formatMessage({ id: 'ask.chat.newChat', defaultMessage: 'New chat' })}
-        </Button>
-      </header>
-      <section
-        aria-label={intl.formatMessage({ id: 'ask.chat.section', defaultMessage: 'Chat' })}
-        className="space-y-8 py-6"
-      >
-        {loadFailed && (
-          <p role="alert" className="text-sm text-destructive">
-            {intl.formatMessage({
-              id: 'ask.settings.unavailable',
-              defaultMessage: 'These changes are unavailable.',
-            })}
-          </p>
-        )}
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={message.sender === 'customer' ? userBubble : 'space-y-3 leading-7'}
-          >
-            {message.sender === 'assistant' ? (
-              <WorkspaceAssistantMessage
-                text={message.text}
-                citations={message.payload?.citations ?? []}
-              />
-            ) : (
-              <MessageMarkdown text={message.text} />
-            )}
-            {payload(message.payload)}
-          </div>
-        ))}
-        {draft && (
-          <>
-            <div className={userBubble}>
-              <MessageMarkdown text={draft.question} />
-            </div>
-            <div className="space-y-3 leading-7" aria-busy={busy}>
-              {draft.text ? (
-                <WorkspaceAssistantMessage
-                  text={draft.text}
-                  citations={draft.final?.citations ?? []}
-                  streaming={busy}
-                />
-              ) : (
-                busy && (
-                  <p className="text-sm text-muted-foreground">
-                    {intl.formatMessage({ id: 'ask.chat.thinking', defaultMessage: 'Thinking…' })}
-                  </p>
-                )
-              )}
-              {payload(draft.final)}
-            </div>
-          </>
-        )}
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-      </section>
-    </>
   )
 }

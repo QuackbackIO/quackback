@@ -40,10 +40,14 @@ const CopilotHome = lazy(() =>
 )
 
 export const Route = createFileRoute('/admin/')({
-  validateSearch: (search: Record<string, unknown>): { copilotThread?: string } =>
-    typeof search.copilotThread === 'string' && search.copilotThread.startsWith('workspace:')
+  validateSearch: (search: Record<string, unknown>): { copilotThread?: string; ask?: string } => ({
+    ...(typeof search.copilotThread === 'string' && search.copilotThread.startsWith('workspace:')
       ? { copilotThread: search.copilotThread }
-      : {},
+      : {}),
+    ...(typeof search.ask === 'string' && search.ask.trim()
+      ? { ask: search.ask.trim().slice(0, 200) }
+      : {}),
+  }),
   loader: async ({ context }) => {
     // Home's own strings, which the admin seed leaves out.
     const launchMessages = loadLaunchMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE)
@@ -87,7 +91,7 @@ function AdminOverviewPage() {
 function AdminHome() {
   const router = useRouter()
   const { modulesChanged } = Route.useLoaderData()
-  const { copilotThread } = Route.useSearch()
+  const { copilotThread, ask } = Route.useSearch()
   useEffect(() => {
     if (modulesChanged) void router.invalidate()
   }, [modulesChanged, router])
@@ -144,12 +148,13 @@ function AdminHome() {
       <Suspense fallback={copilotThread ? null : <HomeLoadingFrame header={header} />}>
         <CopilotHome
           threadKey={copilotThread}
+          initialQuestion={ask}
           canAsk={copilotOnHome && !paused}
           header={header}
           paused={
             paused ? <CopilotPaused resetsAt={paused.resetsAt} trial={paused.trial} /> : undefined
           }
-          waiting={<WaitingOnYou />}
+          waiting={<WaitingOnYou className="mb-6" />}
           below={
             <>
               {plan}

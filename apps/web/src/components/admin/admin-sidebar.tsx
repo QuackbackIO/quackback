@@ -63,10 +63,8 @@ import {
   useBillingEnabled,
   useCloudEnabled,
   useSessionContext,
-  useUserRole,
   useWorkspaceSettings,
 } from '@/lib/client/hooks/use-root-context'
-import { isAdmin } from '@/lib/shared/roles'
 import {
   useRefreshWaitingOnNewApproval,
   useWaitingApprovalCount,
@@ -357,16 +355,11 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   const orgLogo = branding?.logoUrl ?? branding?.headerLogoUrl ?? '/logo.png'
   const orgName = branding?.name ?? 'Quackback'
 
-  // Requests waiting on the viewer. Admins can decide every kind, so they
-  // always have Approvals; a member has it while a request waits on them.
-  const userRole = useUserRole()
+  // Offer Approvals only while a request waits on the viewer.
   const waitingApprovals = useWaitingApprovalCount() ?? 0
   useRefreshWaitingOnNewApproval()
-  const onApprovalsPage = useRouterState({
-    select: (s) => s.location.pathname.startsWith('/admin/approvals'),
-  })
   const railItems = buildRailItems(flags, {
-    approvals: isAdmin(userRole) || waitingApprovals > 0 || onApprovalsPage,
+    approvals: waitingApprovals > 0,
   })
   // Posts and comments waiting for review. Shown on Feedback when there are any.
   const feedbackEnabled = isProductEnabled(flags, 'feedback')

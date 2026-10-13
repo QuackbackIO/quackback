@@ -14,9 +14,10 @@ const searchContext = { open: openPalette }
 vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
 
 // vi.hoisted so the mock is ready when the hoisted vi.mock factory runs.
-const { mockGetRouteContext, mockRole } = vi.hoisted(() => ({
+const { mockGetRouteContext, mockRole, mockLocation } = vi.hoisted(() => ({
   mockGetRouteContext: vi.fn(),
   mockRole: { current: 'admin' as 'admin' | 'member' },
+  mockLocation: { current: '/admin/feedback' },
 }))
 
 vi.mock('@/lib/client/hooks/use-permission', () => ({
@@ -26,7 +27,7 @@ vi.mock('@/lib/client/hooks/use-permission', () => ({
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
   useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
-    select({ location: { pathname: '/admin/feedback' } }),
+    select({ location: { pathname: mockLocation.current } }),
   useRouteContext: (opts?: { select?: (context: unknown) => unknown }) =>
     opts?.select ? opts.select(mockGetRouteContext()) : mockGetRouteContext(),
   Link: ({
@@ -403,24 +404,40 @@ describe('AdminSidebar rail', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
     const dialog = await screen.findByRole('dialog')
     const links = [...dialog.querySelectorAll('nav a')].map((a) => a.getAttribute('href'))
-    expect(links.slice(0, 3)).toEqual(['/admin', '/admin/approvals', '/admin/feedback'])
+    expect(links.slice(0, 2)).toEqual(['/admin', '/admin/feedback'])
   })
 })
 
 describe('AdminSidebar: Approvals', () => {
   afterEach(() => {
     mockApprovals.current = undefined
+    mockLocation.current = '/admin/feedback'
     cleanup()
   })
   const approvalsLink = (container: HTMLElement) =>
     container.querySelector('aside nav a[href="/admin/approvals"]')
 
-  it('puts Approvals below Home for an admin, quiet while nothing waits', () => {
+  it('hides Approvals from an admin when nothing waits', () => {
     mockApprovals.current = { count: 0, latest: [] }
+    const { container } = renderSidebar('admin', { flags: ALL_ON })
+    expect(approvalsLink(container)).toBeNull()
+  })
+
+  it('keeps the item hidden while the count loads or the empty queue is open', () => {
+    mockApprovals.current = undefined
+    expect(approvalsLink(renderSidebar('admin', { flags: ALL_ON }).container)).toBeNull()
+    cleanup()
+    mockApprovals.current = { count: 0, latest: [] }
+    mockLocation.current = '/admin/approvals'
+    expect(approvalsLink(renderSidebar('admin', { flags: ALL_ON }).container)).toBeNull()
+  })
+
+  it('puts Approvals below Home when a request waits on the admin', () => {
+    mockApprovals.current = { count: 1, latest: [] }
     const { container } = renderSidebar('admin', { flags: ALL_ON })
     const links = [...container.querySelectorAll('aside nav a')].map((a) => a.getAttribute('href'))
     expect(links.slice(0, 2)).toEqual(['/admin', '/admin/approvals'])
-    expect(approvalsLink(container)!.textContent).toBe('Approvals')
+    expect(approvalsLink(container)!.textContent).toContain('1 waiting')
   })
 
   it('hides Approvals from a member with nothing to decide', () => {

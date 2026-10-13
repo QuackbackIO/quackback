@@ -303,6 +303,10 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     ],
     'team dashboard search checks each product permission and scopes every entity query to the actor'
   ),
+  'lib/server/functions/workspace-search.ts::searchWorkspaceEntitiesFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.POST_VIEW_PRIVATE, PERMISSIONS.HELP_CENTER_MANAGE, PERMISSIONS.CHANGELOG_VIEW_DRAFT, PERMISSIONS.CHANGELOG_MANAGE, PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+    'keyword and semantic dashboard search both apply product permissions and actor row visibility before returning records'
+  ),
   'lib/server/functions/workspace-copilot.ts::getWorkspaceCopilotAvailabilityFn': END_USER(
     'returns only whether this caller has Copilot permission and the enabled capability'
   ),

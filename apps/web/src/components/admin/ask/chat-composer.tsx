@@ -9,7 +9,7 @@ export interface ChatComposerProps {
   onQueryChange: (query: string) => void
   canAsk: boolean
   busy: boolean
-  onAsk: (question: string) => void
+  onAsk: (question: string, keyboard?: boolean) => void
   onStop: () => void
   autoFocus?: boolean
   footerActions?: ReactNode
@@ -38,7 +38,7 @@ export function ChatComposer({
   }, [autoFocus])
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-3 shadow-float transition-[box-shadow,border-color,translate] duration-300 ease-out focus-within:-translate-y-px focus-within:border-muted-foreground focus-within:shadow-float-focus motion-reduce:transition-none motion-reduce:focus-within:translate-y-0">
+    <div className="rounded-2xl border border-border bg-card p-3 shadow-float transition-[box-shadow,border-color,translate] duration-[var(--duration-base)] ease-out focus-within:-translate-y-px focus-within:border-muted-foreground focus-within:shadow-float-focus motion-reduce:transition-none motion-reduce:focus-within:translate-y-0">
       <Textarea
         ref={input}
         value={query}
@@ -55,7 +55,7 @@ export function ChatComposer({
             event.nativeEvent.keyCode !== 229
           ) {
             event.preventDefault()
-            if (canSend) onAsk(question)
+            if (canSend) onAsk(question, true)
           }
         }}
       />

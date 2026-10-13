@@ -9,8 +9,8 @@
  *
  * What each callback maps FROM on the wire:
  * - `onTextDelta`: TEXT_MESSAGE_CONTENT deltas are the RAW structured JSON;
- *   the prose is diffed out of the partial parse's `textField` (the exact
- *   delta-diffing the server used to do before emitting `*.v1.delta`).
+ *   the configured top-level text field is decoded incrementally, including
+ *   escaped characters split across chunks.
  * - `onActivity`: STEP_STARTED chunks (AG-UI's standard step lifecycle;
  *   `stepName` is the server-authoritative status vocabulary).
  * - `onFinal`: the terminal RUN_FINISHED's standard `result` slot — the
@@ -22,7 +22,8 @@
  */
 import { useCallback, useMemo, useRef } from 'react'
 import { useChat, fetchServerSentEvents } from '@tanstack/ai-react'
-import { parsePartialJSON, type StreamChunk } from '@tanstack/ai'
+import type { StreamChunk } from '@tanstack/ai'
+import { StreamedJsonText } from '@/lib/client/utils/streamed-json-text'
 import { aguiFetchClient } from '@/lib/client/utils/agui-fetch'
 import type { AssistantActivityStatus } from '@/lib/shared/conversation/types'
 
@@ -61,9 +62,9 @@ export function useAguiTurn(options: { url: string; textField?: string }) {
   const textField = options.textField ?? 'text'
   const handlersRef = useRef<AguiTurnHandlers | null>(null)
   const forwardedRef = useRef<Record<string, unknown>>({})
-  // Prose accumulator, reset per run; `terminal` dedupes onFinal/onError so a
+  // Incremental decoder, reset per run; `terminal` dedupes onFinal/onError so a
   // stream that errors after a final (or vice versa) reports exactly once.
-  const runRef = useRef({ raw: '', emitted: '', terminal: false })
+  const runRef = useRef({ parser: new StreamedJsonText(textField), terminal: false })
 
   const connection = useMemo(
     () =>
@@ -89,7 +90,7 @@ export function useAguiTurn(options: { url: string; textField?: string }) {
       }
       switch (chunk.type) {
         case 'RUN_STARTED':
-          runRef.current = { raw: '', emitted: '', terminal: false }
+          runRef.current = { parser: new StreamedJsonText(textField), terminal: false }
           break
         case 'CUSTOM':
           // A tool-using turn runs its agent loop unconstrained and emits the
@@ -98,22 +99,14 @@ export function useAguiTurn(options: { url: string; textField?: string }) {
           // boundary. Text before it is loop prose — reset so the JSON
           // finalization parses cleanly from its first byte.
           if (chunk.name === 'structured-output.start') {
-            runRef.current.raw = ''
-            runRef.current.emitted = ''
+            runRef.current.parser = new StreamedJsonText(textField)
           }
           break
         case 'TEXT_MESSAGE_CONTENT': {
           if (!handlers.onTextDelta || typeof chunk.delta !== 'string') break
           const run = runRef.current
-          run.raw += chunk.delta
-          const partial = parsePartialJSON(run.raw) as Record<string, unknown> | undefined
-          const text =
-            typeof partial?.[textField] === 'string' ? (partial[textField] as string) : ''
-          if (text.length > run.emitted.length && text.startsWith(run.emitted)) {
-            const delta = text.slice(run.emitted.length)
-            run.emitted = text
-            handlers.onTextDelta(delta, text)
-          }
+          const { delta, text } = run.parser.append(chunk.delta)
+          if (delta && !run.terminal) handlers.onTextDelta(delta, text)
           break
         }
         case 'STEP_STARTED': {
@@ -162,14 +155,14 @@ export function useAguiTurn(options: { url: string; textField?: string }) {
     async ({ question, forwardedProps, handlers }: StartAguiTurnOptions): Promise<void> => {
       handlersRef.current = handlers
       forwardedRef.current = forwardedProps ?? {}
-      runRef.current = { raw: '', emitted: '', terminal: false }
+      runRef.current = { parser: new StreamedJsonText(textField), terminal: false }
       try {
         await sendMessage(question)
       } finally {
         handlers.onStreamEnd?.()
       }
     },
-    [sendMessage]
+    [sendMessage, textField]
   )
 
   /** Rewind the thread to just before the `turnIndex`-th user message — the

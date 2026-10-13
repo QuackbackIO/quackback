@@ -13,10 +13,15 @@ import {
 import { useRouterState } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { loadAskMessages, normalizeLocale, DEFAULT_LOCALE } from '@/lib/shared/i18n'
 
-const SearchPaletteDialog = lazy(() =>
+const loadPalette = () =>
   import('./search-palette-dialog').then((module) => ({ default: module.SearchPaletteDialog }))
-)
+const SearchPaletteDialog = lazy(loadPalette)
+const warmPalette = (locale: string) => {
+  void loadPalette().catch(() => {})
+  void loadAskMessages(normalizeLocale(locale) ?? DEFAULT_LOCALE).catch(() => {})
+}
 
 export const SearchPaletteContext = createContext<{ open: () => void } | null>(null)
 
@@ -30,13 +35,15 @@ const INBOX_PATH = /^\/admin\/inbox(?:\/|$)/
 export function SearchPaletteProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [instant, setInstant] = useState(false)
   const openRef = useRef(false)
   const returnFocus = useRef<HTMLElement | null>(null)
   const onInbox = useRouterState({ select: (state) => INBOX_PATH.test(state.location.pathname) })
-  const change = useCallback((next: boolean) => {
+  const change = useCallback((next: boolean, keyboard = false) => {
     if (next && !openRef.current) returnFocus.current = document.activeElement as HTMLElement
     openRef.current = next
     if (next) setMounted(true)
+    if (next) setInstant(keyboard)
     setOpen(next)
   }, [])
   useEffect(() => {
@@ -45,7 +52,7 @@ export function SearchPaletteProvider({ children }: { children: ReactNode }) {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== 'k')
         return
       event.preventDefault()
-      change(!openRef.current)
+      change(!openRef.current, true)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -56,7 +63,12 @@ export function SearchPaletteProvider({ children }: { children: ReactNode }) {
       {children}
       {mounted && (
         <Suspense fallback={null}>
-          <SearchPaletteDialog open={open} onOpenChange={change} returnFocus={returnFocus} />
+          <SearchPaletteDialog
+            open={open}
+            onOpenChange={change}
+            returnFocus={returnFocus}
+            instant={instant}
+          />
         </Suspense>
       )}
     </SearchPaletteContext.Provider>
@@ -91,6 +103,8 @@ export function SearchTrigger({ className, tour = false }: { className?: string;
     <button
       type="button"
       onClick={open}
+      onPointerEnter={() => warmPalette(intl.locale)}
+      onFocus={() => warmPalette(intl.locale)}
       aria-label={label}
       aria-keyshortcuts="Control+K Meta+K"
       data-admin-rail-item=""

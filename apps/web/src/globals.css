@@ -423,6 +423,19 @@
   }
   body {
     -webkit-font-smoothing: antialiased;
+  --duration-instant: 0ms;
+  --duration-fast: 100ms;
+  --duration-quick: 120ms;
+  --duration-base: 160ms;
+  --duration-slow: 220ms;
+  --duration-slower: 300ms;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-emphasized: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --stagger: 40ms;
+  --distance-sm: 4px;
+  --distance-md: 8px;
     letter-spacing: var(--letter-spacing);
     @apply bg-background text-foreground;
   }

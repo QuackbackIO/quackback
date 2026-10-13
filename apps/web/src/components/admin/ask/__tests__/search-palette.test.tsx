@@ -28,12 +28,24 @@ vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useBillingEnabled: () => false,
   useCloudEnabled: () => false,
 }))
-vi.mock('@/lib/server/functions/ask-search', () => ({
-  searchAskEntitiesFn: async ({ data }: { data: { query: string } }) => {
+vi.mock('@/lib/server/functions/workspace-search', () => ({
+  searchWorkspaceEntitiesFn: async ({ data }: { data: { query: string; mode: string } }) => {
+    if (data.mode === 'semantic') return { available: false, results: [] }
     state.searches.push(data.query)
-    return data.query === 'refund'
-      ? [{ id: 'post_refund', title: 'Refund policy idea', href: '/admin/feedback?post=refund' }]
-      : []
+    return {
+      available: true,
+      results:
+        data.query === 'refund'
+          ? [
+              {
+                id: 'post_refund',
+                kind: 'post',
+                title: 'Refund policy idea',
+                href: '/admin/feedback?post=refund',
+              },
+            ]
+          : [],
+    }
   },
 }))
 

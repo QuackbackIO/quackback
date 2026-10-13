@@ -12,13 +12,13 @@ import { useWaitingApprovals } from './use-waiting-approvals'
  * way into Approvals. It reads the answer the admin layout already holds, so
  * Home renders without waiting for it, and shows nothing while nothing waits.
  */
-export function WaitingOnYou() {
+export function WaitingOnYou({ className }: { className?: string } = {}) {
   const intl = useIntl()
   const headingId = useId()
   const waiting = useWaitingApprovals()
   if (!waiting || waiting.count === 0 || waiting.latest.length === 0) return null
   return (
-    <section aria-labelledby={headingId} data-slot="waiting-on-you">
+    <section aria-labelledby={headingId} data-slot="waiting-on-you" className={className}>
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
         <h2 id={headingId} className="text-[13px] font-medium text-muted-foreground">
           {intl.formatMessage({
