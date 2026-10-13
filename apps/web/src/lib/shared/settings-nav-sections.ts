@@ -92,6 +92,7 @@ const MODULE_PAGE_ACCESS = {
   '/admin/settings/changelog': { permission: PERMISSIONS.CHANGELOG_MANAGE },
   '/admin/settings/status': { permission: PERMISSIONS.STATUS_PAGE_MANAGE },
   '/admin/settings/agents/assistants': { permission: PERMISSIONS.API_KEY_MANAGE },
+  '/admin/settings/agents/your-ai': { permission: PERMISSIONS.API_KEY_MANAGE },
   '/admin/settings/agents/keys': { permission: PERMISSIONS.API_KEY_MANAGE },
   '/admin/settings/agents/webhooks': { permission: PERMISSIONS.API_KEY_MANAGE },
 } as const satisfies Partial<
@@ -286,6 +287,7 @@ export function buildNavSections(
           id: '/admin/settings/agents',
           pages: [
             modulePage('/admin/settings/agents/assistants'),
+            ...(flags?.ownAgent ? [modulePage('/admin/settings/agents/your-ai')] : []),
             modulePage('/admin/settings/agents/keys'),
             modulePage('/admin/settings/agents/webhooks'),
           ],

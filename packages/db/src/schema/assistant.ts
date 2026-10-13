@@ -13,6 +13,7 @@ import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { conversations } from './conversation'
 import { principal } from './auth'
+import { supportAgents } from './support-agents'
 
 /**
  * Assistant involvement record — the audit/KPI unit for the in-product AI
@@ -78,6 +79,12 @@ export const assistantInvolvements = pgTable(
     conversationId: typeIdColumn('conversation')('conversation_id')
       .notNull()
       .references(() => conversations.id, { onDelete: 'cascade' }),
+    // The workspace's own AI agent that engaged the conversation. Null means the
+    // built-in Quackback AI, so every earlier row keeps its meaning.
+    supportAgentId: typeIdColumnNullable('support_agent')('support_agent_id').references(
+      () => supportAgents.id,
+      { onDelete: 'set null' }
+    ),
     triggeredBy: text('triggered_by', { enum: ASSISTANT_INVOLVEMENT_TRIGGERS }).notNull(),
     status: text('status', { enum: ASSISTANT_INVOLVEMENT_STATUSES }).notNull().default('active'),
     handoffReason: text('handoff_reason', { enum: ASSISTANT_HANDOFF_REASONS }),

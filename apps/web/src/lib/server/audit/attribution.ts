@@ -189,6 +189,17 @@ export function workflowAttribution(workflow: { name: string }): AuditAttributio
   return { channel: 'workflow', clientName: cleanName(workflow.name) }
 }
 
+/** The workspace's own AI agent acts as itself, with a credential of its own. */
+export function agentAttribution(agent: { id: string; name: string }): AuditAttribution {
+  return {
+    channel: 'agent',
+    credentialKind: 'agent_credential',
+    credentialId: agent.id,
+    clientName: cleanName(agent.name),
+    onBehalfOfPrincipalId: null,
+  }
+}
+
 /**
  * The assistant acts as itself. When it runs a tool for a teammate, as on Home
  * or for an approved proposal, it acts on that teammate's behalf; on its own

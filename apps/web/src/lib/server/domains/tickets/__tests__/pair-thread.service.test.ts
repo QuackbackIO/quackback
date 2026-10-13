@@ -40,6 +40,7 @@ vi.mock('@/lib/server/config', () => ({
 const assistantState = vi.hoisted(() => ({ id: null as string | null }))
 vi.mock('@/lib/server/messages/assistant-principal', () => ({
   assistantPrincipalIdOnce: vi.fn(async () => assistantState.id),
+  aiPrincipalIdsOnce: vi.fn(async () => new Set(assistantState.id ? [assistantState.id] : [])),
 }))
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'

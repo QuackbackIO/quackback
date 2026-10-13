@@ -254,6 +254,20 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "workspace's.",
   },
   {
+    file: 'apps/web/src/lib/server/messages/assistant-principal.ts',
+    name: 'cachedAiPrincipalIds',
+    category: 'workspace-keyed',
+    reason:
+      'AI author ids belong to one workspace database; a cross-workspace hit would mislabel a human reply as AI. WorkspaceKeyedCache partitions the set.',
+  },
+  {
+    file: 'apps/web/src/lib/server/messages/assistant-principal.ts',
+    name: 'aiIdsCheckedAt',
+    category: 'workspace-keyed',
+    reason:
+      'The refresh time must be keyed with the AI author-id set, so one workspace cannot prevent another workspace from resolving its own author ids.',
+  },
+  {
     file: 'apps/web/src/lib/server/realtime/stream-connection-limit.ts',
     name: 'streamLimiter',
     category: 'workspace-keyed',

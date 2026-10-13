@@ -83,7 +83,7 @@ import {
 import type { ConversationId, ConversationMessageId, TicketId } from '@quackback/ids'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { toMessageDTO } from '@/lib/server/messages/message-core'
-import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
+import { aiPrincipalIdsOnce } from '@/lib/server/messages/assistant-principal'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 
 /** Same page size as the pre-convergence ticket thread (ticket-message.service). */
@@ -277,7 +277,7 @@ async function toPairDtos(
       sourced.map((s) => s.row.principalId),
       { preferAccountName }
     ),
-    assistantPrincipalIdOnce(),
+    aiPrincipalIdsOnce(),
   ])
   return sourced.map(({ row, source }) => ({
     ...toMessageDTO(

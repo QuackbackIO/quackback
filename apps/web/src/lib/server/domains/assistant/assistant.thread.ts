@@ -188,7 +188,7 @@ export function mapRowsToThreadMessages(
       sender:
         m.senderType === 'visitor'
           ? 'customer'
-          : m.author?.principalId === assistantPrincipalId
+          : m.isAssistant || m.author?.principalId === assistantPrincipalId
             ? 'assistant'
             : 'human_agent',
       trimmed,

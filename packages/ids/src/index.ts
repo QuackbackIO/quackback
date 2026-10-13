@@ -137,6 +137,8 @@ export type {
   ConnectorId,
   SkillId,
   AssistantEventId,
+  SupportAgentId,
+  SupportAgentTurnId,
   AssistantToolCallId,
   AssistantSnippetId,
   AssistantDocumentId,

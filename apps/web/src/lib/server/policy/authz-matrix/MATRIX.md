@@ -101,7 +101,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 754 surfaces
+### Server functions (`requireAuth`) — 760 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -716,6 +716,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/subscriptions.ts`::unsubscribeFromPostFn | END_USER (any authenticated) |
 | `lib/server/functions/subscriptions.ts`::updateSubscriptionLevelFn | END_USER (any authenticated) |
 | `lib/server/functions/subscriptions.ts`::adminUpdateVoterSubscriptionFn | post.vote_on_behalf |
+| `lib/server/functions/support-agents.ts`::getSupportAgentConfigFn | api_key.manage |
+| `lib/server/functions/support-agents.ts`::manageSupportAgentFn | api_key.manage |
+| `lib/server/functions/support-agents.ts`::manageSupportAgentFn | ADMIN-ONLY (~api_key.manage) |
+| `lib/server/functions/support-agents.ts`::getAnsweringFn | settings.manage |
+| `lib/server/functions/support-agents.ts`::updateAnsweringFn | settings.manage |
+| `lib/server/functions/support-agents.ts`::updateAnsweringFn | ADMIN-ONLY (~settings.manage) |
 | `lib/server/functions/support-reporting.ts`::supportReportingFn | analytics.view |
 | `lib/server/functions/support-reporting.ts`::attributeBreakdownFn | analytics.view |
 | `lib/server/functions/team-people.ts`::searchPeopleToAddFn | member.manage |
@@ -998,6 +1004,18 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/webhooks/index.ts`::GET | webhook.view |
 | `routes/api/v1/webhooks/index.ts`::POST | webhook.manage |
 
+### Own AI agent API (`withAgentAuth`, live controller required) — 7 surfaces
+
+| Surface | Enforces |
+| --- | --- |
+| `routes/api/v1/agent/conversations/$conversationId.activity.ts`::POST | OWN AGENT (live controller only) |
+| `routes/api/v1/agent/conversations/$conversationId.handoff.ts`::POST | OWN AGENT (live controller only) |
+| `routes/api/v1/agent/conversations/$conversationId.reply.ts`::POST | OWN AGENT (live controller only) |
+| `routes/api/v1/agent/conversations/$conversationId.resolve.ts`::POST | OWN AGENT (live controller only) |
+| `routes/api/v1/agent/conversations/$conversationId.stream.ts`::POST | OWN AGENT (live controller only) |
+| `routes/api/v1/agent/conversations/$conversationId.ts`::GET | OWN AGENT (live controller only) |
+| `routes/api/v1/agent/turns.ts`::GET | OWN AGENT (live controller only) |
+
 ### Session-authenticated routes (`requireAuth`) — 2 surfaces
 
 | Surface | Enforces |
@@ -1082,7 +1100,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-228 of 1100 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+228 of 1111 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

@@ -1,5 +1,5 @@
 import {
-  ENTITLEMENTS,
+  ENTITLEMENT_DISPLAY,
   PLAN_CATALOGUE,
   canonicalPlanId,
   minimumPlanFor,
@@ -21,7 +21,7 @@ export type UpgradeDescription = {
 
 /** Catalogue-backed copy for an entitlement. Plan names come from PLAN_CATALOGUE. */
 export function describeEntitlementUpgrade(key: EntitlementKey): UpgradeDescription {
-  const definition = ENTITLEMENTS[key]
+  const definition = ENTITLEMENT_DISPLAY[key]
   const plan = minimumPlanFor(key)
   const verb = definition.plural ? 'are' : 'is'
   if (!plan) {

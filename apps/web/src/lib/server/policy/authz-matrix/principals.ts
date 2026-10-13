@@ -50,6 +50,7 @@ const READ_ONLY_KEY_SCOPES = new Set<McpScope>([
 ])
 
 export type PrincipalClassId =
+  | 'own_agent'
   | 'admin'
   | 'member'
   | 'portal_user'
@@ -65,7 +66,7 @@ export interface PrincipalClass {
   label: string
   role: Role | null
   principalType: PrincipalType
-  authMethod: 'cookie' | 'widget-bearer' | 'api-key' | 'oauth'
+  authMethod: 'cookie' | 'widget-bearer' | 'api-key' | 'oauth' | 'agent-key'
   /** Surface channels this class can present credentials to. */
   channels: ReadonlySet<Channel>
   /** Resolved catalogue permissions (server-fn / REST authority). */
@@ -85,6 +86,18 @@ const SESSION_CHANNELS = new Set<Channel>(['server-fn', 'sse', 'session-route'])
 const KEY_CHANNELS = new Set<Channel>(['api-route', 'mcp'])
 
 export const PRINCIPAL_CLASSES: PrincipalClass[] = [
+  {
+    id: 'own_agent',
+    label: 'Own AI agent (controlled conversations only)',
+    role: 'member',
+    principalType: 'service',
+    authMethod: 'agent-key',
+    channels: new Set<Channel>(['agent-api']),
+    permissions: new Set(),
+    isTeamMember: false,
+    isAuthenticatedPrincipal: true,
+    mcpScopes: null,
+  },
   {
     id: 'admin',
     label: 'Admin (Owner preset)',

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { join } from 'node:path'
 import { resolveSurfaces } from '../resolve'
 import { scanAllMcpTools, scanAllEntryPoints } from '../scan'
-import { PRINCIPAL_CLASS_BY_ID, ALL_MCP_SCOPES } from '../principals'
+import { PRINCIPAL_CLASS_BY_ID, PRINCIPAL_CLASSES, ALL_MCP_SCOPES } from '../principals'
 import { evaluate, evaluateMcpTool, renderMatrixDoc } from '../matrix'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
@@ -253,5 +253,23 @@ describe('golden matrix document', () => {
   it('matches the committed MATRIX.md snapshot', async () => {
     const doc = renderMatrixDoc(surfaces, tools, entryPoints)
     await expect(doc).toMatchFileSnapshot(join(__dirname, '../MATRIX.md'))
+  })
+})
+
+describe('own-agent credential boundary', () => {
+  const agent = PRINCIPAL_CLASSES.find((c) => c.id === 'own_agent')!
+  const agentSurfaces = surfaces.filter((s) => s.channel === 'agent-api')
+  it('records every current agent callback behind the controller credential', () => {
+    expect(agentSurfaces).toHaveLength(7)
+    for (const surface of agentSurfaces) {
+      expect(surface.authz).toEqual({ type: 'agent_controller' })
+      expect(evaluate(agent, surface)).toBe('allow')
+      for (const other of PRINCIPAL_CLASSES.filter((c) => c.id !== 'own_agent'))
+        expect(evaluate(other, surface)).toBe('n/a')
+    }
+  })
+  it('gives the agent no entry to teammate REST, server functions or MCP', () => {
+    for (const surface of surfaces.filter((s) => s.channel !== 'agent-api'))
+      expect(evaluate(agent, surface)).toBe('n/a')
   })
 })

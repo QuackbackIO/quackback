@@ -32,6 +32,14 @@ function LabsSettingsPage() {
     onSuccess: () => void router.invalidate(),
     onError: (_error, next) => setCopilotHome(!next),
   })
+  const [ownAgent, setOwnAgent] = useState(flags?.ownAgent === true)
+  const ownToggle = useMutation({
+    meta: AUTOSAVE,
+    mutationFn: (next: boolean) => updateFeatureFlagsFn({ data: { ownAgent: next } }),
+    onMutate: setOwnAgent,
+    onSuccess: () => void router.invalidate(),
+    onError: (_error, next) => setOwnAgent(!next),
+  })
   return (
     <SettingsPage page="/admin/settings/labs">
       <SettingsCard>
@@ -52,6 +60,22 @@ function LabsSettingsPage() {
                 checked={copilotHome}
                 disabled={toggle.isPending}
                 onCheckedChange={(next) => toggle.mutate(next)}
+              />
+            }
+          />
+          <SettingRow
+            label={intl.formatMessage({ id: 'ownAgent.title', defaultMessage: 'Your AI agent' })}
+            htmlFor="labs-own-agent"
+            description={intl.formatMessage({
+              id: 'ownAgent.labsDescription',
+              defaultMessage: 'Let your own AI answer customer conversations.',
+            })}
+            control={
+              <Switch
+                id="labs-own-agent"
+                checked={ownAgent}
+                disabled={ownToggle.isPending}
+                onCheckedChange={(next) => ownToggle.mutate(next)}
               />
             }
           />

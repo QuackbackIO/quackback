@@ -31,6 +31,7 @@ const GATE_CALLEES = new Set([
   'requireAuth',
   'requireWidgetAuth',
   'withApiKeyAuth',
+  'withAgentAuth',
   'requireTeamAuth',
 ])
 /** Team wrappers with no options arg — authority declared in classifications. */
@@ -128,6 +129,7 @@ function gateAuthz(callee: string, call: ts.CallExpression): ScannedAuthz {
     if (call.arguments.length === 0) return { kind: 'bare' }
     return classifyPermissionArg(call.arguments[0])
   }
+  if (callee === 'withAgentAuth') return { kind: 'bare' }
   if (callee === 'withApiKeyAuth') {
     // withApiKeyAuth(request) is bare; withApiKeyAuth(request, { permission }) gates.
     if (call.arguments.length <= 1) return { kind: 'bare' }

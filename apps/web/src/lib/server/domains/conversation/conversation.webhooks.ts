@@ -10,7 +10,7 @@
  * an email surfaces.
  */
 import type { ConversationId, SlaPolicyId } from '@quackback/ids'
-import type { Conversation, ConversationMessage } from '@/lib/server/db'
+import type { Conversation, ConversationMessage, Transaction } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import type { ConversationAuthorInput } from './conversation.types'
 import type {
@@ -273,4 +273,25 @@ export async function emitConversationCsatCommentAdded(
       csatSubmittedAt.toISOString()
     )
   )
+}
+
+/** Store the message event with a reply and its receipt, so dispatch survives a crash after commit. */
+export async function emitMessageCreatedInTransaction(
+  tx: Transaction,
+  author: ConversationAuthorInput,
+  message: ConversationMessage,
+  conversation: Conversation
+): Promise<void> {
+  const { emit } = await import('@/lib/server/events/emit')
+  const { messageCreated } = await import('@/lib/server/events/catalogue')
+  await emit(tx, messageCreated, {
+    payload: {
+      message: messageData(message, author, conversation),
+      conversation: conversationRef(conversation),
+      isFirstMessage: false,
+    },
+    actor: { type: 'service', id: author.principalId },
+    entityId: message.id,
+    context: { source: 'agent' },
+  })
 }

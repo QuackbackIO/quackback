@@ -21,6 +21,8 @@
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 export type SurfaceIntent =
+  /** An agent credential, limited to its currently controlled conversations. */
+  | 'AGENT_CONTROLLER'
   /** Bare `requireAuth()`: any authenticated principal (team, portal, or widget). */
   | 'END_USER'
   /** Bare `withApiKeyAuth(req)`: any valid API key, no permission; public-tier data. */
@@ -97,6 +99,34 @@ const SETTINGS_REGISTRY_PERMISSIONS = [
 ]
 
 export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
+  'routes/api/v1/agent/turns.ts::GET': {
+    intent: 'AGENT_CONTROLLER',
+    why: 'An own-agent credential pulls only unexpired turns on conversations it currently controls; internal notes are excluded.',
+  },
+  'routes/api/v1/agent/conversations/$conversationId.ts::GET': {
+    intent: 'AGENT_CONTROLLER',
+    why: 'An own-agent credential is scoped to the live conversation controller; every operation rechecks ownership.',
+  },
+  'routes/api/v1/agent/conversations/$conversationId.activity.ts::POST': {
+    intent: 'AGENT_CONTROLLER',
+    why: 'An own-agent credential is scoped to the live conversation controller; every operation rechecks ownership.',
+  },
+  'routes/api/v1/agent/conversations/$conversationId.stream.ts::POST': {
+    intent: 'AGENT_CONTROLLER',
+    why: 'An own-agent credential is scoped to the live conversation controller; every operation rechecks ownership.',
+  },
+  'routes/api/v1/agent/conversations/$conversationId.reply.ts::POST': {
+    intent: 'AGENT_CONTROLLER',
+    why: 'An own-agent credential is scoped to the live conversation controller; every operation rechecks ownership.',
+  },
+  'routes/api/v1/agent/conversations/$conversationId.handoff.ts::POST': {
+    intent: 'AGENT_CONTROLLER',
+    why: 'An own-agent credential is scoped to the live conversation controller; every operation rechecks ownership.',
+  },
+  'routes/api/v1/agent/conversations/$conversationId.resolve.ts::POST': {
+    intent: 'AGENT_CONTROLLER',
+    why: 'An own-agent credential is scoped to the live conversation controller; every operation rechecks ownership.',
+  },
   'lib/server/functions/assistant-connectors.ts::createConnectorFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
     'either AI permission opens it, and assigning to an agent also requires that agent AI permission'
@@ -775,6 +805,18 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
 const NOT_A_GATE = (why: string): Classification => ({ intent: 'NOT_A_GATE', why })
 
 export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
+  'lib/server/functions/support-agents.ts::manageSupportAgentFn::isAdmin': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'admin',
+    resolvesTo: PERMISSIONS.API_KEY_MANAGE,
+    why: 'Only a dashboard admin may create, rotate or remove an agent credential; recent sign-in is checked before issuing secrets.',
+  },
+  'lib/server/functions/support-agents.ts::updateAnsweringFn::isAdmin': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'admin',
+    resolvesTo: PERMISSIONS.SETTINGS_MANAGE,
+    why: 'The workspace answerer is an admin-owned setting, including when a custom member role holds settings.manage.',
+  },
   // Real access decisions the requireAuth/withApiKeyAuth scan does NOT cover —
   // surfaced precisely because a stray change here would widen access silently.
   'routes/api/chat/stream.ts::GET::isTeamMember': {

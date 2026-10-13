@@ -228,6 +228,8 @@ export type AssistantWebSourceId = TypeId<'assistant_web_source'>
 
 /** Assistant usage-event ID - e.g., assistant_event_01h455vb4pex5vsknk084sn02q */
 export type AssistantEventId = TypeId<'assistant_event'>
+export type SupportAgentId = TypeId<'support_agent'>
+export type SupportAgentTurnId = TypeId<'support_agent_turn'>
 
 /** Ticket ID - e.g., ticket_01h455vb4pex5vsknk084sn02q */
 export type TicketId = TypeId<'ticket'>
@@ -459,6 +461,8 @@ export interface EntityIdMap {
   file: FileId
   assistant_web_source: AssistantWebSourceId
   assistant_event: AssistantEventId
+  support_agent: SupportAgentId
+  support_agent_turn: SupportAgentTurnId
   ticket: TicketId
   ticket_status: TicketStatusId
   ticket_type: TicketTypeId

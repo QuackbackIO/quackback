@@ -188,6 +188,7 @@ vi.mock('@/lib/server/db', () => {
     c.where = vi.fn(() => c)
     c.orderBy = vi.fn(() => c)
     c.limit = vi.fn(async () => (label === 'conversations' ? [conversationRow()] : []))
+    c.for = vi.fn(async () => (label === 'conversations' ? [conversationRow()] : []))
     c.returning = vi.fn(async () => {
       if (label === 'conversation_messages') {
         return [{ ...row, id: 'conversation_msg_new', createdAt: new Date() }]

@@ -1143,6 +1143,9 @@ export interface FeatureFlags {
   /** Copilot on Home: the Home chat that answers from Copilot's knowledge and
    *  proposes reversible settings changes. A Labs switch; on for new workspaces. */
   copilotHome: boolean
+  /** Let the workspace's own AI agent answer customers instead of the built-in
+   *  AI: the Who answers card under Support. A Labs switch, off until chosen. */
+  ownAgent: boolean
 }
 
 /**
@@ -1219,10 +1222,14 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   supportTickets: false,
   statusPage: false,
   copilotHome: false,
+  ownAgent: false,
 }
 
 /** Flags that are Labs switches rather than products (Settings › Labs). */
-export const LABS_FEATURE_FLAGS = ['copilotHome'] as const satisfies readonly (keyof FeatureFlags)[]
+export const LABS_FEATURE_FLAGS = [
+  'copilotHome',
+  'ownAgent',
+] as const satisfies readonly (keyof FeatureFlags)[]
 
 /** Flags a workspace is created with: the defaults plus Copilot on Home. */
 export const NEW_WORKSPACE_FEATURE_FLAGS: FeatureFlags = {

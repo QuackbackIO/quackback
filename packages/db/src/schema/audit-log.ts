@@ -45,11 +45,11 @@ export const auditLog = pgTable(
     metadata: jsonb('metadata'),
     /**
      * What carried the change: 'ui' | 'api' | 'mcp' | 'assistant' | 'workflow' |
-     * 'system'. Null on rows written before attribution existed and on paths
+     * 'system' | 'agent'. Null on rows written before attribution existed and on paths
      * no boundary attributes.
      */
     channel: text('channel'),
-    /** The credential that made the change: 'api_key' | 'oauth_client', or null. */
+    /** The credential that made the change: 'api_key' | 'oauth_client' | 'agent_credential', or null. */
     credentialKind: text('credential_kind'),
     /** The API key id or OAuth client id. */
     credentialId: text('credential_id'),

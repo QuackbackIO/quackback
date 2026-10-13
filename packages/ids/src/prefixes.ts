@@ -92,6 +92,10 @@ export const ID_PREFIXES = {
   assistant_web_source: 'assistant_web_source',
   assistant_event: 'assistant_event',
 
+  // Who answers customers: the built-in AI or a workspace's own AI agent
+  support_agent: 'support_agent',
+  support_agent_turn: 'support_agent_turn',
+
   // Tickets (support platform §4.2)
   ticket: 'ticket',
   ticket_status: 'ticket_status',

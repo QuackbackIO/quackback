@@ -21,6 +21,8 @@ export type Outcome = 'allow' | 'deny' | 'n/a'
 export function evaluate(cls: PrincipalClass, surface: ResolvedSurface): Outcome {
   if (!cls.channels.has(surface.channel)) return 'n/a'
   switch (surface.authz.type) {
+    case 'agent_controller':
+      return cls.id === 'own_agent' ? 'allow' : 'deny'
     case 'permission':
       return cls.permissions.has(surface.authz.permission) ? 'allow' : 'deny'
     case 'end_user':
@@ -58,6 +60,8 @@ const MANAGER = resolveActorPermissions('member')
 
 function authzLabel(s: ResolvedSurface): string {
   switch (s.authz.type) {
+    case 'agent_controller':
+      return 'OWN AGENT (live controller only)'
     case 'permission':
       return s.authz.permission
     case 'end_user':
@@ -119,6 +123,7 @@ export function renderMatrixDoc(
   const sections = [
     ['server-fn', 'Server functions (`requireAuth`)'],
     ['api-route', 'Public REST API (`withApiKeyAuth`)'],
+    ['agent-api', 'Own AI agent API (`withAgentAuth`, live controller required)'],
     ['session-route', 'Session-authenticated routes (`requireAuth`)'],
     ['sse', 'SSE stream (inline gate)'],
     ['mcp', 'MCP transport entry'],

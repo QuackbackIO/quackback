@@ -130,11 +130,23 @@ export function richMessageFallbackLabel(doc: TiptapContent | null | undefined):
   return ''
 }
 
+/**
+ * Whether a message was written by an AI: the built-in assistant, or any of the
+ * workspace's own AI agents. Callers pass the one id, or the set of AI ids.
+ */
+function isAiAuthor(
+  principalId: PrincipalId | null,
+  ai: PrincipalId | ReadonlySet<PrincipalId> | null | undefined
+): boolean {
+  if (ai == null || principalId == null) return false
+  return typeof ai === 'string' ? principalId === ai : ai.has(principalId)
+}
+
 /** Map a message row + resolved author to its wire DTO (conversation or ticket). */
 export function toMessageDTO(
   message: ConversationMessage,
   author: ConversationAuthorDTO | null,
-  assistantPrincipalId?: PrincipalId | null
+  assistantPrincipalId?: PrincipalId | ReadonlySet<PrincipalId> | null
 ): ConversationMessageDTO {
   const { contentJson, attachments } = liftInlineImagesToAttachments(
     contentJsonForClient(message.contentJson ?? null),
@@ -151,7 +163,7 @@ export function toMessageDTO(
     author,
     attachments,
     citations: message.citations ?? [],
-    isAssistant: assistantPrincipalId != null && message.principalId === assistantPrincipalId,
+    isAssistant: isAiAuthor(message.principalId, assistantPrincipalId),
     isInternal: message.isInternal,
     contentJson,
     viaEmail: message.metadata?.source === 'email',

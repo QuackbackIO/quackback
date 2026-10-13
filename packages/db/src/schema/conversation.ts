@@ -15,6 +15,7 @@ import {
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
+import { supportAgents } from './support-agents'
 import { workspaceAssistantThreads } from './workspace-assistant'
 import { teams } from './teams'
 import { channelAccounts } from './channel-accounts'
@@ -65,6 +66,12 @@ export const conversations = pgTable(
     // both, and assigning one never clears the other. `set null` so a deleted
     // team leaves the conversation team-unassigned rather than orphaned.
     assignedTeamId: typeIdColumnNullable('team')('assigned_team_id'),
+    // The AI agent currently answering this conversation, when it is one of the
+    // workspace's own agents. Null means the built-in AI or the team, as before.
+    controllerAgentId: typeIdColumnNullable('support_agent')('controller_agent_id').references(
+      () => supportAgents.id,
+      { onDelete: 'set null' }
+    ),
     status: text('status', { enum: CONVERSATION_STATUSES }).notNull().default('open'),
     // Snooze wake time for a 'snoozed' conversation. NULL while snoozed means
     // "until the customer next replies" (a customer message always wakes it); a

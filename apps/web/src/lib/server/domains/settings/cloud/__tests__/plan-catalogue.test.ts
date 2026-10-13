@@ -53,6 +53,7 @@ function on(plan: PlanId): CloudConfig {
 const INCLUDED_FROM: Partial<Record<EntitlementKey, PlanId>> = {
   customDomain: 'pro',
   aiAssistant: 'pro',
+  ownAgent: 'pro',
   aiDrafts: 'pro',
   apiAccess: 'pro',
   mcpServer: 'pro',

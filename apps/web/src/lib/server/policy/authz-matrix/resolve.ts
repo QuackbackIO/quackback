@@ -20,9 +20,10 @@ import {
   inlineKey,
 } from './classifications'
 
-export type Channel = 'server-fn' | 'api-route' | 'session-route' | 'mcp' | 'sse'
+export type Channel = 'agent-api' | 'server-fn' | 'api-route' | 'session-route' | 'mcp' | 'sse'
 
 export type ResolvedAuthz =
+  | { type: 'agent_controller' }
   /** A specific catalogue permission is required. */
   | { type: 'permission'; permission: PermissionKey }
   /** Any authenticated principal (team, portal, or widget). */
@@ -56,6 +57,7 @@ const PERMISSION_BY_CONST = new Map<string, PermissionKey>(
 )
 
 function channelOf(file: string): Channel {
+  if (file.startsWith('routes/api/v1/agent/')) return 'agent-api'
   if (file.startsWith('routes/api/chat/stream')) return 'sse'
   // Cookie-authenticated routes the app's own pages call. They live under
   // routes/api/ but present a session, not an API key, so grouping them with
@@ -145,7 +147,9 @@ export function resolveSurfaces(srcRoot: string): ResolveResult {
           ? { type: 'public_data' }
           : cls.intent === 'MCP_ENTRY'
             ? { type: 'mcp_entry' }
-            : { type: 'end_user' }
+            : cls.intent === 'AGENT_CONTROLLER'
+              ? { type: 'agent_controller' }
+              : { type: 'end_user' }
       surfaces.push({ ...base, authz })
     } else {
       errors.push(

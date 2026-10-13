@@ -19,7 +19,9 @@ checklist.
     `replied`, `handed_off`, `resolved`, `csat_submitted`, `breached`, `voted`,
     `external_status_changed` (a linked tracker issue moved upstream),
     `requested` · `decided` · `applied` (an approval is asked for, decided by
-    a person, and its change applied), …
+    a person, and its change applied), `turn_requested` · `turn_expired` (the
+    workspace's own AI agent is asked to answer a customer, and may miss its
+    deadline), …
     (add new ones to the list _on purpose_).
 - A new verb is a deliberate decision, not a drive-by string. Adding one and
   forgetting the list turns CI red.

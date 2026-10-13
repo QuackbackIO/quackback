@@ -265,6 +265,11 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
  */
 export const SIDE_EFFECT_LEDGER_EXEMPTIONS: readonly LedgerExemption[] = [
   {
+    column: schema.supportAgents.lastDeliveredAt,
+    reason:
+      'Delivery health telemetry shown in agent configuration. No dispatcher, retry, deadline, or cooldown reads it. Reclassify if delivery eligibility ever depends on this stamp; a rewind would then admit an already completed external delivery.',
+  },
+  {
     column: schema.assistantInvolvements.escalationOfferedAt,
     reason:
       'Declared but not wired: no code writes it and no code reads it, so there is nothing for a restore to get wrong. Reclassify as settle with stamp-pending the moment an escalation path starts draining it, because a rewound stamp would then offer a human a second time to a conversation that already had the offer.',

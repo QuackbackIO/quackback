@@ -28,7 +28,12 @@ import {
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import { logger } from '@/lib/server/logger'
 import { notTestConversation } from '@/lib/server/test-data'
-import type { AssistantInvolvementId, ConversationId } from '@quackback/ids'
+import type {
+  AssistantInvolvementId,
+  ConversationId,
+  PrincipalId,
+  SupportAgentId,
+} from '@quackback/ids'
 import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
 
 const log = logger.child({ component: 'assistant-involvement' })
@@ -122,12 +127,21 @@ export function outcomeStatus(kind: 'confirmed' | 'assumed'): AssistantInvolveme
 
 /** Open a fresh involvement for a conversation Quinn is engaging. */
 export async function openInvolvement(
-  input: { conversationId: ConversationId; triggeredBy: AssistantInvolvementTrigger },
+  input: {
+    conversationId: ConversationId
+    triggeredBy: AssistantInvolvementTrigger
+    /** The workspace's own AI agent that engaged; omitted for the built-in AI. */
+    supportAgentId?: SupportAgentId | null
+  },
   exec: Executor = db
 ): Promise<AssistantInvolvement> {
   const [row] = await exec
     .insert(assistantInvolvements)
-    .values({ conversationId: input.conversationId, triggeredBy: input.triggeredBy })
+    .values({
+      conversationId: input.conversationId,
+      triggeredBy: input.triggeredBy,
+      supportAgentId: input.supportAgentId ?? null,
+    })
     .returning()
   return row
 }
@@ -215,7 +229,9 @@ export async function recordHandoff(
 export async function recordOutcome(
   id: AssistantInvolvementId,
   kind: 'confirmed' | 'assumed',
-  exec: Executor = db
+  exec: Executor = db,
+  /** Who resolved it, when not the built-in AI (a workspace's own AI agent). */
+  resolvedBy?: { principalId: PrincipalId; displayName?: string }
 ): Promise<AssistantInvolvement | null> {
   const [row] = await exec
     .update(assistantInvolvements)
@@ -234,11 +250,11 @@ export async function recordOutcome(
         await import('@/lib/server/events/dispatch')
       const { ensureAssistantPrincipal } =
         await import('@/lib/server/domains/assistant/assistant.principal')
-      const assistant = await ensureAssistantPrincipal()
+      const assistant = resolvedBy ? null : await ensureAssistantPrincipal()
       await dispatchAssistantResolved(
         buildEventActor({
-          principalId: assistant.id,
-          displayName: assistant.displayName ?? undefined,
+          principalId: resolvedBy?.principalId ?? assistant!.id,
+          displayName: resolvedBy?.displayName ?? assistant?.displayName ?? undefined,
         }),
         row.conversationId,
         row.status

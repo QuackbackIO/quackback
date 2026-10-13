@@ -96,6 +96,9 @@ describe('event catalogue coverage', () => {
     'requested',
     'decided',
     'applied',
+    // agent turns: the workspace's own AI agent is asked to answer, and may miss its deadline
+    'turn_requested',
+    'turn_expired',
     // status-page legacy compound verbs (entity is status_incident/status_component)
     'incident_created',
     'incident_updated',

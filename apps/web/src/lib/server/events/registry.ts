@@ -15,6 +15,7 @@ import { notificationHook } from './handlers/notification'
 import { aiHook } from './handlers/ai'
 import { webhookHook } from './handlers/webhook'
 import { appWebhookHook } from './handlers/app-webhook'
+import { agentTurnHook } from './handlers/agent-turn'
 
 const builtinHooks = new Map<string, HookHandler>([
   ['email', emailHook],
@@ -22,6 +23,7 @@ const builtinHooks = new Map<string, HookHandler>([
   ['ai', aiHook],
   ['webhook', webhookHook],
   ['app_webhook', appWebhookHook],
+  ['agent_turn', agentTurnHook],
 ])
 
 /**

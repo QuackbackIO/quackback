@@ -286,6 +286,21 @@ export const P = {
   // assistant + sla
   'assistant.handed_off': z.looseObject({ conversationId: id, reason: z.string() }),
   'assistant.resolved': z.looseObject({ conversationId: id, outcome: z.string() }),
+  // Agent turns: ids only. The turn request is assembled at delivery from the
+  // live conversation, so customer text never sits in the outbox.
+  'agent.turn_requested': z.looseObject({
+    turnId: id,
+    agentId: id,
+    conversationId: id,
+    triggerMessageId: nullableStr,
+    deadlineAt: z.string(),
+  }),
+  'agent.turn_expired': z.looseObject({
+    turnId: id,
+    agentId: id,
+    conversationId: id,
+    fallback: z.enum(['quackback_ai', 'team']),
+  }),
   // SLA timer triggers (support platform §4.6). `ticketId`/`ticket` are
   // present only for the ticket-anchored time_to_resolve clock
   // (ticket-sla.service.ts); conversation clocks omit both.

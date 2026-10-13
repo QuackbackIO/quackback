@@ -68,6 +68,7 @@ export const SETTINGS_PAGE_ICONS: Record<
   '/admin/settings/security/authentication': ShieldCheckIcon,
   '/admin/settings/agents': CommandLineIcon,
   '/admin/settings/agents/assistants': CommandLineIcon,
+  '/admin/settings/agents/your-ai': SparklesIcon,
   '/admin/settings/agents/keys': CommandLineIcon,
   '/admin/settings/agents/webhooks': CommandLineIcon,
   '/admin/settings/labs': BeakerIcon,

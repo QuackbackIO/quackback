@@ -533,8 +533,10 @@ export async function sendVisitorMessage(
     void isPairedWithCustomerTicket(txResult.conversation.id)
       .then((paired) => {
         if (paired) return undefined
-        return import('@/lib/server/domains/assistant/assistant.orchestrator').then((m) =>
-          m.runAssistantTurnForConversation(txResult.conversation.id)
+        // The switchboard decides who answers: the built-in AI, the workspace's
+        // own AI agent, or the team.
+        return import('@/lib/server/domains/support-agents/switchboard').then((m) =>
+          m.answerCustomerMessage(txResult.conversation.id, txResult.message.id)
         )
       })
       .catch((err) => log.warn({ err }, 'assistant turn failed'))
@@ -743,6 +745,7 @@ export async function sendAgentMessage(
       .from(conversations)
       .where(eq(conversations.id, conversationId))
       .limit(1)
+      .for('update')
     if (!existing) {
       throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
     }
@@ -788,15 +791,31 @@ export async function sendAgentMessage(
         waitingSince: null,
         // Keep resolvedAt consistent with the new status (reopening clears it).
         resolvedAt: resolvedAtForStatus(agentNextStatus, message.createdAt),
+        // A teammate's reply takes the conversation from any AI agent.
+        controllerAgentId: null,
         updatedAt: message.createdAt,
       })
       .where(eq(conversations.id, conversationId))
       .returning()
 
+    if (existing.controllerAgentId) {
+      const { supportAgentTurns } = await import('@/lib/server/db')
+      await tx
+        .update(supportAgentTurns)
+        .set({ status: 'superseded', completedAt: message.createdAt })
+        .where(
+          and(
+            eq(supportAgentTurns.conversationId, conversationId),
+            eq(supportAgentTurns.status, 'requested')
+          )
+        )
+    }
+
     return {
       message,
       conversation: updated,
       previousAgentPrincipalId: existing.assignedAgentPrincipalId,
+      hadAgentController: existing.controllerAgentId !== null,
     }
   })
 
@@ -2063,11 +2082,6 @@ export async function markConversationUnreadFromMessage(
 
 // -------------------------------------------------------------- assistant (Quinn) ---
 
-/** Actor for an assistant-authored write: the system actor, carrying Quinn's principal id. */
-function assistantActor(principalId: PrincipalId): Actor {
-  return { ...systemActor(), principalId }
-}
-
 /**
  * Cheap synchronous gate before spending on an assistant turn: only the widget
  * channel triggers Quinn today (email + other sources join later phases), and a
@@ -2149,66 +2163,14 @@ export async function appendAssistantReply(
     metadata?: ConversationMessageMetadata | null
   }
 ): Promise<ConversationMessageDTO> {
-  const txResult = await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, conversationId))
-      .limit(1)
-    if (!existing) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
-    const [message] = await tx
-      .insert(conversationMessages)
-      .values({
-        conversationId,
-        principalId: author.principalId,
-        senderType: 'agent',
-        content,
-        contentJson: opts.contentJson ?? null,
-        citations: opts.citations?.length ? opts.citations : null,
-        metadata: opts.metadata ?? null,
-      })
-      .returning()
-    const nextStatus = applyAgentReopenStatus(
-      existing.status,
-      getChannelDescriptor(existing.channel)?.reopenOnReply ?? 'always'
-    )
-    const [updated] = await tx
-      .update(conversations)
-      .set({
-        lastMessageAt: message.createdAt,
-        lastMessagePreview: preview(content, []),
-        status: nextStatus,
-        waitingSince: opts.waiting ? message.createdAt : null,
-        resolvedAt: resolvedAtForStatus(nextStatus, message.createdAt),
-        updatedAt: message.createdAt,
-      })
-      .where(eq(conversations.id, conversationId))
-      .returning()
-    return { conversation: updated, message }
-  })
-
-  const authored = await resolveAuthorAudiences(author)
-  const messageDTO = toMessageDTO(txResult.message, authored.supportAuthor, author.principalId)
-  const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
-  await publishConversationUpdate(conversationDTO.id, conversationDTO)
-  publishConversationMessage(
-    txResult.conversation.id,
-    {
-      visitor: toMessageDTO(txResult.message, authored.publicAuthor, author.principalId),
-      agent: messageDTO,
-    },
-    { conversationUpdated: true }
+  const { persistAssistantReply, publishAssistantReply } = await import('./assistant-reply')
+  const stored = await db.transaction((tx) =>
+    persistAssistantReply(tx, conversationId, content, author, {
+      ...opts,
+      controllerAgentId: null,
+    })
   )
-  // isFirstMessage only matters for a VISITOR message — this is Quinn's own
-  // reply, so false.
-  void emitMessageCreated(
-    assistantActor(author.principalId),
-    author,
-    txResult.message,
-    txResult.conversation,
-    false
-  )
-  return messageDTO
+  return publishAssistantReply(stored, author)
 }
 
 /**

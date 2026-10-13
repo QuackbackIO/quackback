@@ -252,6 +252,7 @@ const VIA_CHANNEL: Partial<Record<AuditChannel, MessageDescriptor>> = defineMess
   assistant: { id: 'admin.auditLog.via.assistant', defaultMessage: 'via assistant' },
   workflow: { id: 'admin.auditLog.via.workflow', defaultMessage: 'via workflow' },
   system: { id: 'admin.auditLog.via.system', defaultMessage: 'via system' },
+  agent: { id: 'admin.auditLog.via.agent', defaultMessage: 'via AI agent' },
 })
 
 const VIA_ON_BEHALF_OF = defineMessages({

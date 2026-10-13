@@ -84,17 +84,31 @@ export interface PlanDefinition {
  * include it". A call site may use either or both; both refuse with a 402,
  * only the entitlement one can name a plan.
  */
+/** Labels used by the browser; server gate paths stay in the full catalogue. */
+export const ENTITLEMENT_DISPLAY = {
+  customDomain: { friendly: 'Custom domains', plural: true },
+  sso: { friendly: 'Single sign-on', plural: false },
+  aiAssistant: { friendly: 'The AI assistant', plural: false },
+  ownAgent: { friendly: 'Your AI agent', plural: false },
+  aiInsights: { friendly: 'AI insights', plural: true },
+  aiDrafts: { friendly: 'AI drafts', plural: true },
+  workflows: { friendly: 'Workflows', plural: true },
+  apiAccess: { friendly: 'API access', plural: false },
+  mcpServer: { friendly: 'The MCP server', plural: false },
+  webhooks: { friendly: 'Webhooks', plural: true },
+  auditLog: { friendly: 'The audit log', plural: false },
+  hideBranding: { friendly: 'Branding removal', plural: false },
+} as const
+
 export const ENTITLEMENTS = {
   customDomain: {
-    friendly: 'Custom domains',
-    plural: true,
+    ...ENTITLEMENT_DISPLAY.customDomain,
     tierFeature: 'customDomain',
     chokepoint:
       'lib/server/functions/cloud-identity.ts (mutateCloudCustomDomainFn); lib/server/domains/help-center/help-center-domain.service.ts (setHelpCenterDomain)',
   },
   sso: {
-    friendly: 'Single sign-on',
-    plural: false,
+    ...ENTITLEMENT_DISPLAY.sso,
     tierFeature: 'customOidcProvider',
     chokepoint: 'lib/server/functions/sso.ts (upsertIdentityProviderFn)',
   },
@@ -103,11 +117,15 @@ export const ENTITLEMENTS = {
    * {@link ENTITLEMENTS.aiDrafts}; this key only gates the orchestrator.
    */
   aiAssistant: {
-    friendly: 'The AI assistant',
-    plural: false,
+    ...ENTITLEMENT_DISPLAY.aiAssistant,
     tierFeature: null,
     chokepoint:
       'lib/server/domains/assistant/assistant.orchestrator.ts (previewAssistantTurnForConversation, runAssistantTurnForConversation)',
+  },
+  ownAgent: {
+    ...ENTITLEMENT_DISPLAY.ownAgent,
+    tierFeature: null,
+    chokepoint: 'lib/server/domains/support-agents/availability.ts (assertOwnAgentAvailable)',
   },
   /**
    * Post summaries and sentiment. Deliberately *not* the drafting half of the
@@ -115,8 +133,7 @@ export const ENTITLEMENTS = {
    * tier earlier, so one key could not have covered both.
    */
   aiInsights: {
-    friendly: 'AI insights',
-    plural: true,
+    ...ENTITLEMENT_DISPLAY.aiInsights,
     tierFeature: null,
     chokepoint:
       'lib/server/domains/summary/summary.service.ts (generateAndSavePostSummary), lib/server/domains/sentiment/sentiment.service.ts (analyzeSentiment)',
@@ -126,15 +143,13 @@ export const ENTITLEMENTS = {
    * those drafts insert from.
    */
   aiDrafts: {
-    friendly: 'AI drafts',
-    plural: true,
+    ...ENTITLEMENT_DISPLAY.aiDrafts,
     tierFeature: null,
     chokepoint:
       'lib/server/domains/assistant/copilot-gate.ts (gateCopilotAguiRequest, the shared gate for the drafting routes), lib/server/domains/macros/macro.service.ts (listMacros, createMacro)',
   },
   workflows: {
-    friendly: 'Workflows',
-    plural: true,
+    ...ENTITLEMENT_DISPLAY.workflows,
     tierFeature: null,
     chokepoint: 'lib/server/domains/workflows/workflow.service.ts (createWorkflow)',
   },
@@ -148,27 +163,23 @@ export const ENTITLEMENTS = {
    * a per-request memo, neither of which this key should introduce on its own.
    */
   apiAccess: {
-    friendly: 'API access',
-    plural: false,
+    ...ENTITLEMENT_DISPLAY.apiAccess,
     tierFeature: null,
     chokepoint: 'not wired: lib/server/domains/api/auth.ts (withApiKeyAuth)',
   },
   mcpServer: {
-    friendly: 'The MCP server',
-    plural: false,
+    ...ENTITLEMENT_DISPLAY.mcpServer,
     tierFeature: 'mcpServer',
     chokepoint:
       'lib/server/mcp/handler.ts (handleMcpRequest, after auth), lib/server/domains/settings/settings.service.ts (updateDeveloperConfig when enabling)',
   },
   webhooks: {
-    friendly: 'Webhooks',
-    plural: true,
+    ...ENTITLEMENT_DISPLAY.webhooks,
     tierFeature: 'webhooks',
     chokepoint: 'lib/server/domains/webhooks/webhook.service.ts (createWebhook)',
   },
   auditLog: {
-    friendly: 'The audit log',
-    plural: false,
+    ...ENTITLEMENT_DISPLAY.auditLog,
     tierFeature: null,
     chokepoint: 'lib/server/functions/audit-log.ts (listAuditEventsFn)',
   },
@@ -178,8 +189,7 @@ export const ENTITLEMENTS = {
    * function is true when cloud is off.
    */
   hideBranding: {
-    friendly: 'Branding removal',
-    plural: false,
+    ...ENTITLEMENT_DISPLAY.hideBranding,
     tierFeature: null,
     chokepoint:
       'not wired: display-only via shouldShowPoweredBy; lib/server/domains/settings/cloud/powered-by.ts',
@@ -211,10 +221,10 @@ export interface EntitlementDefinition {
 
 export type EntitlementKey = keyof typeof ENTITLEMENTS
 
-export const ENTITLEMENT_KEYS = Object.keys(ENTITLEMENTS) as EntitlementKey[]
+export const ENTITLEMENT_KEYS = Object.keys(ENTITLEMENT_DISPLAY) as EntitlementKey[]
 
 export function isEntitlementKey(value: string): value is EntitlementKey {
-  return Object.prototype.hasOwnProperty.call(ENTITLEMENTS, value)
+  return Object.prototype.hasOwnProperty.call(ENTITLEMENT_DISPLAY, value)
 }
 
 // ---------------------------------------------------------------------------
@@ -244,6 +254,7 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
     grants: [
       'customDomain',
       'aiAssistant',
+      'ownAgent',
       'aiDrafts',
       'aiInsights',
       'apiAccess',
@@ -259,6 +270,7 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
     grants: [
       'customDomain',
       'aiAssistant',
+      'ownAgent',
       'aiDrafts',
       'aiInsights',
       'apiAccess',
@@ -275,6 +287,7 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
     grants: [
       'customDomain',
       'aiAssistant',
+      'ownAgent',
       'aiDrafts',
       'aiInsights',
       'apiAccess',

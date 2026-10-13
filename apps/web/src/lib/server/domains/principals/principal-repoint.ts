@@ -462,6 +462,8 @@ export const REPOINT_STEPS: RepointStep[] = [
  * merge source.
  */
 export const REPOINT_EXEMPTIONS: Record<string, string> = {
+  'support_agents.principal_id':
+    'Support agents own generated service principals; anonymous-to-identified user merges cannot own these identities.',
   'workspace_assistant_threads.owner_principal_id':
     'Private Copilot threads belong to authenticated team users with copilot.use; anonymous visitor merges cannot own them.',
   'integration_sync_actions.principal_id':

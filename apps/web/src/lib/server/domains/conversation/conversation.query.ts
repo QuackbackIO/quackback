@@ -59,7 +59,7 @@ import {
 } from '@/lib/shared/conversation/views'
 import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import type { SlaApplied } from '@/lib/server/domains/sla/sla.service'
-import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
+import { aiPrincipalIdsOnce } from '@/lib/server/messages/assistant-principal'
 import { hasLinkedCustomerTicketSql } from '@/lib/server/messages/pair-link'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import { isTestThreadSql } from './conversation.test-data'
@@ -1043,7 +1043,7 @@ export async function listMessages(
         preferAccountName: opts?.preferAccountName ?? !!opts?.includeInternal,
       }
     ),
-    assistantPrincipalIdOnce(),
+    aiPrincipalIdsOnce(),
   ])
   const ordered = [...page].reverse() // oldest-first for rendering
   // Stash the agent-only suggestion off each internal note's metadata while we
@@ -1116,7 +1116,7 @@ export async function listConversationMessagesForGrounding(
       rows.map((m) => m.principalId),
       { preferAccountName: true }
     ),
-    assistantPrincipalIdOnce(),
+    aiPrincipalIdsOnce(),
   ])
   return rows.map((m) =>
     toMessageDTO(

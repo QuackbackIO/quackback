@@ -58,8 +58,8 @@ Edges (28):
 
 ## 3. Server domains (lib/server/domains)
 
-Nodes (54): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (140):
+Nodes (55): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, support-agents, teams, tickets, user-attributes, users, webhooks, workflows
+Edges (147):
 
 - activity -> principals
 - admin-overview -> changelog
@@ -70,6 +70,7 @@ Edges (140):
 - analytics -> workflows
 - api -> api-keys
 - api -> settings
+- api -> support-agents
 - api -> webhooks
 - api-keys -> principals
 - assistant -> ai
@@ -121,6 +122,7 @@ Edges (140):
 - conversation -> principals
 - conversation -> settings
 - conversation -> sla
+- conversation -> support-agents
 - conversation -> teams
 - conversation -> tickets
 - conversation -> workflows
@@ -182,6 +184,11 @@ Edges (140):
 - subscriptions -> status
 - summary -> ai
 - summary -> settings
+- support-agents -> assistant
+- support-agents -> conversation
+- support-agents -> principals
+- support-agents -> settings
+- support-agents -> workflows
 - tickets -> conversation
 - tickets -> files
 - tickets -> principals
@@ -207,5 +214,5 @@ Edges (140):
 Strongly connected components with more than one domain. A new entry here is a new cycle and needs an explicit decision.
 
 - ai <-> settings <-> sla
-- assistant <-> channel-accounts <-> channels <-> conversation <-> conversation-attributes <-> inbox <-> tickets <-> workflows
+- api <-> assistant <-> channel-accounts <-> channels <-> conversation <-> conversation-attributes <-> inbox <-> support-agents <-> tickets <-> workflows
 - changelog <-> embeddings <-> merge-suggestions <-> posts <-> subscriptions

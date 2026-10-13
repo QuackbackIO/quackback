@@ -447,6 +447,13 @@ export {
   pushDevices,
   // Schema tables - assistant (Quinn) involvement record
   assistantInvolvements,
+  // Schema tables - who answers customers (built-in AI or the workspace's own agent)
+  supportAgents,
+  supportAgentTurns,
+  SUPPORT_AGENT_KINDS,
+  SUPPORT_AGENT_STATUSES,
+  SUPPORT_AGENT_FALLBACKS,
+  SUPPORT_AGENT_TURN_STATUSES,
   ASSISTANT_INVOLVEMENT_TRIGGERS,
   ASSISTANT_INVOLVEMENT_STATUSES,
   ASSISTANT_HANDOFF_REASONS,
@@ -528,6 +535,12 @@ export {
 } from '@quackback/db'
 
 // Re-export schema types not covered by @quackback/db/types
+export type {
+  SupportAgentKind,
+  SupportAgentStatus,
+  SupportAgentFallback,
+  SupportAgentTurnStatus,
+} from '@quackback/db'
 export type {
   AssistantInvolvementSource,
   AssistantInvolvementStatus,

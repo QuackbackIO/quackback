@@ -45,6 +45,7 @@ export const SETTINGS_PAGES = {
   '/admin/settings/security/authentication': { label: 'Access & Security' },
   '/admin/settings/agents': { label: 'Agents & API' },
   '/admin/settings/agents/assistants': { label: 'Assistants' },
+  '/admin/settings/agents/your-ai': { label: 'Your AI agent' },
   '/admin/settings/agents/keys': { label: 'API keys' },
   '/admin/settings/agents/webhooks': { label: 'Webhooks' },
   '/admin/settings/labs': { label: 'Labs' },

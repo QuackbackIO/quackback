@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { lazy, Suspense } from 'react'
 import { useIntl } from 'react-intl'
 import {
   AgentPauseControl,
@@ -14,6 +15,10 @@ import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { FeatureFlags } from '@/lib/shared/types'
+
+const AnsweringModeCard = lazy(() =>
+  import('./agents/answering-mode-card').then((module) => ({ default: module.AnsweringModeCard }))
+)
 
 /**
  * Who replies to a new conversation: whether Quackback AI answers customers,
@@ -38,6 +43,11 @@ export function WhoAnswersPage() {
 
   return (
     <SettingsPage page="/admin/settings/who-answers">
+      {canRoute && flags?.ownAgent && (
+        <Suspense fallback={null}>
+          <AnsweringModeCard />
+        </Suspense>
+      )}
       {canAi && (
         <SettingsCard>
           <SettingRows>

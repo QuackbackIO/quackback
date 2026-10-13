@@ -43,7 +43,7 @@ import {
 } from '@/lib/server/messages/message-core'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { extractMentions } from '@/lib/server/domains/posts/extract-mentions'
-import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
+import { aiPrincipalIdsOnce } from '@/lib/server/messages/assistant-principal'
 import { resolveMessageParent } from './message-parent'
 import { syncConversationMessageMentions } from './sync-conversation-mentions'
 import {
@@ -150,8 +150,8 @@ export async function editConversationMessage(
   if (message.metadata?.block) {
     throw new ForbiddenError('FORBIDDEN', 'This message cannot be edited')
   }
-  const assistantId = await assistantPrincipalIdOnce()
-  if (assistantId && message.principalId === assistantId) {
+  const aiIds = await aiPrincipalIdsOnce()
+  if (message.principalId && aiIds.has(message.principalId)) {
     throw new ForbiddenError('FORBIDDEN', 'Assistant messages cannot be edited')
   }
 

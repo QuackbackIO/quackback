@@ -45,7 +45,6 @@ import { getLiveWorkflowReferencedAttributeKeys } from '@/lib/server/domains/wor
 import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
 import {
   ensureAssistantPrincipal,
-  getAssistantPrincipal,
   loadConversationThread,
   loadThreadFileExcerpts,
   mapRowsToThreadMessages,
@@ -61,6 +60,7 @@ import {
   activityToStatus,
 } from '.'
 import { logger } from '@/lib/server/logger'
+import { aiPrincipalIdsOnce } from '@/lib/server/messages/assistant-principal'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 
 const log = logger.child({ component: 'assistant-orchestrator' })
@@ -534,8 +534,10 @@ export async function attributeCsatIfLastHandler(
     // so skip the principal + last-message reads entirely.
     const involvement = await getLatestInvolvement(conversationId)
     if (!involvement) return
-    const assistantPrincipal = await getAssistantPrincipal()
-    if (!assistantPrincipal) return
+    // Any AI counts as the last handler: the built-in assistant or the
+    // workspace's own AI agent.
+    const aiPrincipalIds = await aiPrincipalIdsOnce()
+    if (aiPrincipalIds.size === 0) return
     const [last] = await db
       .select({ principalId: conversationMessages.principalId })
       .from(conversationMessages)
@@ -549,7 +551,7 @@ export async function attributeCsatIfLastHandler(
       )
       .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
       .limit(1)
-    if (!last || last.principalId !== assistantPrincipal.id) return
+    if (!last?.principalId || !aiPrincipalIds.has(last.principalId)) return
     await setInvolvementRating(involvement.id, rating)
   } catch (err) {
     log.warn({ err }, 'attribute csat to assistant involvement failed')

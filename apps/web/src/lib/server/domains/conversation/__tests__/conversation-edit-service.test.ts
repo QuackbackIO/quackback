@@ -38,6 +38,7 @@ vi.mock('@/lib/server/domains/tickets/pair-thread.service', () => ({
 }))
 
 vi.mock('@/lib/server/messages/assistant-principal', () => ({
+  aiPrincipalIdsOnce: async () => new Set(),
   assistantPrincipalIdOnce: vi.fn(async () => null),
 }))
 

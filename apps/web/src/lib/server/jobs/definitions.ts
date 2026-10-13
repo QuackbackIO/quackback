@@ -418,6 +418,18 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/events/event-reactions-queue').then((m) => m.runEventReactions),
   },
   {
+    // One job per AI-agent turn, queued with the turn and run at its reply
+    // deadline: expire it if unanswered and apply the agent's fallback.
+    name: 'agent-turn-deadline',
+    concurrency: 2,
+    maxAttempts: 3,
+    retryBackoffMs: 2_000,
+    retentionMs: DAY_MS,
+    failedRetentionMs: 7 * DAY_MS,
+    handler: () =>
+      import('@/lib/server/domains/support-agents/deadline-queue').then((m) => m.runTurnDeadline),
+  },
+  {
     // The close summaries, queued next to event-reactions. Slow AI calls that
     // do not depend on order, so they run concurrently off the serial queue.
     name: 'event-summaries',

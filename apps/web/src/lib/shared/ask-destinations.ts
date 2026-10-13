@@ -213,6 +213,7 @@ export const ASK_CATALOGUE_MESSAGES = Object.fromEntries([
       helpCenter: true,
       statusPage: true,
       changelog: true,
+      ownAgent: true,
     },
     billingEnabled: true,
     domainsEnabled: true,
