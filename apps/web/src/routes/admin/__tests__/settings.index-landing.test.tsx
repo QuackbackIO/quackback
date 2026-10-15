@@ -52,7 +52,10 @@ describe('settings index on desktop', () => {
 
   it('opens the first page a viewer without settings.manage can open', () => {
     renderIndex([PERMISSIONS.AI_CUSTOMER_MANAGE])
-    expect(hoisted.navigate).toHaveBeenCalledWith({ to: '/admin/settings/agent', replace: true })
+    expect(hoisted.navigate).toHaveBeenCalledWith({
+      to: '/admin/settings/ai/customers',
+      replace: true,
+    })
   })
 
   it('opens Notifications for a viewer with no settings permission', () => {

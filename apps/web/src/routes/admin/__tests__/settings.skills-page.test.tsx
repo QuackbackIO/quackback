@@ -24,9 +24,7 @@ vi.mock('@/lib/server/functions/assistant-skills', () => ({
   },
 }))
 
-const { Route } = await import('../settings.skills')
-const SkillsPage = (Route as unknown as { options: { component: () => ReactNode } }).options
-  .component
+const { SkillsManager: SkillsPage } = await import('@/components/admin/automation/skills-manager')
 
 const SKILL = {
   id: 'skill_1',
@@ -57,12 +55,9 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('skills page', () => {
-  it('uses the standard page header, whose title has no icon beside it', async () => {
+  it('renders the library within Guidance without adding another page header', () => {
     renderPage()
-    const heading = await screen.findByRole('heading', { level: 1, name: 'Skills' })
-    const header = heading.closest('[data-page-header]')
-    expect(header).not.toBeNull()
-    expect(heading.previousElementSibling).toBeNull()
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
   })
 
   it('shows an empty state with the New skill button only in the header and no loading explainer', async () => {

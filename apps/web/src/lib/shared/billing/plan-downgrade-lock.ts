@@ -1,5 +1,6 @@
-/** The AI & Automation pages, which live under settings but are product surfaces. */
+/** The Quackback AI pages and Workflows, which live under settings but are product surfaces. */
 const BLOCKED_SETTINGS_PAGES = [
+  '/admin/settings/ai',
   '/admin/settings/agent',
   '/admin/settings/copilot',
   '/admin/settings/skills',

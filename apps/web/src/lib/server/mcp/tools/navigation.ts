@@ -40,7 +40,7 @@ export const WORKSPACE_NAVIGATION = {
     scope: 'read:settings',
   },
   api_keys: {
-    href: '/admin/settings/developers',
+    href: '/admin/settings/agents/keys',
     permission: PERMISSIONS.API_KEY_MANAGE,
     scope: 'read:settings',
   },

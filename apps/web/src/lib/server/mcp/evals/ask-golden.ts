@@ -198,7 +198,7 @@ export const ASK_GOLDEN_CASES: readonly AskGoldenCase[] = [
     tool: 'navigate_workspace',
     arguments: { destination: 'api_keys' },
     expected: 'navigation',
-    expectedHref: '/admin/settings/developers',
+    expectedHref: '/admin/settings/agents/keys',
   },
   {
     id: '20',

@@ -169,7 +169,7 @@ export function MessengerChannelPage() {
             />
             <p className="text-xs text-muted-foreground">
               Shown outside{' '}
-              <Link to="/admin/settings/office-hours" className={INLINE_LINK}>
+              <Link to="/admin/settings/hours-sla" className={INLINE_LINK}>
                 office hours
               </Link>{' '}
               or when nobody is online.
@@ -224,7 +224,7 @@ export function MessengerChannelPage() {
             }
             control={
               <Button variant="outline" size="sm" asChild>
-                <Link to="/admin/settings/agent">Configure</Link>
+                <Link to="/admin/settings/ai/customers">Configure</Link>
               </Button>
             }
           />

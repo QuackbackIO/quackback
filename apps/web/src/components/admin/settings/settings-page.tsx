@@ -6,15 +6,10 @@ import { PageHeader, type PageCrumb } from '@/components/shared/page-header'
 import { cn } from '@/lib/shared/utils'
 import { SaveStatus } from './save-status'
 import { moduleOfPage, type NavModule, type NavSection } from './settings-nav-sections'
-import {
-  AUTOMATION_PAGES,
-  SETTINGS_PAGES,
-  type AutomationPagePath,
-  type SettingsPagePath,
-} from './settings-pages'
+import { AI_PAGES, SETTINGS_PAGES, type AiPagePath, type SettingsPagePath } from './settings-pages'
 
 type PageTitle =
-  { page: SettingsPagePath | AutomationPagePath; title?: never } | { title: string; page?: never }
+  { page: SettingsPagePath | AiPagePath; title?: never } | { title: string; page?: never }
 
 type SettingsPageProps = PageTitle & {
   description?: string
@@ -76,8 +71,8 @@ export function SettingsPage({
 
   let resolvedTitle = title
   if (page !== undefined) {
-    if (page in AUTOMATION_PAGES) {
-      resolvedTitle = intl.formatMessage(AUTOMATION_PAGES[page as AutomationPagePath])
+    if (page in AI_PAGES) {
+      resolvedTitle = intl.formatMessage(AI_PAGES[page as AiPagePath])
     } else {
       resolvedTitle = SETTINGS_PAGES[page as SettingsPagePath].label
     }

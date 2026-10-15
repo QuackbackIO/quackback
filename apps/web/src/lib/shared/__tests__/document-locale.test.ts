@@ -16,10 +16,10 @@ describe('documentLocale', () => {
   })
   it('localizes the AI & Automation pages under settings and the workflow builder', () => {
     for (const id of [
-      '/admin/settings/agent',
-      '/admin/settings/copilot',
-      '/admin/settings/skills',
-      '/admin/settings/connectors',
+      '/admin/settings/ai/customers',
+      '/admin/settings/ai/teammates',
+      '/admin/settings/ai/guidance',
+      '/admin/settings/ai/actions',
       '/admin/settings/connectors_/$connectorId',
       '/admin/settings/workflows',
       '/admin/settings_/workflows/$workflowId',

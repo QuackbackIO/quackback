@@ -11,7 +11,6 @@ const MODULES = {
   '../automation.workflows': () => import('../automation.workflows'),
   '../automation.assistant': () => import('../automation.assistant'),
   '../automation.performance': () => import('../automation.performance'),
-  '../settings.ai': () => import('../settings.ai'),
   '../automation.connectors_.$connectorId': () => import('../automation.connectors_.$connectorId'),
   '../automation_.workflows.$workflowId': () => import('../automation_.workflows.$workflowId'),
   '../automation.index': () => import('../automation.index'),
@@ -36,11 +35,10 @@ describe('retired /admin/automation URLs', () => {
     ['../automation.agent', '/admin/settings/agent'],
     ['../automation.copilot', '/admin/settings/copilot'],
     ['../automation.skills', '/admin/settings/skills'],
-    ['../automation.connectors', '/admin/settings/connectors'],
+    ['../automation.connectors', '/admin/settings/ai/actions'],
     ['../automation.workflows', '/admin/settings/workflows'],
     ['../automation.assistant', '/admin/settings/agent'],
     ['../automation.performance', '/admin/analytics'],
-    ['../settings.ai', '/admin/settings/agent'],
   ])('%s lands on %s and keeps the query string', async (module, target) => {
     const withQuery = await redirectOf(module, at('?tab=guidance'))
     expect(withQuery.href).toBe(
@@ -77,7 +75,7 @@ describe('retired /admin/automation URLs', () => {
     })
     expect(
       (await redirectOf('../automation.index', ctx([PERMISSIONS.AI_CUSTOMER_MANAGE], false))).href
-    ).toBe('/admin/settings/agent')
+    ).toBe('/admin/settings/ai/customers')
     expect(
       (await redirectOf('../automation.index', ctx([PERMISSIONS.WORKFLOW_MANAGE], true))).href
     ).toBe('/admin/settings/workflows')

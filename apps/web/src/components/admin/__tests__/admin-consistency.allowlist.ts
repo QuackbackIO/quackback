@@ -9,12 +9,7 @@ import type { RuleName } from './admin-consistency.rules'
 export const ALLOWLIST: Record<RuleName, string[]> = {
   'page-shell': [],
   'page-width': [],
-  'registry-pages': [
-    // A module label with no page of its own: its URL redirects to the first page of the module.
-    '/admin/settings/feedback',
-    // A module label with no page of its own: its URL redirects to the first page of the module.
-    '/admin/settings/support',
-  ],
+  'registry-pages': [],
   'create-labels': [],
   'no-dashes': [],
   'tab-icons': [],

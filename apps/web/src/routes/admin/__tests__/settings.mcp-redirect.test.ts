@@ -5,17 +5,16 @@ const { Route } = await import('../settings.mcp')
 type BeforeLoadFn = (ctx: unknown) => void
 
 describe('settings.mcp route', () => {
-  it('redirects to /admin/settings/developers?tab=mcp', () => {
+  it('redirects to the Assistants page', () => {
     let thrown: unknown
     try {
-      ;(Route.options.beforeLoad as BeforeLoadFn)({})
+      ;(Route.options.beforeLoad as BeforeLoadFn)({ location: { searchStr: '' } })
     } catch (e) {
       thrown = e
     }
     expect(thrown).toBeInstanceOf(Response)
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const opts = (thrown as any).options as Record<string, unknown>
-    expect(opts.to).toBe('/admin/settings/developers')
-    expect(opts.search).toEqual({ tab: 'mcp' })
+    expect(opts.href).toBe('/admin/settings/agents/assistants')
   })
 })

@@ -13,12 +13,13 @@ const LOCALIZED_ROUTE_IDS = new Set([
   '/auth/reset-password',
   '/widget',
   '/unsubscribe',
-  // The AI & Automation pages under settings. The settings layout and the other
-  // settings pages stay English.
-  '/admin/settings/agent',
-  '/admin/settings/copilot',
-  '/admin/settings/skills',
-  '/admin/settings/connectors',
+  // The Quackback AI pages and Workflows under settings. The settings layout and
+  // the other settings pages stay English.
+  '/admin/settings/ai/customers',
+  '/admin/settings/ai/teammates',
+  '/admin/settings/ai/knowledge',
+  '/admin/settings/ai/guidance',
+  '/admin/settings/ai/actions',
   '/admin/settings/connectors_/$connectorId',
   '/admin/settings/workflows',
   '/admin/settings_/workflows/$workflowId',

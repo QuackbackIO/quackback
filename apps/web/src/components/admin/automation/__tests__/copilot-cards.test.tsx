@@ -182,18 +182,18 @@ function CopilotHeader({ available }: { available?: boolean }) {
 }
 
 describe('Copilot pause control', () => {
-  it('offers Pause Copilot and a quiet status line while on', async () => {
+  it('offers Pause Quackback AI and a quiet status line while on', async () => {
     renderWithProviders(<CopilotHeader available />)
-    expect(await screen.findByRole('button', { name: 'Pause Copilot' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Pause Quackback AI' })).toBeInTheDocument()
     expect(screen.getByTestId('line')).toHaveTextContent('Available to teammates in the inbox')
   })
 
   it('pauses after confirming by turning the Q&A capability off', async () => {
     renderWithProviders(<CopilotHeader available />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Pause Copilot' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause Quackback AI' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(updateCopilotCapabilities).not.toHaveBeenCalled()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Pause Copilot' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Pause Quackback AI' }))
     await waitFor(() => expect(updateCopilotCapabilities).toHaveBeenCalledTimes(1))
     expect(updateCopilotCapabilities.mock.calls[0][0].data).toEqual({
       expectedRevision: 4,
@@ -206,9 +206,9 @@ describe('Copilot pause control', () => {
       throw new Error('boom')
     })
     renderWithProviders(<CopilotHeader available />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Pause Copilot' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause Quackback AI' }))
     const dialog = await screen.findByRole('alertdialog')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Pause Copilot' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Pause Quackback AI' }))
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1))
     expect(toastError).toHaveBeenCalledWith("Couldn't save. Try again.")
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
@@ -217,7 +217,7 @@ describe('Copilot pause control', () => {
   it('hides the control when no AI model is configured', async () => {
     renderWithProviders(<CopilotHeader available={false} />)
     expect(await screen.findByTestId('line')).toHaveTextContent(/Configure an AI model/)
-    expect(screen.queryByRole('button', { name: 'Pause Copilot' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pause Quackback AI' })).not.toBeInTheDocument()
   })
 
   it('reads availability from the settings when the page does not pass it', async () => {
@@ -231,7 +231,7 @@ describe('Copilot pause control', () => {
     await waitFor(() =>
       expect(screen.getByTestId('line')).toHaveTextContent(/Configure an AI model/)
     )
-    expect(screen.queryByRole('button', { name: 'Pause Copilot' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pause Quackback AI' })).not.toBeInTheDocument()
   })
 
   it('offers the control when the settings report a configured model', async () => {
@@ -242,7 +242,7 @@ describe('Copilot pause control', () => {
       aiAvailable: true,
     } as never)
     renderWithProviders(<CopilotHeader />)
-    expect(await screen.findByRole('button', { name: 'Pause Copilot' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Pause Quackback AI' })).toBeInTheDocument()
     expect(screen.getByTestId('line')).toHaveTextContent('Available to teammates in the inbox')
   })
 })

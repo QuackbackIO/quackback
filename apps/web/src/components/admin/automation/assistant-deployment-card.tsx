@@ -141,7 +141,7 @@ export function AgentPauseControl({
         {live
           ? intl.formatMessage({
               id: 'automation.agent.deployment.pause',
-              defaultMessage: 'Pause Agent',
+              defaultMessage: 'Pause Quackback AI',
             })
           : intl.formatMessage({
               id: 'automation.agent.deployment.resume',
@@ -158,11 +158,11 @@ export function AgentPauseControl({
           confirmingEnabled
             ? intl.formatMessage({
                 id: 'automation.agent.deployment.enableConfirmTitle',
-                defaultMessage: 'Resume the Agent in Messenger?',
+                defaultMessage: 'Resume Quackback AI in Messenger?',
               })
             : intl.formatMessage({
                 id: 'automation.agent.deployment.pauseConfirmTitle',
-                defaultMessage: 'Pause the Agent in Messenger?',
+                defaultMessage: 'Pause Quackback AI in Messenger?',
               })
         }
         description={
@@ -186,7 +186,7 @@ export function AgentPauseControl({
               })
             : intl.formatMessage({
                 id: 'automation.agent.deployment.pause',
-                defaultMessage: 'Pause Agent',
+                defaultMessage: 'Pause Quackback AI',
               })
         }
         cancelLabel={intl.formatMessage({

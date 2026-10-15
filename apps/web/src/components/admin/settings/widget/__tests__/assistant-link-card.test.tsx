@@ -30,21 +30,21 @@ function renderCard(assistant?: { enabled?: boolean; respond?: boolean; name?: s
 describe('AssistantLinkCard', () => {
   afterEach(cleanup)
 
-  it('is a row named AI agent that links to AI & Automation', () => {
+  it('links Quackback AI to Who answers', () => {
     renderCard({ enabled: true })
     const row = document.querySelector('[data-slot="settings-list-row"]') as HTMLElement
-    expect(row.getAttribute('href')).toBe('/admin/settings/agent')
-    expect(row).toHaveTextContent('AI agent')
+    expect(row.getAttribute('href')).toBe('/admin/settings/who-answers')
+    expect(row).toHaveTextContent('Quackback AI')
     expect(screen.queryByText('Assistant')).toBeNull()
     expect(screen.queryByText(/assistant off/i)).toBeNull()
   })
 
-  it('keeps the name AI agent and marks it Off when it is turned off', () => {
+  it('keeps the Quackback AI name and marks it Off when it is turned off', () => {
     renderCard({ enabled: false, name: 'Helper' })
     const row = document.querySelector('[data-slot="settings-list-row"]') as HTMLElement
-    expect(row).toHaveTextContent('AI agent')
+    expect(row).toHaveTextContent('Quackback AI')
     expect(row).toHaveTextContent('Off')
-    expect(row).toHaveTextContent('Turn it on in AI & Automation')
+    expect(row).not.toHaveTextContent('AI & Automation')
   })
 
   it('marks it Paused when it is on but not replying', () => {
@@ -52,7 +52,7 @@ describe('AssistantLinkCard', () => {
     const row = document.querySelector('[data-slot="settings-list-row"]') as HTMLElement
     expect(row).toHaveTextContent('Paused')
     expect(row).not.toHaveTextContent('Off')
-    expect(row).toHaveTextContent('Resume it in AI & Automation')
+    expect(row).not.toHaveTextContent('AI & Automation')
   })
 
   it('shows Off, not Paused, when it is off', () => {
@@ -72,7 +72,7 @@ describe('AssistantLinkCard', () => {
   it('describes the live state when it is on', () => {
     renderCard({ enabled: true })
     const row = document.querySelector('[data-slot="settings-list-row"]') as HTMLElement
-    expect(row).toHaveTextContent('Configure in AI & Automation')
+    expect(row).toHaveTextContent('Quackback AI')
     expect(row).not.toHaveTextContent('Off')
   })
 })

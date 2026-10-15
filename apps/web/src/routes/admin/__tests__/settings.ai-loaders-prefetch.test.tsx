@@ -54,6 +54,11 @@ vi.mock('@/lib/server/functions/entitlement-status', () => ({
   hasEntitlementFn: () => Promise.resolve(true),
 }))
 
+vi.mock('@/lib/server/functions/assistant-skills', async (original) => ({
+  ...(await original<typeof import('@/lib/server/functions/assistant-skills')>()),
+  listSkillsFn: stub('skills', { skills: [] }),
+}))
+
 const { assistantQueries } = await import('@/lib/client/queries/assistant')
 const { connectorQueries } = await import('@/lib/client/queries/assistant-connectors')
 const { settingsQueries } = await import('@/lib/client/queries/settings')
@@ -103,17 +108,17 @@ function useAgentSettingsReads() {
 describe('AI & Automation loaders', () => {
   it('/admin/settings/agent warms the settings and the hidden Guidance tab reads', async () => {
     const { warmed, afterMount } = await fetchesAfterLoader(
-      '@/routes/admin/settings.agent',
+      '@/routes/admin/settings.ai.guidance',
       useAgentSettingsReads,
       { permissions: ['ai.customer.manage'] }
     )
     expect(afterMount).toEqual([])
-    expect(warmed).toEqual(['guidanceRules', 'guidanceStats', 'settings'])
+    expect(warmed).toEqual(['guidanceRules', 'guidanceStats', 'settings', 'skills'])
   })
 
   it('/admin/settings/connectors warms the built-in tools card', async () => {
     const { warmed, afterMount } = await fetchesAfterLoader(
-      '@/routes/admin/settings.connectors',
+      '@/routes/admin/settings.ai.actions',
       () => {
         useQuery(connectorQueries.list())
         useQuery(assistantQueries.settings())

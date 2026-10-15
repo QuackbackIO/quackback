@@ -21,9 +21,11 @@ describe('buildSettingsModules', () => {
     const support = buildSettingsModules({ supportInbox: true }).find((m) => m.id === 'support')!
     expect(support.pages.map((p) => p.label)).toEqual([
       'Channels',
+      'Who answers',
+      'Workflows',
       'Macros',
-      'Office hours',
-      'SLA policies',
+      'Hours & SLAs',
+      'Fields & tags',
     ])
     expect(support.pages.map((p) => p.to)).not.toContain('/admin/settings/channels/messenger')
   })
@@ -34,24 +36,24 @@ describe('buildSettingsModules', () => {
     )!
     expect(support.pages.map((p) => p.label)).toEqual([
       'Channels',
+      'Who answers',
+      'Workflows',
       'Macros',
-      'Office hours',
-      'SLA policies',
-      'Ticket types',
-      'Ticket statuses',
+      'Hours & SLAs',
+      'Tickets',
+      'Fields & tags',
     ])
   })
 
   it('lists Email and GitHub when only supportTickets is on', () => {
     const support = buildSettingsModules({ supportTickets: true }).find((m) => m.id === 'support')!
     expect(support.pages.map((p) => p.label)).toEqual([
-      'Email',
-      'GitHub',
+      'Channels',
+      'Workflows',
       'Macros',
-      'Office hours',
-      'SLA policies',
-      'Ticket types',
-      'Ticket statuses',
+      'Hours & SLAs',
+      'Tickets',
+      'Fields & tags',
     ])
   })
 })
@@ -70,7 +72,7 @@ describe('settingsModuleLandingPath', () => {
   it('lands Support on Email when only tickets are on', () => {
     const modules = buildSettingsModules({ supportTickets: true })
     expect(settingsModuleLandingPath(modules.find((m) => m.id === 'support')!)).toBe(
-      '/admin/settings/channels/email'
+      '/admin/settings/channels'
     )
   })
 
@@ -103,7 +105,11 @@ describe('module pages and permissions', () => {
       .find((m) => m.id === 'support')!
       .pages.find((p) => p.to === to)
     expect(page).toBeDefined()
-    expect(manager.has(page!.permission)).toBe(true)
+    expect(
+      page!.permission
+        ? manager.has(page!.permission)
+        : page!.anyOf?.some((permission) => manager.has(permission))
+    ).toBe(true)
     expect(to).not.toBe('/admin/settings/channels')
   })
 

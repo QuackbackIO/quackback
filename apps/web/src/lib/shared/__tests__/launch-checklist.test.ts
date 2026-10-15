@@ -164,7 +164,7 @@ describe('buildLaunchTasks', () => {
 
     it('opens the Agent settings for an assistant manager', () => {
       const task = quinn({ ...withSupport, hasAgentAnswering: false })
-      expect(task?.href).toBe('/admin/settings/agent')
+      expect(task?.href).toBe('/admin/settings/ai/customers')
       expect(task?.actionLabel).toBe('Set up the AI agent')
       expect(task?.availability).toBe('available')
     })

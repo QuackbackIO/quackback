@@ -22,7 +22,8 @@ vi.mock('@/lib/server/functions/settings', () => ({
   updateOfficeHoursFn: (...a: unknown[]) => updateOfficeHours(...a),
 }))
 
-const { Route } = await import('../settings.office-hours')
+const { OfficeHoursSettings } =
+  await import('@/components/admin/settings/hours/office-hours-settings')
 
 const SCHEDULE = {
   enabled: true,
@@ -34,7 +35,7 @@ const SCHEDULE = {
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
   client.setQueryData(['settings', 'officeHours'], SCHEDULE)
-  const Page = Route.options.component as React.ComponentType
+  const Page = OfficeHoursSettings as React.ComponentType
   return render(
     <IntlProvider locale="en" defaultLocale="en">
       <QueryClientProvider client={client}>

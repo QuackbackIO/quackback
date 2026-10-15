@@ -356,11 +356,7 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
             </div>
             <p className="text-[11px] text-muted-foreground ml-7">
               Use an{' '}
-              <Link
-                to="/admin/settings/developers"
-                search={{ tab: 'keys' as const }}
-                className={INLINE_LINK}
-              >
+              <Link to="/admin/settings/agents/keys" className={INLINE_LINK}>
                 API key
               </Link>{' '}
               or OAuth (browser login, recommended). Claude Code and Claude Desktop support both.

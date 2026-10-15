@@ -4,7 +4,7 @@ import { cn } from '@/lib/shared/utils'
 import { NAV_ICON_CLASS, NAV_ITEM_CLASS } from '@/components/shared/nav-tokens'
 import { FilterSection } from '@/components/shared/filter-section'
 import { usePermissions } from '@/lib/client/use-permissions'
-import { AUTOMATION_PAGE_ICONS, SETTINGS_PAGE_ICONS } from './settings-page-icons'
+import { PAGE_ICONS } from './settings-page-icons'
 import {
   buildNavSections,
   isNavModule,
@@ -22,7 +22,7 @@ import {
 
 type IconComponent = ComponentType<{ className?: string }>
 
-const ICONS: Record<string, IconComponent> = { ...SETTINGS_PAGE_ICONS, ...AUTOMATION_PAGE_ICONS }
+const ICONS: Record<string, IconComponent> = PAGE_ICONS
 
 /** The icon of a row or module, keyed by its page path. */
 function iconFor(path: string): IconComponent {

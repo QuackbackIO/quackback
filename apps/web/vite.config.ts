@@ -175,7 +175,7 @@ export default defineConfig(({ mode }) => {
         // that end up in the client bundle. Mark node: imports as external since they're
         // SSR-only code paths that never execute in the browser.
         external: [/^node:/],
-        // NO manualChunks pinning — deliberately. Directory-pinned chunks
+        // No admin-directory manualChunks pinning. Directory-pinned chunks
         // (route-<segment>, components-admin-<section>) looked tidy but broke
         // code-splitting app-wide: rolldown places modules shared between a
         // pinned chunk and the entry INSIDE the pinned chunk, so the entry
@@ -200,7 +200,13 @@ export default defineConfig(({ mode }) => {
                 // set into ~200 tiny chunks, each a request on every first
                 // load. `$initial` is rolldown's tag for exactly that set, so
                 // unlike directory pinning it cannot pull a lazy module in.
-                groups: [{ name: 'entry', tags: ['$initial'] }],
+                groups: [
+                  { name: 'entry', tags: ['$initial'] },
+                  // Shared UI utilities otherwise become dozens of tiny requests.
+                  // The initial group keeps React and its static dependencies;
+                  // this group is restricted to the UI library's utility package.
+                  { name: 'ui-utilities', test: /@base-ui[\\/]utils[\\/]/, maxModuleSize: 5000 },
+                ],
               },
             },
           },

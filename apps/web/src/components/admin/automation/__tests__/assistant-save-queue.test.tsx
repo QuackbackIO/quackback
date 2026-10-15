@@ -204,14 +204,14 @@ describe('assistant saves share one queue', () => {
       </>
     )
     const name = await screen.findByLabelText('Name')
-    const pause = await screen.findByRole('button', { name: 'Pause Copilot' })
+    const pause = await screen.findByRole('button', { name: 'Pause Quackback AI' })
     const open = holdServer()
     fireEvent.change(name, { target: { value: 'Mallard' } })
     await waitFor(() => expect(server.gate).not.toBeNull())
     await new Promise((resolve) => setTimeout(resolve, 1000))
     fireEvent.click(pause)
     const dialog = await screen.findByRole('alertdialog')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Pause Copilot' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Pause Quackback AI' }))
     await act(async () => open())
     await waitFor(() => expect(server.saves).toHaveLength(2), slow)
     expect(server.saves).toEqual(['identity@2', 'capabilities@3'])
@@ -239,16 +239,18 @@ describe('a change from another session', () => {
 
   it('refetches after a rejected pause so pausing again succeeds', async () => {
     renderCards(<CopilotPauseControl />)
-    const pause = await screen.findByRole('button', { name: 'Pause Copilot' })
+    const pause = await screen.findByRole('button', { name: 'Pause Quackback AI' })
     server.revision = 9
     fireEvent.click(pause)
     fireEvent.click(
-      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Pause Copilot' })
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Pause Quackback AI',
+      })
     )
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(server.loads).toBeGreaterThan(1))
     fireEvent.click(
-      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Pause Copilot' })
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Pause Quackback AI' })
     )
     await waitFor(() => expect(server.saves).toEqual(['capabilities@9']))
   })

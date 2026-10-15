@@ -20,7 +20,6 @@ import {
   LinkIcon,
   MegaphoneIcon,
   PuzzlePieceIcon,
-  QueueListIcon,
   ShieldCheckIcon,
   SignalIcon,
   SparklesIcon,
@@ -31,7 +30,7 @@ import {
   UsersIcon,
 } from '@heroicons/react/24/solid'
 import { GitHubIcon } from '@/components/icons/integration-icons'
-import type { AutomationPagePath, SettingsPagePath } from './settings-pages'
+import type { AiPagePath, SettingsPagePath } from './settings-pages'
 
 /**
  * The icon of each settings page, keyed like the label registry in
@@ -52,10 +51,10 @@ export const SETTINGS_PAGE_ICONS: Record<
   '/admin/settings/channels/email': EnvelopeIcon,
   '/admin/settings/channels/github': GitHubIcon,
   '/admin/settings/macros': DocumentDuplicateIcon,
-  '/admin/settings/office-hours': ClockIcon,
-  '/admin/settings/sla': ShieldCheckIcon,
-  '/admin/settings/ticket-types': TicketIcon,
-  '/admin/settings/ticket-statuses': QueueListIcon,
+  '/admin/settings/who-answers': UserGroupIcon,
+  '/admin/settings/hours-sla': ClockIcon,
+  '/admin/settings/tickets': TicketIcon,
+  '/admin/settings/fields': TagIcon,
   '/admin/settings/help-center': BookOpenIcon,
   '/admin/settings/changelog': MegaphoneIcon,
   '/admin/settings/status': SignalIcon,
@@ -67,24 +66,31 @@ export const SETTINGS_PAGE_ICONS: Record<
   '/admin/settings/widget/install': CodeBracketIcon,
   '/admin/settings/members': UsersIcon,
   '/admin/settings/security/authentication': ShieldCheckIcon,
-  '/admin/settings/developers': CommandLineIcon,
+  '/admin/settings/agents': CommandLineIcon,
+  '/admin/settings/agents/assistants': CommandLineIcon,
+  '/admin/settings/agents/keys': CommandLineIcon,
+  '/admin/settings/agents/webhooks': CommandLineIcon,
   '/admin/settings/labs': BeakerIcon,
   '/admin/settings/integrations': PuzzlePieceIcon,
   '/admin/settings/billing': CreditCardIcon,
   '/admin/settings/people': UserGroupIcon,
   '/admin/settings/companies': BuildingOfficeIcon,
-  '/admin/settings/conversation-data': ChatBubbleLeftIcon,
   '/admin/settings/imports': ArrowDownTrayIcon,
 }
 
-/** The icon of each AI & Automation page. */
-export const AUTOMATION_PAGE_ICONS: Record<
-  AutomationPagePath,
-  ComponentType<{ className?: string }>
-> = {
-  '/admin/settings/agent': SparklesIcon,
-  '/admin/settings/copilot': UserGroupIcon,
-  '/admin/settings/skills': BookOpenIcon,
-  '/admin/settings/connectors': LinkIcon,
+/** The icon of each page whose label is a message. */
+export const AI_PAGE_ICONS: Record<AiPagePath, ComponentType<{ className?: string }>> = {
+  '/admin/settings/ai': SparklesIcon,
+  '/admin/settings/ai/customers': SparklesIcon,
+  '/admin/settings/ai/teammates': UserGroupIcon,
+  '/admin/settings/ai/knowledge': BookOpenIcon,
+  '/admin/settings/ai/guidance': BookOpenIcon,
+  '/admin/settings/ai/actions': LinkIcon,
   '/admin/settings/workflows': BoltIcon,
 }
+
+/** The icon of every page the nav and the module tabs can name. */
+export const PAGE_ICONS: Record<
+  SettingsPagePath | AiPagePath,
+  ComponentType<{ className?: string }>
+> = { ...SETTINGS_PAGE_ICONS, ...AI_PAGE_ICONS }

@@ -153,7 +153,7 @@ describe('AI agent row', () => {
     renderPage()
     expect(screen.getByText('The AI agent answers first')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Configure' }).getAttribute('href')).toBe(
-      '/admin/settings/agent'
+      '/admin/settings/ai/customers'
     )
     expect(screen.queryByText(/Fronting conversations/)).toBeNull()
   })

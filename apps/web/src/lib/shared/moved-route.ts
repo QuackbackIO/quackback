@@ -6,5 +6,9 @@ import { redirect } from '@tanstack/react-router'
  * or an OAuth return keeps its meaning.
  */
 export function redirectMoved(to: string, location: { searchStr?: string }): never {
-  throw redirect({ href: `${to}${location.searchStr ?? ''}`, replace: true })
+  const [path, targetSearch] = to.split('?')
+  const query = new URLSearchParams(location.searchStr)
+  for (const [key, value] of new URLSearchParams(targetSearch)) query.set(key, value)
+  const search = query.toString()
+  throw redirect({ href: `${path}${search ? `?${search}` : ''}`, replace: true })
 }

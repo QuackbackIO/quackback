@@ -40,9 +40,9 @@ describe('module hub routes', () => {
     )
   })
 
-  it('sends /admin/settings/support to Email when only tickets are on', async () => {
+  it('sends /admin/settings/support to Channels when only tickets are on', async () => {
     expect(await redirectOf(support.options.beforeLoad, { supportTickets: true })).toBe(
-      '/admin/settings/channels/email'
+      '/admin/settings/channels'
     )
   })
 

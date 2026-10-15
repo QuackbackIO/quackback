@@ -1,12 +1,10 @@
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { AI_ANY_PERMISSIONS } from '@/lib/shared/ai-permissions'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
-import {
-  AUTOMATION_PAGES,
-  SETTINGS_PAGES,
-  type AutomationPagePath,
-  type SettingsPagePath,
-} from './settings-pages'
+import { AI_PAGES, SETTINGS_PAGES, type AiPagePath, type SettingsPagePath } from './settings-pages'
+
+/** Every page path the nav and the module tabs can name. */
+export type NavPagePath = SettingsPagePath | AiPagePath
 
 /*
  * The settings nav as plain data: which pages exist, their labels, and the
@@ -34,7 +32,7 @@ export interface NavItem {
  */
 export interface NavModule {
   label: string
-  id: SettingsPagePath
+  id: NavPagePath
   pages: NavItem[]
 }
 
@@ -47,56 +45,84 @@ export interface NavSection {
 
 export interface SettingsModuleRowPage {
   label: string
-  to: SettingsPagePath
+  to: NavPagePath
   /** The permission the page's route checks; the nav and module landing offer it only to holders. */
-  permission: PermissionKey
+  permission?: PermissionKey
+  /** Pages that open to a holder of any one of these, instead of a single permission. */
+  anyOf?: readonly PermissionKey[]
 }
 
 export interface SettingsModuleRow {
   id: string
   label: string
   /** The module's own page path; its icon is keyed by it. */
-  to: SettingsPagePath
+  to: NavPagePath
   pages: SettingsModuleRowPage[]
 }
 
-/** The permission each module page's route checks when it opens. */
-const MODULE_PAGE_PERMISSIONS = {
-  '/admin/settings/boards': PERMISSIONS.BOARD_MANAGE,
-  '/admin/settings/statuses': PERMISSIONS.STATUS_MANAGE,
-  '/admin/settings/tags': PERMISSIONS.TAG_MANAGE,
-  '/admin/settings/moderation': PERMISSIONS.SETTINGS_MODERATION,
-  '/admin/settings/channels': PERMISSIONS.SETTINGS_MANAGE,
-  '/admin/settings/channels/email': PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
-  '/admin/settings/channels/github': PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
-  '/admin/settings/macros': PERMISSIONS.CONVERSATION_MANAGE,
-  '/admin/settings/office-hours': PERMISSIONS.OFFICE_HOURS_MANAGE,
-  '/admin/settings/sla': PERMISSIONS.SLA_MANAGE,
-  '/admin/settings/ticket-types': PERMISSIONS.TICKET_MANAGE_TYPES,
-  '/admin/settings/ticket-statuses': PERMISSIONS.TICKET_MANAGE_TYPES,
-  '/admin/settings/help-center': PERMISSIONS.HELP_CENTER_MANAGE,
-  '/admin/settings/changelog': PERMISSIONS.CHANGELOG_MANAGE,
-  '/admin/settings/status': PERMISSIONS.STATUS_PAGE_MANAGE,
-} as const satisfies Partial<Record<SettingsPagePath, PermissionKey>>
+/** Who can open each module page: its route's permission, or any of several. */
+const MODULE_PAGE_ACCESS = {
+  '/admin/settings/boards': { permission: PERMISSIONS.BOARD_MANAGE },
+  '/admin/settings/statuses': { permission: PERMISSIONS.STATUS_MANAGE },
+  '/admin/settings/tags': { permission: PERMISSIONS.TAG_MANAGE },
+  '/admin/settings/moderation': { permission: PERMISSIONS.SETTINGS_MODERATION },
+  '/admin/settings/channels': { permission: PERMISSIONS.SETTINGS_MANAGE },
+  '/admin/settings/channels/email': { permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE },
+  '/admin/settings/channels/github': { permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE },
+  '/admin/settings/who-answers': {
+    anyOf: [
+      PERMISSIONS.AI_CUSTOMER_MANAGE,
+      PERMISSIONS.WORKFLOW_MANAGE,
+      PERMISSIONS.SETTINGS_MANAGE,
+    ],
+  },
+  '/admin/settings/workflows': { permission: PERMISSIONS.WORKFLOW_MANAGE },
+  '/admin/settings/macros': { permission: PERMISSIONS.CONVERSATION_MANAGE },
+  '/admin/settings/hours-sla': {
+    anyOf: [PERMISSIONS.OFFICE_HOURS_MANAGE, PERMISSIONS.SLA_MANAGE],
+  },
+  '/admin/settings/tickets': { permission: PERMISSIONS.TICKET_MANAGE_TYPES },
+  '/admin/settings/fields': { permission: PERMISSIONS.CONVERSATION_MANAGE },
+  '/admin/settings/ai/customers': { permission: PERMISSIONS.AI_CUSTOMER_MANAGE },
+  '/admin/settings/ai/teammates': { permission: PERMISSIONS.AI_TEAMMATE_MANAGE },
+  '/admin/settings/ai/knowledge': { anyOf: AI_ANY_PERMISSIONS },
+  '/admin/settings/ai/guidance': { anyOf: AI_ANY_PERMISSIONS },
+  '/admin/settings/ai/actions': { anyOf: AI_ANY_PERMISSIONS },
+  '/admin/settings/help-center': { permission: PERMISSIONS.HELP_CENTER_MANAGE },
+  '/admin/settings/changelog': { permission: PERMISSIONS.CHANGELOG_MANAGE },
+  '/admin/settings/status': { permission: PERMISSIONS.STATUS_PAGE_MANAGE },
+  '/admin/settings/agents/assistants': { permission: PERMISSIONS.API_KEY_MANAGE },
+  '/admin/settings/agents/keys': { permission: PERMISSIONS.API_KEY_MANAGE },
+  '/admin/settings/agents/webhooks': { permission: PERMISSIONS.API_KEY_MANAGE },
+} as const satisfies Partial<
+  Record<NavPagePath, { permission: PermissionKey } | { anyOf: readonly PermissionKey[] }>
+>
 
-type ModulePagePath = keyof typeof MODULE_PAGE_PERMISSIONS
+type ModulePagePath = keyof typeof MODULE_PAGE_ACCESS
+
+/** The label of a page, from whichever registry holds it. */
+function pageLabel(to: NavPagePath): string {
+  return to in AI_PAGES
+    ? AI_PAGES[to as AiPagePath].defaultMessage
+    : SETTINGS_PAGES[to as SettingsPagePath].label
+}
 
 /** A module page whose label comes from the page registry. */
 function modulePage(to: ModulePagePath): SettingsModuleRowPage {
-  const { label } = SETTINGS_PAGES[to]
-  return { label, to, permission: MODULE_PAGE_PERMISSIONS[to] }
+  return { label: pageLabel(to), to, ...MODULE_PAGE_ACCESS[to] }
 }
 
-function moduleHead(to: SettingsPagePath) {
-  const { label } = SETTINGS_PAGES[to]
-  return { label, to }
+function moduleHead(to: NavPagePath) {
+  return { label: pageLabel(to), to }
 }
 
 /**
  * The breadcrumb a page under a module's page shows for the module. It links
  * to the module, which opens the first of its pages the viewer can open.
  */
-export function moduleCrumb(to: '/admin/settings/feedback' | '/admin/settings/support') {
+export function moduleCrumb(
+  to: '/admin/settings/feedback' | '/admin/settings/support' | '/admin/settings/ai'
+) {
   return moduleHead(to)
 }
 
@@ -116,26 +142,22 @@ export function buildSettingsModuleRows(flags?: Partial<FeatureFlags>): Settings
   ]
 
   const supportPages: SettingsModuleRowPage[] = []
+  if (isProductEnabled(flags, 'support')) supportPages.push(modulePage('/admin/settings/channels'))
   if (flags?.supportInbox) {
-    supportPages.push(modulePage('/admin/settings/channels'))
-  } else if (isProductEnabled(flags, 'support')) {
-    supportPages.push(
-      modulePage('/admin/settings/channels/email'),
-      modulePage('/admin/settings/channels/github')
-    )
+    supportPages.push(modulePage('/admin/settings/who-answers'))
   }
   if (isProductEnabled(flags, 'support')) {
     supportPages.push(
+      modulePage('/admin/settings/workflows'),
       modulePage('/admin/settings/macros'),
-      modulePage('/admin/settings/office-hours'),
-      modulePage('/admin/settings/sla')
+      modulePage('/admin/settings/hours-sla')
     )
   }
   if (flags?.supportTickets) {
-    supportPages.push(
-      modulePage('/admin/settings/ticket-types'),
-      modulePage('/admin/settings/ticket-statuses')
-    )
+    supportPages.push(modulePage('/admin/settings/tickets'))
+  }
+  if (isProductEnabled(flags, 'support')) {
+    supportPages.push(modulePage('/admin/settings/fields'))
   }
   if (supportPages.length > 0) {
     modules.push({
@@ -144,6 +166,18 @@ export function buildSettingsModuleRows(flags?: Partial<FeatureFlags>): Settings
       pages: supportPages,
     })
   }
+
+  modules.push({
+    id: 'ai',
+    ...moduleHead('/admin/settings/ai'),
+    pages: [
+      modulePage('/admin/settings/ai/customers'),
+      modulePage('/admin/settings/ai/teammates'),
+      modulePage('/admin/settings/ai/knowledge'),
+      modulePage('/admin/settings/ai/guidance'),
+      modulePage('/admin/settings/ai/actions'),
+    ],
+  })
 
   if (isProductEnabled(flags, 'helpCenter')) {
     modules.push({
@@ -177,22 +211,12 @@ function navPage(to: SettingsPagePath): NavItem {
   return { label: SETTINGS_PAGES[to].label, to }
 }
 
-/** A nav row for an AI & Automation page; its label is the message's default text. */
-function navAutomationPage(to: AutomationPagePath, permission: PermissionKey): NavItem {
-  return { label: AUTOMATION_PAGES[to].defaultMessage, to, permission }
-}
-
-function navSharedAiPage(to: AutomationPagePath): NavItem {
-  return { label: AUTOMATION_PAGES[to].defaultMessage, to, anyOf: AI_ANY_PERMISSIONS }
-}
-
 export function isNavModule(entry: NavEntry): entry is NavModule {
   return 'pages' in entry
 }
 
 /**
- * The settings IA (SETTINGS-IA-SPEC Option B): four stable sections (Modules,
- * AI & Automation, Workspace, Data). Flags hide ITEMS (or whole product
+ * The settings IA: three stable sections (Modules, Workspace, Data). Flags hide ITEMS (or whole product
  * modules), never sections, so the sidebar layout does not reflow when a
  * flag flips. A section a viewer holds no permission for is left out.
  *
@@ -209,29 +233,22 @@ export function buildNavSections(
   const products: NavEntry[] = buildSettingsModuleRows(flags).map((module): NavEntry => {
     const [only, ...rest] = module.pages
     if (only && rest.length === 0) {
-      return { label: only.label, to: only.to, permission: only.permission }
+      return { label: only.label, to: only.to, permission: only.permission, anyOf: only.anyOf }
     }
     return {
       label: module.label,
       id: module.to,
-      pages: module.pages.map(({ label, to, permission }) => ({ label, to, permission })),
+      pages: module.pages.map(({ label, to, permission, anyOf }) => ({
+        label,
+        to,
+        permission,
+        anyOf,
+      })),
     }
   })
 
   return [
     { label: 'Modules', items: products },
-    {
-      label: 'AI & Automation',
-      items: [
-        navAutomationPage('/admin/settings/agent', PERMISSIONS.AI_CUSTOMER_MANAGE),
-        navAutomationPage('/admin/settings/copilot', PERMISSIONS.AI_TEAMMATE_MANAGE),
-        navSharedAiPage('/admin/settings/skills'),
-        navSharedAiPage('/admin/settings/connectors'),
-        ...(flags?.supportInbox
-          ? [navAutomationPage('/admin/settings/workflows', PERMISSIONS.WORKFLOW_MANAGE)]
-          : []),
-      ],
-    },
     {
       label: 'Workspace',
       items: [
@@ -265,9 +282,14 @@ export function buildNavSections(
           permission: PERMISSIONS.AUTH_MANAGE,
         },
         {
-          ...navPage('/admin/settings/developers'),
-          permission: PERMISSIONS.API_KEY_MANAGE,
-        },
+          ...moduleHead('/admin/settings/agents'),
+          id: '/admin/settings/agents',
+          pages: [
+            modulePage('/admin/settings/agents/assistants'),
+            modulePage('/admin/settings/agents/keys'),
+            modulePage('/admin/settings/agents/webhooks'),
+          ],
+        } satisfies NavModule,
         {
           ...navPage('/admin/settings/labs'),
           permission: PERMISSIONS.SETTINGS_MANAGE,
@@ -297,14 +319,6 @@ export function buildNavSections(
           ...navPage('/admin/settings/companies'),
           permission: PERMISSIONS.COMPANY_VIEW,
         },
-        ...(isProductEnabled(flags, 'support')
-          ? [
-              {
-                ...navPage('/admin/settings/conversation-data'),
-                permission: PERMISSIONS.CONVERSATION_MANAGE,
-              },
-            ]
-          : []),
         {
           ...navPage('/admin/settings/imports'),
           permission: PERMISSIONS.SETTINGS_MANAGE,

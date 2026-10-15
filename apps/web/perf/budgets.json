@@ -286,58 +286,6 @@
       "htmlTransferKB": 28.3,
       "componentRenders": 330
     },
-    "sweep:doc:admin:/admin/settings/agent": {
-      "dbQueries": 8,
-      "htmlKB": 76.3
-    },
-    "sweep:ui:admin:/admin/settings/agent": {
-      "dbQueries": 16,
-      "serverRequests": 3,
-      "requests": 130,
-      "jsRequests": 126,
-      "jsKB": 460.4,
-      "htmlTransferKB": 31.1,
-      "componentRenders": 548
-    },
-    "sweep:doc:admin:/admin/settings/connectors": {
-      "dbQueries": 7,
-      "htmlKB": 80.6
-    },
-    "sweep:ui:admin:/admin/settings/connectors": {
-      "dbQueries": 7,
-      "serverRequests": 1,
-      "requests": 108,
-      "jsRequests": 104,
-      "jsKB": 397.3,
-      "htmlTransferKB": 31.4,
-      "componentRenders": 405
-    },
-    "sweep:doc:admin:/admin/settings/copilot": {
-      "dbQueries": 6,
-      "htmlKB": 68.6
-    },
-    "sweep:ui:admin:/admin/settings/copilot": {
-      "dbQueries": 16,
-      "serverRequests": 3,
-      "requests": 127,
-      "jsRequests": 121,
-      "jsKB": 442.0,
-      "htmlTransferKB": 30.4,
-      "componentRenders": 467
-    },
-    "sweep:doc:admin:/admin/settings/skills": {
-      "dbQueries": 7,
-      "htmlKB": 67.1
-    },
-    "sweep:ui:admin:/admin/settings/skills": {
-      "dbQueries": 7,
-      "serverRequests": 1,
-      "requests": 108,
-      "jsRequests": 104,
-      "jsKB": 396.9,
-      "htmlTransferKB": 30.1,
-      "componentRenders": 375
-    },
     "sweep:doc:admin:/admin/settings/workflows": {
       "dbQueries": 7,
       "htmlKB": 79.3
@@ -546,32 +494,6 @@
       "htmlTransferKB": 30.6,
       "componentRenders": 416
     },
-    "sweep:doc:admin:/admin/settings/conversation-data": {
-      "dbQueries": 7,
-      "htmlKB": 84
-    },
-    "sweep:ui:admin:/admin/settings/conversation-data": {
-      "dbQueries": 7,
-      "serverRequests": 1,
-      "requests": 125,
-      "jsRequests": 120,
-      "jsKB": 420.4,
-      "htmlTransferKB": 32.6,
-      "componentRenders": 423
-    },
-    "sweep:doc:admin:/admin/settings/developers": {
-      "dbQueries": 8,
-      "htmlKB": 77.9
-    },
-    "sweep:ui:admin:/admin/settings/developers": {
-      "dbQueries": 8,
-      "serverRequests": 1,
-      "requests": 132,
-      "jsRequests": 127,
-      "jsKB": 431.9,
-      "htmlTransferKB": 34.3,
-      "componentRenders": 431
-    },
     "sweep:doc:admin:/admin/settings/domains": {
       "dbQueries": 6,
       "htmlKB": 64.3
@@ -715,19 +637,6 @@
       "htmlTransferKB": 30.8,
       "componentRenders": 464
     },
-    "sweep:doc:admin:/admin/settings/office-hours": {
-      "dbQueries": 6,
-      "htmlKB": 68.4
-    },
-    "sweep:ui:admin:/admin/settings/office-hours": {
-      "dbQueries": 6,
-      "serverRequests": 1,
-      "requests": 114,
-      "jsRequests": 109,
-      "jsKB": 415.8,
-      "htmlTransferKB": 30.5,
-      "componentRenders": 395
-    },
     "sweep:doc:admin:/admin/settings/people": {
       "dbQueries": 7,
       "htmlKB": 73.2
@@ -780,19 +689,6 @@
       "htmlTransferKB": 32.2,
       "componentRenders": 416
     },
-    "sweep:doc:admin:/admin/settings/sla": {
-      "dbQueries": 8,
-      "htmlKB": 74.5
-    },
-    "sweep:ui:admin:/admin/settings/sla": {
-      "dbQueries": 8,
-      "serverRequests": 1,
-      "requests": 120,
-      "jsRequests": 115,
-      "jsKB": 415.3,
-      "htmlTransferKB": 31.4,
-      "componentRenders": 430
-    },
     "sweep:doc:admin:/admin/settings/statuses": {
       "dbQueries": 7,
       "htmlKB": 94.7
@@ -818,32 +714,6 @@
       "jsKB": 412.5,
       "htmlTransferKB": 31.3,
       "componentRenders": 505
-    },
-    "sweep:doc:admin:/admin/settings/ticket-statuses": {
-      "dbQueries": 7,
-      "htmlKB": 109.2
-    },
-    "sweep:ui:admin:/admin/settings/ticket-statuses": {
-      "dbQueries": 7,
-      "serverRequests": 1,
-      "requests": 115,
-      "jsRequests": 110,
-      "jsKB": 421.2,
-      "htmlTransferKB": 32.4,
-      "componentRenders": 626
-    },
-    "sweep:doc:admin:/admin/settings/ticket-types": {
-      "dbQueries": 8,
-      "htmlKB": 77.5
-    },
-    "sweep:ui:admin:/admin/settings/ticket-types": {
-      "dbQueries": 8,
-      "serverRequests": 1,
-      "requests": 127,
-      "jsRequests": 122,
-      "jsKB": 475.8,
-      "htmlTransferKB": 31.2,
-      "componentRenders": 451
     },
     "sweep:doc:admin:/admin/settings/widget": {
       "dbQueries": 16,
@@ -1054,6 +924,162 @@
       "jsKB": 395.1,
       "htmlTransferKB": 30.5,
       "componentRenders": 321
+    },
+    "sweep:doc:admin:/admin/settings/ai/customers": {
+      "dbQueries": 6,
+      "htmlKB": 66.1
+    },
+    "sweep:ui:admin:/admin/settings/ai/customers": {
+      "dbQueries": 6,
+      "serverRequests": 1,
+      "requests": 118,
+      "jsRequests": 114,
+      "jsKB": 425,
+      "htmlTransferKB": 13.4,
+      "componentRenders": 425
+    },
+    "sweep:doc:admin:/admin/settings/ai/actions": {
+      "dbQueries": 7,
+      "htmlKB": 78.5
+    },
+    "sweep:ui:admin:/admin/settings/ai/actions": {
+      "dbQueries": 7,
+      "serverRequests": 1,
+      "requests": 107,
+      "jsRequests": 103,
+      "jsKB": 402.8,
+      "htmlTransferKB": 14.7,
+      "componentRenders": 396
+    },
+    "sweep:doc:admin:/admin/settings/fields": {
+      "dbQueries": 7,
+      "htmlKB": 82.1
+    },
+    "sweep:ui:admin:/admin/settings/fields": {
+      "dbQueries": 7,
+      "serverRequests": 1,
+      "requests": 118,
+      "jsRequests": 114,
+      "jsKB": 425.5,
+      "htmlTransferKB": 15.8,
+      "componentRenders": 438
+    },
+    "sweep:doc:admin:/admin/settings/ai/teammates": {
+      "dbQueries": 6,
+      "htmlKB": 64.3
+    },
+    "sweep:ui:admin:/admin/settings/ai/teammates": {
+      "dbQueries": 6,
+      "serverRequests": 1,
+      "requests": 102,
+      "jsRequests": 98,
+      "jsKB": 397.9,
+      "htmlTransferKB": 13.2,
+      "componentRenders": 354
+    },
+    "sweep:doc:admin:/admin/settings/agents/keys": {
+      "dbQueries": 7,
+      "htmlKB": 70.8
+    },
+    "sweep:ui:admin:/admin/settings/agents/keys": {
+      "dbQueries": 7,
+      "serverRequests": 1,
+      "requests": 112,
+      "jsRequests": 108,
+      "jsKB": 407.3,
+      "htmlTransferKB": 14.2,
+      "componentRenders": 381
+    },
+    "sweep:doc:admin:/admin/settings/hours-sla": {
+      "dbQueries": 8,
+      "htmlKB": 74.9
+    },
+    "sweep:ui:admin:/admin/settings/hours-sla": {
+      "dbQueries": 8,
+      "serverRequests": 1,
+      "requests": 127,
+      "jsRequests": 123,
+      "jsKB": 448.5,
+      "htmlTransferKB": 14.9,
+      "componentRenders": 425
+    },
+    "sweep:doc:admin:/admin/settings/ai/guidance": {
+      "dbQueries": 9,
+      "htmlKB": 77.9
+    },
+    "sweep:ui:admin:/admin/settings/ai/guidance": {
+      "dbQueries": 9,
+      "serverRequests": 1,
+      "requests": 127,
+      "jsRequests": 123,
+      "jsKB": 448.5,
+      "htmlTransferKB": 14.5,
+      "componentRenders": 466
+    },
+    "sweep:doc:admin:/admin/settings/ai/knowledge": {
+      "dbQueries": 6,
+      "htmlKB": 66.4
+    },
+    "sweep:ui:admin:/admin/settings/ai/knowledge": {
+      "dbQueries": 6,
+      "serverRequests": 1,
+      "requests": 109,
+      "jsRequests": 105,
+      "jsKB": 408.1,
+      "htmlTransferKB": 13.4,
+      "componentRenders": 457
+    },
+    "sweep:doc:admin:/admin/settings/who-answers": {
+      "dbQueries": 6,
+      "htmlKB": 69.1
+    },
+    "sweep:ui:admin:/admin/settings/who-answers": {
+      "dbQueries": 6,
+      "serverRequests": 1,
+      "requests": 105,
+      "jsRequests": 101,
+      "jsKB": 400.5,
+      "htmlTransferKB": 13.9,
+      "componentRenders": 370
+    },
+    "sweep:doc:admin:/admin/settings/agents/assistants": {
+      "dbQueries": 6,
+      "htmlKB": 80.4
+    },
+    "sweep:ui:admin:/admin/settings/agents/assistants": {
+      "dbQueries": 6,
+      "serverRequests": 1,
+      "requests": 103,
+      "jsRequests": 99,
+      "jsKB": 403.3,
+      "htmlTransferKB": 16.2,
+      "componentRenders": 379
+    },
+    "sweep:doc:admin:/admin/settings/agents/webhooks": {
+      "dbQueries": 7,
+      "htmlKB": 66.3
+    },
+    "sweep:ui:admin:/admin/settings/agents/webhooks": {
+      "dbQueries": 7,
+      "serverRequests": 1,
+      "requests": 125,
+      "jsRequests": 121,
+      "jsKB": 427,
+      "htmlTransferKB": 13.6,
+      "componentRenders": 379
+    },
+    "sweep:doc:admin:/admin/settings/tickets": {
+      "dbQueries": 9,
+      "htmlKB": 118
+    },
+    "sweep:ui:admin:/admin/settings/tickets": {
+      "dbQueries": 9,
+      "serverRequests": 1,
+      "requests": 124,
+      "jsRequests": 120,
+      "jsKB": 486.1,
+      "htmlTransferKB": 16.3,
+      "componentRenders": 667
     }
   },
   "$comment": "Ceilings for bun perf/bench.ts. Lowered with --update whenever a journey comes in under; raised only with --update --allow-increase, which a reviewer should question."

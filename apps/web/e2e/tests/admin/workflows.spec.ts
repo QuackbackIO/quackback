@@ -80,7 +80,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
   test('list page renders with a New workflow control', async ({ page }) => {
     await page.goto('/admin/settings/workflows')
 
-    await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Support', exact: true })).toBeVisible({
       timeout: 15000,
     })
     await expect(page.getByRole('button', { name: 'New workflow' })).toBeVisible()

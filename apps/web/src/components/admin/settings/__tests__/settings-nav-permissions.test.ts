@@ -55,7 +55,7 @@ describe('navSectionsFor', () => {
     ])
     expect(labels(only(PERMISSIONS.API_KEY_MANAGE), 'Workspace')).toEqual([
       'Notifications',
-      'Developers',
+      'Agents & API',
     ])
     expect(labels(only(PERMISSIONS.INTEGRATION_VIEW), 'Workspace')).toEqual([
       'Notifications',
@@ -67,25 +67,36 @@ describe('navSectionsFor', () => {
     ])
     expect(labels(only(PERMISSIONS.USER_ATTRIBUTE_VIEW), 'Data')).toEqual(['Users'])
     expect(labels(only(PERMISSIONS.COMPANY_VIEW), 'Data')).toEqual(['Companies'])
-    expect(labels(only(PERMISSIONS.CONVERSATION_MANAGE), 'Data')).toEqual(['Conversations'])
+    const support = only(PERMISSIONS.CONVERSATION_MANAGE)
+      .find((s) => s.label === 'Modules')!
+      .items.find((i) => i.label === 'Support')!
+    expect('pages' in support && support.pages.map((p) => p.label)).toContain('Fields & tags')
   })
 
-  it('offers the AI & Automation pages by the permission each one checks', () => {
-    const only = (permission: PermissionKey) =>
-      navSectionsFor(buildNavSections({ supportInbox: true }, true, true), new Set([permission]))
-
-    expect(labels(only(PERMISSIONS.AI_CUSTOMER_MANAGE), 'AI & Automation')).toEqual([
-      'Agent',
-      'Skills',
-      'Connectors',
+  it('offers the AI audiences and actions only to their permission holders', () => {
+    const aiPages = (permission: PermissionKey) => {
+      const sections = navSectionsFor(
+        buildNavSections({ supportInbox: true }),
+        new Set([permission])
+      )
+      const ai = sections
+        .find((s) => s.label === 'Modules')
+        ?.items.find((i) => i.label === 'Quackback AI')
+      return ai && 'pages' in ai ? ai.pages.map((p) => p.label) : []
+    }
+    expect(aiPages(PERMISSIONS.AI_CUSTOMER_MANAGE)).toEqual([
+      'Customers',
+      'Knowledge',
+      'Guidance',
+      'Actions',
     ])
-    expect(labels(only(PERMISSIONS.AI_TEAMMATE_MANAGE), 'AI & Automation')).toEqual([
-      'Copilot',
-      'Skills',
-      'Connectors',
+    expect(aiPages(PERMISSIONS.AI_TEAMMATE_MANAGE)).toEqual([
+      'Teammates',
+      'Knowledge',
+      'Guidance',
+      'Actions',
     ])
-    expect(labels(only(PERMISSIONS.WORKFLOW_MANAGE), 'AI & Automation')).toEqual(['Workflows'])
-    expect(labels(only(PERMISSIONS.MEMBER_VIEW), 'AI & Automation')).toBeNull()
+    expect(aiPages(PERMISSIONS.MEMBER_VIEW)).toEqual([])
   })
 
   it('leaves the AI & Automation heading out when no row is visible', () => {
@@ -120,7 +131,7 @@ describe('navSectionsFor', () => {
     const modules = sections.find((s) => s.label === 'Modules')!.items
     expect(modules).toHaveLength(1)
     const support = modules[0] as unknown as { label: string; pages: { to: string }[] }
-    expect(support.pages.map((k) => k.to)).toEqual(['/admin/settings/office-hours'])
+    expect(support.pages.map((k) => k.to)).toEqual(['/admin/settings/hours-sla'])
   })
 
   it('drops a module with no openable pages', () => {
@@ -179,11 +190,11 @@ describe('firstSettingsPath', () => {
   })
 
   it('opens Agent for a role with only ai.customer.manage', () => {
-    expect(first(new Set([PERMISSIONS.AI_CUSTOMER_MANAGE]))).toBe('/admin/settings/agent')
+    expect(first(new Set([PERMISSIONS.AI_CUSTOMER_MANAGE]))).toBe('/admin/settings/who-answers')
   })
 
   it('opens Workflows for a workflow manager while the inbox is on', () => {
-    expect(first(new Set([PERMISSIONS.WORKFLOW_MANAGE]))).toBe('/admin/settings/workflows')
+    expect(first(new Set([PERMISSIONS.WORKFLOW_MANAGE]))).toBe('/admin/settings/who-answers')
   })
 
   it('opens Notifications for a viewer with no settings permission', () => {

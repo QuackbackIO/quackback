@@ -48,6 +48,7 @@ const SAME_AS_ENGLISH_EVERYWHERE = [
   'GitHub',
   'Copilot.',
   'Quackback AI.',
+  'Webhooks',
 ]
 const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
   de: [
@@ -118,6 +119,7 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Agents',
     'Archive',
     'Assistant',
+    'Assistants',
     'Audience',
     'Audio',
     'Avatar',

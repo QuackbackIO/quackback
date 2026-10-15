@@ -50,13 +50,13 @@ const tabLabels = (name: string) =>
 
 describe('SettingsPage', () => {
   it('takes the title from the registry for a registered page', () => {
-    renderPage(<SettingsPage page="/admin/settings/office-hours">body</SettingsPage>)
-    expect(screen.getByRole('heading', { level: 1, name: 'Office hours' })).toBeInTheDocument()
+    renderPage(<SettingsPage page="/admin/settings/hours-sla">body</SettingsPage>)
+    expect(screen.getByRole('heading', { level: 1, name: 'Hours & SLAs' })).toBeInTheDocument()
   })
 
   it('resolves automation pages through their message descriptor', () => {
-    renderPage(<SettingsPage page="/admin/settings/connectors" />)
-    expect(screen.getByRole('heading', { level: 1, name: 'Connectors' })).toBeInTheDocument()
+    renderPage(<SettingsPage page="/admin/settings/ai/actions" />)
+    expect(screen.getByRole('heading', { level: 1, name: 'Actions' })).toBeInTheDocument()
   })
 
   it('uses an explicit title for a dynamic page', () => {
@@ -129,11 +129,11 @@ describe('SettingsPage', () => {
   })
 
   it('gives an AI & Automation page the settings back link', () => {
-    renderPage(<SettingsPage page="/admin/settings/skills" />)
+    renderPage(<SettingsPage page="/admin/settings/ai/guidance" />)
     expect(screen.getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe(
       '/admin/settings'
     )
-    expect(screen.getByRole('heading', { level: 1, name: 'Skills' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Guidance' })).toBeInTheDocument()
   })
 
   it('renders actions, the save status slot and children', () => {
@@ -191,7 +191,10 @@ describe('SettingsPage', () => {
 
     it("puts the page's description under the tabs, not under the module title", () => {
       renderInSettings(
-        <SettingsPage page="/admin/settings/sla" description="Response and resolution targets." />
+        <SettingsPage
+          page="/admin/settings/hours-sla"
+          description="Response and resolution targets."
+        />
       )
       const header = document.querySelector('[data-page-header]')!
       expect(header.textContent).not.toContain('Response and resolution targets.')
@@ -203,10 +206,10 @@ describe('SettingsPage', () => {
     })
 
     it('lists only the pages of the module the viewer can open', () => {
-      renderInSettings(<SettingsPage page="/admin/settings/office-hours" />, {
+      renderInSettings(<SettingsPage page="/admin/settings/hours-sla" />, {
         permissions: [PERMISSIONS.OFFICE_HOURS_MANAGE, PERMISSIONS.SLA_MANAGE],
       })
-      expect(tabLabels('Support')).toEqual(['Office hours', 'SLA policies'])
+      expect(tabLabels('Support')).toEqual(['Hours & SLAs'])
     })
   })
 

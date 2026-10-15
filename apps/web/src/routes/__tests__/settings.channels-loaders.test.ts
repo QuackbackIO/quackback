@@ -30,7 +30,7 @@ async function warmedKeys(route: unknown, permissions: PermissionKey[]) {
 const key = (...parts: string[]) => JSON.stringify(parts)
 
 describe('channels settings loaders', () => {
-  it('hub: warms the configs, the email and GitHub status and the routing switch', async () => {
+  it('hub: warms the configs, the email and GitHub status', async () => {
     const keys = await warmedKeys(HubRoute, [PERMISSIONS.SETTINGS_MANAGE])
     expect(keys).toEqual(
       expect.arrayContaining([
@@ -38,7 +38,6 @@ describe('channels settings loaders', () => {
         key('settings', 'portalConfig'),
         key('settings', 'email-channel-status'),
         key('settings', 'github-channel-status'),
-        key('conversation-routing'),
       ])
     )
   })

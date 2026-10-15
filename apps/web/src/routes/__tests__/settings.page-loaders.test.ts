@@ -14,7 +14,7 @@ vi.mock('@/lib/server/functions/entitlement-status', () => ({
 }))
 
 const { Route: MacrosRoute } = await import('../admin/settings.macros')
-const { Route: SlaRoute } = await import('../admin/settings.sla')
+const { Route: SlaRoute } = await import('../admin/settings.hours-sla')
 const { Route: ChangelogRoute } = await import('../admin/settings.changelog')
 const { Route: ImportsRoute } = await import('../admin/settings.imports')
 const { Route: AuthenticationRoute } = await import('../admin/settings.security.authentication')

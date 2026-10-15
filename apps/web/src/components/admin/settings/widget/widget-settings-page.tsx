@@ -1033,18 +1033,11 @@ export function AssistantLinkCard({
     <SettingsCard flush>
       <SettingsList>
         <SettingsListRow
-          to="/admin/settings/agent"
+          to="/admin/settings/who-answers"
           leading={<RowIcon icon={SparklesIcon} />}
-          title="AI agent"
+          title="Quackback AI"
           badges={
             off ? <StateBadge state="off" /> : paused ? <StateBadge state="paused" /> : undefined
-          }
-          meta={
-            off
-              ? 'Turn it on in AI & Automation'
-              : paused
-                ? 'Resume it in AI & Automation'
-                : 'Configure in AI & Automation'
           }
         />
       </SettingsList>

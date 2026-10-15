@@ -62,16 +62,16 @@ function renderHarness(props: Parameters<typeof Harness>[0]) {
 }
 
 describe('Agent pause control', () => {
-  it('offers Pause Agent with a quiet status line while replying', () => {
+  it('offers Pause Quackback AI with a quiet status line while replying', () => {
     renderHarness({ deployment: { enabled: true, respond: true } })
-    expect(screen.getByRole('button', { name: 'Pause Agent' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pause Quackback AI' })).toBeInTheDocument()
     expect(screen.getByTestId('line')).toHaveTextContent('Replying in Messenger')
   })
 
   it('offers Resume when paused', () => {
     renderHarness({ deployment: { enabled: true, respond: false } })
     expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Pause Agent' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pause Quackback AI' })).not.toBeInTheDocument()
     expect(screen.getByTestId('line')).toHaveTextContent('Paused, not replying in Messenger')
   })
 
@@ -108,11 +108,13 @@ describe('Agent pause control', () => {
     vi.mocked(updateWidgetAssistantDeploymentFn).mockResolvedValueOnce(undefined as never)
     const onChange = vi.fn()
     renderHarness({ deployment: { enabled: true, respond: true }, onChange })
-    fireEvent.click(screen.getByRole('button', { name: 'Pause Agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pause Quackback AI' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(updateWidgetAssistantDeploymentFn).not.toHaveBeenCalled()
     fireEvent.click(
-      Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Pause Agent')!
+      Array.from(dialog.querySelectorAll('button')).find(
+        (b) => b.textContent === 'Pause Quackback AI'
+      )!
     )
     await waitFor(() =>
       expect(updateWidgetAssistantDeploymentFn).toHaveBeenCalledWith({
@@ -139,10 +141,12 @@ describe('Agent pause control', () => {
     vi.mocked(updateWidgetAssistantDeploymentFn).mockRejectedValueOnce(new Error('boom'))
     const onChange = vi.fn()
     renderHarness({ deployment: { enabled: true, respond: true }, onChange })
-    fireEvent.click(screen.getByRole('button', { name: 'Pause Agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pause Quackback AI' }))
     const dialog = await screen.findByRole('alertdialog')
     fireEvent.click(
-      Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Pause Agent')!
+      Array.from(dialog.querySelectorAll('button')).find(
+        (b) => b.textContent === 'Pause Quackback AI'
+      )!
     )
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1))
     expect(toastError).toHaveBeenCalledWith("Couldn't save. Try again.")

@@ -5,7 +5,7 @@ import {
   searchAskDestinations,
   buildAskStarterPrompts,
 } from '../ask-destinations'
-import { SETTINGS_PAGES, AUTOMATION_PAGES } from '../settings-pages'
+import { SETTINGS_PAGES, AI_PAGES } from '../settings-pages'
 
 const options = {
   permissions: new Set(ALL_PERMISSIONS),
@@ -24,7 +24,7 @@ const options = {
 describe('Ask destinations', () => {
   it('includes every registered settings and automation page once', () => {
     const paths = buildAskDestinations(options).map((item) => item.href)
-    for (const path of [...Object.keys(SETTINGS_PAGES), ...Object.keys(AUTOMATION_PAGES)]) {
+    for (const path of [...Object.keys(SETTINGS_PAGES), ...Object.keys(AI_PAGES)]) {
       expect(
         paths.filter((candidate) => candidate === path),
         path
@@ -44,7 +44,7 @@ describe('Ask destinations', () => {
       ...options,
       permissions: new Set([PERMISSIONS.OFFICE_HOURS_MANAGE]),
     }).map((item) => item.href)
-    expect(limited).toContain('/admin/settings/office-hours')
+    expect(limited).toContain('/admin/settings/hours-sla')
     expect(limited).not.toContain('/admin/settings/widget')
   })
   it('hides disabled products and optional billing and domain destinations', () => {
@@ -55,7 +55,7 @@ describe('Ask destinations', () => {
       domainsEnabled: false,
     }).map((item) => item.href)
     expect(paths).not.toContain('/admin/inbox')
-    expect(paths).not.toContain('/admin/settings/office-hours')
+    expect(paths).not.toContain('/admin/settings/hours-sla')
     expect(paths).not.toContain('/admin/settings/status')
     expect(paths).not.toContain('/admin/settings/billing')
     expect(paths).not.toContain('/admin/settings/domains')

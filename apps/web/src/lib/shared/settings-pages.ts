@@ -25,11 +25,11 @@ export const SETTINGS_PAGES = {
   '/admin/settings/channels/messenger': { label: 'Messenger' },
   '/admin/settings/channels/email': { label: 'Email' },
   '/admin/settings/channels/github': { label: 'GitHub' },
+  '/admin/settings/who-answers': { label: 'Who answers' },
   '/admin/settings/macros': { label: 'Macros' },
-  '/admin/settings/office-hours': { label: 'Office hours' },
-  '/admin/settings/sla': { label: 'SLA policies' },
-  '/admin/settings/ticket-types': { label: 'Ticket types' },
-  '/admin/settings/ticket-statuses': { label: 'Ticket statuses' },
+  '/admin/settings/hours-sla': { label: 'Hours & SLAs' },
+  '/admin/settings/tickets': { label: 'Tickets' },
+  '/admin/settings/fields': { label: 'Fields & tags' },
   // Other product modules
   '/admin/settings/help-center': { label: 'Help Center' },
   '/admin/settings/changelog': { label: 'Changelog' },
@@ -43,41 +43,47 @@ export const SETTINGS_PAGES = {
   '/admin/settings/widget/install': { label: 'Install' },
   '/admin/settings/members': { label: 'Members & Teams' },
   '/admin/settings/security/authentication': { label: 'Access & Security' },
-  '/admin/settings/developers': { label: 'Developers' },
+  '/admin/settings/agents': { label: 'Agents & API' },
+  '/admin/settings/agents/assistants': { label: 'Assistants' },
+  '/admin/settings/agents/keys': { label: 'API keys' },
+  '/admin/settings/agents/webhooks': { label: 'Webhooks' },
   '/admin/settings/labs': { label: 'Labs' },
   '/admin/settings/integrations': { label: 'Integrations' },
   '/admin/settings/billing': { label: 'Plan & billing' },
   // Data
   '/admin/settings/people': { label: 'Users' },
   '/admin/settings/companies': { label: 'Companies' },
-  '/admin/settings/conversation-data': { label: 'Conversations' },
   '/admin/settings/imports': { label: 'Imports & exports' },
 } as const satisfies Record<string, SettingsPageEntry>
 
 export type SettingsPagePath = keyof typeof SETTINGS_PAGES
 
-const automationMessages = defineMessages({
-  agent: { id: 'automation.nav.agent', defaultMessage: 'Agent' },
-  copilot: { id: 'automation.nav.copilot', defaultMessage: 'Copilot' },
-  connectors: { id: 'automation.nav.connectors', defaultMessage: 'Connectors' },
-  skills: { id: 'automation.nav.skills', defaultMessage: 'Skills' },
+const aiMessages = defineMessages({
+  module: { id: 'automation.nav.group.quinn', defaultMessage: 'Quackback AI' },
+  customers: { id: 'ai.nav.customers', defaultMessage: 'Customers' },
+  teammates: { id: 'ai.nav.teammates', defaultMessage: 'Teammates' },
+  knowledge: { id: 'automation.agent.tabs.knowledge', defaultMessage: 'Knowledge' },
+  guidance: { id: 'automation.agent.tabs.guidance', defaultMessage: 'Guidance' },
+  actions: { id: 'automation.agent.tabs.actions', defaultMessage: 'Actions' },
   workflows: { id: 'automation.nav.workflows', defaultMessage: 'Workflows' },
 })
 
 /**
- * The AI & Automation pages, which are settings pages too. Their labels are
- * messages, so the page title is translated; the settings nav shows each
- * message's default text.
+ * The settings pages whose labels are messages, so the page title is
+ * translated: the Quackback AI module and its pages, and Workflows. The
+ * settings nav shows each message's default text.
  */
-export const AUTOMATION_PAGES = {
-  '/admin/settings/agent': automationMessages.agent,
-  '/admin/settings/copilot': automationMessages.copilot,
-  '/admin/settings/connectors': automationMessages.connectors,
-  '/admin/settings/skills': automationMessages.skills,
-  '/admin/settings/workflows': automationMessages.workflows,
+export const AI_PAGES = {
+  '/admin/settings/ai': aiMessages.module,
+  '/admin/settings/ai/customers': aiMessages.customers,
+  '/admin/settings/ai/teammates': aiMessages.teammates,
+  '/admin/settings/ai/knowledge': aiMessages.knowledge,
+  '/admin/settings/ai/guidance': aiMessages.guidance,
+  '/admin/settings/ai/actions': aiMessages.actions,
+  '/admin/settings/workflows': aiMessages.workflows,
 } as const
 
-export type AutomationPagePath = keyof typeof AUTOMATION_PAGES
+export type AiPagePath = keyof typeof AI_PAGES
 
 export function settingsPageLabel(path: SettingsPagePath): string {
   const page = SETTINGS_PAGES[path]

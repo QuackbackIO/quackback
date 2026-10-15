@@ -1,0 +1,67 @@
+import { z } from 'zod'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router'
+import { isProductEnabled } from '@/lib/shared/types/settings'
+import { conversationAttributeQueries } from '@/lib/client/queries/conversation-attributes'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ConversationAttributesList } from '@/components/admin/settings/conversation-data/conversation-attributes-list'
+import { ConversationTagsManager } from '@/components/admin/settings/conversation-data/conversation-tags-manager'
+import { adminPageHead } from '@/lib/client/admin-head'
+
+const searchSchema = z.object({
+  tab: z.enum(['attributes', 'tags']).optional(),
+})
+type ConversationDataTab = 'attributes' | 'tags'
+
+export const Route = createFileRoute('/admin/settings/fields')({
+  head: adminPageHead('Fields and tags settings'),
+  validateSearch: searchSchema,
+  beforeLoad: ({ context }) => {
+    if (!isProductEnabled(context.settings?.featureFlags, 'support')) {
+      throw redirect({ to: '/admin/settings/general' })
+    }
+  },
+  loader: async ({ context }) => {
+    assertRoutePermission(context.permissions, PERMISSIONS.CONVERSATION_MANAGE)
+    await context.queryClient.ensureQueryData(conversationAttributeQueries.registry())
+    return {}
+  },
+  component: ConversationDataPage,
+})
+
+function ConversationDataPage() {
+  const search = Route.useSearch()
+  const tab: ConversationDataTab = search.tab ?? 'attributes'
+  const navigate = useNavigate()
+
+  return (
+    <SettingsPage page="/admin/settings/fields">
+      <Tabs
+        value={tab}
+        onValueChange={(next) => {
+          // Callback form preserves any other search params on the URL.
+          void navigate({
+            to: '/admin/settings/fields',
+            search: (prev) => ({ ...prev, tab: next as ConversationDataTab }),
+            replace: true,
+          })
+        }}
+        variant="line"
+        className="space-y-6"
+      >
+        <TabsList>
+          <TabsTrigger value="attributes">Attributes</TabsTrigger>
+          <TabsTrigger value="tags">Tags</TabsTrigger>
+        </TabsList>
+        <TabsContent value="attributes" className="space-y-6">
+          <ConversationAttributesList />
+        </TabsContent>
+        <TabsContent value="tags" className="space-y-6">
+          <ConversationTagsManager />
+        </TabsContent>
+      </Tabs>
+    </SettingsPage>
+  )
+}

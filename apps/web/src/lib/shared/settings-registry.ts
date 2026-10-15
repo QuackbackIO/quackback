@@ -63,7 +63,7 @@ export const SETTINGS_AREA_META: Record<SettingsArea, SettingsAreaMeta> = {
     description: 'When the team is available: timezone, weekly intervals and holidays.',
     risk: 'low',
     permission: PERMISSIONS.OFFICE_HOURS_MANAGE,
-    href: '/admin/settings/office-hours',
+    href: '/admin/settings/hours-sla',
   },
   messenger: {
     id: 'messenger',

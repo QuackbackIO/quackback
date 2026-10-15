@@ -55,7 +55,7 @@ export function QuinnViewHeader({
       })}
       {canConfigure && (
         <Link
-          to="/admin/settings/agent"
+          to="/admin/settings/ai/customers"
           className="ms-auto rounded-full px-2.5 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           Configure the agent

@@ -26,7 +26,7 @@ describe('QuinnViewHeader', () => {
     hoisted.canManage = true
     render(<QuinnViewHeader onChange={() => {}} />)
     expect(screen.getByRole('link', { name: 'Configure the agent' }).getAttribute('href')).toBe(
-      '/admin/settings/agent'
+      '/admin/settings/ai/customers'
     )
   })
 

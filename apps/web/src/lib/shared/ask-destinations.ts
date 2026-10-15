@@ -74,7 +74,7 @@ const KEYWORDS: Record<string, string[]> = {
   '/admin/settings/members': ['invite', 'team', 'roles'],
   '/admin/settings/billing': ['plan', 'upgrade', 'payment', 'subscription'],
   '/admin/settings/security/authentication': ['sso', 'sign in', 'authentication', 'login'],
-  '/admin/settings/developers': ['api', 'keys', 'webhooks'],
+  '/admin/settings/agents': ['api', 'keys', 'webhooks', 'mcp', 'assistants'],
   '/admin/settings/widget': ['messenger', 'welcome', 'chat'],
   '/admin/settings/widget/install': ['install', 'snippet', 'website', 'embed'],
   '/admin/settings/portal': ['branding', 'logo', 'color', 'theme', 'header'],

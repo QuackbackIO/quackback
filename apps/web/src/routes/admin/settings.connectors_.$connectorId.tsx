@@ -107,10 +107,10 @@ function ConnectorDetailPage() {
   const connectorCrumbs = [
     {
       label: intl.formatMessage({
-        id: 'automation.connectors.title',
-        defaultMessage: 'Connectors',
+        id: 'automation.agent.tabs.actions',
+        defaultMessage: 'Actions',
       }),
-      to: '/admin/settings/connectors',
+      to: '/admin/settings/ai/actions',
     },
   ]
   const { connectorId } = Route.useParams()
@@ -128,7 +128,7 @@ function ConnectorDetailPage() {
     return <p className="text-sm text-muted-foreground">Loading…</p>
   }
   if (builtin || connectorId === 'quackback') {
-    return <Navigate to="/admin/settings/connectors" />
+    return <Navigate to="/admin/settings/ai/actions" />
   }
   if (!connector) {
     return (
@@ -245,7 +245,7 @@ function ConnectorDetailPage() {
         onConfirm={() => {
           remove.mutate(connector.id, {
             onSuccess: () => {
-              void navigate({ to: '/admin/settings/connectors' })
+              void navigate({ to: '/admin/settings/ai/actions' })
             },
             onError: () => toast.error('Could not disconnect'),
           })

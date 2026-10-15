@@ -18,14 +18,14 @@ describe('finishConnectorOAuth', () => {
     const response = await callback('?error=access_denied')
     expect(response.status).toBe(302)
     expect(response.headers.get('location')).toBe(
-      'https://app.example.test/admin/settings/connectors?oauth=error'
+      'https://app.example.test/admin/settings/ai/actions?oauth=error'
     )
   })
 
   it('returns a callback with no usable state to the Connectors settings page', async () => {
     const response = await callback('?code=abc&state=not-a-signed-state')
     expect(response.headers.get('location')).toBe(
-      'https://app.example.test/admin/settings/connectors?oauth=error'
+      'https://app.example.test/admin/settings/ai/actions?oauth=error'
     )
   })
 })

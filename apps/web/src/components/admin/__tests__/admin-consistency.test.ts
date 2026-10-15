@@ -7,11 +7,21 @@
  * tested in admin-consistency-rules.test.ts.
  */
 import { describe, expect, it } from 'vitest'
-import { AUTOMATION_PAGES, SETTINGS_PAGES } from '../settings/settings-pages'
+import { AI_PAGES, SETTINGS_PAGES } from '../settings/settings-pages'
+import { buildNavSections, isNavModule } from '../settings/settings-nav-sections'
 import { ALLOWLIST } from './admin-consistency.allowlist'
 import { RULE_NAMES, scanAdminFiles, type RuleName } from './admin-consistency.rules'
 
-const REGISTRY_PATHS = [...Object.keys(SETTINGS_PAGES), ...Object.keys(AUTOMATION_PAGES)]
+// Module landing URLs redirect to a permitted tab; they do not render a page shell.
+const landingPaths = new Set(
+  buildNavSections({ supportInbox: true, supportTickets: true })
+    .flatMap((section) => section.items)
+    .filter(isNavModule)
+    .map((module) => module.id)
+)
+const REGISTRY_PATHS = [...Object.keys(SETTINGS_PAGES), ...Object.keys(AI_PAGES)].filter(
+  (path) => !landingPaths.has(path as never)
+)
 const offenders = scanAdminFiles(REGISTRY_PATHS)
 
 const FIX: Record<RuleName, string> = {

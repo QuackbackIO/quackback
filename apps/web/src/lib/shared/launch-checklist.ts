@@ -79,7 +79,7 @@ export type LaunchTaskHref =
   | '/admin/settings/general'
   | '/admin/settings/widget/install'
   | '/admin/settings/integrations'
-  | '/admin/settings/agent'
+  | '/admin/settings/ai/customers'
   | '/admin/help-center'
   | '/admin/feedback'
   | '/admin/inbox'
@@ -370,7 +370,7 @@ function buildOutcomeTasks(
     completed: status.hasAgentAnswering === true,
     canAct: permissions.assistantManage,
     classification: 'prerequisite',
-    href: '/admin/settings/agent',
+    href: '/admin/settings/ai/customers',
     actionLabel: 'Set up the AI agent',
     completedLabel: 'Open Agent',
   }

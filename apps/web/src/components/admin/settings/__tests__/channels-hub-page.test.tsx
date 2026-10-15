@@ -33,6 +33,7 @@ vi.mock('@/lib/server/functions/channel-accounts', () => ({ listRecentEmailLogFn
 vi.mock('@/integrations/github/server/functions', () => ({ getGitHubChannelStatusFn: vi.fn() }))
 
 const { ChannelsHubPage } = await import('../channels-hub-page')
+const { ConversationRoutingCard } = await import('../conversation-routing-card')
 const { settingsQueries } = await import('@/lib/client/queries/settings')
 const { channelSettingsQueries } = await import('@/lib/client/queries/channel-settings')
 const { githubChannelStatusQuery } =
@@ -56,11 +57,11 @@ function seed(github: Record<string, unknown>) {
   client.setQueryData(channelSettingsQueries.routing().queryKey, { enabled: false } as never)
 }
 
-function renderPage() {
+function renderPage(routing = false) {
   return render(
     <IntlProvider locale="en" defaultLocale="en">
       <QueryClientProvider client={client}>
-        <ChannelsHubPage />
+        {routing ? <ConversationRoutingCard /> : <ChannelsHubPage />}
       </QueryClientProvider>
     </IntlProvider>
   )
@@ -108,15 +109,21 @@ describe('ChannelsHubPage', () => {
     expect(screen.getByText('acme/inbox')).toBeTruthy()
   })
 
+  it('keeps the routing control out of Channels', () => {
+    seed(WORKING_GITHUB)
+    renderPage()
+    expect(screen.queryByRole('switch', { name: 'Auto-assign new conversations' })).toBeNull()
+  })
+
   it('badges a channel only when it needs attention', () => {
     seed({ ...WORKING_GITHUB, lastError: 'Bad credentials' })
     renderPage()
     expect(screen.getByText('Needs attention')).toBeTruthy()
   })
 
-  it('saves the routing switch as an autosave mutation', async () => {
+  it('saves the routing switch in Who answers as an autosave mutation', async () => {
     seed(WORKING_GITHUB)
-    renderPage()
+    renderPage(true)
     const toggle = screen.getByRole('switch', { name: 'Auto-assign new conversations' })
     expect(toggle.getAttribute('aria-checked')).toBe('false')
     fireEvent.click(toggle)

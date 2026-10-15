@@ -27,7 +27,7 @@ export function useCopilotStatusLine(availableOverride?: boolean) {
   if (!available) {
     return intl.formatMessage({
       id: 'automation.copilot.deployment.unavailable',
-      defaultMessage: 'Configure an AI model to let teammates use Copilot.',
+      defaultMessage: 'Configure an AI model to let teammates use Quackback AI.',
     })
   }
   if (!settingsQuery.data) return undefined
@@ -38,7 +38,7 @@ export function useCopilotStatusLine(availableOverride?: boolean) {
       })
     : intl.formatMessage({
         id: 'automation.copilot.deployment.pausedLine',
-        defaultMessage: 'Paused, teammates do not see Copilot in the inbox',
+        defaultMessage: 'Paused, teammates do not see Quackback AI in the inbox',
       })
 }
 
@@ -90,7 +90,7 @@ export function CopilotPauseControl({ available: availableOverride }: { availabl
         {on
           ? intl.formatMessage({
               id: 'automation.copilot.deployment.pause',
-              defaultMessage: 'Pause Copilot',
+              defaultMessage: 'Pause Quackback AI',
             })
           : intl.formatMessage({
               id: 'automation.copilot.deployment.resume',
@@ -107,11 +107,11 @@ export function CopilotPauseControl({ available: availableOverride }: { availabl
           confirmingEnabled
             ? intl.formatMessage({
                 id: 'automation.copilot.deployment.resumeConfirmTitle',
-                defaultMessage: 'Resume Copilot in the inbox?',
+                defaultMessage: 'Resume Quackback AI in the inbox?',
               })
             : intl.formatMessage({
                 id: 'automation.copilot.deployment.pauseConfirmTitle',
-                defaultMessage: 'Pause Copilot?',
+                defaultMessage: 'Pause Quackback AI?',
               })
         }
         description={
@@ -119,12 +119,12 @@ export function CopilotPauseControl({ available: availableOverride }: { availabl
             ? intl.formatMessage({
                 id: 'automation.copilot.deployment.resumeConfirmDescription',
                 defaultMessage:
-                  'Teammates will be able to ask Copilot in the inbox and accept its drafted replies.',
+                  'Teammates will be able to ask Quackback AI in the inbox and accept its drafted replies.',
               })
             : intl.formatMessage({
                 id: 'automation.copilot.deployment.pauseConfirmDescription',
                 defaultMessage:
-                  'Copilot will stop answering teammates and offering drafts. Your configuration is kept.',
+                  'Quackback AI will stop answering teammates and offering drafts. Your configuration is kept.',
               })
         }
         confirmLabel={
@@ -135,7 +135,7 @@ export function CopilotPauseControl({ available: availableOverride }: { availabl
               })
             : intl.formatMessage({
                 id: 'automation.copilot.deployment.pause',
-                defaultMessage: 'Pause Copilot',
+                defaultMessage: 'Pause Quackback AI',
               })
         }
         cancelLabel={intl.formatMessage({

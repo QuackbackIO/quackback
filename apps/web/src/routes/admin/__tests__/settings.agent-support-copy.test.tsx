@@ -85,7 +85,7 @@ vi.mock('@/lib/client/mutations/assistant', () => ({
   useUpdateWidgetAssistantDeployment: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
-const { Route } = await import('../settings.agent')
+const { Route } = await import('../settings.ai.customers')
 const AgentPage = (Route as unknown as { options: { component: () => ReactNode } }).options
   .component
 
@@ -135,10 +135,10 @@ describe('Agent page without the Support inbox', () => {
     )
   })
 
-  it('shows the live line and the pause control once the inbox is on', () => {
+  it('shows the live line and links to Who answers once the inbox is on', () => {
     renderPage({ supportInbox: true, supportTickets: false })
     expect(screen.getByTestId('description')).toHaveTextContent('Replying in Messenger')
-    expect(screen.getByRole('button', { name: 'Pause Agent' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Who answers' })).toBeInTheDocument()
   })
 
   it('offers the General link only to someone who can open General', () => {

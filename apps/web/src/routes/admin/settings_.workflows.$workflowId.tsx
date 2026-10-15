@@ -3,7 +3,7 @@ import { createFileRoute, Navigate } from '@tanstack/react-router'
 import { Skeleton } from '@/components/ui/skeleton'
 import { workflowDetailQuery } from '@/lib/client/queries/workflows'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types/settings'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
@@ -30,13 +30,13 @@ export const Route = createFileRoute('/admin/settings_/workflows/$workflowId')({
   component: WorkflowBuilderPage,
 })
 
-/** Gate behind the `supportInbox` flag, mirroring the workflows list route. */
+/** Gate behind the Support product, mirroring the workflows list route. */
 function WorkflowBuilderPage() {
   const { workflowId } = Route.useParams()
   const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
-  if (!flags?.supportInbox) {
-    return <Navigate to="/admin/settings/agent" />
+  if (!isProductEnabled(flags, 'support')) {
+    return <Navigate to="/admin/settings/general" />
   }
   return (
     <Suspense

@@ -68,17 +68,17 @@ describe('WhoRepliesFirstCard', () => {
     expect(screen.getByText(/the workflow decides the assignment/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Manage the agent' })).toHaveAttribute(
       'href',
-      '/admin/settings/agent'
+      '/admin/settings/ai/customers'
     )
     expect(screen.queryByRole('link', { name: 'Manage workflows' })).toBeNull()
     expect(screen.getByRole('link', { name: 'Office hours' })).toHaveAttribute(
       'href',
-      '/admin/settings/office-hours'
+      '/admin/settings/hours-sla'
     )
   })
 
   it('hides Manage the agent on the agent page and points at Workflows', () => {
-    hoisted.pathname = '/admin/settings/agent'
+    hoisted.pathname = '/admin/settings/ai/customers'
     renderCard()
     expect(screen.queryByRole('link', { name: 'Manage the agent' })).toBeNull()
     expect(screen.getByText(/in the order on Workflows/)).toBeTruthy()
