@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { DomainAccessPicker } from '@/components/domain-access-picker'
+import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { domainAccessLevels, scopesFromDomainLevels } from '@/lib/shared/api-key-scopes'
 import {
   CLIENT_REQUESTED_SCOPE_PARAM,
@@ -30,8 +32,17 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute('/oauth/consent')({
   validateSearch: searchSchema,
-  component: ConsentPage,
+  component: ConsentRoute,
 })
+
+function ConsentRoute() {
+  // This standalone route uses English copy and sits outside the portal/admin providers.
+  return (
+    <PortalIntlProvider locale={DEFAULT_LOCALE}>
+      <ConsentPage />
+    </PortalIntlProvider>
+  )
+}
 
 interface OAuthClientInfo {
   client_name?: string
