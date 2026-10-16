@@ -73,6 +73,16 @@ export const WEBHOOK_EVENT_CONFIG = [
     description: 'When a post is assigned to a new owner',
   },
   {
+    id: 'post.subscriber_added',
+    label: 'Post Subscriber Added',
+    description: 'When someone follows a post, or a teammate subscribes them to it',
+  },
+  {
+    id: 'post.subscriber_removed',
+    label: 'Post Subscriber Removed',
+    description: 'When someone unfollows a post, or a teammate unsubscribes them from it',
+  },
+  {
     id: 'comment.created',
     label: 'New Comment',
     description: 'When a comment is posted',
@@ -243,6 +253,41 @@ export const WEBHOOK_EVENT_CONFIG = [
     id: 'ticket.external_status_changed',
     label: 'Linked Issue Status Changed',
     description: 'When a tracker issue linked to a ticket changes status on the external platform',
+  },
+  {
+    id: 'ticket.due_changed',
+    label: 'Ticket Due Date Changed',
+    description: 'When a ticket due date is set, moved, or cleared',
+  },
+  {
+    id: 'ticket.due_soon',
+    label: 'Ticket Due Soon',
+    description: 'When an open ticket is due within the next 24 hours',
+  },
+  {
+    id: 'ticket.overdue',
+    label: 'Ticket Overdue',
+    description: 'When an open ticket passes its due date',
+  },
+  {
+    id: 'ticket.subscriber_added',
+    label: 'Ticket Watcher Added',
+    description: 'When someone starts watching a ticket, or a teammate adds them as a watcher',
+  },
+  {
+    id: 'ticket.subscriber_removed',
+    label: 'Ticket Watcher Removed',
+    description: 'When someone stops watching a ticket, or a teammate removes them as a watcher',
+  },
+  {
+    id: 'ticket.updated',
+    label: 'Ticket Updated',
+    description: 'When a ticket is renamed',
+  },
+  {
+    id: 'ticket.priority_changed',
+    label: 'Ticket Priority Changed',
+    description: "When a ticket's priority changes",
   },
   {
     id: 'approval.requested',

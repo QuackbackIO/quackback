@@ -13,8 +13,20 @@
  * accepts a post id must call this before any mutation. It throws a
  * NotFoundError-shaped error (don't leak existence to denied callers).
  */
-import { db, eq, and, or, isNull, posts, boards, postComments } from '@/lib/server/db'
-import { type PostCommentId, type PostId } from '@quackback/ids'
+import {
+  db,
+  eq,
+  and,
+  or,
+  inArray,
+  isNull,
+  posts,
+  boards,
+  postComments,
+  principal,
+  userSegments,
+} from '@/lib/server/db'
+import { type PostCommentId, type PostId, type PrincipalId, type SegmentId } from '@quackback/ids'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import {
@@ -103,6 +115,77 @@ export async function assertPostViewable(postId: PostId, actor: Actor): Promise<
     // 404-shape on deny so we don't leak existence to a denied caller.
     throw new NotFoundError('POST_NOT_FOUND', `Post ${postId} not found`)
   }
+}
+
+/**
+ * Which of `principalIds` can view a post under its board's audience and its
+ * moderation state right now. The notification fan-outs use it to drop
+ * people who lost sight of a post after they subscribed, and adding a
+ * subscriber uses it to refuse someone who can't see the post. Empty when the
+ * post or its board is gone.
+ *
+ * Fast path: on an anonymous-tier board a published post is visible to
+ * everyone, so no per-principal lookup is needed. That is the common case;
+ * only the audience-restricted minority pays for the role + segment read.
+ */
+export async function principalsWhoCanViewPost(
+  postId: PostId,
+  principalIds: PrincipalId[]
+): Promise<Set<PrincipalId>> {
+  if (principalIds.length === 0) return new Set()
+
+  const postRows = await db
+    .select({
+      moderationState: posts.moderationState,
+      principalId: posts.principalId,
+      access: boards.access,
+    })
+    .from(posts)
+    .innerJoin(boards, eq(posts.boardId, boards.id))
+    .where(and(eq(posts.id, postId), isNull(posts.deletedAt), isNull(boards.deletedAt)))
+    .limit(1)
+  const post = postRows[0]
+  if (!post) return new Set()
+
+  // (The anonymous view tier is the access-matrix equivalent of the legacy
+  // 'public' audience kind.)
+  if (post.access?.view === 'anonymous' && post.moderationState === 'published') {
+    return new Set(principalIds)
+  }
+
+  // Batch-load each principal's role + segments in one query each.
+  const principals = await db
+    .select({ id: principal.id, role: principal.role, type: principal.type })
+    .from(principal)
+    .where(inArray(principal.id, principalIds))
+  const segmentRows = await db
+    .select({ principalId: userSegments.principalId, segmentId: userSegments.segmentId })
+    .from(userSegments)
+    .where(inArray(userSegments.principalId, principalIds))
+  const segmentsByPrincipal = new Map<string, Set<SegmentId>>()
+  for (const row of segmentRows) {
+    const key = String(row.principalId)
+    const set = segmentsByPrincipal.get(key) ?? new Set<SegmentId>()
+    set.add(row.segmentId as SegmentId)
+    segmentsByPrincipal.set(key, set)
+  }
+
+  const allowed = new Set<PrincipalId>()
+  for (const row of principals) {
+    const actor: Actor = {
+      principalId: row.id,
+      role: (row.role ?? null) as Actor['role'],
+      principalType: row.type as Actor['principalType'],
+      segmentIds: segmentsByPrincipal.get(String(row.id)) ?? new Set(),
+    }
+    const decision = canViewPost(
+      actor,
+      { moderationState: post.moderationState, principalId: post.principalId },
+      { access: post.access }
+    )
+    if (decision.allowed) allowed.add(row.id)
+  }
+  return allowed
 }
 
 /**
