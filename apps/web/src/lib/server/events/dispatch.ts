@@ -27,6 +27,7 @@ import type {
   EventTicketMessageAttachment,
   EventTicketRef,
   SlaTimerPayload,
+  TicketDueAlertPayload,
 } from './types.js'
 import type { JsonValue } from '@/lib/shared/json'
 import type { ConversationAttributeSource } from '@/lib/shared/conversation/attribute-values'
@@ -241,6 +242,33 @@ export async function dispatchPostOwnerAssigned(
       ownerPrincipalId: input.ownerPrincipalId,
       previousOwnerPrincipalId: input.previousOwnerPrincipalId,
     },
+  })
+}
+
+/** A post subscription changed by hand: see PostSubscriberChangedPayload. */
+export async function dispatchPostSubscriberAdded(
+  actor: EventActor,
+  post: EventPostRef,
+  subscriberPrincipalId: string,
+  reason: string | null
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.subscriber_added',
+    data: { post, subscriberPrincipalId, reason },
+  })
+}
+
+export async function dispatchPostSubscriberRemoved(
+  actor: EventActor,
+  post: EventPostRef,
+  subscriberPrincipalId: string,
+  reason: string | null
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.subscriber_removed',
+    data: { post, subscriberPrincipalId, reason },
   })
 }
 
@@ -616,6 +644,35 @@ export async function dispatchTicketReplied(
   })
 }
 
+/** A watch changed by hand: see TicketSubscriberChangedPayload. */
+export async function dispatchTicketSubscriberAdded(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  title: string,
+  subscriberPrincipalId: string,
+  reason: string | null
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.subscriber_added',
+    data: { ticket, title, subscriberPrincipalId, reason },
+  })
+}
+
+export async function dispatchTicketSubscriberRemoved(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  title: string,
+  subscriberPrincipalId: string,
+  reason: string | null
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.subscriber_removed',
+    data: { ticket, title, subscriberPrincipalId, reason },
+  })
+}
+
 export async function dispatchTicketExternalStatusChanged(
   actor: EventActor,
   ticket: EventTicketRef,
@@ -638,6 +695,85 @@ export async function dispatchTicketExternalStatusChanged(
       externalStatus,
       transition,
     },
+  })
+}
+
+/** The due date was set, moved or cleared (not fired for a due date given at
+ *  creation, which ticket.created carries on the ticket ref). */
+export async function dispatchTicketDueChanged(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  title: string,
+  dueAt: string | null,
+  previousDueAt: string | null
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.due_changed',
+    data: { ticket, title, dueAt, previousDueAt },
+  })
+}
+
+/** A ticket field was edited (today: the title). */
+export async function dispatchTicketUpdated(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  title: string,
+  previousTitle: string,
+  changedKeys: string[]
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.updated',
+    data: { ticket, title, previousTitle, changedKeys },
+  })
+}
+
+export async function dispatchTicketPriorityChanged(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  title: string,
+  previousPriority: string,
+  newPriority: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.priority_changed',
+    data: { ticket, title, previousPriority, newPriority },
+  })
+}
+
+/** A public reply on a ticket thread was edited (ticket.replied's shape + editedAt). */
+export async function dispatchTicketReplyUpdated(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  messageId: string,
+  content: string,
+  attachments: EventTicketMessageAttachment[] | null,
+  senderType: 'agent' | 'visitor',
+  title: string,
+  authorName: string | null,
+  editedAt: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.reply_updated',
+    data: { ticket, messageId, content, attachments, senderType, title, authorName, editedAt },
+  })
+}
+
+/** A public reply was deleted from a ticket thread. */
+export async function dispatchTicketReplyDeleted(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  messageId: string,
+  senderType: 'agent' | 'visitor',
+  title: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.reply_deleted',
+    data: { ticket, messageId, senderType, title },
   })
 }
 
@@ -778,6 +914,37 @@ export async function dispatchSlaBreached(id: string, payload: SlaTimerPayload) 
     {
       ...timerEventEnvelope(id),
       type: 'sla.breached',
+      data: payload,
+    },
+    { rethrow: true }
+  )
+}
+
+/**
+ * Fire ticket.due_soon once an open ticket's due date is within the next 24
+ * hours. `id` is deterministic per ticket and due date (see
+ * ticket-due.sweep.ts's `dueAlertEventId`), so a repeat tick dedupes at the
+ * outbox. Rethrows like the SLA pair: the sweep claims its fire-once marker
+ * only after this dispatch resolves (claim-after-enqueue).
+ */
+export async function dispatchTicketDueSoon(id: string, payload: TicketDueAlertPayload) {
+  await dispatchEvent(
+    {
+      ...timerEventEnvelope(id),
+      type: 'ticket.due_soon',
+      data: payload,
+    },
+    { rethrow: true }
+  )
+}
+
+/** Fire ticket.overdue once an open ticket's due date passes. Mirrors
+ *  dispatchTicketDueSoon, including the rethrow (see that doc). */
+export async function dispatchTicketOverdue(id: string, payload: TicketDueAlertPayload) {
+  await dispatchEvent(
+    {
+      ...timerEventEnvelope(id),
+      type: 'ticket.overdue',
       data: payload,
     },
     { rethrow: true }
