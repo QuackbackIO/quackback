@@ -14,6 +14,7 @@ import type { PrincipalId, TeamId, CompanyId, ConversationId } from '@quackback/
 import { TICKET_TYPES, TICKET_STAGES, CONVERSATION_PRIORITIES } from '@/lib/shared/db-types'
 import { INBOX_TRIAGE_FACETS } from '@/lib/shared/inbox/items'
 import { coerceTicketTypeId } from '@/lib/shared/tickets'
+import { TICKET_DUE_FILTERS } from '@/lib/shared/ticket-due'
 import { PageLimitMinOneSchema } from '@/lib/shared/schemas/taxonomy'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
@@ -23,7 +24,7 @@ import { inboxChannelFilterSchema } from '@/lib/shared/channels/inbox-filter'
 const ticketTypeSchema = z.enum(TICKET_TYPES)
 const ticketStageSchema = z.enum(TICKET_STAGES)
 const prioritySchema = z.enum(CONVERSATION_PRIORITIES)
-const inboxSortSchema = z.enum(['recent', 'oldest', 'created', 'priority', 'relevance'])
+const inboxSortSchema = z.enum(['recent', 'oldest', 'created', 'priority', 'due', 'relevance'])
 
 export const listInboxItemsSchema = z.object({
   facet: z.enum(INBOX_TRIAGE_FACETS),
@@ -49,6 +50,9 @@ export const listInboxItemsSchema = z.object({
   assignee: z.string().optional(),
   teamId: z.string().optional(),
   companyId: z.string().optional(),
+  /** The Due date filter; the conversation branch applies it through the
+   *  linked customer ticket. */
+  due: z.enum(TICKET_DUE_FILTERS).optional(),
   sort: inboxSortSchema.optional(),
   limit: PageLimitMinOneSchema,
   cursor: z.string().optional(),
@@ -93,6 +97,7 @@ export const listInboxItemsFn = createServerFn({ method: 'GET' })
         data.companyId && isValidTypeId(data.companyId, 'company')
           ? (data.companyId as CompanyId)
           : undefined,
+      due: data.due,
       sort: data.sort,
       limit: data.limit,
       cursor: data.cursor,

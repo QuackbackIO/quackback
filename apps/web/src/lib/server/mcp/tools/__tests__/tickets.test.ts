@@ -18,6 +18,10 @@ vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
   sendTicketMessage: (...a: unknown[]) => mockSendMessage(...a),
   addTicketNote: (...a: unknown[]) => mockAddNote(...a),
 }))
+const mockSetDueAt = vi.fn()
+vi.mock('@/lib/server/domains/tickets/ticket-due.service', () => ({
+  setTicketDueAt: (...a: unknown[]) => mockSetDueAt(...a),
+}))
 const mockLink = vi.fn()
 const mockUnlink = vi.fn()
 const mockListLinked = vi.fn()
@@ -89,6 +93,7 @@ describe('ticket MCP tools', () => {
       'link_ticket',
       'list_tickets',
       'reply_to_ticket',
+      'set_ticket_due_date',
       'unlink_ticket',
     ])
   })
@@ -119,8 +124,20 @@ describe('ticket MCP tools', () => {
       requesterPrincipalId: 'principal_r',
       assigneePrincipalId: 'principal_a',
       assigneeTeamId: null,
+      dueAt: null,
       updatedAt: '2026-07-04T00:00:00.000Z',
     })
+  })
+
+  it('list_tickets passes the due filter and the due sort, and returns dueAt', async () => {
+    mockListTickets.mockResolvedValue({
+      tickets: [{ ...ticketDTO, dueAt: '2026-11-03T17:00:00.000Z' }],
+      hasMore: false,
+    })
+    const out = await collect(teamAuth).get('list_tickets')!({ due: 'overdue', sort: 'due' })
+    const [filter] = mockListTickets.mock.calls[0]
+    expect(filter).toMatchObject({ due: 'overdue', sort: 'due', limit: 20 })
+    expect(parse(out).tickets[0].dueAt).toBe('2026-11-03T17:00:00.000Z')
   })
 
   it('list_tickets passes the registry ticketTypeId filter and maps the type ref (Phase 4)', async () => {
@@ -283,6 +300,25 @@ describe('ticket MCP tools', () => {
     expect(input.descriptionJson).toBeUndefined()
   })
 
+  it('create_ticket passes dueAt to the service as a Date and returns it', async () => {
+    mockCreateTicket.mockResolvedValue({ ...ticketDTO, dueAt: '2026-11-03T17:00:00.000Z' })
+    const out = await collect(teamAuth).get('create_ticket')!({
+      type: 'customer',
+      title: 'Refund not received',
+      dueAt: '2026-11-03T18:00:00+01:00',
+    })
+    const [input] = mockCreateTicket.mock.calls[0]
+    expect(input.dueAt).toBeInstanceOf(Date)
+    expect(input.dueAt.toISOString()).toBe('2026-11-03T17:00:00.000Z')
+    expect(parse(out).dueAt).toBe('2026-11-03T17:00:00.000Z')
+  })
+
+  it('create_ticket leaves dueAt unset when none is given', async () => {
+    mockCreateTicket.mockResolvedValue(ticketDTO)
+    await collect(teamAuth).get('create_ticket')!({ title: 'Refund not received' })
+    expect(mockCreateTicket.mock.calls[0][0].dueAt).toBeUndefined()
+  })
+
   it('create_ticket passes a registry ticketTypeId through (Phase 4; category derived)', async () => {
     mockCreateTicket.mockResolvedValue(ticketDTO)
     await collect(teamAuth).get('create_ticket')!({
@@ -433,6 +469,44 @@ describe('ticket MCP tools', () => {
     })
     expect(mockUnlink).toHaveBeenCalledTimes(1)
     expect(parse(out).linkedTicketIds).toEqual([])
+  })
+
+  it('set_ticket_due_date sets the date as a Date with the caller as actor', async () => {
+    mockSetDueAt.mockResolvedValue({ ...ticketDTO, dueAt: '2026-11-03T17:00:00.000Z' })
+    const out = await collect(teamAuth).get('set_ticket_due_date')!({
+      ticketId: 'ticket_1',
+      dueAt: '2026-11-03T17:00:00Z',
+    })
+    const [id, dueAt, actor] = mockSetDueAt.mock.calls[0]
+    expect(id).toBe('ticket_1')
+    expect(dueAt).toBeInstanceOf(Date)
+    expect(dueAt.toISOString()).toBe('2026-11-03T17:00:00.000Z')
+    expect(actor.principalId).toBe('principal_key')
+    expect(parse(out)).toEqual({
+      id: 'ticket_1',
+      reference: '#42',
+      dueAt: '2026-11-03T17:00:00.000Z',
+    })
+  })
+
+  it('set_ticket_due_date clears the date with null', async () => {
+    mockSetDueAt.mockResolvedValue(ticketDTO)
+    const out = await collect(teamAuth).get('set_ticket_due_date')!({
+      ticketId: 'ticket_1',
+      dueAt: null,
+    })
+    expect(mockSetDueAt.mock.calls[0][1]).toBeNull()
+    expect(parse(out).dueAt).toBeNull()
+  })
+
+  it('set_ticket_due_date requires the write:chat scope', async () => {
+    const readOnly = { ...teamAuth, scopes: ['read:chat'] } as unknown as McpAuthContext
+    const out = await collect(readOnly).get('set_ticket_due_date')!({
+      ticketId: 'ticket_1',
+      dueAt: null,
+    })
+    expect(out.isError).toBe(true)
+    expect(mockSetDueAt).not.toHaveBeenCalled()
   })
 
   it('write tools require the write:chat scope, not just read:chat', async () => {
