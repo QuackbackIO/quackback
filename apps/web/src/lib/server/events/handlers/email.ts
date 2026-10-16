@@ -188,7 +188,7 @@ async function deliverEmail(
       const data = event.data as EventPostMentionedData
       result = await sendPostMentionEmail({
         to: email,
-        mentionerName: event.actor.displayName ?? '',
+        mentionerName: cfg.mentionerName ?? event.actor.displayName ?? '',
         postTitle: data.postTitle,
         excerpt: data.excerpt,
         postUrl: data.postUrl,

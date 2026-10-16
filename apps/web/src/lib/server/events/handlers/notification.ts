@@ -58,6 +58,8 @@ export interface NotificationConfig {
   // conversation.note_mentioned (WO-3 slice 3)
   conversationMessageId?: string
   authorName?: string
+  // post.mentioned: who mentioned the recipient, resolved by getMentionTargets
+  mentionerName?: string | null
   preview?: string
   // ticket.status_changed (WO-3 slice 4) — labels resolved by the target
   // resolver (getTicketStatusChangedTargets), never carried on the event
@@ -244,7 +246,8 @@ function buildNotifications(
 
   if (event.type === 'post.mentioned') {
     const data = event.data as EventPostMentionedData
-    const actorName = event.actor.displayName?.trim() || 'Anonymous user'
+    const actorName =
+      config.mentionerName?.trim() || event.actor.displayName?.trim() || 'Anonymous user'
     // principalIds is always a single-element array for post.mentioned (target resolver builds it that way).
     return principalIds.map((principalId) => ({
       principalId,
