@@ -101,7 +101,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 754 surfaces
+### Server functions (`requireAuth`) — 755 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -747,6 +747,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/tickets.ts`::setTicketStatusFn | ticket.set_status |
 | `lib/server/functions/tickets.ts`::assignTicketFn | ticket.assign |
 | `lib/server/functions/tickets.ts`::setTicketPriorityFn | ticket.set_status |
+| `lib/server/functions/tickets.ts`::setTicketDueAtFn | ticket.set_status |
 | `lib/server/functions/tickets.ts`::bulkUpdateTicketsFn | DYNAMIC (ticket.assign | ticket.set_status) |
 | `lib/server/functions/tickets.ts`::getTicketLinksFn | ticket.view |
 | `lib/server/functions/tickets.ts`::linkTicketToTrackerFn | ticket.assign |
@@ -860,7 +861,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workspace-copilot.ts`::undoWorkspaceSettingsProposalFn | DYNAMIC (copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 133 surfaces
+### Public REST API (`withApiKeyAuth`) — 134 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -978,6 +979,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/tags/index.ts`::POST | tag.manage |
 | `routes/api/v1/ticket-statuses/index.ts`::GET | ticket.view |
 | `routes/api/v1/tickets/$ticketId.assign.ts`::POST | ticket.assign |
+| `routes/api/v1/tickets/$ticketId.due.ts`::POST | ticket.set_status |
 | `routes/api/v1/tickets/$ticketId.messages.ts`::GET | ticket.view |
 | `routes/api/v1/tickets/$ticketId.note.ts`::POST | ticket.note |
 | `routes/api/v1/tickets/$ticketId.priority.ts`::POST | ticket.set_status |
@@ -1019,7 +1021,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-46 tools. "Team" = requires an admin/member role in addition to the scope.
+47 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
@@ -1057,6 +1059,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | restore_suggestion | write:feedback | ✓ |
 | search | read:article, read:feedback | ✓ |
 | set_conversation_status | write:chat | ✓ |
+| set_ticket_due_date | write:chat | ✓ |
 | share_post | write:chat | ✓ |
 | suggest_post | write:chat | ✓ |
 | triage_post | write:feedback | ✓ |
@@ -1082,7 +1085,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-228 of 1100 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+228 of 1102 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

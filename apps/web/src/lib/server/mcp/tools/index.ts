@@ -24,7 +24,7 @@
  *                    set_conversation_status
  * - tickets.ts       list_tickets, get_ticket, create_ticket,
  *                    reply_to_ticket, add_ticket_note, link_ticket,
- *                    unlink_ticket
+ *                    unlink_ticket, set_ticket_due_date
  * - files.ts         upload_file
  * - widget.ts        widget_install_status
  * - settings.ts      get_settings, propose_settings_change

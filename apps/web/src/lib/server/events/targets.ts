@@ -1297,6 +1297,8 @@ type TicketEmailKind =
   | 'assigned_team'
   | 'sla_warning'
   | 'sla_breach'
+  | 'due_soon'
+  | 'overdue'
 
 interface BaseTicketConfigParams {
   kind: TicketEmailKind
@@ -1642,7 +1644,7 @@ export async function getTicketAssignedEmailTargets(
   )
 }
 
-/** ISO due-date → a short "Jul 17, 02:00 UTC" label for SLA emails. */
+/** ISO due-date → a short "Jul 17, 02:00 UTC" label for SLA and ticket due-date emails. */
 function formatSlaDue(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleString('en-US', {
@@ -1717,6 +1719,74 @@ export async function getSlaEmailTargets(
       agentFacingConfig({ kind, ticketLabel: '', title, ctaUrl, context, clockLabel, dueLabel })
     )
   )
+}
+
+/**
+ * Who hears a ticket's due-date alerts: the assignee when there is one, else
+ * the assigned team's members, else nobody (the getSlaEmailTargets rule). Read
+ * off the event's ticket ref, which the sweep built from the row at the moment
+ * it noticed the deadline. There is no actor to exclude: a timer fired it.
+ */
+async function ticketDueRecipients(ticket: {
+  assignedPrincipalId?: string | null
+  assignedTeamId?: string | null
+}): Promise<PrincipalId[]> {
+  if (ticket.assignedPrincipalId) return [ticket.assignedPrincipalId as PrincipalId]
+  if (!ticket.assignedTeamId) return []
+  const { listTeamMemberPrincipalIds } = await import('@/lib/server/domains/teams')
+  return listTeamMemberPrincipalIds(ticket.assignedTeamId as TeamId)
+}
+
+/**
+ * Notification target for `ticket.due_soon` / `ticket.overdue`: one combined
+ * bell for the ticket's responsible teammates (see ticketDueRecipients). The
+ * handler words the row from the title and stores the due date with it.
+ */
+export async function getTicketDueTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.due_soon' && event.type !== 'ticket.overdue') return null
+  const { ticket, title, dueAt } = event.data
+  const recipients = await ticketDueRecipients(ticket)
+  if (recipients.length === 0) return null
+  return {
+    type: 'notification',
+    target: { principalIds: recipients },
+    config: { ticketId: ticket.id, title, dueAt },
+  }
+}
+
+/**
+ * `ticket.due_soon` / `ticket.overdue` → agent emails to the same teammates as
+ * the bell, filtered by the matrix key of the same name as the notification
+ * type. kinds `due_soon` / `overdue`, inbox CTA, branded From, threaded on the
+ * ticket.
+ */
+export async function getTicketDueEmailTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'ticket.due_soon' && event.type !== 'ticket.overdue') return []
+  if (!(await isSupportTicketsEnabled())) return []
+  const { ticket, title, dueAt } = event.data
+
+  const recipientIds = await ticketDueRecipients(ticket)
+  if (recipientIds.length === 0) return []
+
+  const overdue = event.type === 'ticket.overdue'
+  const matrixKey = overdue ? 'ticket_overdue' : 'ticket_due_soon'
+  const { recipients, emailMap } = await resolveEligibleRecipients(recipientIds, matrixKey)
+  if (recipients.length === 0) return []
+
+  const ticketId = ticket.id as TicketId
+  const config = agentFacingConfig({
+    kind: overdue ? 'overdue' : 'due_soon',
+    ticketId,
+    ticketLabel: formatTicketNumber(ticket.number),
+    title,
+    ctaUrl: inboxUrl(context.portalBaseUrl, ticketId),
+    context,
+    dueLabel: formatSlaDue(dueAt),
+  })
+  return recipients.map((id) => ticketEmailTarget(emailMap.get(id)!, config))
 }
 
 // ============================================================================

@@ -9,6 +9,7 @@ import {
   AdjustmentsHorizontalIcon,
   ArrowUturnLeftIcon,
   BoltIcon,
+  CalendarDaysIcon,
   ChatBubbleLeftEllipsisIcon,
   ChatBubbleLeftRightIcon,
   CheckCircleIcon,
@@ -54,6 +55,7 @@ export const ACTION_ICONS: Record<ActionType, typeof BoltIcon> = {
   set_attribute: AdjustmentsHorizontalIcon,
   add_note: DocumentTextIcon,
   set_ticket_status: TicketIcon,
+  set_ticket_due_date: CalendarDaysIcon,
   convert_to_ticket: TicketIcon,
   send_webhook: PaperAirplaneIcon,
 }

@@ -72,6 +72,8 @@ export const ticketRef = z.object({
   priority: z.string(),
   assignedPrincipalId: z.string().nullable().optional(),
   assignedTeamId: z.string().nullable().optional(),
+  // The shared due date; absent on payloads recorded before due dates shipped.
+  dueAt: z.string().nullable().optional(),
 })
 const attachment = z.object({
   name: z.string(),
@@ -283,6 +285,14 @@ export const P = {
     externalStatus: z.string(),
     transition: z.enum(['closed', 'reopened']).nullable(),
   }),
+  'ticket.due_changed': z.looseObject({
+    ticket: ticketRef,
+    title: z.string(),
+    dueAt: nullableStr,
+    previousDueAt: nullableStr,
+  }),
+  'ticket.due_soon': z.looseObject({ ticket: ticketRef, title: z.string(), dueAt: z.string() }),
+  'ticket.overdue': z.looseObject({ ticket: ticketRef, title: z.string(), dueAt: z.string() }),
   // assistant + sla
   'assistant.handed_off': z.looseObject({ conversationId: id, reason: z.string() }),
   'assistant.resolved': z.looseObject({ conversationId: id, outcome: z.string() }),

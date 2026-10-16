@@ -25,6 +25,8 @@ export type NotificationType =
   | 'ticket_note_added'
   | 'ticket_external_status_changed'
   | 'ticket_created'
+  | 'ticket_due_soon'
+  | 'ticket_overdue'
   | 'sla_warning'
   | 'sla_breach'
   | 'comment_mentioned'
