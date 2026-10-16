@@ -2196,5 +2196,11 @@
   "oauthDevice.problem.rateLimited": "Te veel pogingen. Probeer het over een minuut opnieuw.",
   "oauthDevice.problem.noScopes": "Kies minstens één ding om toe te staan.",
   "oauthDevice.problem.error": "Er ging iets mis. Probeer het opnieuw.",
-  "oauthDevice.ready.unverified": "Niet-geverifieerde app. Iedereen kan een app onder elke naam registreren."
+  "oauthDevice.ready.unverified": "Niet-geverifieerde app. Iedereen kan een app onder elke naam registreren.",
+  "admin.integrations.oauthError.denied": "De verbinding is geweigerd op {name}. Maak opnieuw verbinding om toegang te geven.",
+  "admin.integrations.oauthError.expired": "Het verbindingsverzoek is verlopen of was ongeldig. Probeer opnieuw verbinding te maken.",
+  "admin.integrations.oauthError.session": "Je sessie is tijdens het verbinden veranderd. Meld je opnieuw aan en maak dan verbinding.",
+  "admin.integrations.oauthError.credentials": "Voeg de app-gegevens van {name} toe voordat je verbinding maakt.",
+  "admin.integrations.oauthError.elsewhere": "Dit {name}-account is al verbonden met een andere Quackback-werkruimte.",
+  "admin.integrations.oauthError.failed": "{name} heeft de verbinding niet voltooid. Probeer opnieuw verbinding te maken."
 }

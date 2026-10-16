@@ -2196,5 +2196,11 @@
   "oauthDevice.problem.rateLimited": "Too many attempts. Try again in a minute.",
   "oauthDevice.problem.noScopes": "Choose at least one thing to allow.",
   "oauthDevice.problem.error": "Something went wrong. Please try again.",
-  "oauthDevice.ready.unverified": "Unverified application. Anyone can register an app under any name."
+  "oauthDevice.ready.unverified": "Unverified application. Anyone can register an app under any name.",
+  "admin.integrations.oauthError.denied": "The connection was declined on {name}. Connect again to allow access.",
+  "admin.integrations.oauthError.expired": "The connection request expired or was not valid. Try connecting again.",
+  "admin.integrations.oauthError.session": "Your session changed while connecting. Sign in again, then connect.",
+  "admin.integrations.oauthError.credentials": "Add the {name} app credentials before connecting.",
+  "admin.integrations.oauthError.elsewhere": "This {name} account is already connected to another Quackback workspace.",
+  "admin.integrations.oauthError.failed": "{name} didn't finish the connection. Try connecting again."
 }

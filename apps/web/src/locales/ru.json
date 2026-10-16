@@ -2196,5 +2196,11 @@
   "oauthDevice.problem.rateLimited": "Слишком много попыток. Повторите через минуту.",
   "oauthDevice.problem.noScopes": "Выберите хотя бы одно разрешение.",
   "oauthDevice.problem.error": "Что-то пошло не так. Попробуйте снова.",
-  "oauthDevice.ready.unverified": "Непроверенное приложение. Любой может зарегистрировать приложение под любым именем."
+  "oauthDevice.ready.unverified": "Непроверенное приложение. Любой может зарегистрировать приложение под любым именем.",
+  "admin.integrations.oauthError.denied": "Подключение отклонено в {name}. Подключитесь снова, чтобы разрешить доступ.",
+  "admin.integrations.oauthError.expired": "Срок запроса на подключение истёк, или он недействителен. Попробуйте подключиться снова.",
+  "admin.integrations.oauthError.session": "Сеанс изменился во время подключения. Войдите снова, затем подключитесь.",
+  "admin.integrations.oauthError.credentials": "Добавьте учётные данные приложения {name} перед подключением.",
+  "admin.integrations.oauthError.elsewhere": "Этот аккаунт {name} уже подключён к другому рабочему пространству Quackback.",
+  "admin.integrations.oauthError.failed": "{name} не завершил подключение. Попробуйте подключиться снова."
 }

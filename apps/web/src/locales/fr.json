@@ -2196,5 +2196,11 @@
   "oauthDevice.problem.rateLimited": "Trop de tentatives. Réessayez dans une minute.",
   "oauthDevice.problem.noScopes": "Choisissez au moins une autorisation.",
   "oauthDevice.problem.error": "Une erreur s'est produite. Veuillez réessayer.",
-  "oauthDevice.ready.unverified": "Application non vérifiée. N'importe qui peut enregistrer une application sous n'importe quel nom."
+  "oauthDevice.ready.unverified": "Application non vérifiée. N'importe qui peut enregistrer une application sous n'importe quel nom.",
+  "admin.integrations.oauthError.denied": "La connexion a été refusée sur {name}. Connectez-vous à nouveau pour autoriser l'accès.",
+  "admin.integrations.oauthError.expired": "La demande de connexion a expiré ou n'était pas valide. Réessayez de vous connecter.",
+  "admin.integrations.oauthError.session": "Votre session a changé pendant la connexion. Reconnectez-vous, puis connectez l'intégration.",
+  "admin.integrations.oauthError.credentials": "Ajoutez les identifiants de l'application {name} avant de vous connecter.",
+  "admin.integrations.oauthError.elsewhere": "Ce compte {name} est déjà connecté à un autre espace de travail Quackback.",
+  "admin.integrations.oauthError.failed": "{name} n'a pas terminé la connexion. Réessayez de vous connecter."
 }

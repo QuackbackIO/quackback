@@ -2196,5 +2196,11 @@
   "oauthDevice.problem.rateLimited": "嘗試次數過多。請一分鐘後再試。",
   "oauthDevice.problem.noScopes": "請至少選擇一項允許的內容。",
   "oauthDevice.problem.error": "發生錯誤。請再試一次。",
-  "oauthDevice.ready.unverified": "未經驗證的應用程式。任何人都可以用任意名稱註冊應用程式。"
+  "oauthDevice.ready.unverified": "未經驗證的應用程式。任何人都可以用任意名稱註冊應用程式。",
+  "admin.integrations.oauthError.denied": "{name} 上的連線遭到拒絕。請重新連線以允許存取。",
+  "admin.integrations.oauthError.expired": "連線要求已過期或無效。請重新嘗試連線。",
+  "admin.integrations.oauthError.session": "連線期間你的工作階段已變更。請重新登入後再連線。",
+  "admin.integrations.oauthError.credentials": "請先新增 {name} 應用程式憑證再連線。",
+  "admin.integrations.oauthError.elsewhere": "此 {name} 帳戶已連線到另一個 Quackback 工作區。",
+  "admin.integrations.oauthError.failed": "{name} 未完成連線。請重新嘗試連線。"
 }

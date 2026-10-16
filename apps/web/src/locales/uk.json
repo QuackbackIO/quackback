@@ -2196,5 +2196,11 @@
   "oauthDevice.problem.rateLimited": "Забагато спроб. Спробуйте за хвилину.",
   "oauthDevice.problem.noScopes": "Виберіть принаймні один дозвіл.",
   "oauthDevice.problem.error": "Щось пішло не так. Спробуйте ще раз.",
-  "oauthDevice.ready.unverified": "Неперевірений застосунок. Будь-хто може зареєструвати застосунок під будь-якою назвою."
+  "oauthDevice.ready.unverified": "Неперевірений застосунок. Будь-хто може зареєструвати застосунок під будь-якою назвою.",
+  "admin.integrations.oauthError.denied": "Підключення відхилено в {name}. Підключіться знову, щоб надати доступ.",
+  "admin.integrations.oauthError.expired": "Термін запиту на підключення минув, або він недійсний. Спробуйте підключитися знову.",
+  "admin.integrations.oauthError.session": "Сеанс змінився під час підключення. Увійдіть знову, а потім підключіться.",
+  "admin.integrations.oauthError.credentials": "Додайте облікові дані застосунку {name} перед підключенням.",
+  "admin.integrations.oauthError.elsewhere": "Цей обліковий запис {name} уже підключено до іншого робочого простору Quackback.",
+  "admin.integrations.oauthError.failed": "{name} не завершив підключення. Спробуйте підключитися знову."
 }

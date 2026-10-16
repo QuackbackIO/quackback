@@ -2196,5 +2196,11 @@
   "oauthDevice.problem.rateLimited": "尝试次数过多。请一分钟后再试。",
   "oauthDevice.problem.noScopes": "请至少选择一项允许的内容。",
   "oauthDevice.problem.error": "出了点问题。请重试。",
-  "oauthDevice.ready.unverified": "未经验证的应用。任何人都可以用任意名称注册应用。"
+  "oauthDevice.ready.unverified": "未经验证的应用。任何人都可以用任意名称注册应用。",
+  "admin.integrations.oauthError.denied": "{name} 上的连接被拒绝。请重新连接以允许访问。",
+  "admin.integrations.oauthError.expired": "连接请求已过期或无效。请重新尝试连接。",
+  "admin.integrations.oauthError.session": "连接期间你的会话已更改。请重新登录后再连接。",
+  "admin.integrations.oauthError.credentials": "请先添加 {name} 应用凭据再连接。",
+  "admin.integrations.oauthError.elsewhere": "此 {name} 账户已连接到另一个 Quackback 工作区。",
+  "admin.integrations.oauthError.failed": "{name} 未完成连接。请重新尝试连接。"
 }

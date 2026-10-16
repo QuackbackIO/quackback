@@ -2196,5 +2196,11 @@
   "oauthDevice.problem.rateLimited": "ลองหลายครั้งเกินไป ลองอีกครั้งในอีกหนึ่งนาที",
   "oauthDevice.problem.noScopes": "เลือกสิ่งที่อนุญาตอย่างน้อยหนึ่งอย่าง",
   "oauthDevice.problem.error": "เกิดข้อผิดพลาดบางอย่าง โปรดลองอีกครั้ง",
-  "oauthDevice.ready.unverified": "แอปพลิเคชันที่ยังไม่ได้รับการยืนยัน ใครก็ลงทะเบียนแอปด้วยชื่ออะไรก็ได้"
+  "oauthDevice.ready.unverified": "แอปพลิเคชันที่ยังไม่ได้รับการยืนยัน ใครก็ลงทะเบียนแอปด้วยชื่ออะไรก็ได้",
+  "admin.integrations.oauthError.denied": "การเชื่อมต่อถูกปฏิเสธบน {name} เชื่อมต่ออีกครั้งเพื่ออนุญาตการเข้าถึง",
+  "admin.integrations.oauthError.expired": "คำขอเชื่อมต่อหมดอายุหรือไม่ถูกต้อง ลองเชื่อมต่ออีกครั้ง",
+  "admin.integrations.oauthError.session": "เซสชันของคุณเปลี่ยนไประหว่างการเชื่อมต่อ ลงชื่อเข้าใช้อีกครั้ง แล้วจึงเชื่อมต่อ",
+  "admin.integrations.oauthError.credentials": "เพิ่มข้อมูลรับรองแอป {name} ก่อนเชื่อมต่อ",
+  "admin.integrations.oauthError.elsewhere": "บัญชี {name} นี้เชื่อมต่อกับพื้นที่ทำงาน Quackback อื่นอยู่แล้ว",
+  "admin.integrations.oauthError.failed": "{name} ไม่ได้ทำการเชื่อมต่อให้เสร็จสิ้น ลองเชื่อมต่ออีกครั้ง"
 }

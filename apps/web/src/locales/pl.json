@@ -2196,5 +2196,11 @@
   "oauthDevice.problem.rateLimited": "Zbyt wiele prób. Spróbuj ponownie za minutę.",
   "oauthDevice.problem.noScopes": "Wybierz co najmniej jedno uprawnienie.",
   "oauthDevice.problem.error": "Coś poszło nie tak. Spróbuj ponownie.",
-  "oauthDevice.ready.unverified": "Niezweryfikowana aplikacja. Każdy może zarejestrować aplikację pod dowolną nazwą."
+  "oauthDevice.ready.unverified": "Niezweryfikowana aplikacja. Każdy może zarejestrować aplikację pod dowolną nazwą.",
+  "admin.integrations.oauthError.denied": "Połączenie zostało odrzucone w {name}. Połącz ponownie, aby zezwolić na dostęp.",
+  "admin.integrations.oauthError.expired": "Żądanie połączenia wygasło lub było nieprawidłowe. Spróbuj połączyć ponownie.",
+  "admin.integrations.oauthError.session": "Twoja sesja zmieniła się podczas łączenia. Zaloguj się ponownie, a następnie połącz.",
+  "admin.integrations.oauthError.credentials": "Dodaj dane uwierzytelniające aplikacji {name} przed połączeniem.",
+  "admin.integrations.oauthError.elsewhere": "To konto {name} jest już połączone z innym obszarem roboczym Quackback.",
+  "admin.integrations.oauthError.failed": "{name} nie dokończył połączenia. Spróbuj połączyć ponownie."
 }

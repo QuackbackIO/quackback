@@ -2196,5 +2196,11 @@
   "oauthDevice.problem.rateLimited": "Demasiados intentos. Inténtalo de nuevo dentro de un minuto.",
   "oauthDevice.problem.noScopes": "Elige al menos un permiso.",
   "oauthDevice.problem.error": "Algo salió mal. Inténtalo de nuevo.",
-  "oauthDevice.ready.unverified": "Aplicación no verificada. Cualquiera puede registrar una aplicación con cualquier nombre."
+  "oauthDevice.ready.unverified": "Aplicación no verificada. Cualquiera puede registrar una aplicación con cualquier nombre.",
+  "admin.integrations.oauthError.denied": "La conexión se rechazó en {name}. Vuelve a conectar para permitir el acceso.",
+  "admin.integrations.oauthError.expired": "La solicitud de conexión caducó o no era válida. Vuelve a intentar conectar.",
+  "admin.integrations.oauthError.session": "Tu sesión cambió durante la conexión. Vuelve a iniciar sesión y conecta.",
+  "admin.integrations.oauthError.credentials": "Añade las credenciales de la app de {name} antes de conectar.",
+  "admin.integrations.oauthError.elsewhere": "Esta cuenta de {name} ya está conectada a otro espacio de trabajo de Quackback.",
+  "admin.integrations.oauthError.failed": "{name} no completó la conexión. Vuelve a intentar conectar."
 }
