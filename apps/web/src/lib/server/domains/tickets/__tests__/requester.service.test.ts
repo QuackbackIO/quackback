@@ -69,11 +69,13 @@ import { runEventReactions } from '@/lib/server/events/event-reactions-queue'
 import { createSlaPolicy } from '@/lib/server/domains/sla/sla-policy.service'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
+import { ValidationError } from '@/lib/shared/errors'
 import {
   appendInboundTicketReply,
   captureRequesterEmail,
   createMyTicket,
   getMyTicketWatchStatus,
+  getRequesterTicketSummaries,
   listMyTicketSummaries,
   watchMyTicket,
   unwatchMyTicket,
@@ -519,5 +521,81 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     const [p] = await testDb.select().from(principal).where(eq(principal.id, anonId))
     expect(p.contactEmail).toBe('visitor@example.com')
     expect(await captureRequesterEmail(anonId, 'other@example.com')).toEqual({ captured: false })
+  })
+
+  describe('createMyTicket with a due date', () => {
+    it('saves the proposed date, returns it on the requester DTO and both summaries', async () => {
+      await seedWorkspace()
+      await seedStagedStatuses()
+      const me = await seedPrincipal()
+      // End of a local day three days out, as the widget form sends it.
+      const due = new Date(Date.now() + 3 * 86_400_000)
+      due.setSeconds(0, 0)
+
+      const created = await createMyTicket(requesterActor(me), { title: 'Need it', dueAt: due })
+
+      expect(created.dueAt).toBe(due.toISOString())
+      const row = await readTicketRow(created.id)
+      expect(row.dueAt?.getTime()).toBe(due.getTime())
+      // A future date filed by someone who is not the assignee arms both alerts.
+      expect(row.dueSoonNotifiedFor).toBeNull()
+      expect(row.overdueNotifiedFor).toBeNull()
+
+      const [summary] = (await listMyTicketSummaries(me)).filter((t) => t.ticketId === created.id)
+      expect(summary.dueAt).toBe(due.toISOString())
+
+      const [pair] = await testDb
+        .select()
+        .from(ticketConversations)
+        .where(eq(ticketConversations.ticketId, created.id))
+      const map = await getRequesterTicketSummaries([pair.conversationId], me)
+      expect(map.get(pair.conversationId)?.dueAt).toBe(due.toISOString())
+    })
+
+    it('leaves dueAt null when none is proposed, on the DTO and both summaries', async () => {
+      await seedWorkspace()
+      await seedStagedStatuses()
+      const me = await seedPrincipal()
+
+      const created = await createMyTicket(requesterActor(me), { title: 'No rush' })
+
+      expect(created.dueAt).toBeNull()
+      const [summary] = (await listMyTicketSummaries(me)).filter((t) => t.ticketId === created.id)
+      expect(summary.dueAt).toBeNull()
+      const [pair] = await testDb
+        .select()
+        .from(ticketConversations)
+        .where(eq(ticketConversations.ticketId, created.id))
+      const map = await getRequesterTicketSummaries([pair.conversationId], me)
+      expect(map.get(pair.conversationId)?.dueAt).toBeNull()
+    })
+
+    it('rejects a past date (the customer window) and files nothing', async () => {
+      await seedWorkspace()
+      await seedStagedStatuses()
+      const me = await seedPrincipal()
+
+      const err = await createMyTicket(requesterActor(me), {
+        title: 'Yesterday',
+        dueAt: new Date(Date.now() - 86_400_000),
+      }).catch((e: unknown) => e)
+
+      expect(err).toBeInstanceOf(ValidationError)
+      expect(err).toMatchObject({ code: 'INVALID_DUE_DATE' })
+      expect(await listMyTicketSummaries(me)).toHaveLength(0)
+    })
+
+    it('rejects a date beyond the customer window that a teammate could still set', async () => {
+      await seedWorkspace()
+      await seedStagedStatuses()
+      const me = await seedPrincipal()
+
+      await expect(
+        createMyTicket(requesterActor(me), {
+          title: 'Far out',
+          dueAt: new Date(Date.now() + 3 * 365 * 86_400_000),
+        })
+      ).rejects.toMatchObject({ code: 'INVALID_DUE_DATE' })
+    })
   })
 })

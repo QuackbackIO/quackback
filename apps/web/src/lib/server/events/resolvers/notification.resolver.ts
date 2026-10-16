@@ -28,6 +28,7 @@ import {
   getTicketRepliedTargets,
   getTicketNoteAddedTargets,
   getTicketExternalStatusChangedTargets,
+  getTicketSubscriberAddedTargets,
   getMessageCreatedTargets,
   getApprovalRequestedTargets,
   getTicketCreatedEmailTargets,
@@ -36,6 +37,8 @@ import {
   getTicketAssignedEmailTargets,
   getSlaEmailTargets,
   getConversationNoteMentionedEmailTargets,
+  getTicketDueTargets,
+  getTicketDueEmailTargets,
 } from '../targets'
 import type { SinkResolver } from './registry'
 import type { DomainEvent } from '../envelope'
@@ -69,8 +72,11 @@ const BELL_BUILDERS: Record<string, BellBuilder> = {
   'ticket.replied': getTicketRepliedTargets,
   'ticket.note_added': getTicketNoteAddedTargets,
   'ticket.external_status_changed': getTicketExternalStatusChangedTargets,
+  'ticket.subscriber_added': getTicketSubscriberAddedTargets,
   'message.created': getMessageCreatedTargets,
   'approval.requested': getApprovalRequestedTargets,
+  'ticket.due_soon': getTicketDueTargets,
+  'ticket.overdue': getTicketDueTargets,
 }
 
 /**
@@ -89,6 +95,8 @@ const EMAIL_BUILDERS: Record<string, EmailBuilder> = {
   'ticket.assigned': getTicketAssignedEmailTargets,
   'sla.approaching_breach': getSlaEmailTargets,
   'sla.breached': getSlaEmailTargets,
+  'ticket.due_soon': getTicketDueEmailTargets,
+  'ticket.overdue': getTicketDueEmailTargets,
   'conversation.note_mentioned': getConversationNoteMentionedEmailTargets,
 }
 

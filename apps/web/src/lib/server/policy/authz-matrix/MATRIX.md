@@ -101,7 +101,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 754 surfaces
+### Server functions (`requireAuth`) — 756 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -747,6 +747,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/tickets.ts`::setTicketStatusFn | ticket.set_status |
 | `lib/server/functions/tickets.ts`::assignTicketFn | ticket.assign |
 | `lib/server/functions/tickets.ts`::setTicketPriorityFn | ticket.set_status |
+| `lib/server/functions/tickets.ts`::setTicketDueAtFn | ticket.set_status |
 | `lib/server/functions/tickets.ts`::bulkUpdateTicketsFn | DYNAMIC (ticket.assign | ticket.set_status) |
 | `lib/server/functions/tickets.ts`::getTicketLinksFn | ticket.view |
 | `lib/server/functions/tickets.ts`::linkTicketToTrackerFn | ticket.assign |
@@ -781,6 +782,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/tickets.ts`::muteTicketFn | ticket.view |
 | `lib/server/functions/tickets.ts`::unmuteTicketFn | ticket.view |
 | `lib/server/functions/tickets.ts`::listTicketWatchersFn | ticket.view |
+| `lib/server/functions/tickets.ts`::listTicketWatcherCandidatesFn | ticket.assign |
 | `lib/server/functions/tickets.ts`::adminAddTicketWatcherFn | ticket.assign |
 | `lib/server/functions/tickets.ts`::adminRemoveTicketWatcherFn | ticket.assign |
 | `lib/server/functions/tickets.ts`::getMyTicketWatchStatusFn | END_USER (any authenticated) |
@@ -860,7 +862,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workspace-copilot.ts`::undoWorkspaceSettingsProposalFn | DYNAMIC (copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 133 surfaces
+### Public REST API (`withApiKeyAuth`) — 137 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -978,12 +980,16 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/tags/index.ts`::POST | tag.manage |
 | `routes/api/v1/ticket-statuses/index.ts`::GET | ticket.view |
 | `routes/api/v1/tickets/$ticketId.assign.ts`::POST | ticket.assign |
+| `routes/api/v1/tickets/$ticketId.due.ts`::POST | ticket.set_status |
 | `routes/api/v1/tickets/$ticketId.messages.ts`::GET | ticket.view |
 | `routes/api/v1/tickets/$ticketId.note.ts`::POST | ticket.note |
 | `routes/api/v1/tickets/$ticketId.priority.ts`::POST | ticket.set_status |
 | `routes/api/v1/tickets/$ticketId.reply.ts`::POST | ticket.reply |
 | `routes/api/v1/tickets/$ticketId.status.ts`::POST | ticket.set_status |
 | `routes/api/v1/tickets/$ticketId.ts`::GET | ticket.view |
+| `routes/api/v1/tickets/$ticketId.watchers.$principalId.ts`::DELETE | ticket.assign |
+| `routes/api/v1/tickets/$ticketId.watchers.ts`::GET | ticket.view |
+| `routes/api/v1/tickets/$ticketId.watchers.ts`::POST | ticket.assign |
 | `routes/api/v1/tickets/index.ts`::GET | ticket.view |
 | `routes/api/v1/tickets/index.ts`::POST | ticket.create |
 | `routes/api/v1/users/$principalId.ts`::GET | people.view |
@@ -1019,13 +1025,14 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-46 tools. "Team" = requires an admin/member role in addition to the scope.
+52 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
 | accept_suggestion | write:feedback | ✓ |
 | add_comment | write:feedback | · |
 | add_ticket_note | write:chat | ✓ |
+| add_ticket_watcher | write:chat | ✓ |
 | create_article | write:article | ✓ |
 | create_changelog | write:changelog | ✓ |
 | create_post | write:feedback | · |
@@ -1044,6 +1051,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | link_ticket | write:chat | ✓ |
 | list_approvals | read:settings | ✓ |
 | list_conversations | read:chat | ✓ |
+| list_ticket_watchers | read:chat | ✓ |
 | list_tickets | read:chat | ✓ |
 | manage_category | write:article | ✓ |
 | merge_post | write:feedback | ✓ |
@@ -1051,23 +1059,27 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | propose_settings_change | write:settings | ✓ |
 | proxy_vote | write:feedback | ✓ |
 | react_to_comment | write:feedback | · |
+| remove_ticket_watcher | write:chat | ✓ |
 | reply_to_conversation | write:chat | ✓ |
 | reply_to_ticket | write:chat | ✓ |
 | restore_post | write:feedback | ✓ |
 | restore_suggestion | write:feedback | ✓ |
 | search | read:article, read:feedback | ✓ |
 | set_conversation_status | write:chat | ✓ |
+| set_ticket_due_date | write:chat | ✓ |
 | share_post | write:chat | ✓ |
 | suggest_post | write:chat | ✓ |
 | triage_post | write:feedback | ✓ |
 | unlink_ticket | write:chat | ✓ |
 | unmerge_post | write:feedback | ✓ |
+| unwatch_ticket | write:chat | ✓ |
 | update_article | write:article | ✓ |
 | update_changelog | write:changelog | ✓ |
 | update_comment | write:feedback | · |
 | update_settings | write:settings | ✓ |
 | upload_file | write:chat | ✓ |
 | vote_post | write:feedback | · |
+| watch_ticket | write:chat | ✓ |
 | widget_install_status | read:feedback | ✓ |
 
 ### MCP scope holdings by class
@@ -1082,7 +1094,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-228 of 1100 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+228 of 1106 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
