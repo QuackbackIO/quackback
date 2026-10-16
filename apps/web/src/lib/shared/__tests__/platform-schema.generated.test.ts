@@ -83,6 +83,15 @@ describe('platform-schema.generated.json parity', () => {
       expect(key.sensitive).toBe(key.kind === 'secret')
     }
   })
+
+  it('masks gateway headers because they can contain credentials', () => {
+    expect(committed.ai.keys.find((key) => key.key === 'OPENAI_DEFAULT_HEADERS')).toEqual({
+      key: 'OPENAI_DEFAULT_HEADERS',
+      kind: 'secret',
+      group: 'connection',
+      sensitive: true,
+    })
+  })
 })
 
 describe('platform-schema.generated.json env-var round trip', () => {
