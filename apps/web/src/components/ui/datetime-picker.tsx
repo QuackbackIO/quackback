@@ -26,6 +26,13 @@ interface DateTimePickerProps {
   dateOnly?: boolean
   /** Called when the inline clear control is clicked (shown when value is set) */
   onClear?: () => void
+  /** Accessible name of the inline clear control (default "Clear date") */
+  clearLabel?: string
+  /**
+   * Called when the popover opens or closes, so a caller can hold a draft
+   * while it is open and commit once on close instead of on every change.
+   */
+  onOpenChange?: (open: boolean) => void
   /** Additional class names for trigger button */
   className?: string
 }
@@ -77,9 +84,15 @@ export function DateTimePicker({
   disabled = false,
   dateOnly = false,
   onClear,
+  clearLabel = 'Clear date',
+  onOpenChange,
   className,
 }: DateTimePickerProps) {
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpenState] = React.useState(false)
+  const setOpen = (next: boolean) => {
+    setOpenState(next)
+    onOpenChange?.(next)
+  }
 
   const defaultPlaceholder = dateOnly ? 'Pick a date' : 'Pick date & time'
   const resolvedPlaceholder = placeholder ?? defaultPlaceholder
@@ -119,7 +132,13 @@ export function DateTimePicker({
   const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const [hours, minutes] = e.target.value.split(':').map(Number)
     if (!isNaN(hours) && !isNaN(minutes)) {
-      const base = value ? new Date(value) : maxDate ? new Date(maxDate) : new Date()
+      // With no date picked yet, the time lands on today (or on maxDate when
+      // that already passed), never on a far-future maxDate.
+      const base = value
+        ? new Date(value)
+        : maxDate && maxDate.getTime() < Date.now()
+          ? new Date(maxDate)
+          : new Date()
       base.setHours(hours, minutes, 0, 0)
       onChange(applyBounds(base))
     }
@@ -174,7 +193,7 @@ export function DateTimePicker({
               onClear()
             }}
             className="inline-flex shrink-0 items-center justify-center border-l border-border/50 px-1.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-            aria-label="Clear date"
+            aria-label={clearLabel}
           >
             <XMarkIcon className="h-3 w-3" />
           </button>

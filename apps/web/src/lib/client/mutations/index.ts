@@ -53,6 +53,11 @@ export {
   useAddNotificationChannel,
   useUpdateNotificationChannel,
   useRemoveNotificationChannel,
+  useReconnectIntegrationDestination,
+  useAddIntegrationDestination,
+  useRemoveIntegrationDestination,
+  useSetIntegrationDestinationEnabled,
+  useSetIntegrationDestinationConfig,
 } from './integrations'
 
 // Status sync mutations

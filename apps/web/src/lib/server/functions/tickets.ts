@@ -29,7 +29,8 @@ import {
   TICKET_STAGES,
   CONVERSATION_PRIORITIES,
 } from '@/lib/shared/db-types'
-import { validateTicketIntakeValues, coerceTicketTypeId } from '@/lib/shared/tickets'
+import { validateTicketIntakeValues, coerceTicketTypeId, TICKET_SORTS } from '@/lib/shared/tickets'
+import { TICKET_DUE_FILTERS } from '@/lib/shared/ticket-due'
 import type {
   AssignTicketInput,
   TicketListFilter,
@@ -43,8 +44,14 @@ import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { conversationIdSchema } from '@/lib/server/domains/assistant/conversation-id.schema'
 import {
   ticketAttachmentSchema,
+  ticketDueAtWireSchema,
   createMyTicketSchema,
+  ticketIdSchema,
+  ticketColleaguesSchema,
+  shareMyTicketSchema,
+  removeMyTicketShareSchema,
   type CreateMyTicketInput,
+  type ShareMyTicketInput,
 } from '@/lib/shared/schemas/tickets'
 
 const ticketTypeSchema = z.enum(TICKET_TYPES)
@@ -67,8 +74,12 @@ const listTicketsSchema = z.object({
   teamId: z.string().optional(),
   requesterPrincipalId: z.string().optional(),
   companyId: z.string().optional(),
+  // Only the tickets the caller watches.
+  watching: z.boolean().optional(),
   search: z.string().optional(),
-  sort: z.enum(['recent', 'oldest', 'created', 'priority']).optional(),
+  sort: z.enum(TICKET_SORTS).optional(),
+  // Due-date filter: overdue, due within 24 hours, or no due date.
+  due: z.enum(TICKET_DUE_FILTERS).optional(),
   cursor: z.string().optional(),
   limit: PageLimitMinOneSchema,
 })
@@ -105,8 +116,10 @@ export const listTicketsFn = createServerFn({ method: 'GET' })
         data.companyId && isValidTypeId(data.companyId, 'company')
           ? (data.companyId as CompanyId)
           : undefined,
+      watcherPrincipalId: data.watching ? (ctx.principal.id as PrincipalId) : undefined,
       search: data.search,
       sort: data.sort,
+      due: data.due,
       cursor:
         data.cursor && isValidTypeId(data.cursor, 'ticket') ? (data.cursor as TicketId) : undefined,
       limit: data.limit,
@@ -166,6 +179,8 @@ const createTicketSchema = z.object({
   priority: prioritySchema.optional(),
   companyId: z.string().optional(),
   customAttributes: z.record(z.string(), z.unknown()).optional(),
+  // The shared due date (ISO instant); the service checks the teammate window.
+  dueAt: ticketDueAtWireSchema.optional(),
 })
 
 export const createTicketFn = createServerFn({ method: 'POST' })
@@ -223,6 +238,7 @@ export const createTicketFn = createServerFn({ method: 'POST' })
             ? (data.companyId as CompanyId)
             : undefined,
         customAttributes,
+        dueAt: data.dueAt ? new Date(data.dueAt) : undefined,
       },
       actor
     )
@@ -276,6 +292,33 @@ export const setTicketPriorityFn = createServerFn({ method: 'POST' })
     return setTicketPriority(data.ticketId as TicketId, data.priority, actor)
   })
 
+/**
+ * Set, move or clear (`dueAt: null`) a ticket's shared due date. Gated on
+ * ticket.set_status like priority; the service re-checks, validates the
+ * teammate window and records the change.
+ */
+export const setTicketDueAtFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string(), dueAt: ticketDueAtWireSchema.nullable() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_SET_STATUS })
+    const actor = await policyActorFromAuth(ctx)
+    const { setTicketDueAt } = await import('@/lib/server/domains/tickets/ticket-due.service')
+    return setTicketDueAt(
+      data.ticketId as TicketId,
+      data.dueAt ? new Date(data.dueAt) : null,
+      actor
+    )
+  })
+
+export const setTicketTitleFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string(), title: z.string().trim().min(1).max(300) }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_SET_STATUS })
+    const actor = await policyActorFromAuth(ctx)
+    const { setTicketTitle } = await import('@/lib/server/domains/tickets/ticket.service')
+    return setTicketTitle(data.ticketId as TicketId, data.title, actor)
+  })
+
 // ---------------------------------------------------------------------------
 // Bulk mutation (support platform §4.6, ticket axis — mirrors
 // bulkUpdateConversationsFn's contract in functions/conversation.ts)
@@ -287,6 +330,8 @@ const bulkTicketActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('assign_team'), teamId: z.string().nullable() }),
   z.object({ type: z.literal('priority'), priority: prioritySchema }),
   z.object({ type: z.literal('set_status'), statusId: z.string() }),
+  // dueAt: an ISO instant, or null to clear the due date.
+  z.object({ type: z.literal('set_due'), dueAt: ticketDueAtWireSchema.nullable() }),
 ])
 
 /** Client-facing action shape (plain strings; the handler narrows to branded
@@ -300,7 +345,7 @@ const bulkUpdateTicketsSchema = z.object({
 })
 
 /** Gate a bulk action on the SAME permission its single-ticket fn uses:
- *  (re)assignment mirrors assignTicketFn (ticket.assign); priority/status
+ *  (re)assignment mirrors assignTicketFn (ticket.assign); priority/status/due
  *  mirror the set-status fns — same split as the conversation bulk fn's
  *  `permissionForBulkAction`. */
 function permissionForBulkTicketAction(type: BulkTicketActionInput['type']) {
@@ -311,14 +356,14 @@ function permissionForBulkTicketAction(type: BulkTicketActionInput['type']) {
 
 /**
  * Apply one inbox action to many tickets in a single call (support platform
- * §4.6, ticket axis: assign, assign_team, priority, set_status). The required
+ * §4.6, ticket axis: assign, assign_team, priority, set_status, set_due). The required
  * permission depends on the action (assign vs status), so the gate is bare
  * and the per-action permission is asserted at runtime, mirroring
  * bulkUpdateConversationsFn. Unlike that fn (which loops the single-
  * conversation ops itself), the per-item loop + isolation here lives in the
  * domain-level `bulkUpdateTickets` (ticket.service.ts), which reuses the same
- * single-ticket ops (`assignTicket`/`setTicketPriority`/`setTicketStatus`)
- * their individual server fns call — this fn only resolves input ('me',
+ * single-ticket ops (`assignTicket`/`setTicketPriority`/`setTicketStatus`/
+ * `setTicketDueAt`) their individual server fns call — this fn only resolves input ('me',
  * team-id) and delegates.
  */
 export const bulkUpdateTicketsFn = createServerFn({ method: 'POST' })
@@ -345,6 +390,8 @@ export const bulkUpdateTicketsFn = createServerFn({ method: 'POST' })
           return { type: 'priority', priority: action.priority }
         case 'set_status':
           return { type: 'set_status', statusId: action.statusId as TicketStatusId }
+        case 'set_due':
+          return { type: 'set_due', dueAt: action.dueAt ? new Date(action.dueAt) : null }
       }
     })()
 
@@ -426,6 +473,8 @@ export const linkTicketIssueFn = createServerFn({ method: 'POST' })
       ticketId: z.string(),
       issue: z.string().trim().min(1).max(500),
       integrationType: z.string().min(1).max(50).default('github'),
+      /** For a tracker serving several repositories: the one the issue must belong to. */
+      destinationId: z.string().max(100).optional(),
     })
   )
   .handler(async ({ data }) => {
@@ -433,20 +482,38 @@ export const linkTicketIssueFn = createServerFn({ method: 'POST' })
     const actor = await policyActorFromAuth(ctx)
     const { linkTicketToIssue } =
       await import('@/lib/server/domains/tickets/ticket-external-links.service')
-    return linkTicketToIssue(data.ticketId as TicketId, data.issue, actor, data.integrationType)
+    return linkTicketToIssue(
+      data.ticketId as TicketId,
+      data.issue,
+      actor,
+      data.integrationType,
+      data.destinationId
+    )
   })
 
 /** Create a NEW issue on a connected tracker from this ticket and link it.
  *  Gated on TICKET_ASSIGN — the same association-management gate as
  *  link/unlink. Capability-gated on the provider's issues.create. */
 export const createTicketIssueFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ ticketId: z.string(), integrationType: z.string().min(1).max(50) }))
+  .validator(
+    z.object({
+      ticketId: z.string(),
+      integrationType: z.string().min(1).max(50),
+      /** For a tracker serving several repositories: where to create it (default: the default one). */
+      destinationId: z.string().max(100).optional(),
+    })
+  )
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_ASSIGN })
     const actor = await policyActorFromAuth(ctx)
     const { createIssueForTicket } =
       await import('@/lib/server/domains/tickets/ticket-external-links.service')
-    return createIssueForTicket(data.ticketId as TicketId, data.integrationType, actor)
+    return createIssueForTicket(
+      data.ticketId as TicketId,
+      data.integrationType,
+      actor,
+      data.destinationId
+    )
   })
 
 /** Remove a ticket's tracker issue link. Gated on TICKET_ASSIGN. */
@@ -870,8 +937,10 @@ export const searchTicketsFn = createServerFn({ method: 'GET' })
 // Ticket watchers (subscriptions). Agent side gates on TICKET_VIEW +
 // assertTicketVisible (watching is a read-side self-action — same visibility
 // as reading the ticket); managing OTHER watchers gates on TICKET_ASSIGN, the
-// established "manage this ticket's associations" permission. Requester side
-// is ownership-gated in requester.service, mirroring the fns above.
+// established "manage this ticket's associations" permission. The rules live
+// in ticket-watchers.service, shared with the REST API and the MCP tools.
+// Requester side is ownership-gated in requester.service, mirroring the fns
+// above.
 // ---------------------------------------------------------------------------
 
 /** The caller's principal id, or refuse — watch state is per-principal. */
@@ -897,11 +966,9 @@ export const watchTicketFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
     const actor = await policyActorFromAuth(ctx)
-    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
-    await assertTicketVisible(data.ticketId as TicketId, actor)
-    const { subscribeToTicket } =
-      await import('@/lib/server/domains/tickets/ticket-subscription.service')
-    await subscribeToTicket(requireSelfPrincipal(actor), data.ticketId as TicketId, 'manual')
+    const { watchTicketForSelf } =
+      await import('@/lib/server/domains/tickets/ticket-watchers.service')
+    await watchTicketForSelf(data.ticketId as TicketId, actor)
   })
 
 export const unwatchTicketFn = createServerFn({ method: 'POST' })
@@ -909,11 +976,9 @@ export const unwatchTicketFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
     const actor = await policyActorFromAuth(ctx)
-    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
-    await assertTicketVisible(data.ticketId as TicketId, actor)
-    const { unsubscribeFromTicket } =
-      await import('@/lib/server/domains/tickets/ticket-subscription.service')
-    await unsubscribeFromTicket(requireSelfPrincipal(actor), data.ticketId as TicketId)
+    const { unwatchTicketForSelf } =
+      await import('@/lib/server/domains/tickets/ticket-watchers.service')
+    await unwatchTicketForSelf(data.ticketId as TicketId, actor)
   })
 
 export const muteTicketFn = createServerFn({ method: 'POST' })
@@ -945,11 +1010,21 @@ export const listTicketWatchersFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
     const actor = await policyActorFromAuth(ctx)
-    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
-    await assertTicketVisible(data.ticketId as TicketId, actor)
-    const { listTicketWatchers } =
-      await import('@/lib/server/domains/tickets/ticket-subscription.service')
-    return listTicketWatchers(data.ticketId as TicketId)
+    const { listWatchersOfTicket } =
+      await import('@/lib/server/domains/tickets/ticket-watchers.service')
+    return listWatchersOfTicket(data.ticketId as TicketId, actor)
+  })
+
+/** The teammates the watcher picker offers, each marked with whether the
+ *  ticket is visible to them (a teammate who can't see it can't be added). */
+export const listTicketWatcherCandidatesFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_ASSIGN })
+    const actor = await policyActorFromAuth(ctx)
+    const { listTicketWatcherCandidates } =
+      await import('@/lib/server/domains/tickets/ticket-watchers.service')
+    return listTicketWatcherCandidates(data.ticketId as TicketId, actor)
   })
 
 export const adminAddTicketWatcherFn = createServerFn({ method: 'POST' })
@@ -957,11 +1032,9 @@ export const adminAddTicketWatcherFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_ASSIGN })
     const actor = await policyActorFromAuth(ctx)
-    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
-    await assertTicketVisible(data.ticketId as TicketId, actor)
-    const { addManualTicketWatcher } =
-      await import('@/lib/server/domains/tickets/ticket-subscription.service')
-    await addManualTicketWatcher(data.principalId as PrincipalId, data.ticketId as TicketId)
+    const { addTicketWatcher } =
+      await import('@/lib/server/domains/tickets/ticket-watchers.service')
+    await addTicketWatcher(data.ticketId as TicketId, data.principalId as PrincipalId, actor)
   })
 
 export const adminRemoveTicketWatcherFn = createServerFn({ method: 'POST' })
@@ -969,11 +1042,9 @@ export const adminRemoveTicketWatcherFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_ASSIGN })
     const actor = await policyActorFromAuth(ctx)
-    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
-    await assertTicketVisible(data.ticketId as TicketId, actor)
-    const { unsubscribeFromTicket } =
-      await import('@/lib/server/domains/tickets/ticket-subscription.service')
-    await unsubscribeFromTicket(data.principalId as PrincipalId, data.ticketId as TicketId)
+    const { removeTicketWatcher } =
+      await import('@/lib/server/domains/tickets/ticket-watchers.service')
+    await removeTicketWatcher(data.ticketId as TicketId, data.principalId as PrincipalId, actor)
   })
 
 // Requester side (portal): ownership-gated in requester.service, flag-gated
@@ -1022,12 +1093,14 @@ export const runGetConversationLinkedTicket = createServerOnlyFn(
     const { isSupportTicketsEnabled } =
       await import('@/lib/server/domains/settings/settings.support')
     if (!(await isSupportTicketsEnabled())) return null
-    const { getRequesterTicketForConversation } =
-      await import('@/lib/server/domains/tickets/requester.service')
-    return getRequesterTicketForConversation(
+    // The requester's own ticket, or one shared with the caller.
+    const { getCustomerTicketForConversation } =
+      await import('@/lib/server/domains/tickets/customer-ticket-sharing.service')
+    const linked = await getCustomerTicketForConversation(
       data.conversationId as ConversationId,
       ctx.principal.id
     )
+    return linked?.ticket ?? null
   }
 )
 
@@ -1094,6 +1167,11 @@ export const runCreateMyTicket = createServerOnlyFn(async function runCreateMyTi
     attachments: data.attachments as ConversationAttachment[] | undefined,
     ticketTypeId: intake.ticketTypeId,
     customAttributes: intake.customAttributes,
+    // The customer's proposed "Needed by" date. The ticket form block's
+    // askDueDate toggle only decides whether the field is SHOWN; it is not a
+    // security boundary — any requester may propose one, and createTicketCore
+    // holds it to the customer window (no past dates, at most two years out).
+    dueAt: data.dueAt ? new Date(data.dueAt) : undefined,
   })
 })
 
@@ -1133,4 +1211,132 @@ export const unwatchMyTicketFn = createServerFn({ method: 'POST' })
   .validator(z.object({ ticketId: z.string() }))
   .handler(async ({ data }) => {
     return runUnwatchMyTicket(await requireAuth(), data)
+  })
+
+// ---------------------------------------------------------------------------
+// Sharing, customer side (ticket-sharing.service): who is on a ticket the
+// caller can see, the colleagues the requester may share it with, sharing,
+// and taking someone off (yourself, to leave). Ownership- or share-gated in
+// the service, flag-gated here like the other requester fns.
+// ---------------------------------------------------------------------------
+
+export const runGetMyTicketSharing = createServerOnlyFn(async function runGetMyTicketSharing(
+  ctx: Awaited<ReturnType<typeof requireAuth>>,
+  data: { ticketId: string }
+) {
+  await requireSupportTicketsEnabled()
+  const actor = await policyActorFromAuth(ctx)
+  const { getTicketSharing } =
+    await import('@/lib/server/domains/tickets/customer-ticket-sharing.service')
+  return getTicketSharing(actor, data.ticketId as TicketId)
+})
+
+export const getMyTicketSharingFn = createServerFn({ method: 'GET' })
+  .validator(ticketIdSchema)
+  .handler(async ({ data }) => {
+    return runGetMyTicketSharing(await requireAuth(), data)
+  })
+
+export const runListMyTicketColleagues = createServerOnlyFn(
+  async function runListMyTicketColleagues(
+    ctx: Awaited<ReturnType<typeof requireAuth>>,
+    data: { ticketId: string; query?: string }
+  ) {
+    await requireSupportTicketsEnabled()
+    const actor = await policyActorFromAuth(ctx)
+    const { listShareableColleagues } =
+      await import('@/lib/server/domains/tickets/customer-ticket-sharing.service')
+    return {
+      colleagues: await listShareableColleagues(actor, data.ticketId as TicketId, data.query),
+    }
+  }
+)
+
+export const listMyTicketColleaguesFn = createServerFn({ method: 'GET' })
+  .validator(ticketColleaguesSchema)
+  .handler(async ({ data }) => {
+    return runListMyTicketColleagues(await requireAuth(), data)
+  })
+
+export const runShareMyTicket = createServerOnlyFn(async function runShareMyTicket(
+  ctx: Awaited<ReturnType<typeof requireAuth>>,
+  data: ShareMyTicketInput
+) {
+  await requireSupportTicketsEnabled()
+  const actor = await policyActorFromAuth(ctx)
+  const { shareTicketWithColleague } =
+    await import('@/lib/server/domains/tickets/customer-ticket-sharing.service')
+  const target = data.principalId
+    ? { principalId: data.principalId as PrincipalId }
+    : { email: data.email ?? '' }
+  return shareTicketWithColleague(actor, data.ticketId as TicketId, target, {
+    actorDisplayName: ctx.user.name,
+  })
+})
+
+export const shareMyTicketFn = createServerFn({ method: 'POST' })
+  .validator(shareMyTicketSchema)
+  .handler(async ({ data }) => {
+    return runShareMyTicket(await requireAuth(), data)
+  })
+
+export const runRemoveMyTicketShare = createServerOnlyFn(async function runRemoveMyTicketShare(
+  ctx: Awaited<ReturnType<typeof requireAuth>>,
+  data: { ticketId: string; principalId: string }
+) {
+  await requireSupportTicketsEnabled()
+  const actor = await policyActorFromAuth(ctx)
+  const { removeTicketShare } =
+    await import('@/lib/server/domains/tickets/customer-ticket-sharing.service')
+  return removeTicketShare(actor, data.ticketId as TicketId, data.principalId as PrincipalId, {
+    actorDisplayName: ctx.user.name,
+  })
+})
+
+export const removeMyTicketShareFn = createServerFn({ method: 'POST' })
+  .validator(removeMyTicketShareSchema)
+  .handler(async ({ data }) => {
+    return runRemoveMyTicketShare(await requireAuth(), data)
+  })
+
+// Sharing, team side: the customers a ticket is shared with, and sharing by
+// email (ticket.reply on a ticket the caller can see, enforced in the service).
+
+export const listTicketParticipantsFn = createServerFn({ method: 'GET' })
+  .validator(ticketIdSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { listTicketParticipants } =
+      await import('@/lib/server/domains/tickets/ticket-sharing.service')
+    return { participants: await listTicketParticipants(data.ticketId as TicketId, actor) }
+  })
+
+export const addTicketParticipantFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string(), email: z.string().email().max(320) }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_REPLY })
+    const actor = await policyActorFromAuth(ctx)
+    const { addTicketParticipantByEmail } =
+      await import('@/lib/server/domains/tickets/ticket-sharing.service')
+    return addTicketParticipantByEmail(data.ticketId as TicketId, data.email, actor, {
+      actorDisplayName: ctx.user.name,
+    })
+  })
+
+export const removeTicketParticipantFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string(), principalId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_REPLY })
+    const actor = await policyActorFromAuth(ctx)
+    const { removeTicketParticipant } =
+      await import('@/lib/server/domains/tickets/ticket-sharing.service')
+    return removeTicketParticipant(
+      data.ticketId as TicketId,
+      data.principalId as PrincipalId,
+      actor,
+      {
+        actorDisplayName: ctx.user.name,
+      }
+    )
   })

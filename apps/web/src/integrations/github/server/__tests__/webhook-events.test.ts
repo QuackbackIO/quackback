@@ -3,9 +3,12 @@ import { githubWebhookEvents } from '@/lib/server/domains/channel-accounts/githu
 import { registerGitHubWebhook, patchGitHubWebhook } from '../webhook-registration'
 
 describe('githubWebhookEvents', () => {
-  it('adds issue_comment only when the inbox channel is live', () => {
-    expect(githubWebhookEvents(false)).toEqual(['issues'])
-    expect(githubWebhookEvents(true)).toEqual(['issues', 'issue_comment'])
+  it('adds issue_comment only for a repository bringing its issues into a live inbox', () => {
+    const inbox = { inboundMode: 'conversations' }
+    expect(githubWebhookEvents(inbox, { inboxLive: true })).toEqual(['issues', 'issue_comment'])
+    expect(githubWebhookEvents(inbox, { inboxLive: false })).toEqual(['issues'])
+    expect(githubWebhookEvents({ inboundMode: 'off' }, { inboxLive: true })).toEqual(['issues'])
+    expect(githubWebhookEvents({}, { inboxLive: true })).toEqual(['issues'])
   })
 })
 

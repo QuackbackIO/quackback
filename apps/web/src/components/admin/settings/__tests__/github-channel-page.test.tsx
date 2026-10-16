@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 
 const setInbox = vi.fn()
+const setRepositoryInbox = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -24,6 +25,7 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/integrations/github/server/functions', () => ({
   getGitHubChannelStatusFn: vi.fn(),
   setGitHubInboxEnabledFn: (...a: unknown[]) => setInbox(...a),
+  setGitHubRepositoryInboxFn: (...a: unknown[]) => setRepositoryInbox(...a),
   getGitHubConnectUrl: vi.fn(),
 }))
 vi.mock('@/integrations/github/ui/github-connection-actions', () => ({
@@ -58,11 +60,25 @@ const CONNECTED = {
   lastErrorAt: null,
   lastOutboundAt: null,
   lastInboundAt: new Date(Date.now() - 3600_000).toISOString(),
+  repositories: [] as Record<string, unknown>[],
 }
+
+const repository = (over: Record<string, unknown>) => ({
+  id: 'dest_inbox',
+  repo: 'acme/inbox',
+  enabled: true,
+  inboundMode: 'conversations',
+  receives: true,
+  webhookEvents: ['issues', 'issue_comment'],
+  lastInboundAt: null,
+  ...over,
+})
 
 beforeEach(() => {
   setInbox.mockReset()
   setInbox.mockResolvedValue({ ok: true })
+  setRepositoryInbox.mockReset()
+  setRepositoryInbox.mockResolvedValue({ ok: true })
   client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
 })
 afterEach(cleanup)
@@ -99,6 +115,52 @@ describe('GitHubChannelPage', () => {
       autosave: true,
       showServerMessage: true,
     })
+  })
+
+  it('lists each repository with its own inbox switch', async () => {
+    renderPage({
+      ...CONNECTED,
+      repositories: [
+        repository({}),
+        repository({ id: 'dest_docs', repo: 'acme/docs', inboundMode: 'off' }),
+      ],
+    })
+    const inbox = screen.getByRole('switch', {
+      name: 'Bring issues from acme/inbox into the inbox',
+    })
+    const docs = screen.getByRole('switch', { name: 'Bring issues from acme/docs into the inbox' })
+    expect(inbox).toBeChecked()
+    expect(docs).not.toBeChecked()
+
+    fireEvent.click(docs)
+    await waitFor(() =>
+      expect(setRepositoryInbox).toHaveBeenCalledWith({
+        data: { destinationId: 'dest_docs', enabled: true },
+      })
+    )
+  })
+
+  it('says why a repository may not be bringing issues in', () => {
+    renderPage({
+      ...CONNECTED,
+      repositories: [
+        repository({ id: 'a', repo: 'acme/a', enabled: false }),
+        repository({ id: 'b', repo: 'acme/b', receives: false }),
+        repository({ id: 'c', repo: 'acme/c', webhookEvents: ['issues'] }),
+      ],
+    })
+    expect(screen.getByText('Sync is off for this repository.')).toBeInTheDocument()
+    expect(
+      screen.getByText('This repository only sends, so nothing comes in from it.')
+    ).toBeInTheDocument()
+    expect(screen.getByText(/does not deliver comments yet/)).toBeInTheDocument()
+  })
+
+  it('points to the integration when no repository is synced', () => {
+    renderPage(CONNECTED)
+    expect(
+      screen.getByText('No repositories yet. Add one in the GitHub integration.')
+    ).toBeInTheDocument()
   })
 
   it('shows sync times in a Sync card instead of a Health panel', () => {
