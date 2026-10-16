@@ -139,6 +139,30 @@ describe('listPublicPostsWithVotesAndAvatars — default status filtering', () =
     expect(mockInArray).toHaveBeenCalledWith(mockPostStatuses.slug, ['open', 'under_review'])
   })
 
+  it('searches every status when a search term is given without a status filter', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ search: 'widget' })
+
+    const activeFilterApplied = mockEq.mock.calls.some(
+      ([col, val]) => col === mockPostStatuses.category && val === 'active'
+    )
+    expect(activeFilterApplied).toBe(false)
+    expect(mockOr).not.toHaveBeenCalled()
+  })
+
+  it('keeps an explicit status filter while searching', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ search: 'widget', statusSlugs: ['complete'] })
+
+    expect(mockInArray).toHaveBeenCalledWith(mockPostStatuses.slug, ['complete'])
+    const activeFilterApplied = mockEq.mock.calls.some(
+      ([col, val]) => col === mockPostStatuses.category && val === 'active'
+    )
+    expect(activeFilterApplied).toBe(false)
+  })
+
   it('does not apply the default category filter when statusIds are provided', async () => {
     const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
 

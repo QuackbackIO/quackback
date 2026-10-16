@@ -165,8 +165,9 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
     conditions.push(inArray(posts.statusId, statusIdSubquery))
   } else if (statusIds && statusIds.length > 0) {
     conditions.push(inArray(posts.statusId, statusIds))
-  } else {
-    // Default: exclude complete/closed posts — only show active-category statuses (or unstatused)
+  } else if (!search) {
+    // Default: exclude complete/closed posts — only show active-category statuses (or unstatused).
+    // A search skips this so people can find ideas that already shipped or were closed.
     const activeStatusSubquery = db
       .select({ id: postStatuses.id })
       .from(postStatuses)
