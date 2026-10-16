@@ -244,6 +244,7 @@
   "portal.feedback.toolbar.searchPlaceholder": "Пошук дописів...",
   "portal.feedback.toolbar.searchSubmit": "Шукати",
   "portal.feedback.toolbar.clearSearch": "Очистити пошук",
+  "portal.feedback.toolbar.searchLabel": "Пошук ідей",
   "portal.feedback.filter.clearAll": "Очистити все",
   "portal.feedback.sidebar.boards": "Дошки",
   "portal.feedback.sidebar.viewAllPosts": "Усі ідеї",

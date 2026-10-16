@@ -244,6 +244,7 @@
   "portal.feedback.toolbar.searchPlaceholder": "Beiträge durchsuchen …",
   "portal.feedback.toolbar.searchSubmit": "Suchen",
   "portal.feedback.toolbar.clearSearch": "Suche zurücksetzen",
+  "portal.feedback.toolbar.searchLabel": "Ideen durchsuchen",
   "portal.feedback.filter.clearAll": "Alle entfernen",
   "portal.feedback.sidebar.boards": "Boards",
   "portal.feedback.sidebar.viewAllPosts": "Alle Ideen ansehen",

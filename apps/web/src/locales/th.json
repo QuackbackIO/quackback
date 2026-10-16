@@ -261,6 +261,7 @@
   "portal.feedback.toolbar.searchPlaceholder": "ค้นหาโพสต์...",
   "portal.feedback.toolbar.searchSubmit": "ค้นหา",
   "portal.feedback.toolbar.clearSearch": "ล้างการค้นหา",
+  "portal.feedback.toolbar.searchLabel": "ค้นหาไอเดีย",
   "portal.feedback.filter.clearAll": "ล้างทั้งหมด",
   "portal.feedback.sidebar.boards": "บอร์ด",
   "portal.feedback.sidebar.viewAllPosts": "ดูโพสต์ทั้งหมด",

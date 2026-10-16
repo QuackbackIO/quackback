@@ -244,6 +244,7 @@
   "portal.feedback.toolbar.searchPlaceholder": "Search posts...",
   "portal.feedback.toolbar.searchSubmit": "Search",
   "portal.feedback.toolbar.clearSearch": "Clear search",
+  "portal.feedback.toolbar.searchLabel": "Search ideas",
   "portal.feedback.filter.clearAll": "Clear all",
   "portal.feedback.sidebar.boards": "Boards",
   "portal.feedback.sidebar.viewAllPosts": "View all ideas",

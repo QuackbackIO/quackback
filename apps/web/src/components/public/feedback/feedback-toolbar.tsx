@@ -1,14 +1,12 @@
-import { useState } from 'react'
-import { useIntl, FormattedMessage } from 'react-intl'
+import { useIntl } from 'react-intl'
 import {
   ArrowTrendingUpIcon,
   ClockIcon,
   FireIcon,
   MagnifyingGlassIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/solid'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { cn } from '@/lib/shared/utils'
 
 interface FeedbackToolbarProps {
@@ -52,23 +50,22 @@ export function FeedbackToolbar({
   filterButton,
 }: FeedbackToolbarProps): React.ReactElement {
   const intl = useIntl()
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [searchValue, setSearchValue] = useState(currentSearch || '')
-
-  function handleSearchSubmit(e: React.FormEvent): void {
-    e.preventDefault()
-    onSearchChange(searchValue)
-    setSearchOpen(false)
-  }
+  const search = useDebouncedSearch({
+    externalValue: currentSearch,
+    onChange: (value) => onSearchChange(value ?? ''),
+  })
+  const searchLabel = intl.formatMessage({
+    id: 'portal.feedback.toolbar.searchLabel',
+    defaultMessage: 'Search ideas',
+  })
 
   function handleClearSearch(): void {
-    setSearchValue('')
+    search.setValue('')
     onSearchChange('')
-    setSearchOpen(false)
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 sm:gap-4">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
       <div className="flex items-center gap-1 min-w-0">
         {SORT_OPTIONS.map((option) => {
           const Icon = option.icon
@@ -95,46 +92,31 @@ export function FeedbackToolbar({
         )}
       </div>
 
-      <div className="flex items-center gap-2">
-        {/* Search */}
-        <Popover open={searchOpen} onOpenChange={setSearchOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-1.5">
-              <MagnifyingGlassIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">
-                <FormattedMessage id="portal.feedback.toolbar.search" defaultMessage="Search" />
-              </span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="max-w-[calc(100vw-2rem)] sm:w-80" align="end">
-            <form onSubmit={handleSearchSubmit} className="flex gap-2">
-              <Input
-                placeholder={intl.formatMessage({
-                  id: 'portal.feedback.toolbar.searchPlaceholder',
-                  defaultMessage: 'Search posts...',
-                })}
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                className="flex-1"
-                autoFocus
-              />
-              <Button type="submit" size="sm">
-                <FormattedMessage
-                  id="portal.feedback.toolbar.searchSubmit"
-                  defaultMessage="Search"
-                />
-              </Button>
-            </form>
-            {currentSearch && (
-              <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={handleClearSearch}>
-                <FormattedMessage
-                  id="portal.feedback.toolbar.clearSearch"
-                  defaultMessage="Clear search"
-                />
-              </Button>
-            )}
-          </PopoverContent>
-        </Popover>
+      <div className="flex flex-1 basis-56 items-center gap-2">
+        <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-transparent ps-3 pe-1 text-sm focus-within:ring-2 focus-within:ring-ring/50">
+          <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <input
+            type="search"
+            aria-label={searchLabel}
+            placeholder={searchLabel}
+            value={search.value}
+            onChange={(e) => search.setValue(e.target.value)}
+            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
+          />
+          {search.value && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              aria-label={intl.formatMessage({
+                id: 'portal.feedback.toolbar.clearSearch',
+                defaultMessage: 'Clear search',
+              })}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <XMarkIcon className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </label>
 
         {filterButton}
       </div>

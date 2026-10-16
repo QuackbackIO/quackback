@@ -244,6 +244,7 @@
   "portal.feedback.toolbar.searchPlaceholder": "Поиск предложений...",
   "portal.feedback.toolbar.searchSubmit": "Поиск",
   "portal.feedback.toolbar.clearSearch": "Очистить поиск",
+  "portal.feedback.toolbar.searchLabel": "Поиск идей",
   "portal.feedback.filter.clearAll": "Сбросить всё",
   "portal.feedback.sidebar.boards": "Категории",
   "portal.feedback.sidebar.viewAllPosts": "Все идеи",

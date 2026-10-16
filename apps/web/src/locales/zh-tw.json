@@ -244,6 +244,7 @@
   "portal.feedback.toolbar.searchPlaceholder": "搜尋貼文...",
   "portal.feedback.toolbar.searchSubmit": "搜尋",
   "portal.feedback.toolbar.clearSearch": "清除搜尋",
+  "portal.feedback.toolbar.searchLabel": "搜尋想法",
   "portal.feedback.filter.clearAll": "全部清除",
   "portal.feedback.sidebar.boards": "看板",
   "portal.feedback.sidebar.viewAllPosts": "查看所有想法",
