@@ -72,6 +72,8 @@ export const ticketRef = z.object({
   priority: z.string(),
   assignedPrincipalId: z.string().nullable().optional(),
   assignedTeamId: z.string().nullable().optional(),
+  // The shared due date; absent on payloads recorded before due dates shipped.
+  dueAt: z.string().nullable().optional(),
 })
 const attachment = z.object({
   name: z.string(),
@@ -116,6 +118,16 @@ export const P = {
     boardId: id.optional(),
     ownerPrincipalId: id,
     previousOwnerPrincipalId: nullableStr,
+  }),
+  'post.subscriber_added': z.looseObject({
+    post: postRef,
+    subscriberPrincipalId: id,
+    reason: nullableStr,
+  }),
+  'post.subscriber_removed': z.looseObject({
+    post: postRef,
+    subscriberPrincipalId: id,
+    reason: nullableStr,
   }),
   // comment family
   'comment.created': z.looseObject({ comment: commentData, post: postRef }),
@@ -282,6 +294,68 @@ export const P = {
     externalUrl: nullableStr,
     externalStatus: z.string(),
     transition: z.enum(['closed', 'reopened']).nullable(),
+  }),
+  'ticket.due_changed': z.looseObject({
+    ticket: ticketRef,
+    title: z.string(),
+    dueAt: nullableStr,
+    previousDueAt: nullableStr,
+  }),
+  'ticket.due_soon': z.looseObject({ ticket: ticketRef, title: z.string(), dueAt: z.string() }),
+  'ticket.overdue': z.looseObject({ ticket: ticketRef, title: z.string(), dueAt: z.string() }),
+  'ticket.subscriber_added': z.looseObject({
+    ticket: ticketRef,
+    title: z.string(),
+    subscriberPrincipalId: id,
+    reason: nullableStr,
+  }),
+  'ticket.subscriber_removed': z.looseObject({
+    ticket: ticketRef,
+    title: z.string(),
+    subscriberPrincipalId: id,
+    reason: nullableStr,
+  }),
+  'ticket.updated': z.looseObject({
+    ticket: ticketRef,
+    title: z.string(),
+    previousTitle: z.string(),
+    changedKeys: z.array(z.string()),
+  }),
+  'ticket.priority_changed': z.looseObject({
+    ticket: ticketRef,
+    title: z.string(),
+    previousPriority: z.string(),
+    newPriority: z.string(),
+  }),
+  'ticket.reply_updated': z.looseObject({
+    ticket: ticketRef,
+    messageId: id,
+    content: z.string(),
+    attachments: z.array(attachment).nullable(),
+    senderType: z.enum(['agent', 'visitor']),
+    title: z.string(),
+    authorName: nullableStr,
+    editedAt: z.string(),
+  }),
+  'ticket.reply_deleted': z.looseObject({
+    ticket: ticketRef,
+    messageId: id,
+    senderType: z.enum(['agent', 'visitor']),
+    title: z.string(),
+  }),
+  'ticket.attachment_added': z.looseObject({
+    ticket: ticketRef,
+    messageId: id,
+    senderType: z.enum(['agent', 'visitor']),
+    title: z.string(),
+    attachment,
+  }),
+  'ticket.attachment_removed': z.looseObject({
+    ticket: ticketRef,
+    messageId: id,
+    senderType: z.enum(['agent', 'visitor']),
+    title: z.string(),
+    attachment,
   }),
   // assistant + sla
   'assistant.handed_off': z.looseObject({ conversationId: id, reason: z.string() }),

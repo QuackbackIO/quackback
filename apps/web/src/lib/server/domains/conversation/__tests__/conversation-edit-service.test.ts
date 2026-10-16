@@ -13,6 +13,7 @@ const publishConversationUpdate = vi.fn()
 const emitMessageUpdated = vi.fn()
 const updateGitHubIssueComment = vi.fn()
 const publishTicketEvent = vi.fn()
+const emitTicketReplyUpdated = vi.fn()
 const ne = vi.fn()
 let pairTicketId: string | null = null
 
@@ -31,6 +32,10 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishAgentConversationEvent: (...a: unknown[]) => publishAgentConversationEvent(...a),
   publishConversationUpdate: (...a: unknown[]) => publishConversationUpdate(...a),
   publishTicketEvent: (...a: unknown[]) => publishTicketEvent(...a),
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.webhooks', () => ({
+  emitTicketReplyUpdated: (...a: unknown[]) => emitTicketReplyUpdated(...a),
 }))
 
 vi.mock('@/lib/server/domains/tickets/pair-thread.service', () => ({
@@ -372,6 +377,51 @@ describe('editConversationMessage', () => {
     expect(publishAgentConversationEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'message_updated' })
     )
+  })
+
+  it('announces a public ticket reply edit as ticket.reply_updated', async () => {
+    messageRow = message({ conversationId: null, ticketId: 'ticket_1' })
+    await editConversationMessage(
+      'conversation_msg_1' as ConversationMessageId,
+      'Hello there',
+      null,
+      agentActor
+    )
+    expect(emitTicketReplyUpdated).toHaveBeenCalledTimes(1)
+    const [actor, ticketId, dto, editedAt] = emitTicketReplyUpdated.mock.calls[0]
+    expect(actor).toBe(agentActor)
+    expect(ticketId).toBe('ticket_1')
+    expect(dto).toMatchObject({ id: 'conversation_msg_1', content: 'Hello there' })
+    expect(editedAt).toBeInstanceOf(Date)
+  })
+
+  it('announces a paired conversation reply edit against its customer ticket', async () => {
+    pairTicketId = 'ticket_pair'
+    messageRow = message()
+    await editConversationMessage(
+      'conversation_msg_1' as ConversationMessageId,
+      'Hello there',
+      null,
+      agentActor
+    )
+    expect(emitTicketReplyUpdated).toHaveBeenCalledWith(
+      agentActor,
+      'ticket_pair',
+      expect.objectContaining({ id: 'conversation_msg_1' }),
+      expect.any(Date)
+    )
+  })
+
+  it('never announces an internal note edit to integrations', async () => {
+    messageRow = message({ conversationId: null, ticketId: 'ticket_1', isInternal: true })
+    await editConversationMessage(
+      'conversation_msg_1' as ConversationMessageId,
+      'Hello there',
+      null,
+      agentActor
+    )
+    expect(publishTicketEvent).toHaveBeenCalled()
+    expect(emitTicketReplyUpdated).not.toHaveBeenCalled()
   })
 
   it('does not push to a ticket channel for an unpaired conversation', async () => {
