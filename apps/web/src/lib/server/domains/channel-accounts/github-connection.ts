@@ -140,73 +140,78 @@ export async function getActiveGitHubIntegration() {
   })
 }
 
-function isDuplicateHookError(err: unknown): boolean {
-  const raw = err instanceof Error ? err.message : String(err)
-  return /already exists|already registered|not unique|duplicate/i.test(raw)
-}
-
 /**
- * Ensure the GitHub repo hook listens for the events implied by current
- * inbox state. Failures write `integrations.lastError` and rethrow so the
- * caller can surface Attention without rolling back the account toggle.
+ * Ensure every enabled repository's hook listens for the events implied by
+ * current inbox state: patch a registered hook, register one where missing.
+ * Each repository's failure is recorded on that repository; any failure also
+ * writes `integrations.lastError` and rethrows so the caller can surface
+ * Attention without rolling back the account toggle.
  */
 export async function syncGitHubWebhookEvents(): Promise<void> {
   const integration = await getActiveGitHubIntegration()
-  if (!integration) return
-  const config = (integration.config ?? {}) as Record<string, unknown>
-  const ownerRepo = config.channelId as string | undefined
-  if (!ownerRepo) return
-  if (!integration.secrets) return
+  if (!integration?.secrets) return
 
   const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
-  const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
-  const accessToken = secrets.accessToken
+  const accessToken = decryptSecrets<{ accessToken?: string }>(integration.secrets).accessToken
   if (!accessToken) return
 
   const {
     generateWebhookSecret,
     buildWebhookCallbackUrl,
-    storeWebhookIds,
     recordIntegrationLastError,
     clearIntegrationLastError,
   } = await import('@/lib/server/integrations/webhook-registration')
-  const { registerGitHubWebhook, patchGitHubWebhook, findGitHubWebhookByUrl } =
-    await import('@/integrations/github/server/webhook-registration')
+  const {
+    ensureDestinations,
+    listDestinations,
+    readDestinationSecret,
+    writeDestinationWebhook,
+    registerDestinationWebhook,
+    recordDestinationError,
+    clearDestinationError,
+  } = await import('@/lib/server/integrations/destinations')
+  const { patchGitHubWebhook } = await import('@/integrations/github/server/webhook-registration')
 
-  const inboxEnabled = !!(await getLiveGitHubConnectionAccount())
-  const events = githubWebhookEvents(inboxEnabled)
+  await ensureDestinations(integration)
+  const repositories = (await listDestinations(integration.id, 'repo')).filter((r) => r.enabled)
+  if (repositories.length === 0) return
+
+  const events = githubWebhookEvents(!!(await getLiveGitHubConnectionAccount()))
   const callbackUrl = buildWebhookCallbackUrl('github')
-  const secret = (config.webhookSecret as string | undefined) ?? generateWebhookSecret()
-  let hookId = config.externalWebhookId as string | undefined
-
-  try {
-    if (!hookId) {
-      try {
-        const result = await registerGitHubWebhook(
+  const failures: string[] = []
+  for (const repository of repositories) {
+    try {
+      if (repository.externalWebhookId) {
+        const secret = readDestinationSecret(repository) ?? generateWebhookSecret()
+        await patchGitHubWebhook(
           accessToken,
-          ownerRepo,
+          repository.externalId,
+          repository.externalWebhookId,
+          events,
           callbackUrl,
-          secret,
-          events
+          secret
         )
-        hookId = result.webhookId
-      } catch (err) {
-        if (!isDuplicateHookError(err)) throw err
-        const existing = await findGitHubWebhookByUrl(accessToken, ownerRepo, callbackUrl)
-        if (!existing) throw err
-        hookId = existing
-        await patchGitHubWebhook(accessToken, ownerRepo, hookId, events, callbackUrl, secret)
+        await writeDestinationWebhook(repository.id, {
+          secret,
+          externalWebhookId: repository.externalWebhookId,
+          events,
+        })
+      } else {
+        // Registration finds and patches a hook GitHub already has at this URL.
+        await registerDestinationWebhook({ integration, destination: repository, accessToken })
       }
-    } else {
-      await patchGitHubWebhook(accessToken, ownerRepo, hookId, events, callbackUrl, secret)
+      await clearDestinationError(repository.id)
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err)
+      failures.push(`${repository.externalId}: ${raw}`)
+      await recordDestinationError(repository.id, `Webhook update failed: ${raw}`).catch(() => {})
     }
-    await storeWebhookIds(integration.id, secret, hookId)
-    await clearIntegrationLastError(integration.id)
-  } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err)
-    await recordIntegrationLastError(integration.id, `Webhook update failed: ${raw}`).catch(
-      () => {}
-    )
-    throw err
   }
+
+  if (failures.length > 0) {
+    const message = `Webhook update failed: ${failures.join('; ')}`
+    await recordIntegrationLastError(integration.id, message).catch(() => {})
+    throw new Error(message)
+  }
+  await clearIntegrationLastError(integration.id)
 }

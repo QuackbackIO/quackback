@@ -64,6 +64,7 @@ import {
   ConversationRateLimitError,
 } from './conversation.ratelimit'
 import { sendVisitorMessage } from './conversation.service'
+import { findThreadAccessParticipantBySender } from './conversation-participant.service'
 import {
   addressesPlatformInbox,
   ensurePlatformInboundRoute,
@@ -535,14 +536,24 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   )
   const sender = extractEmailAddress(parsed.from)
   if (!sender) return { status: 'from_mismatch' }
+  // Who the reply is from: the visitor, or (ticket sharing) a customer the
+  // paired ticket was shared with, matched the same way against their own
+  // addresses. Anyone else is still a mismatch, a plain group-thread
+  // participant included: they get copies, not a voice on the thread.
+  let author = visitor
   if (!knownAddresses.has(sender)) {
     const mappedPrincipalId = await resolvePrincipalIdByEmail(sender)
-    if (mappedPrincipalId !== visitorPrincipalId) return { status: 'from_mismatch' }
+    if (mappedPrincipalId !== visitorPrincipalId) {
+      const participant = await findThreadAccessParticipantBySender(conversationId, sender)
+      if (!participant) return { status: 'from_mismatch' }
+      author = participant
+    }
   }
+  const authorPrincipalId = author.id as PrincipalId
 
   // Blocked people cannot reply over email either; ack (200) so the provider
   // stops retrying, mirroring the widget send gate.
-  if (await isBlocked(visitorPrincipalId)) {
+  if (await isBlocked(authorPrincipalId)) {
     logRefusal('sender_blocked', false)
     return { status: 'suppressed' }
   }
@@ -552,7 +563,7 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   // fanout (a visitor mail-looping replies, or a client retrying with fresh
   // Message-IDs). Fails open on store errors. Ack (200) so the provider stops.
   try {
-    await assertConversationSendRate(visitorPrincipalId)
+    await assertConversationSendRate(authorPrincipalId)
   } catch (err) {
     if (err instanceof ConversationRateLimitError) {
       logRefusal('rate_limited', false)
@@ -562,9 +573,9 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   }
 
   const actor: Actor = {
-    principalId: visitorPrincipalId,
-    role: (visitor.role ?? null) as Actor['role'],
-    principalType: normalizePrincipalType(visitor.type),
+    principalId: authorPrincipalId,
+    role: (author.role ?? null) as Actor['role'],
+    principalType: normalizePrincipalType(author.type),
     segmentIds: new Set(),
   }
 
@@ -575,7 +586,7 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   // rich doc + its plaintext mirror: text/plain keeps precedence for `content`
   // (the sender's own quote-trimmed words); the HTML supplies `contentJson` and,
   // for an HTML-only message, the `content` fallback.
-  const media = await rehostInboundMedia(parsed, visitorPrincipalId)
+  const media = await rehostInboundMedia(parsed, authorPrincipalId)
   const converted = media.html ? emailHtmlToContent(media.html) : null
   const content =
     plainText || converted?.text || (media.attachments.length > 0 ? '' : '(no plain-text body)')
@@ -588,7 +599,7 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
       metadata: { source: 'email', emailMessageId: dedupeKey ?? undefined },
       ...(media.attachments.length > 0 ? { attachments: media.attachments } : {}),
     },
-    { principalId: visitorPrincipalId, displayName: visitor.displayName },
+    { principalId: authorPrincipalId, displayName: author.displayName },
     actor,
     contentJson
   )
@@ -934,9 +945,31 @@ async function ingestTicketReply(
       .map((e) => e.toLowerCase())
   )
   const sender = extractEmailAddress(parsed.from)
-  if (!sender || !knownAddresses.has(sender)) {
+  if (!sender) {
     log.warn({ ticketId, reason: 'sender_not_requester' }, 'inbound ticket reply dropped')
     return { status: 'from_mismatch' }
+  }
+  if (!knownAddresses.has(sender)) {
+    // A customer the ticket was shared with replies to the ticket address too
+    // (their emails carry it). Their reply lands on the shared thread as
+    // theirs, through the conversation path, never as the requester's.
+    const { resolvePairConversationId } =
+      await import('@/lib/server/domains/tickets/pair-thread.service')
+    const pairConversationId = await resolvePairConversationId(ticketId)
+    const participant = pairConversationId
+      ? await findThreadAccessParticipantBySender(pairConversationId, sender)
+      : null
+    if (!pairConversationId || !participant) {
+      log.warn({ ticketId, reason: 'sender_not_requester' }, 'inbound ticket reply dropped')
+      return { status: 'from_mismatch' }
+    }
+    return ingestParticipantTicketReply(
+      ticketId,
+      pairConversationId,
+      participant,
+      parsed,
+      dedupeKey ?? undefined
+    )
   }
 
   // Blocked requesters cannot reply over email either; ack (drop, no bounce) so
@@ -1043,4 +1076,62 @@ export async function ingestInboundEmail(event: unknown): Promise<IngestInboundR
     })
   )
   return result
+}
+
+/**
+ * A shared-ticket participant's reply to the ticket's reply address: the same
+ * gates as the requester's (blocked, rate), then a visitor message on the
+ * pair's conversation as the participant. The pair reactions do the rest: the
+ * ticket reply, the reopen, and their re-subscription.
+ */
+async function ingestParticipantTicketReply(
+  ticketId: TicketId,
+  conversationId: ConversationId,
+  participant: typeof principal.$inferSelect,
+  parsed: ParsedInboundEmail,
+  dedupeKey: string | undefined
+): Promise<IngestInboundResult> {
+  const participantId = participant.id as PrincipalId
+  if (await isBlocked(participantId)) {
+    log.warn({ ticketId, reason: 'participant_blocked' }, 'inbound ticket reply dropped')
+    logRefusal('sender_blocked', false)
+    return { status: 'suppressed' }
+  }
+  try {
+    await assertConversationSendRate(participantId)
+  } catch (err) {
+    if (err instanceof ConversationRateLimitError) {
+      logRefusal('rate_limited', false)
+      return { status: 'rate_limited' }
+    }
+    throw err
+  }
+  const plainText = extractReplyText(parsed.text ?? '')
+  const hasAttachmentParts = (parsed.attachments?.length ?? 0) > 0
+  if (!plainText && !parsed.html && !hasAttachmentParts) {
+    logRefusal('empty_body', false)
+    return { status: 'empty' }
+  }
+  const media = await rehostInboundMedia(parsed, participantId)
+  const converted = media.html ? emailHtmlToContent(media.html) : null
+  const content =
+    plainText || converted?.text || (media.attachments.length > 0 ? '' : '(no plain-text body)')
+  const actor: Actor = {
+    principalId: participantId,
+    role: (participant.role ?? null) as Actor['role'],
+    principalType: normalizePrincipalType(participant.type),
+    segmentIds: new Set(),
+  }
+  await sendVisitorMessage(
+    {
+      conversationId,
+      content,
+      metadata: { source: 'email', emailMessageId: dedupeKey },
+      ...(media.attachments.length > 0 ? { attachments: media.attachments } : {}),
+    },
+    { principalId: participantId, displayName: participant.displayName },
+    actor,
+    converted?.contentJson ?? null
+  )
+  return { status: 'ingested_ticket', ticketId }
 }

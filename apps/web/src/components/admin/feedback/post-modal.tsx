@@ -104,6 +104,9 @@ export const PostModalContent = memo(function PostModalContent({
   // via the same post.set_owner-gated fn the portal uses; the current owner is
   // resolved from it against the post's ownerPrincipalId (already in payload).
   const canSetOwner = usePermission(PERMISSIONS.POST_SET_OWNER)
+  const canViewSubscribers = usePermission(PERMISSIONS.POST_VIEW_PRIVATE)
+  const canManageSubscribers = usePermission(PERMISSIONS.POST_VOTE_ON_BEHALF)
+  const canSearchPeople = usePermission(PERMISSIONS.PEOPLE_VIEW)
   const canModerate = usePermission(PERMISSIONS.POST_APPROVE)
   const canManageIntegrations = usePermission(PERMISSIONS.INTEGRATION_MANAGE)
   const approvePost = useApprovePost(postId)
@@ -578,6 +581,12 @@ export const PostModalContent = memo(function PostModalContent({
               onOwnerChange={canSetOwner ? handleOwnerChange : undefined}
               isUpdating={isUpdating}
               hideSubscribe
+              teamSubscribe
+              subscribers={
+                canViewSubscribers
+                  ? { canManage: canManageSubscribers, canSearchPeople }
+                  : undefined
+              }
               variant="card"
               manageActions={manageActions}
             />

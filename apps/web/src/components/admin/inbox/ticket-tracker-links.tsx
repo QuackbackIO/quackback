@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
+import { useIntl } from 'react-intl'
 import type { TicketId, TicketExternalLinkId } from '@quackback/ids'
 import { ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
 import {
@@ -19,6 +20,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+
+/** A repository new issues can be created in, for a tracker serving several. */
+interface TrackerDestination {
+  id: string
+  name: string
+}
 
 interface TrackerLink {
   id: TicketExternalLinkId
@@ -56,18 +63,22 @@ export function TicketTrackerLinks({
 
   // One section per connected linkable tracker, plus orphan sections for
   // links whose integration was later disconnected (still visible/removable).
-  const sections: Array<{ type: string; name: string; canLink: boolean; canCreate: boolean }> =
-    data.trackers.map(
-      (t: { integrationType: string; name: string; canLink: boolean; canCreate: boolean }) => ({
-        type: t.integrationType,
-        name: t.name,
-        canLink: t.canLink,
-        canCreate: t.canCreate,
-      })
-    )
+  const sections: Array<{
+    type: string
+    name: string
+    canLink: boolean
+    canCreate: boolean
+    destinations: TrackerDestination[]
+  }> = data.trackers.map((t) => ({
+    type: t.integrationType,
+    name: t.name,
+    canLink: t.canLink,
+    canCreate: t.canCreate,
+    destinations: t.destinations,
+  }))
   for (const type of linksByType.keys()) {
     if (!sections.some((s) => s.type === type)) {
-      sections.push({ type, name: type, canLink: false, canCreate: false })
+      sections.push({ type, name: type, canLink: false, canCreate: false, destinations: [] })
     }
   }
   if (sections.length === 0) return null
@@ -82,6 +93,7 @@ export function TicketTrackerLinks({
           name={s.name}
           canLink={s.canLink}
           canCreate={s.canCreate}
+          destinations={s.destinations}
           links={linksByType.get(s.type) ?? []}
           onChanged={onChanged}
         />
@@ -96,6 +108,7 @@ function TrackerSection({
   name,
   canLink,
   canCreate,
+  destinations,
   links,
   onChanged,
 }: {
@@ -104,9 +117,12 @@ function TrackerSection({
   name: string
   canLink: boolean
   canCreate: boolean
+  /** Several repositories: creating asks which one. */
+  destinations: TrackerDestination[]
   links: TrackerLink[]
   onChanged: () => void
 }) {
+  const intl = useIntl()
   const qc = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [issueRef, setIssueRef] = useState('')
@@ -135,7 +151,8 @@ function TrackerSection({
     onError,
   })
   const create = useMutation({
-    mutationFn: () => createTicketIssueFn({ data: { ticketId, integrationType: type } }),
+    mutationFn: (destinationId?: string) =>
+      createTicketIssueFn({ data: { ticketId, integrationType: type, destinationId } }),
     onSuccess: (result) => {
       settle()
       toast.message(
@@ -159,11 +176,28 @@ function TrackerSection({
     if (value && !link.isPending) link.mutate(value)
   }
 
-  // Both affordances → a two-item menu; a single affordance renders directly.
+  // With several repositories, "create" becomes one choice per repository;
+  // a link's repository comes from the issue reference itself.
+  const createItems =
+    destinations.length > 1 ? (
+      destinations.map((destination) => (
+        <DropdownMenuItem key={destination.id} onClick={() => create.mutate(destination.id)}>
+          {intl.formatMessage(
+            { id: 'admin.ticketTracker.createIn', defaultMessage: 'Create issue in {repository}' },
+            { repository: destination.name }
+          )}
+        </DropdownMenuItem>
+      ))
+    ) : (
+      <DropdownMenuItem onClick={() => create.mutate(undefined)}>Create new issue</DropdownMenuItem>
+    )
+
+  // Both affordances (or a choice of repositories) → a menu; a single
+  // affordance renders directly.
   const addBtnClass =
     'inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline'
   const addAffordance =
-    canLink && canCreate ? (
+    canCreate && (canLink || destinations.length > 1) ? (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" className={addBtnClass} disabled={create.isPending}>
@@ -171,8 +205,12 @@ function TrackerSection({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setAdding(true)}>Link existing issue…</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => create.mutate()}>Create new issue</DropdownMenuItem>
+          {canLink && (
+            <DropdownMenuItem onClick={() => setAdding(true)}>
+              Link existing issue…
+            </DropdownMenuItem>
+          )}
+          {createItems}
         </DropdownMenuContent>
       </DropdownMenu>
     ) : canLink ? (
@@ -182,7 +220,7 @@ function TrackerSection({
     ) : canCreate ? (
       <button
         type="button"
-        onClick={() => create.mutate()}
+        onClick={() => create.mutate(undefined)}
         disabled={create.isPending}
         className={addBtnClass}
       >

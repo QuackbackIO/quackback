@@ -20,8 +20,10 @@ import { queueSyncOperation } from '@/lib/server/integrations/sync/ledger'
 import {
   installationIdentity,
   reviewDestination,
+  linkTarget,
   syncOperationKey,
 } from '@/lib/server/integrations/sync/identity'
+import { destinationChannelIds } from '@/lib/server/integrations/destinations'
 
 // ============================================================================
 // Types
@@ -135,11 +137,10 @@ export async function executeCascadeDelete(
     const { link, integration } = row
     if (!link.syncScope) continue
     const installation = installationIdentity(integration)
-    const destination = reviewDestination(
-      link,
-      integration,
-      getIntegration(integration.integrationType)
-    )
+    const definition = getIntegration(integration.integrationType)
+    const channelIds = await destinationChannelIds(integration, tx)
+    const destination = reviewDestination(link, integration, definition, channelIds)
+    const target = linkTarget(link, integration, definition, channelIds)
     await queueSyncOperation(
       {
         operationKey: syncOperationKey({
@@ -165,7 +166,11 @@ export async function executeCascadeDelete(
         result: { externalUrl: link.externalUrl, externalDisplayId: link.externalDisplayId },
         payload: {
           executor: 'archive',
-          data: { linkId: link.id, proposedStatus: 'Archive or close this remote item' },
+          data: {
+            linkId: link.id,
+            proposedStatus: 'Archive or close this remote item',
+            ...(target ? { target } : {}),
+          },
         },
       },
       tx
