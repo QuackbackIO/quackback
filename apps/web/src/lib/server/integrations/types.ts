@@ -1,5 +1,5 @@
 import type { IntegrationHook } from './sync/outcomes'
-import type { InboundWebhookHandler } from './inbound-types'
+import type { InboundWebhookHandler, RemoteIssueComment } from './inbound-types'
 import type { UserSyncHandler } from './user-sync-types'
 
 /**
@@ -155,6 +155,116 @@ export interface ParsedIssueRef {
   /** Human-readable reference shown in the UI (e.g. "acme/app#412", "PROJ-42"). */
   externalDisplayId: string
   externalUrl: string | null
+  /**
+   * For a provider serving several destinations: the configured destination
+   * (`integration_destinations.id`) the reference belongs to.
+   */
+  destinationId?: string
+}
+
+/** A destination a connection serves, as `parseRef` matches references against. */
+export interface ConfiguredDestination {
+  id: string
+  externalId: string
+}
+
+/**
+ * What an issue created from a ticket may say, read at dispatch from the
+ * ticket's current customer-visible thread: never an internal note, never the
+ * requester's identity.
+ */
+export interface TicketIssueSource {
+  ticketId: string
+  number: number
+  title: string
+  /** The first customer-visible message, as Markdown. Empty when there is none. */
+  narrative: string
+  /** Files on the thread's customer-visible messages, oldest first. */
+  attachments: { name: string; url: string; contentType: string }[]
+  /** The ticket status's name. */
+  status: string | null
+  priority: 'none' | 'low' | 'medium' | 'high' | 'urgent'
+  /** The channel its conversation came in on (`email`, `messenger`, ...), when it has one. */
+  channel: string | null
+  /** The ticket in the Quackback inbox. */
+  url: string
+}
+
+/** A provider's rendering of a ticket as a new issue. */
+export interface TicketIssueContent {
+  title: string
+  bodyMarkdown: string
+  labels?: string[]
+}
+
+/**
+ * A public ticket reply as a comment on a linked issue may say it, read at
+ * dispatch: never an internal note, never another message's files, and the
+ * requester is never named (the issue may be public).
+ */
+export interface TicketReplySource {
+  messageId: string
+  ticketId: string
+  /** `agent` for a teammate's reply, `visitor` for the requester's. */
+  senderType: 'agent' | 'visitor'
+  /** The teammate's public display name. Always null for a requester reply. */
+  authorName: string | null
+  /** The reply, as Markdown. */
+  markdown: string
+  /** This reply's own files. */
+  attachments: { name: string; url: string; contentType: string }[]
+}
+
+/** A comment the connection wrote, as the provider reports it. */
+export interface IssueCommentRef {
+  /** The provider's comment id. */
+  externalId: string
+  externalUrl: string | null
+  /** Its version after the write (GitHub: `updated_at`), when the provider reports one. */
+  version: string | null
+}
+
+/**
+ * Mirror a linked ticket's public replies onto the issue as comments. Every
+ * comment written here is the connection's own: it is created from a reply,
+ * and only ever edited or deleted to follow that reply. Remote-authored
+ * comments are never touched, only read (`list`) when a ticket is resynced.
+ * Each call throws an `issueError` carrying the response `status` on a
+ * rejected request.
+ */
+export interface IssueCommentCapability {
+  /** The comment body for a reply, with a hidden marker naming the reply and the connection. */
+  format(reply: TicketReplySource, context: { integrationId: string }): string
+  create(args: {
+    auth: Record<string, unknown>
+    /** The linked issue (`ParsedIssueRef.externalId`). */
+    issueId: string
+    body: string
+  }): Promise<IssueCommentRef>
+  /** Null when the comment is gone from the platform (deleted there). */
+  update(args: {
+    auth: Record<string, unknown>
+    commentId: string
+    body: string
+  }): Promise<IssueCommentRef | null>
+  /** Resolves when the comment is gone, including when it was already removed. */
+  delete(args: { auth: Record<string, unknown>; commentId: string }): Promise<void>
+  /**
+   * Read an issue's comments, oldest first, for a ticket's resync: those
+   * updated at or after `since`, at most `limit` of them.
+   */
+  list(args: {
+    auth: Record<string, unknown>
+    issueId: string
+    since: string
+    limit: number
+  }): Promise<RemoteIssueComment[]>
+  /**
+   * For a provider with an Inbox channel: the channel thread an item's
+   * conversation has (GitHub: `owner/repo#n`). Comments on such an item reach
+   * the inbox through the channel, never a linked ticket.
+   */
+  threadKey?(target: { channelId: string }, issueId: string): string
 }
 
 /**
@@ -175,7 +285,17 @@ export interface IssueTrackerCapability {
    * ref that violates the connected config (e.g. a foreign repository, when
    * the integration pins one).
    */
-  parseRef?(input: string, config: Record<string, unknown>): ParsedIssueRef | null
+  parseRef?(
+    input: string,
+    config: Record<string, unknown>,
+    /**
+     * The enabled destinations of a connection serving several (GitHub
+     * repositories). When given, the reference must belong to one of them and
+     * the result names it as `destinationId`; otherwise the connection's own
+     * `config.channelId` pin applies.
+     */
+    destinations?: readonly ConfiguredDestination[]
+  ): ParsedIssueRef | null
   /**
    * Create an issue/work item on the connected channel. Abstracts the CALL,
    * not the body format: `bodyMarkdown` is GitHub-flavored markdown and each
@@ -190,8 +310,88 @@ export interface IssueTrackerCapability {
     auth: Record<string, unknown>
     title: string
     bodyMarkdown: string
+    /** Labels to set on the new issue, for a provider that has them; others ignore it. */
+    labels?: string[]
   }): Promise<ParsedIssueRef>
+  /**
+   * How this provider writes an issue created from a ticket (manually or by
+   * a destination's ticket opt-in). Without it the ticket's narrative and a
+   * back-link are sent. `integrationId` lets the body carry a marker naming
+   * the connection that wrote it.
+   */
+  formatTicketIssue?(
+    ticket: TicketIssueSource,
+    context: { integrationId: string }
+  ): TicketIssueContent
+  /**
+   * Post a linked ticket's public replies to the issue, in destinations that
+   * switch `postRepliesAsComments` on (see `sync/comments.ts`), and read the
+   * issue's comments back when a ticket is resynced (`ticket-sync.ts`).
+   */
+  comments?: IssueCommentCapability
+  /**
+   * Bring a linked issue in step with its ticket (state, labels, title, body,
+   * assignees), in destinations that switch `applyAutomatically` on (see
+   * `sync/issue-updates.ts`). Only honoured with `writeContract: 'guarded'`.
+   */
+  update?(args: IssueUpdateArgs): Promise<IssueUpdateResult>
+  /**
+   * The promise `update` keeps, which automatic remote edits require:
+   * `guarded` reads the item first and writes nothing when it changed on the
+   * platform since `baseline` (a review instead), then writes only the
+   * fields that differ. It is compare-then-write, not an atomic conditional
+   * write: a change landing between the read and the write is not detected.
+   */
+  writeContract?: 'guarded'
 }
+
+/**
+ * What a ticket asks of its linked issue. Every field is optional; only the
+ * ones given are compared, and only those that differ are written.
+ */
+export interface IssueUpdateChange {
+  state?: { state: 'open' | 'closed'; stateReason?: 'completed' | 'not_planned' }
+  /** Labels to add, and labels Quackback owns to take off when present. Others are never touched. */
+  labels?: { add: string[]; remove: string[] }
+  title?: string
+  /**
+   * The re-rendered body, written only while the issue's body is still the
+   * one this connection wrote for this ticket (it carries the marker), so a
+   * body written by a person is never replaced.
+   */
+  body?: string
+  /** The issue's assignees, as platform logins; `[]` clears them. */
+  assignees?: string[]
+}
+
+export interface IssueUpdateArgs {
+  auth: Record<string, unknown>
+  issueId: string
+  /** The ticket and connection, to recognise a body this connection wrote. */
+  ticketId: string
+  integrationId: string
+  /**
+   * What we last saw of the issue: its state (as the inbound parser names
+   * it, e.g. `Closed (not planned)`), and when (the platform's version for
+   * our own writes, the receipt time for inbound changes, the link's creation
+   * otherwise). Null state: never seen.
+   */
+  baseline: { state: string | null; at: Date }
+  change: IssueUpdateChange
+  /**
+   * Called once the guard passed and before the first write; records the
+   * dispatch. A false return means the work is no longer wanted: write nothing.
+   */
+  beforeWrite(): Promise<boolean>
+}
+
+export type IssueUpdateResult =
+  /** Nothing differed, or everything was written. `version`/`state` are the issue's now. */
+  | { outcome: 'unchanged' | 'updated'; version: string; state: string; changed: string[] }
+  /** The issue changed on the platform since the baseline: nothing was written. */
+  | { outcome: 'conflict'; reason: 'state' | 'activity' }
+  /** `beforeWrite` declined: nothing was written. */
+  | { outcome: 'cancelled' }
 
 /** One selectable external status/state, as shown in the status-mapping UI. */
 export interface ExternalStatusItem {
@@ -207,6 +407,8 @@ export interface ExternalStatusItem {
 export interface DestinationItem {
   id: string
   name: string
+  /** The provider's immutable id (GitHub's numeric repository id), when it has one. */
+  key?: string
 }
 
 /** A matching remote item returned by `externalLinks.search` (IF WO-15). */
@@ -252,6 +454,55 @@ export interface IntegrationDefinition {
       config: Record<string, unknown>
       accessToken: string
     }) => Promise<boolean>
+    /**
+     * One connection serves several destinations of this `destinations` kind
+     * (GitHub: repositories), each stored in `integration_destinations` with
+     * its own webhook and signing secret. `webhookRegistration` then runs once
+     * per destination with `config.channelId` naming it (see
+     * `destinations.ts`), and `inbound.destinationOf` routes deliveries.
+     */
+    multiple?: {
+      kind: string
+      label: string
+      /**
+       * Validates a patch to one destination's settings
+       * (`integration_destinations.config`): which keys exist and what they
+       * may hold. A key it does not accept is refused.
+       */
+      configSchema: import('zod').ZodType<
+        Partial<import('@/lib/server/db').IntegrationDestinationConfig>
+      >
+      /**
+       * Checks a patch that passed `configSchema` against the workspace (GitHub:
+       * the ticket scope names a live team and a customer ticket type). Throws
+       * a `ValidationError` to refuse it.
+       */
+      validateConfig?: (
+        patch: Partial<import('@/lib/server/db').IntegrationDestinationConfig>
+      ) => Promise<void>
+      /**
+       * Whether anything listens to one destination's webhook, so a newly
+       * added destination should get one. Receives that destination's config
+       * (`destinationConfig`: the connection's config with the destination's
+       * settings over it). Defaults to the connection's status-sync switch.
+       */
+      webhookWanted?: (config: Record<string, unknown>) => Promise<boolean>
+      /**
+       * The settings a destination starts with when it is added or created
+       * for a legacy connection. Defaults to none.
+       */
+      initialConfig?: (
+        integrationId: import('@quackback/ids').IntegrationId
+      ) => Promise<Partial<import('@/lib/server/db').IntegrationDestinationConfig>>
+      /**
+       * Called after a destination's settings change, so the provider can act
+       * on them (GitHub: resubscribe that repository's webhook). Best effort:
+       * a failure is the provider's to record.
+       */
+      onConfigChanged?: (
+        destination: import('./destinations').IntegrationDestination
+      ) => Promise<void>
+    }
   }
   appHooks?: {
     /** The provider executes through the shared ledger, with optional queue scheduling. */
@@ -384,6 +635,8 @@ export interface IntegrationDefinition {
           externalWebhookId?: string
           /** Authenticated provider response may issue the signing secret (e.g. Asana). */
           webhookSecret?: string
+          /** The events the webhook subscribes to, kept on the destination for display. */
+          events?: string[]
         }>
         unregister(params: {
           accessToken: string
