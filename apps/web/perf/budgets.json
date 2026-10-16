@@ -678,7 +678,7 @@
     },
     "sweep:doc:admin:/admin/settings/members/roles/new": {
       "dbQueries": 10,
-      "htmlKB": 94.6
+      "htmlKB": 99.6
     },
     "sweep:ui:admin:/admin/settings/members/roles/new": {
       "dbQueries": 10,
