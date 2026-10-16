@@ -243,6 +243,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         commentCount: post.commentCount,
         tags: post.tags,
         board: post.board,
+        changelogEntry: post.changelogEntry,
       })),
       hasMore: postsResult.hasMore,
       total: undefined,

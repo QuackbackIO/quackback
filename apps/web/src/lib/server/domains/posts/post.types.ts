@@ -4,6 +4,7 @@
 
 import type { Post, Board, BoardAccess, PostTag, TiptapContent } from '@/lib/server/db'
 import type {
+  ChangelogId,
   PostId,
   BoardId,
   PostTagId,
@@ -107,6 +108,8 @@ export interface PublicPostListItem {
   tags: Array<{ id: PostTagId; name: string; color: string }>
   board?: { id: BoardId; name: string; slug: string }
   moderationState?: 'published' | 'pending' | string
+  /** Newest published changelog entry announcing this post, if any. */
+  changelogEntry?: { id: ChangelogId; title: string } | null
 }
 
 /**
