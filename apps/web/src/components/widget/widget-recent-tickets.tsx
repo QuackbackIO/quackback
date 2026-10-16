@@ -6,7 +6,7 @@ import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
 import { widgetMyTicketsKey } from './widget-tickets'
 import { TimeAgo } from '@/components/ui/time-ago'
-import { StageChip } from '@/components/shared/ticket-stage'
+import { StageChip, TicketDueLabel } from '@/components/shared/ticket-stage'
 
 /** How many tickets the Home card lists — a glanceable recency strip, not the
  *  full index (that is the Tickets tab). */
@@ -15,7 +15,7 @@ const RECENT_TICKETS_LIMIT = 3
 /**
  * The Home surface's Recent tickets card: up to three of the identified
  * requester's own tickets, newest-activity first, each row showing its public
- * stage chip and opening its conversation thread (the converged pair) on tap.
+ * stage chip (and due date, when set) and opening its conversation thread (the converged pair) on tap.
  * Shares the Tickets tab's query key so the two surfaces never fetch twice.
  * Renders nothing for an anonymous visitor (no tickets exist) or when the
  * requester has none.
@@ -70,6 +70,7 @@ export function WidgetRecentTicketsCard({
                   <span className="font-mono text-[11px] text-muted-foreground/60">
                     {t.reference}
                   </span>
+                  <TicketDueLabel dueAt={t.dueAt} closed={t.stage.closed} />
                 </span>
               </span>
             </button>

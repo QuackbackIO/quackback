@@ -99,6 +99,8 @@ const listInboxPostsSchema = z.object({
   updatedBefore: z.string().optional(),
   sort: z.enum(['newest', 'oldest', 'votes', 'priority']).optional().default('newest'),
   showDeleted: z.boolean().optional(),
+  /** Only posts the caller follows. */
+  following: z.boolean().optional(),
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional().default(20),
 })
@@ -206,7 +208,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
   .validator(listInboxPostsSchema)
   .handler(async ({ data }) => {
     log.debug('fetch inbox posts for admin')
-    await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
     const result = await listAdminInboxPage({
       boardIds: data.boardIds as BoardId[] | undefined,
@@ -224,6 +226,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
       updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
       sort: data.sort,
       showDeleted: data.showDeleted,
+      followerId: data.following ? auth.principal.id : undefined,
       cursor: data.cursor,
       limit: data.limit,
     })
@@ -249,7 +252,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
 export const fetchInboxFilterCounts = createServerFn({ method: 'GET' })
   .validator(inboxFilterCountsSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
     return countInboxFilterFacets({
       boardIds: data.boardIds as BoardId[] | undefined,
       statusIds: data.statusIds as PostStatusId[] | undefined,
@@ -265,6 +268,7 @@ export const fetchInboxFilterCounts = createServerFn({ method: 'GET' })
       responded: data.responded,
       updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
       showDeleted: data.showDeleted,
+      followerId: data.following ? auth.principal.id : undefined,
     })
   })
 
