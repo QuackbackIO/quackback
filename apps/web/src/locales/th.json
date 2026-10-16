@@ -519,6 +519,7 @@
   "portal.unsubscribeBanner.dismiss": "ปิด",
   "portal.pinnedComment.pinnedBadge": "ปักหมุด",
   "portal.postCard.authorFallback": "ไม่ระบุชื่อ",
+  "portal.postCard.inChangelog": "ในบันทึกการเปลี่ยนแปลง",
   "portal.postCard.editNotAllowed": "ไม่อนุญาตให้แก้ไข",
   "portal.postCard.deleteNotAllowed": "ไม่อนุญาตให้ลบ",
   "portal.postCard.quickActions.viewInPortal": "ดูในพอร์ทัล",

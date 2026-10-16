@@ -370,6 +370,7 @@
   "portal.unsubscribeBanner.dismiss": "Скрыть",
   "portal.pinnedComment.pinnedBadge": "Закреплено",
   "portal.postCard.authorFallback": "Аноним",
+  "portal.postCard.inChangelog": "В журнале изменений",
   "portal.postCard.editNotAllowed": "Редактирование недоступно",
   "portal.postCard.deleteNotAllowed": "Удаление недоступно",
   "portal.postCard.quickActions.viewInPortal": "Открыть в портале",

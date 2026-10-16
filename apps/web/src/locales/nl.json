@@ -370,6 +370,7 @@
   "portal.unsubscribeBanner.dismiss": "Sluiten",
   "portal.pinnedComment.pinnedBadge": "Vastgezet",
   "portal.postCard.authorFallback": "Anoniem",
+  "portal.postCard.inChangelog": "In de changelog",
   "portal.postCard.editNotAllowed": "Bewerken niet toegestaan",
   "portal.postCard.deleteNotAllowed": "Verwijderen niet toegestaan",
   "portal.postCard.quickActions.viewInPortal": "Bekijken in portaal",

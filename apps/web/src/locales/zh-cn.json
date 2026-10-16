@@ -370,6 +370,7 @@
   "portal.unsubscribeBanner.dismiss": "关闭",
   "portal.pinnedComment.pinnedBadge": "置顶",
   "portal.postCard.authorFallback": "匿名",
+  "portal.postCard.inChangelog": "见更新日志",
   "portal.postCard.editNotAllowed": "不允许编辑",
   "portal.postCard.deleteNotAllowed": "不允许删除",
   "portal.postCard.quickActions.viewInPortal": "在门户中查看",

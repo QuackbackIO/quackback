@@ -370,6 +370,7 @@
   "portal.unsubscribeBanner.dismiss": "Закрити",
   "portal.pinnedComment.pinnedBadge": "Закріплено",
   "portal.postCard.authorFallback": "Анонім",
+  "portal.postCard.inChangelog": "У журналі змін",
   "portal.postCard.editNotAllowed": "Редагування недоступне",
   "portal.postCard.deleteNotAllowed": "Видалення недоступне",
   "portal.postCard.quickActions.viewInPortal": "Відкрити в порталі",

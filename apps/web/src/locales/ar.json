@@ -370,6 +370,7 @@
   "portal.unsubscribeBanner.dismiss": "إغلاق",
   "portal.pinnedComment.pinnedBadge": "مثبّت",
   "portal.postCard.authorFallback": "مجهول",
+  "portal.postCard.inChangelog": "في آخر المستجدات",
   "portal.postCard.editNotAllowed": "التعديل غير مسموح",
   "portal.postCard.deleteNotAllowed": "الحذف غير مسموح",
   "portal.postCard.quickActions.viewInPortal": "عرض في البوابة",

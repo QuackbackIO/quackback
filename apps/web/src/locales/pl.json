@@ -370,6 +370,7 @@
   "portal.unsubscribeBanner.dismiss": "Zamknij",
   "portal.pinnedComment.pinnedBadge": "Przypięty",
   "portal.postCard.authorFallback": "Anonim",
+  "portal.postCard.inChangelog": "Na liście zmian",
   "portal.postCard.editNotAllowed": "Edycja niedozwolona",
   "portal.postCard.deleteNotAllowed": "Usuwanie niedozwolone",
   "portal.postCard.quickActions.viewInPortal": "Zobacz w portalu",
