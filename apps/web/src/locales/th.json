@@ -722,6 +722,8 @@
   "portal.feedback.filter.statusGroup.active": "กำลังดำเนินการ",
   "portal.feedback.filter.statusGroup.complete": "เสร็จแล้ว",
   "portal.feedback.filter.statusGroup.closed": "ปิดแล้ว",
+  "portal.feedback.filter.status.activeOnly": "เฉพาะที่กำลังดำเนินการ",
+  "portal.feedback.filter.status.any": "ทั้งหมด",
   "portal.feedback.filter.chip.board": "บอร์ด:",
   "portal.feedback.filter.chip.status": "สถานะ:",
   "portal.feedback.filter.chip.tag": "แท็ก:",

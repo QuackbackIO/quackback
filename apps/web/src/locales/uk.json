@@ -556,6 +556,8 @@
   "portal.feedback.filter.statusGroup.active": "Активні",
   "portal.feedback.filter.statusGroup.complete": "Завершені",
   "portal.feedback.filter.statusGroup.closed": "Закриті",
+  "portal.feedback.filter.status.activeOnly": "Лише активні",
+  "portal.feedback.filter.status.any": "Будь-який",
   "portal.feedback.filter.chip.board": "Дошка:",
   "portal.feedback.filter.chip.status": "Статус:",
   "portal.feedback.filter.chip.tag": "Тег:",

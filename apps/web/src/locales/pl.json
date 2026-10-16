@@ -556,6 +556,8 @@
   "portal.feedback.filter.statusGroup.active": "Aktywne",
   "portal.feedback.filter.statusGroup.complete": "Zakończone",
   "portal.feedback.filter.statusGroup.closed": "Zamknięte",
+  "portal.feedback.filter.status.activeOnly": "Tylko aktywne",
+  "portal.feedback.filter.status.any": "Dowolny",
   "portal.feedback.filter.chip.board": "Tablica:",
   "portal.feedback.filter.chip.status": "Status:",
   "portal.feedback.filter.chip.tag": "Tag:",

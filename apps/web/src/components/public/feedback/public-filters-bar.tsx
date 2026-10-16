@@ -159,7 +159,7 @@ export function PublicFiltersBar({
     [filters, setFilters, statuses, tags, boards, members, segments, intl, boardLocked]
   )
 
-  if (activeChips.length === 0) return null
+  const pickedCount = activeChips.filter((chip) => !chip.implied).length
 
   return (
     <div
@@ -174,17 +174,19 @@ export function PublicFiltersBar({
         <FilterChip key={key} icon={CHIP_ICON_BY_TYPE[type]} {...chipProps} />
       ))}
 
-      <AddFilterButton
-        filters={filters}
-        setFilters={setFilters}
-        statuses={statuses}
-        tags={tags}
-        boards={boards}
-        boardLocked={boardLocked}
-        variant="pill"
-      />
+      {pickedCount > 0 && (
+        <AddFilterButton
+          filters={filters}
+          setFilters={setFilters}
+          statuses={statuses}
+          tags={tags}
+          boards={boards}
+          boardLocked={boardLocked}
+          variant="pill"
+        />
+      )}
 
-      {activeChips.length >= 2 && (
+      {pickedCount >= 2 && (
         <button
           type="button"
           onClick={clearFilters}
@@ -639,7 +641,10 @@ interface ActiveChipDescriptor {
   color?: string
   options?: FilterOption[]
   onChange?: (newId: string) => void
-  onRemove: () => void
+  /** Absent on an implied chip, which shows a default rather than a picked filter. */
+  onRemove?: () => void
+  /** The status scope applied when nothing is picked: dashed, not removable. */
+  implied?: boolean
   /** Team-only chip: amber styling. */
   internal?: boolean
   /** Localized "only your team sees this" tooltip for internal chips. */
@@ -714,6 +719,27 @@ function buildActiveChips(args: {
         },
       })
     }
+  } else {
+    // Nothing picked: the feed hides complete and closed posts, except while
+    // searching. Say so, and let the chip open the status list.
+    chips.push({
+      key: 'status-implied',
+      type: 'status',
+      label: intl.formatMessage({
+        id: 'portal.feedback.filter.chip.status',
+        defaultMessage: 'Status:',
+      }),
+      value: filters.search
+        ? intl.formatMessage({ id: 'portal.feedback.filter.status.any', defaultMessage: 'Any' })
+        : intl.formatMessage({
+            id: 'portal.feedback.filter.status.activeOnly',
+            defaultMessage: 'Active only',
+          }),
+      valueId: '',
+      options: statusOptions,
+      onChange: (slug) => setFilters({ status: [slug] }),
+      implied: true,
+    })
   }
 
   // Tags — 1-2 individual, 3+ combined

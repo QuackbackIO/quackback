@@ -556,6 +556,8 @@
   "portal.feedback.filter.statusGroup.active": "نشط",
   "portal.feedback.filter.statusGroup.complete": "مكتمل",
   "portal.feedback.filter.statusGroup.closed": "مغلق",
+  "portal.feedback.filter.status.activeOnly": "النشطة فقط",
+  "portal.feedback.filter.status.any": "الكل",
   "portal.feedback.filter.chip.board": "اللوحة:",
   "portal.feedback.filter.chip.status": "الحالة:",
   "portal.feedback.filter.chip.tag": "الوسم:",

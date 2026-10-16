@@ -70,9 +70,32 @@ function renderBar(overrides: Partial<React.ComponentProps<typeof PublicFiltersB
 }
 
 describe('PublicFiltersBar', () => {
-  it('renders nothing when no filters are active (toolbar carries the entry point)', () => {
-    const { container } = renderBar()
-    expect(container).toBeEmptyDOMElement()
+  it('shows the implied "Active only" status when no status is picked', () => {
+    renderBar()
+    expect(screen.getByText(/^Status:$/)).toBeInTheDocument()
+    expect(screen.getByText('Active only')).toBeInTheDocument()
+    // The implied chip is not a filter the visitor added, so it has no remove
+    // button, and the toolbar's Filter button stays the only entry point.
+    expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /add filter/i })).not.toBeInTheDocument()
+  })
+
+  it('shows "Any" as the implied status while searching', () => {
+    renderBar({ filters: { sort: 'top', search: 'widget' } })
+    expect(screen.getByText('Any')).toBeInTheDocument()
+    expect(screen.queryByText('Active only')).not.toBeInTheDocument()
+  })
+
+  it('picking a status from the implied chip replaces the default', () => {
+    const { setFilters } = renderBar()
+    fireEvent.click(screen.getByText('Active only'))
+    fireEvent.click(screen.getByRole('button', { name: 'Complete' }))
+    expect(setFilters).toHaveBeenCalledWith({ status: ['complete'] })
+  })
+
+  it('drops the implied chip once a status is picked', () => {
+    renderBar({ filters: { sort: 'top', status: ['open'] } })
+    expect(screen.queryByText('Active only')).not.toBeInTheDocument()
   })
 
   it('renders chips + the dashed Add filter pill when chips are active', () => {

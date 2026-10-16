@@ -556,6 +556,8 @@
   "portal.feedback.filter.statusGroup.active": "进行中",
   "portal.feedback.filter.statusGroup.complete": "已完成",
   "portal.feedback.filter.statusGroup.closed": "已关闭",
+  "portal.feedback.filter.status.activeOnly": "仅进行中",
+  "portal.feedback.filter.status.any": "全部",
   "portal.feedback.filter.chip.board": "看板：",
   "portal.feedback.filter.chip.status": "状态：",
   "portal.feedback.filter.chip.tag": "标签：",

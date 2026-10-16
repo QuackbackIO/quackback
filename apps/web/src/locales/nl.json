@@ -556,6 +556,8 @@
   "portal.feedback.filter.statusGroup.active": "Actief",
   "portal.feedback.filter.statusGroup.complete": "Afgerond",
   "portal.feedback.filter.statusGroup.closed": "Gesloten",
+  "portal.feedback.filter.status.activeOnly": "Alleen actief",
+  "portal.feedback.filter.status.any": "Alle",
   "portal.feedback.filter.chip.board": "Bord:",
   "portal.feedback.filter.chip.status": "Status:",
   "portal.feedback.filter.chip.tag": "Tag:",

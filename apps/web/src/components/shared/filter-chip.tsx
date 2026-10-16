@@ -22,8 +22,8 @@ interface FilterChipProps {
   valueId: string
   /** Optional color for a dot indicator */
   color?: string
-  /** Called when the chip's remove button is clicked */
-  onRemove: () => void
+  /** Called when the chip's remove button is clicked. Omit for an implied chip, which has none. */
+  onRemove?: () => void
   /** Called when a dropdown option is selected */
   onChange?: (newId: string) => void
   /** Dropdown options (renders a popover when provided with onChange) */
@@ -35,6 +35,8 @@ interface FilterChipProps {
   internal?: boolean
   /** Localized tooltip text; shown on hover when `internal` is set. */
   tooltip?: string
+  /** A default the viewer did not pick (e.g. the status scope): dashed and not removable. */
+  implied?: boolean
 }
 
 export function FilterChip({
@@ -48,6 +50,7 @@ export function FilterChip({
   options,
   internal = false,
   tooltip,
+  implied = false,
 }: FilterChipProps) {
   const [open, setOpen] = useState(false)
   const hasOptions = options && options.length > 0 && onChange
@@ -98,7 +101,9 @@ export function FilterChip({
         'transition-colors',
         internal
           ? 'bg-amber-500/10 border border-amber-500/40 hover:border-amber-500/60'
-          : 'bg-muted/60 border border-border/30 hover:border-border/50'
+          : implied
+            ? 'border border-dashed border-border hover:border-foreground/30'
+            : 'bg-muted/60 border border-border/30 hover:border-border/50'
       )}
     >
       {hasOptions ? (
@@ -138,19 +143,21 @@ export function FilterChip({
       ) : (
         <span className="inline-flex items-center gap-1">{chipContent}</span>
       )}
-      <button
-        type="button"
-        onClick={onRemove}
-        className={cn(
-          'ml-0.5 p-0.5 rounded-full',
-          'hover:bg-foreground/10',
-          'text-muted-foreground hover:text-foreground',
-          'transition-colors'
-        )}
-        aria-label={`Remove ${label} ${value} filter`}
-      >
-        <XMarkIcon className="h-2.5 w-2.5" />
-      </button>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className={cn(
+            'ml-0.5 p-0.5 rounded-full',
+            'hover:bg-foreground/10',
+            'text-muted-foreground hover:text-foreground',
+            'transition-colors'
+          )}
+          aria-label={`Remove ${label} ${value} filter`}
+        >
+          <XMarkIcon className="h-2.5 w-2.5" />
+        </button>
+      )}
     </div>
   )
 
