@@ -54,7 +54,7 @@
     "@types/react-dom": "^19.3.0",
     "happy-dom": "^20.14.5",
     "react-dom": "^19.3.0",
-    "tsup": "^8.5.1",
+    "tsup": "^9.0.0",
     "react": "^19.3.0"
   },
   "repository": {
