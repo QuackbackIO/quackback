@@ -119,6 +119,7 @@ export function agentEventChangesInboxList(evt: ConversationStreamEvent): boolea
   if (
     evt.kind === 'ticket_message' ||
     evt.kind === 'ticket_message_updated' ||
+    evt.kind === 'ticket_message_deleted' ||
     evt.kind === 'ticket_updated'
   )
     return true
@@ -411,7 +412,8 @@ export interface TicketThreadCache {
 /** Apply one ticket-stream event to an open ticket thread's cache. Events for
  *  other tickets (the inbox stream is multiplexed, and a ticket's own stream
  *  only ever carries its own events anyway) and any kind other than
- *  `ticket_message` / `ticket_message_updated` return prev untouched —
+ *  `ticket_message` / `ticket_message_updated` / `ticket_message_deleted`
+ *  return prev untouched —
  *  `ticket_updated`/`ticket_read` have nothing in this cache to patch (see the
  *  type doc above). Ticket-parented reactions/flags don't broadcast yet (see
  *  message.actions.ts); a body edit does, and patches only the body fields so
@@ -422,6 +424,10 @@ export function applyTicketThreadEvent(
   ticketId: TicketId
 ): TicketThreadCache | undefined {
   if (!prev) return prev
+  if (evt.kind === 'ticket_message_deleted') {
+    if (evt.ticketId !== ticketId) return prev
+    return removeThreadMessage(prev, evt.messageId)
+  }
   if (evt.kind === 'ticket_message_updated') {
     if (evt.ticketId !== ticketId) return prev
     return updateThreadMessage(prev, evt.message.id, (m) => ({

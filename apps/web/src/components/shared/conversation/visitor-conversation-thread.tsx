@@ -230,6 +230,15 @@ export function VisitorConversationThread({
   // refreshed when a ticket system event lands on the stream. Null = no pair,
   // no header card — a plain chat is completely untouched by ticket-ness.
   const [linkedTicket, setLinkedTicket] = useState<RequesterTicketDTO | null>(null)
+  // How the viewer reaches the thread: their own, or a customer ticket shared
+  // with them. A participant replies but never answers the thread's blocks or
+  // rates it, and sees the requester's (and other customers') messages as
+  // theirs, not their own.
+  const [viewerRole, setViewerRole] = useState<'owner' | 'participant'>('owner')
+  const [viewerPrincipalId, setViewerPrincipalId] = useState<string | null>(null)
+  // Bumped when the viewer leaves a ticket shared with them: reloading the
+  // thread then finds it is no longer theirs and shows the greeting state.
+  const [reloadKey, setReloadKey] = useState(0)
   const [teamName, setTeamName] = useState<string | null>(null)
   // AI-assistant display identity (fronts new conversations); null when disabled.
   const [assistant, setAssistant] = useState<{
@@ -394,6 +403,8 @@ export function VisitorConversationThread({
         setAssistant(res.assistant ?? null)
         setCanEmailReply(res.canEmailVisitor)
         setLinkedTicket(res.linkedTicket ?? null)
+        setViewerRole(res.viewerRole === 'participant' ? 'participant' : 'owner')
+        setViewerPrincipalId(res.viewerPrincipalId ?? null)
         const conv = res.conversation
         if (conv) {
           // Snapshot the thread into the query cache; stream events and sends
@@ -417,7 +428,7 @@ export function VisitorConversationThread({
       cancelled = true
     }
     // getAuthHeaders is identity-stable per surface; sessionVersion is the reload key.
-  }, [sessionVersion, conversationTarget])
+  }, [sessionVersion, conversationTarget, reloadKey])
 
   // Refetch the authoritative thread after a reconnect to catch anything missed.
   const refreshMessages = useCallback(async () => {
@@ -654,6 +665,7 @@ export function VisitorConversationThread({
   // Prompt for a rating once the conversation is closed and not yet rated —
   // suppressed whenever a request_csat block already asked (see above).
   const showCsatPrompt =
+    viewerRole === 'owner' &&
     !!conversationId &&
     conversationStatus === 'closed' &&
     csatRating == null &&
@@ -793,8 +805,11 @@ export function VisitorConversationThread({
   // automatically the instant the pending block resolves (no client memory —
   // re-derived from `messages` on every render, same as `rows`).
   const composerLock = useMemo(
-    () => deriveComposerLock(messages, conversationStatus, blockStates),
-    [messages, conversationStatus, blockStates]
+    () =>
+      viewerRole === 'participant'
+        ? { disabled: false, lockedBy: null }
+        : deriveComposerLock(messages, conversationStatus, blockStates),
+    [messages, conversationStatus, blockStates, viewerRole]
   )
   const composerLockHint =
     composerLock.lockedBy === 'buttons'
@@ -969,7 +984,12 @@ export function VisitorConversationThread({
         )
       case 'message': {
         const m = row.message
-        const isVisitor = m.senderType === 'visitor'
+        // A customer-side message is the viewer's own unless another customer
+        // on a shared ticket wrote it (then it reads as theirs, with a name).
+        const isVisitor =
+          m.senderType === 'visitor' &&
+          (!viewerPrincipalId || !m.author || m.author.principalId === viewerPrincipalId)
+        const otherCustomer = m.senderType === 'visitor' && !isVisitor
         const block = m.block
         // "Show expected reply time" is a quiet system-style caption, never a
         // chat bubble — localized client-side from `block.status` (the
@@ -980,7 +1000,13 @@ export function VisitorConversationThread({
         const bubble = (
           <VisitorMessageBubble
             side={isVisitor ? 'self' : 'peer'}
-            authorName={isVisitor ? undefined : (m.author?.displayName ?? teamName ?? undefined)}
+            authorName={
+              isVisitor
+                ? undefined
+                : otherCustomer
+                  ? (m.author?.displayName ?? undefined)
+                  : (m.author?.displayName ?? teamName ?? undefined)
+            }
             isAssistant={m.isAssistant}
             content={m.content}
             contentJson={m.contentJson}
@@ -1000,6 +1026,9 @@ export function VisitorConversationThread({
             embedOpenMode={embedOpenMode}
           />
         )
+        // The requester's structured steps (forms, buttons, ratings) are
+        // theirs to answer: someone the ticket was shared with reads them only.
+        if (viewerRole === 'participant') return bubble
         // A send_ticket_form block's card rides below the intro bubble — a
         // SEND kind with no blockState, so it renders ahead of the
         // interactive-affordance gate below.
@@ -1007,7 +1036,10 @@ export function VisitorConversationThread({
           return (
             <div className="flex flex-col items-start">
               {bubble}
-              <BlockTicketForm getAuthHeaders={getAuthHeaders} />
+              <BlockTicketForm
+                getAuthHeaders={getAuthHeaders}
+                askDueDate={block.askDueDate === true}
+              />
             </div>
           )
         }
@@ -1203,7 +1235,13 @@ export function VisitorConversationThread({
       {/* The pair's ticket header (converged Messages): stage chip + tracker +
           watch bell + collapsed details. Only when a linked ticket exists —
           plain chats render nothing here. */}
-      {linkedTicket && <TicketHeaderCard ticket={linkedTicket} getAuthHeaders={getAuthHeaders} />}
+      {linkedTicket && (
+        <TicketHeaderCard
+          ticket={linkedTicket}
+          getAuthHeaders={getAuthHeaders}
+          onLeft={() => setReloadKey((k) => k + 1)}
+        />
+      )}
 
       <div className="relative flex-1 min-h-0">
         {/* Every attachment in the loaded thread, in message order — lets a

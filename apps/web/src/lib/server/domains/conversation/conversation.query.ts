@@ -6,6 +6,7 @@ import {
   db,
   conversations,
   conversationMessages,
+  conversationParticipants,
   principal,
   eq,
   and,
@@ -60,7 +61,15 @@ import {
 import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import type { SlaApplied } from '@/lib/server/domains/sla/sla.service'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
-import { hasLinkedCustomerTicketSql } from '@/lib/server/messages/pair-link'
+import {
+  hasLinkedCustomerTicketSql,
+  linkedCustomerTicketDueAtSql,
+  linkedCustomerTicketDueSql,
+  loadLinkedCustomerTicketDueAt,
+  pairTicketWatchedBySql,
+  participantThreadAccessSql,
+} from '@/lib/server/messages/pair-link'
+import type { TicketDueFilter } from '@/lib/shared/ticket-due'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import { isTestThreadSql } from './conversation.test-data'
 import { testOwnerOf } from '@/lib/server/test-data'
@@ -795,6 +804,107 @@ export async function listConversationsForVisitor(
   return Promise.all(rows.map((c) => conversationToDTO(c, side)))
 }
 
+/** How a customer reaches a conversation: as its visitor, or as a customer
+ *  its paired ticket was shared with (ticket sharing). */
+export type CustomerConversationRole = 'owner' | 'participant'
+
+export interface CustomerConversationResult extends ActiveConversationResult {
+  /** Null exactly when `conversation` is. */
+  role: CustomerConversationRole | null
+}
+
+/**
+ * A conversation a customer asked for by id (history row / ?c= deep link):
+ * their own, or a shared ticket thread they were given. Anything else is
+ * hidden exactly as `getConversationForVisitor` hides it. Never used to pick a
+ * customer's default thread: a ticket shared with them must not take over
+ * their own Messenger conversation.
+ */
+export async function getConversationForCustomer(
+  conversationId: ConversationId,
+  principalId: PrincipalId
+): Promise<CustomerConversationResult> {
+  const [row] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  const owned = resolveVisitorConversation(row ?? null, principalId)
+  if (owned.conversation) return { ...owned, role: 'owner' }
+  if (!row) return { conversation: null, isReadOnly: false, role: null }
+  const [shared] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(eq(conversations.id, conversationId), participantThreadAccessSql(principalId)))
+    .limit(1)
+  if (!shared) return { conversation: null, isReadOnly: false, role: null }
+  return {
+    conversation: row,
+    isReadOnly: !RESUMABLE_STATUSES.has(row.status),
+    role: 'participant',
+  }
+}
+
+/**
+ * The visitor-side DTO of a shared ticket thread, as its participant sees it:
+ * unread counted from their own watermark, never the requester's, and no CSAT
+ * of the requester's.
+ */
+export async function participantConversationToDTO(
+  conversation: Conversation,
+  principalId: PrincipalId
+): Promise<ConversationDTO> {
+  const [dto, readRow] = await Promise.all([
+    conversationToDTO(conversation, 'visitor'),
+    db
+      .select({ lastReadAt: conversationParticipants.lastReadAt })
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, conversation.id),
+          eq(conversationParticipants.principalId, principalId)
+        )
+      )
+      .limit(1),
+  ])
+  const lastReadAt = readRow[0]?.lastReadAt ?? null
+  const unread = await unreadCountFor({ ...conversation, visitorLastReadAt: lastReadAt }, 'visitor')
+  return {
+    ...dto,
+    unreadCount: unread,
+    visitorLastReadAt: lastReadAt?.toISOString() ?? null,
+    csatRating: null,
+  }
+}
+
+/**
+ * A customer's conversations for their Messages list, newest-first: their own
+ * plus the shared ticket threads they were given (`sharedIds`). Visitor-side
+ * DTOs, each from the caller's point of view.
+ */
+export async function listConversationsForCustomer(
+  principalId: PrincipalId,
+  limit = 50
+): Promise<{ conversations: ConversationDTO[]; sharedIds: ConversationId[] }> {
+  const rows = await db
+    .select()
+    .from(conversations)
+    .where(
+      or(eq(conversations.visitorPrincipalId, principalId), participantThreadAccessSql(principalId))
+    )
+    .orderBy(desc(conversations.lastMessageAt))
+    .limit(limit)
+  const sharedIds = rows.filter((c) => c.visitorPrincipalId !== principalId).map((c) => c.id)
+  const dtos = await Promise.all(
+    rows.map((c) =>
+      c.visitorPrincipalId === principalId
+        ? conversationToDTO(c, 'visitor')
+        : participantConversationToDTO(c, principalId)
+    )
+  )
+  return { conversations: dtos, sharedIds }
+}
+
 /**
  * Total unread across ALL of a visitor's conversations — the aggregate the
  * messenger launcher/tab badge needs (`conversationToDTO`'s per-thread
@@ -803,8 +913,47 @@ export async function listConversationsForVisitor(
  * agent messages newer than each conversation's visitor read watermark, summed.
  * A never-read conversation (null watermark) counts all its agent messages,
  * mirroring `unreadCountFor`; internal notes and deleted rows never count.
+ * Shared ticket threads the customer was given count from their own
+ * participant watermark.
  */
 export async function countVisitorUnreadMessages(visitorPrincipalId: PrincipalId): Promise<number> {
+  const [owned, shared] = await Promise.all([
+    countOwnedUnreadMessages(visitorPrincipalId),
+    countSharedUnreadMessages(visitorPrincipalId),
+  ])
+  return owned + shared
+}
+
+/** The shared ticket threads' part of the badge: agent messages newer than
+ *  each participant row's own watermark. */
+async function countSharedUnreadMessages(principalId: PrincipalId): Promise<number> {
+  const [row] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(conversationMessages)
+    .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))
+    .innerJoin(
+      conversationParticipants,
+      and(
+        eq(conversationParticipants.conversationId, conversations.id),
+        eq(conversationParticipants.principalId, principalId)
+      )
+    )
+    .where(
+      and(
+        participantThreadAccessSql(principalId),
+        eq(conversationMessages.senderType, 'agent'),
+        eq(conversationMessages.isInternal, false),
+        isNull(conversationMessages.deletedAt),
+        or(
+          isNull(conversationParticipants.lastReadAt),
+          gt(conversationMessages.createdAt, conversationParticipants.lastReadAt)
+        )
+      )
+    )
+  return row?.c ?? 0
+}
+
+async function countOwnedUnreadMessages(visitorPrincipalId: PrincipalId): Promise<number> {
   const [row] = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(conversationMessages)
@@ -1180,6 +1329,15 @@ export interface ConversationListFilter {
    *  standalone ticket rows from the ticket branch. Never set by the plain
    *  conversation scopes (their rows are unrestricted). */
   hasLinkedCustomerTicket?: boolean
+  /** The inbox's Due date filter, read through the pair edge: only
+   *  conversations whose linked live customer ticket is overdue, due within
+   *  24 hours, or has no due date. A customer ticket lists as its
+   *  conversation's row (the one-row rule), so this is where most tickets
+   *  meet the filter. */
+  linkedTicketDue?: TicketDueFilter
+  /** The inbox's Watching view: only pairs whose customer ticket this
+   *  principal watches (see `pairTicketWatchedBySql`). */
+  pairTicketWatchedBy?: PrincipalId
   /** "Spam" view: only conversations ended as spam. Spam-ended threads are
    *  excluded from every other list (the triage facets, queues, and searches
    *  must never surface them) — this flag is the one opt-in that lists them. */
@@ -1202,7 +1360,13 @@ export interface ConversationListFilter {
  * unit-testable without a database.
  */
 export interface SortDescriptor {
-  primary: 'lastMessageAt' | 'createdAt' | 'waitingSince' | 'priorityRank' | 'slaDueAt'
+  primary:
+    | 'lastMessageAt'
+    | 'createdAt'
+    | 'waitingSince'
+    | 'priorityRank'
+    | 'slaDueAt'
+    | 'linkedTicketDueAt'
   direction: 'asc' | 'desc'
 }
 
@@ -1218,6 +1382,8 @@ export function sortDescriptorFor(sort: ConversationSort = 'recent'): SortDescri
       return { primary: 'priorityRank', direction: 'desc' }
     case 'sla':
       return { primary: 'slaDueAt', direction: 'asc' }
+    case 'due':
+      return { primary: 'linkedTicketDueAt', direction: 'asc' }
     // 'relevance' has no descriptor of its own: it orders on a score computed
     // from the search term, not on a column, and degrades to most-recent
     // activity on a list that carries no term to score against.
@@ -1262,6 +1428,11 @@ function orderByForSort(sort: ConversationSort) {
     case 'slaDueAt':
       // Soonest breach first; rows with no active SLA clock sit at the end.
       return [sql`${slaDueExpr} ASC NULLS LAST`, asc(conversations.id)]
+    case 'linkedTicketDueAt':
+      // Soonest-due linked ticket first; conversations with no dated ticket
+      // (no link, a deleted ticket, or no date) sit at the end. A correlated
+      // subquery per row, like the SLA sort.
+      return [sql`${linkedCustomerTicketDueAtSql()} ASC NULLS LAST`, asc(conversations.id)]
     case 'createdAt':
       return [
         d.direction === 'asc' ? asc(conversations.createdAt) : desc(conversations.createdAt),
@@ -1313,8 +1484,14 @@ function relevanceCursorCondition(relevance: SQL<number>, score: number, c: Conv
  * pair, most-significant-first. The cursor is re-resolved from the DB (never
  * a client string) so ties + sub-ms precision are exact. Covers every sort,
  * including the waiting/SLA NULLS-LAST boundary and the priority-rank CASE.
+ * `linkedTicketDueAt` is the cursor row's linked ticket due date, re-read
+ * with the cursor (only the 'due' sort reads it).
  */
-function cursorConditionForSort(sort: ConversationSort, c: Conversation) {
+function cursorConditionForSort(
+  sort: ConversationSort,
+  c: Conversation,
+  linkedTicketDueAt: Date | null = null
+) {
   const d = sortDescriptorFor(sort)
   switch (d.primary) {
     case 'priorityRank': {
@@ -1362,6 +1539,22 @@ function cursorConditionForSort(sort: ConversationSort, c: Conversation) {
           }
         : { equal: sql`${slaDueExpr} IS NULL`, strict: undefined }
       return buildKeysetCondition([slaCol, ascColumn(conversations.id, c.id)])
+    }
+    case 'linkedTicketDueAt': {
+      // Same NULLS-LAST boundary shape as the SLA sort, against the linked
+      // ticket's due date re-read alongside the cursor row.
+      const linkedTicketDueExpr = linkedCustomerTicketDueAtSql()
+      const due = linkedTicketDueAt?.toISOString()
+      const dueCol: KeysetColumn = due
+        ? {
+            equal: sql`${linkedTicketDueExpr} = ${due}::timestamptz`,
+            strict: or(
+              sql`${linkedTicketDueExpr} > ${due}::timestamptz`,
+              sql`${linkedTicketDueExpr} IS NULL`
+            )!,
+          }
+        : { equal: sql`${linkedTicketDueExpr} IS NULL`, strict: undefined }
+      return buildKeysetCondition([dueCol, ascColumn(conversations.id, c.id)])
     }
     case 'createdAt': {
       const col =
@@ -1607,18 +1800,25 @@ export async function listConversationsForAgent(
   // ordering columns (which vary per sort) + ties are handled deterministically
   // (mirrors listMessages). An unknown id → first page, and a malformed cursor
   // can no longer reach a date parse / 500 the list. Relevance-ordered pages
-  // additionally need the cursor row's score, recomputed by the same expression.
+  // additionally need the cursor row's score, recomputed by the same expression,
+  // and 'due'-ordered pages the cursor row's linked ticket due date.
   let cursor: Conversation | null = null
   let cursorRelevance = 0
+  let cursorLinkedTicketDueAt: Date | null = null
   if (filter.before) {
-    const [row] = await db
-      .select({ row: conversations, relevance: relevance ?? sql<number>`0::float8` })
-      .from(conversations)
-      .where(eq(conversations.id, filter.before as ConversationId))
-      .limit(1)
+    const cursorId = filter.before as ConversationId
+    const [[row], linkedTicketDueAt] = await Promise.all([
+      db
+        .select({ row: conversations, relevance: relevance ?? sql<number>`0::float8` })
+        .from(conversations)
+        .where(eq(conversations.id, cursorId))
+        .limit(1),
+      sort === 'due' ? loadLinkedCustomerTicketDueAt(cursorId) : Promise.resolve(null),
+    ])
     if (row) {
       cursor = row.row
       cursorRelevance = Number(row.relevance)
+      cursorLinkedTicketDueAt = linkedTicketDueAt
     }
   }
 
@@ -1807,12 +2007,18 @@ export async function listConversationsForAgent(
         // can't keep listing. The shared fragment keeps this view and the
         // inbox nav's pair badge in lockstep.
         filter.hasLinkedCustomerTicket ? hasLinkedCustomerTicketSql() : undefined,
+        // The Due date filter, through the pair edge to the linked customer
+        // ticket (see `linkedCustomerTicketDueSql`).
+        filter.linkedTicketDue
+          ? linkedCustomerTicketDueSql(filter.linkedTicketDue, new Date())
+          : undefined,
+        filter.pairTicketWatchedBy ? pairTicketWatchedBySql(filter.pairTicketWatchedBy) : undefined,
         // Keyset comparison for the active order (re-resolved cursor row). id is
         // always the final tiebreak so a page boundary never dupes or skips.
         cursor
           ? relevance
             ? relevanceCursorCondition(relevance, cursorRelevance, cursor)
-            : cursorConditionForSort(sort, cursor)
+            : cursorConditionForSort(sort, cursor, cursorLinkedTicketDueAt)
           : undefined
       )
     )
