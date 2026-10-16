@@ -821,6 +821,19 @@ describe('ticket actions (set_ticket_status / convert_to_ticket)', () => {
     ).toBe(false)
   })
 
+  it('accepts add_ticket_watcher with a teammate, rejects it without one', () => {
+    expect(
+      workflowGraphSchema.safeParse(
+        graphWithAction({ type: 'add_ticket_watcher', principalId: 'principal_1' })
+      ).success
+    ).toBe(true)
+    expect(
+      workflowGraphSchema.safeParse(
+        graphWithAction({ type: 'add_ticket_watcher', principalId: '' })
+      ).success
+    ).toBe(false)
+  })
+
   it('accepts convert_to_ticket with no settings', () => {
     expect(
       workflowGraphSchema.safeParse(graphWithAction({ type: 'convert_to_ticket' })).success

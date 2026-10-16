@@ -9,6 +9,7 @@ import {
   posts,
   postStatuses,
   postTagAssignments,
+  postSubscriptions,
   userSegments,
   principal,
   user,
@@ -82,6 +83,7 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
     updatedBefore,
     showDeleted,
     excludeTest,
+    followerId,
   } = params
 
   const conditions = []
@@ -115,6 +117,13 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
     } else if (statusIds && statusIds.length > 0) {
       conditions.push(inArray(posts.statusId, statusIds))
     }
+  }
+
+  if (followerId) {
+    // A follow on a post merged into this one follows this thread too.
+    conditions.push(
+      sql`EXISTS (SELECT 1 FROM ${postSubscriptions} fs WHERE fs.principal_id = ${toUuid(followerId)}::uuid AND (fs.post_id = ${posts.id} OR fs.post_id IN (SELECT m.id FROM ${posts} m WHERE m.canonical_post_id = ${posts.id} AND m.deleted_at IS NULL)))`
+    )
   }
 
   if (ownerId === null) {
