@@ -26,14 +26,13 @@ vi.mock('../index', async () => {
 
 const mockDeleteWhere = vi.fn().mockResolvedValue(undefined)
 const mockDbDelete = vi.fn(() => ({ where: mockDeleteWhere }))
-const mockEq = vi.fn((col: unknown, val: unknown) => ({ col, val }))
+const mockInArray = vi.fn((col: unknown, vals: unknown) => ({ op: 'inArray', col, vals }))
 const mockVerificationTable = { identifier: 'verification.identifier' }
 
 vi.mock('@/lib/server/db', () => ({
   db: { delete: mockDbDelete },
   verification: mockVerificationTable,
-  eq: mockEq,
-  inArray: vi.fn((col: unknown, vals: unknown) => ({ op: 'inArray', col, vals })),
+  inArray: mockInArray,
 }))
 
 const { mintMagicLinkUrl, revokeMagicLinkToken, revokeMagicLinkTokens } =
@@ -66,10 +65,9 @@ describe('mintMagicLinkUrl', () => {
       value: string
       expiresAt: Date
     }
-    expect(typeof args.identifier).toBe('string')
-    expect(args.identifier.length).toBeGreaterThan(16)
-    const parsed = JSON.parse(args.value)
-    expect(parsed.email).toBe('a@b.com')
+    // Better-Auth's verifier looks up `magic-link:<token>` and parses a strict record.
+    expect(args.identifier).toMatch(/^magic-link:[A-Za-z]{32}$/)
+    expect(JSON.parse(args.value)).toEqual({ type: 'magic-link', email: 'a@b.com' })
     expect(args.expiresAt).toBeInstanceOf(Date)
   })
 
@@ -95,19 +93,22 @@ describe('mintMagicLinkUrl', () => {
     })
     expect(url).toMatch(/^https:\/\/acme\.test\/verify-magic-link\?token=/)
     expect(url).toContain('callbackURL=')
-    // The returned token is the verification identifier and the one in the URL.
-    expect(token).toBe(mockCreateVerificationValue.mock.calls[0][0].identifier)
+    // The returned token is the bare token, in the URL and inside the prefixed identifier.
+    expect(mockCreateVerificationValue.mock.calls[0][0].identifier).toBe(`magic-link:${token}`)
     expect(url).toContain(`token=${token}`)
   })
 })
 
 describe('revokeMagicLinkToken', () => {
-  it('deletes the verification row whose identifier is the token', async () => {
+  it('deletes the prefixed row and the bare row a pre-prefix mint may have written', async () => {
     await revokeMagicLinkToken('tok_abc')
 
     expect(mockDbDelete).toHaveBeenCalledTimes(1)
     expect(mockDbDelete).toHaveBeenCalledWith(mockVerificationTable)
-    expect(mockEq).toHaveBeenCalledWith(mockVerificationTable.identifier, 'tok_abc')
+    expect(mockInArray).toHaveBeenCalledWith(mockVerificationTable.identifier, [
+      'magic-link:tok_abc',
+      'tok_abc',
+    ])
     expect(mockDeleteWhere).toHaveBeenCalled()
   })
 
@@ -122,6 +123,12 @@ describe('revokeMagicLinkTokens', () => {
     await revokeMagicLinkTokens(['tok_a', 'tok_b'])
     expect(mockDbDelete).toHaveBeenCalledTimes(1)
     expect(mockDbDelete).toHaveBeenCalledWith(mockVerificationTable)
+    expect(mockInArray).toHaveBeenCalledWith(mockVerificationTable.identifier, [
+      'magic-link:tok_a',
+      'tok_a',
+      'magic-link:tok_b',
+      'tok_b',
+    ])
     expect(mockDeleteWhere).toHaveBeenCalled()
   })
 
