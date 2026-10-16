@@ -321,25 +321,23 @@ export type PostMergeSuggestionId = TypeId<'post_merge_sug'>
 // Help Center Entity IDs
 // ============================================
 
-/** Help center category ID - e.g., kb_category_01h455vb4pex5vsknk084sn02q */
-export type KbCategoryId = TypeId<'kb_category'>
+/** Help center category ID - e.g., category_01h455vb4pex5vsknk084sn02q */
+export type CategoryId = TypeId<'category'>
 
 /** Help center article ID - e.g., article_01h455vb4pex5vsknk084sn02q */
 export type ArticleId = TypeId<'article'>
-/** @deprecated Prefer `ArticleId`. Same type; inbound `kb_article_…` is rewritten. */
-export type KbArticleId = ArticleId
 
-/** Article feedback ID - e.g., kb_article_feedback_01h455vb4pex5vsknk084sn02q */
-export type KbArticleFeedbackId = TypeId<'kb_article_feedback'>
+/** Article feedback ID - e.g., article_feedback_01h455vb4pex5vsknk084sn02q */
+export type ArticleFeedbackId = TypeId<'article_feedback'>
 
 /** Help center redirect rule ID - e.g., hc_redirect_rule_01h455vb4pex5vsknk084sn02q */
 export type HcRedirectRuleId = TypeId<'hc_redirect_rule'>
 
-/** Article translation ID - e.g., kb_article_translation_01h455vb4pex5vsknk084sn02q */
-export type KbArticleTranslationId = TypeId<'kb_article_translation'>
+/** Article translation ID - e.g., article_translation_01h455vb4pex5vsknk084sn02q */
+export type ArticleTranslationId = TypeId<'article_translation'>
 
-/** Category translation ID - e.g., kb_category_translation_01h455vb4pex5vsknk084sn02q */
-export type KbCategoryTranslationId = TypeId<'kb_category_translation'>
+/** Category translation ID - e.g., category_translation_01h455vb4pex5vsknk084sn02q */
+export type CategoryTranslationId = TypeId<'category_translation'>
 
 // ============================================
 // Auth Entity IDs (Better-auth)
@@ -537,12 +535,12 @@ export interface EntityIdMap {
   event: EvtId
   job: JobId
   app: AppId
-  kb_category: KbCategoryId
-  kb_article: KbArticleId
-  kb_article_feedback: KbArticleFeedbackId
+  category: CategoryId
+  article: ArticleId
+  article_feedback: ArticleFeedbackId
   hc_redirect_rule: HcRedirectRuleId
-  kb_article_translation: KbArticleTranslationId
-  kb_category_translation: KbCategoryTranslationId
+  article_translation: ArticleTranslationId
+  category_translation: CategoryTranslationId
 }
 
 /**

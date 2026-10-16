@@ -11,7 +11,11 @@ import { typeIdSchema } from '../zod'
  * derived from ID_PREFIX_ALIASES so dropping an alias fails here.
  */
 const RETIRED_PREFIXES: Record<string, keyof typeof ID_PREFIXES> = {
-  kb_article: 'kb_article',
+  kb_article: 'article',
+  kb_category: 'category',
+  kb_article_feedback: 'article_feedback',
+  kb_article_translation: 'article_translation',
+  kb_category_translation: 'category_translation',
   status: 'post_status',
   tag: 'post_tag',
   comment: 'post_comment',
@@ -25,8 +29,6 @@ const RETIRED_PREFIXES: Record<string, keyof typeof ID_PREFIXES> = {
   chat_msg: 'conversation_message',
   chat_tag: 'conversation_tag',
   chat_msg_mention: 'conversation_message_mention',
-  category: 'kb_category',
-  article_feedback: 'kb_article_feedback',
 }
 
 describe('retired ID prefixes', () => {

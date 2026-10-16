@@ -20,7 +20,7 @@ vi.mock('@/lib/server/db', async (original) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 vi.mock('@/lib/server/domains/help-center/help-center-embedding.service', () => ({
-  generateKbQueryEmbedding: async (actualQuery: string) => {
+  generateHelpCenterQueryEmbedding: async (actualQuery: string) => {
     expect(actualQuery).toBe(query)
     return null
   },
@@ -116,7 +116,7 @@ describe('workspace knowledge access', () => {
     const { openWorkspaceMcp } = await import('../mcp-workspace-tools')
     const { makeAssistantToolContext } = await import('../assistant.toolspec')
     const { assembleAssistantToolset } = await import('../assistant.tools')
-    const categoryId = createId('kb_category')
+    const categoryId = createId('category')
     const articleSeedId = generateId('article')
     const documentId = createId('assistant_document')
     const snippetId = createId('assistant_snippet')

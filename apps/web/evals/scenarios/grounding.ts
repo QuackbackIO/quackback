@@ -35,7 +35,7 @@ export const groundingScenarios: Scenario[] = [
     title: 'Grounded answer with correct citations',
     roles: ['customer_support', 'copilot_qa'],
     surface: 'widget',
-    fixtures: { kbArticles: [REFUND_ARTICLE] },
+    fixtures: { helpCenterArticles: [REFUND_ARTICLE] },
     prompt: 'What is your refund policy?',
     structural: [
       { type: 'status', oneOf: ['answered'] },
@@ -51,7 +51,7 @@ export const groundingScenarios: Scenario[] = [
     roles: ['customer_support'],
     surface: 'widget',
     // Only an unrelated article exists, so retrieval surfaces nothing relevant.
-    fixtures: { kbArticles: [OFFICE_HOURS_ARTICLE] },
+    fixtures: { helpCenterArticles: [OFFICE_HOURS_ARTICLE] },
     prompt:
       'Do you offer a hardware trade-in program where I can send back an old industrial forklift for credit?',
     structural: [
@@ -65,7 +65,7 @@ export const groundingScenarios: Scenario[] = [
     title: 'Search-budget stop — never loops to the iteration cap',
     roles: ['customer_support'],
     surface: 'widget',
-    fixtures: { kbArticles: [OFFICE_HOURS_ARTICLE] },
+    fixtures: { helpCenterArticles: [OFFICE_HOURS_ARTICLE] },
     prompt:
       'What is the exact SLA uptime percentage guaranteed in the enterprise contract, and the penalty schedule for each breach tier?',
     structural: [
@@ -78,7 +78,7 @@ export const groundingScenarios: Scenario[] = [
     title: 'Paraphrase — semantic match with little keyword overlap',
     roles: ['customer_support'],
     surface: 'widget',
-    fixtures: { kbArticles: [EXPORT_ARTICLE] },
+    fixtures: { helpCenterArticles: [EXPORT_ARTICLE] },
     prompt: 'How can I get an offline copy of everything I have saved so far?',
     structural: [
       { type: 'status', oneOf: ['answered'] },
@@ -92,7 +92,7 @@ export const groundingScenarios: Scenario[] = [
     title: 'Multi-turn follow-up — answer depends on earlier thread context',
     roles: ['customer_support'],
     surface: 'widget',
-    fixtures: { kbArticles: [REFUND_ARTICLE] },
+    fixtures: { helpCenterArticles: [REFUND_ARTICLE] },
     thread: [
       { sender: 'customer', content: 'I bought a subscription three weeks ago.' },
       {

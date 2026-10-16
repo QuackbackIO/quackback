@@ -63,7 +63,7 @@ describe('useAskAi', () => {
       kind: 'grounded',
       answer: 'A.',
       // The model cited an id that never appeared in the snapshot join.
-      sources: [{ articleId: 'article_1' }, { articleId: 'kb_ghost' }],
+      sources: [{ articleId: 'article_1' }, { articleId: 'article_ghost' }],
     }
     stubAguiFetch(
       aguiRun({ middle: [snapshotChunk([META]), ...structuredDeltas(answer)], result: answer })

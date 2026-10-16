@@ -9,7 +9,7 @@
  * An ordinary (never parked) auto-translate keeps its existing behaviour.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createId, type KbArticleId, type PrincipalId, type UserId } from '@quackback/ids'
+import { createId, type ArticleId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   and,
@@ -129,18 +129,18 @@ function job(payload: Record<string, unknown>): ClaimedJob {
   }
 }
 
-async function seedArticle(): Promise<KbArticleId> {
+async function seedArticle(): Promise<ArticleId> {
   const userId = createId('user') as UserId
   await testDb.insert(user).values({ id: userId, name: 'Editor', email: `${userId}@example.com` })
   const principalId = createId('principal') as PrincipalId
   await testDb
     .insert(principal)
     .values({ id: principalId, userId, role: 'admin', type: 'user', createdAt: new Date() })
-  const categoryId = createId('kb_category')
+  const categoryId = createId('category')
   await testDb
     .insert(helpCenterCategories)
     .values({ id: categoryId as never, slug: `c-${categoryId}`, name: 'General' })
-  const articleId = createId('kb_article') as KbArticleId
+  const articleId = createId('article') as ArticleId
   await testDb.insert(helpCenterArticles).values({
     id: articleId,
     categoryId: categoryId as never,
@@ -161,7 +161,7 @@ async function pendingFor(articleId: string) {
   return Array.from(result as unknown as Iterable<{ payload: Record<string, unknown> }>)
 }
 
-async function translation(articleId: KbArticleId, locale: string) {
+async function translation(articleId: ArticleId, locale: string) {
   const [row] = await testDb
     .select()
     .from(helpCenterArticleTranslations)
@@ -174,7 +174,7 @@ async function translation(articleId: KbArticleId, locale: string) {
   return row
 }
 
-const manual = (articleId: KbArticleId) => ({
+const manual = (articleId: ArticleId) => ({
   articleId,
   locale: 'de',
   title: 'Erstattungen',
@@ -192,7 +192,7 @@ describe.skipIf(!fixture.available)('parked auto-translate never replaces manual
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
-  async function park(articleId: KbArticleId, locale = 'de') {
+  async function park(articleId: ArticleId, locale = 'de') {
     await runHelpCenterTranslate(job({ type: 'translate-article', articleId, locale }))
     expect(await listPausedTranslationLocales(articleId)).toContain(locale)
   }
@@ -303,7 +303,7 @@ describe.skipIf(!fixture.available)('parked auto-translate never replaces manual
     expect((await translation(articleId, 'de'))?.content).toBe('Von Hand geschrieben.')
   })
 
-  async function releaseAndRun(articleId: KbArticleId) {
+  async function releaseAndRun(articleId: ArticleId) {
     state.exhausted = false
     await runHelpCenterTranslateResume(job({}))
     for (const { payload } of await pendingFor(articleId)) {

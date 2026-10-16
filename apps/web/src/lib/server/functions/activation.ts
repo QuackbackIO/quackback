@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import type { BoardId, KbArticleId } from '@quackback/ids'
+import type { BoardId, ArticleId } from '@quackback/ids'
 import {
   db,
   and,
@@ -134,7 +134,7 @@ export const getActivationBridgeContextFn = createServerFn({ method: 'GET' }).ha
   } else if (startingPoint.resourceType === 'article' && startingPoint.resourceId) {
     const article = await db.query.helpCenterArticles.findFirst({
       where: and(
-        eq(helpCenterArticles.id, startingPoint.resourceId as KbArticleId),
+        eq(helpCenterArticles.id, startingPoint.resourceId as ArticleId),
         isNull(helpCenterArticles.deletedAt)
       ),
       columns: { title: true },

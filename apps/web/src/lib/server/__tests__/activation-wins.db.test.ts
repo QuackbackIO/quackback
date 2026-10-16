@@ -98,7 +98,7 @@ it('counts a helpful vote from someone outside the team as the help center win',
   const owner = await person('admin')
   const [category] = await testDb
     .insert(helpCenterCategories)
-    .values({ name: 'General', slug: `general-${createId('kb_category').slice(-6)}` })
+    .values({ name: 'General', slug: `general-${createId('category').slice(-6)}` })
     .returning()
   const [article] = await testDb
     .insert(helpCenterArticles)
@@ -136,14 +136,12 @@ it('counts a helpful vote from someone outside the team as the help center win',
   // Publishing the article is the team's own act, not the win.
   expect(await detectFirstWin(state)).toEqual({ reached: false, reachedAt: null })
   // A signed-out visitor's vote has no principal: still someone outside the team.
-  await testDb
-    .insert(helpCenterArticleFeedback)
-    .values({
-      articleId: article!.id,
-      principalId: null,
-      helpful: true,
-      createdAt: new Date('2026-03-01'),
-    })
+  await testDb.insert(helpCenterArticleFeedback).values({
+    articleId: article!.id,
+    principalId: null,
+    helpful: true,
+    createdAt: new Date('2026-03-01'),
+  })
   expect(await detectFirstWin(state)).toEqual({
     reached: true,
     reachedAt: '2026-03-01T00:00:00.000Z',
@@ -155,7 +153,7 @@ it('counts a helpful vote on a deleted article as no win', async () => {
   const owner = await person('admin')
   const [category] = await testDb
     .insert(helpCenterCategories)
-    .values({ name: 'General', slug: `general-${createId('kb_category').slice(-6)}` })
+    .values({ name: 'General', slug: `general-${createId('category').slice(-6)}` })
     .returning()
   const [article] = await testDb
     .insert(helpCenterArticles)

@@ -44,7 +44,7 @@ import {
   deleteCategoryTranslationFn,
 } from '@/lib/server/functions/help-center-translations'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
-import type { KbCategoryId } from '@quackback/ids'
+import type { CategoryId } from '@quackback/ids'
 import type { SupportedLocale } from '@/lib/shared/i18n'
 
 const LOCALE_LABELS: Record<string, string> = {
@@ -64,7 +64,7 @@ const LOCALE_LABELS: Record<string, string> = {
 
 /** Compact per-locale name/description editor (domains/languages §2). No
  *  draft/published status for categories -- a non-empty name IS translated. */
-function CategoryTranslationsSection({ categoryId }: { categoryId: KbCategoryId }) {
+function CategoryTranslationsSection({ categoryId }: { categoryId: CategoryId }) {
   const configQuery = useQuery(settingsQueries.helpCenterConfig())
   const additionalLocales = configQuery.data?.locales?.additional ?? []
   const [locale, setLocale] = useState<string | null>(null)
@@ -227,16 +227,16 @@ interface CategoryFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   initialValues?: {
-    id: KbCategoryId
+    id: CategoryId
     name: string
     description: string | null
     icon: string | null
     isPublic: boolean
     segmentIds: string[]
-    parentId: KbCategoryId | null
+    parentId: CategoryId | null
   }
   /** Pre-selected parent when creating a new category (ignored if initialValues is set). */
-  defaultParentId?: KbCategoryId | null
+  defaultParentId?: CategoryId | null
   onCreated?: (categoryId: string) => void
 }
 
@@ -256,7 +256,7 @@ export function CategoryFormDialog({
   const [description, setDescription] = useState('')
   const [isPublic, setIsPublic] = useState(true)
   const [segmentIds, setSegmentIds] = useState<string[]>([])
-  const [parentId, setParentId] = useState<KbCategoryId | null>(null)
+  const [parentId, setParentId] = useState<CategoryId | null>(null)
   const [iconPickerOpen, setIconPickerOpen] = useState(false)
   const [iconSearch, setIconSearch] = useState('')
 
@@ -420,7 +420,7 @@ export function CategoryFormDialog({
             <Select
               value={parentId ?? '__none__'}
               onValueChange={(value) =>
-                setParentId(value === '__none__' ? null : (value as KbCategoryId))
+                setParentId(value === '__none__' ? null : (value as CategoryId))
               }
             >
               <SelectTrigger id="category-parent">

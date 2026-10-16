@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 import de from '@/locales/de.json'
 
 const statuses = vi.hoisted(() => ({
@@ -39,7 +39,7 @@ function renderDialog(locale: string, messages: Record<string, string>) {
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale={locale} messages={messages}>
         <ArticleTranslationsDialog
-          articleId={'article_1' as KbArticleId}
+          articleId={'article_1' as ArticleId}
           open
           onOpenChange={() => {}}
         />

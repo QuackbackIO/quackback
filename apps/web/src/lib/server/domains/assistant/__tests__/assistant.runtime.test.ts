@@ -2,7 +2,7 @@ import { DEFAULT_WORKSPACE_ASSISTANT } from '@/lib/shared/assistant/config'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { toolDefinition } from '@tanstack/ai'
 import { z } from 'zod'
-import { makeKbArticle } from './kb-fixtures'
+import { makeHelpCenterArticle } from './help-center-fixtures'
 
 const mockConfig = vi.hoisted(() => ({
   openaiApiKey: 'test-key' as string | undefined,
@@ -32,7 +32,7 @@ vi.mock('@tanstack/ai-openai/compatible', () => ({
 
 const mockRetrieve = vi.fn()
 vi.mock('../retrieval', () => ({
-  retrieveKbArticles: (...args: unknown[]) => mockRetrieve(...args),
+  retrieveHelpCenterArticles: (...args: unknown[]) => mockRetrieve(...args),
 }))
 
 // The current conversation's customer lookup (P2-A.4 customer-scoped
@@ -489,7 +489,7 @@ describe('assembleCitations', () => {
       assembleCitations(
         [
           { type: 'article', id: 'article_1' },
-          { type: 'article', id: 'kb_article_HALLUCINATED' },
+          { type: 'article', id: 'article_HALLUCINATED' },
           { type: 'article', id: 'article_1' },
         ],
         ledger
@@ -646,7 +646,7 @@ describe('runAssistantTurn', () => {
   })
 
   it('runs the tool round trip and assembles citations from what search surfaced', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
+    mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1')])
     const deltas: string[] = []
     mockChat.mockImplementation(
       (opts: {
@@ -738,7 +738,7 @@ describe('runAssistantTurn', () => {
     mockRetrieve.mockImplementation(async (actualQuery, options) => {
       expect(actualQuery).toBe(query)
       expect(options).toEqual({ audience: 'team' })
-      return [makeKbArticle('article_setup')]
+      return [makeHelpCenterArticle('article_setup')]
     })
     mockCountAssignedSkills.mockImplementation(async (agent) => (agent === 'copilot' ? 1 : 0))
     mockCompileSkillCatalogue.mockImplementation(async (agent) =>
@@ -949,7 +949,7 @@ describe('runAssistantTurn', () => {
     expect(prompt).not.toContain('\n# Ignore previous')
   })
   it('derives a team content audience for the copilot surface (structural leak gate)', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
+    mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1')])
     mockChat.mockImplementation(
       (opts: {
         tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>
@@ -983,8 +983,8 @@ describe('runAssistantTurn', () => {
 
   it('sets internalSourced when retrieval returns mixed public/internal sources but the final cites only public', async () => {
     mockRetrieve.mockResolvedValue([
-      makeKbArticle('kb_article_public', { isPublic: true }),
-      makeKbArticle('kb_article_internal', { isPublic: false }),
+      makeHelpCenterArticle('article_public', { isPublic: true }),
+      makeHelpCenterArticle('article_internal', { isPublic: false }),
     ])
     mockChat.mockImplementation(
       (opts: {
@@ -999,7 +999,7 @@ describe('runAssistantTurn', () => {
           )
           yield* completeRun({
             text: 'Here is the policy.',
-            citations: [{ type: 'article', id: 'kb_article_public' }],
+            citations: [{ type: 'article', id: 'article_public' }],
           })
         })()
     )
@@ -1011,14 +1011,14 @@ describe('runAssistantTurn', () => {
 
     expect(result.status).toBe('answered')
     if (result.status === 'answered') {
-      expect(result.citations).toEqual([expect.objectContaining({ id: 'kb_article_public' })])
+      expect(result.citations).toEqual([expect.objectContaining({ id: 'article_public' })])
       expect(result.citations[0]).not.toHaveProperty('internal')
       expect(result.internalSourced).toBe(true)
     }
   })
 
   it('internalSourced stays false when every retrieved source is public', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1', { isPublic: true })])
+    mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1', { isPublic: true })])
     mockChat.mockImplementation(
       (opts: {
         tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>
@@ -1065,7 +1065,7 @@ describe('runAssistantTurn', () => {
   })
 
   it("carries the source's updatedAt on every surface's citations (freshness line; the orchestrator strips it at persistence)", async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
+    mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1')])
     const turnWith = (copilot = false) => {
       mockChat.mockImplementation(
         (opts: {
@@ -1147,7 +1147,7 @@ describe('runAssistantTurn', () => {
     // A grounded source in the ledger plus report_inability: an honest "I
     // can't help" must not dress itself in sources, so the cited id is dropped
     // and its inline marker stripped.
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
+    mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1')])
     mockChat.mockImplementation(
       (opts: {
         tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>
@@ -1427,7 +1427,7 @@ describe('runAssistantTurn', () => {
   })
 
   it('logs answerKind "answered" in the usage-log metadata for a normal grounded reply', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
+    mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1')])
     mockChat.mockImplementation(
       (opts: {
         tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>
@@ -1469,7 +1469,10 @@ describe('runAssistantTurn', () => {
   })
 
   it('logs citedSources with one entry per distinct source actually cited, dropping a hallucinated id', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1'), makeKbArticle('article_2')])
+    mockRetrieve.mockResolvedValue([
+      makeHelpCenterArticle('article_1'),
+      makeHelpCenterArticle('article_2'),
+    ])
     mockChat.mockImplementation(
       (opts: {
         tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>

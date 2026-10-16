@@ -1,11 +1,11 @@
 /**
- * Debounced help-center article search against /api/widget/kb-search, with a
+ * Debounced help-center article search against /api/widget/help-center-search, with a
  * small per-mount result cache and in-flight abort. Shared by the widget
  * Help tab and the /hc hero search.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-export interface KbSearchArticle {
+export interface HelpCenterSearchArticle {
   id: string
   urlId: number
   slug: string
@@ -17,7 +17,7 @@ export interface KbSearchArticle {
 const DEBOUNCE_MS = 300
 const CACHE_SIZE = 30
 
-export function useKbSearch({
+export function useHelpCenterSearch({
   query,
   limit,
   locale,
@@ -37,12 +37,12 @@ export function useKbSearch({
   getHeaders?: () => HeadersInit
   /** Fired with the articles of each completed search (cache hits included);
    *  not fired when the query is blank. */
-  onResults?: (articles: KbSearchArticle[]) => void
-}): { results: KbSearchArticle[]; isSearching: boolean } {
-  const [results, setResults] = useState<KbSearchArticle[]>([])
+  onResults?: (articles: HelpCenterSearchArticle[]) => void
+}): { results: HelpCenterSearchArticle[]; isSearching: boolean } {
+  const [results, setResults] = useState<HelpCenterSearchArticle[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
-  const cacheRef = useRef(new Map<string, KbSearchArticle[]>())
+  const cacheRef = useRef(new Map<string, HelpCenterSearchArticle[]>())
   // Latest callback without retriggering the debounce effect.
   const onResultsRef = useRef(onResults)
   onResultsRef.current = onResults
@@ -79,14 +79,14 @@ export function useKbSearch({
       try {
         const params = new URLSearchParams({ q, limit: String(limit) })
         if (loc) params.set('locale', loc)
-        const res = await fetch(`/api/widget/kb-search?${params.toString()}`, {
+        const res = await fetch(`/api/widget/help-center-search?${params.toString()}`, {
           signal: controller.signal,
           headers: getHeadersRef.current?.(),
         })
         if (!res.ok) return
         if (version !== sessionVersionRef.current) return
         const data = await res.json()
-        const articles: KbSearchArticle[] = data.data?.articles ?? []
+        const articles: HelpCenterSearchArticle[] = data.data?.articles ?? []
         cacheRef.current.set(cacheKey, articles)
         setResults(articles)
         onResultsRef.current?.(articles)

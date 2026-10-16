@@ -6,7 +6,7 @@ Regenerate with `bunx vitest run apps/web/src/lib/server/policy/migration-contra
 
 ## Summary
 
-Migrations scanned: 282. Migrations with destructive DDL: 39.
+Migrations scanned: 283. Migrations with destructive DDL: 40.
 
 | Kind | Occurrences |
 | --- | --- |
@@ -14,7 +14,7 @@ Migrations scanned: 282. Migrations with destructive DDL: 39.
 | DROP TABLE | 21 |
 | DROP CONSTRAINT | 18 |
 | RENAME COLUMN | 15 |
-| RENAME TO (table) | 14 |
+| RENAME TO (table) | 20 |
 | SET NOT NULL | 4 |
 | ALTER COLUMN TYPE | 2 |
 | DROP DEFAULT | 1 |
@@ -62,6 +62,7 @@ Migrations scanned: 282. Migrations with destructive DDL: 39.
 | 0288_kb_translations_dutch_search.sql | DROP COLUMN kb_article_translations.search_vector | annotated (safe-after 0.13.2) |
 | 0294_workspace_copilot.sql | DROP CONSTRAINT conversation_messages.conversation_messages_parent_check | annotated (safe-after 0.13.2) |
 | 0302_approvals_foundation.sql | DROP CONSTRAINT assistant_pending_actions.assistant_pending_actions_parent_check | annotated (safe-after 0.14.1) |
+| 0305_help_center_names.sql | RENAME TO (table) kb_categories -> help_center_categories; RENAME TO (table) kb_articles -> help_center_articles; RENAME TO (table) kb_article_feedback -> help_center_article_feedback; RENAME TO (table) kb_search_queries -> help_center_search_queries; RENAME TO (table) kb_article_translations -> help_center_article_translations; RENAME TO (table) kb_category_translations -> help_center_category_translations | annotated (safe-after 0.14.1) |
 
 ## Grandfathered (29)
 

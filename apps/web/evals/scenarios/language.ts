@@ -17,7 +17,7 @@ export const languageScenarios: Scenario[] = [
     title: 'French question → French answer',
     roles: ['customer_support'],
     surface: 'widget',
-    fixtures: { kbArticles: [HOURS_ARTICLE] },
+    fixtures: { helpCenterArticles: [HOURS_ARTICLE] },
     prompt: 'Bonjour, quels sont vos horaires de support pendant la semaine ?',
     structural: [{ type: 'status', oneOf: ['answered'] }],
     // Language is judged, not heuristically sniffed: a marker-count heuristic

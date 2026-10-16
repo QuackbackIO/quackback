@@ -17,7 +17,7 @@ import { getChatModel } from '@/lib/server/domains/ai/models'
 import { logger } from '@/lib/server/logger'
 import { runSynthesis, salvageJsonWithSchema } from './synthesis-core'
 import { ASK_AI_USER_MESSAGE_GUARD } from './injection-guard'
-import type { RetrievedKbArticle } from './retrieval'
+import type { RetrievedHelpCenterArticle } from './retrieval'
 
 const log = logger.child({ component: 'assistant-synthesis' })
 
@@ -40,7 +40,7 @@ export interface AskAiAnswer {
 
 export interface SynthesizeAnswerParams {
   query: string
-  articles: RetrievedKbArticle[]
+  articles: RetrievedHelpCenterArticle[]
   /** Aborting this signal cancels the in-flight provider call. */
   signal?: AbortSignal
   /** Called with each new fragment of the answer text as it streams. */
@@ -89,7 +89,7 @@ export const ASK_AI_MISS_FALLBACK =
  * numbered source articles. Exported so tests can pin the injection guard
  * and citation rules.
  */
-export function buildAskAiSystemPrompts(articles: RetrievedKbArticle[]): string[] {
+export function buildAskAiSystemPrompts(articles: RetrievedHelpCenterArticle[]): string[] {
   const instructions = [
     'You are a help-center assistant. Always reply with a helpful message; never return an empty answer.',
     'Decide between two modes and set "kind" accordingly:',
@@ -168,7 +168,7 @@ export async function synthesizeAnswer(params: SynthesizeAnswerParams): Promise<
       pipelineStep: 'help_center_answers',
       callType: 'chat_completion',
       model,
-      metadata: { kbArticleIds: articleIds, query: params.query },
+      metadata: { articleIds: articleIds, query: params.query },
     },
     // Prefer the validated structured object for classification; if the
     // stream never produced one (final is null), this attempt is invalid.

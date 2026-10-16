@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { KbArticleId, PrincipalId } from '@quackback/ids'
+import type { ArticleId, PrincipalId } from '@quackback/ids'
 import { listPublicArticlesSchema } from '@/lib/shared/schemas/help-center'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 
@@ -54,10 +54,10 @@ export const widgetResolvePublicArticleRefFn = createServerFn({ method: 'GET' })
     const viewer = await resolveHelpPublicViewer(await getOptionalWidgetAuth())
     const locale = data.locale ?? DEFAULT_LOCALE
     try {
-      const kbId = canonicalArticleTypeId(data.ref)
+      const articleTypeId = canonicalArticleTypeId(data.ref)
       const load = (loc: string) =>
-        kbId
-          ? getPublicArticleByIdForLocale(kbId, loc, viewer)
+        articleTypeId
+          ? getPublicArticleByIdForLocale(articleTypeId, loc, viewer)
           : getPublicArticleBySlugForLocale(data.ref, loc, viewer)
       const { value: article, locale: resolvedLocale } = await withDefaultLocaleFallback(
         locale,
@@ -81,7 +81,7 @@ export const widgetRecordArticleFeedbackFn = createServerFn({ method: 'POST' })
     const { recordArticleFeedback } =
       await import('@/lib/server/domains/help-center/help-center.service')
     const feedbackId = await recordArticleFeedback(
-      data.articleId as KbArticleId,
+      data.articleId as ArticleId,
       data.helpful,
       (auth?.principal?.id as PrincipalId) ?? null
     )

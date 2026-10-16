@@ -114,7 +114,7 @@ export const assistantInvolvementsRelations = relations(assistantInvolvements, (
 
 /** pgvector column, 1536 dims (OpenAI text-embedding-3-small). Local to this
  *  file, mirroring the per-schema-file `vector` customType convention (see
- *  posts.ts / kb.ts) rather than a shared export. */
+ *  posts.ts / help-center.ts) rather than a shared export. */
 const vector = customType<{ data: number[] }>({
   dataType() {
     return 'vector(1536)'

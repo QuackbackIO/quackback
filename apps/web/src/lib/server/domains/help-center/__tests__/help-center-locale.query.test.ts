@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { KbCategoryId, KbArticleId } from '@quackback/ids'
+import type { CategoryId, ArticleId } from '@quackback/ids'
 
 const mockListPublicCategories = vi.fn()
 const mockGetPublicCategoryBySlug = vi.fn()
@@ -81,7 +81,7 @@ beforeEach(() => {
 
 describe('listPublicCategoriesForLocale', () => {
   it('returns the default-locale list unchanged for the default locale', async () => {
-    const categories = [{ id: 'kb_category_1', name: 'Billing' }]
+    const categories = [{ id: 'category_1', name: 'Billing' }]
     mockListPublicCategories.mockResolvedValue(categories)
 
     const result = await listPublicCategoriesForLocale('en')
@@ -90,7 +90,7 @@ describe('listPublicCategoriesForLocale', () => {
   })
 
   it('excludes a category with no translated name in the target locale', async () => {
-    mockListPublicCategories.mockResolvedValue([{ id: 'kb_category_1', name: 'Billing' }])
+    mockListPublicCategories.mockResolvedValue([{ id: 'category_1', name: 'Billing' }])
     mockCategoryTranslationFindMany.mockResolvedValue([])
     mockSelectFrom.mockReturnValue({
       innerJoin: () => ({ where: () => ({ groupBy: () => Promise.resolve([]) }) }),
@@ -100,9 +100,9 @@ describe('listPublicCategoriesForLocale', () => {
   })
 
   it('excludes a category translated but with zero translated-published articles', async () => {
-    mockListPublicCategories.mockResolvedValue([{ id: 'kb_category_1', name: 'Billing' }])
+    mockListPublicCategories.mockResolvedValue([{ id: 'category_1', name: 'Billing' }])
     mockCategoryTranslationFindMany.mockResolvedValue([
-      { categoryId: 'kb_category_1', name: 'Abrechnung' },
+      { categoryId: 'category_1', name: 'Abrechnung' },
     ])
     mockSelectFrom.mockReturnValue({
       innerJoin: () => ({ where: () => ({ groupBy: () => Promise.resolve([]) }) }),
@@ -113,34 +113,34 @@ describe('listPublicCategoriesForLocale', () => {
 
   it('includes a category with a translated name and >=1 translated-published article', async () => {
     mockListPublicCategories.mockResolvedValue([
-      { id: 'kb_category_1', name: 'Billing', description: 'EN desc' },
+      { id: 'category_1', name: 'Billing', description: 'EN desc' },
     ])
     mockCategoryTranslationFindMany.mockResolvedValue([
-      { categoryId: 'kb_category_1', name: 'Abrechnung', description: 'DE desc' },
+      { categoryId: 'category_1', name: 'Abrechnung', description: 'DE desc' },
     ])
     mockSelectFrom.mockReturnValue({
       innerJoin: () => ({
         where: () => ({
-          groupBy: () => Promise.resolve([{ categoryId: 'kb_category_1', translatedCount: 1 }]),
+          groupBy: () => Promise.resolve([{ categoryId: 'category_1', translatedCount: 1 }]),
         }),
       }),
     })
 
     const result = await listPublicCategoriesForLocale('de')
-    expect(result).toEqual([{ id: 'kb_category_1', name: 'Abrechnung', description: 'DE desc' }])
+    expect(result).toEqual([{ id: 'category_1', name: 'Abrechnung', description: 'DE desc' }])
   })
 })
 
 describe('getPublicCategoryBySlugForLocale', () => {
   it('returns the base category for the default locale', async () => {
-    mockGetPublicCategoryBySlug.mockResolvedValue({ id: 'kb_category_1', name: 'Billing' })
+    mockGetPublicCategoryBySlug.mockResolvedValue({ id: 'category_1', name: 'Billing' })
     const result = await getPublicCategoryBySlugForLocale('billing', 'en')
-    expect(result).toEqual({ id: 'kb_category_1', name: 'Billing' })
+    expect(result).toEqual({ id: 'category_1', name: 'Billing' })
     expect(mockGetCategoryTranslation).not.toHaveBeenCalled()
   })
 
   it('throws when no translation exists for the target locale', async () => {
-    mockGetPublicCategoryBySlug.mockResolvedValue({ id: 'kb_category_1', name: 'Billing' })
+    mockGetPublicCategoryBySlug.mockResolvedValue({ id: 'category_1', name: 'Billing' })
     mockGetCategoryTranslation.mockResolvedValue(null)
 
     await expect(getPublicCategoryBySlugForLocale('billing', 'de')).rejects.toThrow(/translation/i)
@@ -148,7 +148,7 @@ describe('getPublicCategoryBySlugForLocale', () => {
 
   it('overlays the translated name/description', async () => {
     mockGetPublicCategoryBySlug.mockResolvedValue({
-      id: 'kb_category_1' as KbCategoryId,
+      id: 'category_1' as CategoryId,
       name: 'Billing',
       description: 'EN',
     })
@@ -165,7 +165,7 @@ describe('listPublicArticlesForCategoryLocale', () => {
     const articles = [{ id: 'article_1', title: 'Invoices' }]
     mockListPublicArticlesForCategory.mockResolvedValue(articles)
 
-    const result = await listPublicArticlesForCategoryLocale('kb_category_1', 'en')
+    const result = await listPublicArticlesForCategoryLocale('category_1', 'en')
     expect(result).toBe(articles)
   })
 
@@ -178,7 +178,7 @@ describe('listPublicArticlesForCategoryLocale', () => {
       { articleId: 'article_1', title: 'Rechnungen', description: 'DE' },
     ])
 
-    const result = await listPublicArticlesForCategoryLocale('kb_category_1', 'de')
+    const result = await listPublicArticlesForCategoryLocale('category_1', 'de')
     expect(result).toEqual([{ id: 'article_1', title: 'Rechnungen', description: 'DE' }])
   })
 })
@@ -199,7 +199,7 @@ describe('getPublicArticleBySlugForLocale', () => {
 
   it('overlays translated content, falling back to base contentJson when the translation has none', async () => {
     mockGetPublicArticleBySlug.mockResolvedValue({
-      id: 'article_1' as KbArticleId,
+      id: 'article_1' as ArticleId,
       title: 'Invoices',
       description: 'EN',
       content: 'en content',

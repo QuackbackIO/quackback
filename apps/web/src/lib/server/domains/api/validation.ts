@@ -4,7 +4,7 @@ import { ValidationError } from '@/lib/shared/errors'
 /**
  * Validate a required TypeID parameter.
  * Throws ValidationError if the format is invalid.
- * Alias prefixes (e.g. `kb_article_` → `article_`) are rewritten to the
+ * Alias prefixes (e.g. `article_` → `article_`) are rewritten to the
  * canonical prefix so callers always see the catalogue form.
  */
 export function parseTypeId<T extends string>(

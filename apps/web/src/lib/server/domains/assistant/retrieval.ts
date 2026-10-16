@@ -3,7 +3,7 @@
  *
  * The single retrieval module behind help-center Ask AI (and, later, the
  * assistant's search tool). Audience-scoped whole-article top-k:
- * semantic (pgvector cosine over kb_articles.embedding) when a query
+ * semantic (pgvector cosine over help_center_articles.embedding) when a query
  * embedding is available, keyword (tsvector) otherwise. Results below the
  * similarity floor are simply absent, so an empty result means "no relevant
  * articles" and callers must NOT invoke a model for it.
@@ -15,7 +15,7 @@
 
 import { db, helpCenterArticles, helpCenterCategories, and, sql } from '@/lib/server/db'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
-import { generateKbQueryEmbedding } from '@/lib/server/domains/help-center/help-center-embedding.service'
+import { generateHelpCenterQueryEmbedding } from '@/lib/server/domains/help-center/help-center-embedding.service'
 import {
   helpCenterVisibilityConditions,
   KEYWORD_WEIGHT,
@@ -33,7 +33,7 @@ import {
  */
 export const RELATED_SIMILARITY_FLOOR = 0.3
 
-export interface RetrievedKbArticle {
+export interface RetrievedHelpCenterArticle {
   id: string
   urlId: number
   slug: string
@@ -57,7 +57,7 @@ export interface RetrievedKbArticle {
   updatedAt: Date
 }
 
-export interface RetrieveKbArticlesOptions {
+export interface RetrieveHelpCenterArticlesOptions {
   audience?: HelpCenterAudience
   /**
    * Viewer for the 'public' audience's per-category segment gate. Defaults to
@@ -83,15 +83,15 @@ export interface RetrieveKbArticlesOptions {
 }
 
 /** Default number of articles stuffed into the synthesis context. */
-export const KB_ASK_TOP_K = 5
+export const HELP_CENTER_ASK_TOP_K = 5
 
 /** Per-article content budget for the synthesis context (trimmed in SQL). */
-export const KB_ASK_CONTEXT_CHARS = 4000
+export const HELP_CENTER_ASK_CONTEXT_CHARS = 4000
 
 /** Select the article content pre-trimmed to the context budget, so whole
  *  long articles never cross the wire just to be sliced in JS. */
 const trimmedContent = () =>
-  sql<string>`left(${helpCenterArticles.content}, ${KB_ASK_CONTEXT_CHARS})`
+  sql<string>`left(${helpCenterArticles.content}, ${HELP_CENTER_ASK_CONTEXT_CHARS})`
 
 /**
  * Retrieve the top-k most relevant knowledge-base articles for a query.
@@ -100,18 +100,18 @@ const trimmedContent = () =>
  * falls back to keyword (tsvector) ranking when embeddings are unavailable.
  * Always returns an array; empty means nothing relevant was found.
  */
-export async function retrieveKbArticles(
+export async function retrieveHelpCenterArticles(
   query: string,
-  options: RetrieveKbArticlesOptions = {}
-): Promise<RetrievedKbArticle[]> {
+  options: RetrieveHelpCenterArticlesOptions = {}
+): Promise<RetrievedHelpCenterArticle[]> {
   const audience = options.audience ?? 'public'
   const viewer = options.viewer ?? ANONYMOUS_ACTOR
-  const topK = options.topK ?? KB_ASK_TOP_K
+  const topK = options.topK ?? HELP_CENTER_ASK_TOP_K
   const minScore = options.minScore ?? SEMANTIC_SIMILARITY_FLOOR
   const keywordRankFloor = options.keywordRankFloor ?? KEYWORD_RANK_FLOOR
 
-  const embedding = await generateKbQueryEmbedding(query, {
-    pipelineStep: 'kb_retrieval_query_embedding',
+  const embedding = await generateHelpCenterQueryEmbedding(query, {
+    pipelineStep: 'help_center_retrieval_query',
   })
 
   const rows = embedding

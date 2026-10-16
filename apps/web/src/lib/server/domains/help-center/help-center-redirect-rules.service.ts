@@ -2,8 +2,8 @@
  * Redirect rules for the /hc site (domains/languages §2): admin-defined
  * `path -> published article|category` 301s. Many rules may point at the
  * same target; `path` is the unique key. `targetType`/`targetId` is a
- * polymorphic reference with no FK (a single FK can't span kb_articles and
- * kb_categories), so deleting a target requires an explicit cascade — see
+ * polymorphic reference with no FK (a single FK can't span help_center_articles and
+ * help_center_categories), so deleting a target requires an explicit cascade — see
  * {@link deleteRedirectRulesForTarget}, called from the article/category
  * delete services.
  */
@@ -20,8 +20,8 @@ import {
 import {
   ensureTypeId,
   typeIdLookupKeys,
-  type KbArticleId,
-  type KbCategoryId,
+  type ArticleId,
+  type CategoryId,
   type HcRedirectRuleId,
 } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
@@ -30,11 +30,11 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'help-center-redirect-rules' })
 
-function canonicalArticleTargetId(targetId: string): KbArticleId {
+function canonicalArticleTargetId(targetId: string): ArticleId {
   try {
     return ensureTypeId(targetId, 'article')
   } catch {
-    return targetId as KbArticleId
+    return targetId as ArticleId
   }
 }
 
@@ -93,7 +93,7 @@ async function requirePublishedTarget(
   }
 
   const category = await db.query.helpCenterCategories.findFirst({
-    where: eq(helpCenterCategories.id, targetId as KbCategoryId),
+    where: eq(helpCenterCategories.id, targetId as CategoryId),
     columns: { name: true, isPublic: true, deletedAt: true },
   })
   if (!category || category.deletedAt) {
@@ -114,22 +114,22 @@ export async function listRedirectRules(): Promise<HelpCenterRedirectRule[]> {
     .from(helpCenterRedirectRules)
     .orderBy(desc(helpCenterRedirectRules.createdAt))
 
-  const articleIds = new Set<KbArticleId>()
-  const categoryIds = new Set<KbCategoryId>()
+  const articleIds = new Set<ArticleId>()
+  const categoryIds = new Set<CategoryId>()
   for (const row of rows) {
     if (row.targetType === 'article') articleIds.add(canonicalArticleTargetId(row.targetId))
-    else categoryIds.add(row.targetId as KbCategoryId)
+    else categoryIds.add(row.targetId as CategoryId)
   }
 
   const [articles, categories] = await Promise.all([
     articleIds.size === 0
-      ? Promise.resolve([] as Array<{ id: KbArticleId; title: string }>)
+      ? Promise.resolve([] as Array<{ id: ArticleId; title: string }>)
       : db
           .select({ id: helpCenterArticles.id, title: helpCenterArticles.title })
           .from(helpCenterArticles)
           .where(inArray(helpCenterArticles.id, [...articleIds])),
     categoryIds.size === 0
-      ? Promise.resolve([] as Array<{ id: KbCategoryId; name: string }>)
+      ? Promise.resolve([] as Array<{ id: CategoryId; name: string }>)
       : db
           .select({ id: helpCenterCategories.id, name: helpCenterCategories.name })
           .from(helpCenterCategories)
@@ -143,7 +143,7 @@ export async function listRedirectRules(): Promise<HelpCenterRedirectRule[]> {
     const targetLabel =
       row.targetType === 'article'
         ? (articleTitleById.get(canonicalArticleTargetId(row.targetId)) ?? null)
-        : (categoryNameById.get(row.targetId as KbCategoryId) ?? null)
+        : (categoryNameById.get(row.targetId as CategoryId) ?? null)
     return {
       id: row.id,
       path: row.path,
@@ -229,7 +229,7 @@ export async function resolveRedirectRule(path: string): Promise<string | null> 
   }
 
   const category = await db.query.helpCenterCategories.findFirst({
-    where: eq(helpCenterCategories.id, rule.targetId as KbCategoryId),
+    where: eq(helpCenterCategories.id, rule.targetId as CategoryId),
   })
   if (!category || category.deletedAt || !category.isPublic) return null
   return `/hc/categories/${category.slug}`

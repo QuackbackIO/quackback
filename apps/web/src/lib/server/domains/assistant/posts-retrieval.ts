@@ -3,7 +3,7 @@
  *
  * A second `KnowledgeSource` (see `./retrieval-sources`) alongside the
  * knowledge base: retrieval over `posts`, same audience-scoped hybrid shape as
- * `retrieveKbArticles` (retrieval.ts) — semantic (pgvector cosine over
+ * `retrieveHelpCenterArticles` (retrieval.ts) — semantic (pgvector cosine over
  * `posts.embedding`) blended with tsvector (`posts.searchVector`) when a
  * query embedding is available, keyword-only otherwise. Registered per turn
  * when the resolved agent's `posts` knowledge toggle is on (config v3 — see
@@ -217,7 +217,7 @@ async function keywordQuery(
 
 /**
  * Retrieve the top-k most relevant feedback posts for a query, scoped to the
- * turn's retrieval ceiling. Mirrors `retrieveKbArticles`'s two-path shape:
+ * turn's retrieval ceiling. Mirrors `retrieveHelpCenterArticles`'s two-path shape:
  * semantic when a query embedding is available, keyword (tsvector) otherwise.
  * Always returns an array; empty means nothing relevant (or visible) was
  * found.

@@ -50,7 +50,7 @@ import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 function dbRow(id: string) {
   return {
     id,
-    categoryId: 'kb_category_1',
+    categoryId: 'category_1',
     slug: `slug-${id}`,
     title: `Title ${id}`,
     description: null,
@@ -69,9 +69,7 @@ function dbRow(id: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockCategoryFindMany.mockResolvedValue([
-    { id: 'kb_category_1', slug: 'general', name: 'General' },
-  ])
+  mockCategoryFindMany.mockResolvedValue([{ id: 'category_1', slug: 'general', name: 'General' }])
   mockArticleFindMany.mockResolvedValue([])
   mockSearchArticleIdsRanked.mockResolvedValue([])
 })
@@ -121,11 +119,11 @@ describe('listArticles hybrid search parity', () => {
   })
 
   it('forwards category and status filters to the ranked search', async () => {
-    await listArticles({ search: 'q', categoryId: 'kb_category_7', status: 'draft' })
+    await listArticles({ search: 'q', categoryId: 'category_7', status: 'draft' })
     expect(mockSearchArticleIdsRanked).toHaveBeenCalledWith('q', {
       audience: 'team',
       viewer: ANONYMOUS_ACTOR,
-      categoryId: 'kb_category_7',
+      categoryId: 'category_7',
       status: 'draft',
       limit: 50,
     })

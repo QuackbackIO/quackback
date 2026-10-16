@@ -16,7 +16,7 @@ import {
   updateCategory,
   deleteCategory,
 } from '@/lib/server/domains/help-center/help-center.service'
-import type { KbCategoryId } from '@quackback/ids'
+import type { CategoryId } from '@quackback/ids'
 
 const updateCategoryBody = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -63,11 +63,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
         try {
           await withApiKeyAuth(request)
 
-          const categoryId = parseTypeId<KbCategoryId>(
-            params.categoryId,
-            'kb_category',
-            'category ID'
-          )
+          const categoryId = parseTypeId<CategoryId>(params.categoryId, 'category', 'category ID')
 
           const category = await getCategoryById(categoryId)
           return successResponse(formatCategory(category))
@@ -82,11 +78,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
         try {
           await withApiKeyAuth(request, { permission: PERMISSIONS.HELP_CENTER_MANAGE })
 
-          const categoryId = parseTypeId<KbCategoryId>(
-            params.categoryId,
-            'kb_category',
-            'category ID'
-          )
+          const categoryId = parseTypeId<CategoryId>(params.categoryId, 'category', 'category ID')
 
           const body = await request.json()
           const parsed = updateCategoryBody.safeParse(body)
@@ -110,11 +102,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
         try {
           await withApiKeyAuth(request, { permission: PERMISSIONS.HELP_CENTER_MANAGE })
 
-          const categoryId = parseTypeId<KbCategoryId>(
-            params.categoryId,
-            'kb_category',
-            'category ID'
-          )
+          const categoryId = parseTypeId<CategoryId>(params.categoryId, 'category', 'category ID')
 
           await deleteCategory(categoryId)
           return noContentResponse()

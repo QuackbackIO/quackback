@@ -87,7 +87,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 // Mock getTypeIdPrefix from @quackback/ids — extract everything before the last
 // underscore, matching the real TypeID split (the suffix is a fixed base32
 // block with no underscores, so this also works for compound prefixes like
-// kb_article).
+// article).
 vi.mock('@quackback/ids', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
   return {
@@ -1941,7 +1941,7 @@ describe('MCP HTTP Handler', () => {
         oauthRequest(
           jsonRpcRequest('tools/call', {
             name: 'get_details',
-            arguments: { id: 'kb_article_01jx0p1q3rh0d8t5a8j4f7y3p9' },
+            arguments: { id: 'article_01jx0p1q3rh0d8t5a8j4f7y3p9' },
           })
         )
       )

@@ -293,7 +293,7 @@ describe('the real corpus', () => {
     // 0285 replaces only the old three-column link constraint and adds its
     // scoped replacement only when absent. Real PostgreSQL replay is covered
     // by lineage-double-apply and migrator-gap-heal.
-    // 0288 rebuilds kb_article_translations.search_vector only while its
+    // 0288 rebuilds help_center_article_translations.search_vector only while its
     // expression lacks the Dutch config, so a second run changes nothing.
     // 0199 drops the roadmap archive only while it exists and holds no rows;
     // a populated archive, or none at all, makes the block do nothing.
@@ -315,6 +315,8 @@ describe('the real corpus', () => {
     // (settleMaintenanceStart), so a later replay writes zero rows too.
     // 0302 widens the pending-action parent check to allow no parent, once,
     // guarded by its existing definition already reading `<= 1`.
+    // 0305 renames the Help Center tables only while help_center_articles does
+    // not exist yet, so a second run returns before any rename or rewrite.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -342,6 +344,7 @@ describe('the real corpus', () => {
       '0296_validate_workspace_copilot_checks.sql',
       '0298_status_maintenance_started_at.sql',
       '0302_approvals_foundation.sql',
+      '0305_help_center_names.sql',
     ])
   })
 

@@ -34,9 +34,9 @@ const token = `ask${Date.now()}${Math.random().toString(36).slice(2)}`
 const ownerId = createId('principal')
 const boardId = createId('board')
 const postId = createId('post')
-const categoryId = createId('kb_category')
-const articleId = createId('kb_article')
-const deletedArticleId = createId('kb_article')
+const categoryId = createId('category')
+const articleId = createId('article')
+const deletedArticleId = createId('article')
 const actor: Actor = {
   principalId: ownerId,
   role: 'admin',
@@ -124,7 +124,7 @@ describe('instant Ask entity search on real Postgres', () => {
     )
   })
   it('never generates an embedding while typing', async () => {
-    const generate = vi.spyOn(embeddings, 'generateKbQueryEmbedding')
+    const generate = vi.spyOn(embeddings, 'generateHelpCenterQueryEmbedding')
     const result = await search(token)
     expect(result.some((item) => item.id === articleId)).toBe(true)
     expect(generate).not.toHaveBeenCalled()

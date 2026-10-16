@@ -87,7 +87,7 @@ describe('createCategorySchema', () => {
 describe('updateCategorySchema', () => {
   it('accepts valid update with id', () => {
     const result = updateCategorySchema.safeParse({
-      id: 'kb_category_1',
+      id: 'category_1',
       name: 'Updated Name',
     })
     expect(result.success).toBe(true)
@@ -95,7 +95,7 @@ describe('updateCategorySchema', () => {
 
   it('accepts nullable description', () => {
     const result = updateCategorySchema.safeParse({
-      id: 'kb_category_1',
+      id: 'category_1',
       description: null,
     })
     expect(result.success).toBe(true)
@@ -108,7 +108,7 @@ describe('updateCategorySchema', () => {
 
   it('accepts position update for drag reorder', () => {
     const result = updateCategorySchema.safeParse({
-      id: 'kb_category_1',
+      id: 'category_1',
       position: 3,
     })
     expect(result.success).toBe(true)
@@ -119,7 +119,7 @@ describe('updateCategorySchema', () => {
 
   it('accepts full CategoryFormDialog edit payload', () => {
     const result = updateCategorySchema.safeParse({
-      id: 'kb_category_1',
+      id: 'category_1',
       name: 'Updated Name',
       description: 'Updated description',
       icon: '🔧',
@@ -130,7 +130,7 @@ describe('updateCategorySchema', () => {
 
   it('accepts emoji icon update', () => {
     const result = updateCategorySchema.safeParse({
-      id: 'kb_category_1',
+      id: 'category_1',
       icon: '🚀',
     })
     expect(result.success).toBe(true)
@@ -143,7 +143,7 @@ describe('updateCategorySchema', () => {
 describe('createArticleSchema', () => {
   it('accepts valid input', () => {
     const result = createArticleSchema.safeParse({
-      categoryId: 'kb_category_1',
+      categoryId: 'category_1',
       title: 'How to Get Started',
       content: 'Follow these steps...',
     })
@@ -152,7 +152,7 @@ describe('createArticleSchema', () => {
 
   it('rejects empty title', () => {
     const result = createArticleSchema.safeParse({
-      categoryId: 'kb_category_1',
+      categoryId: 'category_1',
       title: '',
       content: 'Content',
     })
@@ -161,7 +161,7 @@ describe('createArticleSchema', () => {
 
   it('rejects empty content', () => {
     const result = createArticleSchema.safeParse({
-      categoryId: 'kb_category_1',
+      categoryId: 'category_1',
       title: 'Title',
       content: '',
     })
@@ -178,7 +178,7 @@ describe('createArticleSchema', () => {
 
   it('accepts optional slug', () => {
     const result = createArticleSchema.safeParse({
-      categoryId: 'kb_category_1',
+      categoryId: 'category_1',
       title: 'Title',
       content: 'Content',
       slug: 'custom-slug',
@@ -213,7 +213,7 @@ describe('listArticlesSchema', () => {
 
   it('accepts all filters', () => {
     const result = listArticlesSchema.safeParse({
-      categoryId: 'kb_category_1',
+      categoryId: 'category_1',
       status: 'published',
       search: 'getting started',
       cursor: 'some_cursor',
@@ -269,7 +269,7 @@ describe('articleFeedbackSchema', () => {
 describe('articleFeedbackReasonSchema', () => {
   it('trims the reason it accepts', () => {
     const result = articleFeedbackReasonSchema.safeParse({
-      feedbackId: 'kb_article_feedback_1',
+      feedbackId: 'article_feedback_1',
       reason: '  The steps stop before the deploy part.  ',
     })
     expect(result.success).toBe(true)
@@ -278,7 +278,7 @@ describe('articleFeedbackReasonSchema', () => {
 
   it('rejects a whitespace-only reason', () => {
     const result = articleFeedbackReasonSchema.safeParse({
-      feedbackId: 'kb_article_feedback_1',
+      feedbackId: 'article_feedback_1',
       reason: '   ',
     })
     expect(result.success).toBe(false)
@@ -286,7 +286,7 @@ describe('articleFeedbackReasonSchema', () => {
 
   it('rejects a reason past the maximum length', () => {
     const result = articleFeedbackReasonSchema.safeParse({
-      feedbackId: 'kb_article_feedback_1',
+      feedbackId: 'article_feedback_1',
       reason: 'x'.repeat(ARTICLE_FEEDBACK_REASON_MAX_LENGTH + 1),
     })
     expect(result.success).toBe(false)

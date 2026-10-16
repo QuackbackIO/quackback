@@ -290,7 +290,9 @@ export async function runAssistantTurnForConversation(
   // Mirrored into the KV cache on every publish (and cleared when the turn ends, in
   // the finally below) so a subscriber that connects mid-turn can replay the
   // current state instead of missing it — see assistant-activity-snapshot.ts.
-  const publishActivity = (status: 'thinking' | 'searching_kb' | 'reviewing_conversation') => {
+  const publishActivity = (
+    status: 'thinking' | 'searching_help_center' | 'reviewing_conversation'
+  ) => {
     const event = {
       kind: 'assistant_activity' as const,
       conversationId,

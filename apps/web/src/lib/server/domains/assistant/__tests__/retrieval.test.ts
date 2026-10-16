@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockGenerateKbEmbedding = vi.fn()
+const mockGenerateHelpCenterEmbedding = vi.fn()
 
 vi.mock('@/lib/server/domains/help-center/help-center-embedding.service', () => ({
-  generateKbEmbedding: (...args: unknown[]) => mockGenerateKbEmbedding(...args),
-  generateKbQueryEmbedding: (...args: unknown[]) => mockGenerateKbEmbedding(...args),
+  generateHelpCenterEmbedding: (...args: unknown[]) => mockGenerateHelpCenterEmbedding(...args),
+  generateHelpCenterQueryEmbedding: (...args: unknown[]) =>
+    mockGenerateHelpCenterEmbedding(...args),
 }))
 
 // Terminal `.limit()` resolves with whatever rows the test seeded.
@@ -58,7 +59,7 @@ vi.mock('@/lib/server/db', () => ({
 
 import { eq, sql } from '@/lib/server/db'
 import { SEMANTIC_SIMILARITY_FLOOR } from '@/lib/server/domains/help-center/help-center-search.service'
-import { retrieveKbArticles, KB_ASK_CONTEXT_CHARS } from '../retrieval'
+import { retrieveHelpCenterArticles, HELP_CENTER_ASK_CONTEXT_CHARS } from '../retrieval'
 
 function row(id: string, content = 'body text') {
   const trailingDigits = id.match(/(\d+)$/)
@@ -68,7 +69,7 @@ function row(id: string, content = 'body text') {
     slug: `slug-${id}`,
     title: `Title ${id}`,
     content,
-    categoryId: 'kb_category_1',
+    categoryId: 'category_1',
     categorySlug: 'general',
     categoryName: 'General',
     score: 0.82,
@@ -80,14 +81,14 @@ beforeEach(() => {
   mockLimit.mockResolvedValue([])
 })
 
-describe('retrieveKbArticles', () => {
+describe('retrieveHelpCenterArticles', () => {
   it('uses the semantic path when a query embedding is available', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue([0.1, 0.2, 0.3])
+    mockGenerateHelpCenterEmbedding.mockResolvedValue([0.1, 0.2, 0.3])
     mockLimit.mockResolvedValue([row('article_1')])
 
-    const result = await retrieveKbArticles('how do I invite teammates')
+    const result = await retrieveHelpCenterArticles('how do I invite teammates')
 
-    expect(mockGenerateKbEmbedding).toHaveBeenCalledOnce()
+    expect(mockGenerateHelpCenterEmbedding).toHaveBeenCalledOnce()
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({
       id: 'article_1',
@@ -100,39 +101,39 @@ describe('retrieveKbArticles', () => {
   })
 
   it('falls back to keyword retrieval when embeddings are unavailable', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue(null)
+    mockGenerateHelpCenterEmbedding.mockResolvedValue(null)
     mockLimit.mockResolvedValue([row('article_2')])
 
-    const result = await retrieveKbArticles('billing')
+    const result = await retrieveHelpCenterArticles('billing')
 
     expect(result).toHaveLength(1)
     expect(result[0].id).toBe('article_2')
   })
 
   it('returns an empty list when nothing clears the similarity floor', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue([0.5])
+    mockGenerateHelpCenterEmbedding.mockResolvedValue([0.5])
     mockLimit.mockResolvedValue([])
 
-    const result = await retrieveKbArticles('completely unrelated gibberish')
+    const result = await retrieveHelpCenterArticles('completely unrelated gibberish')
     expect(result).toEqual([])
   })
 
   it('trims article content to the context budget in SQL (left())', async () => {
     // The trim happens in the select itself, so whole long articles never
     // cross the wire just to be sliced in JS.
-    mockGenerateKbEmbedding.mockResolvedValue([0.5])
-    await retrieveKbArticles('long article')
+    mockGenerateHelpCenterEmbedding.mockResolvedValue([0.5])
+    await retrieveHelpCenterArticles('long article')
 
     const trimCall = vi
       .mocked(sql)
       .mock.calls.find((c) => Array.isArray(c[0]) && (c[0] as string[]).join('?').includes('left('))
     expect(trimCall).toBeDefined()
-    expect(trimCall).toContain(KB_ASK_CONTEXT_CHARS)
+    expect(trimCall).toContain(HELP_CENTER_ASK_CONTEXT_CHARS)
   })
 
   it('uses the answer floor as the default semantic minimum score', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue([0.9])
-    await retrieveKbArticles('anything')
+    mockGenerateHelpCenterEmbedding.mockResolvedValue([0.9])
+    await retrieveHelpCenterArticles('anything')
     const floorCall = vi
       .mocked(sql)
       .mock.calls.find((c) => (c as unknown[]).includes(SEMANTIC_SIMILARITY_FLOOR))
@@ -140,37 +141,37 @@ describe('retrieveKbArticles', () => {
   })
 
   it('lowers the semantic floor when minScore is given (related near-misses)', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue([0.5])
-    await retrieveKbArticles('anything', { minScore: 0.3 })
+    mockGenerateHelpCenterEmbedding.mockResolvedValue([0.5])
+    await retrieveHelpCenterArticles('anything', { minScore: 0.3 })
     const floorCall = vi.mocked(sql).mock.calls.find((c) => (c as unknown[]).includes(0.3))
     expect(floorCall).toBeDefined()
   })
 
   it('applies the public category predicate for the public audience', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue([0.5])
-    await retrieveKbArticles('anything', { audience: 'public' })
+    mockGenerateHelpCenterEmbedding.mockResolvedValue([0.5])
+    await retrieveHelpCenterArticles('anything', { audience: 'public' })
     expect(vi.mocked(eq)).toHaveBeenCalledWith('is_public', true)
   })
 
   it('omits the public category predicate for the team audience', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue([0.5])
-    await retrieveKbArticles('anything', { audience: 'team' })
+    mockGenerateHelpCenterEmbedding.mockResolvedValue([0.5])
+    await retrieveHelpCenterArticles('anything', { audience: 'team' })
     expect(vi.mocked(eq)).not.toHaveBeenCalledWith('is_public', true)
   })
 
   it('maps the computed isPublic flag through for a team-only row (the copilot leak gate reads this)', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue([0.5])
-    mockLimit.mockResolvedValue([{ ...row('kb_article_private'), isPublic: false }])
+    mockGenerateHelpCenterEmbedding.mockResolvedValue([0.5])
+    mockLimit.mockResolvedValue([{ ...row('article_private'), isPublic: false }])
 
-    const result = await retrieveKbArticles('anything', { audience: 'team' })
+    const result = await retrieveHelpCenterArticles('anything', { audience: 'team' })
     expect(result[0].isPublic).toBe(false)
   })
 
   it('maps the computed isPublic flag through for a public row', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue([0.5])
-    mockLimit.mockResolvedValue([{ ...row('kb_article_public'), isPublic: true }])
+    mockGenerateHelpCenterEmbedding.mockResolvedValue([0.5])
+    mockLimit.mockResolvedValue([{ ...row('article_public'), isPublic: true }])
 
-    const result = await retrieveKbArticles('anything', { audience: 'public' })
+    const result = await retrieveHelpCenterArticles('anything', { audience: 'public' })
     expect(result[0].isPublic).toBe(true)
   })
 })

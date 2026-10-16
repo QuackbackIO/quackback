@@ -15,13 +15,13 @@ import {
 import { resolveWidgetViewer } from '@/lib/server/widget/widget-viewer'
 import { logger } from '@/lib/server/logger'
 
-const log = logger.child({ component: 'widget-kb-search' })
+const log = logger.child({ component: 'widget-help-center-search' })
 
 /** Generous per-IP allowance: typing in the search box fires many requests. */
-export const KB_SEARCH_RATE_LIMIT = 60
+export const HELP_CENTER_SEARCH_RATE_LIMIT = 60
 const RATE_WINDOW_SECONDS = 60
 
-export async function handleKbSearch({ request }: { request: Request }): Promise<Response> {
+export async function handleHelpCenterSearch({ request }: { request: Request }): Promise<Response> {
   if (!(await isFeatureEnabled('helpCenter'))) {
     return widgetJsonError(404, 'NOT_FOUND', 'Knowledge base not found')
   }
@@ -35,8 +35,8 @@ export async function handleKbSearch({ request }: { request: Request }): Promise
   }
 
   const limited = await enforcePerIpLimit(request, {
-    keyPrefix: 'kbsearch',
-    limit: KB_SEARCH_RATE_LIMIT,
+    keyPrefix: 'help_center_search',
+    limit: HELP_CENTER_SEARCH_RATE_LIMIT,
     windowSeconds: RATE_WINDOW_SECONDS,
     message: 'Too many searches, slow down',
   })
@@ -69,15 +69,15 @@ export async function handleKbSearch({ request }: { request: Request }): Promise
 
     return Response.json({ data: { articles } }, { headers: widgetCorsHeaders() })
   } catch (error) {
-    log.error({ err: error }, 'kb search failed')
+    log.error({ err: error }, 'help center search failed')
     return widgetJsonError(500, 'SERVER_ERROR', 'Search failed')
   }
 }
 
-export const Route = createFileRoute('/api/widget/kb-search')({
+export const Route = createFileRoute('/api/widget/help-center-search')({
   server: {
     handlers: {
-      GET: handleKbSearch,
+      GET: handleHelpCenterSearch,
     },
   },
 })

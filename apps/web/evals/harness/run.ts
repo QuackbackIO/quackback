@@ -63,7 +63,7 @@ const JUDGE_SOURCE_EXCERPT_CHARS = 600
  * seed no articles (the judge then grades on prompt + reply alone, as before).
  */
 function sourcesForJudge(scenario: TurnScenario): { title: string; excerpt: string }[] {
-  return (scenario.fixtures?.kbArticles ?? []).map((a) => ({
+  return (scenario.fixtures?.helpCenterArticles ?? []).map((a) => ({
     title: a.title,
     excerpt: a.content.slice(0, JUDGE_SOURCE_EXCERPT_CHARS),
   }))

@@ -40,7 +40,7 @@ import {
   helpCenterArticles,
   helpCenterCategories,
 } from '@quackback/db/schema'
-import { generateId, type PostId, type KbArticleId } from '@quackback/ids'
+import { generateId, type PostId, type ArticleId } from '@quackback/ids'
 import { getOpenAI } from '../src/lib/server/domains/ai/config'
 import { getChatModel, getEmbeddingModel } from '../src/lib/server/domains/ai/models'
 
@@ -320,7 +320,11 @@ async function saveEmbedding(postId: PostId, embedding: number[]): Promise<void>
  * Mirror of the app's formatArticleText: title repeated for weight, category
  * appended for context, capped at the embedding input budget.
  */
-function formatKbArticleText(title: string, content: string, categoryName?: string): string {
+function formatHelpCenterArticleText(
+  title: string,
+  content: string,
+  categoryName?: string
+): string {
   const parts = [title, title, content || '']
   if (categoryName) parts.push(`Category: ${categoryName}`)
   return parts.join('\n\n').slice(0, 8000)
@@ -348,7 +352,7 @@ async function countArticlesWithoutEmbeddings(): Promise<number> {
   return Number(result[0].count)
 }
 
-async function saveArticleEmbedding(articleId: KbArticleId, embedding: number[]): Promise<void> {
+async function saveArticleEmbedding(articleId: ArticleId, embedding: number[]): Promise<void> {
   const vectorStr = `[${embedding.join(',')}]`
 
   await db
@@ -575,7 +579,7 @@ async function backfillArticleEmbeddings(
     consecutiveSkips = 0
 
     for (const article of articlesToProcess) {
-      const text = formatKbArticleText(
+      const text = formatHelpCenterArticleText(
         article.title,
         article.content || '',
         article.categoryName ?? undefined

@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockGenerateKbEmbedding = vi.fn()
+const mockGenerateHelpCenterEmbedding = vi.fn()
 vi.mock('../help-center-embedding.service', () => ({
-  generateKbEmbedding: (...args: unknown[]) => mockGenerateKbEmbedding(...args),
-  generateKbQueryEmbedding: (...args: unknown[]) => mockGenerateKbEmbedding(...args),
+  generateHelpCenterEmbedding: (...args: unknown[]) => mockGenerateHelpCenterEmbedding(...args),
+  generateHelpCenterQueryEmbedding: (...args: unknown[]) =>
+    mockGenerateHelpCenterEmbedding(...args),
 }))
 
 const mockLimit = vi.fn()
@@ -65,7 +66,7 @@ beforeEach(() => {
 
 describe('searchArticleIdsRanked', () => {
   it('returns ranked ids from the semantic path when embeddings are available', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue([0.1, 0.2])
+    mockGenerateHelpCenterEmbedding.mockResolvedValue([0.1, 0.2])
     mockLimit.mockResolvedValue([{ id: 'article_2' }, { id: 'article_1' }])
 
     const ids = await searchArticleIdsRanked('invite teammates', { audience: 'team' })
@@ -73,7 +74,7 @@ describe('searchArticleIdsRanked', () => {
   })
 
   it('falls back to keyword ranking when embeddings are unavailable', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue(null)
+    mockGenerateHelpCenterEmbedding.mockResolvedValue(null)
     mockLimit.mockResolvedValue([{ id: 'article_3' }])
 
     const ids = await searchArticleIdsRanked('billing', { audience: 'team' })
@@ -81,7 +82,7 @@ describe('searchArticleIdsRanked', () => {
   })
 
   it('team audience sees drafts and private categories', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue(null)
+    mockGenerateHelpCenterEmbedding.mockResolvedValue(null)
     await searchArticleIdsRanked('q', { audience: 'team' })
     expect(vi.mocked(eq)).not.toHaveBeenCalledWith('is_public', true)
     expect(vi.mocked(isNotNull)).not.toHaveBeenCalledWith('published_at')
@@ -90,20 +91,20 @@ describe('searchArticleIdsRanked', () => {
   })
 
   it('public audience enforces the published + public-category predicate', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue(null)
+    mockGenerateHelpCenterEmbedding.mockResolvedValue(null)
     await searchArticleIdsRanked('q', { audience: 'public' })
     expect(vi.mocked(eq)).toHaveBeenCalledWith('is_public', true)
     expect(vi.mocked(isNotNull)).toHaveBeenCalledWith('published_at')
   })
 
   it('applies status and category filters for team callers', async () => {
-    mockGenerateKbEmbedding.mockResolvedValue(null)
+    mockGenerateHelpCenterEmbedding.mockResolvedValue(null)
     await searchArticleIdsRanked('q', {
       audience: 'team',
       status: 'draft',
-      categoryId: 'kb_category_9',
+      categoryId: 'category_9',
     })
     expect(vi.mocked(isNull)).toHaveBeenCalledWith('published_at')
-    expect(vi.mocked(eq)).toHaveBeenCalledWith('category_id', 'kb_category_9')
+    expect(vi.mocked(eq)).toHaveBeenCalledWith('category_id', 'category_9')
   })
 })

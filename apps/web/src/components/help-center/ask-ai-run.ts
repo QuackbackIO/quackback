@@ -9,13 +9,13 @@ import type { Dispatch, SetStateAction } from 'react'
 import { ChatClient, fetchServerSentEvents } from '@tanstack/ai-client'
 import { parsePartialJSON, type StreamChunk } from '@tanstack/ai'
 import type {
-  KbAskFinalPayload,
-  KbAskStateSnapshot,
-} from '@/lib/shared/help-center/kb-ask-contract'
+  HelpCenterAskFinalPayload,
+  HelpCenterAskStateSnapshot,
+} from '@/lib/shared/help-center/help-center-ask-contract'
 import { aguiFetchClient } from '@/lib/client/utils/agui-fetch'
 import { blankAskAiState, type AskAiSourceMeta, type AskAiState } from './ask-ai-state'
 
-const KB_ASK_URL = '/api/widget/kb-ask'
+const HELP_CENTER_ASK_URL = '/api/widget/help-center-ask'
 
 export interface AskAiRun {
   /** Abort the run; its stream stops updating the state. */
@@ -44,7 +44,7 @@ export function startAskAiRun(
   let emitted = ''
   let terminal = false
 
-  const applyFinal = (final: KbAskFinalPayload) => {
+  const applyFinal = (final: HelpCenterAskFinalPayload) => {
     // Hard failure fallback: the model could not be reached at all.
     if (final.answer === null) {
       setState(blankAskAiState(q, 'no-answer'))
@@ -78,7 +78,7 @@ export function startAskAiRun(
   }
 
   const client = new ChatClient({
-    connection: fetchServerSentEvents(KB_ASK_URL, () => ({
+    connection: fetchServerSentEvents(HELP_CENTER_ASK_URL, () => ({
       // Non-2xx widget envelopes become a synthetic RUN_ERROR SSE frame.
       fetchClient: aguiFetchClient(getHeaders),
     })),
@@ -92,7 +92,7 @@ export function startAskAiRun(
       switch (chunk.type) {
         case 'STATE_SNAPSHOT': {
           // The pre-synthesis source metadata join (citation-dot display).
-          const sources = (chunk.snapshot as KbAskStateSnapshot | undefined)?.sources
+          const sources = (chunk.snapshot as HelpCenterAskStateSnapshot | undefined)?.sources
           if (Array.isArray(sources)) retrieved = sources
           break
         }
@@ -114,7 +114,7 @@ export function startAskAiRun(
           // RUN_FINISHED (no result) does not settle the turn.
           if (chunk.result === undefined || terminal) break
           terminal = true
-          applyFinal(chunk.result as KbAskFinalPayload)
+          applyFinal(chunk.result as HelpCenterAskFinalPayload)
           break
         }
         case 'RUN_ERROR': {

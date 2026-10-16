@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 
 const mockLimit = vi.fn()
 const mockOrderBy = vi.fn(() => ({ limit: mockLimit }))
@@ -27,7 +27,7 @@ describe('listArticlePerformance', () => {
   it('marks a row published when publishedAt is set and draft otherwise', async () => {
     mockLimit.mockResolvedValue([
       {
-        id: 'article_1' as KbArticleId,
+        id: 'article_1' as ArticleId,
         slug: 'popular-article',
         title: 'Popular Article',
         publishedAt: new Date('2024-01-01'),
@@ -37,7 +37,7 @@ describe('listArticlePerformance', () => {
         notHelpfulCount: 5,
       },
       {
-        id: 'article_2' as KbArticleId,
+        id: 'article_2' as ArticleId,
         slug: 'draft-article',
         title: 'Draft Article',
         publishedAt: null,

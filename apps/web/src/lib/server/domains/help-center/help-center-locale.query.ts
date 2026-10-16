@@ -25,7 +25,7 @@ import {
   helpCenterArticleTranslations,
   helpCenterCategoryTranslations,
 } from '@/lib/server/db'
-import type { KbArticleId, KbCategoryId } from '@quackback/ids'
+import type { ArticleId, CategoryId } from '@quackback/ids'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { NotFoundError } from '@/lib/shared/errors'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -112,7 +112,7 @@ export async function getPublicCategoryByUrlIdForLocale(
 ): ReturnType<typeof getPublicCategoryByUrlId> {
   const category = await getPublicCategoryByUrlId(urlId, viewer)
   if (locale === DEFAULT_LOCALE) return category
-  const translation = await getCategoryTranslation(category.id as KbCategoryId, locale)
+  const translation = await getCategoryTranslation(category.id as CategoryId, locale)
   if (!translation || !translation.name.trim()) {
     throw new NotFoundError(
       'CATEGORY_NOT_FOUND',
@@ -123,13 +123,13 @@ export async function getPublicCategoryByUrlIdForLocale(
 }
 
 export async function getPublicCategoryByIdForLocale(
-  id: KbCategoryId,
+  id: CategoryId,
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ): ReturnType<typeof getPublicCategoryById> {
   const category = await getPublicCategoryById(id, viewer)
   if (locale === DEFAULT_LOCALE) return category
-  const translation = await getCategoryTranslation(category.id as KbCategoryId, locale)
+  const translation = await getCategoryTranslation(category.id as CategoryId, locale)
   if (!translation || !translation.name.trim()) {
     throw new NotFoundError('CATEGORY_NOT_FOUND', `No "${locale}" translation for category "${id}"`)
   }
@@ -144,7 +144,7 @@ export async function getPublicCategoryBySlugForLocale(
   const category = await getPublicCategoryBySlug(slug, viewer)
   if (locale === DEFAULT_LOCALE) return category
 
-  const translation = await getCategoryTranslation(category.id as KbCategoryId, locale)
+  const translation = await getCategoryTranslation(category.id as CategoryId, locale)
   if (!translation || !translation.name.trim()) {
     throw new NotFoundError(
       'CATEGORY_NOT_FOUND',
@@ -204,7 +204,7 @@ export async function listPublicArticlesForCategoriesLocale(
 
   const translations = await db.query.helpCenterArticleTranslations.findMany({
     where: and(
-      inArray(helpCenterArticleTranslations.articleId, allArticleIds as KbArticleId[]),
+      inArray(helpCenterArticleTranslations.articleId, allArticleIds as ArticleId[]),
       eq(helpCenterArticleTranslations.locale, locale),
       eq(helpCenterArticleTranslations.status, 'published')
     ),
@@ -233,7 +233,7 @@ export async function getPublicArticleByUrlIdForLocale(
 ): Promise<HelpCenterArticleWithCategory> {
   const article = await getPublicArticleByUrlId(urlId, viewer)
   if (locale === DEFAULT_LOCALE) return article
-  const translation = await getPublishedArticleTranslation(article.id as KbArticleId, locale)
+  const translation = await getPublishedArticleTranslation(article.id as ArticleId, locale)
   if (!translation) {
     throw new NotFoundError(
       'ARTICLE_NOT_FOUND',
@@ -250,13 +250,13 @@ export async function getPublicArticleByUrlIdForLocale(
 }
 
 export async function getPublicArticleByIdForLocale(
-  id: KbArticleId,
+  id: ArticleId,
   locale: string,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HelpCenterArticleWithCategory> {
   const article = await getPublicArticleById(id, viewer)
   if (locale === DEFAULT_LOCALE) return article
-  const translation = await getPublishedArticleTranslation(article.id as KbArticleId, locale)
+  const translation = await getPublishedArticleTranslation(article.id as ArticleId, locale)
   if (!translation) {
     throw new NotFoundError(
       'ARTICLE_NOT_FOUND',
@@ -280,7 +280,7 @@ export async function getPublicArticleBySlugForLocale(
   const article = await getPublicArticleBySlug(slug, viewer)
   if (locale === DEFAULT_LOCALE) return article
 
-  const translation = await getPublishedArticleTranslation(article.id as KbArticleId, locale)
+  const translation = await getPublishedArticleTranslation(article.id as ArticleId, locale)
   if (!translation) {
     throw new NotFoundError(
       'ARTICLE_NOT_FOUND',

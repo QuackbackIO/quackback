@@ -1289,11 +1289,11 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/widget/config[.]json.ts`::GET | route |
 | `routes/api/widget/device.ts`::POST | route |
 | `routes/api/widget/files.ts`::POST | route |
+| `routes/api/widget/help-center-ask.ts`::GET | route |
+| `routes/api/widget/help-center-ask.ts`::POST | route |
+| `routes/api/widget/help-center-search.ts`::GET | route |
 | `routes/api/widget/identify.ts`::POST | route |
 | `routes/api/widget/install-context.ts`::POST | route |
-| `routes/api/widget/kb-ask.ts`::GET | route |
-| `routes/api/widget/kb-ask.ts`::POST | route |
-| `routes/api/widget/kb-search.ts`::GET | route |
 | `routes/api/widget/sdk[.]js.ts`::GET | route |
 | `routes/api/widget/search.ts`::GET | route |
 | `routes/api/widget/session.ts`::GET | route |

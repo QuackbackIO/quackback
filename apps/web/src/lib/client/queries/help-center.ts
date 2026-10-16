@@ -5,7 +5,7 @@
  */
 
 import { queryOptions, infiniteQueryOptions, keepPreviousData } from '@tanstack/react-query'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 import { canonicalArticleTypeId } from '@/lib/shared/widget/article-ref'
 import {
   listCategoriesFn,
@@ -40,9 +40,9 @@ export const helpCenterKeys = {
   articlePerformance: () => [...helpCenterKeys.articles(), 'performance'] as const,
   searchTerms: () => [...helpCenterKeys.all, 'search-terms'] as const,
   articleDetails: () => [...helpCenterKeys.articles(), 'detail'] as const,
-  articleDetail: (id: KbArticleId) =>
+  articleDetail: (id: ArticleId) =>
     [...helpCenterKeys.articleDetails(), canonicalArticleTypeId(id) ?? id] as const,
-  articleFeedbackReasons: (id: KbArticleId) =>
+  articleFeedbackReasons: (id: ArticleId) =>
     [...helpCenterKeys.articleDetail(id), 'feedback-reasons'] as const,
   public: () => [...helpCenterKeys.all, 'public'] as const,
   publicArticleList: (categoryId?: string) =>
@@ -105,14 +105,14 @@ export const helpCenterQueries = {
       staleTime: STALE_TIME_MEDIUM,
     }),
 
-  articleDetail: (id: KbArticleId) =>
+  articleDetail: (id: ArticleId) =>
     queryOptions({
       queryKey: helpCenterKeys.articleDetail(id),
       queryFn: () => getArticleFn({ data: { id } }),
       staleTime: STALE_TIME_MEDIUM,
     }),
 
-  articleFeedbackReasons: (id: KbArticleId) =>
+  articleFeedbackReasons: (id: ArticleId) =>
     queryOptions({
       queryKey: helpCenterKeys.articleFeedbackReasons(id),
       queryFn: () => listArticleFeedbackReasonsFn({ data: { articleId: id } }),

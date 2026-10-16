@@ -17,7 +17,7 @@ import {
   sql,
   inArray,
 } from '@/lib/server/db'
-import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
+import type { ArticleId, CategoryId, PrincipalId } from '@quackback/ids'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import type {
   HelpCenterArticleWithCategory,
@@ -112,7 +112,7 @@ export async function listArticles(
     : [isNull(helpCenterArticles.deletedAt)]
 
   if (categoryId) {
-    conditions.push(eq(helpCenterArticles.categoryId, categoryId as KbCategoryId))
+    conditions.push(eq(helpCenterArticles.categoryId, categoryId as CategoryId))
   }
 
   // Public scope: the parent category must be live, public, and admit the
@@ -139,7 +139,7 @@ export async function listArticles(
 
   if (cursor) {
     const cursorEntry = await db.query.helpCenterArticles.findFirst({
-      where: eq(helpCenterArticles.id, cursor as KbArticleId),
+      where: eq(helpCenterArticles.id, cursor as ArticleId),
       columns: { createdAt: true },
     })
     if (cursorEntry?.createdAt) {
@@ -149,7 +149,7 @@ export async function listArticles(
             gt(helpCenterArticles.createdAt, cursorEntry.createdAt),
             and(
               eq(helpCenterArticles.createdAt, cursorEntry.createdAt),
-              gt(helpCenterArticles.id, cursor as KbArticleId)
+              gt(helpCenterArticles.id, cursor as ArticleId)
             )
           )!
         )
@@ -159,7 +159,7 @@ export async function listArticles(
             lt(helpCenterArticles.createdAt, cursorEntry.createdAt),
             and(
               eq(helpCenterArticles.createdAt, cursorEntry.createdAt),
-              lt(helpCenterArticles.id, cursor as KbArticleId)
+              lt(helpCenterArticles.id, cursor as ArticleId)
             )
           )!
         )
@@ -225,7 +225,7 @@ async function listArticlesRanked(
   const rows =
     pageIds.length > 0
       ? await db.query.helpCenterArticles.findMany({
-          where: inArray(helpCenterArticles.id, pageIds as KbArticleId[]),
+          where: inArray(helpCenterArticles.id, pageIds as ArticleId[]),
           columns: LIST_COLUMNS,
         })
       : []
@@ -276,8 +276,8 @@ async function resolveArticleRelations(
       // that need the full JSON (e.g. article detail page) call getArticleById.
       contentJson: null,
       category: cat
-        ? { id: cat.id as KbCategoryId, urlId: cat.urlId, slug: cat.slug, name: cat.name }
-        : { id: article.categoryId as KbCategoryId, urlId: 0, slug: '', name: 'Unknown' },
+        ? { id: cat.id as CategoryId, urlId: cat.urlId, slug: cat.slug, name: cat.name }
+        : { id: article.categoryId as CategoryId, urlId: 0, slug: '', name: 'Unknown' },
       author: author?.displayName
         ? {
             id: author.principalId as PrincipalId,
@@ -331,7 +331,7 @@ export async function listPublicArticlesForCategory(
     .leftJoin(user, eq(user.id, principal.userId))
     .where(
       and(
-        eq(helpCenterArticles.categoryId, categoryId as KbCategoryId),
+        eq(helpCenterArticles.categoryId, categoryId as CategoryId),
         ...helpCenterVisibilityConditions('public', viewer)
       )
     )
@@ -408,7 +408,7 @@ export async function listPublicArticlesForCategories(
     .leftJoin(user, eq(user.id, principal.userId))
     .where(
       and(
-        inArray(helpCenterArticles.categoryId, categoryIds as KbCategoryId[]),
+        inArray(helpCenterArticles.categoryId, categoryIds as CategoryId[]),
         ...helpCenterVisibilityConditions('public', viewer)
       )
     )

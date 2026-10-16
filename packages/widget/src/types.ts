@@ -64,7 +64,7 @@ export type Identity =
  * - `{ view: 'chat' }` opens the live chat view
  * - `{ postId }` deep-links to a specific post
  * - `{ articleId }` deep-links to a help article (`article_…` TypeID or slug;
- *   stored `kb_article_…` ids also resolve)
+ *   stored `article_…` ids also resolve)
  *
  * `postId` and `articleId` win over `view` when both are set. `board` applies
  * only to `new-post` — Home filtering uses `init({ defaultBoard })` or `?board=`.

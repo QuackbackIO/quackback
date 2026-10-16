@@ -3,7 +3,7 @@
  */
 
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
-import type { KbCategoryId, KbArticleId, KbArticleFeedbackId, PrincipalId } from '@quackback/ids'
+import type { CategoryId, ArticleId, ArticleFeedbackId, PrincipalId } from '@quackback/ids'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import {
@@ -148,7 +148,7 @@ export const getCategoryFn = createServerFn({ method: 'GET' })
   .validator(getCategorySchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const category = await getCategoryById(data.id as KbCategoryId)
+    const category = await getCategoryById(data.id as CategoryId)
     return serializeCategory(category)
   })
 
@@ -182,7 +182,7 @@ export const updateCategoryFn = createServerFn({ method: 'POST' })
   .validator(updateCategorySchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const category = await updateCategory(data.id as KbCategoryId, data)
+    const category = await updateCategory(data.id as CategoryId, data)
     return serializeCategory(category)
   })
 
@@ -190,7 +190,7 @@ export const deleteCategoryFn = createServerFn({ method: 'POST' })
   .validator(deleteCategorySchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    await deleteCategory(data.id as KbCategoryId)
+    await deleteCategory(data.id as CategoryId)
     return { success: true }
   })
 
@@ -231,7 +231,7 @@ export const restoreCategoryFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ category_id: data.id }, 'restore category')
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const category = await restoreCategory(data.id as KbCategoryId)
+    const category = await restoreCategory(data.id as CategoryId)
     log.info({ category_id: category.id }, 'category restored')
     return serializeCategory(category)
   })
@@ -241,7 +241,7 @@ export const restoreArticleFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ article_id: data.id }, 'restore article')
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const article = await restoreArticle(data.id as KbArticleId)
+    const article = await restoreArticle(data.id as ArticleId)
     log.info({ article_id: article.id }, 'article restored')
     return serializeArticle(article)
   })
@@ -443,7 +443,7 @@ export const getArticleFn = createServerFn({ method: 'GET' })
   .validator(getArticleSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const article = await getArticleById(data.id as KbArticleId)
+    const article = await getArticleById(data.id as ArticleId)
     return serializeArticle(article)
   })
 
@@ -497,7 +497,7 @@ export const updateArticleFn = createServerFn({ method: 'POST' })
   .validator(updateArticleSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const article = await updateArticle(data.id as KbArticleId, {
+    const article = await updateArticle(data.id as ArticleId, {
       ...data,
       contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : data.contentJson,
     })
@@ -508,7 +508,7 @@ export const publishArticleFn = createServerFn({ method: 'POST' })
   .validator(publishArticleSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const article = await publishArticle(data.id as KbArticleId)
+    const article = await publishArticle(data.id as ArticleId)
     return serializeArticle(article)
   })
 
@@ -516,7 +516,7 @@ export const unpublishArticleFn = createServerFn({ method: 'POST' })
   .validator(unpublishArticleSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const article = await unpublishArticle(data.id as KbArticleId)
+    const article = await unpublishArticle(data.id as ArticleId)
     return serializeArticle(article)
   })
 
@@ -525,7 +525,7 @@ export const deleteArticleFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     // Soft delete (deleteArticle sets deletedAt) — team OK.
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    await deleteArticle(data.id as KbArticleId)
+    await deleteArticle(data.id as ArticleId)
     return { success: true }
   })
 
@@ -534,7 +534,7 @@ export const recordArticleFeedbackFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const auth = await getOptionalAuth()
     const feedbackId = await recordArticleFeedback(
-      data.articleId as KbArticleId,
+      data.articleId as ArticleId,
       data.helpful,
       (auth?.principal?.id as PrincipalId) ?? null
     )
@@ -546,7 +546,7 @@ export const recordArticleFeedbackFn = createServerFn({ method: 'POST' })
 export const submitArticleFeedbackReasonFn = createServerFn({ method: 'POST' })
   .validator(articleFeedbackReasonSchema)
   .handler(async ({ data }) => {
-    await attachArticleFeedbackReason(data.feedbackId as KbArticleFeedbackId, data.reason)
+    await attachArticleFeedbackReason(data.feedbackId as ArticleFeedbackId, data.reason)
     return { success: true }
   })
 
@@ -554,7 +554,7 @@ export const listArticleFeedbackReasonsFn = createServerFn({ method: 'GET' })
   .validator(listArticleFeedbackReasonsSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const reasons = await listArticleFeedbackReasons(data.articleId as KbArticleId, data.limit)
+    const reasons = await listArticleFeedbackReasons(data.articleId as ArticleId, data.limit)
     return reasons.map((entry) => ({
       id: entry.id,
       reason: entry.reason,
@@ -591,7 +591,7 @@ export const searchPublicArticlesFn = createServerFn({ method: 'GET' })
 
 /**
  * Public article by widget `open({ articleId })` ref — same shape as
- * getPublicArticleBySlugFn. `article_` and `kb_article_` TypeIDs look up by
+ * getPublicArticleBySlugFn. `article_` and `article_` TypeIDs look up by
  * id (same UUID); anything else is a slug. Missing or gated → null.
  * Appended so existing help-center handler indices stay put.
  */
@@ -607,10 +607,10 @@ export const resolvePublicArticleRefFn = createServerFn({ method: 'GET' })
     const viewer = await publicViewer()
     const locale = data.locale ?? DEFAULT_LOCALE
     try {
-      const kbId = canonicalArticleTypeId(data.ref)
+      const articleTypeId = canonicalArticleTypeId(data.ref)
       const load = (loc: string) =>
-        kbId
-          ? getPublicArticleByIdForLocale(kbId, loc, viewer)
+        articleTypeId
+          ? getPublicArticleByIdForLocale(articleTypeId, loc, viewer)
           : getPublicArticleBySlugForLocale(data.ref, loc, viewer)
       const { value: article, locale: resolvedLocale } = await withDefaultLocaleFallback(
         locale,

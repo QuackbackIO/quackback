@@ -5,12 +5,12 @@ import { PencilIcon, TrashIcon, FolderPlusIcon } from '@heroicons/react/16/solid
 import { MENU_ROW } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
 import { buildAncestorChain, MAX_CATEGORY_DEPTH } from '@/lib/shared/help-center-tree'
-import type { KbCategoryId } from '@quackback/ids'
+import type { CategoryId } from '@quackback/ids'
 import { formatCategoryCount } from './category-count'
 
 export interface TreeCategory {
-  id: KbCategoryId
-  parentId: KbCategoryId | null
+  id: CategoryId
+  parentId: CategoryId | null
   name: string
   description: string | null
   icon: string | null
@@ -22,7 +22,7 @@ export interface TreeCategory {
 
 /** Handlers for category CRUD, shared between the sidebar tree and the main finder. */
 export interface CategoryActions {
-  onNew: (parentId: KbCategoryId | null) => void
+  onNew: (parentId: CategoryId | null) => void
   onEdit: (category: TreeCategory) => void
   onDelete: (category: TreeCategory) => void
 }
@@ -30,7 +30,7 @@ export interface CategoryActions {
 interface HelpCenterCategoryTreeProps {
   categories: TreeCategory[]
   selectedId: string | undefined
-  onNavigate: (id: KbCategoryId | null) => void
+  onNavigate: (id: CategoryId | null) => void
   actions: CategoryActions
 }
 

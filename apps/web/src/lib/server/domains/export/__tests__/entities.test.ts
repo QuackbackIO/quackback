@@ -49,7 +49,7 @@ import { votesExporter } from '../entities/votes'
 import { createUsersExporter } from '../entities/users'
 import { companiesExporter } from '../entities/companies'
 import { conversationsExporter } from '../entities/conversations'
-import { kbArticlesExporter } from '../entities/kb'
+import { helpCenterArticlesExporter } from '../entities/help-center'
 
 const d = (iso: string) => new Date(iso)
 
@@ -162,9 +162,9 @@ describe('conversationsExporter.serialize', () => {
   })
 })
 
-describe('kbArticlesExporter.serialize', () => {
+describe('helpCenterArticlesExporter.serialize', () => {
   it('renders the category slug', () => {
-    const line = kbArticlesExporter.serialize({
+    const line = helpCenterArticlesExporter.serialize({
       id: 'article_1',
       category: { slug: 'getting-started' },
       slug: 'install',
@@ -191,7 +191,7 @@ describe('boardsExporter / headers', () => {
       createUsersExporter(),
       companiesExporter,
       conversationsExporter,
-      kbArticlesExporter,
+      helpCenterArticlesExporter,
     ]) {
       expect(entity.key).toBeTruthy()
       expect(entity.fileName).toMatch(/\.(csv|jsonl)$/)

@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { toolDefinition } from '@tanstack/ai'
 import { z } from 'zod'
-import { makeKbArticle } from './kb-fixtures'
+import { makeHelpCenterArticle } from './help-center-fixtures'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
 vi.mock('@/lib/server/config', () => ({ config: {} }))
 
 const mockRetrieve = vi.fn()
 vi.mock('../retrieval', () => ({
-  retrieveKbArticles: (...args: unknown[]) => mockRetrieve(...args),
+  retrieveHelpCenterArticles: (...args: unknown[]) => mockRetrieve(...args),
 }))
 
 // Stand-ins for the optional knowledge sources: resolveKnowledgeSources
@@ -189,7 +189,9 @@ beforeEach(() => {
 
 describe('search', () => {
   it('retrieves audience-scoped, records sources in the ledger, and allowlists output', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1', { content: 'X'.repeat(5000) })])
+    mockRetrieve.mockResolvedValue([
+      makeHelpCenterArticle('article_1', { content: 'X'.repeat(5000) }),
+    ])
     const c = ctx({ audience: 'team' })
     const search = await findTool(c, 'search')
 
@@ -226,7 +228,7 @@ describe('search', () => {
   })
 
   it('frames a non-empty result with the shared content-not-instructions note (retrieval is the fourth guard surface)', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
+    mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1')])
     const c = ctx()
     const search = await findTool(c, 'search')
 
@@ -250,7 +252,7 @@ describe('search', () => {
   })
 
   it("records each surfaced source's updatedAt on the ledgered citation itself (stripped only at persistence)", async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
+    mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1')])
     const c = ctx()
     const search = await findTool(c, 'search')
 
@@ -260,7 +262,7 @@ describe('search', () => {
   })
 
   it('ends exploration past the per-turn search budget with an answer-now note', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
+    mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1')])
     const c = ctx()
     const search = await findTool(c, 'search')
     for (let i = 0; i < 3; i++) await search.execute({ query: `q${i}` }, toolCtx(c))
@@ -277,9 +279,9 @@ describe('search', () => {
   })
 
   it("forwards the context's sourceTypes into retrieveKnowledge, narrowing away the knowledge base", async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
+    mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1')])
     // sourceTypes excludes 'article': the only registered source (flags off)
-    // gets filtered out entirely, so retrieveKbArticles is never called.
+    // gets filtered out entirely, so retrieveHelpCenterArticles is never called.
     const c = ctx({ sourceTypes: ['post'] })
     const search = await findTool(c, 'search')
 
@@ -728,7 +730,7 @@ describe('assembleAssistantToolset: sandbox simulate mode', () => {
   })
 
   it('still executes a read tool normally in simulate mode', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
+    mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1')])
 
     const c = ctx({ conversationId: null, simulate: true })
     const tool = await findTool(c, 'search')
@@ -985,7 +987,7 @@ describe('private workspace proposal enforcement', () => {
     mockRetrieve.mockImplementation(async (actualQuery, options) => {
       expect(actualQuery).toBe(query)
       expect(options).toEqual({ audience: 'team' })
-      return [makeKbArticle('article_setup', { content: 'Configure the workspace.' })]
+      return [makeHelpCenterArticle('article_setup', { content: 'Configure the workspace.' })]
     })
     mockDocumentsRetrieve.mockImplementation(async (actualQuery, audience) => {
       expect(actualQuery).toBe(query)

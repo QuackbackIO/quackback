@@ -27,7 +27,7 @@ import {
   writeGuardedArticleTranslation,
 } from './help-center-translations.service'
 import { logger } from '@/lib/server/logger'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 import type { HelpCenterArticleWithCategory } from './help-center.types'
 
 const log = logger.child({ component: 'help-center-auto-translate' })
@@ -91,7 +91,7 @@ export interface ParkedTranslationGuard {
 
 /** True when the translation still is what the parked job saw. */
 async function translationUnchanged(
-  articleId: KbArticleId,
+  articleId: ArticleId,
   locale: string,
   guard: ParkedTranslationGuard
 ): Promise<boolean> {
@@ -113,7 +113,7 @@ export interface AutoTranslatePause {
  * nothing and writes nothing; the caller parks the item and retries it.
  */
 export async function translateArticleForLocale(
-  articleId: KbArticleId,
+  articleId: ArticleId,
   locale: string,
   opts: { guard?: ParkedTranslationGuard } = {}
 ): Promise<AutoTranslatePause | undefined> {

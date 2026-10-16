@@ -145,11 +145,11 @@ describe('scanMigrationFile: destructive DDL detection', () => {
   it('detects ALTER COLUMN ... TYPE and the SET DATA TYPE spelling', () => {
     const { findings } = scanMigrationFile(
       't.sql',
-      `ALTER TABLE "kb_articles" ALTER COLUMN "embedding" SET DATA TYPE vector(1536);\n` +
+      `ALTER TABLE "help_center_articles" ALTER COLUMN "embedding" SET DATA TYPE vector(1536);\n` +
         `ALTER TABLE "posts" ALTER COLUMN "title" TYPE varchar(50);`
     )
     expect(findings).toEqual([
-      { kind: 'alter_type', line: 1, table: 'kb_articles', detail: 'embedding' },
+      { kind: 'alter_type', line: 1, table: 'help_center_articles', detail: 'embedding' },
       { kind: 'alter_type', line: 2, table: 'posts', detail: 'title' },
     ])
   })
@@ -287,10 +287,10 @@ describe('scanMigrationFile: COLUMN keyword is optional (Postgres shorthand)', (
   it('detects ALTER <col> TYPE with COLUMN omitted', () => {
     const { findings } = scanMigrationFile(
       't.sql',
-      `ALTER TABLE "kb_articles" ALTER "embedding" TYPE vector(1536);`
+      `ALTER TABLE "help_center_articles" ALTER "embedding" TYPE vector(1536);`
     )
     expect(findings).toEqual([
-      { kind: 'alter_type', line: 1, table: 'kb_articles', detail: 'embedding' },
+      { kind: 'alter_type', line: 1, table: 'help_center_articles', detail: 'embedding' },
     ])
   })
 

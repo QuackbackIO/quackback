@@ -28,7 +28,7 @@ import type { AssistantActivityStatus } from '@/lib/shared/conversation/types'
 
 const ACTIVITY_STATUSES: ReadonlySet<AssistantActivityStatus> = new Set([
   'thinking',
-  'searching_kb',
+  'searching_help_center',
   'reviewing_conversation',
 ])
 

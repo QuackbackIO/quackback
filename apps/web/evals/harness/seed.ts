@@ -6,7 +6,7 @@
  *
  * Existing domain helpers are reused by IMPORT, never copied:
  *  - `ensureAssistantPrincipal` provisions Quinn's service principal
- *  - `generateKbEmbedding` / `formatArticleText` embed seeded articles with the
+ *  - `generateHelpCenterEmbedding` / `formatArticleText` embed seeded articles with the
  *    configured model (the same path production embeds through)
  *  - `openInvolvement` opens the involvement a live write turn audits against
  */
@@ -48,7 +48,7 @@ import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant'
 import type { SlackMember } from '@/integrations/slack/server/agent/identity'
 import { openInvolvement } from '@/lib/server/domains/assistant/assistant.involvement'
 import {
-  generateKbEmbedding,
+  generateHelpCenterEmbedding,
   formatArticleText,
 } from '@/lib/server/domains/help-center/help-center-embedding.service'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
@@ -60,7 +60,7 @@ import type {
   ScenarioConfig,
   SeedChangelogEntry,
   SeedGuidance,
-  SeedKbArticle,
+  SeedHelpCenterArticle,
   SeedStatusIncident,
   SeedConnector,
   SeedSkill,
@@ -135,12 +135,12 @@ export async function seedAssistantPrincipal(): Promise<PrincipalId> {
  * real embedding. Fails loudly if the embedding endpoint returns nothing —
  * grounding scenarios cannot retrieve without it.
  */
-export async function seedKbArticle(
+export async function seedHelpCenterArticle(
   authorPrincipalId: PrincipalId,
-  article: SeedKbArticle
+  article: SeedHelpCenterArticle
 ): Promise<string> {
   const isPublic = article.isPublic ?? true
-  const categoryId = createId('kb_category')
+  const categoryId = createId('category')
   await testDb.insert(helpCenterCategories).values({
     id: categoryId,
     slug: `eval-cat-${suffix()}`,
@@ -149,7 +149,7 @@ export async function seedKbArticle(
     segmentIds: [],
   })
 
-  const articleId = createId('kb_article')
+  const articleId = createId('article')
   await testDb.insert(helpCenterArticles).values({
     id: articleId,
     categoryId,
@@ -161,7 +161,7 @@ export async function seedKbArticle(
     publishedAt: new Date(Date.now() - 60_000),
   })
 
-  const embedding = await generateKbEmbedding(
+  const embedding = await generateHelpCenterEmbedding(
     formatArticleText(article.title, article.content, 'Eval Knowledge'),
     { pipelineStep: 'eval_seed' }
   )
@@ -531,8 +531,8 @@ export async function seedFixtures(
   await applyScenarioSettings(config)
   const assistantPrincipalId = await seedAssistantPrincipal()
 
-  for (const article of fixtures?.kbArticles ?? []) {
-    await seedKbArticle(assistantPrincipalId, article)
+  for (const article of fixtures?.helpCenterArticles ?? []) {
+    await seedHelpCenterArticle(assistantPrincipalId, article)
   }
   for (const ticket of fixtures?.ticketSummaries ?? []) {
     await seedTicketSummary(ticket)

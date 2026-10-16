@@ -81,9 +81,9 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_embedding_hnsw_idx ON posts USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL',
   },
   {
-    name: 'kb_articles_embedding_hnsw_idx',
+    name: 'help_center_articles_embedding_hnsw_idx',
     concurrent: true,
-    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS kb_articles_embedding_hnsw_idx ON kb_articles USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL',
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS help_center_articles_embedding_hnsw_idx ON help_center_articles USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL',
   },
   {
     name: 'assistant_snippets_embedding_hnsw_idx',

@@ -13,17 +13,17 @@ import { useDeleteArticle, useDeleteCategory } from '@/lib/client/mutations/help
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import { collectDescendantIds } from '@/lib/shared/help-center-tree'
 import { Route } from '@/routes/admin/help-center'
-import type { KbArticleId, KbCategoryId } from '@quackback/ids'
+import type { ArticleId, CategoryId } from '@quackback/ids'
 
 type CategoryDialogState =
-  { mode: 'new'; parentId: KbCategoryId | null } | { mode: 'edit'; category: TreeCategory } | null
+  { mode: 'new'; parentId: CategoryId | null } | { mode: 'edit'; category: TreeCategory } | null
 
 export function HelpCenterList() {
   const navigate = useNavigate({ from: Route.fullPath })
   const { filters, setFilters, hasActiveFilters } = useHelpCenterFilters()
 
   const [deleteArticleDialogOpen, setDeleteArticleDialogOpen] = useState(false)
-  const [articleToDelete, setArticleToDelete] = useState<KbArticleId | null>(null)
+  const [articleToDelete, setArticleToDelete] = useState<ArticleId | null>(null)
 
   const [categoryDialogState, setCategoryDialogState] = useState<CategoryDialogState>(null)
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<TreeCategory | null>(null)
@@ -57,7 +57,7 @@ export function HelpCenterList() {
   }, [])
 
   const handleEdit = useCallback(
-    (id: KbArticleId) => {
+    (id: ArticleId) => {
       startTransition(() => {
         void navigate({
           search: (prev) => ({ ...prev, article: id }),
@@ -67,7 +67,7 @@ export function HelpCenterList() {
     [navigate]
   )
 
-  const handleDeleteArticle = (id: KbArticleId) => {
+  const handleDeleteArticle = (id: ArticleId) => {
     setArticleToDelete(id)
     setDeleteArticleDialogOpen(true)
   }

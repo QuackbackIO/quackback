@@ -166,7 +166,7 @@ export function isValidTypeId(value: string, expectedPrefix?: IdPrefix): boolean
 
 /**
  * Type guard for a TypeID whose serialized prefix is exactly `prefix`.
- * Retired aliases (`kb_article_…`) are valid inbound article ids via
+ * Retired aliases (`article_…`) are valid inbound article ids via
  * `isValidTypeId` / `ensureTypeId`, but they are not `TypeId<'article'>`.
  */
 export function isTypeId<P extends IdPrefix>(value: string, prefix: P): value is TypeId<P> {
@@ -291,7 +291,7 @@ export function ensureTypeId<P extends IdPrefix>(id: string, prefix: P): TypeId<
 /**
  * Canonical TypeID plus retired serialized forms of the same UUID.
  * Use when comparing against text columns or JSON that may still store
- * an alias prefix (e.g. `kb_article_…` after articles emit `article_…`).
+ * an alias prefix (e.g. `article_…` after articles emit `article_…`).
  */
 export function typeIdLookupKeys(id: string, prefix: IdPrefix): string[] {
   const canonical = ensureTypeId(id, prefix)

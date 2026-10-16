@@ -634,7 +634,7 @@ function WidgetPage() {
           break
         case 'article':
           // Same as postId: store the ref and let the detail view fetch it
-          // with Bearer + sessionVersion. TypeIDs (`article_` / `kb_article_`)
+          // with Bearer + sessionVersion. TypeIDs (`article_` / `article_`)
           // and slugs both resolve server-side; no client hop.
           setSelectedCategory(null)
           setHelpSearch('')

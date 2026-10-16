@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 
 const listReasons = vi.fn()
 
@@ -29,7 +29,7 @@ function renderDialog() {
   return render(
     <QueryClientProvider client={queryClient}>
       <ArticleFeedbackReasonsDialog
-        articleId={'article_1' as KbArticleId}
+        articleId={'article_1' as ArticleId}
         open
         onOpenChange={() => {}}
       />
@@ -41,12 +41,12 @@ describe('ArticleFeedbackReasonsDialog', () => {
   it('shows the reasons visitors wrote, in the order the server returned', async () => {
     listReasons.mockResolvedValue([
       {
-        id: 'kb_article_feedback_2',
+        id: 'article_feedback_2',
         reason: 'The screenshots are out of date',
         createdAt: '2024-03-02T00:00:00.000Z',
       },
       {
-        id: 'kb_article_feedback_1',
+        id: 'article_feedback_1',
         reason: 'Missing the CLI flag',
         createdAt: '2024-03-01T00:00:00.000Z',
       },

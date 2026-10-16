@@ -28,7 +28,7 @@ import {
   deleteArticleTranslationFn,
 } from '@/lib/server/functions/help-center-translations'
 import { getArticleFn } from '@/lib/server/functions/help-center'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 import type { SupportedLocale } from '@/lib/shared/i18n'
 
 const LOCALE_LABELS: Record<string, string> = {
@@ -53,7 +53,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 interface ArticleTranslationsDialogProps {
-  articleId: KbArticleId
+  articleId: ArticleId
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -156,7 +156,7 @@ function TranslationForm({
   locale,
   onSaved,
 }: {
-  articleId: KbArticleId
+  articleId: ArticleId
   locale: string
   onSaved: () => void
 }) {

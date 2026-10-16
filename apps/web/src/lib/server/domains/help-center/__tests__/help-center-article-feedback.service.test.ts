@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { PgDialect } from 'drizzle-orm/pg-core'
 import type { SQL } from 'drizzle-orm'
 import { createId } from '@quackback/ids'
-import type { KbArticleFeedbackId, KbArticleId, PrincipalId } from '@quackback/ids'
+import type { ArticleFeedbackId, ArticleId, PrincipalId } from '@quackback/ids'
 
 const insertValuesCalls: unknown[][] = []
 const updateSetCalls: unknown[][] = []
@@ -103,9 +103,9 @@ beforeEach(async () => {
 
 describe('recordArticleFeedback', () => {
   it('returns the id of the vote it inserted so an anonymous visitor can explain it', async () => {
-    const feedbackId = await recordArticleFeedback('article_1' as KbArticleId, false)
+    const feedbackId = await recordArticleFeedback('article_1' as ArticleId, false)
 
-    expect(feedbackId).toMatch(/^kb_article_feedback_/)
+    expect(feedbackId).toMatch(/^article_feedback_/)
     const [inserted] = insertValuesCalls[0] as [{ id: string; helpful: boolean }]
     expect(inserted.id).toBe(feedbackId)
     expect(inserted.helpful).toBe(false)
@@ -113,7 +113,7 @@ describe('recordArticleFeedback', () => {
 
   it('returns the existing id when a known visitor repeats the same vote', async () => {
     mockFeedbackFindFirst.mockResolvedValue({
-      id: 'kb_article_feedback_1',
+      id: 'article_feedback_1',
       articleId: 'article_1',
       principalId: 'principal_1',
       helpful: false,
@@ -121,25 +121,25 @@ describe('recordArticleFeedback', () => {
     })
 
     const feedbackId = await recordArticleFeedback(
-      'article_1' as KbArticleId,
+      'article_1' as ArticleId,
       false,
       'principal_1' as PrincipalId
     )
 
-    expect(feedbackId).toBe('kb_article_feedback_1')
+    expect(feedbackId).toBe('article_feedback_1')
     expect(insertValuesCalls).toHaveLength(0)
   })
 
   it('clears the reason when a vote flips to helpful', async () => {
     mockFeedbackFindFirst.mockResolvedValue({
-      id: 'kb_article_feedback_1',
+      id: 'article_feedback_1',
       articleId: 'article_1',
       principalId: 'principal_1',
       helpful: false,
       reason: 'Missing the CLI flag',
     })
 
-    await recordArticleFeedback('article_1' as KbArticleId, true, 'principal_1' as PrincipalId)
+    await recordArticleFeedback('article_1' as ArticleId, true, 'principal_1' as PrincipalId)
 
     expect(updateSetCalls[0]).toEqual([{ helpful: true, reason: null }])
   })
@@ -147,10 +147,10 @@ describe('recordArticleFeedback', () => {
 
 describe('attachArticleFeedbackReason', () => {
   it('stores the trimmed reason', async () => {
-    updateReturningRows = [{ id: 'kb_article_feedback_1' }]
+    updateReturningRows = [{ id: 'article_feedback_1' }]
 
     await attachArticleFeedbackReason(
-      'kb_article_feedback_1' as KbArticleFeedbackId,
+      'article_feedback_1' as ArticleFeedbackId,
       '  The steps stop before the deploy part.  '
     )
 
@@ -159,7 +159,7 @@ describe('attachArticleFeedbackReason', () => {
 
   it('rejects a blank reason without touching the row', async () => {
     await expect(
-      attachArticleFeedbackReason('kb_article_feedback_1' as KbArticleFeedbackId, '   \n  ')
+      attachArticleFeedbackReason('article_feedback_1' as ArticleFeedbackId, '   \n  ')
     ).rejects.toMatchObject({ code: 'FEEDBACK_REASON_EMPTY' })
 
     expect(updateSetCalls).toHaveLength(0)
@@ -167,7 +167,7 @@ describe('attachArticleFeedbackReason', () => {
 
   it('rejects a reason longer than the stored maximum', async () => {
     await expect(
-      attachArticleFeedbackReason('kb_article_feedback_1' as KbArticleFeedbackId, 'x'.repeat(1001))
+      attachArticleFeedbackReason('article_feedback_1' as ArticleFeedbackId, 'x'.repeat(1001))
     ).rejects.toMatchObject({ code: 'FEEDBACK_REASON_TOO_LONG' })
 
     expect(updateSetCalls).toHaveLength(0)
@@ -177,15 +177,15 @@ describe('attachArticleFeedbackReason', () => {
     updateReturningRows = []
 
     await expect(
-      attachArticleFeedbackReason('kb_article_feedback_1' as KbArticleFeedbackId, 'Second thoughts')
+      attachArticleFeedbackReason('article_feedback_1' as ArticleFeedbackId, 'Second thoughts')
     ).rejects.toMatchObject({ code: 'FEEDBACK_REASON_UNAVAILABLE' })
   })
 
   it('narrows the write to an unhelpful vote that has no reason yet', async () => {
-    updateReturningRows = [{ id: 'kb_article_feedback_1' }]
+    updateReturningRows = [{ id: 'article_feedback_1' }]
 
     await attachArticleFeedbackReason(
-      createId('kb_article_feedback'),
+      createId('article_feedback'),
       'The steps stop before the deploy part.'
     )
 
@@ -193,9 +193,9 @@ describe('attachArticleFeedbackReason', () => {
     // the row must be selected by more than its id: an id-only WHERE would let
     // any holder rewrite a reason, or write one onto a helpful vote.
     const where = compiledWhere(0)
-    expect(where).toContain('"kb_article_feedback"."id" =')
-    expect(where).toContain('"kb_article_feedback"."helpful" =')
-    expect(where).toContain('"kb_article_feedback"."reason" is null')
+    expect(where).toContain('"help_center_article_feedback"."id" =')
+    expect(where).toContain('"help_center_article_feedback"."helpful" =')
+    expect(where).toContain('"help_center_article_feedback"."reason" is null')
   })
 })
 
@@ -203,18 +203,18 @@ describe('listArticleFeedbackReasons', () => {
   it('returns the stored reasons for an article', async () => {
     mockFeedbackFindMany.mockResolvedValue([
       {
-        id: 'kb_article_feedback_2',
+        id: 'article_feedback_2',
         reason: 'The screenshots are out of date',
         createdAt: new Date('2024-03-02'),
       },
       {
-        id: 'kb_article_feedback_1',
+        id: 'article_feedback_1',
         reason: 'Missing the CLI flag',
         createdAt: new Date('2024-03-01'),
       },
     ])
 
-    const reasons = await listArticleFeedbackReasons('article_1' as KbArticleId)
+    const reasons = await listArticleFeedbackReasons('article_1' as ArticleId)
 
     expect(reasons.map((r) => r.reason)).toEqual([
       'The screenshots are out of date',
@@ -223,7 +223,7 @@ describe('listArticleFeedbackReasons', () => {
   })
 
   it('caps the page size it asks the database for', async () => {
-    await listArticleFeedbackReasons('article_1' as KbArticleId, 500)
+    await listArticleFeedbackReasons('article_1' as ArticleId, 500)
 
     const [query] = mockFeedbackFindMany.mock.calls[0] as [{ limit: number }]
     expect(query.limit).toBe(100)

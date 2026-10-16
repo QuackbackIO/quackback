@@ -3,7 +3,7 @@ import type { ApiAuthContext } from '@/lib/server/domains/api/auth'
 import { SYSTEM_ROLE_PERMISSIONS } from '@/lib/shared/permissions'
 import type { ApiKeyId } from '@/lib/server/domains/api-keys'
 import type { HelpCenterArticleWithCategory } from '@/lib/server/domains/help-center/help-center.types'
-import type { KbArticleFeedbackId, KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
+import type { ArticleFeedbackId, ArticleId, CategoryId, PrincipalId } from '@quackback/ids'
 
 // --- Mocks ---
 
@@ -102,8 +102,8 @@ const mockAuthContext: ApiAuthContext = {
 }
 
 const mockArticle: HelpCenterArticleWithCategory = {
-  id: 'article_1' as KbArticleId,
-  categoryId: 'kb_category_1' as KbCategoryId,
+  id: 'article_1' as ArticleId,
+  categoryId: 'category_1' as CategoryId,
   slug: 'how-to-start',
   title: 'How to Get Started',
   description: null,
@@ -121,7 +121,7 @@ const mockArticle: HelpCenterArticleWithCategory = {
   updatedAt: new Date('2026-01-10'),
   deletedAt: null,
   category: {
-    id: 'kb_category_1' as KbCategoryId,
+    id: 'category_1' as CategoryId,
     urlId: 1,
     slug: 'getting-started',
     name: 'Getting Started',
@@ -205,7 +205,7 @@ describe('POST /api/v1/help-center/articles', () => {
     vi.mocked(createArticle).mockResolvedValue(mockArticle)
 
     const body = {
-      categoryId: 'kb_category_1',
+      categoryId: 'category_1',
       title: 'How to Get Started',
       content: 'Follow these steps...',
     }
@@ -223,7 +223,7 @@ describe('POST /api/v1/help-center/articles', () => {
     vi.mocked(parseOptionalTypeId).mockReturnValue('principal_2' as PrincipalId)
 
     const body = {
-      categoryId: 'kb_category_1',
+      categoryId: 'category_1',
       title: 'Authored Article',
       content: 'Content',
       authorId: 'principal_2',
@@ -233,7 +233,7 @@ describe('POST /api/v1/help-center/articles', () => {
 
     expect(response.status).toBe(201)
     expect(createArticle).toHaveBeenCalledWith(
-      { categoryId: 'kb_category_1', title: 'Authored Article', content: 'Content' },
+      { categoryId: 'category_1', title: 'Authored Article', content: 'Content' },
       'principal_1',
       'principal_2'
     )
@@ -245,7 +245,7 @@ describe('POST /api/v1/help-center/articles', () => {
     })
 
     const body = {
-      categoryId: 'kb_category_1',
+      categoryId: 'category_1',
       title: 'Test',
       content: 'Content',
       authorId: 'not-a-valid-id',
@@ -262,7 +262,7 @@ describe('POST /api/v1/help-center/articles', () => {
     )
 
     const body = {
-      categoryId: 'kb_category_1',
+      categoryId: 'category_1',
       title: 'Test',
       content: 'Content',
       authorId: 'principal_ghost',
@@ -292,7 +292,7 @@ describe('POST /api/v1/help-center/articles', () => {
     )
 
     const body = {
-      categoryId: 'kb_category_1',
+      categoryId: 'category_1',
       title: 'Test',
       content: 'Test content',
     }
@@ -324,7 +324,7 @@ describe('GET /api/v1/help-center/articles/:id', () => {
     const json = await response.json()
     expect(json.data.id).toBe('article_1')
     expect(json.data.category).toEqual({
-      id: 'kb_category_1',
+      id: 'category_1',
       urlId: 1,
       slug: 'getting-started',
       name: 'Getting Started',
@@ -571,9 +571,7 @@ describe('POST /api/v1/help-center/articles/:id/feedback', () => {
   })
 
   it('records helpful=true feedback', async () => {
-    vi.mocked(recordArticleFeedback).mockResolvedValue(
-      'kb_article_feedback_1' as KbArticleFeedbackId
-    )
+    vi.mocked(recordArticleFeedback).mockResolvedValue('article_feedback_1' as ArticleFeedbackId)
 
     const body = { helpful: true }
     const request = createRequest(
@@ -593,9 +591,7 @@ describe('POST /api/v1/help-center/articles/:id/feedback', () => {
   })
 
   it('records helpful=false feedback', async () => {
-    vi.mocked(recordArticleFeedback).mockResolvedValue(
-      'kb_article_feedback_1' as KbArticleFeedbackId
-    )
+    vi.mocked(recordArticleFeedback).mockResolvedValue('article_feedback_1' as ArticleFeedbackId)
 
     const body = { helpful: false }
     const request = createRequest(

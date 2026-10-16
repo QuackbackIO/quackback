@@ -52,13 +52,12 @@ export const ID_PREFIXES = {
   file: 'file',
 
   // Help center
-  kb_category: 'kb_category',
-  // Serialized as `article_…` (same UUID as the retired `kb_article_…` prefix).
-  kb_article: 'article',
-  kb_article_feedback: 'kb_article_feedback',
+  category: 'category',
+  article: 'article',
+  article_feedback: 'article_feedback',
   hc_redirect_rule: 'hc_redirect_rule',
-  kb_article_translation: 'kb_article_translation',
-  kb_category_translation: 'kb_category_translation',
+  article_translation: 'article_translation',
+  category_translation: 'category_translation',
 
   // Companies (B2B customer accounts)
   company: 'company',
@@ -231,7 +230,12 @@ export type EntityType = keyof typeof ID_PREFIXES
  * canonical `ID_PREFIXES` value on ensure/parse.
  */
 export const ID_PREFIX_ALIASES: Readonly<Record<string, IdPrefix>> = {
+  // Help center entities, formerly serialized under a `kb_` namespace.
   kb_article: 'article',
+  kb_category: 'category',
+  kb_article_feedback: 'article_feedback',
+  kb_article_translation: 'article_translation',
+  kb_category_translation: 'category_translation',
   // Feedback entities, serialized under a `post_` namespace.
   status: 'post_status',
   tag: 'post_tag',
@@ -247,9 +251,6 @@ export const ID_PREFIX_ALIASES: Readonly<Record<string, IdPrefix>> = {
   chat_msg: 'conversation_msg',
   chat_tag: 'conversation_tag',
   chat_msg_mention: 'conversation_msg_mention',
-  // Help center entities, serialized under a `kb_` namespace.
-  category: 'kb_category',
-  article_feedback: 'kb_article_feedback',
 }
 
 /**

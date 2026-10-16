@@ -41,14 +41,14 @@ const json = (body: unknown) =>
   new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } })
 
 /** Serve the capability probe, an empty article search, and one streamed answer. */
-function stubKbApi({ askAiEnabled }: { askAiEnabled: boolean }) {
+function stubHelpCenterApi({ askAiEnabled }: { askAiEnabled: boolean }) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
-    if (url.startsWith('/api/widget/kb-search')) return json({ data: { articles: [] } })
-    if (url === '/api/widget/kb-ask' && (init?.method ?? 'GET') === 'GET') {
+    if (url.startsWith('/api/widget/help-center-search')) return json({ data: { articles: [] } })
+    if (url === '/api/widget/help-center-ask' && (init?.method ?? 'GET') === 'GET') {
       return json({ data: { enabled: askAiEnabled } })
     }
-    if (url === '/api/widget/kb-ask') {
+    if (url === '/api/widget/help-center-ask') {
       return mockStreamingResponse(aguiRun({ middle: structuredDeltas(ANSWER), result: ANSWER }))
     }
     throw new Error(`unexpected fetch: ${url}`)
@@ -59,7 +59,7 @@ function stubKbApi({ askAiEnabled }: { askAiEnabled: boolean }) {
 
 /** Render the hero search and wait for the capability probe to answer. */
 async function renderHeroSearch({ askAiEnabled }: { askAiEnabled: boolean }) {
-  const fetchMock = stubKbApi({ askAiEnabled })
+  const fetchMock = stubHelpCenterApi({ askAiEnabled })
   const { HelpCenterHeroSearch } = await import('../help-center-search')
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(

@@ -33,7 +33,7 @@ import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { enqueueJob, type ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { TerminalJobError } from '@/lib/server/jobs/definitions'
 import { logger } from '@/lib/server/logger'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 import {
   translateArticleForLocale,
   type ParkedTranslationGuard,
@@ -81,7 +81,7 @@ export async function runHelpCenterTranslate(job: ClaimedJob): Promise<void> {
       // and the park) is newer than it and makes a released job skip. A job
       // already carrying a baseline keeps its first one across re-parks.
       const baseline = data.guard ?? (await snapshotTranslation(data.articleId, data.locale))
-      const pause = await translateArticleForLocale(data.articleId as KbArticleId, data.locale, {
+      const pause = await translateArticleForLocale(data.articleId as ArticleId, data.locale, {
         guard: data.guard,
       })
       if (pause) {
@@ -102,7 +102,7 @@ async function snapshotTranslation(
   articleId: string,
   locale: string
 ): Promise<ParkedTranslationGuard> {
-  const row = await getArticleTranslation(articleId as KbArticleId, locale)
+  const row = await getArticleTranslation(articleId as ArticleId, locale)
   return { translationUpdatedAt: row ? row.updatedAt.toISOString() : null }
 }
 

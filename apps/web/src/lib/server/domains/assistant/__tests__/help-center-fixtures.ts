@@ -1,11 +1,11 @@
-import type { RetrievedKbArticle } from '../retrieval'
+import type { RetrievedHelpCenterArticle } from '../retrieval'
 
 /** A retrieved knowledge-base article with deterministic, id-derived fields.
- *  Shared by the synthesis and kb-ask route tests. */
-export function makeKbArticle(
+ *  Shared by the synthesis and help-center-ask route tests. */
+export function makeHelpCenterArticle(
   id: string,
-  overrides: Partial<RetrievedKbArticle> = {}
-): RetrievedKbArticle {
+  overrides: Partial<RetrievedHelpCenterArticle> = {}
+): RetrievedHelpCenterArticle {
   const trailingDigits = id.match(/(\d+)$/)
   return {
     id,
@@ -13,7 +13,7 @@ export function makeKbArticle(
     slug: `slug-${id}`,
     title: `Title ${id}`,
     content: `Content of ${id}`,
-    categoryId: 'kb_category_1',
+    categoryId: 'category_1',
     categorySlug: 'general',
     categoryName: 'General',
     score: 0.9,

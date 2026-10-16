@@ -32,9 +32,9 @@ async function fetchArticles(offset: number, limit: number) {
 }
 type ArticleRow = Awaited<ReturnType<typeof fetchArticles>>[number]
 
-export const kbArticlesExporter: EntityExporter<ArticleRow> = {
-  key: 'kb_articles',
-  fileName: 'kb_articles.csv',
+export const helpCenterArticlesExporter: EntityExporter<ArticleRow> = {
+  key: 'help_center_articles',
+  fileName: 'help_center_articles.csv',
   pageSize: 5000,
   header:
     'id,category,slug,title,description,content,published_at,view_count,helpful_count,not_helpful_count,created_at',

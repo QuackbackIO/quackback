@@ -8,7 +8,7 @@ import {
   isNull,
   sql,
 } from '@/lib/server/db'
-import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
+import type { ArticleId, CategoryId, PrincipalId } from '@quackback/ids'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
@@ -56,12 +56,12 @@ export async function resolveArticleWithCategory(
     ...article,
     category: category
       ? {
-          id: category.id as KbCategoryId,
+          id: category.id as CategoryId,
           urlId: category.urlId,
           slug: category.slug,
           name: category.name,
         }
-      : { id: article.categoryId as KbCategoryId, urlId: 0, slug: '', name: 'Unknown' },
+      : { id: article.categoryId as CategoryId, urlId: 0, slug: '', name: 'Unknown' },
     author: authorRecord?.displayName
       ? {
           id: authorRecord.id as PrincipalId,
@@ -77,7 +77,7 @@ export async function resolveArticleWithCategory(
   }
 }
 
-export async function getArticleById(id: KbArticleId): Promise<HelpCenterArticleWithCategory> {
+export async function getArticleById(id: ArticleId): Promise<HelpCenterArticleWithCategory> {
   const article = await db.query.helpCenterArticles.findFirst({
     where: and(eq(helpCenterArticles.id, id), isNull(helpCenterArticles.deletedAt)),
   })
@@ -117,7 +117,7 @@ export async function getPublicArticleByUrlId(
 }
 
 export async function getPublicArticleById(
-  id: KbArticleId,
+  id: ArticleId,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HelpCenterArticleWithCategory> {
   const rows = await db
@@ -222,8 +222,7 @@ export async function createArticle(
   })
   // No category picked (a first article in an empty help center): file it
   // under General rather than refusing the save.
-  const categoryId =
-    (input.categoryId?.trim() as KbCategoryId) || (await ensureDefaultHelpCategory())
+  const categoryId = (input.categoryId?.trim() as CategoryId) || (await ensureDefaultHelpCategory())
 
   const [article] = await db
     .insert(helpCenterArticles)
@@ -253,7 +252,7 @@ export async function createArticle(
 }
 
 export async function updateArticle(
-  id: KbArticleId,
+  id: ArticleId,
   input: UpdateArticleInput,
   authorPrincipalId?: PrincipalId
 ): Promise<HelpCenterArticleWithCategory> {
@@ -267,7 +266,7 @@ export async function updateArticle(
     updateData.contentJson = contentJson
     updateData.content = projectContentJsonToMarkdown(contentJson, input.content?.trim() ?? '')
   }
-  if (input.categoryId !== undefined) updateData.categoryId = input.categoryId as KbCategoryId
+  if (input.categoryId !== undefined) updateData.categoryId = input.categoryId as CategoryId
   if (input.slug !== undefined)
     updateData.slug = await uniqueHelpCenterSlug(
       input.slug.trim(),
@@ -325,7 +324,7 @@ export async function updateArticle(
   return resolved
 }
 
-export async function publishArticle(id: KbArticleId): Promise<HelpCenterArticleWithCategory> {
+export async function publishArticle(id: ArticleId): Promise<HelpCenterArticleWithCategory> {
   const [updated] = await db
     .update(helpCenterArticles)
     .set({ publishedAt: new Date(), updatedAt: new Date() })
@@ -342,7 +341,7 @@ export async function publishArticle(id: KbArticleId): Promise<HelpCenterArticle
   return resolved
 }
 
-export async function unpublishArticle(id: KbArticleId): Promise<HelpCenterArticleWithCategory> {
+export async function unpublishArticle(id: ArticleId): Promise<HelpCenterArticleWithCategory> {
   const [updated] = await db
     .update(helpCenterArticles)
     .set({ publishedAt: null, updatedAt: new Date() })
@@ -352,7 +351,7 @@ export async function unpublishArticle(id: KbArticleId): Promise<HelpCenterArtic
   return resolveArticleWithCategory(updated)
 }
 
-export async function deleteArticle(id: KbArticleId): Promise<void> {
+export async function deleteArticle(id: ArticleId): Promise<void> {
   const result = await db
     .update(helpCenterArticles)
     .set({ deletedAt: new Date() })
@@ -370,7 +369,7 @@ export async function deleteArticle(id: KbArticleId): Promise<void> {
   await cancelPendingAutoTranslations(id)
 }
 
-export async function restoreArticle(id: KbArticleId): Promise<HelpCenterArticleWithCategory> {
+export async function restoreArticle(id: ArticleId): Promise<HelpCenterArticleWithCategory> {
   log.debug({ article_id: id }, 'restore article')
   const article = await db.query.helpCenterArticles.findFirst({
     where: eq(helpCenterArticles.id, id),

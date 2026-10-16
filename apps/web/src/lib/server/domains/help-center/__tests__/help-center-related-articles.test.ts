@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../help-center-embedding.service', () => ({
-  generateKbEmbedding: vi.fn(),
-  generateKbQueryEmbedding: vi.fn(),
+  generateHelpCenterEmbedding: vi.fn(),
+  generateHelpCenterQueryEmbedding: vi.fn(),
 }))
 
 // Each query the service runs ends in .limit(); the queue feeds one result set
@@ -77,7 +77,7 @@ import { getRelatedArticles } from '../help-center-related.service'
 const SOURCE = {
   id: 'article_1',
   title: 'Invite your teammates',
-  categoryId: 'kb_category_1',
+  categoryId: 'category_1',
   embedding: null as number[] | null,
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { makeKbArticle as article } from './kb-fixtures'
+import { makeHelpCenterArticle as article } from './help-center-fixtures'
 
 const mockChat = vi.fn()
 const mockAdapterFactory = vi.fn((..._args: unknown[]) => ({ kind: 'text' }))
@@ -204,7 +204,7 @@ describe('synthesizeAnswer', () => {
       answer: 'Answer.',
       sources: [
         { articleId: 'article_1' },
-        { articleId: 'kb_article_HALLUCINATED' },
+        { articleId: 'article_HALLUCINATED' },
         { articleId: 'article_1' },
       ],
     }
@@ -235,8 +235,8 @@ describe('synthesizeAnswer', () => {
   })
 
   it('repairs a one-character typo in a retrieved TypeID', async () => {
-    const realId = 'kb_article_01m1cxgr9qf22rxt2vwk5jrchg'
-    const mistyped = 'kb_article_01m1cxgr9qf22rxtv2wk5jrchg'
+    const realId = 'article_01m1cxgr9qf22rxt2vwk5jrchg'
+    const mistyped = 'article_01m1cxgr9qf22rxtv2wk5jrchg'
     const object = {
       kind: 'grounded',
       answer: 'Quackback collects feedback [1].',
@@ -274,8 +274,8 @@ describe('synthesizeAnswer', () => {
   })
 
   it('recovers citations from stuffed [n] markers when the TypeID is too garbled to fuzzy-match', async () => {
-    const realId = 'kb_article_01m1cxgr9qf22rxt2vwk5jrchg'
-    const garbled = 'kb_article_01m1cxgr1qf22rxv2wk5jrchg'
+    const realId = 'article_01m1cxgr9qf22rxt2vwk5jrchg'
+    const garbled = 'article_01m1cxgr1qf22rxv2wk5jrchg'
     const object = {
       kind: 'grounded',
       answer: 'Quackback collects feedback [1].',
@@ -293,7 +293,7 @@ describe('synthesizeAnswer', () => {
   })
 
   it('relinks stuffed [1] [4] onto the surviving two-source list', async () => {
-    const ids = ['kb_article_a', 'kb_article_b', 'kb_article_c', 'kb_article_d', 'kb_article_e']
+    const ids = ['article_a', 'article_b', 'article_c', 'article_d', 'article_e']
     const object = {
       kind: 'grounded',
       answer: 'It is a feedback tool [1] you can self-host [4].',
@@ -309,7 +309,7 @@ describe('synthesizeAnswer', () => {
     expect(result).toEqual({
       kind: 'grounded',
       answer: 'It is a feedback tool [1] you can self-host [2].',
-      sources: [{ articleId: 'kb_article_a' }, { articleId: 'kb_article_d' }],
+      sources: [{ articleId: 'article_a' }, { articleId: 'article_d' }],
     })
   })
 
@@ -317,13 +317,13 @@ describe('synthesizeAnswer', () => {
     const object = {
       kind: 'grounded',
       answer: 'A claim.',
-      sources: [{ articleId: 'kb_article_x3' }],
+      sources: [{ articleId: 'article_x3' }],
     }
     mockChat.mockReturnValueOnce(chunkStream(completeRun(object, JSON.stringify(object))))
 
     const result = await synthesizeAnswer({
       query: 'q',
-      articles: [article('kb_article_x1'), article('kb_article_x2')],
+      articles: [article('article_x1'), article('article_x2')],
     })
 
     expect(result).toEqual({ kind: 'no_answer', answer: ASK_AI_MISS_FALLBACK, sources: [] })
@@ -420,7 +420,7 @@ describe('synthesizeAnswer', () => {
       pipelineStep: 'help_center_answers',
       callType: 'chat_completion',
       model: 'test-model',
-      metadata: { kbArticleIds: ['article_1'] },
+      metadata: { articleIds: ['article_1'] },
     })
   })
 })

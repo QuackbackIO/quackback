@@ -336,14 +336,14 @@ it('names the article a signed-out visitor found helpful', async () => {
   const owner = await person('admin', 'Sam Rivera', `sam-${createId('user')}@acme.example`)
   const [category] = await testDb
     .insert(helpCenterCategories)
-    .values({ name: 'General', slug: `general-${createId('kb_category').slice(-6)}` })
+    .values({ name: 'General', slug: `general-${createId('category').slice(-6)}` })
     .returning()
   const [article] = await testDb
     .insert(helpCenterArticles)
     .values({
       categoryId: category!.id,
       title: 'How do I reset my password?',
-      slug: `reset-${createId('kb_category').slice(-6)}`,
+      slug: `reset-${createId('category').slice(-6)}`,
       content: 'Hello',
       principalId: owner,
       publishedAt: new Date('2026-10-01T08:00:00Z'),

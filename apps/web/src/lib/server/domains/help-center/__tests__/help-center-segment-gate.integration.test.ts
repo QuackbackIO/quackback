@@ -20,8 +20,8 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { sql } from 'drizzle-orm'
 
 vi.mock('../help-center-embedding.service', () => ({
-  generateKbQueryEmbedding: vi.fn().mockResolvedValue(null),
-  generateKbEmbedding: vi.fn().mockResolvedValue(null),
+  generateHelpCenterQueryEmbedding: vi.fn().mockResolvedValue(null),
+  generateHelpCenterEmbedding: vi.fn().mockResolvedValue(null),
   generateArticleEmbedding: vi.fn().mockResolvedValue(true),
   clearQueryEmbeddingCache: vi.fn(),
   formatArticleText: (title: string) => title,
@@ -32,8 +32,8 @@ import { helpCenterArticles, helpCenterCategories, principal, type Database } fr
 import { createDb } from '@quackback/db/client'
 import {
   createId,
-  type KbArticleId,
-  type KbCategoryId,
+  type ArticleId,
+  type CategoryId,
   type PrincipalId,
   type SegmentId,
 } from '@quackback/ids'
@@ -48,7 +48,7 @@ import {
 import { getPublicArticleBySlug } from '../help-center.article.service'
 import { listPublicCategories, getPublicCategoryBySlug } from '../help-center.category.service'
 import { getPublicArticleBySlugForLocale } from '../help-center-locale.query'
-import { retrieveKbArticles } from '@/lib/server/domains/assistant/retrieval'
+import { retrieveHelpCenterArticles } from '@/lib/server/domains/assistant/retrieval'
 
 const SEG_ALPHA = createId('segment') as SegmentId
 const SEG_BETA = createId('segment') as SegmentId
@@ -116,7 +116,7 @@ if (resolved) {
 }
 
 interface SeededCategory {
-  id: KbCategoryId
+  id: CategoryId
   slug: string
 }
 
@@ -127,10 +127,10 @@ let artOpenSlug: string
 let artGatedSlug: string
 let artPrivateSlug: string
 let artSelfGatedSlug: string
-const articleIds: KbArticleId[] = []
+const articleIds: ArticleId[] = []
 
 async function seedCategory(name: string, isPublic: boolean, segmentIds: string[]) {
-  const id = createId('kb_category') as KbCategoryId
+  const id = createId('category') as CategoryId
   const slug = `sg-${runSuffix}-${name}`
   await activeDb!.insert(helpCenterCategories).values({
     id,
@@ -142,8 +142,8 @@ async function seedCategory(name: string, isPublic: boolean, segmentIds: string[
   return { id, slug }
 }
 
-async function seedArticle(name: string, categoryId: KbCategoryId, segmentIds: string[] = []) {
-  const id = createId('kb_article') as KbArticleId
+async function seedArticle(name: string, categoryId: CategoryId, segmentIds: string[] = []) {
+  const id = createId('article') as ArticleId
   const slug = `sg-${runSuffix}-${name}`
   await activeDb!.insert(helpCenterArticles).values({
     id,
@@ -223,7 +223,7 @@ describe.skipIf(!dbAvailable)('help-center segment gate (execution-level)', () =
     const publicMember = await searchArticleIdsRanked(TOKEN, { audience: 'public', viewer: member })
     const teamPool = await searchArticleIdsRanked(TOKEN, { audience: 'team' })
 
-    const own = (ids: string[]) => ids.filter((id) => articleIds.includes(id as KbArticleId))
+    const own = (ids: string[]) => ids.filter((id) => articleIds.includes(id as ArticleId))
     expect(own(publicAnon)).toHaveLength(1)
     expect(own(publicMember)).toHaveLength(3)
     // Team bypass: open + gated + private-category + self-gated articles all rank.
@@ -352,20 +352,24 @@ describe.skipIf(!dbAvailable)('help-center segment gate (execution-level)', () =
 
   it('retrieval: public audience excludes gated articles unless the viewer is a member', async () => {
     const own = (rows: Array<{ slug: string }>) => ownSlugs(rows)
-    expect(own(await retrieveKbArticles(TOKEN, { audience: 'public', topK: 10 }))).toEqual([
+    expect(own(await retrieveHelpCenterArticles(TOKEN, { audience: 'public', topK: 10 }))).toEqual([
       artOpenSlug,
     ])
     expect(
-      own(await retrieveKbArticles(TOKEN, { audience: 'public', viewer: outsider, topK: 10 }))
+      own(
+        await retrieveHelpCenterArticles(TOKEN, { audience: 'public', viewer: outsider, topK: 10 })
+      )
     ).toEqual([artOpenSlug])
     expect(
-      own(await retrieveKbArticles(TOKEN, { audience: 'public', viewer: member, topK: 10 })).sort()
+      own(
+        await retrieveHelpCenterArticles(TOKEN, { audience: 'public', viewer: member, topK: 10 })
+      ).sort()
     ).toEqual([artOpenSlug, artGatedSlug, artSelfGatedSlug].sort())
   })
 
   it('retrieval: team audience sees gated articles but flags them internal (isPublic=false)', async () => {
-    const rows = (await retrieveKbArticles(TOKEN, { audience: 'team', topK: 10 })).filter((r) =>
-      r.slug.startsWith(`sg-${runSuffix}-`)
+    const rows = (await retrieveHelpCenterArticles(TOKEN, { audience: 'team', topK: 10 })).filter(
+      (r) => r.slug.startsWith(`sg-${runSuffix}-`)
     )
     const bySlug = new Map(rows.map((r) => [r.slug, r]))
     expect(bySlug.get(artOpenSlug)?.isPublic).toBe(true)

@@ -278,10 +278,10 @@ describe('TypeID Core', () => {
   })
 
   describe('article prefix alias', () => {
-    it('createId(kb_article) emits article_', () => {
-      const id = createId('kb_article')
+    it('createId(article) emits article_', () => {
+      const id = createId('article')
       expect(id).toMatch(/^article_/)
-      expect(ID_PREFIXES.kb_article).toBe('article')
+      expect(ID_PREFIXES.article).toBe('article')
     })
 
     it('accepts retired kb_article_ ids as article ids', () => {

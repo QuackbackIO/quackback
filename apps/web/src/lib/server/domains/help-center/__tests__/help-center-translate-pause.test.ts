@@ -66,7 +66,7 @@ const fixture = await createDbTestFixture({
   probe: async (db) => void (await db.execute(sql`SELECT payload FROM job_queue LIMIT 0`)),
 })
 
-const articleId = () => createId('kb_article')
+const articleId = () => createId('article')
 
 function job(payload: Record<string, unknown>): ClaimedJob {
   return {

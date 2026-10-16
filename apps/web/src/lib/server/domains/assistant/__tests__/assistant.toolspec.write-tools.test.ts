@@ -16,7 +16,7 @@ vi.mock('@/lib/server/config', () => ({ config: {} }))
 // read tools; mocked here too so importing the module never risks a real
 // DB/embedding call, matching assistant.tools.test.ts's approach.
 vi.mock('../retrieval', () => ({
-  retrieveKbArticles: vi.fn(),
+  retrieveHelpCenterArticles: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   listMessages: vi.fn(),

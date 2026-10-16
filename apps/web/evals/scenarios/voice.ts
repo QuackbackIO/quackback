@@ -38,7 +38,7 @@ export const voiceScenarios: Scenario[] = [
     surface: 'widget',
     // Grounding gives the reply substance: without it both variants collapse
     // into the same one-line honest miss and there is no room for tone to show.
-    fixtures: { kbArticles: [DOUBLE_CHARGE_ARTICLE] },
+    fixtures: { helpCenterArticles: [DOUBLE_CHARGE_ARTICLE] },
     prompt: 'I was charged twice this month and I am pretty upset about it. What can you do?',
     variants: [
       { label: 'warm', config: { tone: 'warm' } },
@@ -54,7 +54,7 @@ export const voiceScenarios: Scenario[] = [
     surface: 'widget',
     // Same reasoning as 15: an ungrounded "I could not find that" is one
     // sentence under EVERY length preset, so the contrast cannot exist.
-    fixtures: { kbArticles: [BILLING_ARTICLE] },
+    fixtures: { helpCenterArticles: [BILLING_ARTICLE] },
     prompt: 'How do I change the credit card on my account?',
     variants: [
       { label: 'brief', config: { responseLength: 'brief' } },
@@ -71,7 +71,7 @@ export const voiceScenarios: Scenario[] = [
       additionalInstructions:
         'Always open the reply with a friendly Western greeting such as "Howdy partner!" and keep a folksy, cowboy-flavored voice throughout.',
     },
-    fixtures: { kbArticles: [BILLING_ARTICLE] },
+    fixtures: { helpCenterArticles: [BILLING_ARTICLE] },
     prompt: 'How do I update the card on my account?',
     structural: [
       { type: 'status', oneOf: ['answered'] },

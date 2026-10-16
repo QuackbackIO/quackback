@@ -4,11 +4,11 @@
 
 import type { TiptapContent } from '@/lib/server/db'
 import type {
-  KbCategoryId,
-  KbArticleId,
+  CategoryId,
+  ArticleId,
   PrincipalId,
-  KbArticleTranslationId,
-  KbCategoryTranslationId,
+  ArticleTranslationId,
+  CategoryTranslationId,
 } from '@quackback/ids'
 
 // Re-export input types from shared schemas (single source of truth)
@@ -25,8 +25,8 @@ export type {
 // ============================================================================
 
 export interface HelpCenterCategory {
-  id: KbCategoryId
-  parentId: KbCategoryId | null
+  id: CategoryId
+  parentId: CategoryId | null
   slug: string
   name: string
   description: string | null
@@ -58,8 +58,8 @@ export interface HelpCenterCategoryWithCount extends HelpCenterCategory {
 // ============================================================================
 
 export interface HelpCenterArticle {
-  id: KbArticleId
-  categoryId: KbCategoryId
+  id: ArticleId
+  categoryId: CategoryId
   slug: string
   title: string
   description: string | null
@@ -82,7 +82,7 @@ export interface HelpCenterArticle {
 
 export interface HelpCenterArticleWithCategory extends HelpCenterArticle {
   category: {
-    id: KbCategoryId
+    id: CategoryId
     urlId: number
     slug: string
     name: string
@@ -112,8 +112,8 @@ export interface ArticleListResult {
 export type TranslationStatus = 'draft' | 'published' | 'untranslated'
 
 export interface HelpCenterArticleTranslation {
-  id: KbArticleTranslationId
-  articleId: KbArticleId
+  id: ArticleTranslationId
+  articleId: ArticleId
   locale: string
   title: string
   description: string | null
@@ -125,8 +125,8 @@ export interface HelpCenterArticleTranslation {
 }
 
 export interface HelpCenterCategoryTranslation {
-  id: KbCategoryTranslationId
-  categoryId: KbCategoryId
+  id: CategoryTranslationId
+  categoryId: CategoryId
   locale: string
   name: string
   description: string | null

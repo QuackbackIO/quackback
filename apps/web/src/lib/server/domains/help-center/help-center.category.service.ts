@@ -11,7 +11,7 @@ import {
   sql,
   inArray,
 } from '@/lib/server/db'
-import type { KbCategoryId, SegmentId } from '@quackback/ids'
+import type { CategoryId, SegmentId } from '@quackback/ids'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { segmentGateAllows } from '@/lib/server/policy/segment-gate'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
@@ -153,15 +153,15 @@ export async function listCategories(
   const flat = categories.map((c) => ({ id: c.id, parentId: c.parentId ?? null }))
   const recursiveTotal = computeRecursiveCounts(
     flat,
-    (id) => countMap.get(id as KbCategoryId)?.total ?? 0
+    (id) => countMap.get(id as CategoryId)?.total ?? 0
   )
   const recursivePublished = computeRecursiveCounts(
     flat,
-    (id) => countMap.get(id as KbCategoryId)?.published ?? 0
+    (id) => countMap.get(id as CategoryId)?.published ?? 0
   )
 
   return categories.map((cat) => {
-    const row = countMap.get(cat.id as KbCategoryId)
+    const row = countMap.get(cat.id as CategoryId)
     return {
       ...cat,
       articleCount: row?.total ?? 0,
@@ -188,7 +188,7 @@ export async function listPublicCategories(
     .map((cat) => ({ ...cat, articleCount: cat.recursivePublishedArticleCount }))
 }
 
-export async function getCategoryById(id: KbCategoryId): Promise<HelpCenterCategory> {
+export async function getCategoryById(id: CategoryId): Promise<HelpCenterCategory> {
   const category = await db.query.helpCenterCategories.findFirst({
     where: and(eq(helpCenterCategories.id, id), isNull(helpCenterCategories.deletedAt)),
   })
@@ -241,7 +241,7 @@ export async function getPublicCategoryByUrlId(
 }
 
 export async function getPublicCategoryById(
-  id: KbCategoryId,
+  id: CategoryId,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HelpCenterCategory> {
   const category = await db.query.helpCenterCategories.findFirst({
@@ -335,7 +335,7 @@ export async function createCategory(input: CreateCategoryInput): Promise<HelpCe
       isPublic: input.isPublic ?? true,
       segmentIds: input.segmentIds ? await validateSegmentIds(input.segmentIds) : [],
       position: input.position ?? 0,
-      parentId: (input.parentId as KbCategoryId) ?? null,
+      parentId: (input.parentId as CategoryId) ?? null,
       icon: input.icon ?? null,
     })
     .returning()
@@ -344,7 +344,7 @@ export async function createCategory(input: CreateCategoryInput): Promise<HelpCe
 }
 
 export async function updateCategory(
-  id: KbCategoryId,
+  id: CategoryId,
   input: UpdateCategoryInput
 ): Promise<HelpCenterCategory> {
   const updateData: Partial<typeof helpCenterCategories.$inferInsert> = { updatedAt: new Date() }
@@ -373,7 +373,7 @@ export async function updateCategory(
       movingId: id,
       newParentId: (input.parentId as string | null) ?? null,
     })
-    updateData.parentId = (input.parentId as KbCategoryId) ?? null
+    updateData.parentId = (input.parentId as CategoryId) ?? null
   }
 
   const [updated] = await db
@@ -386,7 +386,7 @@ export async function updateCategory(
   return updated
 }
 
-export async function deleteCategory(id: KbCategoryId): Promise<void> {
+export async function deleteCategory(id: CategoryId): Promise<void> {
   const flat = await db.query.helpCenterCategories.findMany({
     where: isNull(helpCenterCategories.deletedAt),
     columns: { id: true, parentId: true },
@@ -399,7 +399,7 @@ export async function deleteCategory(id: KbCategoryId): Promise<void> {
     flat as Array<{ id: string; parentId: string | null }>,
     id
   )
-  const ids = [...toDelete] as KbCategoryId[]
+  const ids = [...toDelete] as CategoryId[]
   const now = new Date()
 
   const deletedArticleIds = await db.transaction(async (tx) => {
@@ -424,7 +424,7 @@ export async function deleteCategory(id: KbCategoryId): Promise<void> {
   ])
 }
 
-export async function restoreCategory(id: KbCategoryId): Promise<HelpCenterCategory> {
+export async function restoreCategory(id: CategoryId): Promise<HelpCenterCategory> {
   log.debug({ category_id: id }, 'restore category')
   const category = await db.query.helpCenterCategories.findFirst({
     where: eq(helpCenterCategories.id, id),

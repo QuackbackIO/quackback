@@ -218,13 +218,21 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
     reason:
       'hnsw vector_cosine_ops partial index is not faithfully round-tripped by drizzle-kit; drop half of the spurious pair',
     pattern:
-      /^DROP INDEX "(posts|kb_articles|feedback_signals|feedback_suggestions|assistant_snippets|assistant_documents|conversation_summaries|ticket_summaries|changelog)_embedding_hnsw_idx"/,
+      /^DROP INDEX "(posts|help_center_articles|feedback_signals|feedback_suggestions|assistant_snippets|assistant_documents|conversation_summaries|ticket_summaries|changelog)_embedding_hnsw_idx"/,
   },
   {
     reason:
       'hnsw vector_cosine_ops partial index is not faithfully round-tripped by drizzle-kit; create half of the spurious pair',
     pattern:
-      /^CREATE INDEX "(posts|kb_articles|feedback_signals|feedback_suggestions|assistant_snippets|assistant_documents|conversation_summaries|ticket_summaries|changelog)_embedding_hnsw_idx" ON "\w+" USING hnsw /,
+      /^CREATE INDEX "(posts|help_center_articles|feedback_signals|feedback_suggestions|assistant_snippets|assistant_documents|conversation_summaries|ticket_summaries|changelog)_embedding_hnsw_idx" ON "\w+" USING hnsw /,
+  },
+  {
+    // Compatibility views from 0305_help_center_names keep the previous release
+    // working during a rolling deploy. Remove this entry with the migration that
+    // drops them.
+    reason: 'temporary compatibility views for the pre-0305 Help Center table names',
+    pattern:
+      /^DROP VIEW "public"\."kb_(categories|articles|article_feedback|search_queries|article_translations|category_translations)";?$/,
   },
   {
     // Same empty text[] default false positive as invitation.magic_link_tokens
