@@ -23,7 +23,7 @@
 <p align="center">
   <a href="https://github.com/QuackbackIO/quackback"><img src="https://img.shields.io/github/stars/QuackbackIO/quackback?style=flat&color=f7cc29" alt="GitHub stars" /></a>
   <a href="https://github.com/QuackbackIO/quackback/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-111111" alt="License: AGPL-3.0" /></a>
-  <a href="https://github.com/QuackbackIO/quackback/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/QuackbackIO/quackback/ci.yml?label=CI" alt="CI status" /></a>
+  <a href="https://github.com/QuackbackIO/quackback/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/QuackbackIO/quackback/ci.yml?branch=main&label=CI" alt="CI status" /></a>
   <a href="https://github.com/QuackbackIO/quackback/releases"><img src="https://img.shields.io/github/v/release/QuackbackIO/quackback?color=111111" alt="Latest release" /></a>
 </p>
 
