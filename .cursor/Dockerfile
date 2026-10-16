@@ -58,7 +58,7 @@ RUN usermod -aG docker ubuntu \
     && chmod 0440 /etc/sudoers.d/ubuntu
 
 # Install Bun, pinned to the version in the repo's package.json "packageManager".
-ARG BUN_VERSION=1.3.7
+ARG BUN_VERSION=1.4.0
 RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local/bun bash -s "bun-v${BUN_VERSION}" \
     && ln -s /usr/local/bun/bin/bun /usr/local/bin/bun \
     && ln -s /usr/local/bun/bin/bunx /usr/local/bin/bunx
