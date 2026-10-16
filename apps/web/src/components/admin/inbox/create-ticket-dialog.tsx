@@ -43,6 +43,8 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateTimePicker } from '@/components/ui/datetime-picker'
+import { ticketDueBounds } from '@/lib/shared/ticket-due'
 import { Avatar } from '@/components/ui/avatar'
 import {
   Select,
@@ -148,6 +150,10 @@ export function CreateTicketDialog({
   const [descriptionJson, setDescriptionJson] = useState<JSONContent | undefined>(undefined)
   const [descriptionMarkdown, setDescriptionMarkdown] = useState('')
   const [requester, setRequester] = useState<Requester | null>(null)
+  // Optional shared due date (teammate window); the customer sees it on a
+  // customer-type ticket. The window is taken afresh each time the dialog opens.
+  const [dueAt, setDueAt] = useState<Date | undefined>(undefined)
+  const dueBounds = useMemo(() => ticketDueBounds('team'), [open])
 
   // CONVERGENCE PHASE 5 — copilot auto-fill (suggestion-only). `suggestedKeys`
   // marks which values currently on the form came from the copilot (the
@@ -209,6 +215,7 @@ export function CreateTicketDialog({
       setDescriptionMarkdown('')
       clearAttachments()
       setRequester(fromConversation ? (defaultRequester ?? null) : null)
+      setDueAt(undefined)
       setFieldValues({})
       setFieldErrors({})
       setAutoFillLoading(false)
@@ -361,6 +368,7 @@ export function CreateTicketDialog({
         attachments: attachments.length > 0 ? attachments : undefined,
         requesterPrincipalId: requester?.principalId as PrincipalId | undefined,
         customAttributes,
+        dueAt,
         // Lets the create inherit this conversation's assignee (born owned by
         // whoever owns the conversation); the link row itself is written by
         // the linkTicketToConversationFn step below.
@@ -553,6 +561,28 @@ export function CreateTicketDialog({
             suggestedKeys={suggestedKeys}
             suggestionRun={suggestedKeys.size > 0}
           />
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              {intl.formatMessage({ id: 'admin.ticketDue.label', defaultMessage: 'Due date' })}
+            </label>
+            <DateTimePicker
+              value={dueAt}
+              onChange={setDueAt}
+              onClear={() => setDueAt(undefined)}
+              clearLabel={intl.formatMessage({
+                id: 'admin.ticketDue.clear',
+                defaultMessage: 'Clear due date',
+              })}
+              minDate={dueBounds.min}
+              maxDate={dueBounds.max}
+              placeholder={intl.formatMessage({
+                id: 'admin.ticketDue.placeholder',
+                defaultMessage: 'Set due date',
+              })}
+              className="h-9 w-full text-sm"
+            />
+          </div>
 
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">
