@@ -41,6 +41,8 @@ export const postViewFiltersSchema = z
     minVotes: z.number().int().min(0).optional(),
     minComments: z.number().int().min(0).optional(),
     hasDuplicates: z.literal(true).optional(),
+    /** Posts the viewer follows: each teammate sees their own. */
+    following: z.literal(true).optional(),
     showDeleted: z.literal(true).optional(),
     sort: z.enum(POST_VIEW_SORTS).optional(),
     /** Absolute date bounds, ISO strings (a fixed window, not a rolling one). */
@@ -86,6 +88,7 @@ export function inboxFiltersToPostViewFilters(filters: InboxFilters): PostViewFi
   if (filters.minVotes !== undefined) out.minVotes = filters.minVotes
   if (filters.minComments !== undefined) out.minComments = filters.minComments
   if (filters.hasDuplicates) out.hasDuplicates = true
+  if (filters.following) out.following = true
   if (filters.showDeleted) out.showDeleted = true
   if (filters.sort) out.sort = filters.sort
   if (filters.dateFrom) out.dateFrom = filters.dateFrom
@@ -110,6 +113,7 @@ export function postViewFiltersToInboxFilters(filters: PostViewFilters): InboxFi
   if (filters.minVotes !== undefined) out.minVotes = filters.minVotes
   if (filters.minComments !== undefined) out.minComments = filters.minComments
   if (filters.hasDuplicates) out.hasDuplicates = true
+  if (filters.following) out.following = true
   if (filters.showDeleted) out.showDeleted = true
   if (filters.sort) out.sort = filters.sort
   if (filters.dateFrom) out.dateFrom = filters.dateFrom
