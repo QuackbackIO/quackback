@@ -44,8 +44,9 @@ const CHANNEL_LABELS = {
   email: { id: 'portal.settings.notifications.channel.email', defaultMessage: 'Email' },
 } as const satisfies Partial<Record<NotificationChannel, Message>>
 
-/** The rows the portal shows, in the app's language. Admin-only rows keep the
- *  catalog's English label and description. */
+/** The rows the portal shows, in the app's language, plus the ticket due-date
+ *  alerts, which shipped with their own translations. Other admin-only rows
+ *  keep the catalog's English label and description. */
 export const TYPE_LABELS: Partial<
   Record<NotificationTypeMeta['type'], { label: Message; description: Message }>
 > = {
@@ -117,6 +118,26 @@ export const TYPE_LABELS: Partial<
     description: {
       id: 'portal.settings.notifications.type.ticketCreated.description',
       defaultMessage: 'Confirmation when we receive your ticket',
+    },
+  },
+  ticket_due_soon: {
+    label: {
+      id: 'portal.settings.notifications.type.ticketDueSoon.label',
+      defaultMessage: 'Ticket due soon',
+    },
+    description: {
+      id: 'portal.settings.notifications.type.ticketDueSoon.description',
+      defaultMessage: 'A ticket assigned to you or your team is due within 24 hours',
+    },
+  },
+  ticket_overdue: {
+    label: {
+      id: 'portal.settings.notifications.type.ticketOverdue.label',
+      defaultMessage: 'Ticket overdue',
+    },
+    description: {
+      id: 'portal.settings.notifications.type.ticketOverdue.description',
+      defaultMessage: 'A ticket assigned to you or your team is past its due date',
     },
   },
   changelog_published: {
