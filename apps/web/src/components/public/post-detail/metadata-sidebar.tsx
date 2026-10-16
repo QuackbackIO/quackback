@@ -32,6 +32,8 @@ import { AuthVoteButton } from '@/components/public/auth-vote-button'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import { AdminAuthorHoverCard } from '@/components/admin/admin-author-hover-card'
 import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
+import { SubscriptionBell } from '@/components/public/subscription-bell'
+import { PostSubscribers } from '@/components/admin/feedback/post-subscribers'
 import {
   VotersAvatarStack,
   type VotersQuerySource,
@@ -320,6 +322,17 @@ interface MetadataSidebarProps {
   isUpdating?: boolean
   /** Hide subscribe section (for admin context) */
   hideSubscribe?: boolean
+  /**
+   * With `hideSubscribe`, still show the signed-in teammate their own follow
+   * bell. The bell reads its own status, so the portal-only sidebar query
+   * stays off.
+   */
+  teamSubscribe?: boolean
+  /**
+   * Show who is subscribed to the post (admin, post.view_private), with
+   * add/remove for a teammate who can manage them.
+   */
+  subscribers?: { canManage: boolean; canSearchPeople: boolean }
   /** Hide vote button (for admin context where voting is handled differently) */
   hideVote?: boolean
   /** Visual variant: 'column' (default border-l) or 'card' (floating card) */
@@ -374,6 +387,8 @@ export function MetadataSidebar({
   onOwnerChange,
   isUpdating = false,
   hideSubscribe = false,
+  teamSubscribe = false,
+  subscribers,
   hideVote = false,
   variant = 'column',
   votersAdditionalPostIds,
@@ -958,8 +973,8 @@ export function MetadataSidebar({
           )}
         </div>
 
-        {/* Subscribe section - hidden in admin mode */}
-        {!hideSubscribe && (
+        {/* Subscribe section: the portal bell, or in admin mode the teammate's own */}
+        {(!hideSubscribe || teamSubscribe) && (
           <div className="border-t border-border/30 pt-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
@@ -968,11 +983,15 @@ export function MetadataSidebar({
                   defaultMessage="Subscribe"
                 />
               </span>
-              <AuthSubscriptionBell
-                postId={postId}
-                initialStatus={subscriptionStatus}
-                disabled={!isMember}
-              />
+              {hideSubscribe ? (
+                <SubscriptionBell postId={postId} />
+              ) : (
+                <AuthSubscriptionBell
+                  postId={postId}
+                  initialStatus={subscriptionStatus}
+                  disabled={!isMember}
+                />
+              )}
             </div>
             <p className="text-xs text-muted-foreground/70 mt-2">
               <FormattedMessage
@@ -980,6 +999,15 @@ export function MetadataSidebar({
                 defaultMessage="Get notified when there are updates to this post"
               />
             </p>
+            {subscribers && (
+              <div className="mt-3">
+                <PostSubscribers
+                  postId={postId}
+                  canManage={subscribers.canManage}
+                  canSearchPeople={subscribers.canSearchPeople}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

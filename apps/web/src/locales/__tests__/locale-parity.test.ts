@@ -169,6 +169,7 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Audio',
     'Avatar',
     'ETA',
+    'Error',
     'Feedback',
     'General',
     'Ideas',
