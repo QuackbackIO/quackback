@@ -116,7 +116,7 @@ export function FeedbackToolbar({
         )}
       </div>
 
-      <div className="flex flex-1 basis-56 items-center gap-2">
+      <div className="flex min-w-0 flex-1 basis-56 items-center gap-2">
         <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-transparent ps-3 pe-1 text-sm focus-within:ring-2 focus-within:ring-ring/50">
           <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           <input

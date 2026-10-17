@@ -8,8 +8,10 @@ import { useRouter } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { PortalFilterPanel } from '@/components/public/feedback/portal-filter-panel'
+import { PortalFilterSheet } from '@/components/public/feedback/portal-filter-sheet'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
 import {
+  PublicFiltersAddButton,
   PublicFiltersBar,
   PublicFiltersToolbarButton,
 } from '@/components/public/feedback/public-filters-bar'
@@ -196,6 +198,19 @@ export function FeedbackContainer({
     initialData: filtersMatchInitial ? facets : undefined,
   })
 
+  // One panel, shown in the sidebar on wide screens and in a sheet below that.
+  const filterPanel = (
+    <PortalFilterPanel
+      filters={mergedFilters}
+      setFilters={setFilters}
+      boards={boards}
+      statuses={statuses}
+      tags={tags}
+      counts={facetCounts}
+      showViews={isRealUser}
+    />
+  )
+
   const posts = flattenPublicPosts(postsData)
   // Dim the list only during an actual filter transition (placeholderData is
   // still showing the previous filter's results while the new ones load) —
@@ -356,7 +371,23 @@ export function FeedbackContainer({
             currentSearch={activeSearch}
             onSearchChange={handleSearchChange}
             isLoading={isLoading}
-            filterButton={<PublicFiltersToolbarButton filters={filters} setFilters={setFilters} />}
+            filterButton={
+              <>
+                <div className="lg:hidden">
+                  <PortalFilterSheet
+                    activeCount={activeFilterCount + (activeBoard ? 1 : 0) + (filters.view ? 1 : 0)}
+                  >
+                    {filterPanel}
+                    <div className="mt-3 px-1">
+                      <PublicFiltersAddButton filters={filters} setFilters={setFilters} />
+                    </div>
+                  </PortalFilterSheet>
+                </div>
+                <div className="hidden lg:block">
+                  <PublicFiltersToolbarButton filters={filters} setFilters={setFilters} />
+                </div>
+              </>
+            }
           />
           <div className="mt-3">
             <PublicFiltersBar
@@ -462,15 +493,7 @@ export function FeedbackContainer({
         </div>
 
         <FeedbackSidebar workspaceSlug={workspaceSlug} showPoweredBy={showPoweredBy}>
-          <PortalFilterPanel
-            filters={mergedFilters}
-            setFilters={setFilters}
-            boards={boards}
-            statuses={statuses}
-            tags={tags}
-            counts={facetCounts}
-            showViews={isRealUser}
-          />
+          {filterPanel}
         </FeedbackSidebar>
       </div>
     </div>
