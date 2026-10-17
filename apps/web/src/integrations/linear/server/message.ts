@@ -49,12 +49,13 @@ export function buildLinearCommentBody(event: CommentCreatedEvent, rootUrl: stri
     maxLength: 5000,
   })
   const commentUrl = `${buildPostUrl(rootUrl, post.boardSlug, post.id)}#comment-${comment.id}`
+  // One item per line; the trailing double space is a Markdown hard break so
+  // renderers that join soft line breaks still keep the lines apart.
+  const footer = [comment.authorPrincipalId, comment.authorUserId]
+    .filter(Boolean)
+    .map((id) => `\`${id}\``)
+    .concat(`[View comment in Quackback](${commentUrl})`)
+    .join('  \n')
 
-  return [
-    `**${author} commented:**`,
-    '',
-    content,
-    '',
-    `[View comment in Quackback](${commentUrl})`,
-  ].join('\n')
+  return [`**${author} commented:**`, '', content, '', '---', footer].join('\n')
 }

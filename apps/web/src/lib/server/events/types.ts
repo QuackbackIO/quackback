@@ -131,6 +131,10 @@ export interface EventPostRef {
 export interface EventCommentData {
   id: string
   content: string
+  /** Principal id of the commenter (covers anonymous and widget visitors too). */
+  authorPrincipalId?: string
+  /** User account id; absent for anonymous commenters. */
+  authorUserId?: string
   authorEmail?: string
   authorName?: string
   isPrivate?: boolean
