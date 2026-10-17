@@ -4,13 +4,14 @@ import { toast } from 'sonner'
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { Spinner } from '@/components/shared/spinner'
+import { Button } from '@/components/ui/button'
 import { useRouter } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { PortalPoweredBy } from '@/components/public/feedback/portal-powered-by'
 import { PortalFilterPanel } from '@/components/public/feedback/portal-filter-panel'
 import { PortalFilterSheet } from '@/components/public/feedback/portal-filter-sheet'
-import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
+import { FeedbackToolbar, sortForSearch } from '@/components/public/feedback/feedback-toolbar'
 import {
   PublicFiltersAddButton,
   PublicFiltersBar,
@@ -32,7 +33,11 @@ import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
 import type { PublicPostListItem } from '@/lib/shared/types'
-import type { PublicFeedView, PublicPostFacetCounts } from '@/lib/shared/types/filters'
+import type {
+  PublicFeedView,
+  PublicPostFacetCounts,
+  PublicPostSort,
+} from '@/lib/shared/types/filters'
 import { cn } from '@/lib/shared/utils'
 import type { PostId, PostStatusId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
@@ -65,7 +70,7 @@ interface FeedbackContainerProps {
   votedPostIds: string[]
   currentBoard?: string
   currentSearch?: string
-  currentSort?: 'top' | 'new' | 'trending'
+  currentSort?: PublicPostSort
   defaultBoardId?: string
   /** User info if authenticated */
   user?: { name: string | null; email: string } | null
@@ -284,12 +289,15 @@ export function FeedbackContainer({
     onLoadMore: fetchNextPage,
   })
 
-  function handleSortChange(sort: 'top' | 'new' | 'trending'): void {
+  function handleSortChange(sort: PublicPostSort): void {
     setFilters({ sort })
   }
 
   function handleSearchChange(search: string): void {
-    setFilters({ search: search || undefined })
+    setFilters({
+      search: search || undefined,
+      sort: sortForSearch(activeSort, activeSearch, search),
+    })
   }
 
   const currentBoardInfo = activeBoard ? boards.find((b) => b.slug === activeBoard) : boards[0]
@@ -297,6 +305,12 @@ export function FeedbackContainer({
   // A selected board is page context (sidebar / ?board=), not a choice the
   // submit form should switch away from.
   const boardLocked = Boolean(activeBoard)
+
+  // The composer opened from a search that found nothing, with its words as
+  // the title. Signed-out visitors get the composer's own sign-in path.
+  const [draft, setDraft] = useState<{ title: string; key: number }>()
+  const canStartIdea =
+    !isRealUser || Object.values(boardPermissions ?? {}).some((board) => board.canSubmit)
 
   function handlePostCreated(postId: string): void {
     setTimeout(() => {
@@ -389,6 +403,7 @@ export function FeedbackContainer({
             boardPermissions={boardPermissions}
             onPostCreated={handlePostCreated}
             boardLocked={boardLocked}
+            draft={draft}
           />
 
           <FeedbackToolbar
@@ -448,9 +463,34 @@ export function FeedbackContainer({
               <div className="feed-loading-bar h-full w-1/3 rounded-full bg-muted-foreground" />
             </div>
             {posts.length === 0 && !isPending ? (
-              activeSearch || narrowingCount > 0 ? (
+              activeSearch ? (
+                // A search that finds nothing is the moment to post the idea.
+                <div className="text-center py-8 px-4 space-y-3">
+                  <p className="text-muted-foreground">
+                    {intl.formatMessage(
+                      {
+                        id: 'portal.feedback.list.noSearchResults',
+                        defaultMessage: 'No ideas match “{query}”.',
+                      },
+                      { query: activeSearch }
+                    )}
+                  </p>
+                  {canStartIdea && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDraft({ title: activeSearch, key: Date.now() })}
+                    >
+                      {intl.formatMessage({
+                        id: 'portal.feedback.list.postSearchAsIdea',
+                        defaultMessage: 'Post it as a new idea',
+                      })}
+                    </Button>
+                  )}
+                </div>
+              ) : narrowingCount > 0 ? (
                 <p className="text-muted-foreground text-center py-8">
-                  {activeView && narrowingCount === 1 && !activeSearch
+                  {activeView && narrowingCount === 1
                     ? intl.formatMessage(EMPTY_VIEW_MESSAGES[activeView])
                     : intl.formatMessage({
                         id: 'portal.feedback.list.noPostsFiltered',

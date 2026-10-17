@@ -36,6 +36,13 @@ export type RespondedFilter = 'responded' | 'unresponded'
 
 /** Portal feed views for a signed-in viewer: ideas they posted, voted on or follow. */
 export const PUBLIC_FEED_VIEWS = ['mine', 'voted', 'following'] as const
+
+/**
+ * Feed orders. 'relevance' (best match) applies while searching; without a
+ * search it falls back to trending.
+ */
+export const PUBLIC_POST_SORTS = ['top', 'new', 'trending', 'relevance'] as const
+export type PublicPostSort = (typeof PUBLIC_POST_SORTS)[number]
 export type PublicFeedView = (typeof PUBLIC_FEED_VIEWS)[number]
 
 /** Portal filter panel counts, keyed by status slug, board slug, tag id and view. */
@@ -65,7 +72,7 @@ export function feedShowsActiveOnly(feed: { search?: string; view?: string }): b
 export interface PublicFeedbackFilters {
   board?: string
   search?: string
-  sort?: 'top' | 'new' | 'trending'
+  sort?: PublicPostSort
   status?: string[]
   tagIds?: string[]
   minVotes?: number

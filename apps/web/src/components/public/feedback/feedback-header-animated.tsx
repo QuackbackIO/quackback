@@ -58,6 +58,11 @@ export interface FeedbackHeaderProps {
    * board switcher.
    */
   boardLocked?: boolean
+  /**
+   * Opens the composer with this title, for example from a search that found
+   * nothing. A new `key` opens it again with the same title.
+   */
+  draft?: { title: string; key: number }
 }
 
 /** The server's limits for a new post's title and details (createPublicPostSchema). */
@@ -70,6 +75,7 @@ export function FeedbackHeaderAnimated({
   user,
   boardPermissions,
   onPostCreated,
+  draft,
   boardLocked = false,
 }: FeedbackHeaderProps) {
   const intl = useIntl()
@@ -134,6 +140,16 @@ export function FeedbackHeaderAnimated({
   // these client-side (same rules the server enforces on write).
   const selectedBoard = boards.find((b) => b.id === selectedBoardId)
   const boardCustomFields = selectedBoard?.settings?.customFields ?? []
+
+  // A draft handed in (a search that found nothing) opens the composer with
+  // that title, in view.
+  useEffect(() => {
+    if (!draft) return
+    title.set(draft.title)
+    setExpanded(true)
+    titleInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    titleInputRef.current?.focus({ preventScroll: true })
+  }, [draft, title])
 
   // Focus title input when form expands
   useEffect(() => {

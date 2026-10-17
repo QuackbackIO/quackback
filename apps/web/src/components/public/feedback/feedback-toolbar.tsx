@@ -8,10 +8,11 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
+import type { PublicPostSort } from '@/lib/shared/types/filters'
 
 interface FeedbackToolbarProps {
-  currentSort: 'top' | 'new' | 'trending'
-  onSortChange: (sort: 'top' | 'new' | 'trending') => void
+  currentSort: PublicPostSort
+  onSortChange: (sort: PublicPostSort) => void
   currentSearch?: string
   onSearchChange: (search: string) => void
   /** Optional slot rendered after the search button on the right (typically the Filter button). */
@@ -19,6 +20,13 @@ interface FeedbackToolbarProps {
 }
 
 const SORT_OPTIONS = [
+  {
+    // Offered only while searching.
+    value: 'relevance',
+    messageId: 'portal.feedback.toolbar.sortRelevance',
+    defaultMessage: 'Best match',
+    icon: MagnifyingGlassIcon,
+  },
   {
     value: 'trending',
     messageId: 'portal.feedback.toolbar.sortTrending',
@@ -39,6 +47,21 @@ const SORT_OPTIONS = [
   },
 ] as const
 
+/**
+ * The order to use once the search changes. Starting a search from the
+ * default order switches to best match and clearing it goes back; a sort
+ * picked while searching stays.
+ */
+export function sortForSearch(
+  sort: PublicPostSort,
+  previousSearch: string | undefined,
+  search: string
+): PublicPostSort {
+  if (search && !previousSearch && sort === 'trending') return 'relevance'
+  if (!search && sort === 'relevance') return 'trending'
+  return sort
+}
+
 export function FeedbackToolbar({
   currentSort,
   onSortChange,
@@ -47,6 +70,8 @@ export function FeedbackToolbar({
   filterButton,
 }: FeedbackToolbarProps): React.ReactElement {
   const intl = useIntl()
+  // Best match only applies to a search; without one the feed is trending.
+  const shownSort = currentSort === 'relevance' && !currentSearch ? 'trending' : currentSort
   // A local debounce rather than the shared useDebouncedSearch: importing that
   // hook into the portal bundle splits it out of the admin chunk it lives in,
   // costing admin pages an extra request.
@@ -88,27 +113,32 @@ export function FeedbackToolbar({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
       <div className="flex items-center gap-1 min-w-0">
-        {SORT_OPTIONS.map((option) => {
-          const Icon = option.icon
-          const isActive = currentSort === option.value
-          return (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={isActive}
-              onClick={() => onSortChange(option.value)}
-              className={cn(
-                'flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
-                isActive
-                  ? 'bg-muted text-foreground font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              )}
-            >
-              <Icon className={cn('h-3.5 w-3.5', isActive && 'text-primary')} />
-              {intl.formatMessage({ id: option.messageId, defaultMessage: option.defaultMessage })}
-            </button>
-          )
-        })}
+        {SORT_OPTIONS.filter((option) => option.value !== 'relevance' || currentSearch).map(
+          (option) => {
+            const Icon = option.icon
+            const isActive = shownSort === option.value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => onSortChange(option.value)}
+                className={cn(
+                  'flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
+                  isActive
+                    ? 'bg-muted text-foreground font-medium'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                )}
+              >
+                <Icon className={cn('h-3.5 w-3.5', isActive && 'text-primary')} />
+                {intl.formatMessage({
+                  id: option.messageId,
+                  defaultMessage: option.defaultMessage,
+                })}
+              </button>
+            )
+          }
+        )}
       </div>
 
       {/* Search sits after the sort, capped so it reads as a field rather than

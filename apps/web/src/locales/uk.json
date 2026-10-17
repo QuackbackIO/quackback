@@ -2214,5 +2214,8 @@
   "oauthDevice.ready.unverified": "Неперевірений застосунок. Будь-хто може зареєструвати застосунок під будь-якою назвою.",
   "portal.feedback.panel.statusOnly": "Лише",
   "portal.feedback.panel.statusOnlyLabel": "Показати лише {status}",
-  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}",
+  "portal.feedback.toolbar.sortRelevance": "Найкращі збіги",
+  "portal.feedback.list.noSearchResults": "Немає ідей за запитом «{query}».",
+  "portal.feedback.list.postSearchAsIdea": "Опублікувати як нову ідею"
 }

@@ -34,6 +34,7 @@ import {
 import { getSettings } from './workspace'
 import { workspaceAllowsAnonymous } from '@/lib/server/domains/settings/settings.types'
 import { listPublicPosts, getAllUserVotedPostIds } from '@/lib/server/domains/posts/post.public'
+import { withPublicSearchMode } from '@/lib/server/domains/posts/post.public.search'
 import {
   getPublicRoadmapPostsPaginated,
   getVoteAndSubscriptionStatus,
@@ -132,20 +133,25 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
   // structure or widen the public feed. `owner: 'unassigned'` → null match.
   const { ownerId, segmentIds } = teamOnlyFeedFilters(actor, data)
 
-  const feedParams = {
-    boardSlug: data.boardSlug,
-    search: data.search,
-    statusIds: data.statusIds as PostStatusId[] | undefined,
-    statusSlugs: data.statusSlugs,
-    tagIds: data.tagIds as PostTagId[] | undefined,
-    minVotes: data.minVotes,
-    dateFrom: data.dateFrom,
-    responded: data.responded,
-    ownerId,
-    segmentIds,
-    view: data.view,
-    portalFeed: options.portalFeed,
-  }
+  // The search's all-words-or-any mode is settled once, so the list and its
+  // counts match the same posts.
+  const feedParams = await withPublicSearchMode(
+    {
+      boardSlug: data.boardSlug,
+      search: data.search,
+      statusIds: data.statusIds as PostStatusId[] | undefined,
+      statusSlugs: data.statusSlugs,
+      tagIds: data.tagIds as PostTagId[] | undefined,
+      minVotes: data.minVotes,
+      dateFrom: data.dateFrom,
+      responded: data.responded,
+      ownerId,
+      segmentIds,
+      view: data.view,
+      portalFeed: options.portalFeed,
+    },
+    actor
+  )
   // The portal's first page carries the filter panel counts, so a filter
   // change refreshes them in the same request.
   const [result, facets] = await Promise.all([

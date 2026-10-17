@@ -27,9 +27,11 @@ import {
   type SegmentId,
 } from '@quackback/ids'
 import type { PublicPostListResult } from './post.types'
+import { postSearchCondition, postSearchOrder, type PostSearchMode } from './post.search'
 import {
   feedShowsActiveOnly,
   type PublicFeedView,
+  type PublicPostSort,
   type RespondedFilter,
 } from '@/lib/shared/types/filters'
 import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
@@ -80,9 +82,9 @@ export function parseJson<T>(value: string | T): T {
   return typeof value === 'string' ? JSON.parse(value) : value
 }
 
-type SortOrder = 'top' | 'new' | 'trending'
+type SortOrder = PublicPostSort
 
-function getPostSortOrder(sort: SortOrder) {
+function getPostSortOrder(sort: Exclude<SortOrder, 'relevance'>) {
   switch (sort) {
     case 'new':
       return desc(posts.createdAt)
@@ -99,7 +101,21 @@ function getPostSortOrder(sort: SortOrder) {
  * otherwise floats the unpinned NULL rows above the pinned ones.
  */
 function pinnedFirstThen(sort: SortOrder) {
-  return [sql`${posts.pinnedAt} DESC NULLS LAST`, getPostSortOrder(sort)]
+  return [
+    sql`${posts.pinnedAt} DESC NULLS LAST`,
+    getPostSortOrder(sort === 'relevance' ? 'trending' : sort),
+  ]
+}
+
+/**
+ * The feed's order. A search sorted by best match ranks every post on how
+ * well it matches, pinned or not; anything else keeps pinned posts first.
+ */
+function feedOrder(params: Pick<PostListParams, 'search' | 'searchMode'>, sort: SortOrder) {
+  if (sort === 'relevance' && params.search) {
+    return postSearchOrder(params.search, params.searchMode ?? 'all')
+  }
+  return pinnedFirstThen(sort)
 }
 
 export interface PostWithVotesAndAvatars {
@@ -145,6 +161,11 @@ export interface PostListParams {
   segmentIds?: SegmentId[]
   /** Signed-in viewers only: ideas they posted, voted on or follow. Ignored otherwise. */
   view?: PublicFeedView
+  /**
+   * Whether a search needs all its words or any one of them. Resolve it once
+   * per request with withPublicSearchMode, so the list and its counts agree.
+   */
+  searchMode?: PostSearchMode
   /**
    * The portal feed itself: a search reaches complete and closed posts, and
    * rows carry their changelog link. Other callers (widget, apps search) keep
@@ -218,7 +239,7 @@ export function buildPostFilterConditions(
   }
 
   if (search) {
-    conditions.push(sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`)
+    conditions.push(postSearchCondition(search, params.searchMode))
   }
 
   if (typeof params.minVotes === 'number' && params.minVotes > 0) {
@@ -277,7 +298,7 @@ export async function listPublicPostsWithVotesAndAvatars(
   const { sort = 'top', page = 1, limit = 20, principalId, actor = ANONYMOUS_ACTOR } = params
   const offset = (page - 1) * limit
   const conditions = buildPostFilterConditions(params, actor)
-  const orderBy = pinnedFirstThen(sort)
+  const orderBy = feedOrder(params, sort)
 
   // Only authenticated users can vote, so we only check principal_id
   // Anonymous users see vote counts but hasVoted is always false
@@ -399,7 +420,7 @@ export async function listPublicPosts(
   const { sort = 'top', page = 1, limit = 20, actor = ANONYMOUS_ACTOR } = params
   const offset = (page - 1) * limit
   const conditions = buildPostFilterConditions(params, actor)
-  const orderBy = pinnedFirstThen(sort)
+  const orderBy = feedOrder(params, sort)
 
   const postsResult = await db
     .select({

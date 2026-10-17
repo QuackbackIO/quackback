@@ -44,6 +44,7 @@ import {
 } from '@/lib/server/domains/posts/post.public'
 import { getPublicPostDetail } from '@/lib/server/domains/posts/post.public.detail'
 import { countPublicPostFacetsOrNull } from '@/lib/server/domains/posts/post.public.facets'
+import { withPublicSearchMode } from '@/lib/server/domains/posts/post.public.search'
 import { getPostMergeInfo, getMergedPosts } from '@/lib/server/domains/posts/post.merge'
 import { listPublicStatuses } from '@/lib/server/domains/statuses/status.service'
 import { listPublicPostTags } from '@/lib/server/domains/post-tags/post-tag.service'
@@ -64,12 +65,12 @@ import { resolvePortalAccessForRequest } from './portal-access'
 import { teamOnlyFeedFilters } from '@/lib/server/domains/posts/post.public.team-filters'
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
-import { PUBLIC_FEED_VIEWS } from '@/lib/shared/types/filters'
+import { PUBLIC_FEED_VIEWS, PUBLIC_POST_SORTS } from '@/lib/shared/types/filters'
 
 const log = logger.child({ component: 'portal' })
 
 // Schemas
-const sortSchema = z.enum(['top', 'new', 'trending'])
+const sortSchema = z.enum(PUBLIC_POST_SORTS)
 
 const fetchPublicPostsSchema = z.object({
   boardSlug: z.string().optional(),
@@ -187,19 +188,24 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
     // Run ALL queries in parallel for maximum performance — including the
     // (fail-closed) anonymous-ceiling read so buildBoardPermissions doesn't
     // serialize an extra round-trip onto this (highest-traffic) loader.
-    const feedParams = {
-      boardSlug: data.boardSlug,
-      search: data.search,
-      statusSlugs: data.statusSlugs,
-      tagIds: data.tagIds as PostTagId[] | undefined,
-      minVotes: data.minVotes,
-      dateFrom: data.dateFrom,
-      responded: data.responded,
-      ownerId,
-      segmentIds,
-      view: data.view,
-      portalFeed: true,
-    }
+    // A search settles its all-words-or-any mode first (one probe, and only
+    // for a multi-word search), so the list and its counts agree.
+    const feedParams = await withPublicSearchMode(
+      {
+        boardSlug: data.boardSlug,
+        search: data.search,
+        statusSlugs: data.statusSlugs,
+        tagIds: data.tagIds as PostTagId[] | undefined,
+        minVotes: data.minVotes,
+        dateFrom: data.dateFrom,
+        responded: data.responded,
+        ownerId,
+        segmentIds,
+        view: data.view,
+        portalFeed: true,
+      },
+      actor
+    )
     const [boardsRaw, postsResult, statuses, tags, allVotedPosts, allowAnonymous, facets] =
       await Promise.all([
         listPublicBoardsWithStats(actor),
