@@ -9,8 +9,8 @@ import { resolvePostSearchMode } from './post.search'
 
 /**
  * Settles whether the request's search needs all its words: when no post in
- * this feed has them all, any one will do. One cheap probe, and only for a
- * search of two or more plain words.
+ * this feed has them all, half of them will do. One cheap probe, and only for
+ * a search of two or more plain words.
  */
 export async function withPublicSearchMode<T extends PostListParams>(
   params: T,
