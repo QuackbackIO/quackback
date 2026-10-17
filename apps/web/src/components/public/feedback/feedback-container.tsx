@@ -7,6 +7,7 @@ import { Spinner } from '@/components/shared/spinner'
 import { useRouter } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
+import { PortalFilterPanel } from '@/components/public/feedback/portal-filter-panel'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
 import {
   PublicFiltersBar,
@@ -21,7 +22,9 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import {
   flattenPublicPosts,
   publicPostsKeys,
+  usePublicPostFacets,
   usePublicPosts,
+  type PublicPostFacetCounts,
   useVotedPosts,
 } from '@/lib/client/hooks/use-portal-posts-query'
 import { useChangePostStatusId } from '@/lib/client/mutations/posts'
@@ -57,6 +60,8 @@ interface FeedbackContainerProps {
    */
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
   showPoweredBy?: boolean
+  /** Filter panel counts as rendered on the server. */
+  facets?: PublicPostFacetCounts | null
 }
 
 export function FeedbackContainer({
@@ -75,6 +80,7 @@ export function FeedbackContainer({
   user,
   boardPermissions,
   showPoweredBy = true,
+  facets,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const router = useRouter()
@@ -185,6 +191,11 @@ export function FeedbackContainer({
       : undefined,
   })
 
+  const { data: facetCounts } = usePublicPostFacets({
+    filters: mergedFilters,
+    initialData: filtersMatchInitial ? facets : undefined,
+  })
+
   const posts = flattenPublicPosts(postsData)
   // Dim the list only during an actual filter transition (placeholderData is
   // still showing the previous filter's results while the new ones load) —
@@ -234,10 +245,6 @@ export function FeedbackContainer({
 
   function handleSortChange(sort: 'top' | 'new' | 'trending'): void {
     setFilters({ sort })
-  }
-
-  function handleBoardChange(board: string | undefined): void {
-    setFilters({ board })
   }
 
   function handleSearchChange(search: string): void {
@@ -463,13 +470,17 @@ export function FeedbackContainer({
           </div>
         </div>
 
-        <FeedbackSidebar
-          boards={boards}
-          currentBoard={activeBoard}
-          onBoardChange={handleBoardChange}
-          workspaceSlug={workspaceSlug}
-          showPoweredBy={showPoweredBy}
-        />
+        <FeedbackSidebar workspaceSlug={workspaceSlug} showPoweredBy={showPoweredBy}>
+          <PortalFilterPanel
+            filters={mergedFilters}
+            setFilters={setFilters}
+            boards={boards}
+            statuses={statuses}
+            tags={tags}
+            counts={facetCounts}
+            showViews={isRealUser}
+          />
+        </FeedbackSidebar>
       </div>
     </div>
   )

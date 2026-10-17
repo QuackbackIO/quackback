@@ -227,6 +227,7 @@ function PortalFeed() {
       currentSort={currentSort}
       defaultBoardId={portalData.boards[0]?.id}
       boardPermissions={portalData.boardPermissions}
+      facets={portalData.facets}
       showPoweredBy={showPoweredBy}
     />
   )
