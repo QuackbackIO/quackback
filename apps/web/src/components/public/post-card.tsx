@@ -299,7 +299,11 @@ export function PostCard({
         variant="badge"
       />
     ) : currentStatus ? (
-      <StatusBadge name={currentStatus.name} color={currentStatus.color} />
+      <StatusBadge
+        name={currentStatus.name}
+        color={currentStatus.color}
+        className={changelogEntry ? undefined : 'mb-1'}
+      />
     ) : null
 
   // Admin quick actions (status dropdown button + more actions)
@@ -360,7 +364,7 @@ export function PostCard({
 
   // Portal author quick actions (edit/delete)
   const portalQuickActions = !isAdminMode && isCurrentUserAuthor && (
-    <div className="absolute end-2 top-1/2 z-10 -translate-y-1/2">
+    <div className="absolute end-2 top-1/2 -translate-y-1/2">
       <TooltipProvider>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -475,15 +479,16 @@ export function PostCard({
       authorInner
     )
 
-  // In portal mode the title is the card's only link: its ::after covers the
-  // card, and every control sits above it (z-10) so nothing nests in an <a>.
+  // In portal mode the title is the card's only link. `.post-card__link`
+  // (globals.css) stretches it over the card and lifts every other control
+  // above it, so nothing nests inside an <a>.
   const titleText = isAdminMode ? (
     title
   ) : (
     <Link
       to="/b/$slug/posts/$postId"
       params={{ slug: boardSlug, postId: id }}
-      className="outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring/50"
+      className="post-card__link"
     >
       {title}
     </Link>
@@ -494,28 +499,28 @@ export function PostCard({
   const cardContent = (
     <div className="flex items-start p-4 gap-4">
       {/* Vote column */}
-      <div className="relative z-10 shrink-0">{voteButton}</div>
+      {voteButton}
 
       {/* Main content */}
       <div className="flex-1 min-w-0">
         {/* Status badge/dropdown - above title */}
-        {(statusDisplay || changelogEntry) && (
-          <div className="relative z-10 mb-1 flex w-fit items-center gap-2">
+        {changelogEntry ? (
+          <div className="mb-1 flex items-center gap-2">
             {statusDisplay}
-            {changelogEntry && (
-              <Link
-                to="/changelog/$entryId"
-                params={{ entryId: changelogEntry.id }}
-                title={changelogEntry.title}
-                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-              >
-                {intl.formatMessage({
-                  id: 'portal.postCard.inChangelog',
-                  defaultMessage: 'In the changelog',
-                })}
-              </Link>
-            )}
+            <Link
+              to="/changelog/$entryId"
+              params={{ entryId: changelogEntry.id }}
+              title={changelogEntry.title}
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              {intl.formatMessage({
+                id: 'portal.postCard.inChangelog',
+                defaultMessage: 'In the changelog',
+              })}
+            </Link>
           </div>
+        ) : (
+          statusDisplay
         )}
         {/* Title */}
         <h3
@@ -536,7 +541,7 @@ export function PostCard({
 
         {/* Tags */}
         {tags.length > 0 && (
-          <div className="relative z-10 flex w-fit items-center gap-1 mt-1.5">
+          <div className="flex items-center gap-1 mt-1.5">
             {tags.slice(0, 3).map((tag) => {
               const style = { backgroundColor: tag.color + '20', color: tag.color }
               return onTagClick ? (
@@ -544,7 +549,7 @@ export function PostCard({
                   key={tag.id}
                   type="button"
                   onClick={() => onTagClick(tag.id)}
-                  className={cn(tagClassName, 'hover:brightness-125')}
+                  className={tagClassName}
                   style={style}
                 >
                   {tag.name}
@@ -563,7 +568,7 @@ export function PostCard({
 
         {/* Meta row */}
         <div className="flex items-center text-muted-foreground gap-2 text-xs mt-2.5">
-          <span className="relative z-10 inline-flex items-center gap-2">{authorMeta}</span>
+          {authorMeta}
           <span className="text-muted-foreground/40">·</span>
           <TimeAgo date={createdAtDate} className="text-muted-foreground/70" />
           {commentCount > 0 && (
@@ -574,7 +579,7 @@ export function PostCard({
           )}
         </div>
         {moderationState === 'pending' && (
-          <div className="relative z-10 mt-2.5" onClick={(e) => e.stopPropagation()}>
+          <div className="mt-2.5" onClick={(e) => e.stopPropagation()}>
             <InlineModerationActions
               pending
               noun="post"

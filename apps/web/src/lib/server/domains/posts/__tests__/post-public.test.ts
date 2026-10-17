@@ -105,6 +105,13 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   principal: { id: Symbol('principal.id') },
 }))
 
+// The changelog link columns read workspace settings; their SQL is covered by
+// post-public-changelog.db.test.ts.
+vi.mock('../post.public.changelog', () => ({
+  changelogLinkColumns: async () => ({}),
+  toChangelogLink: () => null,
+}))
+
 describe('listPublicPostsWithVotesAndAvatars — default status filtering', () => {
   beforeEach(() => {
     vi.clearAllMocks()

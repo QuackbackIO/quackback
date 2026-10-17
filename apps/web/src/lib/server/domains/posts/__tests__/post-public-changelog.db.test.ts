@@ -5,6 +5,7 @@ import {
   boards,
   changelogEntries,
   changelogEntryPosts,
+  eq,
   posts,
   principal,
   user,
@@ -19,7 +20,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', async () => {
   const { getProductFlagUpdate } = await import('@/lib/shared/types/settings')
   return { getFeatureFlags: async () => getProductFlagUpdate('changelog', flags.changelogOn) }
 })
-import { getChangelogLinksForPosts } from '../post.public.changelog'
+import { changelogLinkColumns, toChangelogLink } from '../post.public.changelog'
 
 const fixture = await createDbTestFixture()
 beforeEach(async () => {
@@ -56,6 +57,15 @@ async function entry(title: string, publishedAt: Date | null, deletedAt: Date | 
   return row!
 }
 
+/** Runs the feed's link columns for one post, the way the list queries do. */
+async function linkFor(postId: PostId) {
+  const [row] = await testDb
+    .select(await changelogLinkColumns())
+    .from(posts)
+    .where(eq(posts.id, postId))
+  return toChangelogLink(row!)
+}
+
 it('links a post to its newest published changelog entry', async () => {
   const postId = await post()
   const older = await entry('Older', new Date('2026-01-01'))
@@ -65,9 +75,7 @@ it('links a post to its newest published changelog entry', async () => {
     { changelogEntryId: newer.id, postId },
   ])
 
-  const links = await getChangelogLinksForPosts([postId])
-
-  expect(links.get(postId)).toEqual({ id: newer.id, title: 'Newer' })
+  expect(await linkFor(postId)).toEqual({ id: newer.id, title: 'Newer' })
 })
 
 it('ignores drafts, scheduled and deleted entries', async () => {
@@ -81,13 +89,11 @@ it('ignores drafts, scheduled and deleted entries', async () => {
     { changelogEntryId: deleted.id, postId },
   ])
 
-  const links = await getChangelogLinksForPosts([postId])
-
-  expect(links.has(postId)).toBe(false)
+  expect(await linkFor(postId)).toBeNull()
 })
 
-it('returns an empty map without querying for an empty page', async () => {
-  expect((await getChangelogLinksForPosts([])).size).toBe(0)
+it('links nothing for a post no entry announced', async () => {
+  expect(await linkFor(await post())).toBeNull()
 })
 
 it('links nothing while the changelog is switched off', async () => {
@@ -96,5 +102,5 @@ it('links nothing while the changelog is switched off', async () => {
   await testDb.insert(changelogEntryPosts).values({ changelogEntryId: published.id, postId })
   flags.changelogOn = false
 
-  expect((await getChangelogLinksForPosts([postId])).size).toBe(0)
+  expect(await linkFor(postId)).toBeNull()
 })

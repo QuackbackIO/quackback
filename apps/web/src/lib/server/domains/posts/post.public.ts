@@ -31,7 +31,11 @@ import { feedShowsActiveOnly, type RespondedFilter } from '@/lib/shared/types/fi
 import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
-import { getChangelogLinksForPosts, type PostChangelogLink } from './post.public.changelog'
+import {
+  changelogLinkColumns,
+  toChangelogLink,
+  type PostChangelogLink,
+} from './post.public.changelog'
 
 /**
  * Portal tag visibility. Non-team viewers only see tags marked public —
@@ -259,6 +263,7 @@ export async function listPublicPostsWithVotesAndAvatars(
 
   const postsResult = await db
     .select({
+      ...(await changelogLinkColumns()),
       id: posts.id,
       title: posts.title,
       content: posts.content,
@@ -291,7 +296,7 @@ export async function listPublicPostsWithVotesAndAvatars(
   const pagePostIds = trimmedResults.map((p) => p.id)
   const pageAuthorIds = [...new Set(trimmedResults.map((p) => p.principalId))]
 
-  const [tagRows, authorRows, changelogLinks] = await Promise.all([
+  const [tagRows, authorRows] = await Promise.all([
     pagePostIds.length > 0
       ? db
           .select({
@@ -318,7 +323,6 @@ export async function listPublicPostsWithVotesAndAvatars(
           .leftJoin(userTable, eq(userTable.id, principalTable.userId))
           .where(inArray(principalTable.id, pageAuthorIds))
       : Promise.resolve([]),
-    getChangelogLinksForPosts(pagePostIds),
   ])
 
   const tagsByPost = new Map<string, Array<{ id: PostTagId; name: string; color: string }>>()
@@ -353,7 +357,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
       hasVoted: post.hasVoted ?? false,
       avatarUrl,
-      changelogEntry: changelogLinks.get(post.id) ?? null,
+      changelogEntry: toChangelogLink(post),
     }
   })
 
@@ -370,6 +374,7 @@ export async function listPublicPosts(
 
   const postsResult = await db
     .select({
+      ...(await changelogLinkColumns()),
       id: posts.id,
       title: posts.title,
       content: posts.content,
@@ -403,7 +408,6 @@ export async function listPublicPosts(
 
   const hasMore = postsResult.length > limit
   const trimmedResults = hasMore ? postsResult.slice(0, limit) : postsResult
-  const changelogLinks = await getChangelogLinksForPosts(trimmedResults.map((p) => p.id))
 
   const items = trimmedResults.map((post) => ({
     id: post.id,
@@ -418,7 +422,7 @@ export async function listPublicPosts(
     moderationState: post.moderationState,
     tags: parseJson<Array<{ id: PostTagId; name: string; color: string }>>(post.tagsJson),
     board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
-    changelogEntry: changelogLinks.get(post.id) ?? null,
+    changelogEntry: toChangelogLink(post),
   }))
 
   return { items, total: undefined, hasMore }

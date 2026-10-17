@@ -411,6 +411,27 @@
   }
 }
 
+/* Feed post card: the title link's ::after covers the whole card so the card
+   reads as one link, and every other control in it sits above that layer.
+   One rule here instead of positioning classes repeated on every card. */
+@layer components {
+  .post-card__link {
+    outline: none;
+  }
+  .post-card__link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+  .post-card__link:focus-visible::after {
+    box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--ring) 50%, transparent);
+  }
+  .post-card :is(button, a, [role='link']):not(.post-card__link) {
+    position: relative;
+    z-index: 1;
+  }
+}
+
 /* ==============================================
    Base Styles (shadcn/ui standard)
    Applies default border and outline colors

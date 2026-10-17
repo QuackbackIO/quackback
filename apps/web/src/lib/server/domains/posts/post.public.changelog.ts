@@ -1,5 +1,15 @@
-import { db, and, desc, eq, inArray, changelogEntries, changelogEntryPosts } from '@/lib/server/db'
-import type { ChangelogId, PostId } from '@quackback/ids'
+import {
+  db,
+  and,
+  desc,
+  eq,
+  sql,
+  posts,
+  changelogEntries,
+  changelogEntryPosts,
+} from '@/lib/server/db'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
+import type { ChangelogId } from '@quackback/ids'
 import { publicChangelogConditions } from '@/lib/server/domains/changelog/changelog.public'
 import { getFeatureFlags } from '@/lib/server/domains/settings/settings.service'
 import { isProductEnabled } from '@/lib/shared/types/settings'
@@ -10,31 +20,42 @@ export interface PostChangelogLink {
 }
 
 /**
- * The newest public changelog entry linked to each post on a page, so a
- * shipped idea in the feed can point at the announcement. Empty when the
- * changelog product is off, so no entry is exposed and no query runs.
+ * Columns for a feed query over `posts`: the id and title of the newest public
+ * changelog entry linked to each post, so a shipped idea can point at its
+ * announcement. They are correlated subqueries, so the link costs no extra
+ * round trip. Both are null when the changelog product is off.
  */
-export async function getChangelogLinksForPosts(
-  postIds: PostId[]
-): Promise<Map<PostId, PostChangelogLink>> {
-  const links = new Map<PostId, PostChangelogLink>()
-  if (postIds.length === 0 || !isProductEnabled(await getFeatureFlags(), 'changelog')) {
-    return links
+export async function changelogLinkColumns() {
+  if (!isProductEnabled(await getFeatureFlags(), 'changelog')) {
+    return {
+      changelogEntryId: sql<ChangelogId | null>`null`,
+      changelogEntryTitle: sql<string | null>`null`,
+    }
   }
+  const newest = (column: AnyPgColumn) =>
+    db
+      .select({ value: column })
+      .from(changelogEntryPosts)
+      .innerJoin(changelogEntries, eq(changelogEntries.id, changelogEntryPosts.changelogEntryId))
+      .where(
+        and(eq(changelogEntryPosts.postId, posts.id), ...publicChangelogConditions(new Date()))
+      )
+      .orderBy(desc(changelogEntries.publishedAt))
+      .limit(1)
+  return {
+    changelogEntryId: sql<ChangelogId | null>`(${newest(changelogEntries.id)})`.mapWith(
+      changelogEntries.id
+    ),
+    changelogEntryTitle: sql<string | null>`(${newest(changelogEntries.title)})`,
+  }
+}
 
-  const rows = await db
-    .selectDistinctOn([changelogEntryPosts.postId], {
-      postId: changelogEntryPosts.postId,
-      id: changelogEntries.id,
-      title: changelogEntries.title,
-    })
-    .from(changelogEntryPosts)
-    .innerJoin(changelogEntries, eq(changelogEntries.id, changelogEntryPosts.changelogEntryId))
-    .where(
-      and(inArray(changelogEntryPosts.postId, postIds), ...publicChangelogConditions(new Date()))
-    )
-    .orderBy(changelogEntryPosts.postId, desc(changelogEntries.publishedAt))
-
-  for (const row of rows) links.set(row.postId, { id: row.id, title: row.title })
-  return links
+/** The link a feed row carries, from the columns above. */
+export function toChangelogLink(row: {
+  changelogEntryId: ChangelogId | null
+  changelogEntryTitle: string | null
+}): PostChangelogLink | null {
+  return row.changelogEntryId && row.changelogEntryTitle !== null
+    ? { id: row.changelogEntryId, title: row.changelogEntryTitle }
+    : null
 }
