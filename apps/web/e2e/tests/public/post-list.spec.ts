@@ -1283,8 +1283,15 @@ test.describe('Post List - Search Accuracy', () => {
     await searchInput.press('Enter')
 
     await expect(page).toHaveURL(/search=dark\+mode|search=dark%20mode/, { timeout: 5000 })
-    await page.waitForLoadState('networkidle')
-    await page.waitForTimeout(300)
+    // The previous results stay on screen until the search lands; wait for it.
+    const titles = page.locator('[data-post-id] h3')
+    await expect
+      .poll(async () =>
+        (await titles.allTextContents()).every((t) =>
+          t.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      )
+      .toBe(true)
 
     const filteredCount = await postCards.count()
     const emptyState = page.getByText('No posts match your filters.')
@@ -1297,7 +1304,6 @@ test.describe('Post List - Search Accuracy', () => {
 
     if (filteredCount > 0) {
       // Every visible post title should contain the search term (case-insensitive)
-      const titles = page.locator('[data-post-id] h3')
       const titleCount = await titles.count()
       for (let i = 0; i < titleCount; i++) {
         const titleText = (await titles.nth(i).textContent()) ?? ''
