@@ -232,6 +232,7 @@ function PortalFeed() {
       defaultBoardId={portalData.boards[0]?.id}
       boardPermissions={portalData.boardPermissions}
       facets={portalData.facets}
+      searchMode={'searchMode' in portalData.posts ? portalData.posts.searchMode : undefined}
       showPoweredBy={showPoweredBy}
     />
   )

@@ -5,23 +5,24 @@
 import { db, and, eq, sql, posts, boards } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy'
 import { buildPostFilterConditions, type PostListParams } from './post.public'
-import { resolvePostSearchMode } from './post.search'
+import { resolvePostSearchMode, type PostSearchMode } from './post.search'
 
 /**
- * Settles whether the request's search needs all its words: when no post in
- * this feed has them all, half of them will do. One cheap probe, and only for
- * a search of two or more plain words.
+ * Settles how loosely the request's search matches (see
+ * resolvePostSearchMode): every word, half of them, or a close spelling. A
+ * search with results costs one LIMIT 1 probe; only one that finds nothing
+ * exactly pays for the fallbacks.
  */
 export async function withPublicSearchMode<T extends PostListParams>(
   params: T,
   actor: Actor
-): Promise<T> {
-  const searchMode = await resolvePostSearchMode(params.search, async () => {
+): Promise<T & { searchMode: PostSearchMode }> {
+  const searchMode = await resolvePostSearchMode(params.search, async (mode) => {
     const rows = await db
       .select({ found: sql<number>`1` })
       .from(posts)
       .innerJoin(boards, eq(posts.boardId, boards.id))
-      .where(and(...buildPostFilterConditions({ ...params, searchMode: 'all' }, actor)))
+      .where(and(...buildPostFilterConditions({ ...params, searchMode: mode }, actor)))
       .limit(1)
     return rows.length > 0
   })

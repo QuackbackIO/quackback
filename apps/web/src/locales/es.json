@@ -2217,5 +2217,7 @@
   "portal.feedback.filter.status.summaryMore": "{names} +{count}",
   "portal.feedback.toolbar.sortRelevance": "Más relevantes",
   "portal.feedback.list.noSearchResults": "Ninguna idea coincide con “{query}”.",
-  "portal.feedback.list.postSearchAsIdea": "Publícala como idea nueva"
+  "portal.feedback.list.postSearchAsIdea": "Publícala como idea nueva",
+  "portal.feedback.list.searchWidenedMost": "Ninguna idea tiene todas tus palabras. Mostrando ideas con la mayoría.",
+  "portal.feedback.list.searchWidenedSimilar": "Sin coincidencias exactas. Mostrando ideas con una ortografía parecida."
 }

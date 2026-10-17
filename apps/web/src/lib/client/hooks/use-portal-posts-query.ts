@@ -13,7 +13,7 @@ import {
   getPostPermissionsFn,
 } from '@/lib/server/functions/public-posts'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
-import type { PublicPostFacetCounts } from '@/lib/shared/types/filters'
+import type { PublicPostFacetCounts, WidenedSearch } from '@/lib/shared/types/filters'
 import type { PublicPostListItem } from '@/lib/shared/types'
 import type { PostId, PostStatusId, PostTagId } from '@quackback/ids'
 
@@ -27,6 +27,8 @@ interface PublicPostListResult {
   hasMore: boolean
   /** Filter panel counts; the portal's first page carries them. */
   facets?: PublicPostFacetCounts
+  /** Set when the search was widened because nothing matched every word. */
+  searchMode?: WidenedSearch
 }
 
 interface PostPermissions {

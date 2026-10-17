@@ -92,7 +92,7 @@ vi.mock('@/lib/server/domains/posts/post.public.utils', () => ({
 const mockListPublicPosts = vi.fn()
 // Settles a search's word mode with a probe query; a pass-through here.
 vi.mock('@/lib/server/domains/posts/post.public.search', () => ({
-  withPublicSearchMode: async <T>(params: T) => params,
+  withPublicSearchMode: async <T>(params: T) => ({ ...params, searchMode: 'all' }),
 }))
 vi.mock('@/lib/server/domains/posts/post.public', () => ({
   listPublicPosts: (...a: unknown[]) => mockListPublicPosts(...a),

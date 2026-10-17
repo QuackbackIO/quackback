@@ -2217,5 +2217,7 @@
   "portal.feedback.filter.status.summaryMore": "{names} +{count}",
   "portal.feedback.toolbar.sortRelevance": "Найкращі збіги",
   "portal.feedback.list.noSearchResults": "Немає ідей за запитом «{query}».",
-  "portal.feedback.list.postSearchAsIdea": "Опублікувати як нову ідею"
+  "portal.feedback.list.postSearchAsIdea": "Опублікувати як нову ідею",
+  "portal.feedback.list.searchWidenedMost": "Жодна ідея не містить усіх ваших слів. Показано ідеї з більшістю з них.",
+  "portal.feedback.list.searchWidenedSimilar": "Точних збігів немає. Показано ідеї зі схожим написанням."
 }

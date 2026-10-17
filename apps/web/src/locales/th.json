@@ -2217,5 +2217,7 @@
   "portal.feedback.filter.status.summaryMore": "{names} +{count}",
   "portal.feedback.toolbar.sortRelevance": "ตรงที่สุด",
   "portal.feedback.list.noSearchResults": "ไม่มีไอเดียที่ตรงกับ “{query}”",
-  "portal.feedback.list.postSearchAsIdea": "โพสต์เป็นไอเดียใหม่"
+  "portal.feedback.list.postSearchAsIdea": "โพสต์เป็นไอเดียใหม่",
+  "portal.feedback.list.searchWidenedMost": "ไม่มีไอเดียที่มีคำของคุณครบทุกคำ กำลังแสดงไอเดียที่มีคำส่วนใหญ่",
+  "portal.feedback.list.searchWidenedSimilar": "ไม่พบผลลัพธ์ที่ตรงกันทุกประการ กำลังแสดงไอเดียที่สะกดคล้ายกัน"
 }

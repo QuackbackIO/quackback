@@ -256,6 +256,8 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
       })),
       hasMore: postsResult.hasMore,
       total: undefined,
+      ...(feedParams.search &&
+        feedParams.searchMode !== 'all' && { searchMode: feedParams.searchMode }),
     }
 
     return {

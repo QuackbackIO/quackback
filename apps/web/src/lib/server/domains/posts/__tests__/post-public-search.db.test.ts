@@ -110,3 +110,19 @@ it('treats punctuation as a word break and never errors on it', async () => {
   expect(await search(slug, "zapier: & | ! ' (")).toEqual(['Zapier integration'])
   expect(await search(slug, '&&&')).toEqual([])
 })
+
+it('finds a title with a close spelling when nothing matches exactly', async () => {
+  const slug = await boardWith([{ title: 'Zapier integration' }, { title: 'Dark mode' }])
+  expect(await search(slug, 'integraton', 'relevance')).toEqual(['Zapier integration'])
+  expect(await search(slug, 'zappier')).toEqual(['Zapier integration'])
+})
+
+it('says how a search was widened', async () => {
+  const slug = await boardWith([{ title: 'Zapier integration' }, { title: 'CSV export' }])
+  const mode = async (query: string) =>
+    (await withPublicSearchMode({ boardSlug: slug, search: query }, ANONYMOUS)).searchMode
+  expect(await mode('zapier')).toBe('all')
+  expect(await mode('csv export option')).toBe('most')
+  expect(await mode('integraton')).toBe('similar')
+  expect(await mode('xyzzy')).toBe('all')
+})
