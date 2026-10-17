@@ -12,6 +12,7 @@ import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { PUBLIC_FEED_VIEWS } from '@/lib/shared/types/filters'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -30,6 +31,7 @@ const searchSchema = z.object({
   // ignores them for everyone else). URL-driven + shareable like the rest.
   owner: z.string().optional(),
   segmentIds: z.array(z.string()).optional(),
+  view: z.enum(PUBLIC_FEED_VIEWS).optional().catch(undefined),
 })
 
 /** Build the portalData query params from the current search + session. */
@@ -46,6 +48,7 @@ function portalDataParams(searchParams: z.infer<typeof searchSchema>, userId: st
     responded: searchParams.responded,
     owner: searchParams.owner,
     segmentIds: searchParams.segmentIds?.length ? searchParams.segmentIds : undefined,
+    view: searchParams.view,
   }
 }
 

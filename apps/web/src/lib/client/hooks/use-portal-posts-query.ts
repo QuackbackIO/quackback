@@ -102,6 +102,7 @@ async function fetchPublicPosts(
       responded: filters.responded,
       owner: filters.owner,
       segmentIds: filters.segmentIds,
+      view: filters.view,
     },
   })) as unknown as PublicPostListResult
 }

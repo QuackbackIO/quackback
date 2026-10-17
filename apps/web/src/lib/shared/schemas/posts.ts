@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { boardIdSchema, postStatusIdSchema, tagIdsSchema } from '@quackback/ids/zod'
 import type { TiptapContent as DbTiptapContent } from '@/lib/shared/db-types'
 import { PageLimitSchema } from './taxonomy'
+import { PUBLIC_FEED_VIEWS } from '@/lib/shared/types/filters'
 
 /**
  * TipTap mark schema - validates mark types and their attributes
@@ -125,6 +126,7 @@ export const listPublicPostsSchema = z.object({
   responded: z.enum(['responded', 'unresponded']).optional(),
   owner: z.string().optional(),
   segmentIds: z.array(z.string()).optional(),
+  view: z.enum(PUBLIC_FEED_VIEWS).optional(),
 })
 export type ListPublicPostsInput = z.infer<typeof listPublicPostsSchema>
 

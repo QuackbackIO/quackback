@@ -44,6 +44,7 @@ export function usePublicFilters() {
       lastRouterSearchRef.current.dateFrom !== routerSearch.dateFrom ||
       lastRouterSearchRef.current.responded !== routerSearch.responded ||
       lastRouterSearchRef.current.owner !== routerSearch.owner ||
+      lastRouterSearchRef.current.view !== routerSearch.view ||
       lastRouterSearchRef.current.status?.join() !== routerSearch.status?.join() ||
       lastRouterSearchRef.current.tagIds?.join() !== routerSearch.tagIds?.join() ||
       lastRouterSearchRef.current.segmentIds?.join() !== routerSearch.segmentIds?.join())
@@ -65,6 +66,7 @@ export function usePublicFilters() {
       responded: routerSearch.responded,
       owner: routerSearch.owner,
       segmentIds: routerSearch.segmentIds?.length ? routerSearch.segmentIds : undefined,
+      view: routerSearch.view,
     }
   }, [optimistic, routerSearch])
 
@@ -86,6 +88,7 @@ export function usePublicFilters() {
           responded: newFilters.responded,
           owner: newFilters.owner,
           segmentIds: newFilters.segmentIds,
+          view: newFilters.view,
         },
         replace: true,
       })
@@ -94,8 +97,8 @@ export function usePublicFilters() {
   )
 
   const clearFilters = useCallback(() => {
-    // Clears chip-level filters only — preserves board, sort, and search,
-    // which have their own dedicated UI affordances.
+    // Clears chip-level filters only — preserves board, view, sort, and
+    // search, which have their own dedicated UI affordances.
     setFilters({
       status: undefined,
       tagIds: undefined,

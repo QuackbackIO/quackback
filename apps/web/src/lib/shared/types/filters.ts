@@ -34,6 +34,10 @@ export interface InboxFilters {
  */
 export type RespondedFilter = 'responded' | 'unresponded'
 
+/** Portal feed views for a signed-in viewer: ideas they posted, voted on or follow. */
+export const PUBLIC_FEED_VIEWS = ['mine', 'voted', 'following'] as const
+export type PublicFeedView = (typeof PUBLIC_FEED_VIEWS)[number]
+
 /**
  * With no status picked, the portal feed shows only active-category posts,
  * except while searching, so shipped and closed ideas can still be found.
@@ -66,6 +70,8 @@ export interface PublicFeedbackFilters {
    * Applied server-side only for post.view_private holders.
    */
   segmentIds?: string[]
+  /** Signed-in viewers: only ideas they posted, voted on or follow. */
+  view?: PublicFeedView
 }
 
 /**

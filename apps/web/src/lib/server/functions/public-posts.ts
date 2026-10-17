@@ -152,6 +152,7 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
     responded: data.responded,
     ownerId,
     segmentIds,
+    view: data.view,
     actor,
   })
 

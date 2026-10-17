@@ -94,7 +94,7 @@ export function FeedbackContainer({
 
   // List key for animations - only updates when data finishes loading
   // This prevents double animations when filters change (stale data → new data)
-  const filterKey = `${filters.board ?? currentBoard}-${filters.sort ?? currentSort}-${filters.search ?? currentSearch}-${(filters.status ?? []).join()}-${(filters.tagIds ?? []).join()}-${filters.minVotes ?? ''}-${filters.dateFrom ?? ''}-${filters.responded ?? ''}-${filters.owner ?? ''}-${(filters.segmentIds ?? []).join()}`
+  const filterKey = `${filters.board ?? currentBoard}-${filters.sort ?? currentSort}-${filters.search ?? currentSearch}-${(filters.status ?? []).join()}-${(filters.tagIds ?? []).join()}-${filters.minVotes ?? ''}-${filters.dateFrom ?? ''}-${filters.responded ?? ''}-${filters.owner ?? ''}-${(filters.segmentIds ?? []).join()}-${filters.view ?? ''}`
   const [listKey, setListKey] = useState(filterKey)
 
   const effectiveUser = session?.user
@@ -128,6 +128,7 @@ export function FeedbackContainer({
       // without post.view_private, so passing them through is always safe.
       owner: filters.owner,
       segmentIds: filters.segmentIds,
+      view: filters.view,
     }),
     [
       activeBoard,
@@ -140,6 +141,7 @@ export function FeedbackContainer({
       filters.responded,
       filters.owner,
       filters.segmentIds,
+      filters.view,
     ]
   )
 
@@ -148,6 +150,7 @@ export function FeedbackContainer({
     board: currentBoard,
     search: currentSearch,
     sort: currentSort,
+    view: filters.view,
   })
 
   // Only use initialData when current filters match what the server rendered
@@ -155,6 +158,7 @@ export function FeedbackContainer({
     mergedFilters.board === initialFiltersRef.current.board &&
     mergedFilters.search === initialFiltersRef.current.search &&
     mergedFilters.sort === initialFiltersRef.current.sort &&
+    mergedFilters.view === initialFiltersRef.current.view &&
     !mergedFilters.status?.length &&
     !mergedFilters.tagIds?.length &&
     !mergedFilters.minVotes &&

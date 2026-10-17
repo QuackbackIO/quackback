@@ -64,6 +64,7 @@ import {
 import { resolvePortalAccessForRequest } from './portal-access'
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
+import { PUBLIC_FEED_VIEWS } from '@/lib/shared/types/filters'
 
 const log = logger.child({ component: 'portal' })
 
@@ -94,6 +95,7 @@ const fetchPortalDataSchema = z.object({
   // payload can never be widened by a crafted request.
   owner: z.string().optional(),
   segmentIds: z.array(z.string()).optional(),
+  view: z.enum(PUBLIC_FEED_VIEWS).optional(),
 })
 
 /**
@@ -209,6 +211,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
           responded: data.responded,
           ownerId,
           segmentIds,
+          view: data.view,
         }),
         listPublicStatuses(),
         // Actor-scoped: internal tags are only listed for team viewers.

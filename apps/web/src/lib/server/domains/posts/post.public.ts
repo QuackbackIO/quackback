@@ -13,6 +13,7 @@ import {
   postTagAssignments,
   postTags,
   postVotes,
+  postSubscriptions,
   postStatuses,
   userSegments,
   principal as principalTable,
@@ -27,7 +28,11 @@ import {
   type SegmentId,
 } from '@quackback/ids'
 import type { PublicPostListResult } from './post.types'
-import { feedShowsActiveOnly, type RespondedFilter } from '@/lib/shared/types/filters'
+import {
+  feedShowsActiveOnly,
+  type PublicFeedView,
+  type RespondedFilter,
+} from '@/lib/shared/types/filters'
 import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
@@ -138,6 +143,32 @@ interface PostListParams {
   ownerId?: PrincipalId | null
   /** Team-only: restrict to posts authored by members of any of these segments. */
   segmentIds?: SegmentId[]
+  /** Signed-in viewers only: ideas they posted, voted on or follow. Ignored otherwise. */
+  view?: PublicFeedView
+}
+
+/** The posts in a viewer's own feed view, keyed off the actor, never the client. */
+function feedViewCondition(view: PublicFeedView, viewer: PrincipalId) {
+  switch (view) {
+    case 'mine':
+      return eq(posts.principalId, viewer)
+    case 'voted':
+      return inArray(
+        posts.id,
+        db
+          .select({ postId: postVotes.postId })
+          .from(postVotes)
+          .where(eq(postVotes.principalId, viewer))
+      )
+    case 'following':
+      return inArray(
+        posts.id,
+        db
+          .select({ postId: postSubscriptions.postId })
+          .from(postSubscriptions)
+          .where(eq(postSubscriptions.principalId, viewer))
+      )
+  }
 }
 
 function buildPostFilterConditions(params: PostListParams, actor: Actor) {
@@ -237,6 +268,13 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
           .where(inArray(userSegments.segmentId, params.segmentIds))
       )
     )
+  }
+
+  // Anonymous sessions have principals too, but no views: a crafted URL falls
+  // back to the whole feed rather than an empty one.
+  const viewer = actor.principalType === 'anonymous' ? null : actor.principalId
+  if (params.view && viewer) {
+    conditions.push(feedViewCondition(params.view, viewer))
   }
 
   return conditions
