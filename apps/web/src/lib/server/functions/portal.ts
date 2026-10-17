@@ -43,7 +43,7 @@ import {
   getAllUserVotedPostIds,
 } from '@/lib/server/domains/posts/post.public'
 import { getPublicPostDetail } from '@/lib/server/domains/posts/post.public.detail'
-import { countPublicPostFacets } from '@/lib/server/domains/posts/post.public.facets'
+import { countPublicPostFacetsOrNull } from '@/lib/server/domains/posts/post.public.facets'
 import { getPostMergeInfo, getMergedPosts } from '@/lib/server/domains/posts/post.merge'
 import { listPublicStatuses } from '@/lib/server/domains/statuses/status.service'
 import { listPublicPostTags } from '@/lib/server/domains/post-tags/post-tag.service'
@@ -218,7 +218,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         principalId ? getAllUserVotedPostIds(principalId) : Promise.resolve(new Set<PostId>()),
         loadAllowAnonymous(),
         // Filter panel counts, so they paint with the page.
-        countPublicPostFacets(feedParams, actor),
+        countPublicPostFacetsOrNull(feedParams, actor),
       ])
 
     // Per-board submit/vote capability for THIS viewer, composed with the

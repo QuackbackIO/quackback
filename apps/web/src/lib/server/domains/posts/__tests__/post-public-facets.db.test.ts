@@ -8,7 +8,17 @@ import {
   type UserId,
 } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { boards, eq, posts, postStatuses, postVotes, principal, user } from '@/lib/server/db'
+import {
+  boards,
+  eq,
+  posts,
+  postStatuses,
+  postTagAssignments,
+  postTags,
+  postVotes,
+  principal,
+  user,
+} from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy'
 
 vi.mock('@/lib/server/db', async (original) => ({
@@ -112,6 +122,58 @@ it('counts every status, board and view, each ignoring its own filter', async ()
   expect(counts.boards[ideasSlug]).toBe(1)
   expect(counts.boards[bugsSlug]).toBe(1)
   expect(counts.views).toEqual({ mine: 1, voted: 0, following: 0 })
+  expect(counts.total).toBe(2)
+})
+
+async function slugOf(boardId: BoardId): Promise<string> {
+  const [row] = await testDb.select().from(boards).where(eq(boards.id, boardId))
+  return row!.slug
+}
+
+it('counts a view over every status, as the view shows it', async () => {
+  const me = await person()
+  const ideas = await board('ideas')
+  await idea(ideas, me, await status('open'))
+  await idea(ideas, me, await status('complete'))
+  const params = { boardSlug: await slugOf(ideas), portalFeed: true }
+
+  const counts = await countPublicPostFacets(params, viewerOf(me))
+  expect(counts.views?.mine).toBe(2)
+  // The default feed is active only.
+  expect(counts.total).toBe(1)
+
+  const inView = await countPublicPostFacets({ ...params, view: 'mine' }, viewerOf(me))
+  expect(inView.total).toBe(2)
+  expect(inView.boards[params.boardSlug]).toBe(2)
+})
+
+it('counts tags with the other filters applied, and never a tag the viewer cannot see', async () => {
+  const me = await person()
+  const ideas = await board('ideas')
+  const open = await status('open')
+  const complete = await status('complete')
+  const [shown, internal] = await testDb
+    .insert(postTags)
+    .values([
+      { name: `shown-${token}`, color: '#84cc16' },
+      { name: `internal-${token}`, color: '#84cc16', isPublic: false },
+    ])
+    .returning()
+  const a = await idea(ideas, me, open)
+  const b = await idea(ideas, me, complete)
+  await testDb.insert(postTagAssignments).values([
+    { postId: a, tagId: shown!.id },
+    { postId: b, tagId: shown!.id },
+    { postId: a, tagId: internal!.id },
+  ])
+
+  const counts = await countPublicPostFacets(
+    { boardSlug: await slugOf(ideas), tagIds: [shown!.id], portalFeed: true },
+    viewerOf(me)
+  )
+  // Active only by default, so the complete idea is not counted.
+  expect(counts.tags[shown!.id]).toBe(1)
+  expect(counts.tags[internal!.id]).toBeUndefined()
 })
 
 it('never counts posts on a board the viewer cannot see', async () => {

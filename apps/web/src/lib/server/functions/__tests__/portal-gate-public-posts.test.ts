@@ -97,7 +97,7 @@ vi.mock('@/lib/server/domains/posts/post.public', () => ({
 
 const mockCountFacets = vi.fn()
 vi.mock('@/lib/server/domains/posts/post.public.facets', () => ({
-  countPublicPostFacets: (...a: unknown[]) => mockCountFacets(...a),
+  countPublicPostFacetsOrNull: (...a: unknown[]) => mockCountFacets(...a),
 }))
 
 const mockPolicyActor = vi.fn()
@@ -780,5 +780,20 @@ describe('listPublicPostsFn — filter panel counts', () => {
     const result = await publicPostsHandlers[LIST_PUBLIC_POSTS]({ data: { page: 2 } })
     expect(result).not.toHaveProperty('facets')
     expect(mockCountFacets).not.toHaveBeenCalled()
+  })
+
+  it('skips them when the caller already holds them (a sort change)', async () => {
+    const result = await publicPostsHandlers[LIST_PUBLIC_POSTS]({
+      data: { page: 1, facets: false },
+    })
+    expect(result).not.toHaveProperty('facets')
+    expect(mockCountFacets).not.toHaveBeenCalled()
+  })
+
+  it('still serves the feed when the counts fail', async () => {
+    mockCountFacets.mockResolvedValue(null)
+    const result = await publicPostsHandlers[LIST_PUBLIC_POSTS]({ data: { page: 1 } })
+    expect(result).not.toHaveProperty('facets')
+    expect(result).toMatchObject({ hasMore: page.hasMore })
   })
 })

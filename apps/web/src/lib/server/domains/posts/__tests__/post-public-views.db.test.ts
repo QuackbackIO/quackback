@@ -1,7 +1,16 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createId, type BoardId, type PostId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { boards, posts, postSubscriptions, postVotes, principal, user } from '@/lib/server/db'
+import {
+  boards,
+  eq,
+  posts,
+  postStatuses,
+  postSubscriptions,
+  postVotes,
+  principal,
+  user,
+} from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy'
 
 vi.mock('@/lib/server/db', async (original) => ({
@@ -44,10 +53,18 @@ async function board(): Promise<BoardId> {
   return row!.id
 }
 
-async function idea(boardId: BoardId, author: PrincipalId, title: string): Promise<PostId> {
+async function idea(
+  boardId: BoardId,
+  author: PrincipalId,
+  title: string,
+  statusSlug?: string
+): Promise<PostId> {
+  const [status] = statusSlug
+    ? await testDb.select().from(postStatuses).where(eq(postStatuses.slug, statusSlug))
+    : []
   const [row] = await testDb
     .insert(posts)
-    .values({ boardId, principalId: author, title, content: 'x' })
+    .values({ boardId, principalId: author, title, content: 'x', statusId: status?.id ?? null })
     .returning()
   return row!.id
 }
@@ -86,4 +103,18 @@ it('ignores the view for an anonymous viewer, so a crafted URL shows the whole f
   const all = await titles({ actor: actorFor(anon, 'anonymous') })
   expect(await titles({ actor: actorFor(anon, 'anonymous'), view: 'mine' })).toEqual(all)
   expect(all).toEqual(expect.arrayContaining(['Someone else', 'Theirs']))
+})
+
+it('shows shipped and closed ideas in a view, which the default feed leaves out', async () => {
+  const me = await person()
+  const boardId = await board()
+  await idea(boardId, me, 'Open', 'open')
+  await idea(boardId, me, 'Shipped', 'complete')
+  await idea(boardId, me, 'Closed', 'closed')
+  const [{ slug }] = await testDb.select().from(boards).where(eq(boards.id, boardId))
+  const feed = { actor: actorFor(me), boardSlug: slug, portalFeed: true }
+
+  expect(await titles(feed)).toEqual(['Open'])
+  expect(await titles({ ...feed, view: 'mine' })).toEqual(['Closed', 'Open', 'Shipped'])
+  expect(await titles({ ...feed, view: 'mine', statusSlugs: ['complete'] })).toEqual(['Shipped'])
 })

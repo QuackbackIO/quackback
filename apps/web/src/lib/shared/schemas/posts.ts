@@ -127,6 +127,8 @@ export const listPublicPostsSchema = z.object({
   owner: z.string().optional(),
   segmentIds: z.array(z.string()).optional(),
   view: z.enum(PUBLIC_FEED_VIEWS).optional(),
+  /** False skips the panel counts, when the caller already holds them. */
+  facets: z.boolean().optional(),
 })
 export type ListPublicPostsInput = z.infer<typeof listPublicPostsSchema>
 

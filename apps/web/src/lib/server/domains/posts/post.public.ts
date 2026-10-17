@@ -35,7 +35,7 @@ import {
 import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
-import { feedViewCondition } from './post.public.views'
+import { feedViewCondition, feedViewFor } from './post.public.views'
 import {
   changelogLinkColumn,
   toChangelogLink,
@@ -154,14 +154,17 @@ export interface PostListParams {
 }
 
 /** A filter left out of the conditions so it can be counted per value. */
-export type PublicFacetDimension = 'status' | 'board' | 'view'
+export type PublicFacetDimension = 'status' | 'board' | 'view' | 'tags'
 
 export function buildPostFilterConditions(
   params: PostListParams,
   actor: Actor,
-  omit?: PublicFacetDimension
+  omit: readonly PublicFacetDimension[] = []
 ) {
   const { boardSlug, statusIds, statusSlugs, tagIds, search } = params
+  // Anonymous sessions have principals too, but no views: a crafted URL falls
+  // back to the whole feed rather than an empty one.
+  const view = feedViewFor(params.view, actor)
   // postViewFilter handles both the board-audience predicate and the
   // moderationState gate (e.g. hide 'pending' from non-authors). Compose
   // alongside the existing soft-delete + canonical-post filters — never
@@ -179,11 +182,11 @@ export function buildPostFilterConditions(
     isNull(posts.deletedAt),
   ]
 
-  if (boardSlug && omit !== 'board') {
+  if (boardSlug && !omit.includes('board')) {
     conditions.push(eq(boards.slug, boardSlug))
   }
 
-  if (omit === 'status') {
+  if (omit.includes('status')) {
     // Counted per status, so no status condition at all.
   } else if (statusSlugs && statusSlugs.length > 0) {
     const statusIdSubquery = db
@@ -193,7 +196,7 @@ export function buildPostFilterConditions(
     conditions.push(inArray(posts.statusId, statusIdSubquery))
   } else if (statusIds && statusIds.length > 0) {
     conditions.push(inArray(posts.statusId, statusIds))
-  } else if (!params.portalFeed || feedShowsActiveOnly(search)) {
+  } else if (!params.portalFeed || feedShowsActiveOnly({ search, view })) {
     // Default: only active-category statuses (or unstatused)
     const activeStatusSubquery = db
       .select({ id: postStatuses.id })
@@ -202,7 +205,7 @@ export function buildPostFilterConditions(
     conditions.push(or(isNull(posts.statusId), inArray(posts.statusId, activeStatusSubquery))!)
   }
 
-  if (tagIds && tagIds.length > 0) {
+  if (tagIds && tagIds.length > 0 && !omit.includes('tags')) {
     // Join the tag catalog so an internal tag id in a crafted URL is inert
     // for non-team callers — otherwise the filter would reveal which posts
     // carry a tag the viewer is never shown.
@@ -261,11 +264,8 @@ export function buildPostFilterConditions(
     )
   }
 
-  // Anonymous sessions have principals too, but no views: a crafted URL falls
-  // back to the whole feed rather than an empty one.
-  const viewer = actor.principalType === 'anonymous' ? null : actor.principalId
-  if (params.view && viewer && omit !== 'view') {
-    conditions.push(feedViewCondition(params.view, viewer))
+  if (view && actor.principalId && !omit.includes('view')) {
+    conditions.push(feedViewCondition(view, actor.principalId))
   }
 
   return conditions

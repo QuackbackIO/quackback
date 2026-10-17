@@ -51,7 +51,7 @@ import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.servic
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 import { resolvePortalAccessForRequest } from './portal-access'
 import { teamOnlyFeedFilters } from '@/lib/server/domains/posts/post.public.team-filters'
-import { countPublicPostFacets } from '@/lib/server/domains/posts/post.public.facets'
+import { countPublicPostFacetsOrNull } from '@/lib/server/domains/posts/post.public.facets'
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
@@ -150,8 +150,8 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
   // change refreshes them in the same request.
   const [result, facets] = await Promise.all([
     listPublicPosts({ ...feedParams, sort: data.sort, page: data.page, limit: data.limit, actor }),
-    options.portalFeed && data.page === 1
-      ? countPublicPostFacets(feedParams, actor)
+    options.portalFeed && data.page === 1 && data.facets !== false
+      ? countPublicPostFacetsOrNull(feedParams, actor)
       : Promise.resolve(undefined),
   ])
 
