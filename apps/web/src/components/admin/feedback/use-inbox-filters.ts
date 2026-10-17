@@ -3,9 +3,20 @@ import { Route } from '@/routes/admin/feedback'
 import { useMemo, useCallback } from 'react'
 import { isItemSelected, toggleItem } from '@/components/shared/filter-utils'
 import type { InboxFilters } from '@/lib/shared/types'
+import { sortForSearch } from '@/lib/shared/types/filters'
 import { DEFAULT_INBOX_SORT } from '@/lib/client/hooks/use-inbox-query'
 
 export type { InboxFilters }
+
+/** The sort URL param once the search changes; the default order stays out of the URL. */
+function sortParamForSearch(
+  sort: InboxFilters['sort'],
+  previousSearch: string | undefined,
+  search: string | undefined
+): InboxFilters['sort'] {
+  const next = sortForSearch(sort ?? DEFAULT_INBOX_SORT, previousSearch, search, DEFAULT_INBOX_SORT)
+  return next === DEFAULT_INBOX_SORT ? undefined : next
+}
 
 function stringList(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === 'string')
@@ -76,6 +87,12 @@ export function useInboxFilters() {
           ...('updatedBefore' in updates && { updatedBefore: updates.updatedBefore }),
           ...('hasDuplicates' in updates && { hasDuplicates: updates.hasDuplicates || undefined }),
           ...('sort' in updates && { sort: updates.sort }),
+          // A new search switches the default order to best match, and
+          // clearing it switches back; see sortForSearch.
+          ...('search' in updates &&
+            !('sort' in updates) && {
+              sort: sortParamForSearch(search.sort, search.search, updates.search),
+            }),
           ...('showDeleted' in updates && { deleted: updates.showDeleted || undefined }),
         }),
         replace: true,
@@ -89,7 +106,8 @@ export function useInboxFilters() {
       from: '/admin/feedback',
       to: '/admin/feedback',
       search: (search) => ({
-        sort: search.sort,
+        // Best match goes with the search being cleared.
+        sort: search.sort === 'relevance' ? undefined : search.sort,
       }),
       replace: true,
     })

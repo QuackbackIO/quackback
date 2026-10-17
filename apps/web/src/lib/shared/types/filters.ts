@@ -25,7 +25,7 @@ export interface InboxFilters {
   updatedBefore?: string
   /** Only show posts with pending duplicate suggestions */
   hasDuplicates?: boolean
-  sort?: 'newest' | 'oldest' | 'votes' | 'priority'
+  sort?: InboxPostSort
   showDeleted?: boolean
 }
 
@@ -49,6 +49,29 @@ export type PublicPostSort = (typeof PUBLIC_POST_SORTS)[number]
  * the words, or titles with a close spelling. Absent for an exact match.
  */
 export type WidenedSearch = 'most' | 'similar'
+
+/**
+ * Admin feedback list orders. 'relevance' (best match) applies while
+ * searching; without a search it falls back to newest.
+ */
+export const INBOX_POST_SORTS = ['newest', 'oldest', 'votes', 'priority', 'relevance'] as const
+export type InboxPostSort = (typeof INBOX_POST_SORTS)[number]
+
+/**
+ * The order to use once the search changes. Starting a search from the
+ * default order switches to best match and clearing it goes back; a sort
+ * picked while searching stays.
+ */
+export function sortForSearch<S extends string>(
+  sort: S | 'relevance',
+  previousSearch: string | undefined,
+  search: string | undefined,
+  defaultSort: S
+): S | 'relevance' {
+  if (search && !previousSearch && sort === defaultSort) return 'relevance'
+  if (!search && sort === 'relevance') return defaultSort
+  return sort
+}
 export type PublicFeedView = (typeof PUBLIC_FEED_VIEWS)[number]
 
 /** Portal filter panel counts, keyed by status slug, board slug, tag id and view. */

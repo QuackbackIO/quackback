@@ -67,6 +67,10 @@ describe('inboxFiltersToPostViewFilters', () => {
     expect('search' in saved).toBe(false)
   })
 
+  it('drops best match, which ranks the search a view leaves out', () => {
+    expect(inboxFiltersToPostViewFilters({ search: 'zap', sort: 'relevance' })).toEqual({})
+  })
+
   it('drops empty arrays and absent values so the stored JSON stays minimal', () => {
     expect(inboxFiltersToPostViewFilters({ status: [], tags: [], minVotes: undefined })).toEqual({})
   })

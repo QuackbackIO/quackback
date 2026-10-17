@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
-import { FeedbackToolbar, sortForSearch } from '../feedback-toolbar'
+import { FeedbackToolbar } from '../feedback-toolbar'
 
 function renderToolbar(props: { currentSearch?: string; onSearchChange?: (s: string) => void }) {
   const onSearchChange = props.onSearchChange ?? vi.fn()
@@ -120,21 +120,5 @@ describe('FeedbackToolbar sort', () => {
   it('shows Trending as the order when best match has no search to rank', () => {
     renderSort('relevance')
     expect(screen.getByRole('button', { name: 'Trending' })).toHaveAttribute('aria-pressed', 'true')
-  })
-})
-
-describe('sortForSearch', () => {
-  it('switches to best match when a search starts from the default order', () => {
-    expect(sortForSearch('trending', undefined, 'zap')).toBe('relevance')
-  })
-
-  it('keeps an order picked on purpose', () => {
-    expect(sortForSearch('top', undefined, 'zap')).toBe('top')
-    expect(sortForSearch('trending', 'za', 'zap')).toBe('trending')
-  })
-
-  it('goes back to trending when the search is cleared', () => {
-    expect(sortForSearch('relevance', 'zap', '')).toBe('trending')
-    expect(sortForSearch('new', 'zap', '')).toBe('new')
   })
 })

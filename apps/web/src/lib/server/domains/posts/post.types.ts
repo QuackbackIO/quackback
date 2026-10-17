@@ -13,6 +13,8 @@ import type {
   PostCommentId,
 } from '@quackback/ids'
 import type { CommentReactionCount, CommentStatusChange } from '@/lib/shared'
+import type { InboxPostSort, WidenedSearch } from '@/lib/shared/types/filters'
+import type { PostSearchMode } from './post.search'
 
 /**
  * Input for creating a new post
@@ -146,7 +148,9 @@ export interface InboxPostListParams {
   /** Filter by team response state */
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: Date
-  sort?: 'newest' | 'oldest' | 'votes' | 'priority'
+  sort?: InboxPostSort
+  /** How loosely the search matches; see resolvePostSearchMode. Defaults to every word. */
+  searchMode?: PostSearchMode
   /** Show only soft-deleted posts (within 30-day restorable window) */
   showDeleted?: boolean
   /** Leave out teammates' test ideas (API, MCP and Copilot reads). */
@@ -162,6 +166,8 @@ export interface InboxPostListResult {
   items: PostListItem[]
   nextCursor: string | null
   hasMore: boolean
+  /** Set when no post matched every word and the search was widened. */
+  searchMode?: WidenedSearch
 }
 
 /**

@@ -12,6 +12,7 @@ import type { PostListItem, PostStatusEntity, Board, PostTag } from '@/lib/share
 import type { TeamMember } from '@/lib/shared/types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
+import type { WidenedSearch } from '@/lib/shared/types/filters'
 import type { PostId } from '@quackback/ids'
 
 interface FeedbackTableViewProps {
@@ -40,6 +41,8 @@ interface FeedbackTableViewProps {
   onToggleSegment?: (id: string) => void
   /** Duplicate counts per post (for badges) */
   duplicateCountByPostId?: Map<PostId, number>
+  /** Set when no post matched every word of the search and it was widened. */
+  searchMode?: WidenedSearch
 }
 
 const SORT_OPTIONS = [
@@ -48,6 +51,14 @@ const SORT_OPTIONS = [
   { value: 'votes', label: 'Top votes' },
   { value: 'priority', label: 'Priority' },
 ]
+
+/** Best match leads the options while searching; it has nothing to rank otherwise. */
+const SEARCH_SORT_OPTIONS = [{ value: 'relevance', label: 'Best match' }, ...SORT_OPTIONS]
+
+const WIDENED_SEARCH_NOTES: Record<WidenedSearch, string> = {
+  most: 'No post has all your words. Showing posts with most of them.',
+  similar: 'No exact matches. Showing posts with a similar spelling.',
+}
 
 interface FeedbackListHeaderProps {
   search: string | undefined
@@ -84,8 +95,8 @@ function FeedbackListHeader({
       searchValue={searchValue}
       onSearchChange={setSearchValue}
       searchPlaceholder="Search posts..."
-      sortOptions={SORT_OPTIONS}
-      activeSort={sort}
+      sortOptions={search ? SEARCH_SORT_OPTIONS : SORT_OPTIONS}
+      activeSort={sort === 'relevance' && !search ? 'newest' : sort}
       onSortChange={handleSortChange}
       filters={filters}
       action={action}
@@ -153,6 +164,7 @@ export function FeedbackTableView({
   onToggleBoard,
   duplicateCountByPostId,
   onToggleSegment,
+  searchMode,
 }: FeedbackTableViewProps): React.ReactElement {
   const loadMoreRef = useInfiniteScroll({
     hasMore,
@@ -277,6 +289,12 @@ export function FeedbackTableView({
   return (
     <div className="max-w-5xl w-full">
       {headerContent}
+
+      {searchMode && (
+        <p className="px-6 pt-3 text-sm text-muted-foreground">
+          {WIDENED_SEARCH_NOTES[searchMode]}
+        </p>
+      )}
 
       {/* Post List */}
       <div className="p-3">

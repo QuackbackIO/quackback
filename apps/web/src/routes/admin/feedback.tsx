@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
+import { INBOX_POST_SORTS } from '@/lib/shared/types/filters'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
 
 const searchSchema = z.object({
@@ -22,7 +23,7 @@ const searchSchema = z.object({
   responded: z.enum(['all', 'responded', 'unresponded']).optional().catch(undefined),
   updatedBefore: z.string().optional(),
   // Portal leftover `sort=trending` must not fail this route.
-  sort: z.enum(['newest', 'oldest', 'votes', 'priority']).optional().catch(undefined),
+  sort: z.enum(INBOX_POST_SORTS).optional().catch(undefined),
   hasDuplicates: z.boolean().optional().catch(undefined),
   deleted: z.boolean().optional().catch(undefined),
   post: z.string().optional(),

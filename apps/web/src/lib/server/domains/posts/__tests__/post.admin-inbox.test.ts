@@ -11,6 +11,12 @@ vi.mock('../post.inbox', () => ({
   listInboxPosts: (...args: unknown[]) => mockListInboxPosts(...args),
 }))
 
+// The search mode is settled against the database; a widened one is set per test.
+let searchMode = 'all'
+vi.mock('../post.inbox.search', () => ({
+  withInboxSearchMode: async (params: object) => ({ ...params, searchMode }),
+}))
+
 const mockCounts = vi.fn()
 vi.mock('@/lib/server/domains/merge-suggestions/merge-suggestion.service', () => ({
   getMergeSuggestionCountsForPosts: (...args: unknown[]) => mockCounts(...args),
@@ -23,6 +29,7 @@ const B = 'post_b' as PostId
 
 beforeEach(() => {
   vi.resetAllMocks()
+  searchMode = 'all'
 })
 
 describe('listAdminInboxPage', () => {
@@ -36,7 +43,7 @@ describe('listAdminInboxPage', () => {
 
     const page = await listAdminInboxPage({ sort: 'newest', limit: 2 })
 
-    expect(mockListInboxPosts).toHaveBeenCalledWith({ sort: 'newest', limit: 2 })
+    expect(mockListInboxPosts).toHaveBeenCalledWith({ sort: 'newest', limit: 2, searchMode: 'all' })
     expect(mockCounts).toHaveBeenCalledWith([A, B])
     expect(page).toEqual({
       items: [{ id: A }, { id: B }],
@@ -53,5 +60,15 @@ describe('listAdminInboxPage', () => {
 
     expect(mockCounts).not.toHaveBeenCalled()
     expect(page.duplicateCounts).toEqual([])
+  })
+
+  it('lists with the settled search mode and says when it was widened', async () => {
+    searchMode = 'similar'
+    mockListInboxPosts.mockResolvedValueOnce({ items: [], nextCursor: null, hasMore: false })
+
+    const page = await listAdminInboxPage({ search: 'integraton' })
+
+    expect(mockListInboxPosts).toHaveBeenCalledWith({ search: 'integraton', searchMode: 'similar' })
+    expect(page.searchMode).toBe('similar')
   })
 })

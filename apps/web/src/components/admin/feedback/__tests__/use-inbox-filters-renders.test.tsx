@@ -120,4 +120,32 @@ describe('useInboxFilters', () => {
     await waitFor(() => expect(latest.hasActiveFilters).toBe(false))
     expect(router.state.location.search).toEqual({ sort: 'votes' })
   })
+
+  it('sorts by best match while searching from the default order', async () => {
+    const router = await mount({})
+
+    await act(async () => latest.setFilters({ search: 'zap' }))
+    await waitFor(() => expect(latest.filters.sort).toBe('relevance'))
+
+    await act(async () => latest.setFilters({ search: undefined }))
+    await waitFor(() => expect(latest.filters.sort).toBe('newest'))
+    expect(router.state.location.search).toEqual({})
+  })
+
+  it('keeps a sort picked on purpose when a search starts', async () => {
+    await mount({ sort: 'votes' })
+
+    await act(async () => latest.setFilters({ search: 'zap' }))
+    await waitFor(() => expect(latest.filters.search).toBe('zap'))
+    expect(latest.filters.sort).toBe('votes')
+  })
+
+  it('drops best match with the search when the filters are cleared', async () => {
+    const router = await mount({ sort: 'relevance', search: 'zap' })
+
+    await act(async () => latest.clearFilters())
+
+    await waitFor(() => expect(latest.hasActiveFilters).toBe(false))
+    expect(router.state.location.search).toEqual({})
+  })
 })
