@@ -524,7 +524,7 @@ export function PostCard({
                 to="/changelog/$entryId"
                 params={{ entryId: changelogEntry.id }}
                 title={changelogEntry.title}
-                className="text-xs text-primary hover:underline"
+                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
               >
                 {intl.formatMessage({
                   id: 'portal.postCard.inChangelog',
