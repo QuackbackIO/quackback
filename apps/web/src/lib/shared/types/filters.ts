@@ -38,6 +38,14 @@ export type RespondedFilter = 'responded' | 'unresponded'
 export const PUBLIC_FEED_VIEWS = ['mine', 'voted', 'following'] as const
 export type PublicFeedView = (typeof PUBLIC_FEED_VIEWS)[number]
 
+/** Portal filter panel counts, keyed by status slug, board slug and view. */
+export interface PublicPostFacetCounts {
+  statuses: Record<string, number>
+  boards: Record<string, number>
+  /** Null for anonymous viewers, who have no views. */
+  views: Record<PublicFeedView, number> | null
+}
+
 /**
  * With no status picked, the portal feed shows only active-category posts,
  * except while searching, so shipped and closed ideas can still be found.

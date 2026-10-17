@@ -7,8 +7,8 @@
   },
   "journeys": {
     "doc:portal-home": {
-      "dbQueries": 6,
-      "htmlKB": 98.2
+      "dbQueries": 7,
+      "htmlKB": 107.6
     },
     "doc:portal-roadmap": {
       "dbQueries": 4,
@@ -32,7 +32,7 @@
     },
     "doc:portal-home+session": {
       "dbQueries": 14,
-      "htmlKB": 116.5
+      "htmlKB": 127.5
     },
     "doc:portal-changelog+session": {
       "dbQueries": 5,
@@ -67,7 +67,7 @@
       "htmlKB": 78.6
     },
     "ui:portal-load": {
-      "dbQueries": 6,
+      "dbQueries": 7,
       "serverRequests": 2,
       "requests": 144,
       "jsRequests": 138,
@@ -85,7 +85,7 @@
       "componentRenders": 122
     },
     "ui:portal-post-load": {
-      "dbQueries": 21,
+      "dbQueries": 22,
       "serverRequests": 3,
       "requests": 135,
       "jsRequests": 130,

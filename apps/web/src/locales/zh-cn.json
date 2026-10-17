@@ -253,7 +253,6 @@
   "portal.feedback.panel.view.mine": "我的想法",
   "portal.feedback.panel.view.voted": "已投票",
   "portal.feedback.panel.view.following": "已关注",
-  "portal.feedback.panel.tags": "标签",
   "portal.feedback.sheet.filters": "筛选",
   "portal.feedback.sheet.filtersOn": "筛选，已启用 {count} 个",
   "portal.feedback.sheet.done": "完成",

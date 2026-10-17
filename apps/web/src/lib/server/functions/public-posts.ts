@@ -51,6 +51,7 @@ import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.servic
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 import { resolvePortalAccessForRequest } from './portal-access'
 import { teamOnlyFeedFilters } from '@/lib/server/domains/posts/post.public.team-filters'
+import { countPublicPostFacets } from '@/lib/server/domains/posts/post.public.facets'
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
@@ -131,15 +132,12 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
   // structure or widen the public feed. `owner: 'unassigned'` → null match.
   const { ownerId, segmentIds } = teamOnlyFeedFilters(actor, data)
 
-  const result = await listPublicPosts({
+  const feedParams = {
     boardSlug: data.boardSlug,
     search: data.search,
     statusIds: data.statusIds as PostStatusId[] | undefined,
     statusSlugs: data.statusSlugs,
     tagIds: data.tagIds as PostTagId[] | undefined,
-    sort: data.sort,
-    page: data.page,
-    limit: data.limit,
     minVotes: data.minVotes,
     dateFrom: data.dateFrom,
     responded: data.responded,
@@ -147,8 +145,15 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
     segmentIds,
     view: data.view,
     portalFeed: options.portalFeed,
-    actor,
-  })
+  }
+  // The portal's first page carries the filter panel counts, so a filter
+  // change refreshes them in the same request.
+  const [result, facets] = await Promise.all([
+    listPublicPosts({ ...feedParams, sort: data.sort, page: data.page, limit: data.limit, actor }),
+    options.portalFeed && data.page === 1
+      ? countPublicPostFacets(feedParams, actor)
+      : Promise.resolve(undefined),
+  ])
 
   log.debug({ count: result.items.length }, 'list public posts results')
   // Serialize Date fields
@@ -158,6 +163,7 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
       ...post,
       createdAt: post.createdAt.toISOString(),
     })),
+    ...(facets && { facets }),
   }
 })
 

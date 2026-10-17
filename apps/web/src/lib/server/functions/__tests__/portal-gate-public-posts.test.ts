@@ -95,6 +95,11 @@ vi.mock('@/lib/server/domains/posts/post.public', () => ({
   getAllUserVotedPostIds: vi.fn(),
 }))
 
+const mockCountFacets = vi.fn()
+vi.mock('@/lib/server/domains/posts/post.public.facets', () => ({
+  countPublicPostFacets: (...a: unknown[]) => mockCountFacets(...a),
+}))
+
 const mockPolicyActor = vi.fn()
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
   getOptionalAuth: vi.fn().mockResolvedValue(null),
@@ -741,5 +746,39 @@ describe('write-path portal-visibility gates (G6)', () => {
     await publicPostsHandlers[TOGGLE_VOTE]({ data: { postId: 'pst_x' } }).catch(() => {})
 
     expect(mockResolvePortalAccess).toHaveBeenCalled()
+  })
+})
+
+describe('listPublicPostsFn — filter panel counts', () => {
+  const page = { items: [], hasMore: false }
+  const counts = { statuses: { open: 3 }, boards: {}, views: null }
+
+  beforeEach(() => {
+    mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'public' })
+    mockPolicyActor.mockResolvedValue({
+      principalId: null,
+      role: null,
+      principalType: 'anonymous',
+      segmentIds: new Set(),
+    })
+    mockListPublicPosts.mockResolvedValue(page)
+    mockCountFacets.mockResolvedValue(counts)
+  })
+
+  it('carries the counts on the first page of the portal feed', async () => {
+    const result = await publicPostsHandlers[LIST_PUBLIC_POSTS]({
+      data: { page: 1, search: 'dark' },
+    })
+    expect(result).toMatchObject({ facets: counts })
+    expect(mockCountFacets).toHaveBeenCalledWith(
+      expect.objectContaining({ search: 'dark', portalFeed: true }),
+      expect.anything()
+    )
+  })
+
+  it('skips them on later pages', async () => {
+    const result = await publicPostsHandlers[LIST_PUBLIC_POSTS]({ data: { page: 2 } })
+    expect(result).not.toHaveProperty('facets')
+    expect(mockCountFacets).not.toHaveBeenCalled()
   })
 })

@@ -5,7 +5,7 @@ import { cn } from '@/lib/shared/utils'
 import { feedShowsActiveOnly, type PublicFeedView } from '@/lib/shared/types/filters'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
-import type { PublicPostFacetCounts } from '@/lib/client/hooks/use-portal-posts-query'
+import type { PublicPostFacetCounts } from '@/lib/shared/types/filters'
 import { STATUS_CATEGORY_ORDER } from './public-filters-bar-defaults'
 
 interface PanelBoard {
@@ -246,7 +246,10 @@ export function PortalFilterPanel({
 
       {tags.length > 1 && (
         <Section
-          title={intl.formatMessage({ id: 'portal.feedback.panel.tags', defaultMessage: 'Tags' })}
+          title={intl.formatMessage({
+            id: 'portal.postDetail.metadata.tags',
+            defaultMessage: 'Tags',
+          })}
         >
           <div className="flex flex-wrap gap-1.5 px-1">
             {tags.map((tag) => {

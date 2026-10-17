@@ -253,7 +253,6 @@
   "portal.feedback.panel.view.mine": "My ideas",
   "portal.feedback.panel.view.voted": "Voted",
   "portal.feedback.panel.view.following": "Following",
-  "portal.feedback.panel.tags": "Tags",
   "portal.feedback.sheet.filters": "Filters",
   "portal.feedback.sheet.filtersOn": "Filters, {count} on",
   "portal.feedback.sheet.done": "Done",

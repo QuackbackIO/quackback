@@ -24,9 +24,7 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import {
   flattenPublicPosts,
   publicPostsKeys,
-  usePublicPostFacets,
   usePublicPosts,
-  type PublicPostFacetCounts,
   useVotedPosts,
 } from '@/lib/client/hooks/use-portal-posts-query'
 import { useChangePostStatusId } from '@/lib/client/mutations/posts'
@@ -34,6 +32,7 @@ import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
 import type { PublicPostListItem } from '@/lib/shared/types'
+import type { PublicPostFacetCounts } from '@/lib/shared/types/filters'
 import { cn } from '@/lib/shared/utils'
 import type { PostId, PostStatusId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
@@ -189,15 +188,13 @@ export function FeedbackContainer({
           items: initialPosts,
           total: initialPosts.length,
           hasMore: initialHasMore,
+          facets: facets ?? undefined,
         }
       : undefined,
   })
 
-  const { data: facetCounts } = usePublicPostFacets({
-    filters: mergedFilters,
-    viewerId: session?.user?.id ?? null,
-    initialData: filtersMatchInitial ? facets : undefined,
-  })
+  // Filter panel counts ride on the first page of the feed.
+  const facetCounts = postsData?.pages[0]?.facets
 
   // One panel, shown in the sidebar on wide screens and in a sheet below that.
   const filterPanel = (

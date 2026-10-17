@@ -1,17 +1,13 @@
 import { db, and, eq, sql, boards, posts, postStatuses } from '@/lib/server/db'
 import { unionAll } from 'drizzle-orm/pg-core'
 import type { Actor } from '@/lib/server/policy'
-import { PUBLIC_FEED_VIEWS, type PublicFeedView } from '@/lib/shared/types/filters'
+import {
+  PUBLIC_FEED_VIEWS,
+  type PublicFeedView,
+  type PublicPostFacetCounts,
+} from '@/lib/shared/types/filters'
 import { buildPostFilterConditions, type PostListParams } from './post.public'
 import { feedViewCondition } from './post.public.views'
-
-/** Counts for the portal filter panel, keyed by status slug, board slug and view. */
-export interface PublicPostFacetCounts {
-  statuses: Record<string, number>
-  boards: Record<string, number>
-  /** Null for anonymous viewers, who have no views. */
-  views: Record<PublicFeedView, number> | null
-}
 
 /**
  * Facet counts for the portal feed, in one round trip. Each dimension leaves

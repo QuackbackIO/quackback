@@ -27,6 +27,14 @@ test.describe('Portal feed filter panel', () => {
     await expect(board).toHaveAttribute('aria-pressed', 'true')
   })
 
+  test('counts follow the other filters', async ({ page }) => {
+    const open = page.getByRole('group', { name: 'Status' }).getByRole('checkbox', { name: /Open/ })
+    await expect(open).not.toHaveText(/(?<!\d)0$/)
+    await page.getByRole('searchbox', { name: 'Search ideas' }).fill('xyzzy_no_such_idea')
+    await expect(page).toHaveURL(/[?&]search=/, { timeout: 5000 })
+    await expect(open).toHaveText(/(?<!\d)0$/, { timeout: 5000 })
+  })
+
   test('a tag on a card filters the feed by that tag', async ({ page }) => {
     const tag = page.locator('[data-post-id] button:not([data-testid])').first()
     await tag.click()

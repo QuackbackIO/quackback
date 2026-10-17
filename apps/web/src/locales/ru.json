@@ -253,7 +253,6 @@
   "portal.feedback.panel.view.mine": "Мои идеи",
   "portal.feedback.panel.view.voted": "Поддержанные",
   "portal.feedback.panel.view.following": "Отслеживаемые",
-  "portal.feedback.panel.tags": "Теги",
   "portal.feedback.sheet.filters": "Фильтры",
   "portal.feedback.sheet.filtersOn": "Фильтры, включено: {count}",
   "portal.feedback.sheet.done": "Готово",

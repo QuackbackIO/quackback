@@ -5,19 +5,14 @@
  * Mutations are in lib/mutations/portal-posts.ts
  */
 
-import {
-  keepPreviousData,
-  useInfiniteQuery,
-  useQuery,
-  type InfiniteData,
-} from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-query'
 import {
   listPublicPostsFn,
   getVotedPostsFn,
   getPostPermissionsFn,
 } from '@/lib/server/functions/public-posts'
-import { fetchPublicPostFacetsFn } from '@/lib/server/functions/public-post-facets'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
+import type { PublicPostFacetCounts } from '@/lib/shared/types/filters'
 import type { PublicPostListItem } from '@/lib/shared/types'
 import type { PostId, PostStatusId, PostTagId } from '@quackback/ids'
 
@@ -29,6 +24,8 @@ interface PublicPostListResult {
   items: PublicPostListItem[]
   total?: number
   hasMore: boolean
+  /** Filter panel counts; the portal's first page carries them. */
+  facets?: PublicPostFacetCounts
 }
 
 interface PostPermissions {
@@ -62,16 +59,6 @@ export const publicPostsKeys = {
   all: ['publicPosts'] as const,
   lists: () => [...publicPostsKeys.all, 'list'] as const,
   list: (filters: PublicFeedbackFilters) => [...publicPostsKeys.lists(), filters] as const,
-}
-
-/**
- * Filter panel counts. A sibling of the list keys, never under them: the vote,
- * edit and delete mutations rewrite every query under `lists()` as feed pages.
- */
-export const publicPostFacetsKeys = {
-  all: ['publicPostFacets'] as const,
-  counts: (filters: Omit<PublicFeedbackFilters, 'sort'>, viewerId: string | null) =>
-    [...publicPostFacetsKeys.all, viewerId, filters] as const,
 }
 
 export const votedPostsKeys = {
@@ -198,32 +185,4 @@ export function flattenPublicPosts(
 ): PublicPostListItem[] {
   if (!data) return []
   return data.pages.flatMap((page) => page.items)
-}
-
-export type PublicPostFacetCounts = NonNullable<Awaited<ReturnType<typeof fetchPublicPostFacetsFn>>>
-
-/**
- * Counts for the portal filter panel. Sort does not change them, so it stays
- * out of the key. `initialData` is the server-rendered set, which only applies
- * while the filters still match the page as it was rendered.
- */
-export function usePublicPostFacets({
-  filters,
-  viewerId,
-  initialData,
-}: {
-  filters: PublicFeedbackFilters
-  /** The signed-in viewer: counts (and views) depend on who is asking. */
-  viewerId: string | null
-  initialData?: PublicPostFacetCounts | null
-}) {
-  const { sort: _sort, ...countFilters } = filters
-  return useQuery({
-    queryKey: publicPostFacetsKeys.counts(countFilters, viewerId),
-    queryFn: () =>
-      fetchPublicPostFacetsFn({ data: { ...feedFilterInput(countFilters), sort: 'top' } }),
-    initialData: initialData ?? undefined,
-    placeholderData: keepPreviousData,
-    staleTime: 15_000,
-  })
 }
