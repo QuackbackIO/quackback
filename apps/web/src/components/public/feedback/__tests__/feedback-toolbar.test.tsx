@@ -6,17 +6,20 @@ import { FeedbackToolbar } from '../feedback-toolbar'
 
 function renderToolbar(props: { currentSearch?: string; onSearchChange?: (s: string) => void }) {
   const onSearchChange = props.onSearchChange ?? vi.fn()
-  render(
+  const ui = (currentSearch: string | undefined) => (
     <IntlProvider locale="en">
       <FeedbackToolbar
         currentSort="trending"
         onSortChange={vi.fn()}
-        currentSearch={props.currentSearch}
+        currentSearch={currentSearch}
         onSearchChange={onSearchChange}
       />
     </IntlProvider>
   )
-  return { onSearchChange }
+  const { rerender } = render(ui(props.currentSearch))
+  /** The URL catching up, as the router does after onSearchChange. */
+  const setCurrentSearch = (value: string | undefined) => rerender(ui(value))
+  return { onSearchChange, setCurrentSearch }
 }
 
 describe('FeedbackToolbar search', () => {
@@ -43,6 +46,34 @@ describe('FeedbackToolbar search', () => {
     const { onSearchChange } = renderToolbar({ currentSearch: 'widget' })
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
     expect(onSearchChange).toHaveBeenCalledWith('')
+  })
+
+  it('keeps typing that happens while the search is being applied', () => {
+    const { onSearchChange, setCurrentSearch } = renderToolbar({})
+    const field = screen.getByRole('searchbox')
+    fireEvent.change(field, { target: { value: 'dark' } })
+    act(() => vi.advanceTimersByTime(400))
+    expect(onSearchChange).toHaveBeenCalledWith('dark')
+    fireEvent.change(field, { target: { value: 'dark mo' } })
+    setCurrentSearch('dark')
+    expect(field).toHaveProperty('value', 'dark mo')
+  })
+
+  it('follows a search changed from elsewhere, like Clear all or Back', () => {
+    const { setCurrentSearch } = renderToolbar({ currentSearch: 'dark' })
+    setCurrentSearch('widget')
+    expect(screen.getByRole('searchbox')).toHaveProperty('value', 'widget')
+  })
+
+  it('does not search for spaces alone, and trims the query', () => {
+    const { onSearchChange } = renderToolbar({})
+    const field = screen.getByRole('searchbox')
+    fireEvent.change(field, { target: { value: '   ' } })
+    act(() => vi.advanceTimersByTime(400))
+    expect(onSearchChange).not.toHaveBeenCalled()
+    fireEvent.change(field, { target: { value: ' dark mode ' } })
+    act(() => vi.advanceTimersByTime(400))
+    expect(onSearchChange).toHaveBeenCalledWith('dark mode')
   })
 
   it('shows no clear button while the field is empty', () => {

@@ -54,18 +54,29 @@ export function FeedbackToolbar({
   // hook into the portal bundle splits it out of the admin chunk it lives in,
   // costing admin pages an extra request.
   const [searchValue, setSearchValue] = useState(currentSearch ?? '')
+  // The last query this field applied. When the URL catches up to it, the
+  // field keeps whatever was typed meanwhile; any other change (Clear all,
+  // Back) comes from elsewhere and replaces the field.
+  const appliedRef = useRef(currentSearch ?? '')
   const onSearchChangeRef = useRef(onSearchChange)
   useEffect(() => {
     onSearchChangeRef.current = onSearchChange
   })
   useEffect(() => {
-    setSearchValue(currentSearch ?? '')
+    const external = currentSearch ?? ''
+    if (external === appliedRef.current) return
+    appliedRef.current = external
+    setSearchValue(external)
   }, [currentSearch])
   useEffect(() => {
-    if (searchValue === (currentSearch ?? '')) return
-    const timeoutId = setTimeout(() => onSearchChangeRef.current(searchValue), 300)
+    const query = searchValue.trim()
+    if (query === appliedRef.current) return
+    const timeoutId = setTimeout(() => {
+      appliedRef.current = query
+      onSearchChangeRef.current(query)
+    }, 300)
     return () => clearTimeout(timeoutId)
-  }, [searchValue, currentSearch])
+  }, [searchValue])
   const searchLabel = intl.formatMessage({
     id: 'portal.feedback.toolbar.searchLabel',
     defaultMessage: 'Search ideas',
@@ -73,6 +84,7 @@ export function FeedbackToolbar({
 
   function handleClearSearch(): void {
     setSearchValue('')
+    appliedRef.current = ''
     onSearchChange('')
   }
 
