@@ -168,13 +168,7 @@ describe('PublicFiltersToolbarButton', () => {
     const setFilters = vi.fn()
     render(
       <Providers>
-        <PublicFiltersToolbarButton
-          filters={{ sort: 'top' }}
-          setFilters={setFilters}
-          statuses={statuses}
-          tags={tags}
-          boards={boards}
-        />
+        <PublicFiltersToolbarButton filters={{ sort: 'top' }} setFilters={setFilters} />
       </Providers>
     )
     expect(screen.getByRole('button', { name: /filter/i })).toBeInTheDocument()
@@ -184,13 +178,7 @@ describe('PublicFiltersToolbarButton', () => {
     const setFilters = vi.fn()
     render(
       <Providers>
-        <PublicFiltersToolbarButton
-          filters={{ sort: 'top' }}
-          setFilters={setFilters}
-          statuses={statuses}
-          tags={tags}
-          boards={boards}
-        />
+        <PublicFiltersToolbarButton filters={{ sort: 'top' }} setFilters={setFilters} />
       </Providers>
     )
     fireEvent.click(screen.getByRole('button', { name: /filter/i }))
@@ -200,80 +188,34 @@ describe('PublicFiltersToolbarButton', () => {
     expect(setFilters).toHaveBeenCalledWith({ minVotes: 25 })
   })
 
-  it('lets users pick a board from the filter menu', () => {
-    const setFilters = vi.fn()
+  it('offers only the filters the panel does not show', () => {
     render(
       <Providers>
-        <PublicFiltersToolbarButton
-          filters={{ sort: 'top' }}
-          setFilters={setFilters}
-          statuses={statuses}
-          tags={tags}
-          boards={boards}
-        />
+        <PublicFiltersToolbarButton filters={{ sort: 'top' }} setFilters={vi.fn()} />
       </Providers>
     )
     fireEvent.click(screen.getByRole('button', { name: /filter/i }))
-    fireEvent.click(screen.getByRole('button', { name: /^Board$/i }))
-    // cmdk's CommandItem renders with role="option"
-    fireEvent.click(screen.getByRole('option', { name: 'Bugs' }))
-    expect(setFilters).toHaveBeenCalledWith({ board: 'bugs' })
-  })
-
-  it('hides the Board category when the board is locked', () => {
-    const setFilters = vi.fn()
-    render(
-      <Providers>
-        <PublicFiltersToolbarButton
-          filters={{ sort: 'top', board: 'bugs' }}
-          setFilters={setFilters}
-          statuses={statuses}
-          tags={tags}
-          boards={boards}
-          boardLocked
-        />
-      </Providers>
-    )
-    fireEvent.click(screen.getByRole('button', { name: /filter/i }))
-    expect(screen.queryByRole('button', { name: /^Board$/i })).not.toBeInTheDocument()
-  })
-
-  it('hides the Board category when only a single board exists', () => {
-    const setFilters = vi.fn()
-    render(
-      <Providers>
-        <PublicFiltersToolbarButton
-          filters={{ sort: 'top' }}
-          setFilters={setFilters}
-          statuses={statuses}
-          tags={tags}
-          boards={[{ id: 'board_1', slug: 'feature-requests', name: 'Feature Requests' }]}
-        />
-      </Providers>
-    )
-    fireEvent.click(screen.getByRole('button', { name: /filter/i }))
-    expect(screen.queryByRole('button', { name: /^Board$/i })).not.toBeInTheDocument()
+    for (const name of [/^Vote count$/i, /^Created date$/i, /^Team response$/i]) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    }
+    for (const name of [/^Board$/i, /^Status$/i, /^Tag$/i]) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+    }
   })
 })
 
 describe('PublicFiltersAddButton (pill variant)', () => {
-  it('clicking a status in the submenu adds it via setFilters', () => {
+  it('adds a filter from the pill menu', () => {
     const setFilters = vi.fn()
     render(
       <Providers>
-        <PublicFiltersAddButton
-          filters={{ sort: 'top' }}
-          setFilters={setFilters}
-          statuses={statuses}
-          tags={tags}
-          boards={boards}
-        />
+        <PublicFiltersAddButton filters={{ sort: 'top' }} setFilters={setFilters} />
       </Providers>
     )
     fireEvent.click(screen.getByRole('button', { name: /^add filter$/i }))
-    fireEvent.click(screen.getByRole('button', { name: /^Status$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Team response$/i }))
     // cmdk's CommandItem renders with role="option"
-    fireEvent.click(screen.getByRole('option', { name: 'Open' }))
-    expect(setFilters).toHaveBeenCalledWith({ status: ['open'] })
+    fireEvent.click(screen.getByRole('option', { name: /has team response/i }))
+    expect(setFilters).toHaveBeenCalledWith({ responded: 'responded' })
   })
 })

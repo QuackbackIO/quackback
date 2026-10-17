@@ -39,7 +39,6 @@ import {
   VOTE_THRESHOLDS,
   DATE_PRESETS,
   RESPONDED_OPTIONS,
-  STATUS_CATEGORY_ORDER,
   getDateFromDaysAgo,
   type DatePresetValue,
   type RespondedValue,
@@ -51,8 +50,7 @@ interface FilterBarBoard {
   name: string
 }
 
-type FilterCategory =
-  'board' | 'status' | 'tag' | 'votes' | 'date' | 'response' | 'owner' | 'segment'
+type FilterCategory = 'votes' | 'date' | 'response' | 'owner' | 'segment'
 type ChipType = 'board' | 'status' | 'tags' | 'votes' | 'date' | 'response' | 'owner' | 'segment'
 
 type IconComponent = React.ComponentType<{ className?: string }>
@@ -176,15 +174,7 @@ export function PublicFiltersBar({
       ))}
 
       {pickedCount > 0 && (
-        <AddFilterButton
-          filters={filters}
-          setFilters={setFilters}
-          statuses={statuses}
-          tags={tags}
-          boards={boards}
-          boardLocked={boardLocked}
-          variant="pill"
-        />
+        <AddFilterButton filters={filters} setFilters={setFilters} variant="pill" />
       )}
 
       {pickedCount >= 2 && (
@@ -208,10 +198,6 @@ export function PublicFiltersBar({
 interface AddFilterButtonProps {
   filters: PublicFeedbackFilters
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
-  statuses: PostStatusEntity[]
-  tags: PostTag[]
-  boards: FilterBarBoard[]
-  boardLocked?: boolean
   /**
    * Trigger style:
    *   - "pill" (default): dashed "+ Add filter" pill that matches the chip shape.
@@ -238,15 +224,7 @@ export function PublicFiltersAddButton(props: Omit<AddFilterButtonProps, 'varian
   return <AddFilterButton {...props} variant="pill" />
 }
 
-function AddFilterButton({
-  filters,
-  setFilters,
-  statuses,
-  tags,
-  boards,
-  boardLocked = false,
-  variant = 'pill',
-}: AddFilterButtonProps) {
+function AddFilterButton({ filters, setFilters, variant = 'pill' }: AddFilterButtonProps) {
   const intl = useIntl()
   const [open, setOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState<FilterCategory | null>(null)
@@ -257,41 +235,15 @@ function AddFilterButton({
     setActiveCategory(null)
   }
 
-  const showBoardCategory = boards.length > 1 && !boardLocked
   // Team-only categories are hidden entirely for non-privileged callers (empty
   // option lists) and also hide individually when their option query is empty.
   const showOwnerCategory = members.length > 0
   const showSegmentCategory = segments.length > 0
 
   const categories = useMemo<{ key: FilterCategory; label: string; icon: IconComponent }[]>(() => {
+    // Board, status and tags live in the filter panel; this menu holds the rest.
     const list: { key: FilterCategory; label: string; icon: IconComponent }[] = []
-    if (showBoardCategory) {
-      list.push({
-        key: 'board',
-        label: intl.formatMessage({
-          id: 'portal.feedback.filter.category.board',
-          defaultMessage: 'Board',
-        }),
-        icon: Squares2X2Icon,
-      })
-    }
     list.push(
-      {
-        key: 'status',
-        label: intl.formatMessage({
-          id: 'portal.feedback.filter.category.status',
-          defaultMessage: 'Status',
-        }),
-        icon: CircleIcon,
-      },
-      {
-        key: 'tag',
-        label: intl.formatMessage({
-          id: 'portal.feedback.filter.category.tag',
-          defaultMessage: 'Tag',
-        }),
-        icon: TagIcon,
-      },
       {
         key: 'votes',
         label: intl.formatMessage({
@@ -341,18 +293,7 @@ function AddFilterButton({
       })
     }
     return list
-  }, [intl, showBoardCategory, showOwnerCategory, showSegmentCategory])
-
-  const groupedStatuses = useMemo(() => {
-    const groups: Record<string, PostStatusEntity[]> = {}
-    for (const cat of STATUS_CATEGORY_ORDER) groups[cat] = []
-    for (const s of statuses) {
-      const cat = (s.category ?? 'active') as string
-      if (!groups[cat]) groups[cat] = []
-      groups[cat].push(s)
-    }
-    return groups
-  }, [statuses])
+  }, [intl, showOwnerCategory, showSegmentCategory])
 
   return (
     <Popover
@@ -433,11 +374,7 @@ function AddFilterButton({
             <Command>
               {/* Hide the search input for short, fixed-preset lists where
                   filtering adds no value (votes / date / response). */}
-              {(activeCategory === 'board' ||
-                activeCategory === 'status' ||
-                activeCategory === 'tag' ||
-                activeCategory === 'owner' ||
-                activeCategory === 'segment') && (
+              {(activeCategory === 'owner' || activeCategory === 'segment') && (
                 <CommandInput
                   placeholder={intl.formatMessage({
                     id: 'portal.feedback.filter.search',
@@ -452,72 +389,6 @@ function AddFilterButton({
                     defaultMessage="No results."
                   />
                 </CommandEmpty>
-
-                {activeCategory === 'board' && (
-                  <CommandGroup>
-                    {boards.map((board) => (
-                      <CommandItem
-                        key={board.id}
-                        value={board.name}
-                        onSelect={() => {
-                          setFilters({ board: board.slug })
-                          closePopover()
-                        }}
-                      >
-                        {board.name}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                )}
-
-                {activeCategory === 'status' &&
-                  STATUS_CATEGORY_ORDER.map((cat) => {
-                    const list = groupedStatuses[cat] ?? []
-                    if (list.length === 0) return null
-                    return (
-                      <CommandGroup
-                        key={cat}
-                        heading={intl.formatMessage({
-                          id: `portal.feedback.filter.statusGroup.${cat}`,
-                          defaultMessage: cat[0].toUpperCase() + cat.slice(1),
-                        })}
-                      >
-                        {list.map((status) => (
-                          <CommandItem
-                            key={status.id}
-                            value={status.name}
-                            onSelect={() => {
-                              setFilters({ status: toggleItem(filters.status, status.slug) })
-                              closePopover()
-                            }}
-                          >
-                            <span
-                              className="h-2 w-2 rounded-full shrink-0"
-                              style={{ backgroundColor: status.color }}
-                            />
-                            {status.name}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    )
-                  })}
-
-                {activeCategory === 'tag' && (
-                  <CommandGroup>
-                    {tags.map((tag) => (
-                      <CommandItem
-                        key={tag.id}
-                        value={tag.name}
-                        onSelect={() => {
-                          setFilters({ tagIds: toggleItem(filters.tagIds, tag.id) })
-                          closePopover()
-                        }}
-                      >
-                        {tag.name}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                )}
 
                 {activeCategory === 'votes' && (
                   <CommandGroup>

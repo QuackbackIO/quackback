@@ -356,16 +356,7 @@ export function FeedbackContainer({
             currentSearch={activeSearch}
             onSearchChange={handleSearchChange}
             isLoading={isLoading}
-            filterButton={
-              <PublicFiltersToolbarButton
-                filters={filters}
-                setFilters={setFilters}
-                statuses={statuses}
-                tags={tags}
-                boards={boards}
-                boardLocked={boardLocked}
-              />
-            }
+            filterButton={<PublicFiltersToolbarButton filters={filters} setFilters={setFilters} />}
           />
           <div className="mt-3">
             <PublicFiltersBar
