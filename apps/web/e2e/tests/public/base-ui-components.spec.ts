@@ -9,7 +9,8 @@ test.describe('Public Base UI component usability', () => {
 
   test('filters, menus, and styled links stay usable', async ({ page }) => {
     await page.goto('/')
-    const filter = page.getByRole('button', { name: /^filter$/i })
+    // The less common filters open from Add filter, at the foot of the panel.
+    const filter = page.getByRole('button', { name: /^add filter$/i })
     await waitForHydration(filter)
     await filter.click()
     const overlay = page.locator(
