@@ -44,7 +44,7 @@ interface PostCardProps {
   authorName: string | null
   authorAvatarUrl?: string | null
   /**
-   * Author's principal id. When present in portal (Link) mode, the author
+   * Author's principal id. When present in portal mode, the author
    * name/avatar link to the public profile with a lazy hover card. Omit (or
    * null) for anonymous authors without a resolvable profile. Ignored in admin
    * (onClick) mode — admin rendering is unchanged.
@@ -94,7 +94,7 @@ interface PostCardProps {
   onStatusChange?: (statusId: PostStatusId) => void
   /** Whether status update is in progress */
   isUpdatingStatus?: boolean
-  /** Use onClick instead of Link navigation */
+  /** Admin mode: the card calls this instead of linking to the post */
   onClick?: () => void
   /** Hover state handlers for quick actions visibility */
   onMouseEnter?: () => void
@@ -153,10 +153,10 @@ export function PostCard({
   const intl = useIntl()
   const authPopover = useAuthPopoverSafe()
   // "Admin mode" here means the inbox list rendering: modal-style navigation
-  // (onClick instead of a Link) plus the admin quick-actions overlay. It is
-  // deliberately NOT tied to canChangeStatus: the public portal grants status
-  // editing to team members via canChangeStatus while keeping Link navigation
-  // and the author quick-actions (edit/delete), so the two concerns are split.
+  // (onClick instead of a title link) plus the admin quick-actions overlay. It
+  // is deliberately NOT tied to canChangeStatus: the public portal grants
+  // status editing to team members via canChangeStatus while keeping the title
+  // link and the author quick-actions (edit/delete), so the two are split.
   const isAdminMode = !!onClick
   const currentStatus = statuses.find((s) => s.id === statusId)
   const isDone = currentStatus?.category === 'complete' || currentStatus?.category === 'closed'
@@ -176,7 +176,6 @@ export function PostCard({
   async function handleVoteClick(e: React.MouseEvent): Promise<void> {
     e.stopPropagation()
     if (!canVote) {
-      e.preventDefault()
       // Signed in but denied by the board's vote tier (segments/team) — an
       // authorization failure, not authentication. The button's tooltip
       // explains; do nothing (never fire a vote the server would reject).
@@ -187,7 +186,6 @@ export function PostCard({
     }
     if (!isAuthenticated && canVote) {
       // Anonymous voting: sign in silently, then vote
-      e.preventDefault()
       if (isAnonSigningIn) return
       setIsAnonSigningIn(true)
       try {
@@ -362,16 +360,12 @@ export function PostCard({
 
   // Portal author quick actions (edit/delete)
   const portalQuickActions = !isAdminMode && isCurrentUserAuthor && (
-    <div
-      className="absolute end-2 top-1/2 z-10 -translate-y-1/2"
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className="absolute end-2 top-1/2 z-10 -translate-y-1/2">
       <TooltipProvider>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              onClick={(e) => e.preventDefault()}
               className="p-1 -m-1 rounded hover:bg-muted/50 transition-colors"
               aria-label={intl.formatMessage({
                 id: 'portal.postCard.quickActions.options',
@@ -381,14 +375,9 @@ export function PostCard({
               <EllipsisHorizontalIcon className="h-4 w-4" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onClick={(e) => e.preventDefault()}>
+          <DropdownMenuContent align="end">
             {canEdit ? (
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.preventDefault()
-                  onEdit?.()
-                }}
-              >
+              <DropdownMenuItem onClick={() => onEdit?.()}>
                 <PencilIcon className="h-4 w-4" />
                 {intl.formatMessage({
                   id: 'portal.postCard.quickActions.edit',
@@ -418,13 +407,7 @@ export function PostCard({
               </Tooltip>
             )}
             {canDelete ? (
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={(e) => {
-                  e.preventDefault()
-                  onDelete?.()
-                }}
-              >
+              <DropdownMenuItem variant="destructive" onClick={() => onDelete?.()}>
                 <TrashIcon className="h-4 w-4" />
                 {intl.formatMessage({
                   id: 'portal.postCard.quickActions.delete',
@@ -459,7 +442,7 @@ export function PostCard({
     </div>
   )
 
-  // Author meta (avatar + name). In portal (Link) mode with a resolvable
+  // Author meta (avatar + name). In portal mode with a resolvable
   // principal, it links to the public profile behind a lazy hover card; in
   // admin (onClick) mode it stays inert so admin rendering is unchanged.
   const authorFallback = intl.formatMessage({
@@ -519,7 +502,7 @@ export function PostCard({
         {(statusDisplay || changelogEntry) && (
           <div className="relative z-10 mb-1 flex w-fit items-center gap-2">
             {statusDisplay}
-            {changelogEntry && !isAdminMode && (
+            {changelogEntry && (
               <Link
                 to="/changelog/$entryId"
                 params={{ entryId: changelogEntry.id }}
@@ -612,24 +595,10 @@ export function PostCard({
   const rootClassName =
     'post-card cursor-pointer transition-colors relative group hover:bg-muted/20'
 
-  // Render as div with onClick for modal navigation, or Link for full-page navigation
-  if (onClick) {
-    return (
-      <div
-        className={rootClassName}
-        onClick={onClick}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-        data-post-id={id}
-      >
-        {cardContent}
-      </div>
-    )
-  }
-
   return (
     <div
       className={rootClassName}
+      onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       data-post-id={id}

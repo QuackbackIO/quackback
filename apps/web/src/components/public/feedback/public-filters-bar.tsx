@@ -31,6 +31,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
+import { feedShowsActiveOnly } from '@/lib/shared/types/filters'
 import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { CircleIcon } from '@/components/shared/filter-menu'
@@ -159,7 +160,7 @@ export function PublicFiltersBar({
     [filters, setFilters, statuses, tags, boards, members, segments, intl, boardLocked]
   )
 
-  const pickedCount = activeChips.filter((chip) => !chip.implied).length
+  const pickedCount = activeChips.filter((chip) => chip.onRemove).length
 
   return (
     <div
@@ -643,8 +644,6 @@ interface ActiveChipDescriptor {
   onChange?: (newId: string) => void
   /** Absent on an implied chip, which shows a default rather than a picked filter. */
   onRemove?: () => void
-  /** The status scope applied when nothing is picked: dashed, not removable. */
-  implied?: boolean
   /** Team-only chip: amber styling. */
   internal?: boolean
   /** Localized "only your team sees this" tooltip for internal chips. */
@@ -720,8 +719,8 @@ function buildActiveChips(args: {
       })
     }
   } else {
-    // Nothing picked: the feed hides complete and closed posts, except while
-    // searching. Say so, and let the chip open the status list.
+    // Nothing picked: show the scope the feed applies, and let the chip open
+    // the status list. It has no remove button, which styles it as implied.
     chips.push({
       key: 'status-implied',
       type: 'status',
@@ -729,16 +728,15 @@ function buildActiveChips(args: {
         id: 'portal.feedback.filter.chip.status',
         defaultMessage: 'Status:',
       }),
-      value: filters.search
-        ? intl.formatMessage({ id: 'portal.feedback.filter.status.any', defaultMessage: 'Any' })
-        : intl.formatMessage({
+      value: feedShowsActiveOnly(filters.search)
+        ? intl.formatMessage({
             id: 'portal.feedback.filter.status.activeOnly',
             defaultMessage: 'Active only',
-          }),
+          })
+        : intl.formatMessage({ id: 'portal.feedback.filter.status.any', defaultMessage: 'Any' }),
       valueId: '',
       options: statusOptions,
       onChange: (slug) => setFilters({ status: [slug] }),
-      implied: true,
     })
   }
 

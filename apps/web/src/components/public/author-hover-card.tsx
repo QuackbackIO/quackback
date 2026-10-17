@@ -6,10 +6,9 @@
  * lazy hover card summarising the author.
  *
  * Behaviour:
- *   - The trigger is a `role="link"` span (never an `<a>`) so it nests safely
- *     inside the post-card `<Link>` without producing illegal nested anchors.
- *     Click / Enter navigate to the profile; propagation is stopped so the
- *     surrounding card link does not also fire.
+ *   - The trigger is a `role="link"` span (never an `<a>`), so it is safe
+ *     inside any clickable container. Click / Enter navigate to the profile;
+ *     propagation is stopped so a clickable ancestor does not also fire.
  *   - The card fetches ON OPEN (not on mount) via `getPublicUserProfileFn`
  *     with a short staleTime, shows a skeleton while loading, and renders the
  *     avatar, name, team badge / "Member since {month year}", and the
@@ -91,7 +90,7 @@ export function AuthorHoverCard({
   }
 
   function goToProfile(e: { preventDefault: () => void; stopPropagation: () => void }) {
-    // Stop the surrounding card `<Link>` from also navigating to the post.
+    // Stop a clickable ancestor (e.g. a card) from also handling the click.
     e.preventDefault()
     e.stopPropagation()
     void navigate({ to: '/u/$principalId', params: { principalId } })

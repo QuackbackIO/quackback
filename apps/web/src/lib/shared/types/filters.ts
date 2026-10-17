@@ -35,6 +35,15 @@ export interface InboxFilters {
 export type RespondedFilter = 'responded' | 'unresponded'
 
 /**
+ * With no status picked, the portal feed shows only active-category posts,
+ * except while searching, so shipped and closed ideas can still be found.
+ * The query and the status chip both read this, so they never disagree.
+ */
+export function feedShowsActiveOnly(search: string | undefined): boolean {
+  return !search
+}
+
+/**
  * Filters for the public portal post list.
  */
 export interface PublicFeedbackFilters {

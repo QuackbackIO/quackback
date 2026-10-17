@@ -14,11 +14,17 @@ vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
+const flags = vi.hoisted(() => ({ changelogOn: true }))
+vi.mock('@/lib/server/domains/settings/settings.service', async () => {
+  const { getProductFlagUpdate } = await import('@/lib/shared/types/settings')
+  return { getFeatureFlags: async () => getProductFlagUpdate('changelog', flags.changelogOn) }
+})
 import { getChangelogLinksForPosts } from '../post.public.changelog'
 
 const fixture = await createDbTestFixture()
 beforeEach(async () => {
   expect(fixture.available).toBe(true)
+  flags.changelogOn = true
   await fixture.begin()
 })
 afterEach(fixture.rollback)
@@ -82,4 +88,13 @@ it('ignores drafts, scheduled and deleted entries', async () => {
 
 it('returns an empty map without querying for an empty page', async () => {
   expect((await getChangelogLinksForPosts([])).size).toBe(0)
+})
+
+it('links nothing while the changelog is switched off', async () => {
+  const postId = await post()
+  const published = await entry('Published', new Date('2026-01-01'))
+  await testDb.insert(changelogEntryPosts).values({ changelogEntryId: published.id, postId })
+  flags.changelogOn = false
+
+  expect((await getChangelogLinksForPosts([postId])).size).toBe(0)
 })

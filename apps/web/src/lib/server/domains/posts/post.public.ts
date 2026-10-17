@@ -27,7 +27,7 @@ import {
   type SegmentId,
 } from '@quackback/ids'
 import type { PublicPostListResult } from './post.types'
-import type { RespondedFilter } from '@/lib/shared/types/filters'
+import { feedShowsActiveOnly, type RespondedFilter } from '@/lib/shared/types/filters'
 import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
@@ -167,9 +167,8 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
     conditions.push(inArray(posts.statusId, statusIdSubquery))
   } else if (statusIds && statusIds.length > 0) {
     conditions.push(inArray(posts.statusId, statusIds))
-  } else if (!search) {
-    // Default: exclude complete/closed posts — only show active-category statuses (or unstatused).
-    // A search skips this so people can find ideas that already shipped or were closed.
+  } else if (feedShowsActiveOnly(search)) {
+    // Default: only active-category statuses (or unstatused)
     const activeStatusSubquery = db
       .select({ id: postStatuses.id })
       .from(postStatuses)

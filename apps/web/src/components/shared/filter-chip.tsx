@@ -22,7 +22,10 @@ interface FilterChipProps {
   valueId: string
   /** Optional color for a dot indicator */
   color?: string
-  /** Called when the chip's remove button is clicked. Omit for an implied chip, which has none. */
+  /**
+   * Called when the chip's remove button is clicked. Omit for an implied chip
+   * (a default the viewer did not pick), which renders dashed with no remove.
+   */
   onRemove?: () => void
   /** Called when a dropdown option is selected */
   onChange?: (newId: string) => void
@@ -35,8 +38,6 @@ interface FilterChipProps {
   internal?: boolean
   /** Localized tooltip text; shown on hover when `internal` is set. */
   tooltip?: string
-  /** A default the viewer did not pick (e.g. the status scope): dashed and not removable. */
-  implied?: boolean
 }
 
 export function FilterChip({
@@ -50,7 +51,6 @@ export function FilterChip({
   options,
   internal = false,
   tooltip,
-  implied = false,
 }: FilterChipProps) {
   const [open, setOpen] = useState(false)
   const hasOptions = options && options.length > 0 && onChange
@@ -101,7 +101,7 @@ export function FilterChip({
         'transition-colors',
         internal
           ? 'bg-amber-500/10 border border-amber-500/40 hover:border-amber-500/60'
-          : implied
+          : !onRemove
             ? 'border border-dashed border-border hover:border-foreground/30'
             : 'bg-muted/60 border border-border/30 hover:border-border/50'
       )}

@@ -31,8 +31,7 @@ import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation
 import type { PublicPostListItem } from '@/lib/shared/types'
 import { cn } from '@/lib/shared/utils'
 import type { PostId, PostStatusId } from '@quackback/ids'
-import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-import { isProductEnabled } from '@/lib/shared/types/settings'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { shownName } from '@/lib/shared/greeting-name'
 
@@ -80,7 +79,6 @@ export function FeedbackContainer({
   const intl = useIntl()
   const router = useRouter()
   const session = useSessionContext()
-  const changelogEnabled = isProductEnabled(useWorkspaceSettings()?.featureFlags, 'changelog')
   const { filters, setFilters, clearFilters, activeFilterCount } = usePublicFilters()
   const queryClient = useQueryClient()
   const { can } = usePortalPermissions()
@@ -431,7 +429,7 @@ export function FeedbackContainer({
                         onTagClick={(tagId) =>
                           setFilters({ tagIds: toggleItem(activeTagIds, tagId) })
                         }
-                        changelogEntry={changelogEnabled ? post.changelogEntry : null}
+                        changelogEntry={post.changelogEntry}
                         isAuthenticated={isRealUser}
                         canVote={
                           post.board ? (boardPermissions?.[post.board.id]?.canVote ?? false) : false

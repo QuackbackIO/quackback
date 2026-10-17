@@ -54,7 +54,7 @@ test.describe('Public Post List — chip filters', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.getByRole('searchbox', { name: 'Search ideas' }).fill(title)
+    await page.getByRole('textbox', { name: 'Search ideas' }).fill(title)
 
     await expect(page).toHaveURL(/[?&]search=/, { timeout: 5000 })
     await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()

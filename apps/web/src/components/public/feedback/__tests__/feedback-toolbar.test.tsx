@@ -25,15 +25,12 @@ describe('FeedbackToolbar search', () => {
 
   it('shows the current search in a visible field', () => {
     renderToolbar({ currentSearch: 'widget' })
-    expect(screen.getByRole('searchbox', { name: 'Search ideas' })).toHaveProperty(
-      'value',
-      'widget'
-    )
+    expect(screen.getByRole('textbox', { name: 'Search ideas' })).toHaveProperty('value', 'widget')
   })
 
   it('applies typing after a pause', () => {
     const { onSearchChange } = renderToolbar({})
-    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'dark mode' } })
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'dark mode' } })
     expect(onSearchChange).not.toHaveBeenCalled()
     act(() => vi.advanceTimersByTime(400))
     expect(onSearchChange).toHaveBeenCalledWith('dark mode')
@@ -42,6 +39,7 @@ describe('FeedbackToolbar search', () => {
   it('clears the search', () => {
     const { onSearchChange } = renderToolbar({ currentSearch: 'widget' })
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    act(() => vi.advanceTimersByTime(400))
     expect(onSearchChange).toHaveBeenCalledWith('')
   })
 
