@@ -695,8 +695,9 @@ function buildActiveChips(args: {
   // Status chips — one per selected slug
   if (filters.status?.length) {
     for (const slug of filters.status) {
+      // A slug the workspace no longer has (renamed or deleted status) still
+      // filters the feed, so it gets a chip that can remove it.
       const status = statuses.find((s) => s.slug === slug)
-      if (!status) continue
       chips.push({
         key: `status-${slug}`,
         type: 'status',
@@ -704,9 +705,9 @@ function buildActiveChips(args: {
           id: 'portal.feedback.filter.chip.status',
           defaultMessage: 'Status:',
         }),
-        value: status.name,
+        value: status?.name ?? slug,
         valueId: slug,
-        color: status.color,
+        color: status?.color,
         options: statusOptions,
         onChange: (newSlug) => {
           const others = filters.status?.filter((s) => s !== slug) ?? []

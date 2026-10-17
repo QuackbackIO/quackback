@@ -93,6 +93,13 @@ describe('PublicFiltersBar', () => {
     expect(setFilters).toHaveBeenCalledWith({ status: ['complete'] })
   })
 
+  it('shows a status the URL names but the workspace no longer has, so it can be removed', () => {
+    const { setFilters } = renderBar({ filters: { sort: 'top', status: ['retired'] } })
+    expect(screen.getByText('retired')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /remove status/i }))
+    expect(setFilters).toHaveBeenCalledWith({ status: undefined })
+  })
+
   it('drops the implied chip once a status is picked', () => {
     renderBar({ filters: { sort: 'top', status: ['open'] } })
     expect(screen.queryByText('Active only')).not.toBeInTheDocument()
