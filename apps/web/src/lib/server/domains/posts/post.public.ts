@@ -13,7 +13,6 @@ import {
   postTagAssignments,
   postTags,
   postVotes,
-  postSubscriptions,
   postStatuses,
   userSegments,
   principal as principalTable,
@@ -36,8 +35,9 @@ import {
 import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+import { feedViewCondition } from './post.public.views'
 import {
-  changelogLinkColumns,
+  changelogLinkColumn,
   toChangelogLink,
   type PostChangelogLink,
 } from './post.public.changelog'
@@ -145,30 +145,12 @@ interface PostListParams {
   segmentIds?: SegmentId[]
   /** Signed-in viewers only: ideas they posted, voted on or follow. Ignored otherwise. */
   view?: PublicFeedView
-}
-
-/** The posts in a viewer's own feed view, keyed off the actor, never the client. */
-function feedViewCondition(view: PublicFeedView, viewer: PrincipalId) {
-  switch (view) {
-    case 'mine':
-      return eq(posts.principalId, viewer)
-    case 'voted':
-      return inArray(
-        posts.id,
-        db
-          .select({ postId: postVotes.postId })
-          .from(postVotes)
-          .where(eq(postVotes.principalId, viewer))
-      )
-    case 'following':
-      return inArray(
-        posts.id,
-        db
-          .select({ postId: postSubscriptions.postId })
-          .from(postSubscriptions)
-          .where(eq(postSubscriptions.principalId, viewer))
-      )
-  }
+  /**
+   * The portal feed itself: a search reaches complete and closed posts, and
+   * rows carry their changelog link. Other callers (widget, apps search) keep
+   * the active-only default and skip the link.
+   */
+  portalFeed?: boolean
 }
 
 function buildPostFilterConditions(params: PostListParams, actor: Actor) {
@@ -202,7 +184,7 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
     conditions.push(inArray(posts.statusId, statusIdSubquery))
   } else if (statusIds && statusIds.length > 0) {
     conditions.push(inArray(posts.statusId, statusIds))
-  } else if (feedShowsActiveOnly(search)) {
+  } else if (!params.portalFeed || feedShowsActiveOnly(search)) {
     // Default: only active-category statuses (or unstatused)
     const activeStatusSubquery = db
       .select({ id: postStatuses.id })
@@ -301,7 +283,7 @@ export async function listPublicPostsWithVotesAndAvatars(
 
   const postsResult = await db
     .select({
-      ...(await changelogLinkColumns()),
+      changelogEntry: await changelogLinkColumn(actor, params.portalFeed),
       id: posts.id,
       title: posts.title,
       content: posts.content,
@@ -395,7 +377,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
       hasVoted: post.hasVoted ?? false,
       avatarUrl,
-      changelogEntry: toChangelogLink(post),
+      changelogEntry: toChangelogLink(post.changelogEntry),
     }
   })
 
@@ -412,7 +394,7 @@ export async function listPublicPosts(
 
   const postsResult = await db
     .select({
-      ...(await changelogLinkColumns()),
+      changelogEntry: await changelogLinkColumn(actor, params.portalFeed),
       id: posts.id,
       title: posts.title,
       content: posts.content,
@@ -460,7 +442,7 @@ export async function listPublicPosts(
     moderationState: post.moderationState,
     tags: parseJson<Array<{ id: PostTagId; name: string; color: string }>>(post.tagsJson),
     board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
-    changelogEntry: toChangelogLink(post),
+    changelogEntry: toChangelogLink(post.changelogEntry),
   }))
 
   return { items, total: undefined, hasMore }

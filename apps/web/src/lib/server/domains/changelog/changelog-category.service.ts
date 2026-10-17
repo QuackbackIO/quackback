@@ -14,6 +14,8 @@ import {
   changelogCategories,
   changelogEntryCategories,
 } from '@/lib/server/db'
+import type { SQL } from 'drizzle-orm'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import type { ChangelogCategoryId, ChangelogId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { TAXONOMY_DEFAULT_COLOR } from '@/lib/shared/schemas/taxonomy'
@@ -24,7 +26,7 @@ import {
   positionCaseSql,
 } from '@/lib/server/utils'
 import type { Actor } from '@/lib/server/policy/types'
-import { segmentGateAllows } from '@/lib/server/policy/segment-gate'
+import { segmentGateAllows, segmentGateFilter } from '@/lib/server/policy/segment-gate'
 import type {
   ChangelogCategory,
   CreateChangelogCategoryInput,
@@ -231,4 +233,19 @@ export function categoryGateAllows(
   actor: Actor
 ): boolean {
   return categories.every((category) => segmentGateAllows(actor, category.segmentIds))
+}
+
+/**
+ * SQL twin of {@link categoryGateAllows} for the entry whose id is `entryId`:
+ * true when none of the entry's categories gates the actor out. Row-by-row
+ * truthiness must match categoryGateAllows exactly.
+ */
+export function categoryGateCondition(actor: Actor, entryId: SQL | AnyPgColumn): SQL {
+  const gate = segmentGateFilter(actor, sql.raw('"gated_category"."segment_ids"'))
+  return sql`NOT EXISTS (
+    SELECT 1 FROM ${changelogEntryCategories} "gated_link"
+    JOIN ${changelogCategories} "gated_category"
+      ON "gated_category"."id" = "gated_link"."category_id"
+    WHERE "gated_link"."changelog_entry_id" = ${entryId} AND NOT (${gate})
+  )`
 }

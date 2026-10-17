@@ -8,9 +8,10 @@ import {
   changelogEntries,
   changelogEntryPosts,
 } from '@/lib/server/db'
-import type { AnyPgColumn } from 'drizzle-orm/pg-core'
-import type { ChangelogId } from '@quackback/ids'
+import { fromUuid, type ChangelogId } from '@quackback/ids'
+import type { Actor } from '@/lib/server/policy'
 import { publicChangelogConditions } from '@/lib/server/domains/changelog/changelog.public'
+import { categoryGateCondition } from '@/lib/server/domains/changelog/changelog-category.service'
 import { getFeatureFlags } from '@/lib/server/domains/settings/settings.service'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 
@@ -19,43 +20,39 @@ export interface PostChangelogLink {
   title: string
 }
 
+/** The column's raw value: the entry id is the stored uuid. */
+type RawChangelogLink = { id: string; title: string } | null
+
 /**
- * Columns for a feed query over `posts`: the id and title of the newest public
- * changelog entry linked to each post, so a shipped idea can point at its
- * announcement. They are correlated subqueries, so the link costs no extra
- * round trip. Both are null when the changelog product is off.
+ * A column for a feed query over `posts`: the newest changelog entry linked to
+ * each post that `actor` may read, so a shipped idea can point at its
+ * announcement. One correlated subquery, so it costs no extra round trip.
+ * Null when not requested or when the changelog product is off.
  */
-export async function changelogLinkColumns() {
-  if (!isProductEnabled(await getFeatureFlags(), 'changelog')) {
-    return {
-      changelogEntryId: sql<ChangelogId | null>`null`,
-      changelogEntryTitle: sql<string | null>`null`,
-    }
+export async function changelogLinkColumn(actor: Actor, requested: boolean | undefined) {
+  if (!requested || !isProductEnabled(await getFeatureFlags(), 'changelog')) {
+    return sql<RawChangelogLink | string>`null`
   }
-  const newest = (column: AnyPgColumn) =>
-    db
-      .select({ value: column })
-      .from(changelogEntryPosts)
-      .innerJoin(changelogEntries, eq(changelogEntries.id, changelogEntryPosts.changelogEntryId))
-      .where(
-        and(eq(changelogEntryPosts.postId, posts.id), ...publicChangelogConditions(new Date()))
+  const newest = db
+    .select({
+      link: sql`json_build_object('id', ${changelogEntries.id}, 'title', ${changelogEntries.title})`,
+    })
+    .from(changelogEntryPosts)
+    .innerJoin(changelogEntries, eq(changelogEntries.id, changelogEntryPosts.changelogEntryId))
+    .where(
+      and(
+        eq(changelogEntryPosts.postId, posts.id),
+        ...publicChangelogConditions(new Date()),
+        categoryGateCondition(actor, changelogEntries.id)
       )
-      .orderBy(desc(changelogEntries.publishedAt))
-      .limit(1)
-  return {
-    changelogEntryId: sql<ChangelogId | null>`(${newest(changelogEntries.id)})`.mapWith(
-      changelogEntries.id
-    ),
-    changelogEntryTitle: sql<string | null>`(${newest(changelogEntries.title)})`,
-  }
+    )
+    .orderBy(desc(changelogEntries.publishedAt))
+    .limit(1)
+  return sql<RawChangelogLink | string>`(${newest})`
 }
 
-/** The link a feed row carries, from the columns above. */
-export function toChangelogLink(row: {
-  changelogEntryId: ChangelogId | null
-  changelogEntryTitle: string | null
-}): PostChangelogLink | null {
-  return row.changelogEntryId && row.changelogEntryTitle !== null
-    ? { id: row.changelogEntryId, title: row.changelogEntryTitle }
-    : null
+/** The link a feed row carries, from the column above. */
+export function toChangelogLink(raw: RawChangelogLink | string): PostChangelogLink | null {
+  const link: RawChangelogLink = typeof raw === 'string' ? JSON.parse(raw) : raw
+  return link ? { id: fromUuid('changelog', link.id), title: link.title } : null
 }

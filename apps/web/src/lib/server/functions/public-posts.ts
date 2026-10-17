@@ -115,7 +115,8 @@ export type GetVoteSidebarDataInput = z.infer<typeof getVoteSidebarDataSchema>
  */
 export const runListPublicPosts = createServerOnlyFn(async function runListPublicPosts(
   auth: Awaited<ReturnType<typeof getOptionalAuth>>,
-  data: ListPublicPostsInput
+  data: ListPublicPostsInput,
+  options: { portalFeed?: boolean } = {}
 ) {
   log.debug({ sort: data.sort, board_slug: data.boardSlug || 'all' }, 'list public posts')
   // Resolve the actor so per-board audience + per-post moderation
@@ -153,6 +154,7 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
     ownerId,
     segmentIds,
     view: data.view,
+    portalFeed: options.portalFeed,
     actor,
   })
 
@@ -175,7 +177,7 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
       log.debug('portal access denied, returning empty')
       return { items: [], hasMore: false, total: 0 }
     }
-    return runListPublicPosts(await getOptionalAuth(), data)
+    return runListPublicPosts(await getOptionalAuth(), data, { portalFeed: true })
   })
 
 /**

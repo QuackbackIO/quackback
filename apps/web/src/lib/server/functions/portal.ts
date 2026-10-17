@@ -212,6 +212,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
           ownerId,
           segmentIds,
           view: data.view,
+          portalFeed: true,
         }),
         listPublicStatuses(),
         // Actor-scoped: internal tags are only listed for team viewers.

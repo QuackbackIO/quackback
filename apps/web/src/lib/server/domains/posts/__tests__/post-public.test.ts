@@ -108,7 +108,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 // The changelog link columns read workspace settings; their SQL is covered by
 // post-public-changelog.db.test.ts.
 vi.mock('../post.public.changelog', () => ({
-  changelogLinkColumns: async () => ({}),
+  changelogLinkColumn: async () => null,
   toChangelogLink: () => null,
 }))
 
@@ -146,10 +146,10 @@ describe('listPublicPostsWithVotesAndAvatars — default status filtering', () =
     expect(mockInArray).toHaveBeenCalledWith(mockPostStatuses.slug, ['open', 'under_review'])
   })
 
-  it('searches every status when a search term is given without a status filter', async () => {
+  it('searches every status in the portal feed when no status is picked', async () => {
     const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
 
-    await listPublicPostsWithVotesAndAvatars({ search: 'widget' })
+    await listPublicPostsWithVotesAndAvatars({ search: 'widget', portalFeed: true })
 
     const activeFilterApplied = mockEq.mock.calls.some(
       ([col, val]) => col === mockPostStatuses.category && val === 'active'
@@ -158,10 +158,22 @@ describe('listPublicPostsWithVotesAndAvatars — default status filtering', () =
     expect(mockOr).not.toHaveBeenCalled()
   })
 
+  it('keeps the active-only default for a search outside the portal feed', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ search: 'widget' })
+
+    expect(mockEq).toHaveBeenCalledWith(mockPostStatuses.category, 'active')
+  })
+
   it('keeps an explicit status filter while searching', async () => {
     const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
 
-    await listPublicPostsWithVotesAndAvatars({ search: 'widget', statusSlugs: ['complete'] })
+    await listPublicPostsWithVotesAndAvatars({
+      search: 'widget',
+      statusSlugs: ['complete'],
+      portalFeed: true,
+    })
 
     expect(mockInArray).toHaveBeenCalledWith(mockPostStatuses.slug, ['complete'])
     const activeFilterApplied = mockEq.mock.calls.some(
