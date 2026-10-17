@@ -41,6 +41,27 @@ describe('buildLinearIssueBody', () => {
     )
   })
 
+  it('lists the author ids under the author, one item per footer line', () => {
+    const result = buildLinearIssueBody(
+      makePostCreatedEvent({ authorPrincipalId: 'principal_1', authorUserId: 'user_1' }),
+      'https://feedback.example.com'
+    )
+
+    expect(result.description).toContain(
+      '---\n**Submitted by:** Jane Doe  \n`principal_1`  \n`user_1`  \n**Board:** features  \n[View in Quackback](https://feedback.example.com/b/features/posts/post_1)'
+    )
+  })
+
+  it('shows only the principal id for anonymous authors', () => {
+    const result = buildLinearIssueBody(
+      makePostCreatedEvent({ authorPrincipalId: 'principal_1' }),
+      'https://feedback.example.com'
+    )
+
+    expect(result.description).toContain('`principal_1`  \n**Board:** features')
+    expect(result.description).not.toContain('user_')
+  })
+
   it('does not include vote count', () => {
     const result = buildLinearIssueBody(makePostCreatedEvent(), 'https://feedback.example.com')
 
@@ -163,6 +184,27 @@ describe('buildLinearCommentBody', () => {
     expect(body).toContain(
       '[View comment in Quackback](https://feedback.example.com/b/features/posts/post_1#comment-comment_1)'
     )
+  })
+
+  it('lists principal id, user id and link on their own lines in the footer', () => {
+    const body = buildLinearCommentBody(
+      makeCommentCreatedEvent({ authorPrincipalId: 'principal_1', authorUserId: 'user_1' }),
+      'https://feedback.example.com'
+    )
+
+    expect(body).toContain(
+      '---\n`principal_1`  \n`user_1`  \n[View comment in Quackback](https://feedback.example.com/b/features/posts/post_1#comment-comment_1)'
+    )
+  })
+
+  it('shows only the principal id for anonymous commenters', () => {
+    const body = buildLinearCommentBody(
+      makeCommentCreatedEvent({ authorPrincipalId: 'principal_1' }),
+      'https://x.test'
+    )
+
+    expect(body).toContain('---\n`principal_1`  \n[View comment in Quackback]')
+    expect(body).not.toContain('user_')
   })
 
   it('turns stored media paths into absolute URLs Linear can import', () => {

@@ -182,6 +182,8 @@ export async function executeHookSync(
       boardId: post.boardId,
       boardSlug: board.slug,
       voteCount: post.voteCount,
+      authorPrincipalId: post.principalId,
+      authorUserId: post.author?.userId ?? undefined,
       authorName: post.author?.displayName ?? post.author?.user?.name ?? undefined,
       authorEmail: realEmail(post.author?.user?.email) ?? undefined,
     }
@@ -202,6 +204,8 @@ export async function executeHookSync(
       id: comment.id,
       content: contentJsonToMarkdown(comment.contentJson, comment.content),
       isPrivate: false,
+      authorPrincipalId: comment.principalId,
+      authorUserId: comment.author?.userId ?? undefined,
       authorName: comment.author?.displayName ?? comment.author?.user?.name ?? undefined,
       authorEmail: realEmail(comment.author?.user?.email) ?? undefined,
     }

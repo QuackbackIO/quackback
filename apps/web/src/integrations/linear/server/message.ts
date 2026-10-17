@@ -28,16 +28,27 @@ export function buildLinearIssueBodyFromPost(
   const content = buildIntegrationPostContent(post.content, rootUrl, { embedVideos: true })
   const author = getAuthorName(post)
 
-  const description = [
-    content,
-    '',
-    '---',
+  const footer = joinFooterLines([
     `**Submitted by:** ${author}`,
+    ...authorIdLines(post.authorPrincipalId, post.authorUserId),
     `**Board:** ${post.boardSlug}`,
     `[View in Quackback](${postUrl})`,
-  ].join('\n')
+  ])
 
-  return { title: post.title, description }
+  return { title: post.title, description: [content, '', '---', footer].join('\n') }
+}
+
+/** Code-formatted principal and user ids, skipping whichever is unknown. */
+function authorIdLines(principalId?: string, userId?: string): string[] {
+  return [principalId, userId].filter(Boolean).map((id) => `\`${id}\``)
+}
+
+/**
+ * One item per line; the trailing double space is a Markdown hard break so
+ * renderers that join soft line breaks still keep the lines apart.
+ */
+function joinFooterLines(lines: string[]): string {
+  return lines.join('  \n')
 }
 
 /** Build the Linear comment body for a newly published public Quackback comment. */
@@ -49,12 +60,10 @@ export function buildLinearCommentBody(event: CommentCreatedEvent, rootUrl: stri
     maxLength: 5000,
   })
   const commentUrl = `${buildPostUrl(rootUrl, post.boardSlug, post.id)}#comment-${comment.id}`
-
-  return [
-    `**${author} commented:**`,
-    '',
-    content,
-    '',
+  const footer = joinFooterLines([
+    ...authorIdLines(comment.authorPrincipalId, comment.authorUserId),
     `[View comment in Quackback](${commentUrl})`,
-  ].join('\n')
+  ])
+
+  return [`**${author} commented:**`, '', content, '', '---', footer].join('\n')
 }
