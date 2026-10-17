@@ -98,6 +98,7 @@ export function FeedbackToolbar({
             <button
               key={option.value}
               type="button"
+              aria-pressed={isActive}
               onClick={() => onSortChange(option.value)}
               className={cn(
                 'flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
@@ -112,12 +113,15 @@ export function FeedbackToolbar({
           )
         })}
         {isLoading && (
-          <span className="ml-1 h-4 w-4 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin" />
+          <span
+            aria-hidden
+            className="ml-1 h-4 w-4 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin"
+          />
         )}
       </div>
 
       <div className="flex min-w-0 flex-1 basis-56 items-center gap-2">
-        <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-transparent ps-3 pe-1 text-sm focus-within:ring-2 focus-within:ring-ring/50">
+        <label className="flex h-11 lg:h-8 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-transparent ps-3 pe-1 text-sm focus-within:ring-2 focus-within:ring-ring/50">
           <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           <input
             type="search"

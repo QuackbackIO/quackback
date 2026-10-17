@@ -21,7 +21,7 @@ test.describe('Public Post List — chip filters', () => {
   })
 
   test('Filter → Vote count → 5+ filters posts and adds a chip', async ({ page }) => {
-    await page.getByRole('button', { name: /^filter$/i }).click()
+    await page.getByRole('button', { name: /^add filter$/i }).click()
     await page.getByRole('button', { name: /^Vote count$/i }).click()
     await page.getByRole('option', { name: '5+ votes', exact: true }).click()
 
@@ -30,11 +30,11 @@ test.describe('Public Post List — chip filters', () => {
   })
 
   test('Clear all wipes filters and the implied status returns', async ({ page }) => {
-    await page.getByRole('button', { name: /^filter$/i }).click()
+    await page.getByRole('button', { name: /^add filter$/i }).click()
     await page.getByRole('button', { name: /^Vote count$/i }).click()
     await page.getByRole('option', { name: '5+ votes', exact: true }).click()
 
-    await page.getByRole('button', { name: /^filter$/i }).click()
+    await page.getByRole('button', { name: /^add filter$/i }).click()
     await page.getByRole('button', { name: /^Created date$/i }).click()
     await page.getByRole('option', { name: /last 7 days/i }).click()
 
@@ -59,7 +59,7 @@ test.describe('Public Post List — chip filters', () => {
     await expect(page).toHaveURL(/[?&]search=/, { timeout: 5000 })
     await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()
     await expect(
-      page.getByRole('region', { name: 'Active filters' }).getByText('Any', { exact: true })
+      page.getByRole('region', { name: 'Active filters' }).getByText('All', { exact: true })
     ).toBeVisible()
   })
 })

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useIntl } from 'react-intl'
+import { useIntl, type MessageDescriptor } from 'react-intl'
 import { toast } from 'sonner'
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
@@ -13,7 +13,6 @@ import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
 import {
   PublicFiltersAddButton,
   PublicFiltersBar,
-  PublicFiltersToolbarButton,
 } from '@/components/public/feedback/public-filters-bar'
 import { usePublicFilters } from '@/components/public/feedback/use-public-filters'
 import { PortalModerationSection } from '@/components/public/feedback/portal-moderation-section'
@@ -32,12 +31,27 @@ import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
 import type { PublicPostListItem } from '@/lib/shared/types'
-import type { PublicPostFacetCounts } from '@/lib/shared/types/filters'
+import type { PublicFeedView, PublicPostFacetCounts } from '@/lib/shared/types/filters'
 import { cn } from '@/lib/shared/utils'
 import type { PostId, PostStatusId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { shownName } from '@/lib/shared/greeting-name'
+
+const EMPTY_VIEW_MESSAGES: Record<PublicFeedView, MessageDescriptor> = {
+  mine: {
+    id: 'portal.feedback.list.emptyMine',
+    defaultMessage: "You haven't posted any ideas yet.",
+  },
+  voted: {
+    id: 'portal.feedback.list.emptyVoted',
+    defaultMessage: "You haven't voted on any ideas yet.",
+  },
+  following: {
+    id: 'portal.feedback.list.emptyFollowing',
+    defaultMessage: "You aren't following any ideas yet.",
+  },
+}
 
 interface FeedbackContainerProps {
   workspaceName: string
@@ -112,6 +126,8 @@ export function FeedbackContainer({
   // session viewer gets the sign-in path. Anonymous sessions also populate
   // session.user, so !!effectiveUser is not the right signal here.
   const isRealUser = !!session?.user && session.user.principalType !== 'anonymous'
+  // Views are for signed-in users; the server ignores one from anyone else.
+  const activeView = isRealUser ? filters.view : undefined
 
   // Current filter values (URL state takes precedence over props)
   const activeBoard = filters.board ?? currentBoard
@@ -135,7 +151,7 @@ export function FeedbackContainer({
       // without post.view_private, so passing them through is always safe.
       owner: filters.owner,
       segmentIds: filters.segmentIds,
-      view: filters.view,
+      view: activeView,
     }),
     [
       activeBoard,
@@ -148,7 +164,7 @@ export function FeedbackContainer({
       filters.responded,
       filters.owner,
       filters.segmentIds,
-      filters.view,
+      activeView,
     ]
   )
 
@@ -157,7 +173,7 @@ export function FeedbackContainer({
     board: currentBoard,
     search: currentSearch,
     sort: currentSort,
-    view: filters.view,
+    view: activeView,
   })
 
   // Only use initialData when current filters match what the server rendered
@@ -183,6 +199,7 @@ export function FeedbackContainer({
     fetchNextPage,
   } = usePublicPosts({
     filters: mergedFilters,
+    viewerKey: session?.user?.email,
     initialData: filtersMatchInitial
       ? {
           items: initialPosts,
@@ -196,8 +213,14 @@ export function FeedbackContainer({
   // Filter panel counts ride on the first page of the feed.
   const facetCounts = postsData?.pages[0]?.facets
 
+  // A view the server ignores is not counted as on.
+  const filterCount = activeFilterCount - (filters.view && !activeView ? 1 : 0)
+  // An empty board is still a place to post the first idea, so the board
+  // alone doesn't make the feed "filtered".
+  const narrowingCount = filterCount - (filters.board ? 1 : 0)
+
   // One panel, shown in the sidebar on wide screens and in a sheet below that.
-  const filterPanel = (
+  const filterPanel = (layout: 'sidebar' | 'sheet') => (
     <PortalFilterPanel
       filters={mergedFilters}
       setFilters={setFilters}
@@ -206,6 +229,8 @@ export function FeedbackContainer({
       tags={tags}
       counts={facetCounts}
       showViews={isRealUser}
+      layout={layout}
+      footer={<PublicFiltersAddButton filters={filters} setFilters={setFilters} />}
     />
   )
 
@@ -266,8 +291,8 @@ export function FeedbackContainer({
 
   const currentBoardInfo = activeBoard ? boards.find((b) => b.slug === activeBoard) : boards[0]
   const boardIdForCreate = currentBoardInfo?.id || defaultBoardId
-  // A selected board is page context (sidebar / ?board=), not a filter the
-  // submit form or chip row should switch away from.
+  // A selected board is page context (sidebar / ?board=), not a choice the
+  // submit form should switch away from.
   const boardLocked = Boolean(activeBoard)
 
   function handlePostCreated(postId: string): void {
@@ -370,45 +395,47 @@ export function FeedbackContainer({
             onSearchChange={handleSearchChange}
             isLoading={isLoading}
             filterButton={
-              <>
-                <div className="lg:hidden">
-                  <PortalFilterSheet
-                    activeCount={activeFilterCount + (activeBoard ? 1 : 0) + (filters.view ? 1 : 0)}
-                  >
-                    {filterPanel}
-                    <div className="mt-3 px-1">
-                      <PublicFiltersAddButton filters={filters} setFilters={setFilters} />
-                    </div>
-                  </PortalFilterSheet>
-                </div>
-                <div className="hidden lg:block">
-                  <PublicFiltersToolbarButton filters={filters} setFilters={setFilters} />
-                </div>
-              </>
+              <div className="lg:hidden">
+                <PortalFilterSheet activeCount={filterCount}>
+                  {filterPanel('sheet')}
+                </PortalFilterSheet>
+              </div>
             }
           />
           <div className="mt-3">
             <PublicFiltersBar
-              filters={filters}
+              filters={mergedFilters}
               setFilters={setFilters}
               clearFilters={clearFilters}
               statuses={statuses}
               tags={tags}
               boards={boards}
-              boardLocked={boardLocked}
             />
           </div>
+          {facetCounts && (
+            <p role="status" className="sr-only">
+              {intl.formatMessage(
+                {
+                  id: 'portal.feedback.list.resultCount',
+                  defaultMessage: '{count, plural, one {# idea} other {# ideas}}',
+                },
+                { count: facetCounts.total }
+              )}
+            </p>
+          )}
 
           <PortalModerationSection enabled={canApprove} />
 
           <div className="mt-5">
             {posts.length === 0 && !isPending ? (
-              activeSearch || activeFilterCount > 0 ? (
+              activeSearch || narrowingCount > 0 ? (
                 <p className="text-muted-foreground text-center py-8">
-                  {intl.formatMessage({
-                    id: 'portal.feedback.list.noPostsFiltered',
-                    defaultMessage: 'No posts match your filters.',
-                  })}
+                  {activeView && narrowingCount === 1 && !activeSearch
+                    ? intl.formatMessage(EMPTY_VIEW_MESSAGES[activeView])
+                    : intl.formatMessage({
+                        id: 'portal.feedback.list.noPostsFiltered',
+                        defaultMessage: 'No posts match your filters.',
+                      })}
                 </p>
               ) : (
                 <div className="text-center py-10 px-4 space-y-3">
@@ -433,6 +460,7 @@ export function FeedbackContainer({
               <>
                 <div
                   key={listKey}
+                  aria-busy={isLoading}
                   className={cn(
                     'space-y-3 transition-opacity duration-150',
                     isLoading && 'opacity-60'
@@ -491,7 +519,7 @@ export function FeedbackContainer({
         </div>
 
         <FeedbackSidebar workspaceSlug={workspaceSlug} showPoweredBy={showPoweredBy}>
-          {filterPanel}
+          {filterPanel('sidebar')}
         </FeedbackSidebar>
       </div>
     </div>

@@ -22,6 +22,9 @@ test.describe('Portal feed views for a signed-in viewer', () => {
       await button.click()
       await expect(page).toHaveURL(new RegExp(`[?&]view=${view}`), { timeout: 5000 })
       await expect(button).toHaveAttribute('aria-pressed', 'true')
+      await expect(
+        page.getByRole('region', { name: 'Active filters' }).getByText(label, { exact: true })
+      ).toBeVisible()
       // The count beside a view matches what the feed shows (first page).
       if (count > 0 && count <= 20) {
         await expect(page.locator('[data-post-id]')).toHaveCount(count, { timeout: 5000 })

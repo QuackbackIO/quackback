@@ -102,7 +102,7 @@ export function FilterChip({
         internal
           ? 'bg-amber-500/10 border border-amber-500/40 hover:border-amber-500/60'
           : !onRemove
-            ? 'border border-dashed border-border hover:border-foreground/30'
+            ? 'border border-muted-foreground/40 hover:border-muted-foreground'
             : 'bg-muted/60 border border-border/30 hover:border-border/50'
       )}
     >

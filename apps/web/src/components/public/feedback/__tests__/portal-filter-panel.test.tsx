@@ -28,6 +28,8 @@ const boards = [
 const counts = {
   statuses: { open: 4, planned: 2, complete: 9, closed: 1 },
   boards: { bugs: 5, ideas: 6 },
+  tags: { tag_api: 3, tag_ui: 2 },
+  total: 6,
   views: { mine: 2, voted: 3, following: 1 },
 }
 
@@ -80,19 +82,21 @@ describe('PortalFilterPanel', () => {
     expect(screen.queryByRole('group', { name: 'Boards' })).not.toBeInTheDocument()
   })
 
-  it('checks active statuses by default and all of them while searching', () => {
+  it('ticks nothing at the default scope, which the status chip names', () => {
     renderPanel()
-    expect(screen.getByRole('checkbox', { name: /Open/ })).toBeChecked()
-    expect(screen.getByRole('checkbox', { name: /Complete/ })).not.toBeChecked()
-    cleanup()
-    renderPanel({ filters: { sort: 'trending', search: 'dark' } })
-    expect(screen.getByRole('checkbox', { name: /Complete/ })).toBeChecked()
+    for (const box of screen.getAllByRole('checkbox')) expect(box).not.toBeChecked()
   })
 
-  it('adds a status to the default scope when one is checked', () => {
+  it('picks just the status clicked from the default scope', () => {
     const { setFilters } = renderPanel()
     fireEvent.click(screen.getByRole('checkbox', { name: /Complete/ }))
-    expect(setFilters).toHaveBeenCalledWith({ status: ['open', 'planned', 'complete'] })
+    expect(setFilters).toHaveBeenCalledWith({ status: ['complete'] })
+  })
+
+  it('adds a status to the ones already picked, in workspace order', () => {
+    const { setFilters } = renderPanel({ filters: { sort: 'trending', status: ['complete'] } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /Open/ }))
+    expect(setFilters).toHaveBeenCalledWith({ status: ['open', 'complete'] })
   })
 
   it('understands statuses named by id in the URL', () => {
@@ -101,7 +105,7 @@ describe('PortalFilterPanel', () => {
     expect(screen.getByRole('checkbox', { name: /Open/ })).not.toBeChecked()
   })
 
-  it('falls back to the default when the last status is unchecked', () => {
+  it('goes back to the default when the last status is unticked', () => {
     const { setFilters } = renderPanel({ filters: { sort: 'trending', status: ['closed'] } })
     fireEvent.click(screen.getByRole('checkbox', { name: /Closed/ }))
     expect(setFilters).toHaveBeenCalledWith({ status: undefined })
@@ -121,6 +125,44 @@ describe('PortalFilterPanel', () => {
     cleanup()
     renderPanel({ tags: [tags[0]!] })
     expect(screen.queryByRole('group', { name: 'Tags' })).not.toBeInTheDocument()
+  })
+
+  it('shows no number for a row with no posts', () => {
+    renderPanel({ counts: { ...counts, statuses: { ...counts.statuses, closed: 0 } } })
+    expect(screen.getByRole('checkbox', { name: 'Closed' })).toBeInTheDocument()
+  })
+
+  it('leaves out tags on no visible post, unless picked', () => {
+    renderPanel({ counts: { ...counts, tags: { tag_api: 3 } } })
+    expect(screen.queryByRole('group', { name: 'Tags' })).not.toBeInTheDocument()
+    cleanup()
+    renderPanel({
+      counts: { ...counts, tags: { tag_api: 3 } },
+      filters: { sort: 'trending', tagIds: ['tag_ui'] },
+    })
+    expect(within(section('Tags')).getByRole('button', { name: 'UI' })).toBeInTheDocument()
+  })
+
+  it('folds a long tag list behind "N more"', () => {
+    const many = Array.from({ length: 15 }, (_, i) => ({
+      id: `tag_${i}`,
+      name: `Tag ${i}`,
+      color: '#84cc16',
+    })) as unknown as PostTag[]
+    renderPanel({ tags: many, counts: undefined })
+    const list = section('Tags')
+    expect(within(list).queryByRole('button', { name: 'Tag 14' })).not.toBeInTheDocument()
+    fireEvent.click(within(list).getByRole('button', { name: '3 more' }))
+    expect(within(list).getByRole('button', { name: 'Tag 14' })).toBeInTheDocument()
+  })
+
+  it('puts Status before Boards in the phone sheet', () => {
+    renderPanel({ layout: 'sheet', showViews: false })
+    const names = screen
+      .getAllByRole('group')
+      .map((group) => group.getAttribute('aria-labelledby'))
+      .map((id) => document.getElementById(id!)?.textContent)
+    expect(names.indexOf('Status')).toBeLessThan(names.indexOf('Boards'))
   })
 
   it('renders without counts while they load', () => {

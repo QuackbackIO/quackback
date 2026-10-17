@@ -10,7 +10,7 @@ import {
   UserGroupIcon,
   PlusIcon,
   ChevronRightIcon,
-  FunnelIcon,
+  EyeIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
@@ -19,7 +19,6 @@ import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import type { TeamMember } from '@/lib/shared/types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
-import { Button } from '@/components/ui/button'
 import {
   Command,
   CommandEmpty,
@@ -31,7 +30,11 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
-import { feedShowsActiveOnly } from '@/lib/shared/types/filters'
+import {
+  feedShowsActiveOnly,
+  PUBLIC_FEED_VIEWS,
+  type PublicFeedView,
+} from '@/lib/shared/types/filters'
 import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { CircleIcon } from '@/components/shared/filter-menu'
@@ -51,7 +54,8 @@ interface FilterBarBoard {
 }
 
 type FilterCategory = 'votes' | 'date' | 'response' | 'owner' | 'segment'
-type ChipType = 'board' | 'status' | 'tags' | 'votes' | 'date' | 'response' | 'owner' | 'segment'
+type ChipType =
+  'view' | 'board' | 'status' | 'tags' | 'votes' | 'date' | 'response' | 'owner' | 'segment'
 
 type IconComponent = React.ComponentType<{ className?: string }>
 type IntlShape = ReturnType<typeof useIntl>
@@ -82,6 +86,7 @@ function votesLabel(intl: IntlShape, minVotes: number): string {
 }
 
 const CHIP_ICON_BY_TYPE: Record<ChipType, IconComponent> = {
+  view: EyeIcon,
   board: Squares2X2Icon,
   status: CircleIcon,
   tags: TagIcon,
@@ -123,11 +128,6 @@ interface PublicFiltersBarProps {
   statuses: PostStatusEntity[]
   tags: PostTag[]
   boards: FilterBarBoard[]
-  /**
-   * When true, the selected board is page context (sidebar / ?board=) and is
-   * not offered as a switchable filter.
-   */
-  boardLocked?: boolean
 }
 
 export function PublicFiltersBar({
@@ -137,7 +137,6 @@ export function PublicFiltersBar({
   statuses,
   tags,
   boards,
-  boardLocked = false,
 }: PublicFiltersBarProps) {
   const intl = useIntl()
   const { members, segments } = useTeamOnlyFilterOptions()
@@ -153,9 +152,8 @@ export function PublicFiltersBar({
         members,
         segments,
         intl,
-        boardLocked,
       }),
-    [filters, setFilters, statuses, tags, boards, members, segments, intl, boardLocked]
+    [filters, setFilters, statuses, tags, boards, members, segments, intl]
   )
 
   const pickedCount = activeChips.filter((chip) => chip.onRemove).length
@@ -172,10 +170,6 @@ export function PublicFiltersBar({
       {activeChips.map(({ key, type, ...chipProps }) => (
         <FilterChip key={key} icon={CHIP_ICON_BY_TYPE[type]} {...chipProps} />
       ))}
-
-      {pickedCount > 0 && (
-        <AddFilterButton filters={filters} setFilters={setFilters} variant="pill" />
-      )}
 
       {pickedCount >= 2 && (
         <button
@@ -198,33 +192,13 @@ export function PublicFiltersBar({
 interface AddFilterButtonProps {
   filters: PublicFeedbackFilters
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
-  /**
-   * Trigger style:
-   *   - "pill" (default): dashed "+ Add filter" pill that matches the chip shape.
-   *     Use inside the active-chips row.
-   *   - "toolbar": solid Filter button matching the toolbar's Search button.
-   *     Use as the primary entry point next to Search.
-   */
-  variant?: 'pill' | 'toolbar'
 }
 
 /**
- * "Filter" button styled to match the toolbar's Search button. Use as the
- * primary filter entry point inline with Search.
+ * Dashed "+ Add filter" pill for the less common filters (votes, date, team
+ * response), at the foot of the filter panel.
  */
-export function PublicFiltersToolbarButton(props: Omit<AddFilterButtonProps, 'variant'>) {
-  return <AddFilterButton {...props} variant="toolbar" />
-}
-
-/**
- * Dashed "+ Add filter" pill styled to match the chip shape. Use as the
- * "add another" affordance at the end of the active-chips row.
- */
-export function PublicFiltersAddButton(props: Omit<AddFilterButtonProps, 'variant'>) {
-  return <AddFilterButton {...props} variant="pill" />
-}
-
-function AddFilterButton({ filters, setFilters, variant = 'pill' }: AddFilterButtonProps) {
+export function PublicFiltersAddButton({ filters, setFilters }: AddFilterButtonProps) {
   const intl = useIntl()
   const [open, setOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState<FilterCategory | null>(null)
@@ -304,29 +278,20 @@ function AddFilterButton({ filters, setFilters, variant = 'pill' }: AddFilterBut
       }}
     >
       <PopoverTrigger asChild>
-        {variant === 'toolbar' ? (
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <FunnelIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">
-              <FormattedMessage id="portal.feedback.toolbar.filter" defaultMessage="Filter" />
-            </span>
-          </Button>
-        ) : (
-          <button
-            type="button"
-            className={cn(
-              'inline-flex items-center gap-1 px-2 py-0.5',
-              'rounded-full text-xs',
-              'border border-dashed border-border/50',
-              'text-muted-foreground hover:text-foreground',
-              'hover:border-border hover:bg-muted/30',
-              'transition-colors'
-            )}
-          >
-            <PlusIcon className="h-3 w-3" />
-            <FormattedMessage id="portal.feedback.filter.addFilter" defaultMessage="Add filter" />
-          </button>
-        )}
+        <button
+          type="button"
+          className={cn(
+            'inline-flex items-center gap-1 px-2 py-0.5',
+            'rounded-full text-xs',
+            'border border-dashed border-muted-foreground/40',
+            'text-muted-foreground hover:text-foreground',
+            'hover:border-muted-foreground hover:bg-muted/30',
+            'transition-colors'
+          )}
+        >
+          <PlusIcon className="h-3 w-3" />
+          <FormattedMessage id="portal.feedback.filter.addFilter" defaultMessage="Add filter" />
+        </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-48 p-0">
         {activeCategory === null ? (
@@ -530,15 +495,45 @@ function buildActiveChips(args: {
   members: TeamMember[]
   segments: SegmentListItem[]
   intl: IntlShape
-  boardLocked: boolean
 }): ActiveChipDescriptor[] {
-  const { filters, setFilters, statuses, tags, boards, members, segments, intl, boardLocked } = args
+  const { filters, setFilters, statuses, tags, boards, members, segments, intl } = args
   const chips: ActiveChipDescriptor[] = []
 
+  // View chip (My ideas, Voted, Following), so the view is never hidden in
+  // the panel alone.
+  if (filters.view) {
+    const viewLabels = {
+      mine: intl.formatMessage({
+        id: 'portal.feedback.panel.view.mine',
+        defaultMessage: 'My ideas',
+      }),
+      voted: intl.formatMessage({
+        id: 'portal.feedback.panel.view.voted',
+        defaultMessage: 'Voted',
+      }),
+      following: intl.formatMessage({
+        id: 'portal.feedback.panel.view.following',
+        defaultMessage: 'Following',
+      }),
+    }
+    chips.push({
+      key: 'view',
+      type: 'view',
+      label: intl.formatMessage({
+        id: 'portal.feedback.filter.chip.view',
+        defaultMessage: 'Show:',
+      }),
+      value: viewLabels[filters.view],
+      valueId: filters.view,
+      options: PUBLIC_FEED_VIEWS.map((view) => ({ id: view, label: viewLabels[view] })),
+      onChange: (view) => setFilters({ view: view as PublicFeedView }),
+      onRemove: () => setFilters({ view: undefined }),
+    })
+  }
+
   // Board chip — only shown when a specific board is selected (omit for
-  // "All Posts") and the board is not page context. A locked board is
-  // switched from the sidebar, not as a removable filter.
-  if (filters.board && boards.length > 1 && !boardLocked) {
+  // "All Posts").
+  if (filters.board && boards.length > 1) {
     const board = boards.find((b) => b.slug === filters.board)
     if (board) {
       chips.push({
@@ -600,12 +595,12 @@ function buildActiveChips(args: {
         id: 'portal.feedback.filter.chip.status',
         defaultMessage: 'Status:',
       }),
-      value: feedShowsActiveOnly(filters.search)
+      value: feedShowsActiveOnly(filters)
         ? intl.formatMessage({
             id: 'portal.feedback.filter.status.activeOnly',
             defaultMessage: 'Active only',
           })
-        : intl.formatMessage({ id: 'portal.feedback.filter.status.any', defaultMessage: 'Any' }),
+        : intl.formatMessage({ id: 'portal.feedback.filter.status.all', defaultMessage: 'All' }),
       valueId: '',
       options: statusOptions,
       onChange: (slug) => setFilters({ status: [slug] }),

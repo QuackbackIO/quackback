@@ -40,7 +40,7 @@ export function PortalFilterSheet({
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5"
+            className="h-11 gap-1.5"
             aria-label={
               activeCount > 0
                 ? intl.formatMessage(

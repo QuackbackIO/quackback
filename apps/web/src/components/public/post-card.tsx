@@ -549,7 +549,10 @@ export function PostCard({
                   key={tag.id}
                   type="button"
                   onClick={() => onTagClick(tag.id)}
-                  className={tagClassName}
+                  className={cn(
+                    tagClassName,
+                    'hover:brightness-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                  )}
                   style={style}
                 >
                   {tag.name}

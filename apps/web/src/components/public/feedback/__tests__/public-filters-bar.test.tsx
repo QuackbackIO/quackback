@@ -1,13 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { cleanup, render, screen, fireEvent } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import {
-  PublicFiltersBar,
-  PublicFiltersAddButton,
-  PublicFiltersToolbarButton,
-} from '../public-filters-bar'
+import { PublicFiltersBar, PublicFiltersAddButton } from '../public-filters-bar'
 import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 
 const statuses: PostStatusEntity[] = [
@@ -75,15 +71,25 @@ describe('PublicFiltersBar', () => {
     expect(screen.getByText(/^Status:$/)).toBeInTheDocument()
     expect(screen.getByText('Active only')).toBeInTheDocument()
     // The implied chip is not a filter the visitor added, so it has no remove
-    // button, and the toolbar's Filter button stays the only entry point.
+    // button.
     expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /add filter/i })).not.toBeInTheDocument()
   })
 
-  it('shows "Any" as the implied status while searching', () => {
+  it('shows "All" as the implied status while searching or in a view', () => {
     renderBar({ filters: { sort: 'top', search: 'widget' } })
-    expect(screen.getByText('Any')).toBeInTheDocument()
+    expect(screen.getByText('All')).toBeInTheDocument()
     expect(screen.queryByText('Active only')).not.toBeInTheDocument()
+    cleanup()
+    renderBar({ filters: { sort: 'top', view: 'mine' } })
+    expect(screen.getByText('All')).toBeInTheDocument()
+  })
+
+  it('shows the view as a chip that can be removed', () => {
+    const { setFilters } = renderBar({ filters: { sort: 'top', view: 'voted' } })
+    expect(screen.getByText(/^Show:$/)).toBeInTheDocument()
+    expect(screen.getByText('Voted')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /remove show/i }))
+    expect(setFilters).toHaveBeenCalledWith({ view: undefined })
   })
 
   it('picking a status from the implied chip replaces the default', () => {
@@ -105,22 +111,17 @@ describe('PublicFiltersBar', () => {
     expect(screen.queryByText('Active only')).not.toBeInTheDocument()
   })
 
-  it('renders chips + the dashed Add filter pill when chips are active', () => {
+  it('renders a chip per picked status, and no Add filter pill (the panel has it)', () => {
     renderBar({ filters: { sort: 'top', status: ['open'] } })
     expect(screen.getByText('Open')).toBeInTheDocument()
     expect(screen.getByText(/^Status:$/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /add filter/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /add filter/i })).not.toBeInTheDocument()
   })
 
   it('renders a board chip when filters.board is set', () => {
     renderBar({ filters: { sort: 'top', board: 'bugs' } })
     expect(screen.getByText(/^Board:$/)).toBeInTheDocument()
     expect(screen.getByText('Bugs')).toBeInTheDocument()
-  })
-
-  it('does not render a board chip when the board is locked', () => {
-    renderBar({ filters: { sort: 'top', board: 'bugs' }, boardLocked: true })
-    expect(screen.queryByText(/^Board:$/)).not.toBeInTheDocument()
   })
 
   it('does not render a board chip when only one board exists', () => {
@@ -163,25 +164,15 @@ describe('PublicFiltersBar', () => {
   })
 })
 
-describe('PublicFiltersToolbarButton', () => {
-  it('renders the solid Filter button (toolbar variant)', () => {
-    const setFilters = vi.fn()
-    render(
-      <Providers>
-        <PublicFiltersToolbarButton filters={{ sort: 'top' }} setFilters={setFilters} />
-      </Providers>
-    )
-    expect(screen.getByRole('button', { name: /filter/i })).toBeInTheDocument()
-  })
-
+describe('PublicFiltersAddButton', () => {
   it('opens the same category menu and lets users add a vote-count filter', () => {
     const setFilters = vi.fn()
     render(
       <Providers>
-        <PublicFiltersToolbarButton filters={{ sort: 'top' }} setFilters={setFilters} />
+        <PublicFiltersAddButton filters={{ sort: 'top' }} setFilters={setFilters} />
       </Providers>
     )
-    fireEvent.click(screen.getByRole('button', { name: /filter/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^add filter$/i }))
     fireEvent.click(screen.getByRole('button', { name: /vote count/i }))
     // cmdk's CommandItem renders with role="option"
     fireEvent.click(screen.getByRole('option', { name: /25\+ votes/i }))
@@ -191,10 +182,10 @@ describe('PublicFiltersToolbarButton', () => {
   it('offers only the filters the panel does not show', () => {
     render(
       <Providers>
-        <PublicFiltersToolbarButton filters={{ sort: 'top' }} setFilters={vi.fn()} />
+        <PublicFiltersAddButton filters={{ sort: 'top' }} setFilters={vi.fn()} />
       </Providers>
     )
-    fireEvent.click(screen.getByRole('button', { name: /filter/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^add filter$/i }))
     for (const name of [/^Vote count$/i, /^Created date$/i, /^Team response$/i]) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument()
     }

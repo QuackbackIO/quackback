@@ -5,6 +5,7 @@
  * Mutations are in lib/mutations/portal-posts.ts
  */
 
+import { useRef } from 'react'
 import { useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-query'
 import {
   listPublicPostsFn,
@@ -39,6 +40,8 @@ interface UsePublicPostsOptions {
   filters: PublicFeedbackFilters
   initialData?: PublicPostListResult
   enabled?: boolean
+  /** Who is viewing; counts are only reused for the same viewer. */
+  viewerKey?: string
 }
 
 interface UseVotedPostsOptions {
@@ -104,10 +107,17 @@ function feedFilterInput(filters: PublicFeedbackFilters) {
 
 async function fetchPublicPosts(
   filters: PublicFeedbackFilters,
-  page: number
+  page: number,
+  withFacets = true
 ): Promise<PublicPostListResult> {
   return (await listPublicPostsFn({
-    data: { ...feedFilterInput(filters), sort: filters.sort || 'top', page, limit: 20 },
+    data: {
+      ...feedFilterInput(filters),
+      sort: filters.sort || 'top',
+      page,
+      limit: 20,
+      ...(!withFacets && { facets: false }),
+    },
   })) as unknown as PublicPostListResult
 }
 
@@ -120,10 +130,39 @@ export async function fetchVotedPosts(): Promise<Set<string>> {
 // Query Hooks
 // ============================================================================
 
-export function usePublicPosts({ filters, initialData, enabled = true }: UsePublicPostsOptions) {
+export function usePublicPosts({
+  filters,
+  initialData,
+  enabled = true,
+  viewerKey = '',
+}: UsePublicPostsOptions) {
+  // The panel counts don't depend on the sort, so a sort change reuses the
+  // last counts instead of recounting. Any other refetch (a filter change, or
+  // a vote invalidating the feed) counts again.
+  const lastCounts = useRef<{ key: string; sort?: string; facets: PublicPostFacetCounts }>(
+    initialData?.facets && {
+      key: JSON.stringify([viewerKey, feedFilterInput(filters)]),
+      sort: filters.sort,
+      facets: initialData.facets,
+    }
+  )
+
+  async function fetchPage(page: number): Promise<PublicPostListResult> {
+    if (page !== 1) return fetchPublicPosts(filters, page)
+    const key = JSON.stringify([viewerKey, feedFilterInput(filters)])
+    const last = lastCounts.current
+    if (last?.key === key && last.sort !== filters.sort) {
+      last.sort = filters.sort
+      return { ...(await fetchPublicPosts(filters, page, false)), facets: last.facets }
+    }
+    const result = await fetchPublicPosts(filters, page)
+    if (result.facets) lastCounts.current = { key, sort: filters.sort, facets: result.facets }
+    return result
+  }
+
   return useInfiniteQuery({
     queryKey: publicPostsKeys.list(filters),
-    queryFn: ({ pageParam }) => fetchPublicPosts(filters, pageParam),
+    queryFn: ({ pageParam }) => fetchPage(pageParam),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
     // Page number inverts trivially (page - 1) — visitor-facing feed, so the

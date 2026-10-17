@@ -1,8 +1,8 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { useIntl, type MessageDescriptor } from 'react-intl'
 import { CheckIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
-import { feedShowsActiveOnly, type PublicFeedView } from '@/lib/shared/types/filters'
+import type { PublicFeedView } from '@/lib/shared/types/filters'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import type { PublicPostFacetCounts } from '@/lib/shared/types/filters'
@@ -24,7 +24,14 @@ interface PortalFilterPanelProps {
   counts?: PublicPostFacetCounts | null
   /** Signed-in (non-anonymous) viewers get the Show section. */
   showViews: boolean
+  /** The phone sheet puts Status before the board list. */
+  layout?: 'sidebar' | 'sheet'
+  /** Rendered at the foot of the panel (the less common filters). */
+  footer?: React.ReactNode
 }
+
+/** Tags listed before the rest fold behind "N more". */
+const TAGS_SHOWN = 12
 
 const VIEW_LABELS: Record<'all' | PublicFeedView, MessageDescriptor> = {
   all: { id: 'portal.feedback.panel.view.all', defaultMessage: 'All ideas' },
@@ -47,25 +54,39 @@ const rowClass = (active: boolean) =>
       : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
   )
 
+/** A row's post count. Zero shows nothing: the row is still there to pick. */
 function Count({ value }: { value: number | undefined }) {
-  if (value === undefined) return null
-  return <span className="ms-auto shrink-0 ps-1 text-xs font-semibold tabular-nums">{value}</span>
+  const intl = useIntl()
+  if (!value) return null
+  return (
+    <span className="ms-auto shrink-0 ps-1 text-xs text-muted-foreground tabular-nums">
+      {intl.formatNumber(value)}
+    </span>
+  )
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const headingId = useId()
   return (
-    <div
-      role="group"
-      aria-labelledby={headingId}
-      className="border-t border-border/50 px-3 py-3 first:border-t-0"
-    >
+    <div role="group" aria-labelledby={headingId} className="px-3 py-3">
       <h2
         id={headingId}
         className="px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
       >
         {title}
       </h2>
+      {children}
+    </div>
+  )
+}
+
+function StatusGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  const labelId = useId()
+  return (
+    <div role="group" aria-labelledby={labelId} className="mb-1 last:mb-0">
+      <p id={labelId} className="px-1 pb-1 pt-1.5 text-xs text-muted-foreground">
+        {label}
+      </p>
       {children}
     </div>
   )
@@ -97,7 +118,9 @@ function StatusRow({
         aria-hidden
         className={cn(
           'flex size-4 shrink-0 items-center justify-center rounded-[4px] border',
-          checked ? 'border-primary bg-primary text-primary-foreground' : 'border-input'
+          checked
+            ? 'border-primary bg-primary text-primary-foreground'
+            : 'border-muted-foreground/60'
         )}
       >
         {checked && <CheckIcon className="size-3" />}
@@ -126,22 +149,22 @@ export function PortalFilterPanel({
   tags,
   counts,
   showViews,
+  layout = 'sidebar',
+  footer,
 }: PortalFilterPanelProps): React.ReactElement {
   const intl = useIntl()
+  const [allTagsShown, setAllTagsShown] = useState(false)
 
-  // The statuses the feed shows right now: the picked ones, or the default
-  // scope (active only, or everything while searching).
+  // The statuses picked. None picked means the default scope, which the
+  // status chip names, so nothing is ticked.
   // The URL may name statuses by slug or (older links) by id; compare slugs.
-  const scope =
-    filters.status?.map((value) => statuses.find((s) => s.id === value)?.slug ?? value) ??
-    statuses
-      .filter((s) => !feedShowsActiveOnly(filters.search) || s.category === 'active')
-      .map((s) => s.slug)
+  const picked =
+    filters.status?.map((value) => statuses.find((s) => s.id === value)?.slug ?? value) ?? []
 
   function toggleStatus(slug: string): void {
-    const next = scope.includes(slug)
-      ? scope.filter((s) => s !== slug)
-      : statuses.map((s) => s.slug).filter((s) => s === slug || scope.includes(s))
+    const next = picked.includes(slug)
+      ? picked.filter((s) => s !== slug)
+      : statuses.map((s) => s.slug).filter((s) => s === slug || picked.includes(s))
     setFilters({ status: next.length > 0 ? next : undefined })
   }
 
@@ -153,127 +176,150 @@ export function PortalFilterPanel({
     setFilters({ tagIds: next.length > 0 ? next : undefined })
   }
 
-  return (
-    <div className="overflow-hidden rounded-lg border border-border/50 bg-card shadow-sm">
-      {showViews && (
-        <Section
-          title={intl.formatMessage({ id: 'portal.feedback.panel.show', defaultMessage: 'Show' })}
-        >
-          <div className="space-y-1">
-            {(['all', 'mine', 'voted', 'following'] as const).map((view) => {
-              const active = (filters.view ?? 'all') === view
-              return (
-                <button
-                  key={view}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setFilters({ view: view === 'all' ? undefined : view })}
-                  className={rowClass(active)}
-                >
-                  <span className="truncate">{intl.formatMessage(VIEW_LABELS[view])}</span>
-                  {view !== 'all' && <Count value={counts?.views?.[view]} />}
-                </button>
-              )
-            })}
-          </div>
-        </Section>
-      )}
-
-      {boards.length > 1 && (
-        <Section
-          title={intl.formatMessage({
-            id: 'portal.feedback.sidebar.boards',
-            defaultMessage: 'Boards',
-          })}
-        >
-          <div className="space-y-1">
-            <button
-              type="button"
-              aria-pressed={!filters.board}
-              onClick={() => setFilters({ board: undefined })}
-              className={rowClass(!filters.board)}
-            >
-              <span className="truncate">
-                {intl.formatMessage({
-                  id: 'portal.feedback.sidebar.viewAllPosts',
-                  defaultMessage: 'View all ideas',
-                })}
-              </span>
-            </button>
-            {boards.map((board) => (
-              <button
-                key={board.id}
-                type="button"
-                aria-pressed={filters.board === board.slug}
-                onClick={() => setFilters({ board: board.slug })}
-                className={rowClass(filters.board === board.slug)}
-              >
-                <span className="min-w-0 truncate">{board.name}</span>
-                <Count value={counts?.boards[board.slug] ?? (counts ? 0 : undefined)} />
-              </button>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      <Section
-        title={intl.formatMessage({
-          id: 'portal.feedback.filter.category.status',
-          defaultMessage: 'Status',
-        })}
-      >
-        {STATUS_CATEGORY_ORDER.map((category) => {
-          const group = statuses.filter((s) => (s.category ?? 'active') === category)
-          if (group.length === 0) return null
+  const showSection = showViews && (
+    <Section
+      key="show"
+      title={intl.formatMessage({ id: 'portal.feedback.panel.show', defaultMessage: 'Show' })}
+    >
+      <div className="space-y-1">
+        {(['all', 'mine', 'voted', 'following'] as const).map((view) => {
+          const active = (filters.view ?? 'all') === view
           return (
-            <div key={category} className="mb-1 last:mb-0">
-              <p className="px-1 pb-1 pt-1.5 text-[11px] text-muted-foreground">
-                {intl.formatMessage(STATUS_GROUP_LABELS[category])}
-              </p>
-              {group.map((status) => (
-                <StatusRow
-                  key={status.id}
-                  status={status}
-                  checked={scope.includes(status.slug)}
-                  onToggle={() => toggleStatus(status.slug)}
-                  count={counts?.statuses[status.slug] ?? (counts ? 0 : undefined)}
-                />
-              ))}
-            </div>
+            <button
+              key={view}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setFilters({ view: view === 'all' ? undefined : view })}
+              className={rowClass(active)}
+            >
+              <span className="truncate">{intl.formatMessage(VIEW_LABELS[view])}</span>
+              {view !== 'all' && <Count value={counts?.views?.[view]} />}
+            </button>
           )
         })}
-      </Section>
+      </div>
+    </Section>
+  )
 
-      {tags.length > 1 && (
-        <Section
-          title={intl.formatMessage({
-            id: 'portal.postDetail.metadata.tags',
-            defaultMessage: 'Tags',
-          })}
+  const boardSection = boards.length > 1 && (
+    <Section
+      key="boards"
+      title={intl.formatMessage({ id: 'portal.feedback.sidebar.boards', defaultMessage: 'Boards' })}
+    >
+      <div className="space-y-1">
+        <button
+          type="button"
+          aria-pressed={!filters.board}
+          onClick={() => setFilters({ board: undefined })}
+          className={rowClass(!filters.board)}
         >
-          <div className="flex flex-wrap gap-1.5 px-1">
-            {tags.map((tag) => {
-              const active = filters.tagIds?.includes(tag.id) ?? false
-              return (
-                <button
-                  key={tag.id}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => toggleTag(tag.id)}
-                  className="rounded px-2 py-0.5 text-xs font-medium"
-                  style={{
-                    backgroundColor: tag.color + (active ? '40' : '1a'),
-                    color: tag.color,
-                    boxShadow: active ? `inset 0 0 0 1px ${tag.color}` : undefined,
-                  }}
-                >
-                  {tag.name}
-                </button>
-              )
+          <span className="truncate">
+            {intl.formatMessage({
+              id: 'portal.feedback.panel.allBoards',
+              defaultMessage: 'All boards',
             })}
-          </div>
-        </Section>
-      )}
+          </span>
+        </button>
+        {boards.map((board) => (
+          <button
+            key={board.id}
+            type="button"
+            aria-pressed={filters.board === board.slug}
+            onClick={() => setFilters({ board: board.slug })}
+            className={rowClass(filters.board === board.slug)}
+          >
+            <span className="min-w-0 truncate">{board.name}</span>
+            <Count value={counts?.boards[board.slug]} />
+          </button>
+        ))}
+      </div>
+    </Section>
+  )
+
+  const statusSection = (
+    <Section
+      key="status"
+      title={intl.formatMessage({
+        id: 'portal.feedback.filter.category.status',
+        defaultMessage: 'Status',
+      })}
+    >
+      {STATUS_CATEGORY_ORDER.map((category) => {
+        const group = statuses.filter((s) => (s.category ?? 'active') === category)
+        if (group.length === 0) return null
+        return (
+          <StatusGroup key={category} label={intl.formatMessage(STATUS_GROUP_LABELS[category])}>
+            {group.map((status) => (
+              <StatusRow
+                key={status.id}
+                status={status}
+                checked={picked.includes(status.slug)}
+                onToggle={() => toggleStatus(status.slug)}
+                count={counts?.statuses[status.slug]}
+              />
+            ))}
+          </StatusGroup>
+        )
+      })}
+    </Section>
+  )
+
+  // Once the counts are in, tags on no visible post drop out (a picked tag
+  // stays, so it can be unpicked).
+  const usableTags = tags.filter(
+    (tag) => !counts || (counts.tags[tag.id] ?? 0) > 0 || filters.tagIds?.includes(tag.id)
+  )
+  const shownTags = allTagsShown ? usableTags : usableTags.slice(0, TAGS_SHOWN)
+  const tagSection = usableTags.length > 1 && (
+    <Section
+      key="tags"
+      title={intl.formatMessage({ id: 'portal.postDetail.metadata.tags', defaultMessage: 'Tags' })}
+    >
+      <div className="flex flex-wrap gap-1.5 px-1">
+        {shownTags.map((tag) => {
+          const active = filters.tagIds?.includes(tag.id) ?? false
+          return (
+            <button
+              key={tag.id}
+              type="button"
+              aria-pressed={active}
+              onClick={() => toggleTag(tag.id)}
+              className="rounded px-2 py-0.5 text-xs font-medium"
+              style={{
+                backgroundColor: tag.color + (active ? '40' : '1a'),
+                color: tag.color,
+                boxShadow: active ? `inset 0 0 0 1px ${tag.color}` : undefined,
+              }}
+            >
+              {tag.name}
+            </button>
+          )
+        })}
+        {usableTags.length > shownTags.length && (
+          <button
+            type="button"
+            onClick={() => setAllTagsShown(true)}
+            className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          >
+            {intl.formatMessage(
+              { id: 'portal.feedback.panel.moreTags', defaultMessage: '{count} more' },
+              { count: usableTags.length - shownTags.length }
+            )}
+          </button>
+        )}
+      </div>
+    </Section>
+  )
+
+  const sections =
+    layout === 'sheet'
+      ? [showSection, statusSection, boardSection, tagSection]
+      : [showSection, boardSection, statusSection, tagSection]
+
+  return (
+    <div className="divide-y divide-border/50 overflow-hidden rounded-lg border border-border/50 bg-card shadow-sm">
+      {sections}
+      {footer && <div className="px-4 py-3">{footer}</div>}
     </div>
   )
 }

@@ -97,9 +97,10 @@ export function usePublicFilters() {
   )
 
   const clearFilters = useCallback(() => {
-    // Clears chip-level filters only — preserves board, view, sort, and
-    // search, which have their own dedicated UI affordances.
+    // Clears every chip. Sort and search keep their own toolbar controls.
     setFilters({
+      board: undefined,
+      view: undefined,
       status: undefined,
       tagIds: undefined,
       minVotes: undefined,
@@ -112,6 +113,8 @@ export function usePublicFilters() {
 
   const activeFilterCount = useMemo(() => {
     let count = 0
+    if (filters.board) count += 1
+    if (filters.view) count += 1
     if (filters.status?.length) count += filters.status.length
     if (filters.tagIds?.length) count += filters.tagIds.length
     if (filters.minVotes) count += 1
@@ -121,6 +124,8 @@ export function usePublicFilters() {
     if (filters.segmentIds?.length) count += filters.segmentIds.length
     return count
   }, [
+    filters.board,
+    filters.view,
     filters.status,
     filters.tagIds,
     filters.minVotes,
