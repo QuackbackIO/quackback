@@ -8,7 +8,7 @@ test.describe('Public Post List', () => {
 
   test('displays feedback posts', async ({ page }) => {
     // Should show at least one post card (Link elements with href containing /posts/)
-    const postCards = page.locator('a[href*="/posts/"]:has(h3)')
+    const postCards = page.locator('h3 a[href*="/posts/"]')
     await expect(postCards.first()).toBeVisible({ timeout: 10000 })
 
     // Each post should have a title visible
@@ -18,7 +18,7 @@ test.describe('Public Post List', () => {
 
   test('shows post details on cards', async ({ page }) => {
     // Wait for posts to load
-    const postCards = page.locator('a[href*="/posts/"]:has(h3)')
+    const postCards = page.locator('h3 a[href*="/posts/"]')
     await expect(postCards.first()).toBeVisible({ timeout: 10000 })
 
     // Posts should display vote button with count
@@ -37,7 +37,7 @@ test.describe('Public Post List', () => {
     await page.waitForLoadState('networkidle')
 
     // Look for board filter buttons in sidebar
-    const boardButtons = page.locator('button').filter({ hasText: /feature|bug|general/i })
+    const boardButtons = page.locator('aside button').filter({ hasText: /feature|bug|general/i })
 
     // If board filter exists, click it
     const boardButton = boardButtons.first()
@@ -51,6 +51,7 @@ test.describe('Public Post List', () => {
 
   test('can search for posts', async ({ page }) => {
     // Look for search input
+    await page.waitForLoadState('networkidle')
     const searchInput = page.getByPlaceholder(/search/i)
 
     if ((await searchInput.count()) > 0) {
@@ -185,7 +186,7 @@ test.describe('Public Post List', () => {
 
   test('clicking post navigates to detail page', async ({ page }) => {
     // Wait for posts to load
-    const postCards = page.locator('a[href*="/posts/"]:has(h3)')
+    const postCards = page.locator('h3 a[href*="/posts/"]')
     await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
     // Get the href of the first post
@@ -1289,11 +1290,7 @@ test.describe('Post List - Search Accuracy', () => {
     // Use a search term that exists in the seed post titles
     const searchTerm = 'dark mode'
 
-    // Open search popover and type
-    const searchButton = page.getByRole('button', { name: /Search/i }).first()
-    await searchButton.click()
-    const searchInput = page.getByPlaceholder(/Search posts/i)
-    await expect(searchInput).toBeVisible()
+    const searchInput = page.getByRole('searchbox', { name: 'Search ideas' })
     await searchInput.fill(searchTerm)
     await searchInput.press('Enter')
 
@@ -1332,9 +1329,6 @@ test.describe('Post List - Search Accuracy', () => {
     await page.waitForTimeout(300)
     const searchCount = await postCards.count()
 
-    // Open search popover and clear
-    const searchButton = page.getByRole('button', { name: /Search/i }).first()
-    await searchButton.click()
     const clearButton = page.getByRole('button', { name: /Clear search/i })
     await expect(clearButton).toBeVisible({ timeout: 5000 })
     await clearButton.click()
@@ -1360,10 +1354,7 @@ test.describe('Post List - Search Accuracy', () => {
     // Search for a string that will never match real post titles
     const impossibleTerm = 'xyzzy_no_such_post_zqwerty_99999'
 
-    const searchButton = page.getByRole('button', { name: /Search/i }).first()
-    await searchButton.click()
-    const searchInput = page.getByPlaceholder(/Search posts/i)
-    await expect(searchInput).toBeVisible()
+    const searchInput = page.getByRole('searchbox', { name: 'Search ideas' })
     await searchInput.fill(impossibleTerm)
     await searchInput.press('Enter')
 

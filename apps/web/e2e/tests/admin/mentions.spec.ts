@@ -150,7 +150,7 @@ test.describe('Post @-mention happy path', () => {
         // Sort-by-new is best-effort: if "New" isn't visible (e.g. layout
         // variant) the cache-updated list still surfaces the post.
       })
-    const postLink = page.locator(`a[href*="/posts/"]:has(h3:text("${uniqueTitle}"))`)
+    const postLink = page.locator('h3 a[href*="/posts/"]', { hasText: uniqueTitle })
     await expect(postLink.first()).toBeVisible({ timeout: 15000 })
     await postLink.first().click()
     await page.waitForURL(/\/posts\//, { timeout: 10000 })
