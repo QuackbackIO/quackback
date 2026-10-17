@@ -2217,5 +2217,7 @@
   "portal.feedback.filter.status.summaryMore": "{names} +{count}",
   "portal.feedback.toolbar.sortRelevance": "Beste match",
   "portal.feedback.list.noSearchResults": "Geen ideeën gevonden voor “{query}”.",
-  "portal.feedback.list.postSearchAsIdea": "Plaats het als nieuw idee"
+  "portal.feedback.list.postSearchAsIdea": "Plaats het als nieuw idee",
+  "portal.feedback.list.searchWidenedMost": "Geen idee bevat al je woorden. Ideeën met de meeste ervan worden getoond.",
+  "portal.feedback.list.searchWidenedSimilar": "Geen exacte resultaten. Ideeën met een vergelijkbare spelling worden getoond."
 }

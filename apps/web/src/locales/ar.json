@@ -2217,5 +2217,7 @@
   "portal.feedback.filter.status.summaryMore": "{names} +{count}",
   "portal.feedback.toolbar.sortRelevance": "الأفضل تطابقًا",
   "portal.feedback.list.noSearchResults": "لا توجد أفكار تطابق “{query}”.",
-  "portal.feedback.list.postSearchAsIdea": "انشرها كفكرة جديدة"
+  "portal.feedback.list.postSearchAsIdea": "انشرها كفكرة جديدة",
+  "portal.feedback.list.searchWidenedMost": "لا توجد فكرة تحتوي على كل كلماتك. نعرض الأفكار التي تحتوي على معظمها.",
+  "portal.feedback.list.searchWidenedSimilar": "لا توجد نتائج مطابقة تمامًا. نعرض أفكارًا بتهجئة مشابهة."
 }

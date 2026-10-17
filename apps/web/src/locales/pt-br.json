@@ -2217,5 +2217,7 @@
   "portal.feedback.filter.status.summaryMore": "{names} +{count}",
   "portal.feedback.toolbar.sortRelevance": "Mais relevantes",
   "portal.feedback.list.noSearchResults": "Nenhuma ideia corresponde a “{query}”.",
-  "portal.feedback.list.postSearchAsIdea": "Publicar como nova ideia"
+  "portal.feedback.list.postSearchAsIdea": "Publicar como nova ideia",
+  "portal.feedback.list.searchWidenedMost": "Nenhuma ideia tem todas as suas palavras. Mostrando ideias com a maioria delas.",
+  "portal.feedback.list.searchWidenedSimilar": "Nenhum resultado exato. Mostrando ideias com grafia parecida."
 }

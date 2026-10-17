@@ -37,6 +37,7 @@ import type {
   PublicFeedView,
   PublicPostFacetCounts,
   PublicPostSort,
+  WidenedSearch,
 } from '@/lib/shared/types/filters'
 import { cn } from '@/lib/shared/utils'
 import type { PostId, PostStatusId } from '@quackback/ids'
@@ -56,6 +57,17 @@ const EMPTY_VIEW_MESSAGES: Record<PublicFeedView, MessageDescriptor> = {
   following: {
     id: 'portal.feedback.list.emptyFollowing',
     defaultMessage: "You aren't following any ideas yet.",
+  },
+}
+
+const WIDENED_SEARCH_MESSAGES: Record<WidenedSearch, MessageDescriptor> = {
+  most: {
+    id: 'portal.feedback.list.searchWidenedMost',
+    defaultMessage: 'No idea has all your words. Showing ideas with most of them.',
+  },
+  similar: {
+    id: 'portal.feedback.list.searchWidenedSimilar',
+    defaultMessage: 'No exact matches. Showing ideas with a similar spelling.',
   },
 }
 
@@ -83,6 +95,8 @@ interface FeedbackContainerProps {
   showPoweredBy?: boolean
   /** Filter panel counts as rendered on the server. */
   facets?: PublicPostFacetCounts | null
+  /** How the server-rendered search was widened, if it was. */
+  searchMode?: WidenedSearch
 }
 
 export function FeedbackContainer({
@@ -102,6 +116,7 @@ export function FeedbackContainer({
   boardPermissions,
   showPoweredBy = true,
   facets,
+  searchMode: initialSearchMode,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const router = useRouter()
@@ -212,12 +227,15 @@ export function FeedbackContainer({
           total: initialPosts.length,
           hasMore: initialHasMore,
           facets: facets ?? undefined,
+          searchMode: initialSearchMode,
         }
       : undefined,
   })
 
   // Filter panel counts ride on the first page of the feed.
   const facetCounts = postsData?.pages[0]?.facets
+  // Set when nothing matched every word and the search was widened.
+  const widenedSearch = activeSearch ? postsData?.pages[0]?.searchMode : undefined
 
   // A view the server ignores is not counted as on.
   const filterCount = activeFilterCount - (filters.view && !activeView ? 1 : 0)
@@ -518,6 +536,11 @@ export function FeedbackContainer({
               )
             ) : (
               <>
+                {widenedSearch && (
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    {intl.formatMessage(WIDENED_SEARCH_MESSAGES[widenedSearch])}
+                  </p>
+                )}
                 <div key={listKey} className="space-y-3">
                   {posts.map((post, index) => (
                     <div

@@ -2217,5 +2217,7 @@
   "portal.feedback.filter.status.summaryMore": "{names} +{count}",
   "portal.feedback.toolbar.sortRelevance": "最佳符合",
   "portal.feedback.list.noSearchResults": "沒有與「{query}」相符的想法。",
-  "portal.feedback.list.postSearchAsIdea": "發布為新想法"
+  "portal.feedback.list.postSearchAsIdea": "發布為新想法",
+  "portal.feedback.list.searchWidenedMost": "沒有想法包含你的所有詞語。顯示包含其中大部分詞語的想法。",
+  "portal.feedback.list.searchWidenedSimilar": "沒有完全相符的結果。顯示拼寫相近的想法。"
 }

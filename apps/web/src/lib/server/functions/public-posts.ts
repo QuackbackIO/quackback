@@ -170,6 +170,8 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
       createdAt: post.createdAt.toISOString(),
     })),
     ...(facets && { facets }),
+    ...(feedParams.search &&
+      feedParams.searchMode !== 'all' && { searchMode: feedParams.searchMode }),
   }
 })
 

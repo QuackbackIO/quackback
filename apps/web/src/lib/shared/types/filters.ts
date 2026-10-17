@@ -43,6 +43,12 @@ export const PUBLIC_FEED_VIEWS = ['mine', 'voted', 'following'] as const
  */
 export const PUBLIC_POST_SORTS = ['top', 'new', 'trending', 'relevance'] as const
 export type PublicPostSort = (typeof PUBLIC_POST_SORTS)[number]
+
+/**
+ * How a search was widened when nothing matched every word: posts with half
+ * the words, or titles with a close spelling. Absent for an exact match.
+ */
+export type WidenedSearch = 'most' | 'similar'
 export type PublicFeedView = (typeof PUBLIC_FEED_VIEWS)[number]
 
 /** Portal filter panel counts, keyed by status slug, board slug, tag id and view. */

@@ -20,28 +20,48 @@ describe('searchTerms', () => {
 })
 
 describe('canWidenSearch', () => {
-  it('only widens a search of two or more plain words', () => {
-    expect(canWidenSearch('zap')).toBe(false)
+  it('widens plain words, never a query with search operators', () => {
+    expect(canWidenSearch('zap')).toBe(true)
     expect(canWidenSearch('csv export option')).toBe(true)
     expect(canWidenSearch('"dark mode"')).toBe(false)
     expect(canWidenSearch('slack -email')).toBe(false)
     expect(canWidenSearch('slack OR teams')).toBe(false)
+    expect(canWidenSearch('&&&')).toBe(false)
     expect(canWidenSearch(undefined)).toBe(false)
   })
 })
 
 describe('resolvePostSearchMode', () => {
-  it('keeps all words when some post has them all', async () => {
-    expect(await resolvePostSearchMode('csv export', async () => true)).toBe('all')
+  /** A probe that finds matches only in the given modes, and records each ask. */
+  function probe(...matching: string[]) {
+    const asked: string[] = []
+    const hasMatch = async (mode: string) => {
+      asked.push(mode)
+      return matching.includes(mode)
+    }
+    return { asked, hasMatch }
+  }
+
+  it('keeps every word when some post has them all', async () => {
+    const { asked, hasMatch } = probe('all', 'most', 'similar')
+    expect(await resolvePostSearchMode('csv export', hasMatch)).toBe('all')
+    expect(asked).toEqual(['all'])
   })
 
-  it('falls back to half the words when no post has them all', async () => {
-    expect(await resolvePostSearchMode('csv export option', async () => false)).toBe('most')
+  it('falls back to half the words, then to a close spelling', async () => {
+    expect(await resolvePostSearchMode('csv export option', probe('most').hasMatch)).toBe('most')
+    expect(await resolvePostSearchMode('integraton', probe('similar').hasMatch)).toBe('similar')
   })
 
-  it('does not probe a single word', async () => {
-    let probed = false
-    await resolvePostSearchMode('zap', async () => (probed = true))
-    expect(probed).toBe(false)
+  it('skips half the words for a single word', async () => {
+    const { asked, hasMatch } = probe()
+    expect(await resolvePostSearchMode('zap', hasMatch)).toBe('all')
+    expect(asked).toEqual(['all', 'similar'])
+  })
+
+  it('never probes a query with search operators', async () => {
+    const { asked, hasMatch } = probe('similar')
+    expect(await resolvePostSearchMode('"dark mode"', hasMatch)).toBe('all')
+    expect(asked).toEqual([])
   })
 })
