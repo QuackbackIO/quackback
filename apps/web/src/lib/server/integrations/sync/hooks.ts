@@ -182,6 +182,8 @@ export async function executeHookSync(
       boardId: post.boardId,
       boardSlug: board.slug,
       voteCount: post.voteCount,
+      authorPrincipalId: post.principalId,
+      authorUserId: post.author?.userId ?? undefined,
       authorName: post.author?.displayName ?? post.author?.user?.name ?? undefined,
       authorEmail: realEmail(post.author?.user?.email) ?? undefined,
     }

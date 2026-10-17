@@ -110,6 +110,10 @@ export interface EventPostData {
   content: string
   boardId: string
   boardSlug: string
+  /** Principal id of the post author (covers anonymous and widget visitors too). */
+  authorPrincipalId?: string
+  /** User account id; absent for anonymous authors. */
+  authorUserId?: string
   authorEmail?: string
   authorName?: string
   voteCount: number
