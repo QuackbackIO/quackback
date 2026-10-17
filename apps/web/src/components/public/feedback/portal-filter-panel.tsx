@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import { useIntl, type MessageDescriptor } from 'react-intl'
-import { Checkbox } from '@/components/ui/checkbox'
+import { CheckIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { feedShowsActiveOnly, type PublicFeedView } from '@/lib/shared/types/filters'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
@@ -82,22 +82,34 @@ function StatusRow({
   onToggle: () => void
   count: number | undefined
 }) {
-  // A sibling label (htmlFor) rather than a wrapping one: a button checkbox
-  // nested in a label re-dispatches its click and can loop.
-  const id = useId()
+  // A plain checkbox-role button: the whole row toggles, and it renders far
+  // less markup per status than the Base UI checkbox (the portal page weight
+  // budget counts every byte of this panel).
   return (
-    <div className="flex items-center gap-2.5 rounded-md px-1 py-1 text-sm hover:bg-muted/50">
-      <Checkbox id={id} checked={checked} onCheckedChange={onToggle} />
-      <label htmlFor={id} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
-        <span
-          className="size-1.5 shrink-0 rounded-full"
-          style={{ backgroundColor: status.color }}
-          aria-hidden
-        />
-        <span className="min-w-0 truncate text-foreground">{status.name}</span>
-        <Count value={count} />
-      </label>
-    </div>
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={onToggle}
+      className="flex w-full items-center gap-2.5 rounded-md px-1 py-1 text-start text-sm hover:bg-muted/50"
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'flex size-4 shrink-0 items-center justify-center rounded-[4px] border',
+          checked ? 'border-primary bg-primary text-primary-foreground' : 'border-input'
+        )}
+      >
+        {checked && <CheckIcon className="size-3" />}
+      </span>
+      <span
+        className="size-1.5 shrink-0 rounded-full"
+        style={{ backgroundColor: status.color }}
+        aria-hidden
+      />
+      <span className="min-w-0 truncate text-foreground">{status.name}</span>
+      <Count value={count} />
+    </button>
   )
 }
 
