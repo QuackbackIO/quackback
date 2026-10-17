@@ -9,14 +9,15 @@ test.describe('Public Base UI component usability', () => {
 
   test('filters, menus, and styled links stay usable', async ({ page }) => {
     await page.goto('/')
-    const filter = page.getByRole('button', { name: /^filter$/i })
+    // The less common filters open from Add filter, at the foot of the panel.
+    const filter = page.getByRole('button', { name: /^add filter$/i })
     await waitForHydration(filter)
     await filter.click()
     const overlay = page.locator(
       '[data-slot="popover-content"], [role="menu"], [data-slot="dropdown-menu-content"]'
     )
     await expect(overlay.first()).toBeVisible()
-    await expect(page.getByRole('button', { name: /^Status$/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Vote count$/i })).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(overlay.first()).toBeHidden()
 

@@ -44,6 +44,7 @@ export function usePublicFilters() {
       lastRouterSearchRef.current.dateFrom !== routerSearch.dateFrom ||
       lastRouterSearchRef.current.responded !== routerSearch.responded ||
       lastRouterSearchRef.current.owner !== routerSearch.owner ||
+      lastRouterSearchRef.current.view !== routerSearch.view ||
       lastRouterSearchRef.current.status?.join() !== routerSearch.status?.join() ||
       lastRouterSearchRef.current.tagIds?.join() !== routerSearch.tagIds?.join() ||
       lastRouterSearchRef.current.segmentIds?.join() !== routerSearch.segmentIds?.join())
@@ -65,6 +66,7 @@ export function usePublicFilters() {
       responded: routerSearch.responded,
       owner: routerSearch.owner,
       segmentIds: routerSearch.segmentIds?.length ? routerSearch.segmentIds : undefined,
+      view: routerSearch.view,
     }
   }, [optimistic, routerSearch])
 
@@ -86,17 +88,20 @@ export function usePublicFilters() {
           responded: newFilters.responded,
           owner: newFilters.owner,
           segmentIds: newFilters.segmentIds,
+          view: newFilters.view,
         },
         replace: true,
+        resetScroll: false,
       })
     },
     [navigate, filters]
   )
 
   const clearFilters = useCallback(() => {
-    // Clears chip-level filters only — preserves board, sort, and search,
-    // which have their own dedicated UI affordances.
+    // Clears every chip. Sort and search keep their own toolbar controls.
     setFilters({
+      board: undefined,
+      view: undefined,
       status: undefined,
       tagIds: undefined,
       minVotes: undefined,
@@ -109,7 +114,9 @@ export function usePublicFilters() {
 
   const activeFilterCount = useMemo(() => {
     let count = 0
-    if (filters.status?.length) count += filters.status.length
+    if (filters.board) count += 1
+    if (filters.view) count += 1
+    if (filters.status?.length) count += 1
     if (filters.tagIds?.length) count += filters.tagIds.length
     if (filters.minVotes) count += 1
     if (filters.dateFrom) count += 1
@@ -118,6 +125,8 @@ export function usePublicFilters() {
     if (filters.segmentIds?.length) count += filters.segmentIds.length
     return count
   }, [
+    filters.board,
+    filters.view,
     filters.status,
     filters.tagIds,
     filters.minVotes,

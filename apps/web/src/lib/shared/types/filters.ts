@@ -34,6 +34,31 @@ export interface InboxFilters {
  */
 export type RespondedFilter = 'responded' | 'unresponded'
 
+/** Portal feed views for a signed-in viewer: ideas they posted, voted on or follow. */
+export const PUBLIC_FEED_VIEWS = ['mine', 'voted', 'following'] as const
+export type PublicFeedView = (typeof PUBLIC_FEED_VIEWS)[number]
+
+/** Portal filter panel counts, keyed by status slug, board slug, tag id and view. */
+export interface PublicPostFacetCounts {
+  statuses: Record<string, number>
+  boards: Record<string, number>
+  tags: Record<string, number>
+  /** Posts the feed holds with every filter applied. */
+  total: number
+  /** Null for anonymous viewers, who have no views. */
+  views: Record<PublicFeedView, number> | null
+}
+
+/**
+ * With no status picked, the portal feed shows only active-category posts,
+ * except while searching or in a view (My ideas, Voted, Following), so
+ * shipped and closed ideas can still be found. The query, the panel and the
+ * status chip all read this, so they never disagree.
+ */
+export function feedShowsActiveOnly(feed: { search?: string; view?: string }): boolean {
+  return !feed.search && !feed.view
+}
+
 /**
  * Filters for the public portal post list.
  */
@@ -57,6 +82,8 @@ export interface PublicFeedbackFilters {
    * Applied server-side only for post.view_private holders.
    */
   segmentIds?: string[]
+  /** Signed-in viewers: only ideas they posted, voted on or follow. */
+  view?: PublicFeedView
 }
 
 /**

@@ -27,10 +27,20 @@ import {
   type SegmentId,
 } from '@quackback/ids'
 import type { PublicPostListResult } from './post.types'
-import type { RespondedFilter } from '@/lib/shared/types/filters'
+import {
+  feedShowsActiveOnly,
+  type PublicFeedView,
+  type RespondedFilter,
+} from '@/lib/shared/types/filters'
 import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+import { feedViewCondition, feedViewFor } from './post.public.views'
+import {
+  changelogLinkColumn,
+  toChangelogLink,
+  type PostChangelogLink,
+} from './post.public.changelog'
 
 /**
  * Portal tag visibility. Non-team viewers only see tags marked public —
@@ -109,9 +119,10 @@ export interface PostWithVotesAndAvatars {
   hasVoted: boolean
   avatarUrl: string | null
   moderationState?: 'published' | 'pending' | string
+  changelogEntry: PostChangelogLink | null
 }
 
-interface PostListParams {
+export interface PostListParams {
   boardSlug?: string
   search?: string
   statusIds?: PostStatusId[]
@@ -132,10 +143,28 @@ interface PostListParams {
   ownerId?: PrincipalId | null
   /** Team-only: restrict to posts authored by members of any of these segments. */
   segmentIds?: SegmentId[]
+  /** Signed-in viewers only: ideas they posted, voted on or follow. Ignored otherwise. */
+  view?: PublicFeedView
+  /**
+   * The portal feed itself: a search reaches complete and closed posts, and
+   * rows carry their changelog link. Other callers (widget, apps search) keep
+   * the active-only default and skip the link.
+   */
+  portalFeed?: boolean
 }
 
-function buildPostFilterConditions(params: PostListParams, actor: Actor) {
+/** A filter left out of the conditions so it can be counted per value. */
+export type PublicFacetDimension = 'status' | 'board' | 'view' | 'tags'
+
+export function buildPostFilterConditions(
+  params: PostListParams,
+  actor: Actor,
+  omit: readonly PublicFacetDimension[] = []
+) {
   const { boardSlug, statusIds, statusSlugs, tagIds, search } = params
+  // Anonymous sessions have principals too, but no views: a crafted URL falls
+  // back to the whole feed rather than an empty one.
+  const view = feedViewFor(params.view, actor)
   // postViewFilter handles both the board-audience predicate and the
   // moderationState gate (e.g. hide 'pending' from non-authors). Compose
   // alongside the existing soft-delete + canonical-post filters — never
@@ -153,11 +182,13 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
     isNull(posts.deletedAt),
   ]
 
-  if (boardSlug) {
+  if (boardSlug && !omit.includes('board')) {
     conditions.push(eq(boards.slug, boardSlug))
   }
 
-  if (statusSlugs && statusSlugs.length > 0) {
+  if (omit.includes('status')) {
+    // Counted per status, so no status condition at all.
+  } else if (statusSlugs && statusSlugs.length > 0) {
     const statusIdSubquery = db
       .select({ id: postStatuses.id })
       .from(postStatuses)
@@ -165,8 +196,8 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
     conditions.push(inArray(posts.statusId, statusIdSubquery))
   } else if (statusIds && statusIds.length > 0) {
     conditions.push(inArray(posts.statusId, statusIds))
-  } else {
-    // Default: exclude complete/closed posts — only show active-category statuses (or unstatused)
+  } else if (!params.portalFeed || feedShowsActiveOnly({ search, view })) {
+    // Default: only active-category statuses (or unstatused)
     const activeStatusSubquery = db
       .select({ id: postStatuses.id })
       .from(postStatuses)
@@ -174,7 +205,7 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
     conditions.push(or(isNull(posts.statusId), inArray(posts.statusId, activeStatusSubquery))!)
   }
 
-  if (tagIds && tagIds.length > 0) {
+  if (tagIds && tagIds.length > 0 && !omit.includes('tags')) {
     // Join the tag catalog so an internal tag id in a crafted URL is inert
     // for non-team callers — otherwise the filter would reveal which posts
     // carry a tag the viewer is never shown.
@@ -233,6 +264,10 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
     )
   }
 
+  if (view && actor.principalId && !omit.includes('view')) {
+    conditions.push(feedViewCondition(view, actor.principalId))
+  }
+
   return conditions
 }
 
@@ -257,6 +292,7 @@ export async function listPublicPostsWithVotesAndAvatars(
 
   const postsResult = await db
     .select({
+      changelogEntry: await changelogLinkColumn(actor, params.portalFeed),
       id: posts.id,
       title: posts.title,
       content: posts.content,
@@ -350,6 +386,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
       hasVoted: post.hasVoted ?? false,
       avatarUrl,
+      changelogEntry: toChangelogLink(post.changelogEntry),
     }
   })
 
@@ -366,6 +403,7 @@ export async function listPublicPosts(
 
   const postsResult = await db
     .select({
+      changelogEntry: await changelogLinkColumn(actor, params.portalFeed),
       id: posts.id,
       title: posts.title,
       content: posts.content,
@@ -413,6 +451,7 @@ export async function listPublicPosts(
     moderationState: post.moderationState,
     tags: parseJson<Array<{ id: PostTagId; name: string; color: string }>>(post.tagsJson),
     board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
+    changelogEntry: toChangelogLink(post.changelogEntry),
   }))
 
   return { items, total: undefined, hasMore }

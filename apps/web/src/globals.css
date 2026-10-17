@@ -382,6 +382,28 @@
   }
 }
 
+/* Portal feed loading bar: a short segment sweeping across a thin track.
+   Reduced motion holds it still at full width. */
+@keyframes feed-loading {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.feed-loading-bar {
+  animation: feed-loading 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed-loading-bar {
+    width: 100%;
+    animation: none;
+  }
+}
+
 /* Jump-to-message flash: hold a brand tint briefly, then fade to transparent so
    the row returns to its normal background. */
 @keyframes flash-highlight {
@@ -408,6 +430,27 @@
   }
   html:not(.dark) .caret-primary {
     caret-color: var(--accent-ink);
+  }
+}
+
+/* Feed post card: the title link's ::after covers the whole card so the card
+   reads as one link, and every other control in it sits above that layer.
+   One rule here instead of positioning classes repeated on every card. */
+@layer components {
+  .post-card__link {
+    outline: none;
+  }
+  .post-card__link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+  .post-card__link:focus-visible::after {
+    box-shadow: inset 0 0 0 2px var(--ring);
+  }
+  .post-card :is(button, a, [role='link']):not(.post-card__link) {
+    position: relative;
+    z-index: 1;
   }
 }
 

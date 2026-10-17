@@ -10,7 +10,7 @@ import {
   UserGroupIcon,
   PlusIcon,
   ChevronRightIcon,
-  FunnelIcon,
+  EyeIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
@@ -19,7 +19,6 @@ import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import type { TeamMember } from '@/lib/shared/types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
-import { Button } from '@/components/ui/button'
 import {
   Command,
   CommandEmpty,
@@ -31,6 +30,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
+import { PUBLIC_FEED_VIEWS, type PublicFeedView } from '@/lib/shared/types/filters'
 import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { CircleIcon } from '@/components/shared/filter-menu'
@@ -38,10 +38,11 @@ import {
   VOTE_THRESHOLDS,
   DATE_PRESETS,
   RESPONDED_OPTIONS,
-  STATUS_CATEGORY_ORDER,
   getDateFromDaysAgo,
   type DatePresetValue,
   type RespondedValue,
+  STATUS_CATEGORY_ORDER,
+  STATUS_GROUP_LABELS,
 } from './public-filters-bar-defaults'
 
 interface FilterBarBoard {
@@ -50,9 +51,9 @@ interface FilterBarBoard {
   name: string
 }
 
-type FilterCategory =
-  'board' | 'status' | 'tag' | 'votes' | 'date' | 'response' | 'owner' | 'segment'
-type ChipType = 'board' | 'status' | 'tags' | 'votes' | 'date' | 'response' | 'owner' | 'segment'
+type FilterCategory = 'votes' | 'date' | 'response' | 'owner' | 'segment'
+type ChipType =
+  'view' | 'board' | 'status' | 'tags' | 'votes' | 'date' | 'response' | 'owner' | 'segment'
 
 type IconComponent = React.ComponentType<{ className?: string }>
 type IntlShape = ReturnType<typeof useIntl>
@@ -83,6 +84,7 @@ function votesLabel(intl: IntlShape, minVotes: number): string {
 }
 
 const CHIP_ICON_BY_TYPE: Record<ChipType, IconComponent> = {
+  view: EyeIcon,
   board: Squares2X2Icon,
   status: CircleIcon,
   tags: TagIcon,
@@ -124,11 +126,6 @@ interface PublicFiltersBarProps {
   statuses: PostStatusEntity[]
   tags: PostTag[]
   boards: FilterBarBoard[]
-  /**
-   * When true, the selected board is page context (sidebar / ?board=) and is
-   * not offered as a switchable filter.
-   */
-  boardLocked?: boolean
 }
 
 export function PublicFiltersBar({
@@ -138,7 +135,6 @@ export function PublicFiltersBar({
   statuses,
   tags,
   boards,
-  boardLocked = false,
 }: PublicFiltersBarProps) {
   const intl = useIntl()
   const { members, segments } = useTeamOnlyFilterOptions()
@@ -154,9 +150,8 @@ export function PublicFiltersBar({
         members,
         segments,
         intl,
-        boardLocked,
       }),
-    [filters, setFilters, statuses, tags, boards, members, segments, intl, boardLocked]
+    [filters, setFilters, statuses, tags, boards, members, segments, intl]
   )
 
   if (activeChips.length === 0) return null
@@ -173,16 +168,6 @@ export function PublicFiltersBar({
       {activeChips.map(({ key, type, ...chipProps }) => (
         <FilterChip key={key} icon={CHIP_ICON_BY_TYPE[type]} {...chipProps} />
       ))}
-
-      <AddFilterButton
-        filters={filters}
-        setFilters={setFilters}
-        statuses={statuses}
-        tags={tags}
-        boards={boards}
-        boardLocked={boardLocked}
-        variant="pill"
-      />
 
       {activeChips.length >= 2 && (
         <button
@@ -205,45 +190,13 @@ export function PublicFiltersBar({
 interface AddFilterButtonProps {
   filters: PublicFeedbackFilters
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
-  statuses: PostStatusEntity[]
-  tags: PostTag[]
-  boards: FilterBarBoard[]
-  boardLocked?: boolean
-  /**
-   * Trigger style:
-   *   - "pill" (default): dashed "+ Add filter" pill that matches the chip shape.
-   *     Use inside the active-chips row.
-   *   - "toolbar": solid Filter button matching the toolbar's Search button.
-   *     Use as the primary entry point next to Search.
-   */
-  variant?: 'pill' | 'toolbar'
 }
 
 /**
- * "Filter" button styled to match the toolbar's Search button. Use as the
- * primary filter entry point inline with Search.
+ * Dashed "+ Add filter" pill for the less common filters (votes, date, team
+ * response), at the foot of the filter panel.
  */
-export function PublicFiltersToolbarButton(props: Omit<AddFilterButtonProps, 'variant'>) {
-  return <AddFilterButton {...props} variant="toolbar" />
-}
-
-/**
- * Dashed "+ Add filter" pill styled to match the chip shape. Use as the
- * "add another" affordance at the end of the active-chips row.
- */
-export function PublicFiltersAddButton(props: Omit<AddFilterButtonProps, 'variant'>) {
-  return <AddFilterButton {...props} variant="pill" />
-}
-
-function AddFilterButton({
-  filters,
-  setFilters,
-  statuses,
-  tags,
-  boards,
-  boardLocked = false,
-  variant = 'pill',
-}: AddFilterButtonProps) {
+export function PublicFiltersAddButton({ filters, setFilters }: AddFilterButtonProps) {
   const intl = useIntl()
   const [open, setOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState<FilterCategory | null>(null)
@@ -254,41 +207,15 @@ function AddFilterButton({
     setActiveCategory(null)
   }
 
-  const showBoardCategory = boards.length > 1 && !boardLocked
   // Team-only categories are hidden entirely for non-privileged callers (empty
   // option lists) and also hide individually when their option query is empty.
   const showOwnerCategory = members.length > 0
   const showSegmentCategory = segments.length > 0
 
   const categories = useMemo<{ key: FilterCategory; label: string; icon: IconComponent }[]>(() => {
+    // Board, status and tags live in the filter panel; this menu holds the rest.
     const list: { key: FilterCategory; label: string; icon: IconComponent }[] = []
-    if (showBoardCategory) {
-      list.push({
-        key: 'board',
-        label: intl.formatMessage({
-          id: 'portal.feedback.filter.category.board',
-          defaultMessage: 'Board',
-        }),
-        icon: Squares2X2Icon,
-      })
-    }
     list.push(
-      {
-        key: 'status',
-        label: intl.formatMessage({
-          id: 'portal.feedback.filter.category.status',
-          defaultMessage: 'Status',
-        }),
-        icon: CircleIcon,
-      },
-      {
-        key: 'tag',
-        label: intl.formatMessage({
-          id: 'portal.feedback.filter.category.tag',
-          defaultMessage: 'Tag',
-        }),
-        icon: TagIcon,
-      },
       {
         key: 'votes',
         label: intl.formatMessage({
@@ -338,18 +265,7 @@ function AddFilterButton({
       })
     }
     return list
-  }, [intl, showBoardCategory, showOwnerCategory, showSegmentCategory])
-
-  const groupedStatuses = useMemo(() => {
-    const groups: Record<string, PostStatusEntity[]> = {}
-    for (const cat of STATUS_CATEGORY_ORDER) groups[cat] = []
-    for (const s of statuses) {
-      const cat = (s.category ?? 'active') as string
-      if (!groups[cat]) groups[cat] = []
-      groups[cat].push(s)
-    }
-    return groups
-  }, [statuses])
+  }, [intl, showOwnerCategory, showSegmentCategory])
 
   return (
     <Popover
@@ -360,29 +276,20 @@ function AddFilterButton({
       }}
     >
       <PopoverTrigger asChild>
-        {variant === 'toolbar' ? (
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <FunnelIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">
-              <FormattedMessage id="portal.feedback.toolbar.filter" defaultMessage="Filter" />
-            </span>
-          </Button>
-        ) : (
-          <button
-            type="button"
-            className={cn(
-              'inline-flex items-center gap-1 px-2 py-0.5',
-              'rounded-full text-xs',
-              'border border-dashed border-border/50',
-              'text-muted-foreground hover:text-foreground',
-              'hover:border-border hover:bg-muted/30',
-              'transition-colors'
-            )}
-          >
-            <PlusIcon className="h-3 w-3" />
-            <FormattedMessage id="portal.feedback.filter.addFilter" defaultMessage="Add filter" />
-          </button>
-        )}
+        <button
+          type="button"
+          className={cn(
+            'inline-flex items-center gap-1 px-2 py-0.5',
+            'rounded-full text-xs',
+            'border border-dashed border-muted-foreground/40',
+            'text-muted-foreground hover:text-foreground',
+            'hover:border-muted-foreground hover:bg-muted/30',
+            'transition-colors'
+          )}
+        >
+          <PlusIcon className="h-3 w-3" />
+          <FormattedMessage id="portal.feedback.filter.addFilter" defaultMessage="Add filter" />
+        </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-48 p-0">
         {activeCategory === null ? (
@@ -430,11 +337,7 @@ function AddFilterButton({
             <Command>
               {/* Hide the search input for short, fixed-preset lists where
                   filtering adds no value (votes / date / response). */}
-              {(activeCategory === 'board' ||
-                activeCategory === 'status' ||
-                activeCategory === 'tag' ||
-                activeCategory === 'owner' ||
-                activeCategory === 'segment') && (
+              {(activeCategory === 'owner' || activeCategory === 'segment') && (
                 <CommandInput
                   placeholder={intl.formatMessage({
                     id: 'portal.feedback.filter.search',
@@ -449,72 +352,6 @@ function AddFilterButton({
                     defaultMessage="No results."
                   />
                 </CommandEmpty>
-
-                {activeCategory === 'board' && (
-                  <CommandGroup>
-                    {boards.map((board) => (
-                      <CommandItem
-                        key={board.id}
-                        value={board.name}
-                        onSelect={() => {
-                          setFilters({ board: board.slug })
-                          closePopover()
-                        }}
-                      >
-                        {board.name}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                )}
-
-                {activeCategory === 'status' &&
-                  STATUS_CATEGORY_ORDER.map((cat) => {
-                    const list = groupedStatuses[cat] ?? []
-                    if (list.length === 0) return null
-                    return (
-                      <CommandGroup
-                        key={cat}
-                        heading={intl.formatMessage({
-                          id: `portal.feedback.filter.statusGroup.${cat}`,
-                          defaultMessage: cat[0].toUpperCase() + cat.slice(1),
-                        })}
-                      >
-                        {list.map((status) => (
-                          <CommandItem
-                            key={status.id}
-                            value={status.name}
-                            onSelect={() => {
-                              setFilters({ status: toggleItem(filters.status, status.slug) })
-                              closePopover()
-                            }}
-                          >
-                            <span
-                              className="h-2 w-2 rounded-full shrink-0"
-                              style={{ backgroundColor: status.color }}
-                            />
-                            {status.name}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    )
-                  })}
-
-                {activeCategory === 'tag' && (
-                  <CommandGroup>
-                    {tags.map((tag) => (
-                      <CommandItem
-                        key={tag.id}
-                        value={tag.name}
-                        onSelect={() => {
-                          setFilters({ tagIds: toggleItem(filters.tagIds, tag.id) })
-                          closePopover()
-                        }}
-                      >
-                        {tag.name}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                )}
 
                 {activeCategory === 'votes' && (
                   <CommandGroup>
@@ -655,15 +492,45 @@ function buildActiveChips(args: {
   members: TeamMember[]
   segments: SegmentListItem[]
   intl: IntlShape
-  boardLocked: boolean
 }): ActiveChipDescriptor[] {
-  const { filters, setFilters, statuses, tags, boards, members, segments, intl, boardLocked } = args
+  const { filters, setFilters, statuses, tags, boards, members, segments, intl } = args
   const chips: ActiveChipDescriptor[] = []
 
+  // View chip (My ideas, Voted, Following), so the view is never hidden in
+  // the panel alone.
+  if (filters.view) {
+    const viewLabels = {
+      mine: intl.formatMessage({
+        id: 'portal.feedback.panel.view.mine',
+        defaultMessage: 'My ideas',
+      }),
+      voted: intl.formatMessage({
+        id: 'portal.feedback.panel.view.voted',
+        defaultMessage: 'Voted',
+      }),
+      following: intl.formatMessage({
+        id: 'portal.feedback.panel.view.following',
+        defaultMessage: 'Following',
+      }),
+    }
+    chips.push({
+      key: 'view',
+      type: 'view',
+      label: intl.formatMessage({
+        id: 'portal.feedback.filter.chip.view',
+        defaultMessage: 'Show:',
+      }),
+      value: viewLabels[filters.view],
+      valueId: filters.view,
+      options: PUBLIC_FEED_VIEWS.map((view) => ({ id: view, label: viewLabels[view] })),
+      onChange: (view) => setFilters({ view: view as PublicFeedView }),
+      onRemove: () => setFilters({ view: undefined }),
+    })
+  }
+
   // Board chip — only shown when a specific board is selected (omit for
-  // "All Posts") and the board is not page context. A locked board is
-  // switched from the sidebar, not as a removable filter.
-  if (filters.board && boards.length > 1 && !boardLocked) {
+  // "All Posts").
+  if (filters.board && boards.length > 1) {
     const board = boards.find((b) => b.slug === filters.board)
     if (board) {
       chips.push({
@@ -682,38 +549,50 @@ function buildActiveChips(args: {
     }
   }
 
-  const statusOptions: FilterOption[] = statuses.map((s) => ({
-    id: s.slug,
-    label: s.name,
-    color: s.color,
-  }))
-
-  // Status chips — one per selected slug
+  // Status: one chip, only when the pick differs from the default scope (the
+  // panel's ticks show that scope). It names whole groups where it can.
   if (filters.status?.length) {
-    for (const slug of filters.status) {
-      const status = statuses.find((s) => s.slug === slug)
-      if (!status) continue
-      chips.push({
-        key: `status-${slug}`,
-        type: 'status',
-        label: intl.formatMessage({
-          id: 'portal.feedback.filter.chip.status',
-          defaultMessage: 'Status:',
-        }),
-        value: status.name,
-        valueId: slug,
-        color: status.color,
-        options: statusOptions,
-        onChange: (newSlug) => {
-          const others = filters.status?.filter((s) => s !== slug) ?? []
-          setFilters({ status: [...others, newSlug] })
-        },
-        onRemove: () => {
-          const next = filters.status?.filter((s) => s !== slug)
-          setFilters({ status: next?.length ? next : undefined })
-        },
-      })
+    const picked = filters.status.map(
+      (value) => statuses.find((s) => s.id === value)?.slug ?? value
+    )
+    const parts: string[] = []
+    for (const category of STATUS_CATEGORY_ORDER) {
+      const group = statuses.filter((s) => (s.category ?? 'active') === category)
+      const inGroup = group.filter((s) => picked.includes(s.slug))
+      if (group.length > 1 && inGroup.length === group.length) {
+        parts.push(intl.formatMessage(STATUS_GROUP_LABELS[category]))
+      } else {
+        parts.push(...inGroup.map((s) => s.name))
+      }
     }
+    // A slug the workspace no longer has (renamed or deleted status) still
+    // filters the feed, so the chip names it.
+    parts.push(...picked.filter((slug) => !statuses.some((s) => s.slug === slug)))
+    const everything = statuses.length > 0 && statuses.every((s) => picked.includes(s.slug))
+    chips.push({
+      key: 'status',
+      type: 'status',
+      label: intl.formatMessage({
+        id: 'portal.feedback.filter.chip.status',
+        defaultMessage: 'Status:',
+      }),
+      value: everything
+        ? intl.formatMessage({ id: 'portal.feedback.filter.status.all', defaultMessage: 'All' })
+        : parts.length <= 2
+          ? intl.formatList(parts, { type: 'conjunction' })
+          : intl.formatMessage(
+              {
+                id: 'portal.feedback.filter.status.summaryMore',
+                defaultMessage: '{names} +{count}',
+              },
+              {
+                names: intl.formatList(parts.slice(0, 2), { type: 'unit', style: 'short' }),
+                count: parts.length - 2,
+              }
+            ),
+      valueId: picked.join(),
+      onRemove: () => setFilters({ status: undefined }),
+    })
   }
 
   // Tags — 1-2 individual, 3+ combined

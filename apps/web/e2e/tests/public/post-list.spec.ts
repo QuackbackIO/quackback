@@ -8,7 +8,7 @@ test.describe('Public Post List', () => {
 
   test('displays feedback posts', async ({ page }) => {
     // Should show at least one post card (Link elements with href containing /posts/)
-    const postCards = page.locator('a[href*="/posts/"]:has(h3)')
+    const postCards = page.locator('h3 a[href*="/posts/"]')
     await expect(postCards.first()).toBeVisible({ timeout: 10000 })
 
     // Each post should have a title visible
@@ -18,7 +18,7 @@ test.describe('Public Post List', () => {
 
   test('shows post details on cards', async ({ page }) => {
     // Wait for posts to load
-    const postCards = page.locator('a[href*="/posts/"]:has(h3)')
+    const postCards = page.locator('h3 a[href*="/posts/"]')
     await expect(postCards.first()).toBeVisible({ timeout: 10000 })
 
     // Posts should display vote button with count
@@ -37,7 +37,7 @@ test.describe('Public Post List', () => {
     await page.waitForLoadState('networkidle')
 
     // Look for board filter buttons in sidebar
-    const boardButtons = page.locator('button').filter({ hasText: /feature|bug|general/i })
+    const boardButtons = page.locator('aside button').filter({ hasText: /feature|bug|general/i })
 
     // If board filter exists, click it
     const boardButton = boardButtons.first()
@@ -51,6 +51,7 @@ test.describe('Public Post List', () => {
 
   test('can search for posts', async ({ page }) => {
     // Look for search input
+    await page.waitForLoadState('networkidle')
     const searchInput = page.getByPlaceholder(/search/i)
 
     if ((await searchInput.count()) > 0) {
@@ -179,13 +180,15 @@ test.describe('Public Post List', () => {
     await expect(newButton).toHaveClass(/font-medium/, { timeout: 10000 })
 
     // Board should be selected
-    const featuresButton = page.getByRole('button', { name: /Feature Requests/i }).first()
-    await expect(featuresButton).toHaveClass(/font-medium/, { timeout: 10000 })
+    const featuresButton = page
+      .getByRole('group', { name: 'Boards' })
+      .getByRole('button', { name: /Feature Requests/i })
+    await expect(featuresButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10000 })
   })
 
   test('clicking post navigates to detail page', async ({ page }) => {
     // Wait for posts to load
-    const postCards = page.locator('a[href*="/posts/"]:has(h3)')
+    const postCards = page.locator('h3 a[href*="/posts/"]')
     await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
     // Get the href of the first post
@@ -233,13 +236,14 @@ test.describe('Public Post List', () => {
     // URL should contain the board parameter
     await expect(page).toHaveURL(/[?&]board=features/)
 
-    // The "Feature Requests" board should be visually selected in the sidebar (has font-medium class)
-    const featuresButton = page.getByRole('button', { name: /Feature Requests/i }).first()
-    await expect(featuresButton).toHaveClass(/font-medium/, { timeout: 10000 })
+    // The "Feature Requests" board is selected in the sidebar
+    const boards = page.getByRole('group', { name: 'Boards' })
+    const featuresButton = boards.getByRole('button', { name: /Feature Requests/i })
+    await expect(featuresButton).toHaveAttribute('aria-pressed', 'true', { timeout: 10000 })
 
-    // "View all posts" should NOT be selected (no font-medium)
-    const viewAllButton = page.getByRole('button', { name: /View all posts/i }).first()
-    await expect(viewAllButton).not.toHaveClass(/font-medium/)
+    // "All boards" is not
+    const allBoards = boards.getByRole('button', { name: 'All boards' })
+    await expect(allBoards).toHaveAttribute('aria-pressed', 'false')
   })
 
   test('can view all posts after filtering by board', async ({ page }) => {
@@ -250,9 +254,9 @@ test.describe('Public Post List', () => {
     // Verify we're filtered
     await expect(page).toHaveURL(/[?&]board=features/)
 
-    // Click "View all posts" button in sidebar
-    const viewAllButton = page.getByRole('button', { name: /View all posts/i })
-    await viewAllButton.click()
+    // Click "All boards" in the sidebar
+    const boards = page.getByRole('group', { name: 'Boards' })
+    await boards.getByRole('button', { name: 'All boards' }).click()
 
     // URL should no longer have the board parameter
     await expect(page).not.toHaveURL(/[?&]board=/)
@@ -261,9 +265,10 @@ test.describe('Public Post List', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    // "View all posts" should now be selected (has font-medium class when active)
-    const viewAllButtonFresh = page.getByRole('button', { name: /View all posts/i })
-    await expect(viewAllButtonFresh).toHaveClass(/font-medium/)
+    // "All boards" should now be selected
+    await expect(
+      page.getByRole('group', { name: 'Boards' }).getByRole('button', { name: 'All boards' })
+    ).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('filtered board posts link to correct board routes', async ({ page }) => {
@@ -709,18 +714,12 @@ test.describe('Public Post List', () => {
       await page.goto('/')
       await page.waitForLoadState('networkidle')
 
-      // Open filter and select a status
-      const filterButton = page.getByRole('button', { name: /Filter/i })
-      await filterButton.click()
-
-      // Status section is only rendered when statuses exist in seed data
-      test.skip(
-        (await page.getByText('Status', { exact: true }).count()) === 0,
-        'No status options available in filter dropdown'
-      )
-
-      await expect(page.getByText('Status', { exact: true })).toBeVisible()
-      const statusCheckbox = page.locator('button[role="checkbox"]').first()
+      // Toggle a status in the filter panel
+      await page.waitForLoadState('networkidle')
+      const statusCheckbox = page
+        .getByRole('group', { name: 'Status' })
+        .getByRole('checkbox')
+        .first()
       await statusCheckbox.click()
 
       // Wait for URL to update
@@ -748,18 +747,12 @@ test.describe('Public Post List', () => {
       const postCards = page.locator('[data-post-id]')
       await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
-      // Open filter and select a status
-      const filterButton = page.getByRole('button', { name: /Filter/i })
-      await filterButton.click()
-
-      // Status section is only rendered when statuses exist in seed data
-      test.skip(
-        (await page.getByText('Status', { exact: true }).count()) === 0,
-        'No status options available in filter dropdown'
-      )
-
-      await expect(page.getByText('Status', { exact: true })).toBeVisible()
-      const statusCheckbox = page.locator('button[role="checkbox"]').first()
+      // Toggle a status in the filter panel
+      await page.waitForLoadState('networkidle')
+      const statusCheckbox = page
+        .getByRole('group', { name: 'Status' })
+        .getByRole('checkbox')
+        .first()
       await statusCheckbox.click()
 
       // Wait for URL to update (indicates filter applied)
@@ -987,76 +980,35 @@ test.describe('Post List - Filter Result Verification', () => {
     // Record unfiltered count (up to one page)
     const unfilteredCount = await postCards.count()
 
-    // Open filter dropdown, find Tags section
-    const filterButton = page.getByRole('button', { name: /Filter/i })
-    await filterButton.click()
-    await expect(page.getByText('Filters', { exact: true })).toBeVisible()
-
-    const tagsSection = page.getByText('Tags', { exact: true })
-    test.skip((await tagsSection.count()) === 0, 'No tags section in filter dropdown')
-
-    // Click the first tag button
-    const tagButtons = page.locator(
-      'button.rounded-full.text-xs, button[class*="rounded-full"][class*="text-xs"]'
-    )
-    const tagCount = await tagButtons.count()
-    test.skip(tagCount === 0, 'No tag filter buttons found')
-
-    await tagButtons.first().click()
+    const tags = page.getByRole('group', { name: 'Tags' })
+    test.skip((await tags.count()) === 0, 'No tags section in the filter panel')
+    await tags.getByRole('button').first().click()
     await expect(page).toHaveURL(/[?&]tagIds=/, { timeout: 5000 })
-    await page.keyboard.press('Escape')
     await page.waitForLoadState('networkidle')
-    await page.waitForTimeout(300)
 
-    // Filtered count must be <= unfiltered count (filtering can only reduce or equal)
+    // Filtering can only reduce or keep the count
     const filteredCount = await postCards.count()
-    const emptyState = page.getByText('No posts match your filters.')
-    const hasEmpty = (await emptyState.count()) > 0
-
-    if (!hasEmpty) {
-      expect(filteredCount).toBeLessThanOrEqual(unfilteredCount)
-    }
-    // Either fewer posts or an empty-state message is a passing result
-    expect(filteredCount > 0 || hasEmpty).toBe(true)
+    expect(filteredCount).toBeGreaterThan(0)
+    expect(filteredCount).toBeLessThanOrEqual(unfilteredCount)
   })
 
   test('clearing a filter restores a larger result set', async ({ page }) => {
-    // Apply a status filter via UI to avoid URL encoding issues
     await page.goto('/')
     const postCards = page.locator('[data-post-id]')
     await expect(postCards.first()).toBeVisible({ timeout: 15000 })
     await page.waitForLoadState('networkidle')
 
-    const filterButton = page.getByRole('button', { name: /Filter/i })
-    await filterButton.click()
-
-    // Status section is only rendered when statuses exist in seed data
-    test.skip(
-      (await page.getByText('Status', { exact: true }).count()) === 0,
-      'No status options available in filter dropdown'
-    )
-
-    await expect(page.getByText('Status', { exact: true })).toBeVisible()
-    const statusCheckbox = page.locator('button[role="checkbox"]').first()
-    await statusCheckbox.click()
+    const status = page.getByRole('group', { name: 'Status', exact: true })
+    await status.getByRole('checkbox').first().click()
     await expect(page).toHaveURL(/[?&]status=/, { timeout: 5000 })
-    await page.keyboard.press('Escape')
     await page.waitForLoadState('networkidle')
-    await page.waitForTimeout(300)
     const filteredCount = await postCards.count()
 
-    // Open filter dropdown and clear all
-    await filterButton.click()
-    const clearButton = page.getByRole('button', { name: /Clear all/i })
-    await expect(clearButton).toBeVisible()
-    await clearButton.click()
-
-    // URL should have no status filter
+    // Remove it from its chip
+    await page.getByRole('button', { name: /^Remove Status/ }).click()
     await expect(page).not.toHaveURL(/[?&]status=/, { timeout: 5000 })
     await page.waitForLoadState('networkidle')
-    await page.waitForTimeout(300)
 
-    // Unfiltered count should be >= filtered count
     const unfilteredCount = await postCards.count()
     expect(unfilteredCount).toBeGreaterThanOrEqual(filteredCount)
   })
@@ -1289,17 +1241,20 @@ test.describe('Post List - Search Accuracy', () => {
     // Use a search term that exists in the seed post titles
     const searchTerm = 'dark mode'
 
-    // Open search popover and type
-    const searchButton = page.getByRole('button', { name: /Search/i }).first()
-    await searchButton.click()
-    const searchInput = page.getByPlaceholder(/Search posts/i)
-    await expect(searchInput).toBeVisible()
+    const searchInput = page.getByRole('searchbox', { name: 'Search ideas' })
     await searchInput.fill(searchTerm)
     await searchInput.press('Enter')
 
     await expect(page).toHaveURL(/search=dark\+mode|search=dark%20mode/, { timeout: 5000 })
-    await page.waitForLoadState('networkidle')
-    await page.waitForTimeout(300)
+    // The previous results stay on screen until the search lands; wait for it.
+    const titles = page.locator('[data-post-id] h3')
+    await expect
+      .poll(async () =>
+        (await titles.allTextContents()).every((t) =>
+          t.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      )
+      .toBe(true)
 
     const filteredCount = await postCards.count()
     const emptyState = page.getByText('No posts match your filters.')
@@ -1312,7 +1267,6 @@ test.describe('Post List - Search Accuracy', () => {
 
     if (filteredCount > 0) {
       // Every visible post title should contain the search term (case-insensitive)
-      const titles = page.locator('[data-post-id] h3')
       const titleCount = await titles.count()
       for (let i = 0; i < titleCount; i++) {
         const titleText = (await titles.nth(i).textContent()) ?? ''
@@ -1332,9 +1286,6 @@ test.describe('Post List - Search Accuracy', () => {
     await page.waitForTimeout(300)
     const searchCount = await postCards.count()
 
-    // Open search popover and clear
-    const searchButton = page.getByRole('button', { name: /Search/i }).first()
-    await searchButton.click()
     const clearButton = page.getByRole('button', { name: /Clear search/i })
     await expect(clearButton).toBeVisible({ timeout: 5000 })
     await clearButton.click()
@@ -1360,10 +1311,7 @@ test.describe('Post List - Search Accuracy', () => {
     // Search for a string that will never match real post titles
     const impossibleTerm = 'xyzzy_no_such_post_zqwerty_99999'
 
-    const searchButton = page.getByRole('button', { name: /Search/i }).first()
-    await searchButton.click()
-    const searchInput = page.getByPlaceholder(/Search posts/i)
-    await expect(searchInput).toBeVisible()
+    const searchInput = page.getByRole('searchbox', { name: 'Search ideas' })
     await searchInput.fill(impossibleTerm)
     await searchInput.press('Enter')
 

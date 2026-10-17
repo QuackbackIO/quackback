@@ -50,8 +50,8 @@ import { getMemberByUser } from '@/lib/server/domains/principals/principal.servi
 import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 import { resolvePortalAccessForRequest } from './portal-access'
-import { can } from '@/lib/server/policy/authorize'
-import { PERMISSIONS } from '@/lib/shared/permissions'
+import { teamOnlyFeedFilters } from '@/lib/server/domains/posts/post.public.team-filters'
+import { countPublicPostFacetsOrNull } from '@/lib/server/domains/posts/post.public.facets'
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
@@ -115,7 +115,8 @@ export type GetVoteSidebarDataInput = z.infer<typeof getVoteSidebarDataSchema>
  */
 export const runListPublicPosts = createServerOnlyFn(async function runListPublicPosts(
   auth: Awaited<ReturnType<typeof getOptionalAuth>>,
-  data: ListPublicPostsInput
+  data: ListPublicPostsInput,
+  options: { portalFeed?: boolean } = {}
 ) {
   log.debug({ sort: data.sort, board_slug: data.boardSlug || 'all' }, 'list public posts')
   // Resolve the actor so per-board audience + per-post moderation
@@ -129,31 +130,30 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
   // hold post.view_private, resolved through the policy seam. Everyone else
   // has these dropped, so a crafted request can never surface owner/segment
   // structure or widen the public feed. `owner: 'unassigned'` → null match.
-  const canViewPrivate = can(actor, PERMISSIONS.POST_VIEW_PRIVATE)
-  const ownerId = canViewPrivate
-    ? data.owner === 'unassigned'
-      ? null
-      : (data.owner as PrincipalId | undefined)
-    : undefined
-  const segmentIds =
-    canViewPrivate && data.segmentIds?.length ? (data.segmentIds as SegmentId[]) : undefined
+  const { ownerId, segmentIds } = teamOnlyFeedFilters(actor, data)
 
-  const result = await listPublicPosts({
+  const feedParams = {
     boardSlug: data.boardSlug,
     search: data.search,
     statusIds: data.statusIds as PostStatusId[] | undefined,
     statusSlugs: data.statusSlugs,
     tagIds: data.tagIds as PostTagId[] | undefined,
-    sort: data.sort,
-    page: data.page,
-    limit: data.limit,
     minVotes: data.minVotes,
     dateFrom: data.dateFrom,
     responded: data.responded,
     ownerId,
     segmentIds,
-    actor,
-  })
+    view: data.view,
+    portalFeed: options.portalFeed,
+  }
+  // The portal's first page carries the filter panel counts, so a filter
+  // change refreshes them in the same request.
+  const [result, facets] = await Promise.all([
+    listPublicPosts({ ...feedParams, sort: data.sort, page: data.page, limit: data.limit, actor }),
+    options.portalFeed && data.page === 1 && data.facets !== false
+      ? countPublicPostFacetsOrNull(feedParams, actor)
+      : Promise.resolve(undefined),
+  ])
 
   log.debug({ count: result.items.length }, 'list public posts results')
   // Serialize Date fields
@@ -163,6 +163,7 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
       ...post,
       createdAt: post.createdAt.toISOString(),
     })),
+    ...(facets && { facets }),
   }
 })
 
@@ -174,7 +175,7 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
       log.debug('portal access denied, returning empty')
       return { items: [], hasMore: false, total: 0 }
     }
-    return runListPublicPosts(await getOptionalAuth(), data)
+    return runListPublicPosts(await getOptionalAuth(), data, { portalFeed: true })
   })
 
 /**

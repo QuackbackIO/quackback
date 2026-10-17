@@ -38,9 +38,10 @@ describe('usePublicFilters', () => {
     expect(result.current.hasActiveFilters).toBe(true)
   })
 
-  it('clearFilters removes status, tags, minVotes, dateFrom, responded but preserves search/sort/board', () => {
+  it('clearFilters removes every chip, board and view included, but keeps search and sort', () => {
     routerSearch = {
       board: 'feature-requests',
+      view: 'mine',
       search: 'login',
       sort: 'new',
       status: ['open'],
@@ -59,7 +60,8 @@ describe('usePublicFilters', () => {
       expect.objectContaining({
         to: '/',
         search: expect.objectContaining({
-          board: 'feature-requests',
+          board: undefined,
+          view: undefined,
           sort: 'new',
           search: 'login',
           status: undefined,

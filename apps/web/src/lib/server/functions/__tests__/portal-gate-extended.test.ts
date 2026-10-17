@@ -110,6 +110,12 @@ vi.mock('@/lib/server/domains/boards/board.public', () => ({
   getPublicBoardBySlug: (...a: unknown[]) => mockGetPublicBoardBySlug(...a),
 }))
 
+// The portal feed's first page also counts the filter panel; not under test here.
+vi.mock('@/lib/server/domains/posts/post.public.facets', () => ({
+  countPublicPostFacetsOrNull: vi
+    .fn()
+    .mockResolvedValue({ statuses: {}, boards: {}, tags: {}, total: 0, views: null }),
+}))
 vi.mock('@/lib/server/domains/posts/post.public', () => ({
   listPublicPosts: (...a: unknown[]) => mockListPublicPosts(...a),
   listPublicPostsWithVotesAndAvatars: (...a: unknown[]) =>

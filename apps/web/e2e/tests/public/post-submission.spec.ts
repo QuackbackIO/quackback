@@ -392,7 +392,7 @@ test.describe('Board Selector', () => {
     await globalPage.goto('/?board=features')
 
     // Wait for posts to load first (indicates page is ready)
-    const postCards = globalPage.locator('a[href*="/posts/"]:has(h3)')
+    const postCards = globalPage.locator('h3 a[href*="/posts/"]')
     await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
     // Open the form
@@ -944,7 +944,7 @@ test.describe('Submission States and Integration', () => {
     await expect(editor).not.toBeVisible({ timeout: 10000 })
 
     // Find the post and verify author is shown
-    const postCard = globalPage.locator('a[href*="/posts/"]').filter({ hasText: uniqueTitle })
+    const postCard = globalPage.locator('[data-post-id]').filter({ hasText: uniqueTitle })
     await expect(postCard).toBeVisible({ timeout: 10000 })
 
     // Should show "Demo User" as author (from demo@example.com)

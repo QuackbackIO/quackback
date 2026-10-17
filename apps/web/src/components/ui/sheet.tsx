@@ -97,7 +97,7 @@ function SheetContent({
         {children}
         <SheetPrimitive.Close
           className={cn(
-            'absolute top-4 right-4 rounded-xs',
+            'absolute top-4 end-4 rounded-xs',
             'opacity-70 transition-opacity hover:opacity-100',
             'ring-offset-background focus:ring-ring focus:ring-2 focus:ring-offset-2 focus:outline-hidden',
             'data-open:bg-secondary disabled:pointer-events-none'

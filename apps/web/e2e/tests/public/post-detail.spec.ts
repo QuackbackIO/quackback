@@ -3,9 +3,11 @@ import { test, expect } from '@playwright/test'
 /**
  * Navigate to the first available post from the portal home page and return its URL.
  */
-async function navigateToFirstPost(page: Parameters<typeof test>[1] extends (args: { page: infer P }) => unknown ? P : never) {
+async function navigateToFirstPost(
+  page: Parameters<typeof test>[1] extends (args: { page: infer P }) => unknown ? P : never
+) {
   await page.goto('/')
-  const postCards = page.locator('a[href*="/posts/"]:has(h3)')
+  const postCards = page.locator('h3 a[href*="/posts/"]')
   await expect(postCards.first()).toBeVisible({ timeout: 15000 })
   await postCards.first().click()
   await page.waitForURL(/\/posts\//, { timeout: 15000 })
@@ -105,9 +107,9 @@ test.describe('Post detail page', () => {
   }) => {
     // Either a sign-in prompt or a comment form must be present
     const signInPrompt = page.getByText(/sign in to comment/i)
-    const commentForm = page.locator('textarea[placeholder*="comment" i]').or(
-      page.locator('[data-testid="comment-form"]')
-    )
+    const commentForm = page
+      .locator('textarea[placeholder*="comment" i]')
+      .or(page.locator('[data-testid="comment-form"]'))
 
     const hasSignIn = (await signInPrompt.count()) > 0
     const hasForm = (await commentForm.count()) > 0
@@ -145,9 +147,9 @@ test.describe('Post detail page', () => {
       const firstComment = comments.first()
 
       // Author name renders as a font-medium span
-      const authorSpan = firstComment.locator('span.font-medium').or(
-        firstComment.locator('[class*="font-medium"]').first()
-      )
+      const authorSpan = firstComment
+        .locator('span.font-medium')
+        .or(firstComment.locator('[class*="font-medium"]').first())
       if ((await authorSpan.count()) > 0) {
         await expect(authorSpan.first()).toBeVisible()
       }
@@ -208,7 +210,8 @@ test.describe('Post detail page', () => {
     const boardSlug = currentUrl.match(/\/b\/([^/]+)\/posts\//)?.[1]
 
     if (boardSlug) {
-      const boardLink = page.locator(`a[href*="?board=${boardSlug}"]`)
+      const boardLink = page
+        .locator(`a[href*="?board=${boardSlug}"]`)
         .or(page.locator(`a[href*="/b/${boardSlug}"]`))
 
       if ((await boardLink.count()) > 0) {

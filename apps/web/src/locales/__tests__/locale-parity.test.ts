@@ -236,6 +236,7 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Document',
     'Feedback',
     'Feedback.',
+    'Filters',
     'Help',
     'Home',
     'Labs',

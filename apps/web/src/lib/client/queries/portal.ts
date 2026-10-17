@@ -1,6 +1,6 @@
 import { queryOptions, useQuery, type QueryClient } from '@tanstack/react-query'
 import type { PrincipalId, RoadmapId, PostStatusId, BoardId } from '@quackback/ids'
-import type { RespondedFilter } from '@/lib/shared/types/filters'
+import type { PublicFeedView, RespondedFilter } from '@/lib/shared/types/filters'
 import {
   fetchPublicBoards,
   fetchPublicPosts,
@@ -86,6 +86,7 @@ export const portalQueries = {
     responded?: RespondedFilter
     owner?: string
     segmentIds?: string[]
+    view?: PublicFeedView
   }) =>
     queryOptions({
       queryKey: [
@@ -102,6 +103,7 @@ export const portalQueries = {
         params.responded,
         params.owner,
         params.segmentIds,
+        params.view,
       ],
       queryFn: async () => {
         const { userId: _cacheKeyOnly, ...input } = params
