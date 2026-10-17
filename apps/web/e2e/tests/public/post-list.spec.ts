@@ -710,18 +710,12 @@ test.describe('Public Post List', () => {
       await page.goto('/')
       await page.waitForLoadState('networkidle')
 
-      // Open filter and select a status
-      const filterButton = page.getByRole('button', { name: /Filter/i })
-      await filterButton.click()
-
-      // Status section is only rendered when statuses exist in seed data
-      test.skip(
-        (await page.getByText('Status', { exact: true }).count()) === 0,
-        'No status options available in filter dropdown'
-      )
-
-      await expect(page.getByText('Status', { exact: true })).toBeVisible()
-      const statusCheckbox = page.locator('button[role="checkbox"]').first()
+      // Toggle a status in the filter panel
+      await page.waitForLoadState('networkidle')
+      const statusCheckbox = page
+        .getByRole('group', { name: 'Status' })
+        .getByRole('checkbox')
+        .first()
       await statusCheckbox.click()
 
       // Wait for URL to update
@@ -749,18 +743,12 @@ test.describe('Public Post List', () => {
       const postCards = page.locator('[data-post-id]')
       await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
-      // Open filter and select a status
-      const filterButton = page.getByRole('button', { name: /Filter/i })
-      await filterButton.click()
-
-      // Status section is only rendered when statuses exist in seed data
-      test.skip(
-        (await page.getByText('Status', { exact: true }).count()) === 0,
-        'No status options available in filter dropdown'
-      )
-
-      await expect(page.getByText('Status', { exact: true })).toBeVisible()
-      const statusCheckbox = page.locator('button[role="checkbox"]').first()
+      // Toggle a status in the filter panel
+      await page.waitForLoadState('networkidle')
+      const statusCheckbox = page
+        .getByRole('group', { name: 'Status' })
+        .getByRole('checkbox')
+        .first()
       await statusCheckbox.click()
 
       // Wait for URL to update (indicates filter applied)

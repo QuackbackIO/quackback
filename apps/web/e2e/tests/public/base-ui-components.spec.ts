@@ -16,7 +16,7 @@ test.describe('Public Base UI component usability', () => {
       '[data-slot="popover-content"], [role="menu"], [data-slot="dropdown-menu-content"]'
     )
     await expect(overlay.first()).toBeVisible()
-    await expect(page.getByRole('button', { name: /^Status$/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Vote count$/i })).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(overlay.first()).toBeHidden()
 
