@@ -12,6 +12,7 @@ import {
   sendStatusMaintenanceScheduledEmail,
   sendTicketEventEmail,
   sendNoteMentionEmail,
+  sendApprovalRequestEmail,
 } from '@quackback/email'
 import type { EmailResult, IncidentImpact } from '@quackback/email'
 import type { TicketId } from '@quackback/ids'
@@ -159,7 +160,17 @@ async function deliverEmail(
 
     let result: EmailResult
 
-    if (event.type === 'post.status_changed') {
+    if (event.type === 'approval.requested') {
+      const approval = config as Record<string, unknown>
+      result = await sendApprovalRequestEmail({
+        to: email,
+        summary: approval.summary as string,
+        reviewUrl: approval.reviewUrl as string,
+        workspaceName: cfg.workspaceName,
+        preferencesUrl: cfg.preferencesUrl,
+        logoUrl: cfg.logoUrl,
+      })
+    } else if (event.type === 'post.status_changed') {
       result = await sendStatusChangeEmail({
         to: email,
         postTitle: cfg.postTitle,

@@ -189,6 +189,17 @@ export async function handleSlackDecision(
       await ephemeral(client, channel, user, 'This request changed. Ask again to review it.')
       return
     }
+    const { approvalRiskOf } = await import('@/lib/server/domains/assistant/approvals.service')
+    if (action.action_id === 'qb_action_approve' && approvalRiskOf(pending) === 'high') {
+      const query = new URLSearchParams({ id: pending.id, d: button.contentHash })
+      await ephemeral(
+        client,
+        channel,
+        user,
+        `Sign in again to approve: ${getBaseUrl()}/admin/approvals/confirm?${query}`
+      )
+      return
+    }
     try {
       const { decideAssistantAction } =
         await import('@/lib/server/domains/assistant/assistant-actions.service')

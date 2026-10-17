@@ -74,13 +74,14 @@ export const approveAssistantActionFn = createServerFn({ method: 'POST' })
     const actor = await policyActorFromAuth(auth)
     const { decideAssistantAction } =
       await import('@/lib/server/domains/assistant/assistant-actions.service')
+    const { hasRecentSignIn } = await import('@/lib/server/auth/recent-sign-in')
     const settled = await decideAssistantAction(
       data.pendingActionId as AssistantPendingActionId,
       'approved',
       auth.principal.id,
       actor,
       undefined,
-      { contentHash: data.contentHash, via: 'app' }
+      { contentHash: data.contentHash, via: 'app', freshSignIn: await hasRecentSignIn(auth) }
     )
     const { approvalFieldsForDisplay } =
       await import('@/lib/server/domains/assistant/approvals.service')

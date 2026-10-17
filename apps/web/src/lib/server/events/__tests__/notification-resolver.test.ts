@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   getTicketExternalStatusChangedTargets: vi.fn(),
   getMessageCreatedTargets: vi.fn(),
   getApprovalRequestedTargets: vi.fn(),
+  getApprovalEmailTargets: vi.fn(),
   getTicketCreatedEmailTargets: vi.fn(),
   getTicketRepliedEmailTargets: vi.fn(),
   getTicketResolvedEmailTargets: vi.fn(),
@@ -27,6 +28,7 @@ const h = vi.hoisted(() => ({
   getSlaEmailTargets: vi.fn(),
   getConversationNoteMentionedEmailTargets: vi.fn(),
 }))
+vi.mock('../approval-email', () => ({ getApprovalEmailTargets: h.getApprovalEmailTargets }))
 vi.mock('../hook-context', () => ({ buildHookContext: h.buildHookContext }))
 vi.mock('../targets', () => ({
   SUBSCRIBER_EVENT_TYPES: ['post.status_changed', 'comment.created', 'changelog.published'],
@@ -91,6 +93,7 @@ describe('notification resolver routing (WO-8c)', () => {
     h.getTicketRepliedEmailTargets.mockResolvedValue([])
     h.getTicketResolvedEmailTargets.mockResolvedValue([])
     h.getTicketAssignedEmailTargets.mockResolvedValue([])
+    h.getApprovalEmailTargets.mockResolvedValue([])
     h.getSlaEmailTargets.mockResolvedValue([])
     h.getConversationNoteMentionedEmailTargets.mockResolvedValue([])
   })
@@ -135,11 +138,12 @@ describe('notification resolver routing (WO-8c)', () => {
 
   it('routes approval.requested to the bell of everyone who may decide it', async () => {
     h.getApprovalRequestedTargets.mockResolvedValue(T('approval_bell')[0])
+    h.getApprovalEmailTargets.mockResolvedValue(T('approval_email'))
     expect(notificationResolver.interestedIn('approval.requested')).toBe(true)
     expect(notificationResolver.interestedIn('approval.decided')).toBe(false)
     const out = await notificationResolver.resolve(evt('approval.requested'))
-    expect(out.map((t) => t.type)).toEqual(['approval_bell'])
-    expect(h.buildHookContext).not.toHaveBeenCalled()
+    expect(out.map((t) => t.type)).toEqual(['approval_email', 'approval_bell'])
+    expect(h.buildHookContext).toHaveBeenCalledTimes(1)
   })
 
   it('routes ticket.status_changed to the ticket requester bell', async () => {

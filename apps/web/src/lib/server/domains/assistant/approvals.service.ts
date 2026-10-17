@@ -42,6 +42,8 @@ import {
   SETTINGS_PROPOSAL_TOOL,
   settingsProposalPermissions,
   settingsProposalRisk,
+  higherRisk,
+  toolApprovalRisk,
 } from './approval-policy'
 import { isHomeThreadKey } from './workspace-safety'
 
@@ -103,12 +105,14 @@ export function approvalContentDigest(args: Record<string, unknown>): string {
 
 /** The risk of a request: the tier set when it was filed, else read off its content. */
 export function approvalRiskOf(row: Pick<PendingActionRow, 'risk' | 'toolName' | 'args'>) {
-  if (row.risk) return row.risk
   if (row.toolName === SETTINGS_PROPOSAL_TOOL) {
     const parsed = settingsProposalSchema.safeParse(row.args)
-    if (parsed.success) return settingsProposalRisk(parsed.data)
+    if (parsed.success) return higherRisk(row.risk ?? 'low', settingsProposalRisk(parsed.data))
   }
-  return 'medium' satisfies ApprovalRisk
+  const operationRisk = toolApprovalRisk(row.toolName, row.args)
+  return operationRisk === 'high'
+    ? higherRisk(row.risk ?? 'low', operationRisk)
+    : (row.risk ?? operationRisk)
 }
 
 /**
@@ -434,6 +438,7 @@ export async function approveApproval(
   return decideAssistantAction(id, 'approved', actor.principalId!, actor, undefined, {
     contentHash: decision.contentHash,
     via: decision.via,
+    freshSignIn: decision.freshSignIn,
   })
 }
 

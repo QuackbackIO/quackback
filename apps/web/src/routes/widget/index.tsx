@@ -94,7 +94,7 @@ const WidgetMessenger = lazy(() => loadMessenger().then((m) => ({ default: m.Wid
 const WidgetMessages = lazy(() => loadMessagesView().then((m) => ({ default: m.WidgetMessages })))
 const WidgetTickets = lazy(() => loadTicketsView().then((m) => ({ default: m.WidgetTickets })))
 
-/** The lazy views a visitor can reach from the enabled tabs. */
+/** Warm tab roots. Detail views load when a visitor selects the item. */
 function lazyViewLoadersFor(tabs: {
   feedback?: boolean
   changelog?: boolean
@@ -103,9 +103,8 @@ function lazyViewLoadersFor(tabs: {
   tickets?: boolean
 }): (() => Promise<unknown>)[] {
   const loaders: (() => Promise<unknown>)[] = []
-  if (tabs.feedback) loaders.push(loadPostDetail)
-  if (tabs.changelog) loaders.push(loadChangelog, loadChangelogDetail)
-  if (tabs.help) loaders.push(loadHelp, loadHelpCategory, loadHelpDetail)
+  if (tabs.changelog) loaders.push(loadChangelog)
+  if (tabs.help) loaders.push(loadHelp)
   if (tabs.messages) loaders.push(loadMessagesView)
   if (tabs.tickets) loaders.push(loadTicketsView)
   if (tabs.messages || tabs.tickets) loaders.push(loadMessenger)

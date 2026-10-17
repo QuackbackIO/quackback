@@ -15,7 +15,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { isValidTypeId, type AssistantPendingActionId } from '@quackback/ids'
 import type { ApprovalView } from '@/lib/server/domains/assistant/approvals.queue'
 import { approvalRefusal, type ApprovalRefusal } from '@/lib/shared/approval-refusal'
-import { requireAuth, policyActorFromAuth, type AuthContext } from './auth-helpers'
+import { requireAuth, policyActorFromAuth } from './auth-helpers'
 
 const ApprovalInput = z.object({ approvalId: z.string() })
 /** A decision always names the digest of the request it was shown. */
@@ -23,16 +23,6 @@ const DecisionInput = ApprovalInput.extend({ contentHash: z.string().min(1).max(
 
 /** A decision's outcome: the request as it now stands, or why it was refused. */
 export type ApprovalDecisionResult = { ok: true; approval: ApprovalView } | ApprovalRefusal
-
-/**
- * Whether the person signed in again just before this decision, which a
- * high-risk request needs. Only the server answers this, never the request.
- * A session carries no such proof yet, so a high-risk request is refused
- * with RECENT_SIGN_IN_REQUIRED and the page asks the person to sign in again.
- */
-async function hasRecentSignIn(_auth: AuthContext): Promise<boolean> {
-  return false
-}
 
 export const listApprovalsFn = createServerFn({ method: 'GET' })
   .validator(
@@ -67,29 +57,49 @@ export const getApprovalFn = createServerFn({ method: 'GET' })
     return getApprovalForViewer(actor, data.approvalId as AssistantPendingActionId)
   })
 
+async function approveAsPerson(
+  data: z.infer<typeof DecisionInput>,
+  auth: Awaited<ReturnType<typeof requireAuth>>,
+  actor: Awaited<ReturnType<typeof policyActorFromAuth>>,
+  via: 'app' | 'email'
+): Promise<ApprovalDecisionResult> {
+  const id = data.approvalId as AssistantPendingActionId
+  const { approveApproval } = await import('@/lib/server/domains/assistant/approvals.service')
+  const { approvalViewOf } = await import('@/lib/server/domains/assistant/approvals.queue')
+  // Only the server answers whether the person signed in just now, from
+  // their own session; a high-risk request is refused without it.
+  const { hasRecentSignIn } = await import('@/lib/server/auth/recent-sign-in')
+  let settled
+  try {
+    settled = await approveApproval(actor, id, {
+      contentHash: data.contentHash,
+      via,
+      freshSignIn: await hasRecentSignIn(auth),
+    })
+  } catch (error) {
+    // A refusal the page branches on travels as a value; see approvalRefusal.
+    const refused = approvalRefusal(error)
+    if (refused) return refused
+    throw error
+  }
+  // The answer is the request as the decision left it; see approvalViewOf.
+  return { ok: true, approval: await approvalViewOf(settled) }
+}
+
 export const approveApprovalFn = createServerFn({ method: 'POST' })
   .validator(DecisionInput)
   .handler(async ({ data }): Promise<ApprovalDecisionResult> => {
     const auth = await requireAuth()
     const actor = await policyActorFromAuth(auth)
-    const id = data.approvalId as AssistantPendingActionId
-    const { approveApproval } = await import('@/lib/server/domains/assistant/approvals.service')
-    const { approvalViewOf } = await import('@/lib/server/domains/assistant/approvals.queue')
-    let settled
-    try {
-      settled = await approveApproval(actor, id, {
-        contentHash: data.contentHash,
-        via: 'app',
-        freshSignIn: await hasRecentSignIn(auth),
-      })
-    } catch (error) {
-      // A refusal the page branches on travels as a value; see approvalRefusal.
-      const refused = approvalRefusal(error)
-      if (refused) return refused
-      throw error
-    }
-    // The answer is the request as the decision left it; see approvalViewOf.
-    return { ok: true, approval: await approvalViewOf(settled) }
+    return approveAsPerson(data, auth, actor, 'app')
+  })
+
+export const approveApprovalFromEmailFn = createServerFn({ method: 'POST' })
+  .validator(DecisionInput)
+  .handler(async ({ data }): Promise<ApprovalDecisionResult> => {
+    const auth = await requireAuth()
+    const actor = await policyActorFromAuth(auth)
+    return approveAsPerson(data, auth, actor, 'email')
   })
 
 export const rejectApprovalFn = createServerFn({ method: 'POST' })

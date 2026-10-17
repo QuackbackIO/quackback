@@ -33,6 +33,7 @@ vi.mock('@tanstack/react-start', () => ({
 
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
+  hasRecentSignIn: vi.fn(),
   policyActorFromAuth: vi.fn(),
   getPendingActionById: vi.fn(),
   decidePendingAction: vi.fn(),
@@ -61,6 +62,7 @@ vi.mock('@/lib/server/logger', () => {
 })
 
 vi.mock('@/lib/server/db', () => ({ db: {} }))
+vi.mock('@/lib/server/auth/recent-sign-in', () => ({ hasRecentSignIn: hoisted.hasRecentSignIn }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
   requireAuth: hoisted.requireAuth,
@@ -198,6 +200,7 @@ const reject = async (data: any) =>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  hoisted.hasRecentSignIn.mockResolvedValue(false)
   hoisted.requireAuth.mockResolvedValue(AUTH)
   hoisted.policyActorFromAuth.mockResolvedValue(actorWith([PERMISSIONS.CONVERSATION_SET_STATUS]))
   hoisted.resolveToolSpecs.mockReturnValue([CLOSE_SPEC])

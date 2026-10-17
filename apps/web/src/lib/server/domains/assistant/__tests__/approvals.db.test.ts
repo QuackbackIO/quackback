@@ -252,6 +252,19 @@ describe('who may decide', () => {
     expect(rejected).toMatchObject({ status: 'rejected', decisionReason: 'Not this one' })
   })
 
+  it('raises old connector-write approvals to high risk even when medium was stored', async () => {
+    const pending = await homeProposal()
+    await testDb
+      .update(assistantPendingActions)
+      .set({
+        toolName: 'connector_crm__update_contact',
+        risk: 'medium',
+      })
+      .where(eq(assistantPendingActions.id, pending.id))
+    const fields = await approvalFieldsForDisplay(await rowOf(pending.id))
+    expect(fields.risk).toBe('high')
+  })
+
   it('needs an admin who signed in again for a high-risk request, and refuses critical', async () => {
     const pending = await homeProposal()
     await testDb

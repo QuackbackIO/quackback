@@ -29,6 +29,30 @@ export function higherRisk(a: ApprovalRisk, b: ApprovalRisk): ApprovalRisk {
 /** More changes than this in one request is medium risk, however small each one is. */
 export const BULK_CHANGE_THRESHOLD = 25
 
+/** Operations that send data out, change access, or change the AI's knowledge. */
+const HIGH_RISK_TOOLS = new Set([
+  'create_article',
+  'update_article',
+  'delete_article',
+  'manage_category',
+  'create_webhook',
+  'update_webhook',
+  'create_api_key',
+  'update_api_key',
+  'delete_api_key',
+  'invite_member',
+  'update_member_role',
+  'update_guidance',
+  'export_data',
+])
+
+/** Pending connector calls are writes; even an old stored tier cannot lower their risk. */
+export function toolApprovalRisk(toolName: string, args: Record<string, unknown>): ApprovalRisk {
+  if (toolName.startsWith('connector_') || HIGH_RISK_TOOLS.has(toolName) || args.permanent === true)
+    return 'high'
+  return 'medium'
+}
+
 /** The tier of each settings area, as the settings registry declares it. */
 const SETTINGS_AREA_RISK: Record<SettingsArea, ApprovalRisk> = Object.fromEntries(
   Object.entries(SETTINGS_AREA_META).map(([id, meta]) => [id, meta.risk])

@@ -16,7 +16,14 @@ import {
   type AssistantPendingAction,
   type PendingActionDecisionOptions,
 } from './pending-actions.service'
-import { assertDecisionNamesContent, rejectApproval } from './approvals.service'
+import {
+  assertDecisionNamesContent,
+  rejectApproval,
+  approvalRiskOf,
+  assertMayDecide,
+  requiredApprovalPermissions,
+  GONE_TOOL_PERMISSIONS,
+} from './approvals.service'
 import { SETTINGS_PROPOSAL_TOOL } from './approval-policy'
 import {
   getToolSpecByName,
@@ -76,7 +83,9 @@ export async function decideAssistantAction(
   approverPrincipalId: PrincipalId,
   actor: Actor,
   verifiedThreadKey: string | undefined,
-  options: Pick<PendingActionDecisionOptions, 'via' | 'reason' | 'contentHash'>
+  options: Pick<PendingActionDecisionOptions, 'via' | 'reason' | 'contentHash'> & {
+    freshSignIn?: boolean
+  }
 ): Promise<AssistantPendingAction> {
   const pending = await getPendingActionById(pendingActionId)
   if (!pending) throw new NotFoundError('PENDING_ACTION_NOT_FOUND', 'Pending action not found')
@@ -97,7 +106,7 @@ export async function decideAssistantAction(
       actor,
       pending.id,
       proposal.changes.map((change) => change.id),
-      { contentHash, via }
+      { contentHash, via, freshSignIn: options.freshSignIn }
     )
   }
   await assertPendingWorkspaceParent(pending, actor, verifiedThreadKey)
@@ -124,6 +133,22 @@ export async function decideAssistantAction(
     await assertConversationViewable(pending.conversationId, actor)
   } else if (pending.ticketId) {
     await assertTicketVisible(pending.ticketId, actor)
+  }
+
+  // Legacy inline and integration decisions obey the same sensitive-request
+  // rules as the approvals queue. The boundary supplies verified sign-in state.
+  if (
+    decision === 'rejected' &&
+    !isHomeThreadKey(pending.workspaceThreadKey) &&
+    ['high', 'critical'].includes(approvalRiskOf(pending))
+  ) {
+    await assertMayDecide(
+      pending,
+      actor,
+      options,
+      (await requiredApprovalPermissions(pending)) ?? GONE_TOOL_PERMISSIONS,
+      decision
+    )
   }
 
   if (decision === 'rejected') {
@@ -191,6 +216,18 @@ export async function decideAssistantAction(
         `Approving this action requires the '${permission}' permission`
       )
     }
+  }
+
+  // Legacy inline and integration decisions obey the same sensitive-request
+  // rules as the approvals queue. The boundary supplies verified sign-in state.
+  if (['high', 'critical'].includes(approvalRiskOf(pending))) {
+    await assertMayDecide(
+      pending,
+      actor,
+      options,
+      (await requiredApprovalPermissions(pending)) ?? GONE_TOOL_PERMISSIONS,
+      decision
+    )
   }
 
   const decided = await decidePendingAction(

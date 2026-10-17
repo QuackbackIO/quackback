@@ -32,6 +32,7 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
   }),
   policyActorFromAuth: async () => authState.actor!,
 }))
+vi.mock('@/lib/server/auth/recent-sign-in', () => ({ hasRecentSignIn: async () => false }))
 vi.mock('../workspace-copilot-gate', () => ({
   workspaceCopilotAvailable: async () => false,
   assertWorkspaceCopilotAvailable: async () => {

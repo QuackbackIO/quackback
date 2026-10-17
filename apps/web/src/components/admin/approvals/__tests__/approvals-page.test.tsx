@@ -8,11 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApprovalView } from '@/lib/server/domains/assistant/approvals.queue'
 
 const state = vi.hoisted(() => ({
-  search: {} as { view?: 'decided'; id?: string },
+  search: {} as { view?: 'decided'; id?: string; d?: string; source?: 'email' | 'app' },
   navigate: vi.fn(),
   waiting: [] as unknown[],
   decided: [] as unknown[],
   approve: vi.fn(),
+  emailApprove: vi.fn(),
   reject: vi.fn(),
   getApproval: vi.fn(),
   undo: vi.fn(),
@@ -22,6 +23,8 @@ const state = vi.hoisted(() => ({
   waitingCount: null as number | null,
   pageSize: 50,
   bellRead: vi.fn(),
+  signInRequest: vi.fn(),
+  onSignedIn: null as null | ((action: string) => void),
 }))
 
 // The URL as a small store: navigating changes the search the page reads.
@@ -31,12 +34,14 @@ function navigateTo({ search }: { search: object | ((previous: object) => object
 }
 
 vi.mock('@tanstack/react-router', async () => {
-  const { useSyncExternalStore } = await import('react')
+  const { useSyncExternalStore, createElement } = await import('react')
   const subscribe = (listener: () => void) => {
     state.listeners.add(listener)
     return () => state.listeners.delete(listener)
   }
   return {
+    Link: ({ children, to }: { children: ReactNode; to: string }) =>
+      createElement('a', { href: to }, children),
     getRouteApi: () => ({
       useNavigate: () => state.navigate,
       useSearch: () => useSyncExternalStore(subscribe, () => state.search),
@@ -64,8 +69,19 @@ vi.mock('@/lib/server/functions/approvals', () => ({
   },
   getApprovalFn: (args: unknown) => state.getApproval(args),
   approveApprovalFn: (args: unknown) => state.approve(args),
+  approveApprovalFromEmailFn: (args: unknown) => state.emailApprove(args),
   rejectApprovalFn: (args: unknown) => state.reject(args),
   markApprovalBellReadFn: () => state.bellRead(),
+}))
+// The real hook and dialog are covered on their own; here the page's use of them.
+vi.mock('@/lib/client/hooks/use-sign-in-again', () => ({
+  useSignInAgain: (options: { onSignedIn: (action: string) => void }) => {
+    state.onSignedIn = options.onSignedIn
+    return { request: state.signInRequest, dialog: { open: false } }
+  },
+}))
+vi.mock('@/components/auth/sign-in-again-dialog', () => ({
+  SignInAgainDialog: () => <div data-testid="sign-in-again-dialog" />,
 }))
 vi.mock('@/lib/server/functions/workspace-copilot', () => ({
   undoWorkspaceSettingsProposalFn: (args: unknown) => state.undo(args),
@@ -76,6 +92,7 @@ vi.mock('@/components/admin/ask/ask-messages', () => ({
 }))
 
 const { ApprovalsPage } = await import('../approvals-page')
+const { ApprovalConfirmPage } = await import('../approval-confirm-page')
 
 function view(overrides: Partial<ApprovalView> = {}): ApprovalView {
   const now = Date.now()
@@ -120,13 +137,13 @@ function view(overrides: Partial<ApprovalView> = {}): ApprovalView {
   }
 }
 
-function renderPage() {
+function renderPage(content: ReactNode = <ApprovalsPage />) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client = queryClient
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" defaultLocale="en" messages={{}}>
-        <ApprovalsPage />
+        {content}
       </IntlProvider>
     </QueryClientProvider>
   )
@@ -144,6 +161,8 @@ beforeEach(() => {
   state.bellRead.mockResolvedValue({ marked: 0 })
   state.navigate.mockReset()
   state.navigate.mockImplementation(navigateTo)
+  state.emailApprove.mockReset()
+  state.signInRequest.mockReset()
   state.approve.mockReset()
   state.reject.mockReset()
   state.getApproval.mockReset()
@@ -324,17 +343,56 @@ describe('ApprovalsPage', () => {
     )
   })
 
-  it('keeps Approve on a high-risk request and asks for a recent sign-in when refused', async () => {
+  it('opens the sign-in dialog when a high-risk approve is refused, then approves once after it', async () => {
     state.waiting = [view({ risk: 'high', needsFreshSignIn: true })]
-    state.approve.mockResolvedValue({
+    state.approve.mockResolvedValueOnce({
       ok: false,
       code: 'RECENT_SIGN_IN_REQUIRED',
       message: 'Sign in again to decide this request.',
     })
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Sign in again to approve')
+    await waitFor(() =>
+      expect(state.signInRequest).toHaveBeenCalledWith('approve:assistant_action_01:digest-1')
+    )
+    expect(state.approve).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+
+    state.approve.mockResolvedValue({ ok: true, approval: view({ status: 'executed' }) })
+    act(() => state.onSignedIn!('approve:assistant_action_01:digest-1'))
+    await waitFor(() => expect(state.approve).toHaveBeenCalledTimes(2))
+    expect(state.approve).toHaveBeenLastCalledWith({
+      data: { approvalId: 'assistant_action_01', contentHash: 'digest-1' },
+    })
+    // A second signal for the same sign-in does not approve again.
+    act(() => state.onSignedIn!('approve:assistant_action_01:digest-1'))
+    expect(state.approve).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores a resumed action meant for another request', async () => {
+    state.waiting = [view({ risk: 'high', needsFreshSignIn: true })]
+    renderPage()
+    await screen.findByRole('button', { name: 'Approve' })
+    act(() => state.onSignedIn!('approve:assistant_action_99'))
+    expect(state.approve).not.toHaveBeenCalled()
+  })
+
+  it('does not resume approving when the content changed during sign-in', async () => {
+    state.waiting = [view({ risk: 'high', contentHash: 'digest-2' })]
+    renderPage()
+    await screen.findByRole('button', { name: 'Approve' })
+    act(() => state.onSignedIn!('approve:assistant_action_01:digest-1'))
+    expect(state.approve).not.toHaveBeenCalled()
+  })
+
+  it('never asks for a sign-in to reject', async () => {
+    state.waiting = [view({ risk: 'high', needsFreshSignIn: true })]
+    state.reject.mockResolvedValue({ ok: true, approval: view({ status: 'rejected' }) })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Reject' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Reject' }))
+    await waitFor(() => expect(state.reject).toHaveBeenCalled())
+    expect(state.signInRequest).not.toHaveBeenCalled()
   })
 
   it('says how a decided request ended when it is opened from Decided', async () => {
@@ -632,5 +690,33 @@ describe('ApprovalsPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'This action can no longer be approved.'
     )
+  })
+})
+
+describe('approval confirmation from a link', () => {
+  it('only reads on opening; approval is an explicit click bound to the emailed content', async () => {
+    state.search = { id: 'assistant_action_01', d: 'digest-1', source: 'email' }
+    state.getApproval.mockResolvedValue(view())
+    state.emailApprove.mockResolvedValue({ ok: true, approval: view({ status: 'executed' }) })
+    renderPage(<ApprovalConfirmPage />)
+    const approve = await screen.findByRole('button', { name: 'Approve' })
+    expect(state.approve).not.toHaveBeenCalled()
+    expect(state.emailApprove).not.toHaveBeenCalled()
+    fireEvent.click(approve)
+    await waitFor(() =>
+      expect(state.emailApprove).toHaveBeenCalledWith({
+        data: { approvalId: 'assistant_action_01', contentHash: 'digest-1' },
+      })
+    )
+    expect(await screen.findByText('Done. It can’t be undone.')).toBeInTheDocument()
+  })
+
+  it('requires another review when the link names old content', async () => {
+    state.search = { id: 'assistant_action_01', d: 'old-digest' }
+    state.getApproval.mockResolvedValue(view())
+    renderPage(<ApprovalConfirmPage />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('This request changed.')
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+    expect(state.emailApprove).not.toHaveBeenCalled()
   })
 })

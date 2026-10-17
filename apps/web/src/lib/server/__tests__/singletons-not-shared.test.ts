@@ -146,6 +146,9 @@ describe('the readiness memo cannot go blind under pooled workspaces', () => {
         getControlReadState: () => ({ lastOkAt: 0, lastErrorAt: 0, lastError: null }),
         probeControlDatabase: async () => {},
       }))
+      vi.doMock('@/lib/server/jobs/worker', () => ({
+        getJobWorkerStatus: () => ({ running: false, workspaces: [] }),
+      }))
       const { handleReadinessProbe } = await import('@/routes/api/health.ready')
       const response = await handleReadinessProbe()
       return { status: response.status, calls: hoisted.migrationStatusCalls }

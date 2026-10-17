@@ -7,6 +7,10 @@ const mocks = vi.hoisted(() => ({
   decide: vi.fn(),
   spec: vi.fn(),
   can: vi.fn(),
+  approvalRisk: vi.fn(),
+}))
+vi.mock('@/lib/server/domains/assistant/approvals.service', () => ({
+  approvalRiskOf: mocks.approvalRisk,
 }))
 vi.mock('../identity', () => ({
   resolveSlackPrincipal: mocks.resolve,
@@ -61,6 +65,7 @@ beforeEach(() => {
     risk: 'write',
     permissions: ['post.create'],
   })
+  mocks.approvalRisk.mockReturnValue('medium')
   mocks.can.mockReturnValue(true)
   mocks.decide.mockResolvedValue({ status: 'executed', result: {} })
 })
@@ -161,4 +166,32 @@ it('repairs a terminal proposal presentation after decision permissions are remo
   expect(mocks.decide).not.toHaveBeenCalled()
   expect(client.chat.update).toHaveBeenCalledOnce()
   expect(client.chat.postEphemeral).not.toHaveBeenCalled()
+})
+
+it('sends a high-risk approve to the signed-in confirm page without deciding it in Slack', async () => {
+  mocks.approvalRisk.mockReturnValue('high')
+  await handleSlackDecision(payload, client, 'T')
+  expect(mocks.decide).not.toHaveBeenCalled()
+  expect(client.chat.postEphemeral).toHaveBeenCalledWith(
+    expect.objectContaining({
+      text: expect.stringContaining(`/admin/approvals/confirm?id=${id}&d=digest-1`),
+    })
+  )
+})
+
+it('still permits rejecting a high-risk request in Slack', async () => {
+  mocks.approvalRisk.mockReturnValue('high')
+  await handleSlackDecision(
+    { ...payload, actions: [{ action_id: 'qb_action_reject', value: `${id}:digest-1` }] },
+    client,
+    'T'
+  )
+  expect(mocks.decide).toHaveBeenCalledWith(
+    id,
+    'rejected',
+    member.id,
+    actor,
+    JSON.stringify(['T', 'C', '1']),
+    { via: 'slack', contentHash: 'digest-1' }
+  )
 })

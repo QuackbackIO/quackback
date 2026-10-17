@@ -10,6 +10,8 @@
 import { CheckIcon, XMarkIcon, ShieldExclamationIcon } from '@heroicons/react/24/solid'
 import type { AssistantPendingActionId } from '@quackback/ids'
 import { usePendingActionDecision } from '@/lib/client/hooks/use-pending-action-decision'
+import { FormattedMessage } from 'react-intl'
+import { approvalMessages } from '@/components/admin/approvals/approval-messages'
 
 /** Terminal-status copy — shown in place of the buttons once a proposal is no
  *  longer decidable. 'proposed' isn't here: that state renders the buttons. */
@@ -66,14 +68,23 @@ export function PendingActionCard({ pendingActionId, summary }: PendingActionCar
         <span className="text-[11px] text-muted-foreground">Couldn't load the current status</span>
       ) : data?.status === 'proposed' ? (
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={approve}
-            disabled={busy}
-            className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-          >
-            <CheckIcon className="h-3.5 w-3.5" /> Approve
-          </button>
+          {data.risk === 'high' ? (
+            <a
+              href={`/admin/approvals/confirm?${new URLSearchParams({ id, d: data.argsDigest })}`}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <FormattedMessage {...approvalMessages.title} />
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={approve}
+              disabled={busy}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              <CheckIcon className="h-3.5 w-3.5" /> Approve
+            </button>
+          )}
           <button
             type="button"
             onClick={reject}

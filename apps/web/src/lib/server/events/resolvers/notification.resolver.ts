@@ -10,6 +10,7 @@
  * A later phase folds the builders in and retires the legacy module. See
  * to-legacy-event.ts for the actor-fidelity caveat.
  */
+import { getApprovalEmailTargets } from '../approval-email'
 import { buildHookContext } from '../hook-context'
 import { toLegacyEvent } from '../to-legacy-event'
 import {
@@ -83,6 +84,7 @@ const BELL_BUILDERS: Record<string, BellBuilder> = {
  */
 type EmailBuilder = (event: EventData, context: HookContext) => Promise<HookTarget[]>
 const EMAIL_BUILDERS: Record<string, EmailBuilder> = {
+  'approval.requested': getApprovalEmailTargets,
   'ticket.created': getTicketCreatedEmailTargets,
   'ticket.replied': getTicketRepliedEmailTargets,
   'ticket.status_changed': getTicketResolvedEmailTargets,

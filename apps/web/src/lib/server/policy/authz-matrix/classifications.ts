@@ -354,6 +354,10 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     APPROVAL_PERMISSIONS,
     'a person, never the requesting credential, who sees the item and holds every permission the operation needs; the change then runs as that person'
   ),
+  'lib/server/functions/approvals.ts::approveApprovalFromEmailFn': DYNAMIC_PERMISSION(
+    APPROVAL_PERMISSIONS,
+    'a person, never the requesting credential, who sees the item and holds every permission the operation needs; the change then runs as that person'
+  ),
   'lib/server/functions/approvals.ts::markApprovalBellReadFn': END_USER(
     'reads only the caller own approval bell; the principal comes from the session'
   ),

@@ -10,6 +10,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 import type { AssistantPendingActionDTO } from '@/lib/server/functions/assistant-actions'
 
 const { getAssistantPendingActionFn, approveAssistantActionFn, rejectAssistantActionFn } =
@@ -56,12 +57,14 @@ function pendingRow(overrides: Partial<AssistantPendingActionDTO> = {}): Assista
 function renderCard(props: Partial<{ pendingActionId: string; summary: string }> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
-    <QueryClientProvider client={client}>
-      <PendingActionCard
-        pendingActionId={props.pendingActionId ?? 'assistant_action_1'}
-        summary={props.summary ?? 'Close conversation: resolved'}
-      />
-    </QueryClientProvider>
+    <IntlProvider locale="en">
+      <QueryClientProvider client={client}>
+        <PendingActionCard
+          pendingActionId={props.pendingActionId ?? 'assistant_action_1'}
+          summary={props.summary ?? 'Close conversation: resolved'}
+        />
+      </QueryClientProvider>
+    </IntlProvider>
   )
 }
 
@@ -70,6 +73,17 @@ beforeEach(() => {
 })
 
 describe('<PendingActionCard>', () => {
+  it('opens a digest-bound review for sensitive requests without deciding inline', async () => {
+    getAssistantPendingActionFn.mockResolvedValue(pendingRow({ risk: 'high' }))
+    renderCard()
+    const review = await screen.findByRole('link', { name: 'Approvals' })
+    expect(review).toHaveAttribute(
+      'href',
+      '/admin/approvals/confirm?id=assistant_action_1&d=digest-1'
+    )
+    expect(screen.queryByRole('button', { name: /approve/i })).not.toBeInTheDocument()
+    expect(approveAssistantActionFn).not.toHaveBeenCalled()
+  })
   it('shows the summary and Approve/Reject while the live row is proposed', async () => {
     getAssistantPendingActionFn.mockResolvedValue(pendingRow())
 

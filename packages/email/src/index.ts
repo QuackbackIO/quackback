@@ -1,3 +1,4 @@
+import { ApprovalRequestEmail, type ApprovalRequestEmailProps } from './templates/approval-request'
 /**
  * Email sending module for Quackback
  *
@@ -1868,5 +1869,18 @@ export async function sendVerifyAddressEmail(
     subject: 'Confirm your email address',
     react: VerifyAddressEmail({ code, workspaceName, logoUrl }),
     emailType: 'VerifyAddressEmail',
+  })
+}
+
+export async function sendApprovalRequestEmail(
+  args: ApprovalRequestEmailProps & { to: string }
+): Promise<EmailResult> {
+  const { to, ...props } = args
+  return sendEmail({
+    to,
+    subject: `Approval requested in ${props.workspaceName}`,
+    react: ApprovalRequestEmail(props),
+    emailType: 'ApprovalRequestEmail',
+    preview: { reviewUrl: props.reviewUrl },
   })
 }

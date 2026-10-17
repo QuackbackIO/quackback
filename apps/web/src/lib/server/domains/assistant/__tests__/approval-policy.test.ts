@@ -3,6 +3,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { SettingsProposal } from '@/lib/shared/assistant/settings-proposals'
 import {
   higherRisk,
+  toolApprovalRisk,
   settingsProposalPermissions,
   settingsProposalRisk,
   summarizeSettingsProposal,
@@ -115,5 +116,16 @@ describe('approval summaries', () => {
       )
     )
     expect(summary).not.toMatch(/approve|safe|click/i)
+  })
+})
+
+describe('tool approval risk', () => {
+  it('requires high-risk approval for outbound writes and knowledge changes', () => {
+    for (const tool of ['connector_crm__update_contact', 'update_article', 'create_webhook']) {
+      expect(toolApprovalRisk(tool, {})).toBe('high')
+    }
+    expect(toolApprovalRisk('delete_post', { permanent: true })).toBe('high')
+    expect(toolApprovalRisk('reply_to_conversation', {})).toBe('medium')
+    expect(toolApprovalRisk('triage_post', {})).toBe('medium')
   })
 })
