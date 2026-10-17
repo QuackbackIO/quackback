@@ -2214,5 +2214,8 @@
   "oauthDevice.ready.unverified": "Непроверенное приложение. Любой может зарегистрировать приложение под любым именем.",
   "portal.feedback.panel.statusOnly": "Только",
   "portal.feedback.panel.statusOnlyLabel": "Показать только {status}",
-  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}",
+  "portal.feedback.toolbar.sortRelevance": "Лучшие совпадения",
+  "portal.feedback.list.noSearchResults": "Нет идей по запросу «{query}».",
+  "portal.feedback.list.postSearchAsIdea": "Опубликовать как новую идею"
 }

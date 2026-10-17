@@ -2214,5 +2214,8 @@
   "oauthDevice.ready.unverified": "未經驗證的應用程式。任何人都可以用任意名稱註冊應用程式。",
   "portal.feedback.panel.statusOnly": "僅此",
   "portal.feedback.panel.statusOnlyLabel": "僅顯示{status}",
-  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}",
+  "portal.feedback.toolbar.sortRelevance": "最佳符合",
+  "portal.feedback.list.noSearchResults": "沒有與「{query}」相符的想法。",
+  "portal.feedback.list.postSearchAsIdea": "發布為新想法"
 }

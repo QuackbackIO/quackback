@@ -2214,5 +2214,8 @@
   "oauthDevice.ready.unverified": "Application non vérifiée. N'importe qui peut enregistrer une application sous n'importe quel nom.",
   "portal.feedback.panel.statusOnly": "Seul",
   "portal.feedback.panel.statusOnlyLabel": "Afficher seulement {status}",
-  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}",
+  "portal.feedback.toolbar.sortRelevance": "Pertinence",
+  "portal.feedback.list.noSearchResults": "Aucune idée ne correspond à « {query} ».",
+  "portal.feedback.list.postSearchAsIdea": "La publier comme nouvelle idée"
 }

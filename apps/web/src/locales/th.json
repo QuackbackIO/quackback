@@ -2214,5 +2214,8 @@
   "oauthDevice.ready.unverified": "แอปพลิเคชันที่ยังไม่ได้รับการยืนยัน ใครก็ลงทะเบียนแอปด้วยชื่ออะไรก็ได้",
   "portal.feedback.panel.statusOnly": "เท่านั้น",
   "portal.feedback.panel.statusOnlyLabel": "แสดงเฉพาะ {status}",
-  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}",
+  "portal.feedback.toolbar.sortRelevance": "ตรงที่สุด",
+  "portal.feedback.list.noSearchResults": "ไม่มีไอเดียที่ตรงกับ “{query}”",
+  "portal.feedback.list.postSearchAsIdea": "โพสต์เป็นไอเดียใหม่"
 }

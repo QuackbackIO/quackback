@@ -2214,5 +2214,8 @@
   "oauthDevice.ready.unverified": "تطبيق غير موثّق. يمكن لأي شخص تسجيل تطبيق بأي اسم.",
   "portal.feedback.panel.statusOnly": "فقط",
   "portal.feedback.panel.statusOnlyLabel": "عرض {status} فقط",
-  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}",
+  "portal.feedback.toolbar.sortRelevance": "الأفضل تطابقًا",
+  "portal.feedback.list.noSearchResults": "لا توجد أفكار تطابق “{query}”.",
+  "portal.feedback.list.postSearchAsIdea": "انشرها كفكرة جديدة"
 }

@@ -115,7 +115,7 @@ import { FeedbackHeaderAnimated } from '../feedback-header-animated'
 
 const BOARD = { id: 'board_1', name: 'Ideas', slug: 'ideas' }
 
-function renderHeader() {
+function renderHeader(draft?: { title: string; key: number }) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <IntlProvider locale="en" messages={{}} onError={() => {}}>
@@ -124,6 +124,7 @@ function renderHeader() {
           boards={[BOARD]}
           defaultBoardId={BOARD.id}
           boardPermissions={{ [BOARD.id]: { canSubmit: true, canVote: true } }}
+          draft={draft}
         />
       </IntlProvider>
     </QueryClientProvider>
@@ -177,6 +178,22 @@ function typeTitleByKey(text: string, from = '') {
 }
 
 describe('feedback header title', () => {
+  it('opens with a handed-in draft title, ready to finish', async () => {
+    // happy-dom has no scrollIntoView; the composer scrolls itself into view.
+    const scrollIntoView = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = vi.fn()
+    try {
+      renderHeader({ title: 'zapier', key: 1 })
+      await screen.findByTestId('editor')
+      const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' })
+      expect(field.value).toBe('zapier')
+      expect(document.activeElement).toBe(field)
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView
+    }
+  })
+
   it('does not re-render the header per keystroke in the title', async () => {
     renderHeader()
     typeTitle('D')

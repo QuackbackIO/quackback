@@ -2214,5 +2214,8 @@
   "oauthDevice.ready.unverified": "Niet-geverifieerde app. Iedereen kan een app onder elke naam registreren.",
   "portal.feedback.panel.statusOnly": "Alleen",
   "portal.feedback.panel.statusOnlyLabel": "Alleen {status} tonen",
-  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}",
+  "portal.feedback.toolbar.sortRelevance": "Beste match",
+  "portal.feedback.list.noSearchResults": "Geen ideeën gevonden voor “{query}”.",
+  "portal.feedback.list.postSearchAsIdea": "Plaats het als nieuw idee"
 }

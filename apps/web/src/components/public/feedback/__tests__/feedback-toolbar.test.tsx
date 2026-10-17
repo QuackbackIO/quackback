@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
-import { FeedbackToolbar } from '../feedback-toolbar'
+import { FeedbackToolbar, sortForSearch } from '../feedback-toolbar'
 
 function renderToolbar(props: { currentSearch?: string; onSearchChange?: (s: string) => void }) {
   const onSearchChange = props.onSearchChange ?? vi.fn()
@@ -85,5 +85,56 @@ describe('FeedbackToolbar search', () => {
   it('shows no clear button while the field is empty', () => {
     renderToolbar({})
     expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull()
+  })
+})
+
+describe('FeedbackToolbar sort', () => {
+  function renderSort(currentSort: 'trending' | 'relevance', currentSearch?: string) {
+    const onSortChange = vi.fn()
+    render(
+      <IntlProvider locale="en">
+        <FeedbackToolbar
+          currentSort={currentSort}
+          onSortChange={onSortChange}
+          currentSearch={currentSearch}
+          onSearchChange={vi.fn()}
+        />
+      </IntlProvider>
+    )
+    return { onSortChange }
+  }
+
+  it('offers Best match only while searching', () => {
+    renderSort('trending')
+    expect(screen.queryByRole('button', { name: 'Best match' })).not.toBeInTheDocument()
+    cleanup()
+    const { onSortChange } = renderSort('relevance', 'zap')
+    expect(screen.getByRole('button', { name: 'Best match' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Top' }))
+    expect(onSortChange).toHaveBeenCalledWith('top')
+  })
+
+  it('shows Trending as the order when best match has no search to rank', () => {
+    renderSort('relevance')
+    expect(screen.getByRole('button', { name: 'Trending' })).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+describe('sortForSearch', () => {
+  it('switches to best match when a search starts from the default order', () => {
+    expect(sortForSearch('trending', undefined, 'zap')).toBe('relevance')
+  })
+
+  it('keeps an order picked on purpose', () => {
+    expect(sortForSearch('top', undefined, 'zap')).toBe('top')
+    expect(sortForSearch('trending', 'za', 'zap')).toBe('trending')
+  })
+
+  it('goes back to trending when the search is cleared', () => {
+    expect(sortForSearch('relevance', 'zap', '')).toBe('trending')
+    expect(sortForSearch('new', 'zap', '')).toBe('new')
   })
 })

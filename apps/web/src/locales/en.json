@@ -2214,5 +2214,8 @@
   "oauthDevice.ready.unverified": "Unverified application. Anyone can register an app under any name.",
   "portal.feedback.panel.statusOnly": "Only",
   "portal.feedback.panel.statusOnlyLabel": "Show only {status}",
-  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}",
+  "portal.feedback.toolbar.sortRelevance": "Best match",
+  "portal.feedback.list.noSearchResults": "No ideas match “{query}”.",
+  "portal.feedback.list.postSearchAsIdea": "Post it as a new idea"
 }

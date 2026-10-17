@@ -1320,7 +1320,7 @@ test.describe('Post List - Search Accuracy', () => {
     await page.waitForTimeout(500)
 
     // Should show the specific "no match" message rather than just a blank list
-    const noMatchMsg = page.getByText('No posts match your filters.')
+    const noMatchMsg = page.getByText(`No ideas match “${impossibleTerm}”.`)
     await expect(noMatchMsg).toBeVisible({ timeout: 5000 })
 
     // And there should be no post cards

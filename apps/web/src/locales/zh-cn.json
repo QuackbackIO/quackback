@@ -2214,5 +2214,8 @@
   "oauthDevice.ready.unverified": "未经验证的应用。任何人都可以用任意名称注册应用。",
   "portal.feedback.panel.statusOnly": "仅此",
   "portal.feedback.panel.statusOnlyLabel": "仅显示{status}",
-  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}",
+  "portal.feedback.toolbar.sortRelevance": "最佳匹配",
+  "portal.feedback.list.noSearchResults": "没有与“{query}”匹配的想法。",
+  "portal.feedback.list.postSearchAsIdea": "作为新想法发布"
 }

@@ -2214,5 +2214,8 @@
   "oauthDevice.ready.unverified": "Aplicación no verificada. Cualquiera puede registrar una aplicación con cualquier nombre.",
   "portal.feedback.panel.statusOnly": "Solo",
   "portal.feedback.panel.statusOnlyLabel": "Mostrar solo {status}",
-  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}",
+  "portal.feedback.toolbar.sortRelevance": "Más relevantes",
+  "portal.feedback.list.noSearchResults": "Ninguna idea coincide con “{query}”.",
+  "portal.feedback.list.postSearchAsIdea": "Publícala como idea nueva"
 }
