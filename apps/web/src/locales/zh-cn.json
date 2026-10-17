@@ -569,7 +569,6 @@
   "portal.feedback.filter.statusGroup.active": "进行中",
   "portal.feedback.filter.statusGroup.complete": "已完成",
   "portal.feedback.filter.statusGroup.closed": "已关闭",
-  "portal.feedback.filter.status.activeOnly": "仅进行中",
   "portal.feedback.filter.status.all": "全部",
   "portal.feedback.filter.chip.board": "看板：",
   "portal.feedback.filter.chip.status": "状态：",
@@ -2212,5 +2211,8 @@
   "oauthDevice.problem.rateLimited": "尝试次数过多。请一分钟后再试。",
   "oauthDevice.problem.noScopes": "请至少选择一项允许的内容。",
   "oauthDevice.problem.error": "出了点问题。请重试。",
-  "oauthDevice.ready.unverified": "未经验证的应用。任何人都可以用任意名称注册应用。"
+  "oauthDevice.ready.unverified": "未经验证的应用。任何人都可以用任意名称注册应用。",
+  "portal.feedback.panel.statusOnly": "仅此",
+  "portal.feedback.panel.statusOnlyLabel": "仅显示{status}",
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
 }

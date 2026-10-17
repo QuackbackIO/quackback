@@ -569,7 +569,6 @@
   "portal.feedback.filter.statusGroup.active": "進行中",
   "portal.feedback.filter.statusGroup.complete": "已完成",
   "portal.feedback.filter.statusGroup.closed": "已關閉",
-  "portal.feedback.filter.status.activeOnly": "僅進行中",
   "portal.feedback.filter.status.all": "全部",
   "portal.feedback.filter.chip.board": "看板：",
   "portal.feedback.filter.chip.status": "狀態：",
@@ -2212,5 +2211,8 @@
   "oauthDevice.problem.rateLimited": "嘗試次數過多。請一分鐘後再試。",
   "oauthDevice.problem.noScopes": "請至少選擇一項允許的內容。",
   "oauthDevice.problem.error": "發生錯誤。請再試一次。",
-  "oauthDevice.ready.unverified": "未經驗證的應用程式。任何人都可以用任意名稱註冊應用程式。"
+  "oauthDevice.ready.unverified": "未經驗證的應用程式。任何人都可以用任意名稱註冊應用程式。",
+  "portal.feedback.panel.statusOnly": "僅此",
+  "portal.feedback.panel.statusOnlyLabel": "僅顯示{status}",
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
 }

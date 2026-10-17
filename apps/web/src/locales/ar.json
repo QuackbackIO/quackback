@@ -569,7 +569,6 @@
   "portal.feedback.filter.statusGroup.active": "نشط",
   "portal.feedback.filter.statusGroup.complete": "مكتمل",
   "portal.feedback.filter.statusGroup.closed": "مغلق",
-  "portal.feedback.filter.status.activeOnly": "النشطة فقط",
   "portal.feedback.filter.status.all": "الكل",
   "portal.feedback.filter.chip.board": "اللوحة:",
   "portal.feedback.filter.chip.status": "الحالة:",
@@ -2212,5 +2211,8 @@
   "oauthDevice.problem.rateLimited": "محاولات كثيرة جدًا. حاول مرة أخرى بعد دقيقة.",
   "oauthDevice.problem.noScopes": "اختر صلاحية واحدة على الأقل.",
   "oauthDevice.problem.error": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
-  "oauthDevice.ready.unverified": "تطبيق غير موثّق. يمكن لأي شخص تسجيل تطبيق بأي اسم."
+  "oauthDevice.ready.unverified": "تطبيق غير موثّق. يمكن لأي شخص تسجيل تطبيق بأي اسم.",
+  "portal.feedback.panel.statusOnly": "فقط",
+  "portal.feedback.panel.statusOnlyLabel": "عرض {status} فقط",
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
 }

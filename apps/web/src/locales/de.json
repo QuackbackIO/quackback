@@ -569,7 +569,6 @@
   "portal.feedback.filter.statusGroup.active": "Aktiv",
   "portal.feedback.filter.statusGroup.complete": "Abgeschlossen",
   "portal.feedback.filter.statusGroup.closed": "Geschlossen",
-  "portal.feedback.filter.status.activeOnly": "Nur aktive",
   "portal.feedback.filter.status.all": "Alle",
   "portal.feedback.filter.chip.board": "Board:",
   "portal.feedback.filter.chip.status": "Status:",
@@ -2212,5 +2211,8 @@
   "oauthDevice.problem.rateLimited": "Zu viele Versuche. Versuche es in einer Minute erneut.",
   "oauthDevice.problem.noScopes": "Wähle mindestens eine Berechtigung aus.",
   "oauthDevice.problem.error": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
-  "oauthDevice.ready.unverified": "Nicht verifizierte Anwendung. Jeder kann eine App unter beliebigem Namen registrieren."
+  "oauthDevice.ready.unverified": "Nicht verifizierte Anwendung. Jeder kann eine App unter beliebigem Namen registrieren.",
+  "portal.feedback.panel.statusOnly": "Nur",
+  "portal.feedback.panel.statusOnlyLabel": "Nur {status} anzeigen",
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
 }

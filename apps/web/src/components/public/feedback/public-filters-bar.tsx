@@ -30,11 +30,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
-import {
-  feedShowsActiveOnly,
-  PUBLIC_FEED_VIEWS,
-  type PublicFeedView,
-} from '@/lib/shared/types/filters'
+import { PUBLIC_FEED_VIEWS, type PublicFeedView } from '@/lib/shared/types/filters'
 import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { CircleIcon } from '@/components/shared/filter-menu'
@@ -45,6 +41,8 @@ import {
   getDateFromDaysAgo,
   type DatePresetValue,
   type RespondedValue,
+  STATUS_CATEGORY_ORDER,
+  STATUS_GROUP_LABELS,
 } from './public-filters-bar-defaults'
 
 interface FilterBarBoard {
@@ -156,7 +154,7 @@ export function PublicFiltersBar({
     [filters, setFilters, statuses, tags, boards, members, segments, intl]
   )
 
-  const pickedCount = activeChips.filter((chip) => chip.onRemove).length
+  if (activeChips.length === 0) return null
 
   return (
     <div
@@ -171,7 +169,7 @@ export function PublicFiltersBar({
         <FilterChip key={key} icon={CHIP_ICON_BY_TYPE[type]} {...chipProps} />
       ))}
 
-      {pickedCount >= 2 && (
+      {activeChips.length >= 2 && (
         <button
           type="button"
           onClick={clearFilters}
@@ -478,8 +476,7 @@ interface ActiveChipDescriptor {
   color?: string
   options?: FilterOption[]
   onChange?: (newId: string) => void
-  /** Absent on an implied chip, which shows a default rather than a picked filter. */
-  onRemove?: () => void
+  onRemove: () => void
   /** Team-only chip: amber styling. */
   internal?: boolean
   /** Localized "only your team sees this" tooltip for internal chips. */
@@ -552,58 +549,49 @@ function buildActiveChips(args: {
     }
   }
 
-  const statusOptions: FilterOption[] = statuses.map((s) => ({
-    id: s.slug,
-    label: s.name,
-    color: s.color,
-  }))
-
-  // Status chips — one per selected slug
+  // Status: one chip, only when the pick differs from the default scope (the
+  // panel's ticks show that scope). It names whole groups where it can.
   if (filters.status?.length) {
-    for (const slug of filters.status) {
-      // A slug the workspace no longer has (renamed or deleted status) still
-      // filters the feed, so it gets a chip that can remove it.
-      const status = statuses.find((s) => s.slug === slug)
-      chips.push({
-        key: `status-${slug}`,
-        type: 'status',
-        label: intl.formatMessage({
-          id: 'portal.feedback.filter.chip.status',
-          defaultMessage: 'Status:',
-        }),
-        value: status?.name ?? slug,
-        valueId: slug,
-        color: status?.color,
-        options: statusOptions,
-        onChange: (newSlug) => {
-          const others = filters.status?.filter((s) => s !== slug) ?? []
-          setFilters({ status: [...others, newSlug] })
-        },
-        onRemove: () => {
-          const next = filters.status?.filter((s) => s !== slug)
-          setFilters({ status: next?.length ? next : undefined })
-        },
-      })
+    const picked = filters.status.map(
+      (value) => statuses.find((s) => s.id === value)?.slug ?? value
+    )
+    const parts: string[] = []
+    for (const category of STATUS_CATEGORY_ORDER) {
+      const group = statuses.filter((s) => (s.category ?? 'active') === category)
+      const inGroup = group.filter((s) => picked.includes(s.slug))
+      if (group.length > 1 && inGroup.length === group.length) {
+        parts.push(intl.formatMessage(STATUS_GROUP_LABELS[category]))
+      } else {
+        parts.push(...inGroup.map((s) => s.name))
+      }
     }
-  } else {
-    // Nothing picked: show the scope the feed applies, and let the chip open
-    // the status list. It has no remove button, which styles it as implied.
+    // A slug the workspace no longer has (renamed or deleted status) still
+    // filters the feed, so the chip names it.
+    parts.push(...picked.filter((slug) => !statuses.some((s) => s.slug === slug)))
+    const everything = statuses.length > 0 && statuses.every((s) => picked.includes(s.slug))
     chips.push({
-      key: 'status-implied',
+      key: 'status',
       type: 'status',
       label: intl.formatMessage({
         id: 'portal.feedback.filter.chip.status',
         defaultMessage: 'Status:',
       }),
-      value: feedShowsActiveOnly(filters)
-        ? intl.formatMessage({
-            id: 'portal.feedback.filter.status.activeOnly',
-            defaultMessage: 'Active only',
-          })
-        : intl.formatMessage({ id: 'portal.feedback.filter.status.all', defaultMessage: 'All' }),
-      valueId: '',
-      options: statusOptions,
-      onChange: (slug) => setFilters({ status: [slug] }),
+      value: everything
+        ? intl.formatMessage({ id: 'portal.feedback.filter.status.all', defaultMessage: 'All' })
+        : parts.length <= 2
+          ? intl.formatList(parts, { type: 'conjunction' })
+          : intl.formatMessage(
+              {
+                id: 'portal.feedback.filter.status.summaryMore',
+                defaultMessage: '{names} +{count}',
+              },
+              {
+                names: intl.formatList(parts.slice(0, 2), { type: 'unit', style: 'short' }),
+                count: parts.length - 2,
+              }
+            ),
+      valueId: picked.join(),
+      onRemove: () => setFilters({ status: undefined }),
     })
   }
 

@@ -735,7 +735,6 @@
   "portal.feedback.filter.statusGroup.active": "กำลังดำเนินการ",
   "portal.feedback.filter.statusGroup.complete": "เสร็จแล้ว",
   "portal.feedback.filter.statusGroup.closed": "ปิดแล้ว",
-  "portal.feedback.filter.status.activeOnly": "เฉพาะที่กำลังดำเนินการ",
   "portal.feedback.filter.status.all": "ทั้งหมด",
   "portal.feedback.filter.chip.board": "บอร์ด:",
   "portal.feedback.filter.chip.status": "สถานะ:",
@@ -2212,5 +2211,8 @@
   "oauthDevice.problem.rateLimited": "ลองหลายครั้งเกินไป ลองอีกครั้งในอีกหนึ่งนาที",
   "oauthDevice.problem.noScopes": "เลือกสิ่งที่อนุญาตอย่างน้อยหนึ่งอย่าง",
   "oauthDevice.problem.error": "เกิดข้อผิดพลาดบางอย่าง โปรดลองอีกครั้ง",
-  "oauthDevice.ready.unverified": "แอปพลิเคชันที่ยังไม่ได้รับการยืนยัน ใครก็ลงทะเบียนแอปด้วยชื่ออะไรก็ได้"
+  "oauthDevice.ready.unverified": "แอปพลิเคชันที่ยังไม่ได้รับการยืนยัน ใครก็ลงทะเบียนแอปด้วยชื่ออะไรก็ได้",
+  "portal.feedback.panel.statusOnly": "เท่านั้น",
+  "portal.feedback.panel.statusOnlyLabel": "แสดงเฉพาะ {status}",
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
 }

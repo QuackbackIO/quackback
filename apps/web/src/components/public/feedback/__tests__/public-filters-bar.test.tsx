@@ -66,22 +66,12 @@ function renderBar(overrides: Partial<React.ComponentProps<typeof PublicFiltersB
 }
 
 describe('PublicFiltersBar', () => {
-  it('shows the implied "Active only" status when no status is picked', () => {
+  it('shows no chips, and no bar, at the default scope', () => {
     renderBar()
-    expect(screen.getByText(/^Status:$/)).toBeInTheDocument()
-    expect(screen.getByText('Active only')).toBeInTheDocument()
-    // The implied chip is not a filter the visitor added, so it has no remove
-    // button.
-    expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
-  })
-
-  it('shows "All" as the implied status while searching or in a view', () => {
-    renderBar({ filters: { sort: 'top', search: 'widget' } })
-    expect(screen.getByText('All')).toBeInTheDocument()
-    expect(screen.queryByText('Active only')).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Active filters' })).not.toBeInTheDocument()
     cleanup()
-    renderBar({ filters: { sort: 'top', view: 'mine' } })
-    expect(screen.getByText('All')).toBeInTheDocument()
+    renderBar({ filters: { sort: 'top', search: 'widget' } })
+    expect(screen.queryByText(/^Status:$/)).not.toBeInTheDocument()
   })
 
   it('shows the view as a chip that can be removed', () => {
@@ -92,13 +82,6 @@ describe('PublicFiltersBar', () => {
     expect(setFilters).toHaveBeenCalledWith({ view: undefined })
   })
 
-  it('picking a status from the implied chip replaces the default', () => {
-    const { setFilters } = renderBar()
-    fireEvent.click(screen.getByText('Active only'))
-    fireEvent.click(screen.getByRole('button', { name: 'Complete' }))
-    expect(setFilters).toHaveBeenCalledWith({ status: ['complete'] })
-  })
-
   it('shows a status the URL names but the workspace no longer has, so it can be removed', () => {
     const { setFilters } = renderBar({ filters: { sort: 'top', status: ['retired'] } })
     expect(screen.getByText('retired')).toBeInTheDocument()
@@ -106,16 +89,16 @@ describe('PublicFiltersBar', () => {
     expect(setFilters).toHaveBeenCalledWith({ status: undefined })
   })
 
-  it('drops the implied chip once a status is picked', () => {
-    renderBar({ filters: { sort: 'top', status: ['open'] } })
-    expect(screen.queryByText('Active only')).not.toBeInTheDocument()
-  })
-
-  it('renders a chip per picked status, and no Add filter pill (the panel has it)', () => {
-    renderBar({ filters: { sort: 'top', status: ['open'] } })
-    expect(screen.getByText('Open')).toBeInTheDocument()
-    expect(screen.getByText(/^Status:$/)).toBeInTheDocument()
+  it('sums the picked statuses up in one chip that resets to the default', () => {
+    const { setFilters } = renderBar({ filters: { sort: 'top', status: ['open', 'retired'] } })
+    expect(screen.getAllByText(/^Status:$/)).toHaveLength(1)
+    expect(screen.getByText('Open and retired')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /add filter/i })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /remove status/i }))
+    expect(setFilters).toHaveBeenCalledWith({ status: undefined })
+    cleanup()
+    renderBar({ filters: { sort: 'top', status: ['open', 'complete'] } })
+    expect(screen.getByText('All')).toBeInTheDocument()
   })
 
   it('renders a board chip when filters.board is set', () => {

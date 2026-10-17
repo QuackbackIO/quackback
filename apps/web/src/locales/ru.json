@@ -569,7 +569,6 @@
   "portal.feedback.filter.statusGroup.active": "Активные",
   "portal.feedback.filter.statusGroup.complete": "Завершённые",
   "portal.feedback.filter.statusGroup.closed": "Закрытые",
-  "portal.feedback.filter.status.activeOnly": "Только активные",
   "portal.feedback.filter.status.all": "Все",
   "portal.feedback.filter.chip.board": "Доска:",
   "portal.feedback.filter.chip.status": "Статус:",
@@ -2212,5 +2211,8 @@
   "oauthDevice.problem.rateLimited": "Слишком много попыток. Повторите через минуту.",
   "oauthDevice.problem.noScopes": "Выберите хотя бы одно разрешение.",
   "oauthDevice.problem.error": "Что-то пошло не так. Попробуйте снова.",
-  "oauthDevice.ready.unverified": "Непроверенное приложение. Любой может зарегистрировать приложение под любым именем."
+  "oauthDevice.ready.unverified": "Непроверенное приложение. Любой может зарегистрировать приложение под любым именем.",
+  "portal.feedback.panel.statusOnly": "Только",
+  "portal.feedback.panel.statusOnlyLabel": "Показать только {status}",
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
 }

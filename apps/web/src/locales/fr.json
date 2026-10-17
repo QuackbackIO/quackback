@@ -569,7 +569,6 @@
   "portal.feedback.filter.statusGroup.active": "Actif",
   "portal.feedback.filter.statusGroup.complete": "Terminé",
   "portal.feedback.filter.statusGroup.closed": "Fermé",
-  "portal.feedback.filter.status.activeOnly": "Actifs uniquement",
   "portal.feedback.filter.status.all": "Tous",
   "portal.feedback.filter.chip.board": "Tableau :",
   "portal.feedback.filter.chip.status": "Statut :",
@@ -2212,5 +2211,8 @@
   "oauthDevice.problem.rateLimited": "Trop de tentatives. Réessayez dans une minute.",
   "oauthDevice.problem.noScopes": "Choisissez au moins une autorisation.",
   "oauthDevice.problem.error": "Une erreur s'est produite. Veuillez réessayer.",
-  "oauthDevice.ready.unverified": "Application non vérifiée. N'importe qui peut enregistrer une application sous n'importe quel nom."
+  "oauthDevice.ready.unverified": "Application non vérifiée. N'importe qui peut enregistrer une application sous n'importe quel nom.",
+  "portal.feedback.panel.statusOnly": "Seul",
+  "portal.feedback.panel.statusOnlyLabel": "Afficher seulement {status}",
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
 }

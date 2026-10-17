@@ -569,7 +569,6 @@
   "portal.feedback.filter.statusGroup.active": "Активні",
   "portal.feedback.filter.statusGroup.complete": "Завершені",
   "portal.feedback.filter.statusGroup.closed": "Закриті",
-  "portal.feedback.filter.status.activeOnly": "Лише активні",
   "portal.feedback.filter.status.all": "Усі",
   "portal.feedback.filter.chip.board": "Дошка:",
   "portal.feedback.filter.chip.status": "Статус:",
@@ -2212,5 +2211,8 @@
   "oauthDevice.problem.rateLimited": "Забагато спроб. Спробуйте за хвилину.",
   "oauthDevice.problem.noScopes": "Виберіть принаймні один дозвіл.",
   "oauthDevice.problem.error": "Щось пішло не так. Спробуйте ще раз.",
-  "oauthDevice.ready.unverified": "Неперевірений застосунок. Будь-хто може зареєструвати застосунок під будь-якою назвою."
+  "oauthDevice.ready.unverified": "Неперевірений застосунок. Будь-хто може зареєструвати застосунок під будь-якою назвою.",
+  "portal.feedback.panel.statusOnly": "Лише",
+  "portal.feedback.panel.statusOnlyLabel": "Показати лише {status}",
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
 }

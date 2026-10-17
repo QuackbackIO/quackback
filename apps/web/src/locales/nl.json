@@ -569,7 +569,6 @@
   "portal.feedback.filter.statusGroup.active": "Actief",
   "portal.feedback.filter.statusGroup.complete": "Afgerond",
   "portal.feedback.filter.statusGroup.closed": "Gesloten",
-  "portal.feedback.filter.status.activeOnly": "Alleen actief",
   "portal.feedback.filter.status.all": "Alle",
   "portal.feedback.filter.chip.board": "Bord:",
   "portal.feedback.filter.chip.status": "Status:",
@@ -2212,5 +2211,8 @@
   "oauthDevice.problem.rateLimited": "Te veel pogingen. Probeer het over een minuut opnieuw.",
   "oauthDevice.problem.noScopes": "Kies minstens één ding om toe te staan.",
   "oauthDevice.problem.error": "Er ging iets mis. Probeer het opnieuw.",
-  "oauthDevice.ready.unverified": "Niet-geverifieerde app. Iedereen kan een app onder elke naam registreren."
+  "oauthDevice.ready.unverified": "Niet-geverifieerde app. Iedereen kan een app onder elke naam registreren.",
+  "portal.feedback.panel.statusOnly": "Alleen",
+  "portal.feedback.panel.statusOnlyLabel": "Alleen {status} tonen",
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
 }

@@ -569,7 +569,6 @@
   "portal.feedback.filter.statusGroup.active": "Aktywne",
   "portal.feedback.filter.statusGroup.complete": "Zakończone",
   "portal.feedback.filter.statusGroup.closed": "Zamknięte",
-  "portal.feedback.filter.status.activeOnly": "Tylko aktywne",
   "portal.feedback.filter.status.all": "Wszystkie",
   "portal.feedback.filter.chip.board": "Tablica:",
   "portal.feedback.filter.chip.status": "Status:",
@@ -2212,5 +2211,8 @@
   "oauthDevice.problem.rateLimited": "Zbyt wiele prób. Spróbuj ponownie za minutę.",
   "oauthDevice.problem.noScopes": "Wybierz co najmniej jedno uprawnienie.",
   "oauthDevice.problem.error": "Coś poszło nie tak. Spróbuj ponownie.",
-  "oauthDevice.ready.unverified": "Niezweryfikowana aplikacja. Każdy może zarejestrować aplikację pod dowolną nazwą."
+  "oauthDevice.ready.unverified": "Niezweryfikowana aplikacja. Każdy może zarejestrować aplikację pod dowolną nazwą.",
+  "portal.feedback.panel.statusOnly": "Tylko",
+  "portal.feedback.panel.statusOnlyLabel": "Pokaż tylko {status}",
+  "portal.feedback.filter.status.summaryMore": "{names} +{count}"
 }

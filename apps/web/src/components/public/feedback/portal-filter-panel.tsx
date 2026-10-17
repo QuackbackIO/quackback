@@ -6,7 +6,11 @@ import type { PublicFeedView } from '@/lib/shared/types/filters'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import type { PublicPostFacetCounts } from '@/lib/shared/types/filters'
-import { STATUS_CATEGORY_ORDER } from './public-filters-bar-defaults'
+import {
+  STATUS_CATEGORY_ORDER,
+  STATUS_GROUP_LABELS,
+  impliedStatusSlugs,
+} from './public-filters-bar-defaults'
 
 interface PanelBoard {
   id: string
@@ -38,12 +42,6 @@ const VIEW_LABELS: Record<'all' | PublicFeedView, MessageDescriptor> = {
   mine: { id: 'portal.feedback.panel.view.mine', defaultMessage: 'My ideas' },
   voted: { id: 'portal.feedback.panel.view.voted', defaultMessage: 'Voted' },
   following: { id: 'portal.feedback.panel.view.following', defaultMessage: 'Following' },
-}
-
-const STATUS_GROUP_LABELS: Record<(typeof STATUS_CATEGORY_ORDER)[number], MessageDescriptor> = {
-  active: { id: 'portal.feedback.filter.statusGroup.active', defaultMessage: 'Active' },
-  complete: { id: 'portal.feedback.filter.statusGroup.complete', defaultMessage: 'Complete' },
-  closed: { id: 'portal.feedback.filter.statusGroup.closed', defaultMessage: 'Closed' },
 }
 
 const rowClass = (active: boolean) =>
@@ -96,43 +94,61 @@ function StatusRow({
   status,
   checked,
   onToggle,
+  onOnly,
   count,
 }: {
   status: PostStatusEntity
   checked: boolean
   onToggle: () => void
+  /** Shows just this status. */
+  onOnly: () => void
   count: number | undefined
 }) {
+  const intl = useIntl()
   // A plain checkbox-role button: the whole row toggles, and it renders far
   // less markup per status than the Base UI checkbox (the portal page weight
-  // budget counts every byte of this panel).
+  // budget counts every byte of this panel). "Only" sits over the count on
+  // hover or focus.
   return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={checked}
-      onClick={onToggle}
-      className="flex w-full items-center gap-2.5 rounded-md px-1 py-1 text-start text-sm hover:bg-muted/50"
-    >
-      <span
-        aria-hidden
-        className={cn(
-          'flex size-4 shrink-0 items-center justify-center rounded-[4px] border',
-          checked
-            ? 'border-primary bg-primary text-primary-foreground'
-            : 'border-muted-foreground/60'
-        )}
+    <div className="group/status relative">
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={checked}
+        onClick={onToggle}
+        className="flex w-full items-center gap-2.5 rounded-md px-1 py-1 text-start text-sm hover:bg-muted/50"
       >
-        {checked && <CheckIcon className="size-3" />}
-      </span>
-      <span
-        className="size-1.5 shrink-0 rounded-full"
-        style={{ backgroundColor: status.color }}
-        aria-hidden
-      />
-      <span className="min-w-0 truncate text-foreground">{status.name}</span>
-      <Count value={count} />
-    </button>
+        <span
+          aria-hidden
+          className={cn(
+            'flex size-4 shrink-0 items-center justify-center rounded-[4px] border',
+            checked
+              ? 'border-primary bg-primary text-primary-foreground'
+              : 'border-muted-foreground/60'
+          )}
+        >
+          {checked && <CheckIcon className="size-3" />}
+        </span>
+        <span
+          className="size-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: status.color }}
+          aria-hidden
+        />
+        <span className="min-w-0 truncate text-foreground">{status.name}</span>
+        <Count value={count} />
+      </button>
+      <button
+        type="button"
+        onClick={onOnly}
+        aria-label={intl.formatMessage(
+          { id: 'portal.feedback.panel.statusOnlyLabel', defaultMessage: 'Show only {status}' },
+          { status: status.name }
+        )}
+        className="absolute inset-y-0.5 end-0.5 rounded px-1.5 text-xs text-muted-foreground opacity-0 bg-card hover:text-foreground focus-visible:opacity-100 group-hover/status:opacity-100"
+      >
+        {intl.formatMessage({ id: 'portal.feedback.panel.statusOnly', defaultMessage: 'Only' })}
+      </button>
+    </div>
   )
 }
 
@@ -155,17 +171,25 @@ export function PortalFilterPanel({
   const intl = useIntl()
   const [allTagsShown, setAllTagsShown] = useState(false)
 
-  // The statuses picked. None picked means the default scope, which the
-  // status chip names, so nothing is ticked.
-  // The URL may name statuses by slug or (older links) by id; compare slugs.
+  // The ticks always show what the feed holds. With nothing picked that is
+  // the default scope: the active statuses, or every status while searching
+  // or in a view. The URL may name statuses by slug or (older links) by id.
   const picked =
     filters.status?.map((value) => statuses.find((s) => s.id === value)?.slug ?? value) ?? []
+  const implied = impliedStatusSlugs(statuses, filters)
+  const shown = picked.length > 0 ? picked : implied
+
+  // A pick that matches the default scope is no pick, so the URL stays clean
+  // and no chip shows. Unticking the last status also goes back to it.
+  function pickStatuses(next: string[]): void {
+    const ordered = statuses.map((s) => s.slug).filter((slug) => next.includes(slug))
+    const isImplied =
+      ordered.length === implied.length && ordered.every((slug) => implied.includes(slug))
+    setFilters({ status: ordered.length === 0 || isImplied ? undefined : ordered })
+  }
 
   function toggleStatus(slug: string): void {
-    const next = picked.includes(slug)
-      ? picked.filter((s) => s !== slug)
-      : statuses.map((s) => s.slug).filter((s) => s === slug || picked.includes(s))
-    setFilters({ status: next.length > 0 ? next : undefined })
+    pickStatuses(shown.includes(slug) ? shown.filter((s) => s !== slug) : [...shown, slug])
   }
 
   function toggleTag(tagId: string): void {
@@ -253,8 +277,9 @@ export function PortalFilterPanel({
               <StatusRow
                 key={status.id}
                 status={status}
-                checked={picked.includes(status.slug)}
+                checked={shown.includes(status.slug)}
                 onToggle={() => toggleStatus(status.slug)}
+                onOnly={() => pickStatuses([status.slug])}
                 count={counts?.statuses[status.slug]}
               />
             ))}
@@ -317,7 +342,13 @@ export function PortalFilterPanel({
       : [showSection, boardSection, statusSection, tagSection]
 
   return (
-    <div className="divide-y divide-border/50 overflow-hidden rounded-lg border border-border/50 bg-card shadow-sm">
+    <div
+      className={cn(
+        'divide-y divide-border/50',
+        // In the sidebar the card chrome sits on the scroll area around it.
+        layout === 'sheet' && 'overflow-hidden rounded-lg border border-border/50 bg-card shadow-sm'
+      )}
+    >
       {sections}
       {footer && <div className="px-4 py-3">{footer}</div>}
     </div>

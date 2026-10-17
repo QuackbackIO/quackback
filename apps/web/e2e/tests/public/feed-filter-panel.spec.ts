@@ -6,11 +6,13 @@ test.describe('Portal feed filter panel', () => {
     await page.waitForLoadState('networkidle')
   })
 
-  test('ticking Complete shows just the shipped ideas', async ({ page }) => {
+  test('the ticks show the default scope, and Only picks one status', async ({ page }) => {
     const status = page.getByRole('group', { name: 'Status', exact: true })
-    // Nothing is ticked at the default scope, which the status chip names.
-    await expect(status.getByRole('checkbox', { checked: true })).toHaveCount(0)
-    await status.getByRole('checkbox', { name: /Complete/ }).click()
+    await expect(status.getByRole('checkbox', { name: /Open/ })).toBeChecked()
+    await expect(status.getByRole('checkbox', { name: /Complete/ })).not.toBeChecked()
+
+    await status.getByRole('checkbox', { name: /Complete/ }).hover()
+    await status.getByRole('button', { name: 'Show only Complete' }).click()
 
     await expect(page).toHaveURL(/[?&]status=/, { timeout: 5000 })
     await expect(status.getByRole('checkbox', { name: /Complete/ })).toBeChecked()
@@ -18,6 +20,14 @@ test.describe('Portal feed filter panel', () => {
     const filters = page.getByRole('region', { name: 'Active filters' })
     await expect(filters.getByText('Status:')).toHaveCount(1)
     await expect(page.locator('[data-post-id]').first()).toContainText('Complete')
+  })
+
+  test('ticking Complete adds shipped ideas to the feed', async ({ page }) => {
+    const status = page.getByRole('group', { name: 'Status', exact: true })
+    await status.getByRole('checkbox', { name: /Complete/ }).click()
+    await expect(page).toHaveURL(/[?&]status=/, { timeout: 5000 })
+    await expect(status.getByRole('checkbox', { name: /Open/ })).toBeChecked()
+    await expect(status.getByRole('checkbox', { name: /Complete/ })).toBeChecked()
   })
 
   test('picking a board narrows the feed and shows counts', async ({ page }) => {
