@@ -1,7 +1,12 @@
+import { useEffect, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
-import { ArrowTrendingUpIcon, ClockIcon, FireIcon } from '@heroicons/react/24/solid'
-import { SearchInput } from '@/components/shared/search-input'
-import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
+import {
+  ArrowTrendingUpIcon,
+  ClockIcon,
+  FireIcon,
+  MagnifyingGlassIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
 interface FeedbackToolbarProps {
@@ -45,14 +50,31 @@ export function FeedbackToolbar({
   filterButton,
 }: FeedbackToolbarProps): React.ReactElement {
   const intl = useIntl()
-  const search = useDebouncedSearch({
-    externalValue: currentSearch,
-    onChange: (value) => onSearchChange(value ?? ''),
+  // A local debounce rather than the shared useDebouncedSearch: importing that
+  // hook into the portal bundle splits it out of the admin chunk it lives in,
+  // costing admin pages an extra request.
+  const [searchValue, setSearchValue] = useState(currentSearch ?? '')
+  const onSearchChangeRef = useRef(onSearchChange)
+  useEffect(() => {
+    onSearchChangeRef.current = onSearchChange
   })
+  useEffect(() => {
+    setSearchValue(currentSearch ?? '')
+  }, [currentSearch])
+  useEffect(() => {
+    if (searchValue === (currentSearch ?? '')) return
+    const timeoutId = setTimeout(() => onSearchChangeRef.current(searchValue), 300)
+    return () => clearTimeout(timeoutId)
+  }, [searchValue, currentSearch])
   const searchLabel = intl.formatMessage({
     id: 'portal.feedback.toolbar.searchLabel',
     defaultMessage: 'Search ideas',
   })
+
+  function handleClearSearch(): void {
+    setSearchValue('')
+    onSearchChange('')
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
@@ -83,16 +105,30 @@ export function FeedbackToolbar({
       </div>
 
       <div className="flex flex-1 basis-56 items-center gap-2">
-        <SearchInput
-          value={search.value}
-          onChange={search.setValue}
-          placeholder={searchLabel}
-          clearLabel={intl.formatMessage({
-            id: 'portal.feedback.toolbar.clearSearch',
-            defaultMessage: 'Clear search',
-          })}
-          className="rounded-full border-border"
-        />
+        <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-transparent ps-3 pe-1 text-sm focus-within:ring-2 focus-within:ring-ring/50">
+          <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <input
+            type="search"
+            aria-label={searchLabel}
+            placeholder={searchLabel}
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
+          />
+          {searchValue && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              aria-label={intl.formatMessage({
+                id: 'portal.feedback.toolbar.clearSearch',
+                defaultMessage: 'Clear search',
+              })}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <XMarkIcon className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </label>
 
         {filterButton}
       </div>

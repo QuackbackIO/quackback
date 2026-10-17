@@ -1290,7 +1290,7 @@ test.describe('Post List - Search Accuracy', () => {
     // Use a search term that exists in the seed post titles
     const searchTerm = 'dark mode'
 
-    const searchInput = page.getByRole('textbox', { name: 'Search ideas' })
+    const searchInput = page.getByRole('searchbox', { name: 'Search ideas' })
     await searchInput.fill(searchTerm)
     await searchInput.press('Enter')
 
@@ -1354,7 +1354,7 @@ test.describe('Post List - Search Accuracy', () => {
     // Search for a string that will never match real post titles
     const impossibleTerm = 'xyzzy_no_such_post_zqwerty_99999'
 
-    const searchInput = page.getByRole('textbox', { name: 'Search ideas' })
+    const searchInput = page.getByRole('searchbox', { name: 'Search ideas' })
     await searchInput.fill(impossibleTerm)
     await searchInput.press('Enter')
 
