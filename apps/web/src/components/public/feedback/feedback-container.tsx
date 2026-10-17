@@ -11,7 +11,7 @@ import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { PortalPoweredBy } from '@/components/public/feedback/portal-powered-by'
 import { PortalFilterPanel } from '@/components/public/feedback/portal-filter-panel'
 import { PortalFilterSheet } from '@/components/public/feedback/portal-filter-sheet'
-import { FeedbackToolbar, sortForSearch } from '@/components/public/feedback/feedback-toolbar'
+import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
 import {
   PublicFiltersAddButton,
   PublicFiltersBar,
@@ -33,11 +33,12 @@ import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
 import type { PublicPostListItem } from '@/lib/shared/types'
-import type {
-  PublicFeedView,
-  PublicPostFacetCounts,
-  PublicPostSort,
-  WidenedSearch,
+import {
+  sortForSearch,
+  type PublicFeedView,
+  type PublicPostFacetCounts,
+  type PublicPostSort,
+  type WidenedSearch,
 } from '@/lib/shared/types/filters'
 import { cn } from '@/lib/shared/utils'
 import type { PostId, PostStatusId } from '@quackback/ids'
@@ -314,7 +315,7 @@ export function FeedbackContainer({
   function handleSearchChange(search: string): void {
     setFilters({
       search: search || undefined,
-      sort: sortForSearch(activeSort, activeSearch, search),
+      sort: sortForSearch(activeSort, activeSearch, search, 'trending'),
     })
   }
 

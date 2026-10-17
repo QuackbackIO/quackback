@@ -102,21 +102,26 @@ export function postSearchCondition(search: string, mode: PostSearchMode = 'all'
 }
 
 /**
- * Best match first: more of the words ahead of fewer, then text rank (a title
- * match outranks one in the details), then votes, and the post id last so
- * pages never repeat or skip a post on a tie. A close spelling ranks by how
- * close.
+ * What makes one post a better match than another, best first: more of the
+ * words ahead of fewer, then text rank (a title match outranks one in the
+ * details). A close spelling ranks by how close. Each value sorts descending.
+ */
+export function postSearchRank(search: string, mode: PostSearchMode): SQL[] {
+  if (mode === 'similar') return [sql`word_similarity(${similarWords(search)}, ${posts.title})`]
+  const query = postSearchQuery(search, mode === 'all' ? '&' : '|')
+  if (!query) return []
+  const rank = sql`ts_rank(${posts.searchVector}, ${query})`
+  return mode === 'most' ? [sql`(${matchedTerms(search).matched})`, rank] : [rank]
+}
+
+/**
+ * Best match first (postSearchRank), then votes, and the post id last so
+ * pages never repeat or skip a post on a tie.
  */
 export function postSearchOrder(search: string, mode: PostSearchMode): SQL[] {
-  const tail = [sql`${posts.voteCount} DESC`, sql`${posts.id} DESC`]
-  if (mode === 'similar') {
-    return [sql`word_similarity(${similarWords(search)}, ${posts.title}) DESC`, ...tail]
-  }
-  const query = postSearchQuery(search, mode === 'all' ? '&' : '|')
-  if (!query) return tail
-  const order: SQL[] = []
-  if (mode === 'most') order.push(sql`(${matchedTerms(search).matched}) DESC`)
-  return [...order, sql`ts_rank(${posts.searchVector}, ${query}) DESC`, ...tail]
+  return [...postSearchRank(search, mode), posts.voteCount, posts.id].map(
+    (value) => sql`${value} DESC`
+  )
 }
 
 /**

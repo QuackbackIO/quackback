@@ -47,21 +47,6 @@ const SORT_OPTIONS = [
   },
 ] as const
 
-/**
- * The order to use once the search changes. Starting a search from the
- * default order switches to best match and clearing it goes back; a sort
- * picked while searching stays.
- */
-export function sortForSearch(
-  sort: PublicPostSort,
-  previousSearch: string | undefined,
-  search: string
-): PublicPostSort {
-  if (search && !previousSearch && sort === 'trending') return 'relevance'
-  if (!search && sort === 'relevance') return 'trending'
-  return sort
-}
-
 export function FeedbackToolbar({
   currentSort,
   onSortChange,
