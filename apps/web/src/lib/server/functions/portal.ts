@@ -24,8 +24,6 @@ import {
 } from './auth-helpers'
 import { NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
-import { can } from '@/lib/server/policy/authorize'
-import { PERMISSIONS } from '@/lib/shared/permissions'
 import { PageLimitMinOneSchema } from '@/lib/shared/schemas/taxonomy'
 import {
   fetchPublicPostDetailSchema,
@@ -45,6 +43,7 @@ import {
   getAllUserVotedPostIds,
 } from '@/lib/server/domains/posts/post.public'
 import { getPublicPostDetail } from '@/lib/server/domains/posts/post.public.detail'
+import { countPublicPostFacets } from '@/lib/server/domains/posts/post.public.facets'
 import { getPostMergeInfo, getMergedPosts } from '@/lib/server/domains/posts/post.merge'
 import { listPublicStatuses } from '@/lib/server/domains/statuses/status.service'
 import { listPublicPostTags } from '@/lib/server/domains/post-tags/post-tag.service'
@@ -62,6 +61,7 @@ import {
   tagIdInputSchema,
 } from '@/lib/shared/roadmap-config'
 import { resolvePortalAccessForRequest } from './portal-access'
+import { teamOnlyFeedFilters } from '@/lib/server/domains/posts/post.public.team-filters'
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { PUBLIC_FEED_VIEWS } from '@/lib/shared/types/filters'
@@ -162,6 +162,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         tags: [],
         votedPostIds: [],
         principalId: null,
+        facets: null,
       }
     }
 
@@ -177,14 +178,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
     // portal permission bootstrap. Everyone else has these params dropped, so
     // a crafted request can never surface owner/segment structure or widen the
     // public feed. `owner: 'unassigned'` maps to a null owner match.
-    const canViewPrivate = can(actor, PERMISSIONS.POST_VIEW_PRIVATE)
-    const ownerId = canViewPrivate
-      ? data.owner === 'unassigned'
-        ? null
-        : (data.owner as PrincipalId | undefined)
-      : undefined
-    const segmentIds =
-      canViewPrivate && data.segmentIds?.length ? (data.segmentIds as SegmentId[]) : undefined
+    const { ownerId, segmentIds } = teamOnlyFeedFilters(actor, data)
 
     // The viewer's votes come from the session's principal, never from the
     // request: a caller must not be able to name whose votes to read.
@@ -193,26 +187,29 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
     // Run ALL queries in parallel for maximum performance — including the
     // (fail-closed) anonymous-ceiling read so buildBoardPermissions doesn't
     // serialize an extra round-trip onto this (highest-traffic) loader.
-    const [boardsRaw, postsResult, statuses, tags, allVotedPosts, allowAnonymous] =
+    const feedParams = {
+      boardSlug: data.boardSlug,
+      search: data.search,
+      statusSlugs: data.statusSlugs,
+      tagIds: data.tagIds as PostTagId[] | undefined,
+      minVotes: data.minVotes,
+      dateFrom: data.dateFrom,
+      responded: data.responded,
+      ownerId,
+      segmentIds,
+      view: data.view,
+      portalFeed: true,
+    }
+    const [boardsRaw, postsResult, statuses, tags, allVotedPosts, allowAnonymous, facets] =
       await Promise.all([
         listPublicBoardsWithStats(actor),
         // Posts WITHOUT embedded vote check (we get votes separately for parallelism)
         listPublicPostsWithVotesAndAvatars({
+          ...feedParams,
           actor,
-          boardSlug: data.boardSlug,
-          search: data.search,
-          statusSlugs: data.statusSlugs,
-          tagIds: data.tagIds as PostTagId[] | undefined,
           sort: data.sort,
           page: 1,
           limit: 20,
-          minVotes: data.minVotes,
-          dateFrom: data.dateFrom,
-          responded: data.responded,
-          ownerId,
-          segmentIds,
-          view: data.view,
-          portalFeed: true,
         }),
         listPublicStatuses(),
         // Actor-scoped: internal tags are only listed for team viewers.
@@ -220,6 +217,8 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         // Every post the viewer has voted on, so later feed pages highlight too.
         principalId ? getAllUserVotedPostIds(principalId) : Promise.resolve(new Set<PostId>()),
         loadAllowAnonymous(),
+        // Filter panel counts, so they paint with the page.
+        countPublicPostFacets(feedParams, actor),
       ])
 
     // Per-board submit/vote capability for THIS viewer, composed with the
@@ -261,6 +260,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
       votedPostIds,
       principalId,
       boardPermissions,
+      facets,
     }
   })
 

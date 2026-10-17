@@ -122,7 +122,7 @@ export interface PostWithVotesAndAvatars {
   changelogEntry: PostChangelogLink | null
 }
 
-interface PostListParams {
+export interface PostListParams {
   boardSlug?: string
   search?: string
   statusIds?: PostStatusId[]
@@ -153,7 +153,14 @@ interface PostListParams {
   portalFeed?: boolean
 }
 
-function buildPostFilterConditions(params: PostListParams, actor: Actor) {
+/** A filter left out of the conditions so it can be counted per value. */
+export type PublicFacetDimension = 'status' | 'board' | 'tags' | 'view'
+
+export function buildPostFilterConditions(
+  params: PostListParams,
+  actor: Actor,
+  omit?: PublicFacetDimension
+) {
   const { boardSlug, statusIds, statusSlugs, tagIds, search } = params
   // postViewFilter handles both the board-audience predicate and the
   // moderationState gate (e.g. hide 'pending' from non-authors). Compose
@@ -172,11 +179,13 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
     isNull(posts.deletedAt),
   ]
 
-  if (boardSlug) {
+  if (boardSlug && omit !== 'board') {
     conditions.push(eq(boards.slug, boardSlug))
   }
 
-  if (statusSlugs && statusSlugs.length > 0) {
+  if (omit === 'status') {
+    // Counted per status, so no status condition at all.
+  } else if (statusSlugs && statusSlugs.length > 0) {
     const statusIdSubquery = db
       .select({ id: postStatuses.id })
       .from(postStatuses)
@@ -193,7 +202,7 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
     conditions.push(or(isNull(posts.statusId), inArray(posts.statusId, activeStatusSubquery))!)
   }
 
-  if (tagIds && tagIds.length > 0) {
+  if (tagIds && tagIds.length > 0 && omit !== 'tags') {
     // Join the tag catalog so an internal tag id in a crafted URL is inert
     // for non-team callers — otherwise the filter would reveal which posts
     // carry a tag the viewer is never shown.
@@ -255,7 +264,7 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
   // Anonymous sessions have principals too, but no views: a crafted URL falls
   // back to the whole feed rather than an empty one.
   const viewer = actor.principalType === 'anonymous' ? null : actor.principalId
-  if (params.view && viewer) {
+  if (params.view && viewer && omit !== 'view') {
     conditions.push(feedViewCondition(params.view, viewer))
   }
 

@@ -50,8 +50,7 @@ import { getMemberByUser } from '@/lib/server/domains/principals/principal.servi
 import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 import { resolvePortalAccessForRequest } from './portal-access'
-import { can } from '@/lib/server/policy/authorize'
-import { PERMISSIONS } from '@/lib/shared/permissions'
+import { teamOnlyFeedFilters } from '@/lib/server/domains/posts/post.public.team-filters'
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
@@ -130,14 +129,7 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
   // hold post.view_private, resolved through the policy seam. Everyone else
   // has these dropped, so a crafted request can never surface owner/segment
   // structure or widen the public feed. `owner: 'unassigned'` → null match.
-  const canViewPrivate = can(actor, PERMISSIONS.POST_VIEW_PRIVATE)
-  const ownerId = canViewPrivate
-    ? data.owner === 'unassigned'
-      ? null
-      : (data.owner as PrincipalId | undefined)
-    : undefined
-  const segmentIds =
-    canViewPrivate && data.segmentIds?.length ? (data.segmentIds as SegmentId[]) : undefined
+  const { ownerId, segmentIds } = teamOnlyFeedFilters(actor, data)
 
   const result = await listPublicPosts({
     boardSlug: data.boardSlug,

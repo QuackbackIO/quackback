@@ -5,12 +5,18 @@
  * Mutations are in lib/mutations/portal-posts.ts
  */
 
-import { useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+  type InfiniteData,
+} from '@tanstack/react-query'
 import {
   listPublicPostsFn,
   getVotedPostsFn,
   getPostPermissionsFn,
 } from '@/lib/server/functions/public-posts'
+import { fetchPublicPostFacetsFn } from '@/lib/server/functions/public-post-facets'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 import type { PublicPostListItem } from '@/lib/shared/types'
 import type { PostId, PostStatusId, PostTagId } from '@quackback/ids'
@@ -72,10 +78,8 @@ export const postPermissionsKeys = {
 // Fetch Functions
 // ============================================================================
 
-async function fetchPublicPosts(
-  filters: PublicFeedbackFilters,
-  page: number
-): Promise<PublicPostListResult> {
+/** The filter inputs the feed list and its panel counts share. */
+function feedFilterInput(filters: PublicFeedbackFilters) {
   // Parse status filters - can be TypeIDs or slugs
   const statusIds: string[] = []
   const statusSlugs: string[] = []
@@ -86,24 +90,27 @@ async function fetchPublicPosts(
       statusSlugs.push(s)
     }
   }
+  return {
+    boardSlug: filters.board,
+    search: filters.search,
+    statusIds: statusIds.length > 0 ? (statusIds as PostStatusId[]) : undefined,
+    statusSlugs: statusSlugs.length > 0 ? statusSlugs : undefined,
+    tagIds: filters.tagIds as PostTagId[] | undefined,
+    minVotes: filters.minVotes,
+    dateFrom: filters.dateFrom,
+    responded: filters.responded,
+    owner: filters.owner,
+    segmentIds: filters.segmentIds,
+    view: filters.view,
+  }
+}
 
+async function fetchPublicPosts(
+  filters: PublicFeedbackFilters,
+  page: number
+): Promise<PublicPostListResult> {
   return (await listPublicPostsFn({
-    data: {
-      boardSlug: filters.board,
-      search: filters.search,
-      statusIds: statusIds.length > 0 ? (statusIds as PostStatusId[]) : undefined,
-      statusSlugs: statusSlugs.length > 0 ? statusSlugs : undefined,
-      tagIds: filters.tagIds as PostTagId[] | undefined,
-      sort: filters.sort || 'top',
-      page,
-      limit: 20,
-      minVotes: filters.minVotes,
-      dateFrom: filters.dateFrom,
-      responded: filters.responded,
-      owner: filters.owner,
-      segmentIds: filters.segmentIds,
-      view: filters.view,
-    },
+    data: { ...feedFilterInput(filters), sort: filters.sort || 'top', page, limit: 20 },
   })) as unknown as PublicPostListResult
 }
 
@@ -181,4 +188,29 @@ export function flattenPublicPosts(
 ): PublicPostListItem[] {
   if (!data) return []
   return data.pages.flatMap((page) => page.items)
+}
+
+export type PublicPostFacetCounts = NonNullable<Awaited<ReturnType<typeof fetchPublicPostFacetsFn>>>
+
+/**
+ * Counts for the portal filter panel. Sort does not change them, so it stays
+ * out of the key. `initialData` is the server-rendered set, which only applies
+ * while the filters still match the page as it was rendered.
+ */
+export function usePublicPostFacets({
+  filters,
+  initialData,
+}: {
+  filters: PublicFeedbackFilters
+  initialData?: PublicPostFacetCounts | null
+}) {
+  const { sort: _sort, ...countFilters } = filters
+  return useQuery({
+    queryKey: [...publicPostsKeys.lists(), 'facets', countFilters] as const,
+    queryFn: () =>
+      fetchPublicPostFacetsFn({ data: { ...feedFilterInput(countFilters), sort: 'top' } }),
+    initialData: initialData ?? undefined,
+    placeholderData: keepPreviousData,
+    staleTime: 15_000,
+  })
 }
