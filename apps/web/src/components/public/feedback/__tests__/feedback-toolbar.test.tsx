@@ -76,6 +76,12 @@ describe('FeedbackToolbar search', () => {
     expect(onSearchChange).toHaveBeenCalledWith('dark mode')
   })
 
+  it('leaves a URL search with stray spaces alone until the viewer types', () => {
+    const { onSearchChange } = renderToolbar({ currentSearch: 'dark ' })
+    act(() => vi.advanceTimersByTime(400))
+    expect(onSearchChange).not.toHaveBeenCalled()
+  })
+
   it('shows no clear button while the field is empty', () => {
     renderToolbar({})
     expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull()

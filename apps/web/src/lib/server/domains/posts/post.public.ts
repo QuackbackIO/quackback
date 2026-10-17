@@ -154,7 +154,7 @@ export interface PostListParams {
 }
 
 /** A filter left out of the conditions so it can be counted per value. */
-export type PublicFacetDimension = 'status' | 'board' | 'tags' | 'view'
+export type PublicFacetDimension = 'status' | 'board' | 'view'
 
 export function buildPostFilterConditions(
   params: PostListParams,
@@ -202,7 +202,7 @@ export function buildPostFilterConditions(
     conditions.push(or(isNull(posts.statusId), inArray(posts.statusId, activeStatusSubquery))!)
   }
 
-  if (tagIds && tagIds.length > 0 && omit !== 'tags') {
+  if (tagIds && tagIds.length > 0) {
     // Join the tag catalog so an internal tag id in a crafted URL is inert
     // for non-team callers — otherwise the filter would reveal which posts
     // carry a tag the viewer is never shown.

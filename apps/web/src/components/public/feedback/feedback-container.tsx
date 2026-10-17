@@ -195,6 +195,7 @@ export function FeedbackContainer({
 
   const { data: facetCounts } = usePublicPostFacets({
     filters: mergedFilters,
+    viewerId: session?.user?.id ?? null,
     initialData: filtersMatchInitial ? facets : undefined,
   })
 

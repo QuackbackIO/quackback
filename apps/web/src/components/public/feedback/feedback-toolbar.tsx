@@ -57,15 +57,15 @@ export function FeedbackToolbar({
   // The last query this field applied. When the URL catches up to it, the
   // field keeps whatever was typed meanwhile; any other change (Clear all,
   // Back) comes from elsewhere and replaces the field.
-  const appliedRef = useRef(currentSearch ?? '')
+  const appliedRef = useRef((currentSearch ?? '').trim())
   const onSearchChangeRef = useRef(onSearchChange)
   useEffect(() => {
     onSearchChangeRef.current = onSearchChange
   })
   useEffect(() => {
     const external = currentSearch ?? ''
-    if (external === appliedRef.current) return
-    appliedRef.current = external
+    if (external.trim() === appliedRef.current) return
+    appliedRef.current = external.trim()
     setSearchValue(external)
   }, [currentSearch])
   useEffect(() => {

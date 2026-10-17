@@ -119,8 +119,9 @@ export function PortalFilterPanel({
 
   // The statuses the feed shows right now: the picked ones, or the default
   // scope (active only, or everything while searching).
+  // The URL may name statuses by slug or (older links) by id; compare slugs.
   const scope =
-    filters.status ??
+    filters.status?.map((value) => statuses.find((s) => s.id === value)?.slug ?? value) ??
     statuses
       .filter((s) => !feedShowsActiveOnly(filters.search) || s.category === 'active')
       .map((s) => s.slug)

@@ -64,6 +64,16 @@ export const publicPostsKeys = {
   list: (filters: PublicFeedbackFilters) => [...publicPostsKeys.lists(), filters] as const,
 }
 
+/**
+ * Filter panel counts. A sibling of the list keys, never under them: the vote,
+ * edit and delete mutations rewrite every query under `lists()` as feed pages.
+ */
+export const publicPostFacetsKeys = {
+  all: ['publicPostFacets'] as const,
+  counts: (filters: Omit<PublicFeedbackFilters, 'sort'>, viewerId: string | null) =>
+    [...publicPostFacetsKeys.all, viewerId, filters] as const,
+}
+
 export const votedPostsKeys = {
   all: ['votedPosts'] as const,
   byWorkspace: () => [...votedPostsKeys.all] as const,
@@ -199,14 +209,17 @@ export type PublicPostFacetCounts = NonNullable<Awaited<ReturnType<typeof fetchP
  */
 export function usePublicPostFacets({
   filters,
+  viewerId,
   initialData,
 }: {
   filters: PublicFeedbackFilters
+  /** The signed-in viewer: counts (and views) depend on who is asking. */
+  viewerId: string | null
   initialData?: PublicPostFacetCounts | null
 }) {
   const { sort: _sort, ...countFilters } = filters
   return useQuery({
-    queryKey: [...publicPostsKeys.lists(), 'facets', countFilters] as const,
+    queryKey: publicPostFacetsKeys.counts(countFilters, viewerId),
     queryFn: () =>
       fetchPublicPostFacetsFn({ data: { ...feedFilterInput(countFilters), sort: 'top' } }),
     initialData: initialData ?? undefined,

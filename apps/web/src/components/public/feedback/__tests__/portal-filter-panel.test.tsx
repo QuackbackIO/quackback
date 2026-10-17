@@ -95,6 +95,12 @@ describe('PortalFilterPanel', () => {
     expect(setFilters).toHaveBeenCalledWith({ status: ['open', 'planned', 'complete'] })
   })
 
+  it('understands statuses named by id in the URL', () => {
+    renderPanel({ filters: { sort: 'trending', status: ['s3'] } })
+    expect(screen.getByRole('checkbox', { name: /Complete/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Open/ })).not.toBeChecked()
+  })
+
   it('falls back to the default when the last status is unchecked', () => {
     const { setFilters } = renderPanel({ filters: { sort: 'trending', status: ['closed'] } })
     fireEvent.click(screen.getByRole('checkbox', { name: /Closed/ }))
