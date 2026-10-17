@@ -116,6 +116,10 @@ vi.mock('@/lib/server/domains/posts/post.public.facets', () => ({
     .fn()
     .mockResolvedValue({ statuses: {}, boards: {}, tags: {}, total: 0, views: null }),
 }))
+// Settles a search's word mode with a probe query; a pass-through here.
+vi.mock('@/lib/server/domains/posts/post.public.search', () => ({
+  withPublicSearchMode: async <T>(params: T) => params,
+}))
 vi.mock('@/lib/server/domains/posts/post.public', () => ({
   listPublicPosts: (...a: unknown[]) => mockListPublicPosts(...a),
   listPublicPostsWithVotesAndAvatars: (...a: unknown[]) =>

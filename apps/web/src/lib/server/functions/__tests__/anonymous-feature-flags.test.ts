@@ -125,6 +125,10 @@ vi.mock('@/lib/server/sanitize-tiptap', () => ({
   sanitizeTiptapContent: (v: unknown) => v,
 }))
 
+// Settles a search's word mode with a probe query; a pass-through here.
+vi.mock('@/lib/server/domains/posts/post.public.search', () => ({
+  withPublicSearchMode: async <T>(params: T) => params,
+}))
 vi.mock('@/lib/server/domains/posts/post.public', () => ({
   listPublicPosts: vi.fn(),
   getAllUserVotedPostIds: vi.fn(),

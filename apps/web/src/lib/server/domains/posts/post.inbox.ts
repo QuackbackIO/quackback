@@ -31,6 +31,7 @@ import type {
   InboxPostListResult,
   InboxFilterCounts,
 } from './post.types'
+import { postSearchCondition } from './post.search'
 
 /** Facet whose own filter is skipped when counting that facet's options. */
 export type InboxFilterFacet = 'status' | 'board' | 'tags' | 'segments' | 'responded' | 'deleted'
@@ -138,7 +139,7 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
   }
 
   if (search) {
-    conditions.push(sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`)
+    conditions.push(postSearchCondition(search))
   }
 
   if (dateFrom) {
