@@ -1,4 +1,4 @@
-import { Suspense, useDeferredValue } from 'react'
+import { Suspense, useDeferredValue, useState } from 'react'
 import { createFileRoute, notFound, redirect, useRouteContext } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
@@ -169,11 +169,15 @@ function PortalFeed() {
   const session = useSessionContext()
   const settings = useWorkspaceSettings()
   const { showPoweredBy } = Route.useLoaderData()
-  const search = Route.useSearch()
+  const liveSearch = Route.useSearch()
+  // This query only seeds the first render. Later filter changes belong to
+  // the feed's own query, which keeps the page on screen while it loads;
+  // keying this one on the live URL would suspend the whole feed region.
+  const [search] = useState(liveSearch)
 
-  const currentBoard = search.board
-  const currentSearch = search.search
-  const currentSort = search.sort ?? 'trending'
+  const currentBoard = liveSearch.board
+  const currentSearch = liveSearch.search
+  const currentSort = liveSearch.sort ?? 'trending'
 
   // A visitor's first post or vote mints an anonymous session mid-action,
   // which changes the viewer and so the feed's key. Deferring the viewer
@@ -241,7 +245,7 @@ function PortalFeed() {
 function PortalFeedSkeleton() {
   return (
     <div className="py-6" aria-hidden="true">
-      <div className="flex gap-8">
+      <div className="flex gap-6 lg:gap-8">
         <div className="flex-1 min-w-0 space-y-3">
           <div className="h-10 rounded-lg bg-muted/60 animate-pulse" />
           <div className="mt-5 space-y-3">
@@ -253,7 +257,7 @@ function PortalFeedSkeleton() {
             ))}
           </div>
         </div>
-        <div className="hidden lg:block w-64 shrink-0 space-y-3">
+        <div className="hidden md:block w-56 lg:w-64 shrink-0 space-y-3">
           <div className="h-32 rounded-lg bg-muted/40 animate-pulse" />
         </div>
       </div>

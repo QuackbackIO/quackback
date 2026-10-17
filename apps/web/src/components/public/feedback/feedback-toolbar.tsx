@@ -14,8 +14,6 @@ interface FeedbackToolbarProps {
   onSortChange: (sort: 'top' | 'new' | 'trending') => void
   currentSearch?: string
   onSearchChange: (search: string) => void
-  /** Show loading indicator */
-  isLoading?: boolean
   /** Optional slot rendered after the search button on the right (typically the Filter button). */
   filterButton?: React.ReactNode
 }
@@ -46,7 +44,6 @@ export function FeedbackToolbar({
   onSortChange,
   currentSearch,
   onSearchChange,
-  isLoading = false,
   filterButton,
 }: FeedbackToolbarProps): React.ReactElement {
   const intl = useIntl()
@@ -112,15 +109,11 @@ export function FeedbackToolbar({
             </button>
           )
         })}
-        {isLoading && (
-          <span
-            aria-hidden
-            className="ml-1 h-4 w-4 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin"
-          />
-        )}
       </div>
 
-      <div className="flex min-w-0 flex-1 basis-56 items-center gap-2">
+      {/* Search sits after the sort, capped so it reads as a field rather than
+          a banner; on a phone it takes the row with the Filters button. */}
+      <div className="flex min-w-0 flex-1 basis-44 items-center gap-2 sm:ms-auto sm:max-w-xs">
         <label className="flex h-11 lg:h-8 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-transparent ps-3 pe-1 text-sm focus-within:ring-2 focus-within:ring-ring/50">
           <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           <input

@@ -16,15 +16,18 @@ interface PortalFilterSheetProps {
   activeCount: number
   /** The filter panel. */
   children: React.ReactNode
+  /** Pinned under the Done button, outside the scroll area. */
+  footer?: React.ReactNode
 }
 
 /**
- * Below the sidebar breakpoint, the filter panel opens in a bottom sheet.
+ * Below the sidebar breakpoint (md), the filter panel opens in a bottom sheet.
  * Filters apply as they are picked; Done just closes the sheet.
  */
 export function PortalFilterSheet({
   activeCount,
   children,
+  footer,
 }: PortalFilterSheetProps): React.ReactElement {
   const intl = useIntl()
   const [open, setOpen] = useState(false)
@@ -63,15 +66,18 @@ export function PortalFilterSheet({
           </span>
         )}
       </SheetTrigger>
-      <SheetContent side="bottom" className="max-h-[85vh] gap-0 overflow-y-auto rounded-t-xl">
+      {/* Header and footer stay put; only the panel scrolls, so Done is
+          always in reach. */}
+      <SheetContent side="bottom" className="max-h-[85vh] gap-0 rounded-t-xl">
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
         </SheetHeader>
-        <div className="px-4">{children}</div>
-        <SheetFooter>
-          <Button onClick={() => setOpen(false)}>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4">{children}</div>
+        <SheetFooter className="border-t border-border/50">
+          <Button className="h-11" onClick={() => setOpen(false)}>
             {intl.formatMessage({ id: 'portal.feedback.sheet.done', defaultMessage: 'Done' })}
           </Button>
+          {footer}
         </SheetFooter>
       </SheetContent>
     </Sheet>

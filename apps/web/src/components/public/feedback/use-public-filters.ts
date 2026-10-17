@@ -91,6 +91,7 @@ export function usePublicFilters() {
           view: newFilters.view,
         },
         replace: true,
+        resetScroll: false,
       })
     },
     [navigate, filters]
@@ -115,7 +116,7 @@ export function usePublicFilters() {
     let count = 0
     if (filters.board) count += 1
     if (filters.view) count += 1
-    if (filters.status?.length) count += filters.status.length
+    if (filters.status?.length) count += 1
     if (filters.tagIds?.length) count += filters.tagIds.length
     if (filters.minVotes) count += 1
     if (filters.dateFrom) count += 1

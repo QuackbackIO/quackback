@@ -382,6 +382,28 @@
   }
 }
 
+/* Portal feed loading bar: a short segment sweeping across a thin track.
+   Reduced motion holds it still at full width. */
+@keyframes feed-loading {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.feed-loading-bar {
+  animation: feed-loading 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed-loading-bar {
+    width: 100%;
+    animation: none;
+  }
+}
+
 /* Jump-to-message flash: hold a brand tint briefly, then fade to transparent so
    the row returns to its normal background. */
 @keyframes flash-highlight {

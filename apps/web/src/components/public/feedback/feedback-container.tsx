@@ -7,6 +7,7 @@ import { Spinner } from '@/components/shared/spinner'
 import { useRouter } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
+import { PortalPoweredBy } from '@/components/public/feedback/portal-powered-by'
 import { PortalFilterPanel } from '@/components/public/feedback/portal-filter-panel'
 import { PortalFilterSheet } from '@/components/public/feedback/portal-filter-sheet'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
@@ -234,6 +235,8 @@ export function FeedbackContainer({
     />
   )
 
+  const poweredBy = showPoweredBy ? <PortalPoweredBy workspaceSlug={workspaceSlug} /> : null
+
   const posts = flattenPublicPosts(postsData)
   // Dim the list only during an actual filter transition (placeholderData is
   // still showing the previous filter's results while the new ones load) —
@@ -376,7 +379,7 @@ export function FeedbackContainer({
 
   return (
     <div className="py-6">
-      <div className="flex gap-8">
+      <div className="flex gap-6 lg:gap-8">
         <div className="flex-1 min-w-0">
           <FeedbackHeader
             workspaceName={workspaceName}
@@ -393,16 +396,15 @@ export function FeedbackContainer({
             onSortChange={handleSortChange}
             currentSearch={activeSearch}
             onSearchChange={handleSearchChange}
-            isLoading={isLoading}
             filterButton={
-              <div className="lg:hidden">
-                <PortalFilterSheet activeCount={filterCount}>
+              <div className="md:hidden">
+                <PortalFilterSheet activeCount={filterCount} footer={poweredBy}>
                   {filterPanel('sheet')}
                 </PortalFilterSheet>
               </div>
             }
           />
-          <div className="mt-3">
+          <div className="mt-3 empty:hidden">
             <PublicFiltersBar
               filters={mergedFilters}
               setFilters={setFilters}
@@ -426,7 +428,25 @@ export function FeedbackContainer({
 
           <PortalModerationSection enabled={canApprove} />
 
-          <div className="mt-5">
+          {/* The results region: while a filter change loads, the cards (or the
+              empty message) dim and a thin bar runs along the top, so the
+              signal sits where the change will land. */}
+          <div
+            aria-busy={isLoading}
+            className={cn(
+              'relative mt-5 transition-opacity duration-150',
+              isLoading && 'opacity-60'
+            )}
+          >
+            <div
+              aria-hidden
+              className={cn(
+                'pointer-events-none absolute inset-x-0 -top-3 h-0.5 overflow-hidden rounded-full bg-border opacity-0 transition-opacity',
+                isLoading && 'opacity-100 delay-150'
+              )}
+            >
+              <div className="feed-loading-bar h-full w-1/3 rounded-full bg-muted-foreground" />
+            </div>
             {posts.length === 0 && !isPending ? (
               activeSearch || narrowingCount > 0 ? (
                 <p className="text-muted-foreground text-center py-8">
@@ -458,14 +478,7 @@ export function FeedbackContainer({
               )
             ) : (
               <>
-                <div
-                  key={listKey}
-                  aria-busy={isLoading}
-                  className={cn(
-                    'space-y-3 transition-opacity duration-150',
-                    isLoading && 'opacity-60'
-                  )}
-                >
+                <div key={listKey} className="space-y-3">
                   {posts.map((post, index) => (
                     <div
                       key={post.id}
@@ -518,9 +531,7 @@ export function FeedbackContainer({
           </div>
         </div>
 
-        <FeedbackSidebar workspaceSlug={workspaceSlug} showPoweredBy={showPoweredBy}>
-          {filterPanel('sidebar')}
-        </FeedbackSidebar>
+        <FeedbackSidebar footer={poweredBy}>{filterPanel('sidebar')}</FeedbackSidebar>
       </div>
     </div>
   )
