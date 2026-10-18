@@ -444,7 +444,11 @@ export function FeedbackContainer({
 
                 {/* Sentinel element for intersection observer */}
                 {hasNextPage && (
-                  <div ref={sentinelRef} className="py-4 flex justify-center">
+                  <div
+                    ref={sentinelRef}
+                    data-testid="post-list-sentinel"
+                    className="py-4 flex justify-center"
+                  >
                     {isFetchingNextPage && <Spinner />}
                   </div>
                 )}

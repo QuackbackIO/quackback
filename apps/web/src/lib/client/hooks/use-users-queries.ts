@@ -114,7 +114,8 @@ export function portalUsersInfiniteOptions(filters: UsersFilters) {
     queryKey: usersKeys.list(filters),
     queryFn: ({ pageParam }) => fetchPortalUsers(filters, pageParam),
     initialPageParam: 1,
-    getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.hasMore ? lastPageParam + 1 : undefined,
     // Page number is trivially invertible (page - 1), unlike the keyset
     // cursors elsewhere — admin list, so cap at 5 pages (QC-2).
     getPreviousPageParam: (_firstPage, allPages, firstPageParam) =>

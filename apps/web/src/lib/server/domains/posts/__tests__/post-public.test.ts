@@ -268,7 +268,7 @@ describe('listPublicPostsWithVotesAndAvatars — pinned posts lead every sort', 
       expect(pinned).toBeDefined()
       expect(mockMainOrderBy).toHaveBeenCalledTimes(1)
       const args = mockMainOrderBy.mock.calls[0]
-      expect(args).toHaveLength(2)
+      expect(args).toHaveLength(3)
       expect(args[0]).toBe(pinned)
     }
   )
@@ -281,6 +281,22 @@ describe('listPublicPostsWithVotesAndAvatars — pinned posts lead every sort', 
     const args = mockMainOrderBy.mock.calls[0]
     expect(args[1]).toEqual({ _tag: 'desc', col: mockPosts.createdAt })
   })
+
+  // Offset pages are only stable under a total order. created_at and
+  // vote_count both tie (bulk imports, the common 1-vote post), and the
+  // first page is served by a different query than the rest, so without a
+  // unique final key a tied post can land on two pages or on none.
+  it.each(['top', 'new', 'trending'] as const)(
+    'ends every sort with the post id as a unique tie-breaker (%s)',
+    async (sort) => {
+      const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+      await listPublicPostsWithVotesAndAvatars({ sort })
+
+      const args = mockMainOrderBy.mock.calls[0]
+      expect(args.at(-1)).toEqual({ _tag: 'desc', col: mockPosts.id })
+    }
+  )
 })
 
 // ---------------------------------------------------------------------------

@@ -126,8 +126,8 @@ export function useInfiniteNotifications({
       return result as NotificationsListResult
     },
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.hasMore ? allPages.length * NOTIFICATIONS_PAGE_SIZE : undefined,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.hasMore ? lastPageParam + NOTIFICATIONS_PAGE_SIZE : undefined,
     // Offset inverts trivially (offset - page size, floored at 0). This hook
     // is shared by both the admin and portal notification pages — capped at
     // the admin tier (5) per QC-2's bucket list; notification pages rarely

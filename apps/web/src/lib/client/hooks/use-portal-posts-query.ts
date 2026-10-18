@@ -120,7 +120,8 @@ export function usePublicPosts({ filters, initialData, enabled = true }: UsePubl
     queryKey: publicPostsKeys.list(filters),
     queryFn: ({ pageParam }) => fetchPublicPosts(filters, pageParam),
     initialPageParam: 1,
-    getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.hasMore ? lastPageParam + 1 : undefined,
     // Page number inverts trivially (page - 1) — visitor-facing feed, so the
     // wider scroll-back cap (QC-2).
     getPreviousPageParam: (_firstPage, _allPages, firstPageParam) =>

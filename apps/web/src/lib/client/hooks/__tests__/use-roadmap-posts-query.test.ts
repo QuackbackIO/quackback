@@ -6,16 +6,25 @@
  * column at a time. The public portal roadmap board does the same over the
  * public endpoints.
  */
-import { QueryClient } from '@tanstack/react-query'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createElement, type ReactNode } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PostStatusId, RoadmapId } from '@quackback/ids'
 
 const getRoadmapPostsFn = vi.fn()
 const getRoadmapColumnsFn = vi.fn()
+const getRoadmapPostsByStatusFn = vi.fn()
 vi.mock('@/lib/server/functions/roadmaps', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/functions/roadmaps')>()),
   getRoadmapPostsFn: (...args: unknown[]) => getRoadmapPostsFn(...args),
   getRoadmapColumnsFn: (...args: unknown[]) => getRoadmapColumnsFn(...args),
+}))
+vi.mock('@/lib/server/functions/public-posts', () => ({
+  getRoadmapPostsByStatusFn: (...args: unknown[]) => getRoadmapPostsByStatusFn(...args),
+  listPublicPostsFn: vi.fn(),
+  getVotedPostsFn: vi.fn(),
+  getPostPermissionsFn: vi.fn(),
 }))
 
 const fetchPublicRoadmapPosts = vi.fn()
@@ -25,7 +34,7 @@ vi.mock('@/lib/server/functions/portal', () => ({
   fetchPublicRoadmapColumns: (...args: unknown[]) => fetchPublicRoadmapColumns(...args),
 }))
 
-const { roadmapPostsByRoadmapOptions, publicRoadmapPostsOptions } =
+const { roadmapPostsByRoadmapOptions, publicRoadmapPostsOptions, useRoadmapPosts } =
   await import('../use-roadmap-posts-query')
 
 const ROADMAP = 'roadmap_01h455vb4pex5vsknk084sn02q' as RoadmapId
@@ -37,13 +46,95 @@ function page(label: string, hasMore = false) {
   return { items: [{ id: label }], total: 1, hasMore }
 }
 
+/** Mock a column endpoint whose later pages come by `offset`, `total` posts long. */
+function offsetPages(total: number) {
+  return async ({ data }: { data: { offset: number } }) => ({
+    items: [{ id: `post_${data.offset}` }],
+    total,
+    hasMore: data.offset + 20 < total,
+  })
+}
+
+function offsetsRequested(fn: ReturnType<typeof vi.fn>): number[] {
+  return fn.mock.calls.map((call) => (call[0] as { data: { offset: number } }).data.offset)
+}
+
 let client: QueryClient
 beforeEach(() => {
   getRoadmapPostsFn.mockReset()
   getRoadmapColumnsFn.mockReset()
+  getRoadmapPostsByStatusFn.mockReset()
   fetchPublicRoadmapPosts.mockReset()
   fetchPublicRoadmapColumns.mockReset()
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+})
+afterEach(cleanup)
+
+function wrapper({ children }: { children: ReactNode }) {
+  return createElement(QueryClientProvider, { client }, children)
+}
+
+// Capped queries (`maxPages`) drop their oldest page on each append, so the
+// next offset must come from the last page's own param, never from the page
+// count — a count-based param re-requests one page forever (PRO-1664).
+describe('page params past the maxPages cap', () => {
+  it('admin column: advances the offset by 20 (maxPages 5)', async () => {
+    getRoadmapColumnsFn.mockResolvedValue([
+      { items: [{ id: 'post_0' }], total: 180, hasMore: true },
+    ])
+    getRoadmapPostsFn.mockImplementation(offsetPages(180))
+
+    const data = await client.fetchInfiniteQuery({
+      ...roadmapPostsByRoadmapOptions({ roadmapId: ROADMAP, statusId: PLANNED }),
+      pages: 9,
+    })
+
+    expect(offsetsRequested(getRoadmapPostsFn)).toEqual([20, 40, 60, 80, 100, 120, 140, 160])
+    expect(data.pageParams).toEqual([80, 100, 120, 140, 160])
+    expect(data.pages.at(-1)?.hasMore).toBe(false)
+  })
+
+  it('public column: advances the offset by 20 (maxPages 8)', async () => {
+    fetchPublicRoadmapColumns.mockResolvedValue([
+      { items: [{ id: 'post_0' }], total: 220, hasMore: true },
+    ])
+    fetchPublicRoadmapPosts.mockImplementation(offsetPages(220))
+
+    const data = await client.fetchInfiniteQuery({
+      ...publicRoadmapPostsOptions({ roadmapId: ROADMAP, statusId: PLANNED }),
+      pages: 11,
+    })
+
+    expect(offsetsRequested(fetchPublicRoadmapPosts)).toEqual([
+      20, 40, 60, 80, 100, 120, 140, 160, 180, 200,
+    ])
+    expect(data.pageParams).toEqual([60, 80, 100, 120, 140, 160, 180, 200])
+    expect(data.pages.at(-1)?.hasMore).toBe(false)
+  })
+
+  it('per-status hook: advances the page number by 1 (maxPages 5)', async () => {
+    const LAST_PAGE = 9
+    getRoadmapPostsByStatusFn.mockImplementation(async ({ data }: { data: { page: number } }) => ({
+      items: [{ id: `post_${data.page}` }],
+      total: LAST_PAGE,
+      hasMore: data.page < LAST_PAGE,
+    }))
+
+    const { result } = renderHook(() => useRoadmapPosts({ statusId: PLANNED }), { wrapper })
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(1))
+    for (let page = 2; page <= LAST_PAGE; page++) {
+      await act(async () => {
+        await result.current.fetchNextPage()
+      })
+    }
+    await waitFor(() => expect(result.current.hasNextPage).toBe(false))
+
+    const pages = getRoadmapPostsByStatusFn.mock.calls.map(
+      (call) => (call[0] as { data: { page: number } }).data.page
+    )
+    expect(pages).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
+    expect(result.current.data?.pageParams).toEqual([5, 6, 7, 8, 9])
+  })
 })
 
 describe('roadmapPostsByRoadmapOptions', () => {

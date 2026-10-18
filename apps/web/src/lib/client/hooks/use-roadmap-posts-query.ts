@@ -75,7 +75,8 @@ export function useRoadmapPosts({ statusId, initialData }: UseRoadmapPostsOption
         data: { statusId, page: pageParam, limit: 10 },
       }) as Promise<RoadmapPostListResult>,
     initialPageParam: 1,
-    getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.hasMore ? lastPageParam + 1 : undefined,
     // Page number inverts trivially (page - 1); no live consumer currently
     // imports this hook (admin-tier cap applied for when one does).
     getPreviousPageParam: (_firstPage, _allPages, firstPageParam) =>
@@ -232,8 +233,8 @@ export function roadmapPostsByRoadmapOptions({
             },
           }) as Promise<RoadmapPostsListResult>),
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.hasMore ? allPages.length * COLUMN_PAGE_SIZE : undefined,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.hasMore ? lastPageParam + COLUMN_PAGE_SIZE : undefined,
     // Offset inverts trivially (offset - 20, floored at 0), admin board.
     getPreviousPageParam: (_firstPage, _allPages, firstPageParam) =>
       firstPageParam > 0 ? Math.max(0, firstPageParam - COLUMN_PAGE_SIZE) : undefined,
@@ -296,8 +297,8 @@ export function publicRoadmapPostsOptions({
       }) as Promise<RoadmapPostsListResult>
     },
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.hasMore ? allPages.length * COLUMN_PAGE_SIZE : undefined,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.hasMore ? lastPageParam + COLUMN_PAGE_SIZE : undefined,
     // Offset inverts trivially (offset - 20, floored at 0), visitor-facing
     // roadmap board, so the wider scroll-back cap.
     getPreviousPageParam: (_firstPage, _allPages, firstPageParam) =>

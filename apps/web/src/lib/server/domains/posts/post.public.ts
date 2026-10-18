@@ -87,9 +87,16 @@ function getPostSortOrder(sort: SortOrder) {
  * Pinned posts lead the board under every sort; among themselves the most
  * recently pinned is first. NULLS LAST is load-bearing: Postgres DESC
  * otherwise floats the unpinned NULL rows above the pinned ones.
+ *
+ * The id closes the order into a total one. The feed pages by OFFSET, and
+ * its first page comes from a different query than the rest, so posts tied
+ * on the sort key (one created_at from a bulk import, the common 1-vote post)
+ * would otherwise be ordered per query by the planner — served twice on one
+ * page boundary and never on another. Ids are time-ordered, so the
+ * tie-breaker still reads as newest first.
  */
 function pinnedFirstThen(sort: SortOrder) {
-  return [sql`${posts.pinnedAt} DESC NULLS LAST`, getPostSortOrder(sort)]
+  return [sql`${posts.pinnedAt} DESC NULLS LAST`, getPostSortOrder(sort), desc(posts.id)]
 }
 
 export interface PostWithVotesAndAvatars {
