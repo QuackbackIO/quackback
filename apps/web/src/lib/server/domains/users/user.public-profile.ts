@@ -89,8 +89,6 @@ export interface PublicProfileTeamContext {
   blocked: boolean
 }
 
-const ACTIVITY_LIMIT = 100
-
 /** Roles a public profile may resolve for. Anything else (or a non-'user'
  *  principal type) is treated as not-found. */
 const PROFILE_ROLES = ['user', 'member', 'admin'] as const
@@ -164,8 +162,7 @@ export async function getPublicUserProfile(
           .innerJoin(boards, eq(posts.boardId, boards.id))
           .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
           .where(and(eq(posts.principalId, principalId), isNull(posts.deletedAt), viewerFilter))
-          .orderBy(desc(posts.createdAt))
-          .limit(ACTIVITY_LIMIT),
+          .orderBy(desc(posts.createdAt)),
 
         // Posts the owner commented on (public comments only — a private
         // team note must never surface as public activity), grouped per
@@ -189,8 +186,7 @@ export async function getPublicUserProfile(
             )
           )
           .groupBy(posts.id, posts.title, boards.slug, postStatuses.name, postStatuses.color)
-          .orderBy(desc(sql`max(${postComments.createdAt})`))
-          .limit(ACTIVITY_LIMIT),
+          .orderBy(desc(sql`max(${postComments.createdAt})`)),
 
         // Posts the owner upvoted, visible to the viewer.
         db
@@ -200,10 +196,9 @@ export async function getPublicUserProfile(
           .innerJoin(boards, eq(posts.boardId, boards.id))
           .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
           .where(and(eq(postVotes.principalId, principalId), isNull(posts.deletedAt), viewerFilter))
-          .orderBy(desc(postVotes.createdAt))
-          .limit(ACTIVITY_LIMIT),
+          .orderBy(desc(postVotes.createdAt)),
 
-        // Exact viewer-visible counts (the lists above are capped).
+        // Viewer-visible counts for the stats row.
         db
           .select({ count: sql<number>`count(*)::int` })
           .from(posts)
