@@ -13,6 +13,7 @@
 import { z } from 'zod'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { parseTrustedProxyCidrs } from '@/lib/server/trusted-proxy-peers'
 
 const log = logger.child({ component: 'config' })
 
@@ -188,6 +189,23 @@ const configSchema = z
       (val) => (typeof val === 'string' ? val.trim().toLowerCase() || undefined : val),
       z.string().optional()
     ),
+    /**
+     * Comma-separated CIDRs of the proxies allowed to supply client-IP headers.
+     * When set, TRUSTED_PROXY_HOPS and TRUSTED_CLIENT_IP_HEADER apply only to
+     * requests whose socket peer is inside the list; see trusted-proxy-peers.
+     */
+    trustedProxyCidrs: z
+      .string()
+      .optional()
+      .transform((val, ctx) => {
+        const parsed = parseTrustedProxyCidrs(val)
+        if (parsed.ok) return parsed.cidrs
+        ctx.addIssue({
+          code: 'custom',
+          message: `"${parsed.entry}" is not an IPv4 or IPv6 address with an optional /prefix`,
+        })
+        return z.NEVER
+      }),
 
     // Email (all optional)
     emailFrom: z.string().optional(),
@@ -389,6 +407,7 @@ function buildConfigFromEnv(): unknown {
 
     trustedProxyHops: env('TRUSTED_PROXY_HOPS'),
     trustedClientIpHeader: env('TRUSTED_CLIENT_IP_HEADER'),
+    trustedProxyCidrs: env('TRUSTED_PROXY_CIDRS'),
 
     // Email
     emailFrom: env('EMAIL_FROM'),
@@ -598,6 +617,9 @@ export const config = {
   },
   get trustedClientIpHeader(): string | undefined {
     return loadConfig().trustedClientIpHeader
+  },
+  get trustedProxyCidrs(): string[] {
+    return loadConfig().trustedProxyCidrs
   },
 
   // Email

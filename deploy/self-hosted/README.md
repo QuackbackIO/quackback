@@ -249,6 +249,8 @@ TRUSTED_CLIENT_IP_HEADER=x-real-ip
 
 Use `TRUSTED_CLIENT_IP_HEADER` when your proxy sets one authoritative client-IP header (`X-Real-IP` as above, `CF-Connecting-IP` behind Cloudflare), especially when requests pass through more proxies than you can count. Use `TRUSTED_PROXY_HOPS` when you know the exact number of proxies that append to `X-Forwarded-For`. Only name a header your proxy always sets or overwrites, and keep the app port unreachable except through the proxy; a header passed through from clients lets them spoof their IP.
 
+If the app port can also be reached without going through the proxy, set `TRUSTED_PROXY_CIDRS` to the IP addresses or CIDR ranges your proxy connects from (comma-separated, for example `172.18.0.0/16`). `TRUSTED_PROXY_HOPS` and `TRUSTED_CLIENT_IP_HEADER` are then honored only for requests from those addresses; any other connection is treated as the client itself.
+
 Quackback accepts MP4 and WebM feedback videos up to 100 MB. If another proxy,
 load balancer, or hosting platform sits in front of Quackback, set its request
 body limit above 100 MB as well. Image uploads remain limited to 5 MB.
