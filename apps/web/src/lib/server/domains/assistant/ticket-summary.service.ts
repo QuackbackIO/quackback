@@ -53,6 +53,7 @@ import {
 } from './close-summary'
 import { createId, type TicketId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { AI_CHAT_OPTIONS } from '@/lib/server/domains/ai/chat-options'
 
 const log = logger.child({ component: 'ticket-summary' })
 
@@ -125,6 +126,7 @@ export async function summarizeTicketOnClose(
     // chip's 'copilot_summary' (analytics/copilot-usage.ts counts only the
     // latter), matching how the conversation on-close path stays off that report.
     const object = await chat({
+      ...AI_CHAT_OPTIONS,
       adapter: openaiCompatibleText(model, {
         baseURL: config.openaiBaseUrl!,
         apiKey: config.openaiApiKey!,
