@@ -860,7 +860,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workspace-copilot.ts`::undoWorkspaceSettingsProposalFn | DYNAMIC (copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 133 surfaces
+### Public REST API (`withApiKeyAuth`) — 134 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -925,6 +925,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/posts/$postId.comments.ts`::GET | post.view_private |
 | `routes/api/v1/posts/$postId.comments.ts`::POST | comment.moderate |
 | `routes/api/v1/posts/$postId.merge.ts`::POST | post.merge |
+| `routes/api/v1/posts/$postId.move.ts`::POST | post.set_board |
 | `routes/api/v1/posts/$postId.ts`::GET | post.view_private |
 | `routes/api/v1/posts/$postId.ts`::PATCH | DYNAMIC (post.edit | post.set_status | post.set_tags | post.set_owner) |
 | `routes/api/v1/posts/$postId.ts`::DELETE | post.delete |
