@@ -41,7 +41,7 @@ import { getQuinnToolMetricsFn } from '../assistant-tools-analytics'
 
 const TOOL_METRICS = [
   {
-    toolName: 'search_kb',
+    toolName: 'search_help_center',
     succeeded: 8,
     failed: 1,
     denied: 0,

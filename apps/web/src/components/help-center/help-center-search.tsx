@@ -11,7 +11,10 @@ import {
   useAskAiSearchController,
   type AskAiSourceMeta,
 } from '@/components/help-center/ask-ai'
-import { useKbSearch, type KbSearchArticle } from '@/components/help-center/use-kb-search'
+import {
+  useHelpCenterSearch,
+  type HelpCenterSearchArticle,
+} from '@/components/help-center/use-help-center-search'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 
@@ -35,7 +38,7 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
   const containerRef = useRef<HTMLDivElement>(null)
 
   const askAiAvailable = useAskAiAvailable(askAiEnabled)
-  const { results, isSearching } = useKbSearch({
+  const { results, isSearching } = useHelpCenterSearch({
     query,
     limit: 8,
     locale,
@@ -61,7 +64,7 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleResultClick = (result: KbSearchArticle) => {
+  const handleResultClick = (result: HelpCenterSearchArticle) => {
     setShowResults(false)
     setQuery('')
     window.location.href = hcArticlePath({

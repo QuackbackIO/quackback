@@ -10,7 +10,7 @@ const mockSynthesize = vi.fn()
 const mockIsConfigured = vi.fn()
 const { MISS_FALLBACK } = vi.hoisted(() => ({ MISS_FALLBACK: 'No reliable answer found.' }))
 vi.mock('@/lib/server/domains/assistant', () => ({
-  retrieveKbArticles: (...args: unknown[]) => mockRetrieve(...args),
+  retrieveHelpCenterArticles: (...args: unknown[]) => mockRetrieve(...args),
   synthesizeAnswer: (...args: unknown[]) => mockSynthesize(...args),
   isAskAiConfigured: (...args: unknown[]) => mockIsConfigured(...args),
   RELATED_SIMILARITY_FLOOR: 0.3,
@@ -45,8 +45,13 @@ vi.mock('@/lib/server/functions/workspace', () => ({
 }))
 
 import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
-import { handleKbAsk, handleKbAskProbe, KB_ASK_MAX_QUERY_CHARS, KB_ASK_RATE_LIMIT } from '../kb-ask'
-import { makeKbArticle } from '@/lib/server/domains/assistant/__tests__/kb-fixtures'
+import {
+  handleHelpCenterAsk,
+  handleHelpCenterAskProbe,
+  HELP_CENTER_ASK_MAX_QUERY_CHARS,
+  HELP_CENTER_ASK_RATE_LIMIT,
+} from '../help-center-ask'
+import { makeHelpCenterArticle } from '@/lib/server/domains/assistant/__tests__/help-center-fixtures'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
 /** Build an AG-UI RunAgentInput POST request. `question` rides the trailing
@@ -57,7 +62,7 @@ function makePost(
   extraHeaders: Record<string, string> = {}
 ): Request {
   const messages = question === null ? [] : [{ id: 'q', role: 'user', content: question }]
-  return new Request('http://localhost/api/widget/kb-ask', {
+  return new Request('http://localhost/api/widget/help-center-ask', {
     method: 'POST',
     headers: { 'x-forwarded-for': ip, ...extraHeaders },
     body: JSON.stringify({
@@ -74,7 +79,7 @@ function makePost(
 
 /** A bare GET (the capability probe). */
 function makeProbe(): Request {
-  return new Request('http://localhost/api/widget/kb-ask', {
+  return new Request('http://localhost/api/widget/help-center-ask', {
     headers: { 'x-forwarded-for': '203.0.113.9' },
   })
 }
@@ -98,7 +103,7 @@ beforeEach(() => {
   mockLogAiUsage.mockResolvedValue(undefined)
   mockGetChatModel.mockReturnValue('gpt-test')
   mockGetSettings.mockResolvedValue({ id: 'settings_1' })
-  mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
+  mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1')])
   mockSynthesize.mockResolvedValue({
     kind: 'grounded',
     answer: 'Do the thing.',
@@ -115,15 +120,15 @@ const SOURCE_META = {
   categoryName: 'General',
 }
 
-describe('GET /api/widget/kb-ask (capability probe)', () => {
+describe('GET /api/widget/help-center-ask (capability probe)', () => {
   it('404s when the help center flag is off', async () => {
     mockGetFeatureFlags.mockResolvedValue({ helpCenter: false })
-    const res = await handleKbAskProbe({ request: makeProbe() })
+    const res = await handleHelpCenterAskProbe({ request: makeProbe() })
     expect(res.status).toBe(404)
   })
 
   it('serves a capability probe with the widget CORS header', async () => {
-    const res = await handleKbAskProbe({ request: makeProbe() })
+    const res = await handleHelpCenterAskProbe({ request: makeProbe() })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ data: { enabled: true } })
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*')
@@ -134,15 +139,15 @@ describe('GET /api/widget/kb-ask (capability probe)', () => {
 
   it('reports enabled=false on the probe when AI is not configured', async () => {
     mockIsConfigured.mockReturnValue(false)
-    const res = await handleKbAskProbe({ request: makeProbe() })
+    const res = await handleHelpCenterAskProbe({ request: makeProbe() })
     expect(await res.json()).toEqual({ data: { enabled: false } })
   })
 })
 
-describe('POST /api/widget/kb-ask', () => {
+describe('POST /api/widget/help-center-ask', () => {
   it('400s on a non-AG-UI body', async () => {
-    const res = await handleKbAsk({
-      request: new Request('http://localhost/api/widget/kb-ask', {
+    const res = await handleHelpCenterAsk({
+      request: new Request('http://localhost/api/widget/help-center-ask', {
         method: 'POST',
         headers: { 'x-forwarded-for': '203.0.113.9' },
         body: JSON.stringify({ q: 'hello' }),
@@ -154,29 +159,31 @@ describe('POST /api/widget/kb-ask', () => {
   })
 
   it('400s when the AG-UI messages carry no trailing user question', async () => {
-    const res = await handleKbAsk({ request: makePost(null) })
+    const res = await handleHelpCenterAsk({ request: makePost(null) })
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error.code).toBe('INVALID_QUERY')
   })
 
   it('400s on a blank query', async () => {
-    const res = await handleKbAsk({ request: makePost('   ') })
+    const res = await handleHelpCenterAsk({ request: makePost('   ') })
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error.code).toBe('INVALID_QUERY')
   })
 
   it('413s when the query exceeds the length cap', async () => {
-    const res = await handleKbAsk({ request: makePost('x'.repeat(KB_ASK_MAX_QUERY_CHARS + 1)) })
+    const res = await handleHelpCenterAsk({
+      request: makePost('x'.repeat(HELP_CENTER_ASK_MAX_QUERY_CHARS + 1)),
+    })
     expect(res.status).toBe(413)
     const body = await res.json()
     expect(body.error.code).toBe('QUERY_TOO_LONG')
   })
 
   it('429s with Retry-After when over the per-IP limit', async () => {
-    mockIncrementBucket.mockResolvedValue({ count: KB_ASK_RATE_LIMIT + 1 })
-    const res = await handleKbAsk({ request: makePost('hello') })
+    mockIncrementBucket.mockResolvedValue({ count: HELP_CENTER_ASK_RATE_LIMIT + 1 })
+    const res = await handleHelpCenterAsk({ request: makePost('hello') })
     expect(res.status).toBe(429)
     expect(res.headers.get('Retry-After')).toBe('42')
     expect(mockRetrieve).not.toHaveBeenCalled()
@@ -184,9 +191,9 @@ describe('POST /api/widget/kb-ask', () => {
 
   it('429s when a single anonymous session exceeds its own budget, even under the IP limit', async () => {
     mockIncrementBucket.mockImplementation(async (spec: { key: string }) =>
-      spec.key.includes(':session:') ? { count: KB_ASK_RATE_LIMIT + 1 } : { count: 1 }
+      spec.key.includes(':session:') ? { count: HELP_CENTER_ASK_RATE_LIMIT + 1 } : { count: 1 }
     )
-    const res = await handleKbAsk({
+    const res = await handleHelpCenterAsk({
       request: makePost('hello', '203.0.113.9', { Authorization: 'Bearer session-a' }),
     })
     expect(res.status).toBe(429)
@@ -195,9 +202,9 @@ describe('POST /api/widget/kb-ask', () => {
 
   it('keys the session bucket off the bearer token, independent of other sessions on the same IP', async () => {
     mockIncrementBucket.mockImplementation(async (spec: { key: string }) => ({
-      count: spec.key.includes('session-a') ? KB_ASK_RATE_LIMIT + 1 : 1,
+      count: spec.key.includes('session-a') ? HELP_CENTER_ASK_RATE_LIMIT + 1 : 1,
     }))
-    const res = await handleKbAsk({
+    const res = await handleHelpCenterAsk({
       request: makePost('hello', '203.0.113.9', { Authorization: 'Bearer session-b' }),
     })
     expect(res.status).toBe(200)
@@ -205,7 +212,7 @@ describe('POST /api/widget/kb-ask', () => {
 
   it('503s when the workspace is unavailable', async () => {
     mockGetSettings.mockResolvedValue(null)
-    const res = await handleKbAsk({ request: makePost('hello') })
+    const res = await handleHelpCenterAsk({ request: makePost('hello') })
     expect(res.status).toBe(503)
     const body = await res.json()
     expect(body.error.code).toBe('WORKSPACE_UNAVAILABLE')
@@ -214,20 +221,20 @@ describe('POST /api/widget/kb-ask', () => {
 
   it('keys the workspace bucket off the resolved workspace id, not a caller-supplied header', async () => {
     mockGetSettings.mockResolvedValue({ id: 'settings_evade_test' })
-    await handleKbAsk({ request: makePost('hello') })
+    await handleHelpCenterAsk({ request: makePost('hello') })
     const keys = mockIncrementBucket.mock.calls.map(([spec]) => spec.key)
-    expect(keys).toContain('kbask:workspace:settings_evade_test')
+    expect(keys).toContain('help_center_ask:workspace:settings_evade_test')
   })
 
   it('fails open when Redis is down', async () => {
     mockIncrementBucket.mockResolvedValue({ count: null })
-    const res = await handleKbAsk({ request: makePost('hello') })
+    const res = await handleHelpCenterAsk({ request: makePost('hello') })
     expect(res.status).toBe(200)
   })
 
   it('503s when AI is not configured', async () => {
     mockIsConfigured.mockReturnValue(false)
-    const res = await handleKbAsk({ request: makePost('hello') })
+    const res = await handleHelpCenterAsk({ request: makePost('hello') })
     expect(res.status).toBe(503)
     const body = await res.json()
     expect(body.error.code).toBe('AI_NOT_CONFIGURED')
@@ -237,7 +244,7 @@ describe('POST /api/widget/kb-ask', () => {
     mockEnforceAiTokenBudget.mockRejectedValue(
       new TierLimitError({ limit: 'aiTokensPerMonth', message: "You've used your AI budget" })
     )
-    const res = await handleKbAsk({ request: makePost('hello') })
+    const res = await handleHelpCenterAsk({ request: makePost('hello') })
     expect(res.status).toBe(402)
     const body = await res.json()
     expect(body.error.code).toBe('TIER_LIMIT_EXCEEDED')
@@ -247,8 +254,8 @@ describe('POST /api/widget/kb-ask', () => {
   })
 
   it('checks the ai token budget after the rate limit but before retrieval', async () => {
-    mockIncrementBucket.mockResolvedValue({ count: KB_ASK_RATE_LIMIT + 1 })
-    await handleKbAsk({ request: makePost('hello') })
+    mockIncrementBucket.mockResolvedValue({ count: HELP_CENTER_ASK_RATE_LIMIT + 1 })
+    await handleHelpCenterAsk({ request: makePost('hello') })
     expect(mockEnforceAiTokenBudget).not.toHaveBeenCalled()
   })
 
@@ -271,7 +278,7 @@ describe('POST /api/widget/kb-ask', () => {
       }
     )
 
-    const res = await handleKbAsk({ request: makePost('how do I do the thing?') })
+    const res = await handleHelpCenterAsk({ request: makePost('how do I do the thing?') })
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('text/event-stream')
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*')
@@ -307,10 +314,10 @@ describe('POST /api/widget/kb-ask', () => {
 
   it('short-circuits on empty retrieval: no snapshot, no model call, RUN_FINISHED miss with related', async () => {
     mockRetrieve.mockImplementation(async (_q: string, opts?: { minScore?: number }) =>
-      opts?.minScore !== undefined ? [makeKbArticle('article_9')] : []
+      opts?.minScore !== undefined ? [makeHelpCenterArticle('article_9')] : []
     )
 
-    const res = await handleKbAsk({ request: makePost('gibberish') })
+    const res = await handleHelpCenterAsk({ request: makePost('gibberish') })
     const chunks = parseAguiSse(await res.text())
 
     expect(mockSynthesize).not.toHaveBeenCalled()
@@ -335,9 +342,9 @@ describe('POST /api/widget/kb-ask', () => {
 
   it('logs a no_sources ai usage entry on the empty-retrieval short-circuit', async () => {
     mockRetrieve.mockImplementation(async (_q: string, opts?: { minScore?: number }) =>
-      opts?.minScore !== undefined ? [makeKbArticle('article_9')] : []
+      opts?.minScore !== undefined ? [makeHelpCenterArticle('article_9')] : []
     )
-    const res = await handleKbAsk({ request: makePost('gibberish') })
+    const res = await handleHelpCenterAsk({ request: makePost('gibberish') })
     await res.text()
 
     expect(mockSynthesize).not.toHaveBeenCalled()
@@ -356,14 +363,14 @@ describe('POST /api/widget/kb-ask', () => {
   })
 
   it('reuses the retrieved articles as related suggestions on a no-answer', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
+    mockRetrieve.mockResolvedValue([makeHelpCenterArticle('article_1')])
     mockSynthesize.mockResolvedValue({
       kind: 'no_answer',
       answer: 'I could not find a specific answer to that.',
       sources: [],
     })
 
-    const res = await handleKbAsk({ request: makePost('nearby topic') })
+    const res = await handleHelpCenterAsk({ request: makePost('nearby topic') })
     const chunks = parseAguiSse(await res.text())
     const result = (
       chunks.at(-1) as { result?: { kind: string; related: Array<{ articleId: string }> } }
@@ -377,7 +384,7 @@ describe('POST /api/widget/kb-ask', () => {
 
   it('emits a RUN_ERROR frame when synthesis fails', async () => {
     mockSynthesize.mockRejectedValue(new Error('provider down'))
-    const res = await handleKbAsk({ request: makePost('hello') })
+    const res = await handleHelpCenterAsk({ request: makePost('hello') })
     const chunks = parseAguiSse(await res.text())
     const last = chunks.at(-1) as { type: string; code?: string }
     expect(last.type).toBe('RUN_ERROR')
@@ -385,7 +392,7 @@ describe('POST /api/widget/kb-ask', () => {
   })
 
   it('retrieves with the public audience and an anonymous viewer for unidentified callers', async () => {
-    const res = await handleKbAsk({ request: makePost('hello') })
+    const res = await handleHelpCenterAsk({ request: makePost('hello') })
     await res.text()
     expect(mockRetrieve).toHaveBeenCalledWith('hello', {
       audience: 'public',

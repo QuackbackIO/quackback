@@ -23,7 +23,7 @@ vi.mock('@/lib/server/domains/embeddings/embedding.service', () => ({
 // The KB source is always registered alongside documents; it contributes
 // nothing in this scenario.
 vi.mock('../retrieval', () => ({
-  retrieveKbArticles: vi.fn().mockResolvedValue([]),
+  retrieveHelpCenterArticles: vi.fn().mockResolvedValue([]),
 }))
 vi.mock('@/lib/server/domains/ai/models', () => ({
   getEmbeddingModel: () => 'test-embedding-model',

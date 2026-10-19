@@ -2,9 +2,12 @@
  * Ask AI answer state: owned by useAskAi (ask-ai.tsx) and filled in by the
  * streaming run it loads on demand (ask-ai-run.ts).
  */
-import type { KbAskAnswerKind, KbAskSourceMeta } from '@/lib/shared/help-center/kb-ask-contract'
+import type {
+  HelpCenterAskAnswerKind,
+  HelpCenterAskSourceMeta,
+} from '@/lib/shared/help-center/help-center-ask-contract'
 
-export type AskAiSourceMeta = KbAskSourceMeta
+export type AskAiSourceMeta = HelpCenterAskSourceMeta
 
 export type AskAiStatus = 'idle' | 'loading' | 'streaming' | 'done' | 'no-answer' | 'error'
 
@@ -13,7 +16,7 @@ export interface AskAiState {
   question: string
   answer: string
   /** 'grounded' cites sources; 'no_answer' offers related suggestions. */
-  kind: KbAskAnswerKind
+  kind: HelpCenterAskAnswerKind
   /** Sources cited by a grounded answer, resolved to display metadata. */
   citedSources: AskAiSourceMeta[]
   /** Related near-miss articles suggested on a no_answer. */

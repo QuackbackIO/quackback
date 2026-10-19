@@ -22,7 +22,7 @@ import { AnalyticsStatRow } from '@/components/admin/analytics/analytics-stat-ro
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import { Route } from '@/routes/admin/help-center'
 import type { ArticlePerformanceRow } from '@/lib/server/domains/help-center/help-center.article-performance.query'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 
 /**
  * Share of an article's feedback votes that were "helpful", as a whole
@@ -70,7 +70,7 @@ export function ArticlePerformanceTable() {
   const { data: rows, isLoading } = useQuery(helpCenterQueries.articlePerformance())
   const summary = rows && rows.length > 0 ? summarizePerformance(rows) : null
 
-  const handleOpen = (id: KbArticleId) => {
+  const handleOpen = (id: ArticleId) => {
     void navigate({ search: (prev) => ({ ...prev, article: id }) })
   }
 
@@ -116,7 +116,7 @@ export function ArticlePerformanceTable() {
         <button
           type="button"
           data-testid="article-performance-worst"
-          onClick={() => handleOpen(summary.worst!.article.id as KbArticleId)}
+          onClick={() => handleOpen(summary.worst!.article.id as ArticleId)}
           className="w-full mb-4 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-left transition-colors hover:bg-amber-500/10"
         >
           <ExclamationTriangleIcon className="size-5 shrink-0 text-amber-600 dark:text-amber-500" />
@@ -181,7 +181,7 @@ export function ArticlePerformanceTable() {
                   <TableRow
                     key={article.id}
                     className="cursor-pointer text-[13px]"
-                    onClick={() => handleOpen(article.id as KbArticleId)}
+                    onClick={() => handleOpen(article.id as ArticleId)}
                   >
                     <TableCell className="max-w-xs">
                       <div className="flex items-center gap-2 min-w-0">

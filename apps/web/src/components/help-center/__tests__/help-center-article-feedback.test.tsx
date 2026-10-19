@@ -12,7 +12,7 @@ import { IntlProvider } from 'react-intl'
 
 const recordFeedback = vi.fn(async (_input: { data: unknown }) => ({
   success: true as const,
-  feedbackId: 'kb_article_feedback_1',
+  feedbackId: 'article_feedback_1',
 }))
 const submitReason = vi.fn(async (_input: { data: unknown }) => ({ success: true as const }))
 
@@ -70,7 +70,7 @@ describe('HelpCenterArticleFeedback', () => {
     await waitFor(() => expect(submitReason).toHaveBeenCalledTimes(1))
     expect(submitReason).toHaveBeenCalledWith({
       data: {
-        feedbackId: 'kb_article_feedback_1',
+        feedbackId: 'article_feedback_1',
         reason: 'The steps stop before the deploy part.',
       },
     })

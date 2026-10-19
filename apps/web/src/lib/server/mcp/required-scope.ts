@@ -3,7 +3,7 @@
  * needs. Used by the OAuth 403 interceptor so clients can step up; API keys
  * never consult this — they keep HTTP 200 + `isError`.
  */
-import { getTypeIdPrefix } from '@quackback/ids'
+import { getTypeIdPrefix, resolvePrefix } from '@quackback/ids'
 import type { McpScope } from './types'
 
 export const TOOL_SCOPES: Readonly<Record<string, McpScope>> = {
@@ -74,8 +74,8 @@ function getDetailsScope(args: unknown): McpScope {
   const id = isRecord(args) && typeof args.id === 'string' ? args.id : null
   if (!id) return 'read:feedback'
   try {
-    const prefix = getTypeIdPrefix(id)
-    if (prefix === 'article' || prefix === 'kb_article' || prefix === 'kb_category') {
+    const prefix = resolvePrefix(getTypeIdPrefix(id))
+    if (prefix === 'article' || prefix === 'category') {
       return 'read:article'
     }
     return 'read:feedback'

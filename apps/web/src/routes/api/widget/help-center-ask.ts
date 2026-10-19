@@ -2,7 +2,7 @@
  * Ask AI endpoint: streams a synthesized, cited answer built only from
  * published help-center articles.
  *
- * Same public envelope as kb-search (feature gate + CORS *), plus the
+ * Same public envelope as help-center-search (feature gate + CORS *), plus the
  * help-center product, a per-IP/session/workspace rate limit, and a
  * query length cap. The session and workspace buckets stop a single anonymous
  * session (or a Host-header switcheroo) from burning unlimited AI budget
@@ -17,7 +17,7 @@
  * RUN_FINISHED whose standard `result` slot carries the validated answer
  * (kind/answer/sources/related). A failure ends the stream with a coded
  * RUN_ERROR frame. Payload shapes live in the shared contract module
- * (lib/shared/help-center/kb-ask-contract.ts), imported by this route and the
+ * (lib/shared/help-center/help-center-ask-contract.ts), imported by this route and the
  * Ask AI client.
  *
  * A GET (no answer path anymore) is a capability probe so public surfaces can
@@ -27,12 +27,12 @@ import { createFileRoute } from '@tanstack/react-router'
 import { toServerSentEventsResponse, chatParamsFromRequestBody } from '@tanstack/ai'
 import { getFeatureFlags } from '@/lib/server/domains/settings/settings.service'
 import {
-  retrieveKbArticles,
+  retrieveHelpCenterArticles,
   synthesizeAnswer,
   isAskAiConfigured,
   ASK_AI_MISS_FALLBACK,
   RELATED_SIMILARITY_FLOOR,
-  type RetrievedKbArticle,
+  type RetrievedHelpCenterArticle,
 } from '@/lib/server/domains/assistant'
 import {
   createChunkQueue,
@@ -44,10 +44,10 @@ import {
   withSseKeepalive,
 } from '@/lib/server/domains/assistant/agui'
 import type {
-  KbAskFinalPayload,
-  KbAskSourceMeta,
-  KbAskStateSnapshot,
-} from '@/lib/shared/help-center/kb-ask-contract'
+  HelpCenterAskFinalPayload,
+  HelpCenterAskSourceMeta,
+  HelpCenterAskStateSnapshot,
+} from '@/lib/shared/help-center/help-center-ask-contract'
 import {
   enforceWidgetQuota,
   widgetCorsHeaders,
@@ -62,16 +62,16 @@ import { logAiUsage, type AiAnswerKind } from '@/lib/server/domains/ai/usage-log
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { logger } from '@/lib/server/logger'
 
-const log = logger.child({ component: 'widget-kb-ask' })
+const log = logger.child({ component: 'widget-help-center-ask' })
 
-export const KB_ASK_MAX_QUERY_CHARS = 500
-export const KB_ASK_RATE_LIMIT = 10
+export const HELP_CENTER_ASK_MAX_QUERY_CHARS = 500
+export const HELP_CENTER_ASK_RATE_LIMIT = 10
 const RATE_WINDOW_SECONDS = 60
 
 /** How many related near-miss articles to suggest alongside a no-answer. */
-const KB_ASK_RELATED_TOP_K = 3
+const HELP_CENTER_ASK_RELATED_TOP_K = 3
 
-function toSourceMeta(a: RetrievedKbArticle): KbAskSourceMeta {
+function toSourceMeta(a: RetrievedHelpCenterArticle): HelpCenterAskSourceMeta {
   return {
     articleId: a.id,
     urlId: a.urlId,
@@ -104,17 +104,17 @@ function trailingUserQuestion(messages: ReadonlyArray<unknown>): string | null {
  */
 async function relatedArticles(
   query: string,
-  retrieved: RetrievedKbArticle[],
+  retrieved: RetrievedHelpCenterArticle[],
   viewer: Actor
-): Promise<RetrievedKbArticle[]> {
-  if (retrieved.length > 0) return retrieved.slice(0, KB_ASK_RELATED_TOP_K)
+): Promise<RetrievedHelpCenterArticle[]> {
+  if (retrieved.length > 0) return retrieved.slice(0, HELP_CENTER_ASK_RELATED_TOP_K)
   try {
     // topK already caps the row count in SQL, so no post-slice is needed.
-    return await retrieveKbArticles(query, {
+    return await retrieveHelpCenterArticles(query, {
       audience: 'public',
       viewer,
       minScore: RELATED_SIMILARITY_FLOOR,
-      topK: KB_ASK_RELATED_TOP_K,
+      topK: HELP_CENTER_ASK_RELATED_TOP_K,
     })
   } catch {
     return []
@@ -126,7 +126,7 @@ async function relatedArticles(
  * configured, without exposing any configuration detail. The answer path is
  * POST-only, so a GET only ever probes.
  */
-export async function handleKbAskProbe({
+export async function handleHelpCenterAskProbe({
   request: _request,
 }: {
   request: Request
@@ -138,7 +138,7 @@ export async function handleKbAskProbe({
   return Response.json({ data: { enabled: isAskAiConfigured() } }, { headers: widgetCorsHeaders() })
 }
 
-export async function handleKbAsk({ request }: { request: Request }): Promise<Response> {
+export async function handleHelpCenterAsk({ request }: { request: Request }): Promise<Response> {
   const flags = await getFeatureFlags()
   if (!flags.helpCenter) {
     return widgetJsonError(404, 'NOT_FOUND', 'Knowledge base not found')
@@ -165,11 +165,11 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
   if (!query) {
     return widgetJsonError(400, 'INVALID_QUERY', 'Query must not be empty')
   }
-  if (query.length > KB_ASK_MAX_QUERY_CHARS) {
+  if (query.length > HELP_CENTER_ASK_MAX_QUERY_CHARS) {
     return widgetJsonError(
       413,
       'QUERY_TOO_LONG',
-      `Query exceeds ${KB_ASK_MAX_QUERY_CHARS} characters`
+      `Query exceeds ${HELP_CENTER_ASK_MAX_QUERY_CHARS} characters`
     )
   }
 
@@ -185,9 +185,9 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
   if (!settings) return widgetJsonError(503, 'WORKSPACE_UNAVAILABLE', 'Workspace unavailable')
 
   const limited = await enforceWidgetQuota(request, {
-    keyPrefix: 'kbask',
+    keyPrefix: 'help_center_ask',
     workspaceKey: settings.id,
-    limit: KB_ASK_RATE_LIMIT,
+    limit: HELP_CENTER_ASK_RATE_LIMIT,
     windowSeconds: RATE_WINDOW_SECONDS,
     message: 'Too many questions, slow down',
   })
@@ -209,9 +209,9 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
   const viewer = await resolveWidgetViewer()
   let articles
   try {
-    articles = await retrieveKbArticles(query, { audience: 'public', viewer })
+    articles = await retrieveHelpCenterArticles(query, { audience: 'public', viewer })
   } catch (error) {
-    log.error({ err: error }, 'kb ask retrieval failed')
+    log.error({ err: error }, 'help center ask retrieval failed')
     return widgetJsonError(500, 'SERVER_ERROR', 'Answer lookup failed')
   }
 
@@ -246,14 +246,16 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
           durationMs: Date.now() - retrievalStartedAt,
           status: 'success',
           metadata: { answerKind: 'no_sources' satisfies AiAnswerKind, query },
-        }).catch((err) => log.warn({ err }, 'failed to log ai usage for kb-ask no_sources'))
+        }).catch((err) =>
+          log.warn({ err }, 'failed to log ai usage for help-center-ask no_sources')
+        )
         queue.push(
           runFinishedChunk(wire, {
             kind: 'no_answer',
             answer: ASK_AI_MISS_FALLBACK,
             sources: [],
             related: related.map(toSourceMeta),
-          } satisfies KbAskFinalPayload)
+          } satisfies HelpCenterAskFinalPayload)
         )
         queue.end()
         return
@@ -264,7 +266,7 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
       queue.push(
         stateSnapshotChunk({
           sources: articles.map(toSourceMeta),
-        } satisfies KbAskStateSnapshot)
+        } satisfies HelpCenterAskStateSnapshot)
       )
 
       const result = await synthesizeAnswer({
@@ -281,7 +283,7 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
             kind: 'grounded',
             answer: result.answer,
             sources: result.sources,
-          } satisfies KbAskFinalPayload)
+          } satisfies HelpCenterAskFinalPayload)
         )
         queue.end()
         return
@@ -296,13 +298,13 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
           answer: result.answer,
           sources: [],
           related: related.map(toSourceMeta),
-        } satisfies KbAskFinalPayload)
+        } satisfies HelpCenterAskFinalPayload)
       )
       queue.end()
     } catch (error) {
       pairing.closeOpen()
       if (!request.signal.aborted) {
-        log.error({ err: error }, 'kb ask synthesis failed')
+        log.error({ err: error }, 'help center ask synthesis failed')
         queue.push(runErrorChunk(wire, 'SYNTHESIS_FAILED', 'Answer generation failed'))
       }
       queue.end()
@@ -314,11 +316,11 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
   )
 }
 
-export const Route = createFileRoute('/api/widget/kb-ask')({
+export const Route = createFileRoute('/api/widget/help-center-ask')({
   server: {
     handlers: {
-      GET: handleKbAskProbe,
-      POST: handleKbAsk,
+      GET: handleHelpCenterAskProbe,
+      POST: handleHelpCenterAsk,
     },
   },
 })

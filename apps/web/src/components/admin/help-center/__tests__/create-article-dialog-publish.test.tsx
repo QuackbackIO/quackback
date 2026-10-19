@@ -32,7 +32,7 @@ vi.mock('@/lib/client/mutations/help-center', () => {
     },
   })
   return {
-    useCreateArticle: mutation(calls.created, () => ({ id: 'kb_article_1' })),
+    useCreateArticle: mutation(calls.created, () => ({ id: 'article_1' })),
     useUpdateArticle: mutation(calls.updated, (input) => {
       if (calls.updateFailures > 0) {
         calls.updateFailures -= 1
@@ -100,7 +100,7 @@ afterEach(() => {
 it('publishes the new article in one step', async () => {
   render(<CreateArticleDialog open onOpenChange={() => {}} />)
   await userEvent.setup().click(await screen.findByRole('button', { name: 'Publish' }))
-  await waitFor(() => expect(calls.published).toEqual(['kb_article_1']))
+  await waitFor(() => expect(calls.published).toEqual(['article_1']))
   expect(calls.created).toHaveLength(1)
 })
 
@@ -134,7 +134,7 @@ it('keeps a failed publish in view, and publishes the saved draft on retry', asy
   await waitFor(() => expect(calls.navigate).toHaveBeenCalledTimes(1))
   // The draft saved the first time: the retry publishes it, never a second copy.
   expect(calls.created).toHaveLength(1)
-  expect(calls.published).toEqual(['kb_article_1', 'kb_article_1'])
+  expect(calls.published).toEqual(['article_1', 'article_1'])
   expect(onOpenChange).toHaveBeenCalledWith(false)
 })
 
@@ -151,19 +151,19 @@ it('saves edits made after a failed publish into the same draft before publishin
   // The save of the edits fails: the dialog stays open with the error, nothing published.
   await user.click(screen.getByRole('button', { name: 'Publish' }))
   expect(await screen.findByText(/Saving is unavailable/)).toBeInTheDocument()
-  expect(calls.published).toEqual(['kb_article_1'])
+  expect(calls.published).toEqual(['article_1'])
   expect(calls.navigate).not.toHaveBeenCalled()
 
   await user.click(screen.getByRole('button', { name: 'Publish' }))
   await waitFor(() => expect(calls.navigate).toHaveBeenCalledTimes(1))
   expect(calls.created).toHaveLength(1)
   expect(calls.updated.at(-1)).toMatchObject({
-    id: 'kb_article_1',
+    id: 'article_1',
     title: 'Getting started, revised',
     content: 'Hello again',
     contentJson: { type: 'doc', v: 2 },
   })
-  expect(calls.published).toEqual(['kb_article_1', 'kb_article_1'])
+  expect(calls.published).toEqual(['article_1', 'article_1'])
   expect(onOpenChange).toHaveBeenCalledWith(false)
 })
 
@@ -172,7 +172,7 @@ it('hands a published article back to a caller that keeps the person where they 
   const onOpenChange = vi.fn()
   render(<CreateArticleDialog open onOpenChange={onOpenChange} onPublished={onPublished} />)
   await userEvent.setup().click(await screen.findByRole('button', { name: 'Publish' }))
-  await waitFor(() => expect(onPublished).toHaveBeenCalledWith('kb_article_1'))
+  await waitFor(() => expect(onPublished).toHaveBeenCalledWith('article_1'))
   expect(onOpenChange).toHaveBeenCalledWith(false)
   expect(calls.navigate).not.toHaveBeenCalled()
 })

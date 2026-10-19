@@ -21,7 +21,7 @@ import { createUsersExporter } from './entities/users'
 import { companiesExporter } from './entities/companies'
 import { conversationsExporter } from './entities/conversations'
 import { changelogExporter } from './entities/changelog'
-import { kbArticlesExporter } from './entities/kb'
+import { helpCenterArticlesExporter } from './entities/help-center'
 import {
   failStaleActiveRuns,
   listExpiredCompletedRuns,
@@ -43,7 +43,7 @@ function buildEntityList(): EntityExporter[] {
     companiesExporter,
     conversationsExporter,
     changelogExporter,
-    kbArticlesExporter,
+    helpCenterArticlesExporter,
   ]
 }
 

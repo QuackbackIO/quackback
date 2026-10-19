@@ -48,7 +48,7 @@ const { Component: CreateArticleDialog, preload: preloadCreateArticleDialog } = 
 )
 import { TimeAgo } from '@/components/ui/time-ago'
 import { FormattedMessage, useIntl } from 'react-intl'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest' },
@@ -74,8 +74,8 @@ function HelpCenterListSkeleton() {
 }
 
 interface HelpCenterFinderProps {
-  onEditArticle: (id: KbArticleId) => void
-  onDeleteArticle: (id: KbArticleId) => void
+  onEditArticle: (id: ArticleId) => void
+  onDeleteArticle: (id: ArticleId) => void
   categoryActions: CategoryActions
 }
 
@@ -279,7 +279,7 @@ function LiveHelpCenterFinder({
                   style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
                 >
                   <HelpCenterListItem
-                    id={article.id as KbArticleId}
+                    id={article.id as ArticleId}
                     title={article.title}
                     description={article.description}
                     content={article.content}
@@ -419,7 +419,7 @@ function DeletedItemsView() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => restoreArticleMutation.mutate(article.id as KbArticleId)}
+                  onClick={() => restoreArticleMutation.mutate(article.id as ArticleId)}
                   disabled={restoreArticleMutation.isPending}
                 >
                   <ArrowUturnLeftIcon className="h-3.5 w-3.5 mr-1" />

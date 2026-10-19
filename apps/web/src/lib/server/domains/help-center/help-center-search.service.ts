@@ -23,7 +23,7 @@ import {
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { segmentGateFilter } from '@/lib/server/policy/segment-gate'
-import { generateKbQueryEmbedding } from './help-center-embedding.service'
+import { generateHelpCenterQueryEmbedding } from './help-center-embedding.service'
 import { logSearchQuery } from './help-center.search-analytics'
 
 export const KEYWORD_WEIGHT = 0.4
@@ -75,9 +75,9 @@ export function orTermsTsQuery(query: string) {
 /**
  * Same OR-of-terms construction as {@link orTermsTsQuery}, but keyed off a
  * locale's regconfig (domains/languages §2) instead of hardcoded 'english' --
- * used against kb_article_translations.search_vector, which is itself
+ * used against help_center_article_translations.search_vector, which is itself
  * generated with the same per-locale config (see LOCALE_TO_REGCONFIG /
- * localeRegconfigCaseSql in packages/db/src/schema/kb.ts).
+ * localeRegconfigCaseSql in packages/db/src/schema/help-center.ts).
  */
 export function orTermsTsQueryForLocale(query: string, locale: string) {
   const orQuery = query
@@ -128,25 +128,25 @@ export function helpCenterVisibilityConditions(audience: HelpCenterAudience, vie
  * for article queries that cannot join helpCenterCategories (e.g. relational
  * findMany in the list reader). Must stay in lockstep with that owner.
  *
- * The kb_categories references are RAW identifiers, not drizzle column
+ * The help_center_categories references are RAW identifiers, not drizzle column
  * objects: the relational query builder rewrites every embedded column ref
  * onto the root table's alias, which would silently remap these onto
- * kb_articles ("column kb_articles.is_public does not exist" at best, a
+ * help_center_articles ("column help_center_articles.is_public does not exist" at best, a
  * wrong-table predicate at worst). `${helpCenterArticles.categoryId}` is the
  * one ref that SHOULD track the root alias, so it stays a column object.
  * Pinned by the segment-gate integration test.
  */
 export function publicCategoryExistsCondition(viewer: Actor) {
-  const gate = segmentGateFilter(viewer, sql.raw('"kb_categories"."segment_ids"'))
-  // The article-level gate refs kb_articles itself, so it stays a column
+  const gate = segmentGateFilter(viewer, sql.raw('"help_center_categories"."segment_ids"'))
+  // The article-level gate refs help_center_articles itself, so it stays a column
   // object: the relational builder rewrites it onto the root alias, which is
   // the correct table here (same treatment as the categoryId ref below).
   const articleGate = segmentGateFilter(viewer, helpCenterArticles.segmentIds)
   return sql`EXISTS (
-    SELECT 1 FROM "kb_categories"
-    WHERE "kb_categories"."id" = ${helpCenterArticles.categoryId}
-      AND "kb_categories"."deleted_at" IS NULL
-      AND "kb_categories"."is_public" = true
+    SELECT 1 FROM "help_center_categories"
+    WHERE "help_center_categories"."id" = ${helpCenterArticles.categoryId}
+      AND "help_center_categories"."deleted_at" IS NULL
+      AND "help_center_categories"."is_public" = true
       AND ${gate}
   ) AND ${articleGate}`
 }
@@ -195,8 +195,8 @@ export async function hybridSearch(
   limit = 10,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HybridSearchResult[]> {
-  const queryEmbedding = await generateKbQueryEmbedding(query, {
-    pipelineStep: 'kb_search_query_embedding',
+  const queryEmbedding = await generateHelpCenterQueryEmbedding(query, {
+    pipelineStep: 'help_center_search_query',
   })
 
   if (queryEmbedding) {
@@ -329,8 +329,8 @@ export async function searchArticleIdsRanked(
   }
 
   const tsQuery = orTermsTsQuery(query)
-  const queryEmbedding = await generateKbQueryEmbedding(query, {
-    pipelineStep: 'kb_search_query_embedding',
+  const queryEmbedding = await generateHelpCenterQueryEmbedding(query, {
+    pipelineStep: 'help_center_search_query',
   })
 
   const keywordMatch = sql`(
@@ -431,7 +431,7 @@ async function keywordOnlyQuery(
 // ============================================================================
 
 /**
- * Keyword-only search over kb_article_translations for an ADDITIONAL locale.
+ * Keyword-only search over help_center_article_translations for an ADDITIONAL locale.
  * Embeddings stay default-locale only (a cost decision, not a correctness
  * one), so there is no semantic component here -- this is the per-locale
  * analogue of {@link keywordOnlyQuery}, not of the full hybrid query.

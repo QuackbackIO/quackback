@@ -19,13 +19,13 @@ import type { Actor } from '@/lib/server/policy/types'
  * lazy import so this module never eagerly loads a disabled source's schema.
  * With only the knowledge-base source registered (the KB-only default),
  * `retrieveKnowledge` is a byte-identical pass-through of
- * `retrieveKbArticles`'s own ranking — merging and re-ranking a single
+ * `retrieveHelpCenterArticles`'s own ranking — merging and re-ranking a single
  * source's already-sorted output changes nothing.
  */
 import type { PrincipalId, ConversationId } from '@quackback/ids'
 import type { ContentAudience } from './audience'
 import { toHelpCenterAudience } from './audience'
-import { retrieveKbArticles } from './retrieval'
+import { retrieveHelpCenterArticles } from './retrieval'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import type { AssistantConfig, AssistantAgentKind } from '@/lib/shared/assistant/config'
@@ -99,28 +99,30 @@ function helpArticleUrl(urlId: number, slug: string): string {
 }
 
 /**
- * The knowledge-base source: wraps `retrieveKbArticles` unchanged (its
+ * The knowledge-base source: wraps `retrieveHelpCenterArticles` unchanged (its
  * signature is untouched — this only maps its rows onto `RetrievedItem`),
  * translating the turn's `ContentAudience` ceiling to the narrower
  * `HelpCenterAudience` at this one boundary. Always registered: the
  * knowledge base is the grounding source every deploy has from day one, so
  * unlike a future source it never needs a flag check to be included.
  *
- * Deliberately ignores `opts.topK`: `retrieveKbArticles` already applies its
+ * Deliberately ignores `opts.topK`: `retrieveHelpCenterArticles` already applies its
  * own default top-k, and forwarding a different value here would change the
  * exact call shape callers and tests pin today. The composer trims the
  * merged result to the overall topK afterward, so this doesn't under-serve
  * the budget.
  */
-export const kbKnowledgeSource: KnowledgeSource = {
+export const helpCenterKnowledgeSource: KnowledgeSource = {
   sourceType: 'article',
   async retrieve(query, ceiling) {
     // No viewer is threaded here, so at the 'public' ceiling retrieval fails
     // closed: articles under segment-gated categories are excluded entirely
-    // (retrieveKbArticles defaults its viewer to ANONYMOUS_ACTOR). The 'team'
+    // (retrieveHelpCenterArticles defaults its viewer to ANONYMOUS_ACTOR). The 'team'
     // ceiling bypasses the gate and relies on the isPublic/internal flag for
     // the copilot leak gate.
-    const articles = await retrieveKbArticles(query, { audience: toHelpCenterAudience(ceiling) })
+    const articles = await retrieveHelpCenterArticles(query, {
+      audience: toHelpCenterAudience(ceiling),
+    })
     return articles.map((a) => ({
       id: a.id,
       sourceType: 'article' as const,
@@ -296,7 +298,7 @@ export async function resolveKnowledgeSources(
     allowed(permission) ? source : publicOnly(source)
   const sources: KnowledgeSource[] = []
   if (enabledSet.has('article'))
-    sources.push(scoped(kbKnowledgeSource, PERMISSIONS.HELP_CENTER_MANAGE))
+    sources.push(scoped(helpCenterKnowledgeSource, PERMISSIONS.HELP_CENTER_MANAGE))
   if (enabledSet.has('post')) {
     sources.push(
       scoped(

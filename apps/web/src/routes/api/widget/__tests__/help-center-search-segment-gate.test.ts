@@ -38,14 +38,14 @@ vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
   segmentIdsForPrincipal: (...args: unknown[]) => mockSegmentIdsForPrincipal(...args),
 }))
 
-import { handleKbSearch } from '../kb-search'
+import { handleHelpCenterSearch } from '../help-center-search'
 import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 
 const PRINCIPAL = 'principal_01hzuser0000000000000000000' as PrincipalId
 const SEG = 'segment_01hzseg000000000000000000000' as SegmentId
 
 function makeRequest(q = 'hello'): Request {
-  const url = new URL('http://localhost/api/widget/kb-search')
+  const url = new URL('http://localhost/api/widget/help-center-search')
   url.searchParams.set('q', q)
   return new Request(url, { headers: { 'x-forwarded-for': '203.0.113.9' } })
 }
@@ -60,9 +60,9 @@ beforeEach(() => {
   mockSegmentIdsForPrincipal.mockResolvedValue(new Set())
 })
 
-describe('GET /api/widget/kb-search viewer threading', () => {
+describe('GET /api/widget/help-center-search viewer threading', () => {
   it('unidentified callers search as the anonymous actor (fail closed)', async () => {
-    const res = await handleKbSearch({ request: makeRequest() })
+    const res = await handleHelpCenterSearch({ request: makeRequest() })
     expect(res.status).toBe(200)
     expect(mockHybridSearchForLocale).toHaveBeenCalledWith('hello', 'en', 10, ANONYMOUS_ACTOR)
   })
@@ -73,7 +73,7 @@ describe('GET /api/widget/kb-search viewer threading', () => {
     })
     mockSegmentIdsForPrincipal.mockResolvedValue(new Set([SEG]))
 
-    const res = await handleKbSearch({ request: makeRequest() })
+    const res = await handleHelpCenterSearch({ request: makeRequest() })
     expect(res.status).toBe(200)
     expect(mockSegmentIdsForPrincipal).toHaveBeenCalledWith(PRINCIPAL)
     expect(mockHybridSearchForLocale).toHaveBeenCalledWith('hello', 'en', 10, {
@@ -89,14 +89,14 @@ describe('GET /api/widget/kb-search viewer threading', () => {
       principal: { id: PRINCIPAL, role: 'user', type: 'anonymous' },
     })
 
-    await handleKbSearch({ request: makeRequest() })
+    await handleHelpCenterSearch({ request: makeRequest() })
     const viewer = mockHybridSearchForLocale.mock.calls[0][3] as { principalType: string }
     expect(viewer.principalType).toBe('anonymous')
   })
 
   it('viewer resolution failure falls back to the anonymous actor instead of failing the read', async () => {
     mockGetWidgetSession.mockRejectedValue(new Error('boom'))
-    const res = await handleKbSearch({ request: makeRequest() })
+    const res = await handleHelpCenterSearch({ request: makeRequest() })
     expect(res.status).toBe(200)
     expect(mockHybridSearchForLocale).toHaveBeenCalledWith('hello', 'en', 10, ANONYMOUS_ACTOR)
   })

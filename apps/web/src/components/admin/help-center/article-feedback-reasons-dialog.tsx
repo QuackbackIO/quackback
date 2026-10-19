@@ -12,10 +12,10 @@ import { MENU_LABEL } from '@/components/ui/menu'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { cn } from '@/lib/shared/utils'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 
 interface ArticleFeedbackReasonsDialogProps {
-  articleId: KbArticleId
+  articleId: ArticleId
   open: boolean
   onOpenChange: (open: boolean) => void
 }

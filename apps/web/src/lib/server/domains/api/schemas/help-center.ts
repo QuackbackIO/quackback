@@ -17,7 +17,7 @@ import { TimestampSchema, NullableTimestampSchema } from './common'
 import { errorResponses } from './errors'
 
 const CategorySchema = z.object({
-  id: TypeIdSchema.meta({ example: 'kb_category_01h455vb4pex5vsknk084sn02q' }),
+  id: TypeIdSchema.meta({ example: 'category_01h455vb4pex5vsknk084sn02q' }),
   slug: z.string().meta({ example: 'getting-started' }),
   name: z.string().meta({ example: 'Getting started' }),
   description: z.string().nullable(),

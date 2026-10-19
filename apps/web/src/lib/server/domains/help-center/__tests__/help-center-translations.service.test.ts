@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { KbArticleId, KbCategoryId } from '@quackback/ids'
+import type { ArticleId, CategoryId } from '@quackback/ids'
 
 const mockArticleTranslationFindMany = vi.fn()
 const mockArticleTranslationFindFirst = vi.fn()
@@ -21,7 +21,7 @@ function createInsertChain() {
   })
   chain.returning = vi.fn().mockResolvedValue([
     {
-      id: 'kb_article_translation_1',
+      id: 'article_translation_1',
       articleId: 'article_1',
       locale: 'de',
       title: 'Titel',
@@ -45,7 +45,7 @@ function createUpdateChain() {
   })
   chain.returning = vi.fn().mockResolvedValue([
     {
-      id: 'kb_article_translation_1',
+      id: 'article_translation_1',
       articleId: 'article_1',
       locale: 'de',
       title: 'Titel',
@@ -116,29 +116,29 @@ beforeEach(() => {
 describe('article translations', () => {
   it('lists translations for an article', async () => {
     mockArticleTranslationFindMany.mockResolvedValue([{ locale: 'de' }])
-    const result = await listArticleTranslations('article_1' as KbArticleId)
+    const result = await listArticleTranslations('article_1' as ArticleId)
     expect(result).toEqual([{ locale: 'de' }])
   })
 
   it('returns null when a translation does not exist', async () => {
     mockArticleTranslationFindFirst.mockResolvedValue(undefined)
-    expect(await getArticleTranslation('article_1' as KbArticleId, 'de')).toBeNull()
+    expect(await getArticleTranslation('article_1' as ArticleId, 'de')).toBeNull()
   })
 
   it('getPublishedArticleTranslation returns null for a draft translation', async () => {
     mockArticleTranslationFindFirst.mockResolvedValue({ status: 'draft' })
-    expect(await getPublishedArticleTranslation('article_1' as KbArticleId, 'de')).toBeNull()
+    expect(await getPublishedArticleTranslation('article_1' as ArticleId, 'de')).toBeNull()
   })
 
   it('getPublishedArticleTranslation returns the row when published', async () => {
     const row = { status: 'published', title: 'Titel' }
     mockArticleTranslationFindFirst.mockResolvedValue(row)
-    expect(await getPublishedArticleTranslation('article_1' as KbArticleId, 'de')).toEqual(row)
+    expect(await getPublishedArticleTranslation('article_1' as ArticleId, 'de')).toEqual(row)
   })
 
   it('upserts via insert + onConflictDoUpdate on (articleId, locale)', async () => {
     const result = await upsertArticleTranslation({
-      articleId: 'article_1' as KbArticleId,
+      articleId: 'article_1' as ArticleId,
       locale: 'de',
       title: 'Titel',
       content: 'Inhalt',
@@ -149,7 +149,7 @@ describe('article translations', () => {
   })
 
   it('sets translation status and errors when the translation does not exist', async () => {
-    const result = await setArticleTranslationStatus('article_1' as KbArticleId, 'de', 'published')
+    const result = await setArticleTranslationStatus('article_1' as ArticleId, 'de', 'published')
     expect(result.status).toBe('published')
   })
 
@@ -163,12 +163,12 @@ describe('article translations', () => {
     } as any)
 
     await expect(
-      setArticleTranslationStatus('article_1' as KbArticleId, 'de', 'published')
+      setArticleTranslationStatus('article_1' as ArticleId, 'de', 'published')
     ).rejects.toThrow(/before publishing/i)
   })
 
   it('deletes a translation', async () => {
-    await deleteArticleTranslation('article_1' as KbArticleId, 'de')
+    await deleteArticleTranslation('article_1' as ArticleId, 'de')
     // no throw is sufficient; the mocked db.delete().where() always resolves
   })
 
@@ -179,7 +179,7 @@ describe('article translations', () => {
     ])
 
     const statuses = await getArticleTranslationStatuses(
-      'article_1' as KbArticleId,
+      'article_1' as ArticleId,
       ['de', 'fr', 'es'],
       ['es']
     )
@@ -205,21 +205,19 @@ describe('article translations', () => {
 describe('category translations', () => {
   it('lists translations for a category', async () => {
     mockCategoryTranslationFindMany.mockResolvedValue([{ locale: 'de' }])
-    expect(await listCategoryTranslations('kb_category_1' as KbCategoryId)).toEqual([
-      { locale: 'de' },
-    ])
+    expect(await listCategoryTranslations('category_1' as CategoryId)).toEqual([{ locale: 'de' }])
   })
 
   it('returns null when no translation exists', async () => {
     mockCategoryTranslationFindFirst.mockResolvedValue(undefined)
-    expect(await getCategoryTranslation('kb_category_1' as KbCategoryId, 'de')).toBeNull()
+    expect(await getCategoryTranslation('category_1' as CategoryId, 'de')).toBeNull()
   })
 
   it('upserts a category translation', async () => {
     const chainReturning = vi.fn().mockResolvedValue([
       {
-        id: 'kb_category_translation_1',
-        categoryId: 'kb_category_1',
+        id: 'category_translation_1',
+        categoryId: 'category_1',
         locale: 'de',
         name: 'Abrechnung',
         description: null,
@@ -236,7 +234,7 @@ describe('category translations', () => {
     } as any)
 
     const result = await upsertCategoryTranslation({
-      categoryId: 'kb_category_1' as KbCategoryId,
+      categoryId: 'category_1' as CategoryId,
       locale: 'de',
       name: 'Abrechnung',
     })
@@ -244,7 +242,7 @@ describe('category translations', () => {
   })
 
   it('deletes a category translation', async () => {
-    await deleteCategoryTranslation('kb_category_1' as KbCategoryId, 'de')
+    await deleteCategoryTranslation('category_1' as CategoryId, 'de')
   })
 
   it('treats a row with an empty name as untranslated', async () => {
@@ -253,7 +251,7 @@ describe('category translations', () => {
       { locale: 'fr', name: '   ', updatedAt: new Date('2026-01-01') },
     ])
 
-    const statuses = await getCategoryTranslationStatuses('kb_category_1' as KbCategoryId, [
+    const statuses = await getCategoryTranslationStatuses('category_1' as CategoryId, [
       'de',
       'fr',
       'es',

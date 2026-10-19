@@ -238,6 +238,51 @@ export const REPLAY_OVERRIDES: readonly ReplayOverride[] = [
       'every replay forever, with nothing able to write them back.',
     stillFailsWith: /pipeline_log/,
   },
+  {
+    tag: '0226_kb_article_feedback_reason',
+    verdict: 'mutates',
+    why:
+      'It alters `kb_article_feedback`, which 0305_help_center_names renames to its help_center_ name and ' +
+      'replaces with a compatibility view, so a replay targets the view and errors. Refused as ' +
+      'mutates for the reason recorded on 0207_index_tuning.',
+    stillFailsWith: /kb_article_feedback/,
+  },
+  {
+    tag: '0240_kb_article_segments',
+    verdict: 'mutates',
+    why:
+      'It alters `kb_articles`, which 0305_help_center_names renames to its help_center_ name and ' +
+      'replaces with a compatibility view, so a replay targets the view and errors. Refused as ' +
+      'mutates for the reason recorded on 0207_index_tuning.',
+    stillFailsWith: /kb_articles/,
+  },
+  {
+    tag: '0246_hc_search_queries',
+    verdict: 'mutates',
+    why:
+      'It indexes `kb_search_queries`, which 0305_help_center_names renames to its help_center_ name and ' +
+      'replaces with a compatibility view, so a replay targets the view and errors. Refused as ' +
+      'mutates for the reason recorded on 0207_index_tuning.',
+    stillFailsWith: /kb_search_queries/,
+  },
+  {
+    tag: '0272_kb_url_id',
+    verdict: 'mutates',
+    why:
+      'It alters `kb_categories`, which 0305_help_center_names renames to its help_center_ name and ' +
+      'replaces with a compatibility view, so a replay targets the view and errors. Refused as ' +
+      'mutates for the reason recorded on 0207_index_tuning.',
+    stillFailsWith: /kb_categories/,
+  },
+  {
+    tag: '0288_kb_translations_dutch_search',
+    verdict: 'mutates',
+    why:
+      'It alters `kb_article_translations`, which 0305_help_center_names renames to its help_center_ name and ' +
+      'replaces with a compatibility view, so a replay targets the view and errors. Refused as ' +
+      'mutates for the reason recorded on 0207_index_tuning.',
+    stillFailsWith: /kb_article_translations/,
+  },
 ]
 
 /** How bad each verdict is, so an override can be applied as "the worse of the two". */

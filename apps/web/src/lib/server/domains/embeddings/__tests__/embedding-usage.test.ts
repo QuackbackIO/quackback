@@ -34,7 +34,7 @@ vi.mock('@/lib/server/domains/ai/models', () => ({
 }))
 
 import { generateEmbedding } from '../embedding.service'
-import { generateKbEmbedding } from '@/lib/server/domains/help-center/help-center-embedding.service'
+import { generateHelpCenterEmbedding } from '@/lib/server/domains/help-center/help-center-embedding.service'
 import { aiTokensInWindow } from '@/lib/server/domains/ai/usage-counter'
 
 const fixture = await createDbTestFixture({
@@ -107,8 +107,8 @@ describe.skipIf(!fixture.available)('embedding usage accounting', () => {
 
   it('estimates help center embeddings the same way', async () => {
     provider.usage = null
-    await generateKbEmbedding('y'.repeat(80), { pipelineStep: 'kb_search_query_embedding' })
-    const [row] = await embeddingRows('kb_search_query_embedding')
+    await generateHelpCenterEmbedding('y'.repeat(80), { pipelineStep: 'help_center_search_query' })
+    const [row] = await embeddingRows('help_center_search_query')
     expect(row?.totalTokens).toBe(20)
   })
 

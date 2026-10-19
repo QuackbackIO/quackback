@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockGenerateKbQueryEmbedding = vi.fn()
+const mockGenerateHelpCenterQueryEmbedding = vi.fn()
 vi.mock('../help-center-embedding.service', () => ({
-  generateKbQueryEmbedding: (...args: unknown[]) => mockGenerateKbQueryEmbedding(...args),
+  generateHelpCenterQueryEmbedding: (...args: unknown[]) =>
+    mockGenerateHelpCenterQueryEmbedding(...args),
 }))
 
 const mockLimit = vi.fn()
@@ -19,7 +20,13 @@ function makeChain() {
 
 vi.mock('@/lib/server/db', () => ({
   db: { select: vi.fn(() => makeChain()) },
-  helpCenterCategories: { id: 'id', slug: 'slug', name: 'name', isPublic: 'is_public', deletedAt: 'cat_deleted' },
+  helpCenterCategories: {
+    id: 'id',
+    slug: 'slug',
+    name: 'name',
+    isPublic: 'is_public',
+    deletedAt: 'cat_deleted',
+  },
   helpCenterArticles: {
     id: 'id',
     slug: 'slug',
@@ -56,12 +63,11 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
-const { orTermsTsQueryForLocale, hybridSearchForLocale } = await import(
-  '../help-center-search.service'
-)
+const { orTermsTsQueryForLocale, hybridSearchForLocale } =
+  await import('../help-center-search.service')
 
 beforeEach(() => {
-  mockGenerateKbQueryEmbedding.mockReset()
+  mockGenerateHelpCenterQueryEmbedding.mockReset()
   mockLimit.mockReset()
   mockLimit.mockResolvedValue([])
 })
@@ -82,16 +88,16 @@ describe('orTermsTsQueryForLocale', () => {
 
 describe('hybridSearchForLocale', () => {
   it('delegates to the full hybrid search for the default locale', async () => {
-    mockGenerateKbQueryEmbedding.mockResolvedValue(null)
+    mockGenerateHelpCenterQueryEmbedding.mockResolvedValue(null)
     await hybridSearchForLocale('invoices', 'en', 5)
-    // Default-locale path goes through generateKbQueryEmbedding (hybridSearch's own logic).
-    expect(mockGenerateKbQueryEmbedding).toHaveBeenCalled()
+    // Default-locale path goes through generateHelpCenterQueryEmbedding (hybridSearch's own logic).
+    expect(mockGenerateHelpCenterQueryEmbedding).toHaveBeenCalled()
   })
 
   it('runs the keyword-only translation query for an additional locale', async () => {
     const results = await hybridSearchForLocale('rechnung', 'de', 5)
     expect(results).toEqual([])
     // No embedding call on the locale path -- embeddings stay default-locale only.
-    expect(mockGenerateKbQueryEmbedding).not.toHaveBeenCalled()
+    expect(mockGenerateHelpCenterQueryEmbedding).not.toHaveBeenCalled()
   })
 })

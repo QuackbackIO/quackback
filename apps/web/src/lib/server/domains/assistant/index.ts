@@ -8,12 +8,12 @@
  * messenger wiring and the admin sandbox both call.
  */
 export {
-  retrieveKbArticles,
-  KB_ASK_TOP_K,
-  KB_ASK_CONTEXT_CHARS,
+  retrieveHelpCenterArticles,
+  HELP_CENTER_ASK_TOP_K,
+  HELP_CENTER_ASK_CONTEXT_CHARS,
   RELATED_SIMILARITY_FLOOR,
-  type RetrievedKbArticle,
-  type RetrieveKbArticlesOptions,
+  type RetrievedHelpCenterArticle,
+  type RetrieveHelpCenterArticlesOptions,
 } from './retrieval'
 
 // Source-adapter seam: the composed knowledge-base + (flagged) feedback-posts
@@ -21,7 +21,7 @@ export {
 export {
   retrieveKnowledge,
   resolveKnowledgeSources,
-  kbKnowledgeSource,
+  helpCenterKnowledgeSource,
   KNOWLEDGE_TOP_K,
   KNOWLEDGE_SNIPPET_CHARS,
   type RetrievedItem,

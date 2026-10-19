@@ -309,7 +309,7 @@ THE LEDGER SAYS:     {"upToDate":true,"bundledCount":228,"appliedCount":228}
   floor at 0253:     {"ok":true,"missing":[],"floorTag":"0250_job_queue"}
 THE CATALOGUE SAYS:  ok=false
   VIOLATION [invalid_index] public.posts_embedding_hnsw_idx on posts is INVALID (indisready=true)
-  VIOLATION [missing_index] kb_articles_embedding_hnsw_idx does not exist
+  VIOLATION [missing_index] help_center_articles_embedding_hnsw_idx does not exist
   … 5 more
 ```
 

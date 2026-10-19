@@ -217,7 +217,7 @@ export type AssistantActivity = { kind: 'thinking' } | { kind: 'tool'; tool: str
  *  line — both render the exact same three states from the same steps. */
 export function activityToStatus(activity: AssistantActivity): AssistantActivityStatus {
   if (activity.kind === 'thinking') return 'thinking'
-  return activity.tool === 'search' ? 'searching_kb' : 'reviewing_conversation'
+  return activity.tool === 'search' ? 'searching_help_center' : 'reviewing_conversation'
 }
 
 interface AssistantTurnCommonInput {

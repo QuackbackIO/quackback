@@ -89,7 +89,7 @@ export const escalationScenarios: Scenario[] = [
     surface: 'widget',
     fixtures: {
       withConversation: true,
-      kbArticles: [
+      helpCenterArticles: [
         {
           title: 'Changing your billing email',
           content:

@@ -9,7 +9,7 @@
  * slug never collides with itself.
  *
  * Collisions are probed via the caller's `findConflict` across all rows,
- * since the kb slug unique indexes are not filtered on deleted_at.
+ * since the Help Center slug unique indexes are not filtered on deleted_at.
  */
 export async function uniqueHelpCenterSlug(
   desired: string,

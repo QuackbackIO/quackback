@@ -100,7 +100,7 @@ import {
   assistantPendingActions,
   helpCenterArticles,
 } from '@/lib/server/db'
-import { ensureTypeId, typeIdLookupKeys, type KbArticleId, type PrincipalId } from '@quackback/ids'
+import { ensureTypeId, typeIdLookupKeys, type ArticleId, type PrincipalId } from '@quackback/ids'
 import { loadAuthors } from '@/lib/server/domains/principals/principal-display'
 import { COPILOT_EVENT_TYPES } from '@/lib/shared/assistant/copilot-contract'
 import { ratePctOrNull } from '@/lib/shared/percent'
@@ -112,7 +112,7 @@ const TOP_TEAMMATES_LIMIT = 10
  *  per-teammate list, not a full content audit. */
 const TOP_CITED_SOURCES_LIMIT = 10
 
-function canonicalArticleId(id: string): KbArticleId | null {
+function canonicalArticleId(id: string): ArticleId | null {
   try {
     return ensureTypeId(id, 'article')
   } catch {
@@ -121,7 +121,7 @@ function canonicalArticleId(id: string): KbArticleId | null {
 }
 
 function mergeCountsByCanonicalArticleId(rows: Array<{ id: string; n: number }>) {
-  const counts = new Map<KbArticleId, number>()
+  const counts = new Map<ArticleId, number>()
   for (const row of rows) {
     const id = canonicalArticleId(row.id)
     if (!id) continue
@@ -151,7 +151,7 @@ export interface CopilotTeammateQuestionCount {
 }
 
 export interface CopilotCitedSourceCount {
-  id: KbArticleId
+  id: ArticleId
   title: string
   /** Admin-facing edit path, so a content owner can jump straight to fixing it. */
   url: string
@@ -410,7 +410,7 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
     // both a content owner and a stable admin fix-it URL (see
     // CopilotUsageMetrics.topCitedSources).
     db.execute(sql`
-        SELECT regexp_replace(elem->>'id', '^kb_article_', 'article_') AS id,
+        SELECT regexp_replace(elem->>'id', '^article_', 'article_') AS id,
                count(DISTINCT ai_usage_log.id)::int AS n
         FROM ai_usage_log
         CROSS JOIN LATERAL jsonb_array_elements(
@@ -443,7 +443,7 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
   // Title/url are resolved live off the articles table rather than carried in
   // ai_usage_log metadata, so a rename shows up immediately and a deleted
   // article drops out of the report instead of linking nowhere.
-  // Historical rows may still store `kb_article_…`; fold those onto `article_…`
+  // Historical rows may still store `article_…`; fold those onto `article_…`
   // before joining titles or matching insert events.
   const citedCounts = mergeCountsByCanonicalArticleId(citedSourceRows)
   const citedArticleIds = [...citedCounts.keys()]

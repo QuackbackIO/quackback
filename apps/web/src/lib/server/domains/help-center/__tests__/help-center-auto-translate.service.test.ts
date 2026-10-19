@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 
 const mockGetChatModel = vi.fn()
 const mockGetHelpCenterConfig = vi.fn()
@@ -136,7 +136,7 @@ describe('translateArticleForLocale', () => {
     mockGetArticleById.mockResolvedValue({ title: 'Refunds', description: null, content: 'x' })
     mockChat.mockResolvedValue({ title: 'T', content: 'C' })
 
-    const result = await translateArticleForLocale('article_1' as KbArticleId, 'de')
+    const result = await translateArticleForLocale('article_1' as ArticleId, 'de')
 
     expect(result).toEqual({ pausedUntil: budget.windowEnd })
     expect(mockChat).not.toHaveBeenCalled()
@@ -148,7 +148,7 @@ describe('translateArticleForLocale', () => {
     mockGetArticleById.mockResolvedValue({ title: 'Refunds', description: null, content: 'x' })
     mockChat.mockResolvedValue({ title: 'T', content: 'C' })
 
-    const result = await translateArticleForLocale('article_1' as KbArticleId, 'de')
+    const result = await translateArticleForLocale('article_1' as ArticleId, 'de')
 
     expect(result).toBeUndefined()
     expect(mockChat).toHaveBeenCalledOnce()
@@ -159,7 +159,7 @@ describe('translateArticleForLocale', () => {
     mockConfig.openaiApiKey = undefined
     mockGetChatModel.mockReturnValue(null)
 
-    await translateArticleForLocale('article_1' as KbArticleId, 'de')
+    await translateArticleForLocale('article_1' as ArticleId, 'de')
 
     expect(mockGetArticleById).not.toHaveBeenCalled()
     expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
@@ -180,7 +180,7 @@ describe('translateArticleForLocale', () => {
       content: 'Kontaktieren Sie den Quackback-Support.',
     })
 
-    await translateArticleForLocale('article_1' as KbArticleId, 'de')
+    await translateArticleForLocale('article_1' as ArticleId, 'de')
 
     expect(mockUpsertArticleTranslation).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -202,9 +202,7 @@ describe('translateArticleForLocale', () => {
     mockGetArticleById.mockResolvedValue({ title: 'Refunds', description: null, content: 'x' })
     mockChat.mockRejectedValue(new Error('response did not match schema'))
 
-    await expect(
-      translateArticleForLocale('article_1' as KbArticleId, 'de')
-    ).resolves.toBeUndefined()
+    await expect(translateArticleForLocale('article_1' as ArticleId, 'de')).resolves.toBeUndefined()
     expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
   })
 
@@ -214,9 +212,7 @@ describe('translateArticleForLocale', () => {
     mockGetArticleById.mockResolvedValue({ title: 'Refunds', description: null, content: 'x' })
     mockChat.mockResolvedValue({ title: '', content: '' })
 
-    await expect(
-      translateArticleForLocale('article_1' as KbArticleId, 'de')
-    ).resolves.toBeUndefined()
+    await expect(translateArticleForLocale('article_1' as ArticleId, 'de')).resolves.toBeUndefined()
     expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
   })
 })

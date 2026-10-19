@@ -165,13 +165,12 @@ export type {
   ExternalUserMappingId,
   PostMergeSuggestionId,
   // Help center entities
-  KbCategoryId,
+  CategoryId,
   ArticleId,
-  KbArticleId,
-  KbArticleFeedbackId,
+  ArticleFeedbackId,
   HcRedirectRuleId,
-  KbArticleTranslationId,
-  KbCategoryTranslationId,
+  ArticleTranslationId,
+  CategoryTranslationId,
   // Auth entities
   WorkspaceId,
   UserId,

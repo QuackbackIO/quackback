@@ -8,7 +8,7 @@ import {
   submitArticleFeedbackReasonFn,
 } from '@/lib/server/functions/help-center'
 import { ARTICLE_FEEDBACK_REASON_MAX_LENGTH } from '@/lib/shared/schemas/help-center'
-import type { KbArticleFeedbackId, KbArticleId } from '@quackback/ids'
+import type { ArticleFeedbackId, ArticleId } from '@quackback/ids'
 
 interface HelpCenterArticleFeedbackProps {
   articleId: string
@@ -25,7 +25,7 @@ export function HelpCenterArticleFeedback({
   const [isPending, setIsPending] = useState(false)
   // Handle on the vote just cast. An anonymous visitor has no principal, so
   // this id is the only thing tying a reason back to their own vote.
-  const [feedbackId, setFeedbackId] = useState<KbArticleFeedbackId | null>(null)
+  const [feedbackId, setFeedbackId] = useState<ArticleFeedbackId | null>(null)
   const [reason, setReason] = useState('')
   const [reasonSent, setReasonSent] = useState(false)
   const [isSendingReason, setIsSendingReason] = useState(false)
@@ -39,10 +39,10 @@ export function HelpCenterArticleFeedback({
       // The vote lands on the click, before any typing: a visitor who never
       // writes a word still counts, and the reason stays optional.
       const result = await recordArticleFeedbackFn({
-        data: { articleId: articleId as KbArticleId, helpful },
+        data: { articleId: articleId as ArticleId, helpful },
       })
       setFeedback(newFeedback)
-      setFeedbackId((result.feedbackId as KbArticleFeedbackId) ?? null)
+      setFeedbackId((result.feedbackId as ArticleFeedbackId) ?? null)
       setReason('')
       setReasonSent(false)
     } catch {

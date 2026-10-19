@@ -60,23 +60,23 @@ try {
   const authorPrincipalId = author.id
 
   let category = await sql<{ id: string }[]>`
-    SELECT id FROM kb_categories WHERE slug = ${CATEGORY_SLUG} LIMIT 1`
+    SELECT id FROM help_center_categories WHERE slug = ${CATEGORY_SLUG} LIMIT 1`
   let categoryId: string
   if (category.length === 0) {
-    categoryId = toUuid(generateId('kb_category'))
+    categoryId = toUuid(generateId('category'))
     await sql`
-      INSERT INTO kb_categories (id, slug, name, description, is_public, position, created_at, updated_at)
+      INSERT INTO help_center_categories (id, slug, name, description, is_public, position, created_at, updated_at)
       VALUES (${categoryId}, ${CATEGORY_SLUG}, ${'E2E Help'}, ${'Harness fixtures'}, true, 0, NOW(), NOW())`
   } else {
     categoryId = category[0].id
   }
 
   let article = await sql<{ id: string; slug: string }[]>`
-    SELECT id, slug FROM kb_articles WHERE slug = ${ARTICLE_SLUG} LIMIT 1`
+    SELECT id, slug FROM help_center_articles WHERE slug = ${ARTICLE_SLUG} LIMIT 1`
   if (article.length === 0) {
     const articleId = toUuid(generateId('article'))
     await sql`
-      INSERT INTO kb_articles
+      INSERT INTO help_center_articles
         (id, category_id, slug, title, content, principal_id, published_at, created_at, updated_at)
       VALUES
         (${articleId}, ${categoryId}, ${ARTICLE_SLUG}, ${ARTICLE_TITLE},

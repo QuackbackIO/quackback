@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { makeKbArticle } from './kb-fixtures'
+import { makeHelpCenterArticle } from './help-center-fixtures'
 import { ASSISTANT_CITATION_TYPES, type AssistantCitationType } from '../citation-types'
 
-const mockRetrieveKbArticles = vi.fn()
+const mockRetrieveHelpCenterArticles = vi.fn()
 vi.mock('../retrieval', () => ({
-  retrieveKbArticles: (...args: unknown[]) => mockRetrieveKbArticles(...args),
+  retrieveHelpCenterArticles: (...args: unknown[]) => mockRetrieveHelpCenterArticles(...args),
 }))
 
 // Stands in for the real feedback-posts source: resolveKnowledgeSources
@@ -86,7 +86,7 @@ import {
   resolveKnowledgeSources,
   resolveAssistantKnowledgeSnapshot,
   describeEnabledKnowledgeSources,
-  kbKnowledgeSource,
+  helpCenterKnowledgeSource,
   KNOWLEDGE_SNIPPET_CHARS,
 } from '../retrieval-sources'
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
@@ -118,7 +118,7 @@ describe('workspace search reads each source only as far as its own permission',
   })
   const enabledSources = new Set<AssistantCitationType>(['article', 'post', 'changelog', 'ticket'])
   async function ceilings(actor?: Actor) {
-    mockRetrieveKbArticles.mockResolvedValue([])
+    mockRetrieveHelpCenterArticles.mockResolvedValue([])
     mockPostsRetrieve.mockResolvedValue([])
     await retrieveKnowledge('Acme pricing', 'team', {
       workspaceSearch: true,
@@ -126,7 +126,7 @@ describe('workspace search reads each source only as far as its own permission',
       enabledSources,
     })
     return {
-      article: mockRetrieveKbArticles.mock.calls.at(-1)?.[1]?.audience,
+      article: mockRetrieveHelpCenterArticles.mock.calls.at(-1)?.[1]?.audience,
       post: mockPostsRetrieve.mock.calls.at(-1)?.[1],
       changelog: mockChangelogRetrieve.mock.calls.at(-1)?.[1],
       ticket: mockTicketsRetrieve.mock.calls.length,
@@ -174,17 +174,19 @@ describe('workspace search reads each source only as far as its own permission',
   })
 })
 
-describe('kbKnowledgeSource', () => {
+describe('helpCenterKnowledgeSource', () => {
   it('maps a retrieved article onto a RetrievedItem with an article citation', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([
-      makeKbArticle('article_1', { content: 'X'.repeat(5000), score: 0.87 }),
+    mockRetrieveHelpCenterArticles.mockResolvedValue([
+      makeHelpCenterArticle('article_1', { content: 'X'.repeat(5000), score: 0.87 }),
     ])
 
-    const items = await kbKnowledgeSource.retrieve('reset password', 'public', {
+    const items = await helpCenterKnowledgeSource.retrieve('reset password', 'public', {
       topK: 5,
     })
 
-    expect(mockRetrieveKbArticles).toHaveBeenCalledWith('reset password', { audience: 'public' })
+    expect(mockRetrieveHelpCenterArticles).toHaveBeenCalledWith('reset password', {
+      audience: 'public',
+    })
     expect(items).toHaveLength(1)
     expect(items[0]).toEqual({
       id: 'article_1',
@@ -206,30 +208,32 @@ describe('kbKnowledgeSource', () => {
   })
 
   it('maps the team ceiling to the team HelpCenterAudience', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([])
-    await kbKnowledgeSource.retrieve('escalation policy', 'team', { topK: 5 })
-    expect(mockRetrieveKbArticles).toHaveBeenCalledWith('escalation policy', { audience: 'team' })
+    mockRetrieveHelpCenterArticles.mockResolvedValue([])
+    await helpCenterKnowledgeSource.retrieve('escalation policy', 'team', { topK: 5 })
+    expect(mockRetrieveHelpCenterArticles).toHaveBeenCalledWith('escalation policy', {
+      audience: 'team',
+    })
   })
 
   it('maps the internal ceiling to the team HelpCenterAudience (no internal KB tier)', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([])
-    await kbKnowledgeSource.retrieve('q', 'internal', { topK: 5 })
-    expect(mockRetrieveKbArticles).toHaveBeenCalledWith('q', { audience: 'team' })
+    mockRetrieveHelpCenterArticles.mockResolvedValue([])
+    await helpCenterKnowledgeSource.retrieve('q', 'internal', { topK: 5 })
+    expect(mockRetrieveHelpCenterArticles).toHaveBeenCalledWith('q', { audience: 'team' })
   })
 
   it('flags a team-only article as internal (isPublic: false)', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([
-      makeKbArticle('kb_article_private', { isPublic: false }),
+    mockRetrieveHelpCenterArticles.mockResolvedValue([
+      makeHelpCenterArticle('article_private', { isPublic: false }),
     ])
-    const items = await kbKnowledgeSource.retrieve('policy', 'team', { topK: 5 })
+    const items = await helpCenterKnowledgeSource.retrieve('policy', 'team', { topK: 5 })
     expect(items[0].citation.internal).toBe(true)
   })
 
   it('leaves a public article unflagged (no internal key)', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([
-      makeKbArticle('kb_article_public', { isPublic: true }),
+    mockRetrieveHelpCenterArticles.mockResolvedValue([
+      makeHelpCenterArticle('article_public', { isPublic: true }),
     ])
-    const items = await kbKnowledgeSource.retrieve('policy', 'public', { topK: 5 })
+    const items = await helpCenterKnowledgeSource.retrieve('policy', 'public', { topK: 5 })
     expect(items[0].citation).not.toHaveProperty('internal')
   })
 })
@@ -353,7 +357,7 @@ describe('describeEnabledKnowledgeSources', () => {
 describe('resolveKnowledgeSources', () => {
   it('defaults to only the knowledge-base source when no snapshot is passed', async () => {
     const sources = await resolveKnowledgeSources()
-    expect(sources).toEqual([kbKnowledgeSource])
+    expect(sources).toEqual([helpCenterKnowledgeSource])
   })
 
   it('registers exactly the sources named in the enabled set, in vocabulary order', async () => {
@@ -378,7 +382,9 @@ describe('resolveKnowledgeSources', () => {
 
 describe('retrieveKnowledge', () => {
   it('consults only the knowledge base when no enabled set is passed (KB-only default)', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('article_1', { score: 0.9 })])
+    mockRetrieveHelpCenterArticles.mockResolvedValue([
+      makeHelpCenterArticle('article_1', { score: 0.9 }),
+    ])
 
     const items = await retrieveKnowledge('q', 'public')
 
@@ -390,9 +396,9 @@ describe('retrieveKnowledge', () => {
   it('merges sources in parallel by rank tier (score breaking ties within a tier) and trims to topK', async () => {
     mockSnippetsRetrieve.mockResolvedValue([])
     mockConversationSummariesRetrieve.mockResolvedValue([])
-    mockRetrieveKbArticles.mockResolvedValue([
-      makeKbArticle('kb_low', { score: 0.5 }),
-      makeKbArticle('kb_high', { score: 0.9 }),
+    mockRetrieveHelpCenterArticles.mockResolvedValue([
+      makeHelpCenterArticle('article_low', { score: 0.5 }),
+      makeHelpCenterArticle('article_high', { score: 0.9 }),
     ])
     mockPostsRetrieve.mockResolvedValue([
       {
@@ -428,10 +434,10 @@ describe('retrieveKnowledge', () => {
     // Both sources ran (parallel composition); the merge interleaves rank
     // tiers (each source's #1 before any source's #2, raw score ordering
     // within a tier) and trims to topK, dropping the last-tier loser
-    // (kb_low, 0.5) even though it came from the always-on source.
-    expect(mockRetrieveKbArticles).toHaveBeenCalledOnce()
+    // (article_low, 0.5) even though it came from the always-on source.
+    expect(mockRetrieveHelpCenterArticles).toHaveBeenCalledOnce()
     expect(mockPostsRetrieve).toHaveBeenCalledOnce()
-    expect(items.map((i) => i.id)).toEqual(['post_top', 'kb_high', 'post_mid'])
+    expect(items.map((i) => i.id)).toEqual(['post_top', 'article_high', 'post_mid'])
     expect(items).toHaveLength(3)
   })
 
@@ -443,10 +449,10 @@ describe('retrieveKnowledge', () => {
     // seat regardless of its scale.
     mockPostsRetrieve.mockResolvedValue([])
     mockSnippetsRetrieve.mockResolvedValue([])
-    mockRetrieveKbArticles.mockResolvedValue([
-      makeKbArticle('kb_best', { score: 0.08 }),
-      makeKbArticle('kb_second', { score: 0.05 }),
-      makeKbArticle('kb_third', { score: 0.03 }),
+    mockRetrieveHelpCenterArticles.mockResolvedValue([
+      makeHelpCenterArticle('article_best', { score: 0.08 }),
+      makeHelpCenterArticle('article_second', { score: 0.05 }),
+      makeHelpCenterArticle('article_third', { score: 0.03 }),
     ])
     const summary = (id: string, score: number) => ({
       id,
@@ -471,9 +477,9 @@ describe('retrieveKnowledge', () => {
     // instead of losing every slot to the flat 1.0 scale.
     expect(items.map((i) => i.id)).toEqual([
       'conversation_a',
-      'kb_best',
+      'article_best',
       'conversation_b',
-      'kb_second',
+      'article_second',
       'conversation_c',
     ])
   })
@@ -487,10 +493,10 @@ describe('retrieveKnowledge', () => {
     // remaining budget in their own per-source order.
     mockPostsRetrieve.mockResolvedValue([])
     mockSnippetsRetrieve.mockResolvedValue([])
-    mockRetrieveKbArticles.mockResolvedValue([
-      makeKbArticle('kb_best', { score: 0.08 }),
-      makeKbArticle('kb_second', { score: 0.05 }),
-      makeKbArticle('kb_third', { score: 0.03 }),
+    mockRetrieveHelpCenterArticles.mockResolvedValue([
+      makeHelpCenterArticle('article_best', { score: 0.08 }),
+      makeHelpCenterArticle('article_second', { score: 0.05 }),
+      makeHelpCenterArticle('article_third', { score: 0.03 }),
     ])
     const summary = (id: string, score: number) => ({
       id,
@@ -511,23 +517,25 @@ describe('retrieveKnowledge', () => {
     const items = await retrieveKnowledge('q', 'public', { topK: 5, enabledSources: ALL_SOURCES })
 
     expect(items.map((i) => i.id)).toEqual([
-      'kb_best',
-      'kb_second',
-      'kb_third',
+      'article_best',
+      'article_second',
+      'article_third',
       'conversation_a',
       'conversation_b',
     ])
   })
 
   it('sourceTypes undefined consults every registered source (default, unchanged)', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('article_1', { score: 0.5 })])
+    mockRetrieveHelpCenterArticles.mockResolvedValue([
+      makeHelpCenterArticle('article_1', { score: 0.5 }),
+    ])
     mockPostsRetrieve.mockResolvedValue([])
     mockSnippetsRetrieve.mockResolvedValue([])
     mockConversationSummariesRetrieve.mockResolvedValue([])
 
     await retrieveKnowledge('q', 'public', { enabledSources: ALL_SOURCES })
 
-    expect(mockRetrieveKbArticles).toHaveBeenCalled()
+    expect(mockRetrieveHelpCenterArticles).toHaveBeenCalled()
     expect(mockPostsRetrieve).toHaveBeenCalled()
     expect(mockSnippetsRetrieve).toHaveBeenCalled()
     expect(mockConversationSummariesRetrieve).toHaveBeenCalled()
@@ -536,7 +544,9 @@ describe('retrieveKnowledge', () => {
   })
 
   it('sourceTypes narrows to the given subset, skipping every other registered source', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('article_1', { score: 0.5 })])
+    mockRetrieveHelpCenterArticles.mockResolvedValue([
+      makeHelpCenterArticle('article_1', { score: 0.5 }),
+    ])
     mockSnippetsRetrieve.mockResolvedValue([
       {
         id: 'assistant_snippet_1',
@@ -553,7 +563,7 @@ describe('retrieveKnowledge', () => {
       sourceTypes: ['snippet'],
     })
 
-    expect(mockRetrieveKbArticles).not.toHaveBeenCalled()
+    expect(mockRetrieveHelpCenterArticles).not.toHaveBeenCalled()
     expect(mockPostsRetrieve).not.toHaveBeenCalled()
     expect(mockConversationSummariesRetrieve).not.toHaveBeenCalled()
     expect(mockSnippetsRetrieve).toHaveBeenCalled()
@@ -563,7 +573,9 @@ describe('retrieveKnowledge', () => {
   it('cannot re-enable an unregistered source: sourceTypes only narrows what the snapshot already registered', async () => {
     // Only the knowledge base is enabled, even though the request asks for
     // posts too — narrowing can drop, never add.
-    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('article_1', { score: 0.5 })])
+    mockRetrieveHelpCenterArticles.mockResolvedValue([
+      makeHelpCenterArticle('article_1', { score: 0.5 }),
+    ])
 
     const items = await retrieveKnowledge('q', 'public', {
       enabledSources: new Set(['article']),
@@ -575,7 +587,7 @@ describe('retrieveKnowledge', () => {
   })
 
   it('forwards customerPrincipalId and conversationId to every source (only the summaries source reads them)', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([])
+    mockRetrieveHelpCenterArticles.mockResolvedValue([])
     mockPostsRetrieve.mockResolvedValue([])
     mockSnippetsRetrieve.mockResolvedValue([])
     mockConversationSummariesRetrieve.mockResolvedValue([])

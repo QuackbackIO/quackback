@@ -54,7 +54,7 @@ describe.skipIf(!dbAvailable)('help-center search analytics', () => {
   afterAll(async () => {
     if (resolved) {
       await resolved.db.execute(
-        sql`delete from kb_search_queries where normalized_query like ${'wombat-' + runSuffix + '%'}`
+        sql`delete from help_center_search_queries where normalized_query like ${'wombat-' + runSuffix + '%'}`
       )
       await resolved.close()
     }
@@ -63,7 +63,7 @@ describe.skipIf(!dbAvailable)('help-center search analytics', () => {
   it('records a query with its result count', async () => {
     await recordSearchQuery({ query: term('billing'), locale: 'en', resultsCount: 3 })
     const rows = await resolved!.db.execute(
-      sql`select query, normalized_query, results_count from kb_search_queries where normalized_query = ${term('billing')}`
+      sql`select query, normalized_query, results_count from help_center_search_queries where normalized_query = ${term('billing')}`
     )
     expect(rows).toHaveLength(1)
     expect(Number(rows[0].results_count)).toBe(3)
@@ -72,7 +72,7 @@ describe.skipIf(!dbAvailable)('help-center search analytics', () => {
   it('skips blank queries', async () => {
     await recordSearchQuery({ query: '   ', locale: 'en', resultsCount: 0 })
     const rows = await resolved!.db.execute(
-      sql`select id from kb_search_queries where normalized_query = ''`
+      sql`select id from help_center_search_queries where normalized_query = ''`
     )
     expect(rows).toHaveLength(0)
   })

@@ -29,14 +29,14 @@ const assistantMock = vi.hoisted(() => ({
   recordAssistantAnswer: vi.fn(async () => {}),
   setInvolvementRating: vi.fn(async () => {}),
   // Mirrors the real assistant.runtime.ts mapping (thinking -> thinking; any
-  // tool -> searching_kb for search, else reviewing_conversation) so
+  // tool -> searching_help_center for search, else reviewing_conversation) so
   // the activity-snapshot assertions below see the same status strings the
   // unmocked domain would produce.
   activityToStatus: vi.fn((activity: { kind: string; tool?: string }) =>
     activity.kind === 'thinking'
       ? 'thinking'
       : activity.tool === 'search'
-        ? 'searching_kb'
+        ? 'searching_help_center'
         : 'reviewing_conversation'
   ),
 }))

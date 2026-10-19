@@ -10,7 +10,7 @@ import {
   sql,
 } from '@/lib/server/db'
 import { createId } from '@quackback/ids'
-import type { KbArticleFeedbackId, KbArticleId, PrincipalId } from '@quackback/ids'
+import type { ArticleFeedbackId, ArticleId, PrincipalId } from '@quackback/ids'
 import { ValidationError } from '@/lib/shared/errors'
 import { ARTICLE_FEEDBACK_REASON_MAX_LENGTH } from '@/lib/shared/schemas/help-center'
 import { logger } from '@/lib/server/logger'
@@ -25,10 +25,10 @@ const log = logger.child({ component: 'help-center-article-feedback' })
  * the only handle on their own vote.
  */
 export async function recordArticleFeedback(
-  articleId: KbArticleId,
+  articleId: ArticleId,
   helpful: boolean,
   principalId?: PrincipalId | null
-): Promise<KbArticleFeedbackId> {
+): Promise<ArticleFeedbackId> {
   return db.transaction(async (tx) => {
     if (principalId) {
       const existing = await tx.query.helpCenterArticleFeedback.findFirst({
@@ -60,7 +60,7 @@ export async function recordArticleFeedback(
       }
     }
 
-    const id = createId('kb_article_feedback')
+    const id = createId('article_feedback')
     await tx.insert(helpCenterArticleFeedback).values({
       id,
       articleId,
@@ -83,7 +83,7 @@ export async function recordArticleFeedback(
 const ARTICLE_FEEDBACK_REASON_PAGE_MAX = 100
 
 export interface ArticleFeedbackReason {
-  id: KbArticleFeedbackId
+  id: ArticleFeedbackId
   reason: string
   createdAt: Date
 }
@@ -97,7 +97,7 @@ export interface ArticleFeedbackReason {
  * rewriting a reason or turning the row into open-ended storage.
  */
 export async function attachArticleFeedbackReason(
-  feedbackId: KbArticleFeedbackId,
+  feedbackId: ArticleFeedbackId,
   reason: string
 ): Promise<void> {
   const trimmed = reason.trim()
@@ -135,7 +135,7 @@ export async function attachArticleFeedbackReason(
 
 /** Reasons left on one article's unhelpful votes, newest first. */
 export async function listArticleFeedbackReasons(
-  articleId: KbArticleId,
+  articleId: ArticleId,
   limit = 50
 ): Promise<ArticleFeedbackReason[]> {
   const rows = await db.query.helpCenterArticleFeedback.findMany({

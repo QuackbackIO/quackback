@@ -386,8 +386,8 @@ async function getActivity(): Promise<
            WHERE created_at > ${since} AND sender_type = 'agent' AND is_internal = false) as agent_replies,
         (SELECT count(*)::int FROM "tickets" WHERE created_at > ${since} AND deleted_at IS NULL) as tickets,
         (SELECT count(*)::int FROM "changelog_entries" WHERE published_at > ${since} AND deleted_at IS NULL) as changelog_published,
-        (SELECT count(*)::int FROM "kb_articles" WHERE published_at > ${since} AND deleted_at IS NULL) as articles_published,
-        (SELECT count(*)::int FROM "kb_search_queries" WHERE created_at > ${since}) as help_center_searches,
+        (SELECT count(*)::int FROM "help_center_articles" WHERE published_at > ${since} AND deleted_at IS NULL) as articles_published,
+        (SELECT count(*)::int FROM "help_center_search_queries" WHERE created_at > ${since}) as help_center_searches,
         (SELECT count(*)::int FROM "status_incidents" WHERE created_at > ${since} AND deleted_at IS NULL) as incidents,
         (SELECT count(*)::int FROM "workflow_runs" WHERE started_at > ${since}) as workflow_runs,
         (SELECT count(*)::int FROM "job_queue"
@@ -466,7 +466,7 @@ async function getScale(): Promise<TelemetryPayload['scale']> {
         (SELECT count(*)::int FROM "posts" po WHERE po."deleted_at" IS NULL AND NOT EXISTS (SELECT 1 FROM "principal" p WHERE p.id = po.principal_id AND p.test_owner_principal_id IS NOT NULL)) as posts,
         (SELECT count(*)::int FROM "boards" WHERE "deleted_at" IS NULL) as boards,
         (SELECT count(*)::int FROM "conversations" c WHERE NOT EXISTS (SELECT 1 FROM "principal" p WHERE p.id = c.visitor_principal_id AND p.test_owner_principal_id IS NOT NULL)) as conversations,
-        (SELECT count(*)::int FROM "kb_articles" WHERE "deleted_at" IS NULL AND "published_at" IS NOT NULL) as published_articles,
+        (SELECT count(*)::int FROM "help_center_articles" WHERE "deleted_at" IS NULL AND "published_at" IS NOT NULL) as published_articles,
         (SELECT count(*)::int FROM "changelog_entries" WHERE "deleted_at" IS NULL AND "published_at" IS NOT NULL) as changelog_entries,
         (SELECT count(*)::int FROM "status_incidents" WHERE "deleted_at" IS NULL) as incidents`
     )

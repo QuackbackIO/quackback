@@ -9,11 +9,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { EllipsisHorizontalIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 import { stripMarkdownPreview } from '@/lib/shared/utils'
 
 interface HelpCenterListItemProps {
-  id: KbArticleId
+  id: ArticleId
   title: string
   description?: string | null
   content: string
@@ -23,8 +23,8 @@ interface HelpCenterListItemProps {
   author: { id: string; name: string; avatarUrl: string | null } | null
   viewCount: number
   helpfulCount: number
-  onEdit?: (id: KbArticleId) => void
-  onDelete?: (id: KbArticleId) => void
+  onEdit?: (id: ArticleId) => void
+  onDelete?: (id: ArticleId) => void
 }
 
 export function HelpCenterListItem({

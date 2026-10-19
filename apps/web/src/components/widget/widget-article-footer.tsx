@@ -6,7 +6,7 @@ import { widgetRecordArticleFeedbackFn } from '@/lib/server/functions/widget/hel
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { cn } from '@/lib/shared/utils'
 import { useWidgetAuth } from './widget-auth-provider'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 
 interface WidgetArticleFooterProps {
   articleId: string
@@ -37,7 +37,7 @@ export function WidgetArticleFooter({ articleId, onAskQuestion }: WidgetArticleF
       // update and every tap inserts and counts another row.
       if (!(await ensureSession())) return
       await widgetRecordArticleFeedbackFn({
-        data: { articleId: articleId as KbArticleId, helpful },
+        data: { articleId: articleId as ArticleId, helpful },
         headers: getWidgetAuthHeaders(),
       })
       setVote(next)

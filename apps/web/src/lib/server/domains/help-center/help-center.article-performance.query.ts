@@ -1,5 +1,5 @@
 import { db, helpCenterCategories, helpCenterArticles, eq, isNull, desc } from '@/lib/server/db'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 
 /** Default row cap for {@link listArticlePerformance} -- the admin table reads
  *  as a ranked top list, not a paginated archive. */
@@ -7,7 +7,7 @@ export const ARTICLE_PERFORMANCE_LIMIT = 100
 
 /** One row of the admin article-performance table. */
 export interface ArticlePerformanceRow {
-  id: KbArticleId
+  id: ArticleId
   slug: string
   title: string
   status: 'draft' | 'published'
@@ -44,7 +44,7 @@ export async function listArticlePerformance(
     .limit(limit)
 
   return rows.map((row) => ({
-    id: row.id as KbArticleId,
+    id: row.id as ArticleId,
     slug: row.slug,
     title: row.title,
     status: row.publishedAt ? ('published' as const) : ('draft' as const),

@@ -13,7 +13,7 @@ import {
 } from '@/lib/client/mutations/help-center'
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import type { KbArticleId } from '@quackback/ids'
+import type { ArticleId } from '@quackback/ids'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
@@ -113,7 +113,7 @@ export function CreateArticleDialog({
         return
       }
       try {
-        if (publish) await publishArticleMutation.mutateAsync(articleId as KbArticleId)
+        if (publish) await publishArticleMutation.mutateAsync(articleId as ArticleId)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         setSavedDraftId(articleId)

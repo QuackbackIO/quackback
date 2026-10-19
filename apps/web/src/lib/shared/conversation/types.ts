@@ -439,7 +439,8 @@ export const CONVERSATION_SPAM_FILED_BY_LABELS: Record<ConversationSpamFiledBy, 
  * `id:` line equal to the message id for Last-Event-ID backfill.
  */
 /** What Quinn is doing this turn, for the widget's live working trace. */
-export type AssistantActivityStatus = 'thinking' | 'searching_kb' | 'reviewing_conversation'
+export type AssistantActivityStatus =
+  'thinking' | 'searching_help_center' | 'reviewing_conversation'
 
 /** Terminal outcome of Quinn's involvement in a conversation (mirrors the db
  *  ASSISTANT_INVOLVEMENT_STATUSES; inlined here so the browser-safe module has

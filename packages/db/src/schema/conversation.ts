@@ -36,7 +36,7 @@ import type {
   TiptapContent,
 } from '../types'
 
-// Full-text search vector (generated column), mirroring posts/kb.
+// Full-text search vector (generated column), mirroring posts/help-center.
 const tsvector = customType<{ data: string }>({
   dataType() {
     return 'tsvector'
@@ -406,7 +406,7 @@ export const conversationMessages = pgTable(
 
 /**
  * Per-(message, locale) translation cache for the INCOMING direction of P2-D.1
- * two-way inbox translation, mirroring kb_article_translations' (parentId,
+ * two-way inbox translation, mirroring help_center_article_translations' (parentId,
  * locale) -> content shape. `conversation_messages.content`/`content_json` are
  * NEVER mutated by a display translation — this table is the only place a
  * translated rendering of a customer message lives. Keyed by locale (not just

@@ -6,6 +6,7 @@ import {
   boolean,
   index,
   uniqueIndex,
+  foreignKey,
   jsonb,
   uuid,
   customType,
@@ -81,10 +82,10 @@ export function localeRegconfigCaseSql(localeExpr: string): string {
 // ============================================
 
 export const helpCenterCategories = pgTable(
-  'kb_categories',
+  'help_center_categories',
   {
-    id: typeIdWithDefault('kb_category')('id').primaryKey(),
-    parentId: typeIdColumnNullable('kb_category')('parent_id').references(
+    id: typeIdWithDefault('category')('id').primaryKey(),
+    parentId: typeIdColumnNullable('category')('parent_id').references(
       (): AnyPgColumn => helpCenterCategories.id,
       { onDelete: 'set null' }
     ),
@@ -104,11 +105,11 @@ export const helpCenterCategories = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex('kb_categories_slug_idx').on(table.slug),
-    uniqueIndex('kb_categories_url_id_idx').on(table.urlId),
-    index('kb_categories_position_idx').on(table.position),
-    index('kb_categories_deleted_at_idx').on(table.deletedAt),
-    index('kb_categories_parent_id_idx').on(table.parentId),
+    uniqueIndex('help_center_categories_slug_idx').on(table.slug),
+    uniqueIndex('help_center_categories_url_id_idx').on(table.urlId),
+    index('help_center_categories_position_idx').on(table.position),
+    index('help_center_categories_deleted_at_idx').on(table.deletedAt),
+    index('help_center_categories_parent_id_idx').on(table.parentId),
   ]
 )
 
@@ -117,10 +118,10 @@ export const helpCenterCategories = pgTable(
 // ============================================
 
 export const helpCenterArticles = pgTable(
-  'kb_articles',
+  'help_center_articles',
   {
     id: typeIdWithDefault('article')('id').primaryKey(),
-    categoryId: typeIdColumn('kb_category')('category_id')
+    categoryId: typeIdColumn('category')('category_id')
       .notNull()
       .references(() => helpCenterCategories.id, { onDelete: 'cascade' }),
     slug: text('slug').notNull(),
@@ -152,15 +153,15 @@ export const helpCenterArticles = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex('kb_articles_slug_idx').on(table.slug),
-    uniqueIndex('kb_articles_url_id_idx').on(table.urlId),
-    index('kb_articles_principal_id_idx').on(table.principalId),
-    index('kb_articles_published_at_idx').on(table.publishedAt),
-    index('kb_articles_deleted_at_idx').on(table.deletedAt),
-    index('kb_articles_category_published_idx').on(table.categoryId, table.publishedAt),
-    index('kb_articles_category_position_idx').on(table.categoryId, table.position),
-    index('kb_articles_search_vector_idx').using('gin', table.searchVector),
-    index('kb_articles_embedding_hnsw_idx')
+    uniqueIndex('help_center_articles_slug_idx').on(table.slug),
+    uniqueIndex('help_center_articles_url_id_idx').on(table.urlId),
+    index('help_center_articles_principal_id_idx').on(table.principalId),
+    index('help_center_articles_published_at_idx').on(table.publishedAt),
+    index('help_center_articles_deleted_at_idx').on(table.deletedAt),
+    index('help_center_articles_category_published_idx').on(table.categoryId, table.publishedAt),
+    index('help_center_articles_category_position_idx').on(table.categoryId, table.position),
+    index('help_center_articles_search_vector_idx').using('gin', table.searchVector),
+    index('help_center_articles_embedding_hnsw_idx')
       .using('hnsw', sql`${table.embedding} vector_cosine_ops`)
       .where(sql`${table.embedding} IS NOT NULL`),
   ]
@@ -171,12 +172,10 @@ export const helpCenterArticles = pgTable(
 // ============================================
 
 export const helpCenterArticleFeedback = pgTable(
-  'kb_article_feedback',
+  'help_center_article_feedback',
   {
-    id: typeIdWithDefault('kb_article_feedback')('id').primaryKey(),
-    articleId: typeIdColumn('article')('article_id')
-      .notNull()
-      .references(() => helpCenterArticles.id, { onDelete: 'cascade' }),
+    id: typeIdWithDefault('article_feedback')('id').primaryKey(),
+    articleId: typeIdColumn('article')('article_id').notNull(),
     principalId: typeIdColumnNullable('principal')('principal_id').references(() => principal.id, {
       onDelete: 'set null',
     }),
@@ -190,9 +189,15 @@ export const helpCenterArticleFeedback = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('kb_article_feedback_unique_idx').on(table.articleId, table.principalId),
+    // Named explicitly: the generated name exceeds Postgres' 63-character limit.
+    foreignKey({
+      name: 'help_center_article_feedback_article_id_fk',
+      columns: [table.articleId],
+      foreignColumns: [helpCenterArticles.id],
+    }).onDelete('cascade'),
+    uniqueIndex('help_center_article_feedback_unique_idx').on(table.articleId, table.principalId),
     // Backs the admin-side reason list for one article (newest first).
-    index('kb_article_feedback_reason_idx')
+    index('help_center_article_feedback_reason_idx')
       .on(table.articleId, table.createdAt)
       .where(sql`${table.reason} IS NOT NULL`),
   ]
@@ -205,7 +210,7 @@ export const helpCenterArticleFeedback = pgTable(
 /**
  * Admin-defined path -> published article|category 301s for the /hc site.
  * `targetType`/`targetId` is a polymorphic reference with no FK constraint
- * (a single FK can't span kb_articles and kb_categories) -- the owning
+ * (a single FK can't span help_center_articles and help_center_categories) -- the owning
  * article/category service deletes orphaned rules explicitly on hard delete.
  */
 export const helpCenterRedirectRules = pgTable(
@@ -236,7 +241,7 @@ export const helpCenterRedirectRules = pgTable(
  * prefix buys nothing on a high-volume log table.
  */
 export const helpCenterSearchQueries = pgTable(
-  'kb_search_queries',
+  'help_center_search_queries',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     query: text('query').notNull(),
@@ -247,7 +252,7 @@ export const helpCenterSearchQueries = pgTable(
   },
   (table) => [
     // Backs the admin aggregation's time-window filter.
-    index('kb_search_queries_created_at_idx').on(table.createdAt),
+    index('help_center_search_queries_created_at_idx').on(table.createdAt),
   ]
 )
 
@@ -257,18 +262,16 @@ export const helpCenterSearchQueries = pgTable(
 
 /**
  * Per-article translation variants (not chrome-only): default locale content
- * lives on kb_articles itself; every additional locale is a row here.
+ * lives on help_center_articles itself; every additional locale is a row here.
  * `status` is independent of the base article's publishedAt -- a translation
  * can be a draft while the base article is published, or vice versa. Only
  * `published` translations are visible on the public /hc/{locale} site.
  */
 export const helpCenterArticleTranslations = pgTable(
-  'kb_article_translations',
+  'help_center_article_translations',
   {
-    id: typeIdWithDefault('kb_article_translation')('id').primaryKey(),
-    articleId: typeIdColumn('article')('article_id')
-      .notNull()
-      .references(() => helpCenterArticles.id, { onDelete: 'cascade' }),
+    id: typeIdWithDefault('article_translation')('id').primaryKey(),
+    articleId: typeIdColumn('article')('article_id').notNull(),
     locale: text('locale').notNull(),
     title: text('title').notNull().default(''),
     description: text('description'),
@@ -282,9 +285,15 @@ export const helpCenterArticleTranslations = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('kb_article_translations_unique_idx').on(table.articleId, table.locale),
-    index('kb_article_translations_locale_idx').on(table.locale),
-    index('kb_article_translations_search_vector_idx').using('gin', table.searchVector),
+    // Named explicitly: the generated name exceeds Postgres' 63-character limit.
+    foreignKey({
+      name: 'help_center_article_translations_article_id_fk',
+      columns: [table.articleId],
+      foreignColumns: [helpCenterArticles.id],
+    }).onDelete('cascade'),
+    uniqueIndex('help_center_article_translations_unique_idx').on(table.articleId, table.locale),
+    index('help_center_article_translations_locale_idx').on(table.locale),
+    index('help_center_article_translations_search_vector_idx').using('gin', table.searchVector),
   ]
 )
 
@@ -294,12 +303,10 @@ export const helpCenterArticleTranslations = pgTable(
  * name exist", per the homepage visibility gate (domains/languages §1).
  */
 export const helpCenterCategoryTranslations = pgTable(
-  'kb_category_translations',
+  'help_center_category_translations',
   {
-    id: typeIdWithDefault('kb_category_translation')('id').primaryKey(),
-    categoryId: typeIdColumn('kb_category')('category_id')
-      .notNull()
-      .references(() => helpCenterCategories.id, { onDelete: 'cascade' }),
+    id: typeIdWithDefault('category_translation')('id').primaryKey(),
+    categoryId: typeIdColumn('category')('category_id').notNull(),
     locale: text('locale').notNull(),
     name: text('name').notNull().default(''),
     description: text('description'),
@@ -307,8 +314,14 @@ export const helpCenterCategoryTranslations = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('kb_category_translations_unique_idx').on(table.categoryId, table.locale),
-    index('kb_category_translations_locale_idx').on(table.locale),
+    // Named explicitly: the generated name exceeds Postgres' 63-character limit.
+    foreignKey({
+      name: 'help_center_category_translations_category_id_fk',
+      columns: [table.categoryId],
+      foreignColumns: [helpCenterCategories.id],
+    }).onDelete('cascade'),
+    uniqueIndex('help_center_category_translations_unique_idx').on(table.categoryId, table.locale),
+    index('help_center_category_translations_locale_idx').on(table.locale),
   ]
 )
 

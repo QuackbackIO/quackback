@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { KbArticleId, KbCategoryId, HcRedirectRuleId } from '@quackback/ids'
+import type { ArticleId, CategoryId, HcRedirectRuleId } from '@quackback/ids'
 
 const mockArticleFindFirst = vi.fn()
 const mockCategoryFindFirst = vi.fn()
@@ -79,7 +79,7 @@ describe('createRedirectRule', () => {
     const rule = await createRedirectRule({
       path: 'old-slug',
       targetType: 'article',
-      targetId: 'article_1' as KbArticleId,
+      targetId: 'article_1' as ArticleId,
     })
 
     expect(insertValuesCalls[0][0]).toMatchObject({
@@ -100,7 +100,7 @@ describe('createRedirectRule', () => {
     await createRedirectRule({
       path: 'foo//bar/',
       targetType: 'article',
-      targetId: 'article_1' as KbArticleId,
+      targetId: 'article_1' as ArticleId,
     })
 
     expect(insertValuesCalls[0][0]).toMatchObject({ path: '/foo/bar' })
@@ -117,7 +117,7 @@ describe('createRedirectRule', () => {
       createRedirectRule({
         path: '/foo',
         targetType: 'article',
-        targetId: 'article_1' as KbArticleId,
+        targetId: 'article_1' as ArticleId,
       })
     ).rejects.toThrow(/published/i)
     expect(insertValuesCalls).toHaveLength(0)
@@ -130,7 +130,7 @@ describe('createRedirectRule', () => {
       createRedirectRule({
         path: '/foo',
         targetType: 'article',
-        targetId: 'article_missing' as KbArticleId,
+        targetId: 'article_missing' as ArticleId,
       })
     ).rejects.toThrow()
   })
@@ -142,7 +142,7 @@ describe('createRedirectRule', () => {
       createRedirectRule({
         path: '/foo',
         targetType: 'category',
-        targetId: 'kb_category_1' as KbCategoryId,
+        targetId: 'category_1' as CategoryId,
       })
     ).rejects.toThrow(/public/i)
   })
@@ -164,7 +164,7 @@ describe('createRedirectRule', () => {
       createRedirectRule({
         path: '/foo',
         targetType: 'article',
-        targetId: 'article_1' as KbArticleId,
+        targetId: 'article_1' as ArticleId,
       })
     ).rejects.toThrow(/already exists/i)
   })
@@ -193,7 +193,7 @@ describe('listRedirectRules', () => {
             id: 'hc_redirect_rule_3' as HcRedirectRuleId,
             path: '/old-cat',
             targetType: 'category',
-            targetId: 'kb_category_1',
+            targetId: 'category_1',
             createdAt: new Date('2026-01-03'),
           },
         ]),
@@ -205,7 +205,7 @@ describe('listRedirectRules', () => {
         ]),
       })
       .mockReturnValueOnce({
-        where: vi.fn().mockResolvedValue([{ id: 'kb_category_1', name: 'Guides' }]),
+        where: vi.fn().mockResolvedValue([{ id: 'category_1', name: 'Guides' }]),
       })
 
     const rules = await listRedirectRules()
@@ -273,7 +273,7 @@ describe('resolveRedirectRule', () => {
   })
 
   it('resolves a category rule to its canonical /hc path', async () => {
-    mockRuleFindFirst.mockResolvedValue({ targetType: 'category', targetId: 'kb_category_1' })
+    mockRuleFindFirst.mockResolvedValue({ targetType: 'category', targetId: 'category_1' })
     mockCategoryFindFirst.mockResolvedValue({ slug: 'billing', isPublic: true, deletedAt: null })
 
     expect(await resolveRedirectRule('/old-category')).toBe('/hc/categories/billing')

@@ -43,7 +43,7 @@ export interface SeedSkill {
 }
 
 /** A KB article seeded (with a real embedding) for grounding scenarios. */
-export interface SeedKbArticle {
+export interface SeedHelpCenterArticle {
   title: string
   content: string
   /** Public (Agent-visible) vs team-only (Copilot-only). Default: true. */
@@ -168,7 +168,7 @@ export interface ScenarioConfig {
 }
 
 export interface Fixtures {
-  kbArticles?: SeedKbArticle[]
+  helpCenterArticles?: SeedHelpCenterArticle[]
   /** Closed-ticket resolution summaries (team-only source; Phase 4). */
   ticketSummaries?: SeedTicketSummary[]
   /** Changelog entries, published or draft (Phase 4). */

@@ -373,7 +373,7 @@ export const REPOINT_STEPS: RepointStep[] = [
     'User tag assignments; unique (principal_id, tag_id). A tag on the anonymous visitor follows the person on merge; when the identified user already has the tag, the colliding anon row is dropped.'
   ),
   collisionRepoint(
-    'kb_article_feedback',
+    'help_center_article_feedback',
     helpCenterArticleFeedback,
     'principal_id',
     ['article_id'],
@@ -494,7 +494,7 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
   'conversation_message_reactions.principal_id':
     'conversation reactions are agent-only (requireAgent)',
   'conversation_message_flags.principal_id': 'message flags are agent-only',
-  'kb_articles.principal_id': 'help-center authors are team members',
+  'help_center_articles.principal_id': 'help-center authors are team members',
   'changelog_entries.principal_id': 'changelog authors are team members',
   'status_incidents.created_by':
     'incidents/maintenance windows are authored by team members with status_page.publish; the merge source is always anonymous',

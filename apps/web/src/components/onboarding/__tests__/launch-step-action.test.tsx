@@ -13,7 +13,7 @@ const article = vi.hoisted(() => ({ toast: vi.fn() }))
 vi.mock('sonner', () => ({ toast: { success: article.toast, error: vi.fn() } }))
 vi.mock('@/components/admin/help-center/create-article-dialog', () => ({
   CreateArticleDialog: ({ onPublished }: { onPublished?: (id: string) => void }) => (
-    <button type="button" onClick={() => onPublished?.('kb_article_1')}>
+    <button type="button" onClick={() => onPublished?.('article_1')}>
       Publish
     </button>
   ),

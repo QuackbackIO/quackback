@@ -37,7 +37,7 @@ export const slackScenarios: Scenario[] = [
     roles: ['workspace_assistant'],
     surface: 'slack',
     fixtures: {
-      kbArticles: [{ title: 'Refunds', content: 'Refunds are available within 30 days.' }],
+      helpCenterArticles: [{ title: 'Refunds', content: 'Refunds are available within 30 days.' }],
     },
     thread: [
       {
@@ -59,7 +59,7 @@ export const slackScenarios: Scenario[] = [
     roles: ['workspace_assistant'],
     surface: 'slack',
     fixtures: {
-      kbArticles: [
+      helpCenterArticles: [
         {
           title: 'Support hours',
           content: 'Support is open Monday to Friday from 9am to 5pm UTC.',

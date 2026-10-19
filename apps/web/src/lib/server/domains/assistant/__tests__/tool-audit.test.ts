@@ -80,12 +80,12 @@ describe.skipIf(!fixture.available)('tool-audit (real DB, rolled back)', () => {
     const conversationId = await seedConversation()
     const first = await claimToolCall({
       conversationId,
-      toolName: 'search_kb',
+      toolName: 'search_help_center',
       args: { query: 'refunds' },
     })
     const second = await claimToolCall({
       conversationId,
-      toolName: 'search_kb',
+      toolName: 'search_help_center',
       args: { query: 'refunds' },
     })
     expect(first).not.toBeNull()

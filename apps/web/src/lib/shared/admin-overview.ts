@@ -3,7 +3,7 @@
  *
  * Labels and hrefs are derived from real columns:
  *   conversations.waitingSince, conversations.priority, post_statuses.{name,slug,category,isDefault},
- *   changelog_entries.publishedAt, kb_articles.publishedAt.
+ *   changelog_entries.publishedAt, help_center_articles.publishedAt.
  * Do not invent status names such as "Unreviewed" or "Ready to announce".
  *
  * Labels match the admin modules (Support, Feedback, Changelog, Help Center, Status).

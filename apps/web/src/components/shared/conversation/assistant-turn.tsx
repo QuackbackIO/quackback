@@ -68,7 +68,7 @@ function Spinner() {
 
 const ACTIVITY: Record<AssistantActivityStatus, { id: string; defaultMessage: string }> = {
   thinking: { id: 'widget.messenger.assistant.thinking', defaultMessage: 'Thinking…' },
-  searching_kb: {
+  searching_help_center: {
     id: 'widget.messenger.assistant.searching',
     defaultMessage: 'Searching the knowledge base…',
   },

@@ -20,7 +20,7 @@ import {
   getArticleById,
   getCategoryById,
 } from '@/lib/server/domains/help-center/help-center.service'
-import { ensureTypeId, getTypeIdPrefix } from '@quackback/ids'
+import { ensureTypeId, getTypeIdPrefix, resolvePrefix } from '@quackback/ids'
 import { truncate } from '@/lib/shared/utils/string'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { CommentTreeNode } from '@/lib/shared/comment-tree'
@@ -29,8 +29,8 @@ import type {
   BoardId,
   PostTagId,
   ChangelogId,
-  KbArticleId,
-  KbCategoryId,
+  ArticleId,
+  CategoryId,
   PrincipalId,
 } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
@@ -122,13 +122,13 @@ const DETAIL_PERMISSIONS: Record<string, PermissionKey> = {
   post: PERMISSIONS.POST_VIEW_PRIVATE,
   changelog: PERMISSIONS.CHANGELOG_VIEW_DRAFT,
   article: PERMISSIONS.HELP_CENTER_MANAGE,
-  kb_article: PERMISSIONS.HELP_CENTER_MANAGE,
-  kb_category: PERMISSIONS.HELP_CENTER_MANAGE,
+  category: PERMISSIONS.HELP_CENTER_MANAGE,
 }
 
 function detailPermissions(id: string): PermissionKey[] {
   try {
-    const permission = DETAIL_PERMISSIONS[getTypeIdPrefix(id)]
+    const prefix = getTypeIdPrefix(id)
+    const permission = DETAIL_PERMISSIONS[resolvePrefix(prefix) ?? prefix]
     return permission ? [permission] : []
   } catch {
     return []
@@ -186,7 +186,7 @@ Examples:
 - Filter by board and status: search({ boardId: "board_01abc...", status: "open" })
 - Search changelogs: search({ entity: "changelogs", status: "published" })
 - Search articles: search({ entity: "articles", query: "getting started" })
-- Filter articles by category: search({ entity: "articles", categoryId: "kb_category_01abc..." })
+- Filter articles by category: search({ entity: "articles", categoryId: "category_01abc..." })
 - Sort by votes: search({ sort: "votes", limit: 10 })
 - Posts created by the authenticated teammate: search({ authorPrincipalId: "me" })
 - Posts created by an email: search({ authorEmail: "ada@acme.com" })`,
@@ -234,7 +234,7 @@ Examples:
 - Get a post: get_details({ id: "post_01abc..." })
 - Get a changelog: get_details({ id: "changelog_01xyz..." })
 - Get an article: get_details({ id: "article_01abc..." })
-- Get a category: get_details({ id: "kb_category_01abc..." })`,
+- Get a category: get_details({ id: "category_01abc..." })`,
     schema: getDetailsSchema,
     annotations: READ_ONLY,
     handler: async (args) => {
@@ -242,7 +242,9 @@ Examples:
       // rather than the generic errorResult wrapping.
       let prefix: string
       try {
-        prefix = getTypeIdPrefix(args.id)
+        // Retired aliases (e.g. an old `kb_category_…` id) dispatch as their entity.
+        const raw = getTypeIdPrefix(args.id)
+        prefix = resolvePrefix(raw) ?? raw
       } catch {
         return errorResult(
           new Error(
@@ -271,8 +273,7 @@ Examples:
           if (roleDenied) return roleDenied
           return getChangelogDetails(args.id as ChangelogId)
         }
-        case 'article':
-        case 'kb_article': {
+        case 'article': {
           const flagDenied = await requireHelpCenter()
           if (flagDenied) return flagDenied
           const denied = requireScope(auth, 'read:article')
@@ -286,7 +287,7 @@ Examples:
           if (roleDenied) return roleDenied
           return getArticleDetails(ensureTypeId(args.id, 'article'))
         }
-        case 'kb_category': {
+        case 'category': {
           const flagDenied = await requireHelpCenter()
           if (flagDenied) return flagDenied
           const denied = requireScope(auth, 'read:article')
@@ -295,12 +296,12 @@ Examples:
           // symmetric with the article path.
           const roleDenied = requireTeamRole(auth)
           if (roleDenied) return roleDenied
-          return getCategoryDetails(args.id as KbCategoryId)
+          return getCategoryDetails(ensureTypeId(args.id, 'category'))
         }
         default:
           return errorResult(
             new Error(
-              `Unsupported entity type: "${prefix}". Supported: post, changelog, article, kb_category`
+              `Unsupported entity type: "${prefix}". Supported: post, changelog, article, category`
             )
           )
       }
@@ -595,12 +596,12 @@ async function getChangelogDetails(changelogId: ChangelogId): Promise<CallToolRe
   return withAuthorFacts(result, [['', entry.author?.id]])
 }
 
-async function getArticleDetails(articleId: KbArticleId): Promise<CallToolResult> {
+async function getArticleDetails(articleId: ArticleId): Promise<CallToolResult> {
   const article = await getArticleById(articleId)
   return articleResult(article)
 }
 
-async function getCategoryDetails(categoryId: KbCategoryId): Promise<CallToolResult> {
+async function getCategoryDetails(categoryId: CategoryId): Promise<CallToolResult> {
   const category = await getCategoryById(categoryId)
   return categoryResult(category)
 }

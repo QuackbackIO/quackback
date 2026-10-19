@@ -413,7 +413,7 @@ describe('widget BFF getOptionalWidgetAuth endpoints', () => {
     {
       name: 'widgetRecordArticleFeedbackFn',
       call: () =>
-        widgetRecordArticleFeedbackFn({ data: { articleId: 'kbarticle_1', helpful: true } }),
+        widgetRecordArticleFeedbackFn({ data: { articleId: 'notarticle_1', helpful: true } }),
     },
     {
       name: 'widgetListPublicArticlesFn',

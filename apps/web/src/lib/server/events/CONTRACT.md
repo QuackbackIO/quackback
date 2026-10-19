@@ -8,7 +8,7 @@ checklist.
 ## 1. Naming — `<entity>.<verb>`
 
 - **entity** MUST be a `@quackback/ids` key (`ID_PREFIXES`) — e.g. `post`,
-  `post_comment`, `api_key`, `kb_article`, `conversation_message`. Singletons
+  `post_comment`, `api_key`, `article`, `conversation_message`. Singletons
   with no TypeID (`settings`) live on the `VIRTUAL_ENTITIES` allowlist. This
   keeps the event's `entity` field usable as a real join key for per-entity
   timelines, backfill, and audit.

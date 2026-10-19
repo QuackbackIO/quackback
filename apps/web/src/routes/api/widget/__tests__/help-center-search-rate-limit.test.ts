@@ -22,10 +22,10 @@ vi.mock('@/lib/server/utils/rate-bucket', () => ({
   bucketRetryAfter: (...args: unknown[]) => mockBucketRetryAfter(...args),
 }))
 
-import { handleKbSearch, KB_SEARCH_RATE_LIMIT } from '../kb-search'
+import { handleHelpCenterSearch, HELP_CENTER_SEARCH_RATE_LIMIT } from '../help-center-search'
 
 function makeRequest(q?: string, ip = '203.0.113.9'): Request {
-  const url = new URL('http://localhost/api/widget/kb-search')
+  const url = new URL('http://localhost/api/widget/help-center-search')
   if (q !== undefined) url.searchParams.set('q', q)
   return new Request(url, { headers: { 'x-forwarded-for': ip } })
 }
@@ -39,22 +39,22 @@ beforeEach(() => {
   mockHybridSearch.mockResolvedValue([])
 })
 
-describe('GET /api/widget/kb-search rate limiting', () => {
+describe('GET /api/widget/help-center-search rate limiting', () => {
   it('404s when the help center flag is off', async () => {
     mockIsFeatureEnabled.mockResolvedValue(false)
-    const res = await handleKbSearch({ request: makeRequest('hello') })
+    const res = await handleHelpCenterSearch({ request: makeRequest('hello') })
     expect(res.status).toBe(404)
   })
 
   it('searches normally under the limit', async () => {
-    const res = await handleKbSearch({ request: makeRequest('hello') })
+    const res = await handleHelpCenterSearch({ request: makeRequest('hello') })
     expect(res.status).toBe(200)
     expect(mockHybridSearch).toHaveBeenCalledWith('hello', 10)
   })
 
   it('429s with Retry-After when over the per-IP limit', async () => {
-    mockIncrementBucket.mockResolvedValue({ count: KB_SEARCH_RATE_LIMIT + 1 })
-    const res = await handleKbSearch({ request: makeRequest('hello') })
+    mockIncrementBucket.mockResolvedValue({ count: HELP_CENTER_SEARCH_RATE_LIMIT + 1 })
+    const res = await handleHelpCenterSearch({ request: makeRequest('hello') })
     expect(res.status).toBe(429)
     expect(res.headers.get('Retry-After')).toBe('30')
     expect(mockHybridSearch).not.toHaveBeenCalled()
@@ -62,12 +62,12 @@ describe('GET /api/widget/kb-search rate limiting', () => {
 
   it('fails open when Redis errors', async () => {
     mockIncrementBucket.mockResolvedValue({ count: null })
-    const res = await handleKbSearch({ request: makeRequest('hello') })
+    const res = await handleHelpCenterSearch({ request: makeRequest('hello') })
     expect(res.status).toBe(200)
   })
 
   it('does not consume rate budget for empty queries', async () => {
-    const res = await handleKbSearch({ request: makeRequest() })
+    const res = await handleHelpCenterSearch({ request: makeRequest() })
     expect(res.status).toBe(200)
     expect(mockIncrementBucket).not.toHaveBeenCalled()
   })

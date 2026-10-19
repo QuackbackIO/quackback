@@ -121,7 +121,7 @@ export const REATTRIBUTE_STEPS: ReattributeStep[] = [
     'Internal staff notes. Authored by team members, so only reachable here for a teammate demoted to a portal user, but the note is workspace knowledge either way.'
   ),
   reattribute(
-    'kb_articles',
+    'help_center_articles',
     helpCenterArticles,
     'principal_id',
     'Help-center article authorship. A published article is workspace content, not something its author takes with them.'

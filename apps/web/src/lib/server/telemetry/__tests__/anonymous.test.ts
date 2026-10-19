@@ -85,7 +85,7 @@ describe('aiFeatureOf', () => {
     expect(aiFeatureOf('assistant_posts_query')).toBe('assistant')
     expect(aiFeatureOf('copilot_suggest')).toBe('copilot')
     expect(aiFeatureOf('help_center_answers')).toBe('helpCenter')
-    expect(aiFeatureOf('kb_search_query_embedding')).toBe('helpCenter')
+    expect(aiFeatureOf('help_center_search_query')).toBe('helpCenter')
     expect(aiFeatureOf('extraction')).toBe('feedback')
     expect(aiFeatureOf('quality_gate')).toBe('feedback')
     expect(aiFeatureOf('post_autotag')).toBe('feedback')

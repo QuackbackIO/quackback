@@ -47,16 +47,16 @@ describe.skipIf(!fixture.available)('quinn-tools (real DB, rolled back)', () => 
 
   describe('getQuinnToolMetrics', () => {
     it('counts calls per tool by status over the range', async () => {
-      await seedToolCall({ toolName: '__qtt_search_kb', status: 'succeeded' })
-      await seedToolCall({ toolName: '__qtt_search_kb', status: 'succeeded' })
-      await seedToolCall({ toolName: '__qtt_search_kb', status: 'failed' })
-      await seedToolCall({ toolName: '__qtt_search_kb', status: 'denied' })
-      await seedToolCall({ toolName: '__qtt_search_kb', status: 'skipped_duplicate' })
+      await seedToolCall({ toolName: '__qtt_search_help_center', status: 'succeeded' })
+      await seedToolCall({ toolName: '__qtt_search_help_center', status: 'succeeded' })
+      await seedToolCall({ toolName: '__qtt_search_help_center', status: 'failed' })
+      await seedToolCall({ toolName: '__qtt_search_help_center', status: 'denied' })
+      await seedToolCall({ toolName: '__qtt_search_help_center', status: 'skipped_duplicate' })
 
       const metrics = await getQuinnToolMetrics(FROM, TO)
-      const tool = metrics.find((m) => m.toolName === '__qtt_search_kb')
+      const tool = metrics.find((m) => m.toolName === '__qtt_search_help_center')
       expect(tool).toMatchObject({
-        toolName: '__qtt_search_kb',
+        toolName: '__qtt_search_help_center',
         succeeded: 2,
         failed: 1,
         denied: 1,

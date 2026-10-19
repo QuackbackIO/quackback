@@ -60,12 +60,12 @@ describe('buildConversationRows', () => {
   })
 
   it('shows the working trace, and the stream supersedes it once text arrives', () => {
-    const working = buildConversationRows({ ...base, assistantActivity: 'searching_kb' })
+    const working = buildConversationRows({ ...base, assistantActivity: 'searching_help_center' })
     expect(working.map((r) => r.type)).toEqual(['assistant-activity'])
 
     const streaming = buildConversationRows({
       ...base,
-      assistantActivity: 'searching_kb',
+      assistantActivity: 'searching_help_center',
       assistantStream: 'Adding the widget…',
     })
     expect(streaming.map((r) => r.type)).toEqual(['assistant-stream'])

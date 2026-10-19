@@ -133,7 +133,7 @@ export type AiFeature = (typeof AI_FEATURES)[number]
 export function aiFeatureOf(pipelineStep: string): AiFeature {
   if (pipelineStep.startsWith('assistant')) return 'assistant'
   if (pipelineStep.startsWith('copilot')) return 'copilot'
-  if (pipelineStep.startsWith('help_center') || pipelineStep.startsWith('kb_')) return 'helpCenter'
+  if (pipelineStep.startsWith('help_center')) return 'helpCenter'
   if (
     [
       'extraction',

@@ -1,5 +1,5 @@
 import { db, helpCenterCategories, and, eq, isNull, type Transaction } from '@/lib/server/db'
-import type { KbCategoryId } from '@quackback/ids'
+import type { CategoryId } from '@quackback/ids'
 
 /** The category an article lands in when nobody picked one. */
 export const DEFAULT_HELP_CATEGORY = { name: 'General', slug: 'general' } as const
@@ -24,19 +24,19 @@ function findLiveDefault(executor: Executor) {
  * deleted keeps its slug, so a fresh one takes a suffixed slug rather than
  * reviving the deleted row.
  */
-export async function ensureDefaultHelpCategory(executor: Executor = db): Promise<KbCategoryId> {
+export async function ensureDefaultHelpCategory(executor: Executor = db): Promise<CategoryId> {
   const existing = await findLiveDefault(executor)
-  if (existing) return existing.id as KbCategoryId
+  if (existing) return existing.id as CategoryId
 
   const [created] = await executor
     .insert(helpCenterCategories)
     .values({ ...DEFAULT_HELP_CATEGORY })
     .onConflictDoNothing({ target: helpCenterCategories.slug })
     .returning({ id: helpCenterCategories.id })
-  if (created) return created.id as KbCategoryId
+  if (created) return created.id as CategoryId
 
   const raced = await findLiveDefault(executor)
-  if (raced) return raced.id as KbCategoryId
+  if (raced) return raced.id as CategoryId
 
   for (let suffix = 2; ; suffix++) {
     const [fresh] = await executor
@@ -44,6 +44,6 @@ export async function ensureDefaultHelpCategory(executor: Executor = db): Promis
       .values({ name: DEFAULT_HELP_CATEGORY.name, slug: `${DEFAULT_HELP_CATEGORY.slug}-${suffix}` })
       .onConflictDoNothing({ target: helpCenterCategories.slug })
       .returning({ id: helpCenterCategories.id })
-    if (fresh) return fresh.id as KbCategoryId
+    if (fresh) return fresh.id as CategoryId
   }
 }

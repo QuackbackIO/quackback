@@ -1,6 +1,6 @@
 /**
  * Per-article/category translation CRUD (domains/languages §2). Default-
- * locale content stays on kb_articles/kb_categories; every additional locale
+ * locale content stays on help_center_articles/help_center_categories; every additional locale
  * is a row here, independent of the base row's own publishedAt/isPublic.
  */
 import {
@@ -12,7 +12,7 @@ import {
   helpCenterCategoryTranslations,
   type TiptapContent,
 } from '@/lib/server/db'
-import type { KbArticleId, KbCategoryId } from '@quackback/ids'
+import type { ArticleId, CategoryId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { cancelPendingAutoTranslations } from './help-center-translate-jobs'
 import type {
@@ -27,7 +27,7 @@ import type {
 // ============================================================================
 
 export interface UpsertArticleTranslationInput {
-  articleId: KbArticleId
+  articleId: ArticleId
   locale: string
   title: string
   description?: string | null
@@ -36,7 +36,7 @@ export interface UpsertArticleTranslationInput {
 }
 
 export async function listArticleTranslations(
-  articleId: KbArticleId
+  articleId: ArticleId
 ): Promise<HelpCenterArticleTranslation[]> {
   return db.query.helpCenterArticleTranslations.findMany({
     where: eq(helpCenterArticleTranslations.articleId, articleId),
@@ -44,7 +44,7 @@ export async function listArticleTranslations(
 }
 
 export async function getArticleTranslation(
-  articleId: KbArticleId,
+  articleId: ArticleId,
   locale: string
 ): Promise<HelpCenterArticleTranslation | null> {
   const row = await db.query.helpCenterArticleTranslations.findFirst({
@@ -58,7 +58,7 @@ export async function getArticleTranslation(
 
 /** Published-only read for the public /hc/{locale} site. */
 export async function getPublishedArticleTranslation(
-  articleId: KbArticleId,
+  articleId: ArticleId,
   locale: string
 ): Promise<HelpCenterArticleTranslation | null> {
   const row = await getArticleTranslation(articleId, locale)
@@ -144,7 +144,7 @@ export async function writeGuardedArticleTranslation(
 }
 
 export async function setArticleTranslationStatus(
-  articleId: KbArticleId,
+  articleId: ArticleId,
   locale: string,
   status: 'draft' | 'published'
 ): Promise<HelpCenterArticleTranslation> {
@@ -169,7 +169,7 @@ export async function setArticleTranslationStatus(
 }
 
 export async function deleteArticleTranslation(
-  articleId: KbArticleId,
+  articleId: ArticleId,
   locale: string
 ): Promise<void> {
   await cancelPendingAutoTranslations(articleId, locale)
@@ -185,7 +185,7 @@ export async function deleteArticleTranslation(
 
 /** One entry per enabled additional locale, for the admin editor's status pills. */
 export async function getArticleTranslationStatuses(
-  articleId: KbArticleId,
+  articleId: ArticleId,
   enabledLocales: string[],
   pausedLocales: readonly string[] = []
 ): Promise<ArticleTranslationStatusEntry[]> {
@@ -208,14 +208,14 @@ export async function getArticleTranslationStatuses(
 // ============================================================================
 
 export interface UpsertCategoryTranslationInput {
-  categoryId: KbCategoryId
+  categoryId: CategoryId
   locale: string
   name: string
   description?: string | null
 }
 
 export async function listCategoryTranslations(
-  categoryId: KbCategoryId
+  categoryId: CategoryId
 ): Promise<HelpCenterCategoryTranslation[]> {
   return db.query.helpCenterCategoryTranslations.findMany({
     where: eq(helpCenterCategoryTranslations.categoryId, categoryId),
@@ -223,7 +223,7 @@ export async function listCategoryTranslations(
 }
 
 export async function getCategoryTranslation(
-  categoryId: KbCategoryId,
+  categoryId: CategoryId,
   locale: string
 ): Promise<HelpCenterCategoryTranslation | null> {
   const row = await db.query.helpCenterCategoryTranslations.findFirst({
@@ -259,7 +259,7 @@ export async function upsertCategoryTranslation(
 }
 
 export async function deleteCategoryTranslation(
-  categoryId: KbCategoryId,
+  categoryId: CategoryId,
   locale: string
 ): Promise<void> {
   await db
@@ -274,7 +274,7 @@ export async function deleteCategoryTranslation(
 
 /** A category is "translated" in a locale purely by having a non-empty name there. */
 export async function getCategoryTranslationStatuses(
-  categoryId: KbCategoryId,
+  categoryId: CategoryId,
   enabledLocales: string[]
 ): Promise<CategoryTranslationStatusEntry[]> {
   const rows = await listCategoryTranslations(categoryId)

@@ -17,7 +17,7 @@ import type { TiptapContent } from '../types'
 
 /** pgvector column, 1536 dims (OpenAI text-embedding-3-small). Local to this
  *  file, mirroring the per-schema-file `vector` customType convention (see
- *  conversation-summary.ts / posts.ts / kb.ts). Populated on publish/edit by
+ *  conversation-summary.ts / posts.ts / help-center.ts). Populated on publish/edit by
  *  `changelog-embedding.service.ts` (Quinn Phase 4: changelog grounding);
  *  drafts stay null until they are next published. */
 const vector = customType<{ data: number[] }>({

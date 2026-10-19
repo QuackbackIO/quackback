@@ -30,16 +30,16 @@ export type { AskAiSourceMeta } from './ask-ai-state'
 
 /**
  * Whether Ask AI can be offered: the flag is on AND a model is configured.
- * Backed by the kb-ask capability probe (404 when flags are off).
+ * Backed by the help-center-ask capability probe (404 when flags are off).
  */
 export function useAskAiAvailable(
   enabled = true,
   options?: { getHeaders?: () => HeadersInit; sessionVersion?: number }
 ): boolean {
   const query = useQuery({
-    queryKey: ['kb-ask', 'capability', options?.sessionVersion ?? 'anon'] as const,
+    queryKey: ['help-center-ask', 'capability', options?.sessionVersion ?? 'anon'] as const,
     queryFn: async () => {
-      const res = await fetch('/api/widget/kb-ask', {
+      const res = await fetch('/api/widget/help-center-ask', {
         headers: options?.getHeaders?.(),
       })
       if (!res.ok) return false

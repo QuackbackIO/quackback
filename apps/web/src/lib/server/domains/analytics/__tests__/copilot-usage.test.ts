@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { createId } from '@quackback/ids'
-import type { ConversationId, KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, ArticleId, CategoryId, PrincipalId } from '@quackback/ids'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -75,12 +75,12 @@ async function seedPrincipal(displayName: string): Promise<PrincipalId> {
   return row.id
 }
 
-async function seedArticle(title: string): Promise<KbArticleId> {
+async function seedArticle(title: string): Promise<ArticleId> {
   const [author] = await testDb
     .insert(principal)
     .values({ role: 'member', type: 'user', displayName: 'Author', createdAt: new Date() })
     .returning()
-  const categoryId = createId('kb_category') as KbCategoryId
+  const categoryId = createId('category') as CategoryId
   await testDb.insert(helpCenterCategories).values({
     id: categoryId,
     slug: `cat-${categoryId}`,
@@ -608,7 +608,7 @@ describe.skipIf(!fixture.available)('getCopilotUsageMetrics (real DB)', () => {
     })
 
     it('drops a cited article that no longer exists rather than linking nowhere', async () => {
-      const deletedId = createId('kb_article')
+      const deletedId = createId('article')
       await seedUsageLog('assistant', {
         surface: 'copilot',
         citedSources: [{ type: 'article', id: deletedId }],

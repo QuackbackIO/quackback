@@ -17,7 +17,7 @@ import { WidgetArticleSkeleton } from './widget-skeletons'
 import { useWidgetAuth } from './widget-auth-provider'
 
 interface WidgetHelpDetailProps {
-  /** `article_` / `kb_article_` TypeID or public slug — same as `open({ articleId })`. */
+  /** `article_` / `article_` TypeID or public slug — same as `open({ articleId })`. */
   articleRef: string
   /** Tapping the category eyebrow browses the rest of that collection. */
   onCategorySelect?: (categoryId: string, categoryName: string) => void

@@ -6,7 +6,7 @@ import { principal } from './auth'
 
 /** pgvector column, 1536 dims (OpenAI text-embedding-3-small). Local to this
  *  file, mirroring the per-schema-file `vector` customType convention (see
- *  conversation-summary.ts / posts.ts / kb.ts) rather than a shared export. */
+ *  conversation-summary.ts / posts.ts / help-center.ts) rather than a shared export. */
 const vector = customType<{ data: number[] }>({
   dataType() {
     return 'vector(1536)'

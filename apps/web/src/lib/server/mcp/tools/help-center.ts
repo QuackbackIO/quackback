@@ -20,7 +20,7 @@ import {
 } from '@/lib/server/domains/help-center/help-center.service'
 import { isCategoryIconName } from '@/lib/server/domains/help-center/category-icons'
 import { parseOptionalTypeId, parseTypeId } from '@/lib/server/domains/api/validation'
-import type { PrincipalId, KbArticleId, KbCategoryId } from '@quackback/ids'
+import type { PrincipalId, ArticleId, CategoryId } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
 import {
   registerTool,
@@ -159,8 +159,8 @@ export function registerHelpCenterTools(server: McpServer, auth: McpAuthContext)
     description: `Create a new help center article (draft). Use update_article to publish it.
 
 Examples:
-- create_article({ categoryId: "kb_category_01abc...", title: "Getting Started", content: "Welcome to..." })
-- With custom slug: create_article({ categoryId: "kb_category_01abc...", title: "FAQ", content: "...", slug: "frequently-asked-questions" })${CONTENT_FORMAT_BLOCK}`,
+- create_article({ categoryId: "category_01abc...", title: "Getting Started", content: "Welcome to..." })
+- With custom slug: create_article({ categoryId: "category_01abc...", title: "FAQ", content: "...", slug: "frequently-asked-questions" })${CONTENT_FORMAT_BLOCK}`,
     schema: createHelpCenterArticleSchema,
     annotations: WRITE,
     feature: 'helpCenter',
@@ -203,7 +203,7 @@ Examples:
     scope: 'write:article',
     teamOnly: true,
     handler: async (args) => {
-      const articleId = parseTypeId<KbArticleId>(args.articleId, 'article', 'article ID')
+      const articleId = parseTypeId<ArticleId>(args.articleId, 'article', 'article ID')
       const authorPrincipalId = parseOptionalTypeId<PrincipalId>(
         args.authorId,
         'principal',
@@ -249,7 +249,7 @@ Example:
     scope: 'write:article',
     teamOnly: true,
     handler: async (args) => {
-      const articleId = parseTypeId<KbArticleId>(args.articleId, 'article', 'article ID')
+      const articleId = parseTypeId<ArticleId>(args.articleId, 'article', 'article ID')
       await deleteArticle(articleId)
       return jsonResult({ deleted: true, id: articleId })
     },
@@ -262,8 +262,8 @@ Example:
 
 Examples:
 - Create: manage_category({ action: "create", name: "Getting Started", icon: "RocketLaunchIcon" })
-- Update: manage_category({ action: "update", categoryId: "kb_category_01abc...", name: "New Name" })
-- Delete: manage_category({ action: "delete", categoryId: "kb_category_01abc..." })`,
+- Update: manage_category({ action: "update", categoryId: "category_01abc...", name: "New Name" })
+- Delete: manage_category({ action: "delete", categoryId: "category_01abc..." })`,
     schema: manageCategorySchema,
     annotations: DESTRUCTIVE,
     feature: 'helpCenter',
@@ -290,14 +290,14 @@ Examples:
             return errorResult(new Error('categoryId is required when action is "update"'))
           }
           const { action: _, categoryId: __, ...updateData } = args
-          const category = await updateCategory(args.categoryId as KbCategoryId, updateData)
+          const category = await updateCategory(args.categoryId as CategoryId, updateData)
           return categoryResult(category)
         }
         case 'delete': {
           if (!args.categoryId) {
             return errorResult(new Error('categoryId is required when action is "delete"'))
           }
-          await deleteCategory(args.categoryId as KbCategoryId)
+          await deleteCategory(args.categoryId as CategoryId)
           return jsonResult({ deleted: true, id: args.categoryId })
         }
       }

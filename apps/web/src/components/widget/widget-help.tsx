@@ -22,7 +22,7 @@ import {
   useAskAiAvailable,
   useAskAiSearchController,
 } from '@/components/help-center/ask-ai'
-import { useKbSearch } from '@/components/help-center/use-kb-search'
+import { useHelpCenterSearch } from '@/components/help-center/use-help-center-search'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import { cn } from '@/lib/shared/utils'
 import { WidgetHelpCollectionsSkeleton, WidgetHelpSearchSkeleton } from './widget-skeletons'
@@ -60,7 +60,7 @@ export function WidgetHelp({
   })
   // Widget locale passthrough (domains/languages §2): the search API falls
   // back to the default locale server-side if this locale isn't enabled.
-  const { results, isSearching } = useKbSearch({
+  const { results, isSearching } = useHelpCenterSearch({
     query: search,
     limit: 10,
     locale: intl.locale,

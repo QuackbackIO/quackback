@@ -32,7 +32,7 @@ export const SCAN_TABLES = [
   'hook_deliveries',
   'import_runs',
   'export_runs',
-  'kb_articles',
+  'help_center_articles',
   'principal',
   'settings',
 ] as const

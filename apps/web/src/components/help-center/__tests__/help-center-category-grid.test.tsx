@@ -15,7 +15,7 @@ import { HelpCenterCategoryGrid } from '../help-center-category-grid'
 afterEach(cleanup)
 
 const category = (articleCount: number) => ({
-  id: 'kb_category_1',
+  id: 'category_1',
   urlId: 1,
   slug: 'general',
   name: 'General',
@@ -36,7 +36,7 @@ it('speaks the visitor language when the help center has nothing to show', () =>
 it('counts articles with the plural rules of the language', () => {
   render(
     <IntlProvider locale="en">
-      <HelpCenterCategoryGrid categories={[category(1), { ...category(3), id: 'kb_category_2' }]} />
+      <HelpCenterCategoryGrid categories={[category(1), { ...category(3), id: 'category_2' }]} />
     </IntlProvider>
   )
   expect(screen.getByText('1 article')).toBeInTheDocument()
