@@ -164,11 +164,13 @@ async function renderThread({
   helpSearch,
   linkPreviews = false,
   initialDraft,
+  hostFiles,
 }: {
   existing?: boolean
   helpSearch?: (q: string) => Promise<Array<{ slug: string; title: string }>>
   linkPreviews?: boolean
   initialDraft?: string
+  hostFiles?: { version: number; take: () => File[] }
 } = {}) {
   const rpc = makeRpc(existing)
   render(
@@ -189,6 +191,7 @@ async function renderThread({
             linkPreviews={linkPreviews}
             helpSearch={helpSearch ? { search: helpSearch, onSelect: () => {} } : undefined}
             initialDraft={initialDraft}
+            hostFiles={hostFiles}
           />
         </VisitorSurfaceRpcProvider>
       </IntlProvider>
@@ -215,6 +218,24 @@ describe('VisitorConversationThread composer', () => {
       )
     )
     await waitFor(() => expect(probe.editorValue).toBeUndefined())
+  })
+
+  it('stages files handed over by the host once, and sends them like picked files', async () => {
+    const queue = [new File([new Uint8Array([1, 2, 3])], 'shot.png', { type: 'image/png' })]
+    const take = vi.fn(() => queue.splice(0))
+    const rpc = await renderThread({ hostFiles: { version: 1, take } })
+    await waitFor(() => expect(sendButton()).toBeEnabled())
+    expect(queue).toEqual([])
+    fireEvent.click(sendButton())
+    await waitFor(() =>
+      expect(rpc.sendConversationMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            attachments: [expect.objectContaining({ fileId: 'file_1', name: 'shot.png' })],
+          }),
+        })
+      )
+    )
   })
 
   it('does not re-render the thread per keystroke', async () => {

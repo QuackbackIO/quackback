@@ -68,22 +68,23 @@ Drop this in your `<head>` and skip the install step entirely:
 
 ### Methods
 
-| Method                                        | Description                                                                    |
-| --------------------------------------------- | ------------------------------------------------------------------------------ |
-| `Quackback.init(options)`                     | Create launcher + iframe. `options.instanceUrl` required.                      |
-| `Quackback.identify(identity?)`               | Attribute activity to a user. Omit for anonymous.                              |
-| `Quackback.logout()`                          | Clear identity; widget stays visible in anonymous mode.                        |
-| `Quackback.open(options?)`                    | Open the panel; optional deep-link payload (see below).                        |
-| `Quackback.close()`                           | Close the panel.                                                               |
-| `Quackback.showLauncher()` / `hideLauncher()` | Toggle the floating button.                                                    |
-| `Quackback.metadata(patch)`                   | Attach session context to submitted feedback. Pass `null` to remove a key.     |
-| `Quackback.tracking(enabled)`                 | Allow or stop host-page visitor analytics. `false` also removes the device id. |
-| `Quackback.on(event, handler)`                | Subscribe to a widget event. Returns an unsubscribe function.                  |
-| `Quackback.off(event, handler?)`              | Remove a specific handler, or all listeners for the event.                     |
-| `Quackback.destroy()`                         | Tear down all widget state and DOM.                                            |
-| `Quackback.isOpen()`                          | Whether the panel is currently visible.                                        |
-| `Quackback.getUser()`                         | The current identified user, or `null`.                                        |
-| `Quackback.isIdentified()`                    | `true` when a user is identified (non-anonymous).                              |
+| Method                                        | Description                                                                      |
+| --------------------------------------------- | -------------------------------------------------------------------------------- |
+| `Quackback.init(options)`                     | Create launcher + iframe. `options.instanceUrl` required.                        |
+| `Quackback.identify(identity?)`               | Attribute activity to a user. Omit for anonymous.                                |
+| `Quackback.logout()`                          | Clear identity; widget stays visible in anonymous mode.                          |
+| `Quackback.open(options?)`                    | Open the panel; optional deep-link payload (see below).                          |
+| `Quackback.close()`                           | Close the panel.                                                                 |
+| `Quackback.attach(file, options?)`            | Stage a host-page file in the messenger composer (see below). Returns a Promise. |
+| `Quackback.showLauncher()` / `hideLauncher()` | Toggle the floating button.                                                      |
+| `Quackback.metadata(patch)`                   | Attach session context to submitted feedback. Pass `null` to remove a key.       |
+| `Quackback.tracking(enabled)`                 | Allow or stop host-page visitor analytics. `false` also removes the device id.   |
+| `Quackback.on(event, handler)`                | Subscribe to a widget event. Returns an unsubscribe function.                    |
+| `Quackback.off(event, handler?)`              | Remove a specific handler, or all listeners for the event.                       |
+| `Quackback.destroy()`                         | Tear down all widget state and DOM.                                              |
+| `Quackback.isOpen()`                          | Whether the panel is currently visible.                                          |
+| `Quackback.getUser()`                         | The current identified user, or `null`.                                          |
+| `Quackback.isIdentified()`                    | `true` when a user is identified (non-anonymous).                                |
 
 ### `init` options
 
@@ -151,6 +152,24 @@ Quackback.open({ articleId: 'article_01h...' }) // help article TypeID or slug
 `postId` and `articleId` win over `view` if both are set. `board` on `open` only applies to `view: 'new-post'`. Home / Popular Ideas filtering uses `init({ defaultBoard })` or the iframe `?board=` param.
 
 Every `open` field is live. A disabled surface or an unseen board fails closed — the panel still opens, but the widget does not invent access.
+
+### `attach` host files
+
+Hand the widget a file your page made, such as a screenshot or a screen recording. The widget opens the chat view and stages the file in the composer, where it uploads and sends exactly like a file the visitor picked; the visitor still presses Send.
+
+```js
+const blob = await captureScreenshot() // your own capture
+try {
+  await Quackback.attach(blob, { name: 'screenshot.png' })
+} catch (error) {
+  // error.message: ATTACHMENT_INVALID | ATTACHMENT_TOO_LARGE | ATTACHMENT_UNAVAILABLE
+}
+```
+
+- `name` defaults to `file.name` for a `File` and is required for a plain `Blob`. The extension picks the per-file cap (100 MB for video, 25 MB otherwise).
+- The promise resolves with `{ name, size }` once the file is staged. Upload problems after that (rate limit, a type the instance refuses) show on the attachment tile, as for a picked file.
+- `ATTACHMENT_UNAVAILABLE` means no widget (before `init` or after `destroy`), messages are off for the workspace, or the instance did not answer in time.
+- The Blob reaches the widget by `postMessage` structured clone; it is never serialized or sent anywhere else.
 
 ### Events
 

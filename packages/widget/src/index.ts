@@ -8,6 +8,9 @@ import type {
   EventMap,
   EventHandler,
   Unsubscribe,
+  AttachOptions,
+  AttachResult,
+  AttachError,
 } from './types'
 
 import { SDK_VERSION } from './version'
@@ -22,6 +25,9 @@ export type {
   EventMap,
   EventHandler,
   Unsubscribe,
+  AttachOptions,
+  AttachResult,
+  AttachError,
 }
 
 const sdk = createSDK()
@@ -42,6 +48,15 @@ export const Quackback = {
   },
   close(): void {
     sdk.dispatch('close')
+  },
+  /**
+   * Hand a file from the host page (a screenshot or a screen recording, say)
+   * to the widget: it opens the chat view and stages the file in the composer,
+   * where it uploads and sends like a file the visitor picked. Resolves once
+   * the file is staged; rejects with an `AttachError` code as the message.
+   */
+  attach(file: Blob, options?: AttachOptions): Promise<AttachResult> {
+    return sdk.dispatch('attach', file, options) as Promise<AttachResult>
   },
   showLauncher(): void {
     sdk.dispatch('showLauncher')
