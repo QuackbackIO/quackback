@@ -212,6 +212,7 @@ export async function searchShippedPosts(params: {
   query?: string
   boardId?: BoardId
   limit?: number
+  includeIds?: PostId[]
 }): Promise<
   Array<{
     id: PostId
@@ -222,7 +223,7 @@ export async function searchShippedPosts(params: {
     createdAt: Date
   }>
 > {
-  const { query, boardId, limit = 20 } = params
+  const { query, boardId, limit = 100, includeIds } = params
 
   // Get all status IDs with category 'complete'
   const completeStatuses = await db.query.postStatuses.findMany({
@@ -249,26 +250,52 @@ export async function searchShippedPosts(params: {
     conditions.push(sql`LOWER(${posts.title}) LIKE ${searchTerm}`)
   }
 
-  // Fetch posts with board slug and author info
+  const selectColumns = {
+    id: posts.id,
+    title: posts.title,
+    voteCount: posts.voteCount,
+    boardSlug: boards.slug,
+    authorName: sql<string | null>`(
+      SELECT m.display_name FROM ${principal} m
+      WHERE m.id = ${posts.principalId}
+    )`.as('author_name'),
+    createdAt: posts.createdAt,
+  }
+
+  // Fetch posts with board slug and author info, most recently shipped/updated first
   const results = await db
-    .select({
-      id: posts.id,
-      title: posts.title,
-      voteCount: posts.voteCount,
-      boardSlug: boards.slug,
-      authorName: sql<string | null>`(
-        SELECT m.display_name FROM ${principal} m
-        WHERE m.id = ${posts.principalId}
-      )`.as('author_name'),
-      createdAt: posts.createdAt,
-    })
+    .select(selectColumns)
     .from(posts)
     .innerJoin(boards, eq(boards.id, posts.boardId))
     .where(and(...conditions))
-    .orderBy(desc(posts.voteCount), desc(posts.createdAt))
+    .orderBy(desc(posts.updatedAt), desc(posts.voteCount), desc(posts.createdAt))
     .limit(limit)
 
-  return results
+  const uniqueIncludeIds = Array.from(new Set(includeIds ?? []))
+  if (uniqueIncludeIds.length === 0) {
+    return results
+  }
+
+  const seenIds = new Set(results.map((r) => r.id))
+  const missingIds = uniqueIncludeIds.filter((id) => !seenIds.has(id))
+  if (missingIds.length === 0) {
+    return results
+  }
+
+  const includedResults = await db
+    .select(selectColumns)
+    .from(posts)
+    .innerJoin(boards, eq(boards.id, posts.boardId))
+    .where(
+      and(
+        inArray(posts.id, missingIds),
+        inArray(posts.statusId, statusIds),
+        isNull(posts.deletedAt)
+      )
+    )
+    .orderBy(desc(posts.updatedAt), desc(posts.voteCount), desc(posts.createdAt))
+
+  return [...results, ...includedResults]
 }
 
 /**
