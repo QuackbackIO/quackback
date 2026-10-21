@@ -17,6 +17,7 @@ import {
   type UpdateNotificationChannelInput,
   type RemoveNotificationChannelInput,
 } from '@/lib/server/functions/integrations'
+import { reconnectIntegrationDestinationFn } from '@/lib/server/functions/integration-destinations'
 
 /**
  * Mutation hook for updating integration config and event mappings
@@ -84,6 +85,22 @@ export function useRemoveNotificationChannel() {
   return useMutation({
     mutationFn: (input: RemoveNotificationChannelInput) =>
       removeNotificationChannelFn({ data: input }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
+    },
+  })
+}
+
+/**
+ * Register a destination's webhook again (the settings page's "Repair
+ * webhook"). The caller reports the outcome.
+ */
+export function useReconnectIntegrationDestination() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (destinationId: string) =>
+      reconnectIntegrationDestinationFn({ data: { destinationId } }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
     },

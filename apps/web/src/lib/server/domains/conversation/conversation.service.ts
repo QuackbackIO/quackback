@@ -23,6 +23,7 @@ import {
   principal,
   user,
   type Conversation,
+  type ConversationMessage,
   type ConversationSystemEvent,
   withWorkflowAttribution,
   type AssistantPendingActionSurface,
@@ -39,6 +40,7 @@ import type {
   PrincipalId,
   SegmentId,
   TeamId,
+  TicketId,
 } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import {
@@ -81,6 +83,7 @@ import {
   publishAgentConversationEvent,
   publishConversationUpdate,
   publishTyping,
+  publishTicketEvent,
 } from '@/lib/server/realtime/conversation-channels'
 import {
   validateContent,
@@ -95,6 +98,7 @@ import {
   notifyConversationStarted,
 } from './conversation.notify'
 import { resolveReplyRecipient } from './conversation.recipient'
+import { hasParticipantThreadAccess, markParticipantRead } from './conversation-participant.service'
 import { resolveMessageParent } from './message-parent'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import {
@@ -170,11 +174,27 @@ export async function assertConversationViewable(
   actor: Actor
 ): Promise<Conversation> {
   const conversation = await loadConversationOr404(conversationId)
-  const decision = canViewConversation(actor, conversation)
-  if (!decision.allowed) {
-    throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
-  }
-  return conversation
+  if (canViewConversation(actor, conversation).allowed) return conversation
+  // A customer the paired ticket was shared with reads it too. Looked up only
+  // when ownership and the team permission have both said no, so the common
+  // paths pay nothing for it.
+  if (await isSharedTicketParticipant(conversation, actor)) return conversation
+  throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+}
+
+/**
+ * Whether the actor reaches this conversation as a customer its paired ticket
+ * was shared with, rather than as its visitor or a teammate (ticket sharing,
+ * conversation-participant.service's `hasParticipantThreadAccess`).
+ */
+export async function isSharedTicketParticipant(
+  conversation: Pick<Conversation, 'id' | 'visitorPrincipalId'>,
+  actor: Actor,
+  executor?: Parameters<typeof hasParticipantThreadAccess>[2]
+): Promise<boolean> {
+  if (!actor.principalId || actor.principalType === 'service') return false
+  if (actor.principalId === conversation.visitorPrincipalId) return false
+  return hasParticipantThreadAccess(conversation.id, actor.principalId, executor)
 }
 
 /**
@@ -335,6 +355,7 @@ export async function sendVisitorMessage(
     : (input.metadata ?? null)
 
   let created = false
+  let writesAsParticipant = false
   // The conversation's status BEFORE this message, so the assistant trigger can
   // tell a genuinely reopened thread from one a human deliberately closed.
   let priorStatus: ConversationStatus | null = null
@@ -349,10 +370,26 @@ export async function sendVisitorMessage(
       if (!existing) {
         throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
       }
-      const decision = canSendVisitorMessage(actor, existing)
+      // A customer the paired ticket was shared with writes on the requester's
+      // thread as themselves (ticket sharing): checked only when ownership
+      // says no, inside the transaction so a share removed a moment ago no
+      // longer counts. They reply; they never answer the requester's
+      // structured blocks, and their message moves none of the requester's own
+      // state (read watermark, channel, pre-chat email).
+      if (!canSendVisitorMessage(actor, existing).allowed) {
+        writesAsParticipant = await isSharedTicketParticipant(existing, actor, tx)
+      }
+      if (writesAsParticipant && resolvedBlockReply) {
+        throw new ForbiddenError(
+          'FORBIDDEN',
+          'Only the person who opened this ticket can answer this'
+        )
+      }
+      const access = { participant: writesAsParticipant }
+      const decision = canSendVisitorMessage(actor, existing, access)
       if (!decision.allowed) {
         // Hide existence from non-owners; surface the real reason otherwise.
-        if (!canViewConversation(actor, existing).allowed) {
+        if (!canViewConversation(actor, existing, access).allowed) {
           throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
         }
         throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -396,7 +433,7 @@ export async function sendVisitorMessage(
     // Capture a pre-chat email once, only when none is recorded yet — a later
     // send can't overwrite an address the visitor already gave.
     const captureEmail =
-      !conversation.visitorEmail && input.visitorEmail
+      !writesAsParticipant && !conversation.visitorEmail && input.visitorEmail
         ? normalizeEmail(input.visitorEmail)
         : undefined
 
@@ -415,7 +452,8 @@ export async function sendVisitorMessage(
         lastMessageAt: message.createdAt,
         lastMessagePreview: preview(content || fallbackLabel, attachments),
         // Visitor is active, so their side is read; a reply surfaces the thread.
-        visitorLastReadAt: message.createdAt,
+        // A participant's reply moves their own watermark instead (below).
+        ...(writesAsParticipant ? {} : { visitorLastReadAt: message.createdAt }),
         status: visitorNextStatus,
         // A customer message always wakes a snoozed thread — clear the timer.
         snoozedUntil: null,
@@ -442,10 +480,17 @@ export async function sendVisitorMessage(
         // mailbox as a side channel and silently drops replies. Bidirectional on
         // purpose: moving back into the widget must restore the presence gate,
         // otherwise they would get an in-app message AND a redundant email.
-        channel: channelFromVisitorTransport(messageMetadata?.source),
+        // A participant's transport says nothing about the requester's, so
+        // their reply leaves the channel as it is.
+        channel: writesAsParticipant
+          ? conversation.channel
+          : channelFromVisitorTransport(messageMetadata?.source),
       })
       .where(eq(conversations.id, conversation.id))
       .returning()
+    if (writesAsParticipant) {
+      await markParticipantRead(conversation.id, author.principalId, message.createdAt, tx)
+    }
 
     // Also stash the captured email at the principal level so it survives across
     // conversations (reusable contact). Don't overwrite an existing address.
@@ -1790,7 +1835,7 @@ export async function deleteConversationMessage(
     const decision = canDeleteMessage(actor, authored, null)
     if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 
-    await db
+    const [deleted] = await db
       .update(conversationMessages)
       .set({
         deletedAt: new Date(),
@@ -1798,21 +1843,22 @@ export async function deleteConversationMessage(
         updatedAt: new Date(),
       })
       .where(and(eq(conversationMessages.id, messageId), isNull(conversationMessages.deletedAt)))
-
-    // No realtime broadcast and no webhook here: ticket-thread update routing
-    // (and its message.deleted webhook analogue) arrives with the customer
-    // loop, mirroring message.actions.ts's identical deferral for ticket
-    // reactions/flags. The acting client applies the deletion optimistically.
+      .returning({ id: conversationMessages.id })
+    if (deleted) await announceTicketThreadDelete(message.ticketId, message, actor)
     return
   }
 
   const conversationId = message.conversationId
   const conversation = await loadConversationOr404(conversationId)
 
-  const decision = canDeleteMessage(actor, authored, conversation)
+  let decision = canDeleteMessage(actor, authored, conversation)
+  const access = {
+    participant: !decision.allowed && (await isSharedTicketParticipant(conversation, actor)),
+  }
+  if (access.participant) decision = canDeleteMessage(actor, authored, conversation, access)
   if (!decision.allowed) {
     // Hide existence from anyone who can't even view the conversation.
-    if (!canViewConversation(actor, conversation).allowed) {
+    if (!canViewConversation(actor, conversation, access).allowed) {
       throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
     }
     throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -1851,6 +1897,33 @@ export async function deleteConversationMessage(
   if (!message.isInternal) {
     void emitMessageDeleted(actor, message, conversation)
   }
+
+  // A linked pair's thread also renders in its customer ticket.
+  const { resolvePairTicketIdForConversation } =
+    await import('@/lib/server/domains/tickets/pair-thread.service')
+  const pairTicketId = await resolvePairTicketIdForConversation(conversationId)
+  if (pairTicketId) await announceTicketThreadDelete(pairTicketId, message, actor)
+}
+
+/**
+ * A message shown in a ticket thread was deleted: drop it from open ticket
+ * threads, and tell the ticket's integrations when it was a public reply
+ * (ticket.reply_deleted). An internal note's deletion stays inside the inbox.
+ */
+async function announceTicketThreadDelete(
+  ticketId: TicketId,
+  message: ConversationMessage,
+  actor: Actor
+): Promise<void> {
+  publishTicketEvent(ticketId, { kind: 'ticket_message_deleted', ticketId, messageId: message.id })
+  if (message.isInternal || message.senderType === 'system') return
+  const { emitTicketReplyDeleted } = await import('@/lib/server/domains/tickets/ticket.webhooks')
+  void emitTicketReplyDeleted(
+    actor,
+    ticketId,
+    message.id,
+    message.senderType === 'visitor' ? 'visitor' : 'agent'
+  )
 }
 
 /** Record a visitor CSAT rating (1-5) on their conversation. */
@@ -1970,8 +2043,18 @@ export async function markConversationRead(
   actor: Actor
 ): Promise<void> {
   const conversation = await assertConversationViewable(conversationId, actor)
-  const side = conversationSideFor(conversation, actor)
   const now = new Date()
+  const side = conversationSideFor(conversation, actor)
+  // A customer the ticket was shared with reads on their own watermark: the
+  // requester's unread state and read receipt stay the requester's.
+  if (
+    side === 'visitor' &&
+    actor.principalId !== conversation.visitorPrincipalId &&
+    (await isSharedTicketParticipant(conversation, actor))
+  ) {
+    await markParticipantRead(conversation.id, actor.principalId!, now)
+    return
+  }
   await db
     .update(conversations)
     .set(side === 'agent' ? { agentLastReadAt: now } : { visitorLastReadAt: now })

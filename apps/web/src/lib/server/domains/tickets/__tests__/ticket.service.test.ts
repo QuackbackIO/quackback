@@ -48,9 +48,13 @@ const webhooks = vi.hoisted(() => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
+  emitTicketUpdated: vi.fn().mockResolvedValue(undefined),
+  emitTicketPriorityChanged: vi.fn().mockResolvedValue(undefined),
   // Posting a message (activity-enrichment tests) also fires these two.
   emitTicketReplied: vi.fn().mockResolvedValue(undefined),
   emitTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
+  // A bulk set_due runs the due-date setter, which fires ticket.due_changed.
+  emitTicketDueChanged: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('../ticket.webhooks', () => webhooks)
 
@@ -82,12 +86,14 @@ import {
   setTicketStatus,
   assignTicket,
   setTicketPriority,
+  setTicketTitle,
   softDeleteTicket,
   autoReopenOnRequesterReply,
   listTickets,
   getTicket,
   assertTicketVisible,
   bulkUpdateTickets,
+  ticketSortDescriptorFor,
 } from '../ticket.service'
 import { NotFoundError } from '@/lib/shared/errors'
 import { listTicketMessages, sendTicketMessage, addTicketNote } from '../ticket-message.service'
@@ -632,6 +638,83 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     // Re-assigning the identical teammate changes nothing → no second hook.
     await assignTicket(created.id, { assigneePrincipalId: teammate }, actor)
     expect(webhooks.emitTicketAssigned).toHaveBeenCalledTimes(1)
+  })
+
+  it('setTicketPriority fires ticket.priority_changed on a change but stays silent on a no-op', async () => {
+    await seedSettings()
+    await seedStatuses()
+    const actor = adminActor()
+    const created = await createTicket({ type: 'customer', title: 'Triage me' }, actor)
+
+    await setTicketPriority(created.id, 'high', actor)
+    expect(webhooks.emitTicketPriorityChanged).toHaveBeenCalledTimes(1)
+    const [, ticketArg, previous] = webhooks.emitTicketPriorityChanged.mock.calls[0]
+    expect(ticketArg.priority).toBe('high')
+    expect(previous).toBe('none')
+
+    await setTicketPriority(created.id, 'high', actor)
+    expect(webhooks.emitTicketPriorityChanged).toHaveBeenCalledTimes(1)
+  })
+
+  describe('setTicketTitle', () => {
+    it('renames the ticket, trims the title and fires ticket.updated with the previous title', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const created = await createTicket({ type: 'customer', title: 'Login broken' }, actor)
+
+      const dto = await setTicketTitle(created.id, '  Cannot log in with SSO  ', actor)
+      expect(dto.title).toBe('Cannot log in with SSO')
+      const [row] = await testDb.select().from(tickets).where(eq(tickets.id, created.id))
+      expect(row.title).toBe('Cannot log in with SSO')
+      expect(webhooks.emitTicketUpdated).toHaveBeenCalledTimes(1)
+      const [, ticketArg, previousTitle] = webhooks.emitTicketUpdated.mock.calls[0]
+      expect(ticketArg.title).toBe('Cannot log in with SSO')
+      expect(previousTitle).toBe('Login broken')
+    })
+
+    it('treats a rename to the current title as a no-op', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const created = await createTicket({ type: 'customer', title: 'Same' }, actor)
+      realtime.publishTicketEvent.mockClear()
+
+      const dto = await setTicketTitle(created.id, 'Same ', actor)
+      expect(dto.title).toBe('Same')
+      expect(webhooks.emitTicketUpdated).not.toHaveBeenCalled()
+      expect(realtime.publishTicketEvent).not.toHaveBeenCalled()
+    })
+
+    it('refuses an empty or over-long title', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const created = await createTicket({ type: 'customer', title: 'Keep me' }, actor)
+
+      await expect(setTicketTitle(created.id, '   ', actor)).rejects.toThrow(/needs a title/i)
+      await expect(setTicketTitle(created.id, 'x'.repeat(301), actor)).rejects.toThrow(
+        /at most 300/i
+      )
+      expect(webhooks.emitTicketUpdated).not.toHaveBeenCalled()
+    })
+
+    it('refuses an actor without ticket.set_status', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const created = await createTicket({ type: 'customer', title: 'Guarded' }, adminActor())
+      const noPermission: Actor = { ...adminActor(), role: 'member', permissions: new Set() }
+
+      await expect(setTicketTitle(created.id, 'Renamed', noPermission)).rejects.toThrow(
+        /cannot rename/i
+      )
+    })
+
+    it('404s an unknown ticket', async () => {
+      await expect(
+        setTicketTitle(createId('ticket') as TicketId, 'Renamed', adminActor())
+      ).rejects.toBeInstanceOf(NotFoundError)
+    })
   })
 
   describe('watcher auto-subscribe (ticket subscriptions)', () => {
@@ -1246,6 +1329,88 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     })
   })
 
+  describe('listTickets: due date sort + filter', () => {
+    const HOUR = 60 * 60 * 1000
+
+    async function setDue(id: TicketId, dueAt: Date | null, resolvedAt: Date | null = null) {
+      await testDb.update(tickets).set({ dueAt, resolvedAt }).where(eq(tickets.id, id))
+    }
+
+    /** Overdue, resolved-but-past-due, due soon, due later, and undated. */
+    async function seedDueTickets(actor: Actor) {
+      const now = Date.now()
+      const overdue = await createTicket({ type: 'customer', title: 'Overdue' }, actor)
+      const resolved = await createTicket({ type: 'customer', title: 'Resolved' }, actor)
+      const soon = await createTicket({ type: 'customer', title: 'Soon' }, actor)
+      const later = await createTicket({ type: 'customer', title: 'Later' }, actor)
+      const undated = await createTicket({ type: 'customer', title: 'Undated' }, actor)
+      await setDue(overdue.id, new Date(now - 2 * HOUR))
+      await setDue(resolved.id, new Date(now - 3 * HOUR), new Date(now - HOUR))
+      await setDue(soon.id, new Date(now + 2 * HOUR))
+      await setDue(later.id, new Date(now + 72 * HOUR))
+      return { overdue, resolved, soon, later, undated }
+    }
+
+    const mine = (ids: TicketId[], seeded: Record<string, { id: TicketId }>) => {
+      const own = new Set(Object.values(seeded).map((t) => t.id))
+      return ids.filter((id) => own.has(id))
+    }
+
+    it('the due sort descriptor ascends on dueAt', () => {
+      expect(ticketSortDescriptorFor('due')).toEqual({ primary: 'dueAt', direction: 'asc' })
+    })
+
+    it('orders soonest due first with undated tickets last', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const t = await seedDueTickets(actor)
+
+      const { tickets: results } = await listTickets({ sort: 'due', limit: 100 }, actor)
+      expect(
+        mine(
+          results.map((r) => r.id),
+          t
+        )
+      ).toEqual([t.resolved.id, t.overdue.id, t.soon.id, t.later.id, t.undated.id])
+    })
+
+    it('pages the due sort across the NULL boundary without dupes or gaps', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      await seedDueTickets(actor)
+
+      const full = (await listTickets({ sort: 'due', limit: 100 }, actor)).tickets.map((r) => r.id)
+      const paged: TicketId[] = []
+      let cursor: TicketId | undefined
+      for (let i = 0; i < 100; i++) {
+        const page = await listTickets({ sort: 'due', limit: 2, cursor }, actor)
+        paged.push(...page.tickets.map((r) => r.id))
+        if (!page.hasMore) break
+        cursor = page.tickets[page.tickets.length - 1].id
+      }
+      expect(paged).toEqual(full)
+    })
+
+    it('filters overdue (open only), due within 24 hours, and no due date', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const t = await seedDueTickets(actor)
+
+      const ids = async (due: 'overdue' | 'due_soon' | 'none') =>
+        mine(
+          (await listTickets({ due, limit: 100 }, actor)).tickets.map((r) => r.id),
+          t
+        )
+      // A resolved ticket is never overdue, even with a past date.
+      expect(await ids('overdue')).toEqual([t.overdue.id])
+      expect(await ids('due_soon')).toEqual([t.soon.id])
+      expect(await ids('none')).toEqual([t.undated.id])
+    })
+  })
+
   describe('listTickets + getTicket: activity enrichment', () => {
     it('carries the latest non-internal message as the preview + its timestamp as lastMessageAt', async () => {
       await seedSettings()
@@ -1505,6 +1670,45 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
       expect(result.failed[0].id).toBe(missing)
       expect((await readTicket(t1.id)).priority).toBe('high')
       expect((await readTicket(t3.id)).priority).toBe('high')
+    })
+
+    it('routes a set_due action to the due-date setter, and null clears it', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const t1 = await createTicket({ type: 'customer', title: 'Bulk due 1' }, actor)
+      const t2 = await createTicket({ type: 'back_office', title: 'Bulk due 2' }, actor)
+      const dueAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
+
+      const set = await bulkUpdateTickets([t1.id, t2.id], { type: 'set_due', dueAt }, actor)
+      expect(set).toEqual({ succeeded: [t1.id, t2.id], failed: [] })
+      expect((await readTicket(t1.id)).dueAt?.getTime()).toBe(dueAt.getTime())
+      expect((await readTicket(t2.id)).dueAt?.getTime()).toBe(dueAt.getTime())
+      expect(webhooks.emitTicketDueChanged).toHaveBeenCalledTimes(2)
+
+      const cleared = await bulkUpdateTickets([t1.id], { type: 'set_due', dueAt: null }, actor)
+      expect(cleared).toEqual({ succeeded: [t1.id], failed: [] })
+      expect((await readTicket(t1.id)).dueAt).toBeNull()
+    })
+
+    it('isolates a set_due failure (out of window, unknown ticket) from the rest', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const t1 = await createTicket({ type: 'customer', title: 'Bulk due ok' }, actor)
+      const missing = createId('ticket') as TicketId
+      const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+
+      const result = await bulkUpdateTickets([missing, t1.id], { type: 'set_due', dueAt }, actor)
+      expect(result.succeeded).toEqual([t1.id])
+      expect(result.failed.map((f) => f.id)).toEqual([missing])
+
+      // Beyond the teammate window: every item fails on its own, nothing written.
+      const tooFar = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000)
+      const rejected = await bulkUpdateTickets([t1.id], { type: 'set_due', dueAt: tooFar }, actor)
+      expect(rejected.succeeded).toEqual([])
+      expect(rejected.failed.map((f) => f.id)).toEqual([t1.id])
+      expect((await readTicket(t1.id)).dueAt?.getTime()).toBe(dueAt.getTime())
     })
 
     it('reuses the single-item op, so a successful bulk assign still fires ticket.assigned', async () => {
