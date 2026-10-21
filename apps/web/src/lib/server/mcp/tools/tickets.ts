@@ -172,10 +172,15 @@ Example: get_ticket({ ticketId: "ticket_01abc...", includeInternal: true })`,
     scope: 'read:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { getTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      const { assertTicketVisible, getTicket } =
+        await import('@/lib/server/domains/tickets/ticket.service')
       const { listTicketMessages } =
         await import('@/lib/server/domains/tickets/ticket-message.service')
       const ticketId = args.ticketId as TicketId
+      // The same visibility list_tickets applies: a teammate scoped to their
+      // own and their teams' tickets gets NotFound for anyone else's, never
+      // its thread or internal notes.
+      await assertTicketVisible(ticketId, mcpAgentActor(auth))
       const [dto, page] = await Promise.all([
         getTicket(ticketId),
         listTicketMessages(ticketId, {
