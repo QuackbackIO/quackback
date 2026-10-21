@@ -32,4 +32,22 @@ describe('changelog OpenAPI contract', () => {
     expect(getResponse).toContain('linkedPosts')
     expect(patchResponse).toContain('linkedPosts')
   })
+
+  it('documents labels on list, get, create, and update responses', () => {
+    for (const response of [
+      collection.get,
+      collection.post?.responses,
+      detail.get?.responses,
+      detail.patch?.responses,
+    ]) {
+      expect(JSON.stringify(response)).toContain('"labels"')
+    }
+  })
+
+  it('documents the labels and labelIds list filters', () => {
+    const listParams = JSON.stringify(collection.get)
+
+    expect(listParams).toContain('"name":"labels"')
+    expect(listParams).toContain('"name":"labelIds"')
+  })
 })
