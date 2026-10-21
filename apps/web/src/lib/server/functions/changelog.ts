@@ -288,7 +288,7 @@ const searchShippedPostsSchema = z.object({
   query: z.string().optional(),
   boardId: z.string().optional(),
   limit: z.number().int().positive().max(200).optional(),
-  includeIds: z.array(z.string()).max(200).optional(),
+  includeIds: z.array(z.string().min(1)).optional(),
 })
 
 /**

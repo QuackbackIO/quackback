@@ -132,9 +132,20 @@ export function ChangelogMetadataSidebarContent({
       'Pick a date'
     )
 
+  type ShippedPostItem = Awaited<ReturnType<typeof searchShippedPostsFn>>[number]
+  const knownPostsRef = useRef<Map<PostId, ShippedPostItem>>(new Map())
+  const activeIncludeIdsRef = useRef<PostId[]>(linkedPostIds)
+  if (linkedPostIds.some((id) => !knownPostsRef.current.has(id))) {
+    const nextKey = linkedPostIds.join(',')
+    if (activeIncludeIdsRef.current.join(',') !== nextKey) {
+      activeIncludeIdsRef.current = linkedPostIds
+    }
+  }
+  const queryIncludeIds = activeIncludeIdsRef.current
+
   // Search shipped posts
   const { data: posts = [], isLoading: postsLoading } = useQuery({
-    queryKey: ['shipped-posts', search, linkedPostIds],
+    queryKey: ['shipped-posts', search, queryIncludeIds],
     queryFn: () =>
       searchShippedPostsFn({
         data: {
@@ -147,8 +158,14 @@ export function ChangelogMetadataSidebarContent({
     staleTime: 30 * 1000,
   })
 
+  for (const post of posts) {
+    knownPostsRef.current.set(post.id, post)
+  }
+
   // Get selected post details
-  const selectedPosts = posts.filter((p) => linkedPostIds.includes(p.id))
+  const selectedPosts = Array.from(knownPostsRef.current.values()).filter((p) =>
+    linkedPostIds.includes(p.id)
+  )
   const normalizedSearch = search.trim().toLowerCase()
   const dropdownPosts = normalizedSearch
     ? posts.filter((p) => p.title.toLowerCase().includes(normalizedSearch))

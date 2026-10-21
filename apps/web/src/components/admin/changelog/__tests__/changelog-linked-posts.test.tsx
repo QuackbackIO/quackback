@@ -152,4 +152,60 @@ describe('<ChangelogMetadataSidebarContent> linked shipped posts', () => {
     expect(await screen.findByText('Dark mode support')).toBeInTheDocument()
     expect(screen.getAllByText('Already linked post')).toHaveLength(1)
   })
+
+  it('does not fire redundant searchShippedPostsFn requests when toggling an already-loaded post or removing a linked card', async () => {
+    hoisted.listSegmentsFn.mockResolvedValue([])
+    hoisted.searchShippedPostsFn.mockResolvedValue([
+      {
+        id: 'post_1' as PostId,
+        title: 'First shipped post',
+        voteCount: 5,
+        boardSlug: 'feature-requests',
+        authorName: 'Alice',
+        createdAt: new Date('2026-03-01T00:00:00Z'),
+      },
+      {
+        id: 'post_2' as PostId,
+        title: 'Second shipped post',
+        voteCount: 2,
+        boardSlug: 'bugs',
+        authorName: 'Bob',
+        createdAt: new Date('2026-02-01T00:00:00Z'),
+      },
+    ])
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ChangelogMetadataSidebarContent {...baseProps} linkedPostIds={['post_1' as PostId]} />
+      </QueryClientProvider>
+    )
+
+    expect(await screen.findByText('First shipped post')).toBeInTheDocument()
+    expect(hoisted.searchShippedPostsFn).toHaveBeenCalledTimes(1)
+
+    // Linking post_2 (which is already in the loaded posts list) should not refetch
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ChangelogMetadataSidebarContent
+          {...baseProps}
+          linkedPostIds={['post_1' as PostId, 'post_2' as PostId]}
+        />
+      </QueryClientProvider>
+    )
+
+    expect(await screen.findByText('Second shipped post')).toBeInTheDocument()
+    expect(hoisted.searchShippedPostsFn).toHaveBeenCalledTimes(1)
+
+    // Removing post_1 should also not refetch
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ChangelogMetadataSidebarContent {...baseProps} linkedPostIds={['post_2' as PostId]} />
+      </QueryClientProvider>
+    )
+
+    expect(screen.queryByText('First shipped post')).not.toBeInTheDocument()
+    expect(screen.getByText('Second shipped post')).toBeInTheDocument()
+    expect(hoisted.searchShippedPostsFn).toHaveBeenCalledTimes(1)
+  })
 })

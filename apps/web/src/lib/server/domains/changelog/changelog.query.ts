@@ -231,25 +231,6 @@ export async function searchShippedPosts(params: {
     columns: { id: true },
   })
 
-  if (completeStatuses.length === 0) {
-    return []
-  }
-
-  const statusIds = completeStatuses.map((s) => s.id)
-
-  // Build conditions
-  const conditions = [inArray(posts.statusId, statusIds), isNull(posts.deletedAt)]
-
-  if (boardId) {
-    conditions.push(eq(posts.boardId, boardId))
-  }
-
-  // Search by title if query provided
-  if (query?.trim()) {
-    const searchTerm = `%${query.trim().toLowerCase()}%`
-    conditions.push(sql`LOWER(${posts.title}) LIKE ${searchTerm}`)
-  }
-
   const selectColumns = {
     id: posts.id,
     title: posts.title,
@@ -262,16 +243,44 @@ export async function searchShippedPosts(params: {
     createdAt: posts.createdAt,
   }
 
-  // Fetch posts with board slug and author info, most recently shipped/updated first
-  const results = await db
-    .select(selectColumns)
-    .from(posts)
-    .innerJoin(boards, eq(boards.id, posts.boardId))
-    .where(and(...conditions))
-    .orderBy(desc(posts.updatedAt), desc(posts.voteCount), desc(posts.createdAt))
-    .limit(limit)
+  let results: Array<{
+    id: PostId
+    title: string
+    voteCount: number
+    boardSlug: string
+    authorName: string | null
+    createdAt: Date
+  }> = []
 
-  const uniqueIncludeIds = Array.from(new Set(includeIds ?? []))
+  if (completeStatuses.length > 0) {
+    const statusIds = completeStatuses.map((s) => s.id)
+
+    // Build conditions
+    const conditions = [inArray(posts.statusId, statusIds), isNull(posts.deletedAt)]
+
+    if (boardId) {
+      conditions.push(eq(posts.boardId, boardId))
+    }
+
+    // Search by title if query provided
+    if (query?.trim()) {
+      const searchTerm = `%${query.trim().toLowerCase()}%`
+      conditions.push(sql`LOWER(${posts.title}) LIKE ${searchTerm}`)
+    }
+
+    // Fetch posts with board slug and author info, most recently shipped/updated first
+    results = await db
+      .select(selectColumns)
+      .from(posts)
+      .innerJoin(boards, eq(boards.id, posts.boardId))
+      .where(and(...conditions))
+      .orderBy(desc(posts.updatedAt), desc(posts.voteCount), desc(posts.createdAt))
+      .limit(limit)
+  }
+
+  const uniqueIncludeIds = Array.from(
+    new Set((includeIds ?? []).filter((id): id is PostId => id.trim().length > 0))
+  )
   if (uniqueIncludeIds.length === 0) {
     return results
   }
@@ -282,17 +291,13 @@ export async function searchShippedPosts(params: {
     return results
   }
 
+  // Fetch any missing linked posts regardless of current status category (e.g. if a
+  // linked post was later reopened), matching getChangelogById / linkPostsToChangelog.
   const includedResults = await db
     .select(selectColumns)
     .from(posts)
     .innerJoin(boards, eq(boards.id, posts.boardId))
-    .where(
-      and(
-        inArray(posts.id, missingIds),
-        inArray(posts.statusId, statusIds),
-        isNull(posts.deletedAt)
-      )
-    )
+    .where(and(inArray(posts.id, missingIds), isNull(posts.deletedAt)))
     .orderBy(desc(posts.updatedAt), desc(posts.voteCount), desc(posts.createdAt))
 
   return [...results, ...includedResults]

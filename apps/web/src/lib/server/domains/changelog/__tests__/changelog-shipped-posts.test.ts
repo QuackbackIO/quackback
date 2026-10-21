@@ -159,11 +159,39 @@ describe('searchShippedPosts', () => {
       kind: 'and',
       args: [
         { kind: 'inArray', col: 'posts.id', vals: ['post_linked_beyond_limit'] },
-        { kind: 'inArray', col: 'posts.statusId', vals: ['status_complete'] },
         { kind: 'isNull', col: 'posts.deletedAt' },
       ],
     })
     expect(result).toEqual([...primaryRows, ...includedRows])
+  })
+
+  it('returns linked includeIds even when a linked post was reopened out of complete status or no complete statuses exist', async () => {
+    mockStatusesFindMany.mockResolvedValue([])
+    const reopenedLinkedRows = [
+      {
+        id: 'post_reopened' as PostId,
+        title: 'Reopened linked post',
+        voteCount: 4,
+        boardSlug: 'bugs',
+        authorName: 'Dana',
+        createdAt: new Date('2025-11-01T00:00:00Z'),
+      },
+    ]
+    mockSelect.mockReturnValueOnce(createSelectChain(reopenedLinkedRows))
+
+    const result = await searchShippedPosts({
+      includeIds: ['post_reopened' as PostId, '' as PostId],
+    })
+
+    expect(mockSelect).toHaveBeenCalledTimes(1)
+    expect(mockWhere).toHaveBeenCalledWith({
+      kind: 'and',
+      args: [
+        { kind: 'inArray', col: 'posts.id', vals: ['post_reopened'] },
+        { kind: 'isNull', col: 'posts.deletedAt' },
+      ],
+    })
+    expect(result).toEqual(reopenedLinkedRows)
   })
 
   it('skips the secondary query when all includeIds are already in the primary results', async () => {
