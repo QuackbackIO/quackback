@@ -68,6 +68,11 @@ export interface NotificationConfig {
   // ticket.status_changed + ticket.replied (watchers): lets buildNotifications
   // mark the requester's row portal-audience and everyone else's admin.
   requesterPrincipalId?: string | null
+  // ticket.status_changed + ticket.replied (ticket sharing): every customer
+  // recipient — the requester and anyone the ticket was shared with — whose
+  // row opens the portal thread. Absent on rows queued before sharing, where
+  // the requester alone is the customer.
+  portalPrincipalIds?: string[]
   // message.created (WO-3 slice 5) — read back out by the anti-spam presence
   // gate in run(), below.
   isFirstMessage?: boolean
@@ -79,6 +84,9 @@ export interface NotificationConfig {
   // approval.requested: the request's id; its server-written summary is
   // `title` above.
   approvalId?: string
+  // ticket.due_soon / ticket.overdue: the due date the alert is about (ISO);
+  // the ticket's title rides `title` above.
+  dueAt?: string
 }
 
 export const notificationHook: HookHandler = {
@@ -267,6 +275,18 @@ function buildNotifications(
     }))
   }
 
+  if (event.type === 'post.subscriber_added') {
+    const { authorName } = config
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'post_subscriber_added' as NotificationType,
+      title: `${authorName} subscribed you to a post`,
+      body: postTitle ? truncate(postTitle, 150) : undefined,
+      postId,
+      metadata: { postTitle, boardSlug, postUrl, actorName: authorName },
+    }))
+  }
+
   if (event.type === 'conversation.assigned') {
     const { conversationId, assignedAgentPrincipalId } = config
     return principalIds.map((principalId) => {
@@ -328,6 +348,7 @@ function buildNotifications(
       stageLabel,
       previousStageLabel,
       requesterPrincipalId,
+      portalPrincipalIds,
     } = config
     const body = previousStageLabel
       ? `Moved from ${previousStageLabel} to ${stageLabel}`
@@ -353,14 +374,21 @@ function buildNotifications(
               ticketTitle: title,
               stageLabel,
               previousStageLabel,
-              audience:
-                requesterPrincipalId && principalId === requesterPrincipalId ? 'portal' : 'admin',
+              audience: customerAudience(principalId, requesterPrincipalId, portalPrincipalIds),
             },
     }))
   }
 
   if (event.type === 'ticket.replied') {
-    const { ticketId, conversationId, title, authorName, preview, requesterPrincipalId } = config
+    const {
+      ticketId,
+      conversationId,
+      title,
+      authorName,
+      preview,
+      requesterPrincipalId,
+      portalPrincipalIds,
+    } = config
     return principalIds.map((principalId) => ({
       principalId,
       type: 'ticket_replied' as NotificationType,
@@ -371,7 +399,7 @@ function buildNotifications(
         conversationId,
         ticketTitle: title,
         actorName: authorName,
-        audience: requesterPrincipalId && principalId === requesterPrincipalId ? 'portal' : 'admin',
+        audience: customerAudience(principalId, requesterPrincipalId, portalPrincipalIds),
       },
     }))
   }
@@ -403,6 +431,31 @@ function buildNotifications(
       title: `${issueLabel} ${verb} on ${title}`,
       // Recipients are always agent watchers (role-filtered in the target builder).
       metadata: { ticketId, audience: 'admin' },
+    }))
+  }
+
+  if (event.type === 'ticket.due_soon' || event.type === 'ticket.overdue') {
+    const { ticketId, title, dueAt } = config
+    const overdue = event.type === 'ticket.overdue'
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: (overdue ? 'ticket_overdue' : 'ticket_due_soon') as NotificationType,
+      // Worded again in the reader's language from `ticketTitle`
+      // (notification-text.ts); this English must match that default.
+      title: overdue ? `${title} is overdue` : `${title} is due soon`,
+      // Recipients are always the assignee or the assigned team's members.
+      metadata: { ticketId, ticketTitle: title, dueAt, audience: 'admin' },
+    }))
+  }
+
+  if (event.type === 'ticket.subscriber_added') {
+    const { ticketId, title, authorName } = config
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'ticket_subscriber_added' as NotificationType,
+      title: `${authorName} added you as a watcher on ${title}`,
+      // Only a teammate is ever added by someone else (getTicketSubscriberAddedTargets).
+      metadata: { ticketId, actorName: authorName, audience: 'admin' },
     }))
   }
 
@@ -473,4 +526,18 @@ export function filterByInAppPreference(
     if (!prefs) return true
     return shouldNotify(prefs, n.type, 'inApp')
   })
+}
+
+/**
+ * Which surface a ticket bell opens for one recipient: the portal thread for a
+ * customer (the requester, or anyone the ticket was shared with), the admin
+ * inbox for a teammate.
+ */
+function customerAudience(
+  principalId: string,
+  requesterPrincipalId: string | null | undefined,
+  portalPrincipalIds: string[] | undefined
+): 'portal' | 'admin' {
+  if (requesterPrincipalId && principalId === requesterPrincipalId) return 'portal'
+  return portalPrincipalIds?.includes(principalId) ? 'portal' : 'admin'
 }

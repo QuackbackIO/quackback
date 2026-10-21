@@ -759,5 +759,45 @@ describe('dispatchWorkflowsForEvent', () => {
       // applies here.
       expect(mockDbSelect).toHaveBeenCalledTimes(1)
     })
+
+    // The due-date trio rides the same branch: resolve the linked customer
+    // conversation once, dispatch straight through, no interrupt.
+    const ticketDueEvent = (
+      type: 'ticket.due_changed' | 'ticket.due_soon' | 'ticket.overdue'
+    ): EventData =>
+      ({
+        ...base,
+        type,
+        data: {
+          ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+          title: 'A ticket',
+          dueAt: '2026-01-06T17:00:00Z',
+          ...(type === 'ticket.due_changed' ? { previousDueAt: null } : {}),
+        },
+      }) as unknown as EventData
+
+    it.each(['ticket.due_changed', 'ticket.due_soon', 'ticket.overdue'] as const)(
+      '%s resolves the linked customer conversation and dispatches straight through',
+      async (type) => {
+        mockTicketConversationRow.current = { conversationId: 'conversation_linked' }
+        await dispatchWorkflowsForEvent(ticketDueEvent(type))
+        expect(interruptWaitingRuns).not.toHaveBeenCalled()
+        expect(dispatchWorkflowTrigger).toHaveBeenCalledTimes(1)
+        expect(dispatchWorkflowTrigger).toHaveBeenCalledWith(
+          expect.objectContaining({ triggerType: type, conversationId: 'conversation_linked' })
+        )
+      }
+    )
+
+    it.each(['ticket.due_changed', 'ticket.due_soon', 'ticket.overdue'] as const)(
+      '%s on an unlinked ticket does not dispatch, after one immediate lookup',
+      async (type) => {
+        mockTicketConversationRow.current = null
+        await dispatchWorkflowsForEvent(ticketDueEvent(type))
+        expect(dispatchWorkflowTrigger).not.toHaveBeenCalled()
+        expect(interruptWaitingRuns).not.toHaveBeenCalled()
+        expect(mockDbSelect).toHaveBeenCalledTimes(1)
+      }
+    )
   })
 })

@@ -18,6 +18,12 @@ checklist.
     `priority_changed`, `merged`, `unmerged`, `mentioned`, `published`,
     `replied`, `handed_off`, `resolved`, `csat_submitted`, `breached`, `voted`,
     `external_status_changed` (a linked tracker issue moved upstream),
+    `due_changed` · `due_soon` · `overdue` (a ticket's due date moved, is
+    within 24 hours, or has passed),
+    `subscriber_added` · `subscriber_removed` (someone starts or stops
+    following the entity by hand: a watcher, a subscriber),
+    `reply_updated` · `reply_deleted` (a public ticket reply was edited or
+    deleted; internal notes are never announced),
     `requested` · `decided` · `applied` (an approval is asked for, decided by
     a person, and its change applied), …
     (add new ones to the list _on purpose_).
