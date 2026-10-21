@@ -12,7 +12,8 @@
  * - search.ts        search, get_details
  * - posts.ts         triage_post, vote_post, proxy_vote, create_post,
  *                    merge_post, unmerge_post, delete_post, restore_post,
- *                    get_post_activity
+ *                    get_post_activity, list_post_subscribers,
+ *                    subscribe_post
  * - comments.ts      add_comment, update_comment, delete_comment,
  *                    react_to_comment
  * - changelog.ts     create_changelog, update_changelog, delete_changelog
@@ -24,7 +25,11 @@
  *                    set_conversation_status
  * - tickets.ts       list_tickets, get_ticket, create_ticket,
  *                    reply_to_ticket, add_ticket_note, link_ticket,
- *                    unlink_ticket
+ *                    unlink_ticket, set_ticket_due_date,
+ *                    list_ticket_watchers, watch_ticket,
+ *                    unwatch_ticket, add_ticket_watcher,
+ *                    remove_ticket_watcher, list_ticket_participants,
+ *                    add_ticket_participant, remove_ticket_participant
  * - files.ts         upload_file
  * - widget.ts        widget_install_status
  * - settings.ts      get_settings, propose_settings_change

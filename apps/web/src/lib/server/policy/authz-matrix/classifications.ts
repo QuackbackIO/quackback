@@ -473,6 +473,18 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/tickets.ts::unwatchMyTicketFn': END_USER(
     'requester unwatches their own ticket (flag-gated)'
   ),
+  'lib/server/functions/tickets.ts::getMyTicketSharingFn': END_USER(
+    'who is on a ticket the caller opened or was shared with: names only (flag-gated; ownership or share scoped)'
+  ),
+  'lib/server/functions/tickets.ts::listMyTicketColleaguesFn': END_USER(
+    "the requester's own company colleagues they may share a ticket with: names only, empty unless the requester can share (flag-gated)"
+  ),
+  'lib/server/functions/tickets.ts::shareMyTicketFn': END_USER(
+    'the requester shares their own ticket with a same-company colleague (flag-gated; rate-limited, capped)'
+  ),
+  'lib/server/functions/tickets.ts::removeMyTicketShareFn': END_USER(
+    'the requester takes off someone they added, or a participant leaves a ticket shared with them (flag-gated)'
+  ),
 
   // Comments / reactions: end-user create + own-edit/delete.
   'lib/server/functions/comments.ts::createCommentFn': END_USER('end-user posts a comment'),
@@ -508,6 +520,9 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   'lib/server/functions/public-posts.ts::toggleVoteFn': END_USER('end-user votes on a post'),
   'lib/server/functions/public-posts.ts::createPublicPostFn': END_USER('end-user submits a post'),
+  'lib/server/functions/following.ts::getMyFollowingFn': END_USER(
+    'the posts and tickets the caller follows (portal-gated; scoped to their own subscriptions and what they can see)'
+  ),
   'lib/server/functions/subscriptions.ts::fetchSubscriptionStatus':
     END_USER('own subscription status'),
   'lib/server/functions/subscriptions.ts::subscribeToPostFn': END_USER('subscribe self to a post'),
@@ -565,6 +580,18 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   'lib/server/functions/widget/tickets.ts::widgetUnwatchMyTicketFn': END_USER(
     'widget visitor unwatches their own ticket'
+  ),
+  'lib/server/functions/widget/tickets.ts::widgetGetMyTicketSharingFn': END_USER(
+    'widget visitor sees who is on a ticket they opened or were shared with: names only'
+  ),
+  'lib/server/functions/widget/tickets.ts::widgetListMyTicketColleaguesFn': END_USER(
+    'widget visitor lists their own company colleagues they may share a ticket with: names only'
+  ),
+  'lib/server/functions/widget/tickets.ts::widgetShareMyTicketFn': END_USER(
+    'widget visitor shares their own ticket with a same-company colleague'
+  ),
+  'lib/server/functions/widget/tickets.ts::widgetRemoveMyTicketShareFn': END_USER(
+    'widget visitor takes off someone they added, or leaves a ticket shared with them'
   ),
   'lib/server/functions/widget/conversation.ts::widgetSendConversationMessageFn': END_USER(
     'widget visitor sends a conversation message'
@@ -845,7 +872,7 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     why: 'the Files sidebar lists attachments off internal notes too; team-only on top of the CONVERSATION_VIEW permission gate (the conversation-target branch only — the ticket-target branch gates on TICKET_VIEW + assertTicketVisible, mirroring getTicketActivityFn)',
   },
   'lib/server/functions/embeds.ts::scopeTicketEmbed::isTeamMember': NOT_A_GATE(
-    'getEmbedPreviewFn already gates on portal access; team resolves any ticket embed (teammate read path), non-team callers resolve only their own customer ticket via the same ownership rule as loadOwnedTicketOr404'
+    'getEmbedPreviewFn already gates on portal access; team resolves any ticket embed (teammate read path), non-team callers resolve only their own customer ticket via the requester arm of loadAccessibleTicketOr404'
   ),
   'lib/server/functions/tickets.ts::listTicketMessagesFn::isTeamMember': NOT_A_GATE(
     'internal notes are agent-only; requesters never see them'
