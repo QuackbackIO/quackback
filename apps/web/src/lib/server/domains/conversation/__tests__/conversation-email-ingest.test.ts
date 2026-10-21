@@ -89,6 +89,14 @@ vi.mock('../conversation.service', () => ({
   sendVisitorMessage: (...a: unknown[]) => sendVisitorMessage(...a),
 }))
 
+// A customer a paired ticket was shared with may also reply; none is, unless a
+// case says otherwise.
+const findThreadAccessParticipantBySender = vi.fn(async (..._a: unknown[]) => null as unknown)
+vi.mock('../conversation-participant.service', () => ({
+  findThreadAccessParticipantBySender: (...a: unknown[]) =>
+    findThreadAccessParticipantBySender(...a),
+}))
+
 vi.mock('@quackback/email', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@quackback/email')>()),
   getReceivedEmail: (...a: unknown[]) => getReceivedEmail(...a),
@@ -159,6 +167,12 @@ vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
 
 vi.mock('@/lib/server/domains/tickets/requester.service', () => ({
   appendInboundTicketReply: (...a: unknown[]) => appendInboundTicketReply(...a),
+}))
+
+// The ticket's paired thread, for a reply from someone the ticket was shared with.
+const resolvePairConversationId = vi.fn(async (..._a: unknown[]) => null as string | null)
+vi.mock('@/lib/server/domains/tickets/pair-thread.service', () => ({
+  resolvePairConversationId: (...a: unknown[]) => resolvePairConversationId(...a),
 }))
 
 // Only the two functions that read or write rows are spied. `addressesPlatformInbox`
@@ -896,6 +910,39 @@ describe('ingestInboundEmail', () => {
     expect(sendVisitorMessage).not.toHaveBeenCalled()
   })
 
+  it('accepts a customer the paired ticket was shared with, writing as them', async () => {
+    findThreadAccessParticipantBySender.mockResolvedValueOnce({
+      id: 'principal_cole',
+      displayName: 'Cole',
+      role: 'user',
+      type: 'user',
+    })
+
+    const result = await ingestInboundEmail({
+      ...baseEvent,
+      data: { ...baseEvent.data, from: 'Cole <cole@example.com>' },
+    })
+
+    expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+    expect(findThreadAccessParticipantBySender).toHaveBeenCalledWith(
+      'conversation_abc',
+      'cole@example.com'
+    )
+    const [, author, actor] = sendVisitorMessage.mock.calls[0]
+    expect(author).toMatchObject({ principalId: 'principal_cole', displayName: 'Cole' })
+    expect(actor).toMatchObject({ principalId: 'principal_cole', principalType: 'user' })
+  })
+
+  it('still drops anyone else, a plain group-thread participant included', async () => {
+    const result = await ingestInboundEmail({
+      ...baseEvent,
+      data: { ...baseEvent.data, from: 'cc.only@example.com' },
+    })
+    expect(findThreadAccessParticipantBySender).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ status: 'from_mismatch' })
+    expect(sendVisitorMessage).not.toHaveBeenCalled()
+  })
+
   describe('MIME attachment rehosting (P4.4)', () => {
     // Valid PNG magic bytes so the real magic-byte sniff accepts the image parts.
     const PNG = Buffer.from([
@@ -1474,6 +1521,37 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
     expect(appendInboundTicketReply).not.toHaveBeenCalled()
     expect(resolveChannelAccountByRecipient).not.toHaveBeenCalled()
     expect(ensurePlatformInboundRoute).not.toHaveBeenCalled()
+  })
+
+  it('lands a reply from someone the ticket was shared with on the shared thread, as theirs', async () => {
+    resolvePairConversationId.mockResolvedValueOnce('conversation_pair')
+    findThreadAccessParticipantBySender.mockResolvedValueOnce({
+      id: 'principal_cole',
+      displayName: 'Cole',
+      role: 'user',
+      type: 'user',
+    })
+
+    const result = await ingestInboundEmail(
+      ticketEvent({
+        from: 'cole@example.com',
+        headers: [{ name: 'Message-ID', value: '<t-shared@x>' }],
+      })
+    )
+
+    expect(result).toEqual({ status: 'ingested_ticket', ticketId: TICKET_ID })
+    expect(findThreadAccessParticipantBySender).toHaveBeenCalledWith(
+      'conversation_pair',
+      'cole@example.com'
+    )
+    expect(appendInboundTicketReply).not.toHaveBeenCalled()
+    const [input, author] = sendVisitorMessage.mock.calls[0]
+    expect(input).toMatchObject({
+      conversationId: 'conversation_pair',
+      content: 'Yes, still broken.',
+      metadata: { source: 'email', emailMessageId: '<t-shared@x>' },
+    })
+    expect(author).toMatchObject({ principalId: 'principal_cole', displayName: 'Cole' })
   })
 
   it('drops when the ticket is unknown or deleted', async () => {

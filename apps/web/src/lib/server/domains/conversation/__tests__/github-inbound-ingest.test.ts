@@ -293,6 +293,56 @@ describe.skipIf(!fixture.available)('github channel ingest (real DB, rolled back
     expect(await testDb.select().from(conversations)).toHaveLength(0)
   })
 
+  // Issue numbers repeat across repositories: a link to #88 in another
+  // repository does not make this repository's #88 a tracker issue.
+  it('counts a tracker link only when it names this repository', async () => {
+    const { integration } = await seedConnection()
+    const userId = createId('user') as UserId
+    const principalId = createId('principal') as PrincipalId
+    await testDb.insert(user).values({ id: userId, name: 'Poster' })
+    await testDb
+      .insert(principal)
+      .values({ id: principalId, userId, role: 'user', type: 'user', createdAt: new Date() })
+    const [board] = await testDb
+      .insert(boards)
+      .values({ slug: `b_${suffix()}`, name: 'B' })
+      .returning()
+    const [post] = await testDb
+      .insert(posts)
+      .values({ boardId: board.id, title: 'P', content: 'c', principalId })
+      .returning()
+    await testDb.insert(postExternalLinks).values({
+      postId: post.id,
+      integrationType: 'github',
+      externalId: '88',
+      externalDisplayId: 'acme/web#88',
+    })
+    const comment = (id: number) =>
+      ingestGitHubChannelEvent({
+        body: JSON.stringify(
+          issuePayload({
+            action: 'created',
+            number: 88,
+            login: 'jane',
+            comment: { id, login: 'stranger', body: 'hi' },
+          })
+        ),
+        eventName: 'issue_comment',
+        integration: { id: integration.id as IntegrationId, config: integration.config },
+      })
+
+    await comment(10)
+    expect(await testDb.select().from(conversations)).toHaveLength(1)
+
+    await testDb.delete(conversations)
+    await testDb
+      .update(postExternalLinks)
+      .set({ externalDisplayId: 'ACME/api#88' })
+      .where(eq(postExternalLinks.postId, post.id))
+    await comment(11)
+    expect(await testDb.select().from(conversations)).toHaveLength(0)
+  })
+
   it('same githubCommentId twice inserts one message', async () => {
     const { integration } = await seedConnection()
     const payload = issuePayload({

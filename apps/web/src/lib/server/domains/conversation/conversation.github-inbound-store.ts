@@ -71,19 +71,28 @@ export async function githubCommentExists(githubCommentId: string): Promise<bool
   return !!(await findGitHubCommentMessage(githubCommentId))
 }
 
+/**
+ * Whether an issue belongs to tracker sync (an issue our bot opened, or one a
+ * post or ticket links to) rather than to the inbox. Issue numbers repeat
+ * across repositories, so a link counts only when it names this repository:
+ * every GitHub link stores `owner/repo#number` as its display id.
+ */
 export async function isTrackerOwnedIssue(
+  ownerRepo: string,
   issueNumber: string,
   botLogin: string | undefined,
   issueAuthorLogin: string | undefined
 ): Promise<boolean> {
   if (githubLoginsMatch(botLogin, issueAuthorLogin)) return true
+  const reference = `${ownerRepo}#${issueNumber}`.toLowerCase()
   const [postLink] = await db
     .select({ id: postExternalLinks.id })
     .from(postExternalLinks)
     .where(
       and(
         eq(postExternalLinks.integrationType, 'github'),
-        eq(postExternalLinks.externalId, issueNumber)
+        eq(postExternalLinks.externalId, issueNumber),
+        sql`lower(${postExternalLinks.externalDisplayId}) = ${reference}`
       )
     )
     .limit(1)
@@ -94,7 +103,8 @@ export async function isTrackerOwnedIssue(
     .where(
       and(
         eq(ticketExternalLinks.integrationType, 'github'),
-        eq(ticketExternalLinks.externalId, issueNumber)
+        eq(ticketExternalLinks.externalId, issueNumber),
+        sql`lower(${ticketExternalLinks.externalDisplayId}) = ${reference}`
       )
     )
     .limit(1)

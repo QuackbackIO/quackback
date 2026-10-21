@@ -433,3 +433,19 @@ export async function ticketRowToDTO(row: Ticket): Promise<TicketDTO> {
 export function toRequesterTicketDTO(dto: TicketDTO): RequesterTicketDTO {
   return { ...dto, status: null, sla: null }
 }
+
+/**
+ * The view of a customer a ticket was shared with (ticket sharing): the
+ * requester's view without what is the requester's or the team's business —
+ * the requester's company, who on the team has it, its triage priority, and
+ * the answers the requester gave on the ticket form.
+ */
+export function toSharedTicketDTO(dto: RequesterTicketDTO): RequesterTicketDTO {
+  return {
+    ...dto,
+    priority: 'none',
+    assignee: { principalId: null, displayName: null, teamId: null, teamName: null },
+    company: null,
+    customAttributes: {},
+  }
+}

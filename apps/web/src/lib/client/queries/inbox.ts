@@ -29,6 +29,7 @@ import {
   fetchTicketExternalLinksFn,
   getTicketWatchStatusFn,
   listTicketWatchersFn,
+  listTicketWatcherCandidatesFn,
 } from '@/lib/server/functions/tickets'
 import { listTicketTypesFn } from '@/lib/server/functions/ticket-types'
 import type { TicketListFilter } from '@/lib/server/domains/tickets'
@@ -80,6 +81,8 @@ export const ticketKeys = {
   watch: (id: TicketId) => [...ticketKeys.all(), 'watch', id] as const,
   /** A ticket's full watcher list (admin watch control). */
   watchers: (id: TicketId) => [...ticketKeys.all(), 'watchers', id] as const,
+  /** The teammates the watcher picker offers for a ticket. */
+  watcherCandidates: (id: TicketId) => [...ticketKeys.all(), 'watcher-candidates', id] as const,
 }
 
 export const ticketQueries = {
@@ -159,6 +162,15 @@ export const ticketQueries = {
       queryFn: () => listTicketWatchersFn({ data: { ticketId: id } }),
       staleTime: 30_000,
     }),
+
+  /** The teammates the watcher picker offers, each with whether the ticket is
+   *  visible to them (manage permission only — fetched when the picker opens). */
+  watcherCandidates: (id: TicketId) =>
+    queryOptions({
+      queryKey: ticketKeys.watcherCandidates(id),
+      queryFn: () => listTicketWatcherCandidatesFn({ data: { ticketId: id } }),
+      staleTime: 30_000,
+    }),
 }
 
 export const inboxKeys = {
@@ -188,7 +200,9 @@ function inboxListParamsKey(params: InboxListParams): string {
     // A custom view can produce the same kinds+ticketType with this unset —
     // key it so the two never share a cache entry.
     params.linkedPairsOnly ? 'pairs' : '',
+    params.watching ? 'watching' : '',
     params.channel ?? '',
+    params.due ?? '',
   ].join('|')
 }
 

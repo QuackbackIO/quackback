@@ -11,6 +11,12 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const publishConversationEvent = vi.fn()
 const publishAgentConversationEvent = vi.fn()
+const publishTicketEvent = vi.fn()
+const emitTicketReplyDeleted = vi.fn()
+// The customer ticket a conversation is paired with (set per test).
+let pairTicketId: string | null = null
+// Whether the soft-delete UPDATE matched a live row (false = already deleted).
+let deleteMatched = true
 // The message row the initial SELECT resolves to (set per test).
 let messageRow: Record<string, unknown> | null = null
 
@@ -32,6 +38,15 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationEvent: (...a: unknown[]) => publishConversationEvent(...a),
   publishAgentConversationEvent: (...a: unknown[]) => publishAgentConversationEvent(...a),
   publishConversationUpdate: vi.fn(),
+  publishTicketEvent: (...a: unknown[]) => publishTicketEvent(...a),
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.webhooks', () => ({
+  emitTicketReplyDeleted: (...a: unknown[]) => emitTicketReplyDeleted(...a),
+}))
+
+vi.mock('@/lib/server/domains/tickets/pair-thread.service', () => ({
+  resolvePairTicketIdForConversation: vi.fn(async () => pairTicketId),
 }))
 
 vi.mock('@/lib/server/config', () => ({
@@ -66,6 +81,7 @@ vi.mock('@/lib/server/db', () => {
     c.where = () => c
     c.limit = async () =>
       label === 'conversation_messages' ? (messageRow ? [messageRow] : []) : [conversationRow]
+    c.returning = async () => (deleteMatched && messageRow ? [{ id: messageRow.id }] : [])
     return c
   }
 
@@ -109,6 +125,8 @@ const nonAgentActor: Actor = {
 
 beforeEach(() => {
   messageRow = null
+  pairTicketId = null
+  deleteMatched = true
   vi.clearAllMocks()
   mockAssertTicketVisible.mockResolvedValue({ id: 'ticket_1' })
 })
@@ -147,6 +165,41 @@ describe('deleteConversationMessage publish routing', () => {
   })
 })
 
+describe('deleteConversationMessage on a linked pair', () => {
+  const pairMessage = {
+    id: 'conversation_msg_1',
+    conversationId: 'conversation_1',
+    senderType: 'visitor',
+    principalId: 'principal_visitor',
+    isInternal: false,
+    deletedAt: null,
+  }
+
+  it("also drops the reply from the paired ticket's thread and fires ticket.reply_deleted", async () => {
+    pairTicketId = 'ticket_pair'
+    messageRow = { ...pairMessage }
+    await deleteConversationMessage('conversation_msg_1' as ConversationMessageId, agentActor)
+    expect(emit.emitMessageDeleted).toHaveBeenCalledTimes(1)
+    expect(publishTicketEvent).toHaveBeenCalledWith(
+      'ticket_pair',
+      expect.objectContaining({ kind: 'ticket_message_deleted', messageId: 'conversation_msg_1' })
+    )
+    expect(emitTicketReplyDeleted).toHaveBeenCalledWith(
+      agentActor,
+      'ticket_pair',
+      'conversation_msg_1',
+      'visitor'
+    )
+  })
+
+  it('touches no ticket for an unpaired conversation', async () => {
+    messageRow = { ...pairMessage }
+    await deleteConversationMessage('conversation_msg_1' as ConversationMessageId, agentActor)
+    expect(publishTicketEvent).not.toHaveBeenCalled()
+    expect(emitTicketReplyDeleted).not.toHaveBeenCalled()
+  })
+})
+
 describe('deleteConversationMessage ticket branch', () => {
   const ticketMessage = {
     id: 'conversation_msg_ticket',
@@ -158,14 +211,40 @@ describe('deleteConversationMessage ticket branch', () => {
     deletedAt: null,
   }
 
-  it('deletes a ticket-parented message for an agent who can see the ticket, with no broadcast', async () => {
+  it('deletes a ticket-parented reply, drops it from open ticket threads and fires ticket.reply_deleted', async () => {
     messageRow = { ...ticketMessage }
     await deleteConversationMessage('conversation_msg_ticket' as ConversationMessageId, agentActor)
     expect(mockAssertTicketVisible).toHaveBeenCalledWith('ticket_1', agentActor)
-    // Deferred: no realtime fan-out and no webhook for ticket-thread messages yet.
+    expect(publishTicketEvent).toHaveBeenCalledWith('ticket_1', {
+      kind: 'ticket_message_deleted',
+      ticketId: 'ticket_1',
+      messageId: 'conversation_msg_ticket',
+    })
+    expect(emitTicketReplyDeleted).toHaveBeenCalledWith(
+      agentActor,
+      'ticket_1',
+      'conversation_msg_ticket',
+      'agent'
+    )
+    // The conversation channels and message.deleted belong to conversations.
     expect(publishAgentConversationEvent).not.toHaveBeenCalled()
     expect(publishConversationEvent).not.toHaveBeenCalled()
     expect(emit.emitMessageDeleted).not.toHaveBeenCalled()
+  })
+
+  it('removes a deleted ticket note from open threads without telling integrations', async () => {
+    messageRow = { ...ticketMessage, isInternal: true }
+    await deleteConversationMessage('conversation_msg_ticket' as ConversationMessageId, agentActor)
+    expect(publishTicketEvent).toHaveBeenCalledTimes(1)
+    expect(emitTicketReplyDeleted).not.toHaveBeenCalled()
+  })
+
+  it('announces nothing when the message was already deleted', async () => {
+    messageRow = { ...ticketMessage }
+    deleteMatched = false
+    await deleteConversationMessage('conversation_msg_ticket' as ConversationMessageId, agentActor)
+    expect(publishTicketEvent).not.toHaveBeenCalled()
+    expect(emitTicketReplyDeleted).not.toHaveBeenCalled()
   })
 
   it('404s when the ticket is not visible to the actor', async () => {

@@ -90,7 +90,7 @@ export function SubscriptionBell({
           await unsubscribeFromPostFn({ data: { postId } })
         } else if (!previousStatus.subscribed) {
           // Not subscribed yet - create subscription with level
-          await subscribeToPostFn({ data: { postId, reason: 'manual', level: newLevel } })
+          await subscribeToPostFn({ data: { postId, level: newLevel } })
         } else {
           // Already subscribed - just update the level
           await updateSubscriptionLevelFn({ data: { postId, level: newLevel } })
