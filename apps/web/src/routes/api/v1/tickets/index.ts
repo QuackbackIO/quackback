@@ -7,11 +7,13 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
+import { parseOptionalTypeId, parseTypeId } from '@/lib/server/domains/api/validation'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { TICKET_TYPES } from '@/lib/shared/db-types'
-import { coerceTicketTypeId } from '@/lib/shared/tickets'
+import { coerceTicketTypeId, TICKET_SORTS } from '@/lib/shared/tickets'
+import { isTicketDueFilter } from '@/lib/shared/ticket-due'
+import { ticketDueAtWireSchema } from '@/lib/shared/schemas/tickets'
 import { serializeTicket } from './-serialize'
 import {
   priorityEnum,
@@ -35,7 +37,17 @@ const createTicketSchema = z.object({
   requesterPrincipalId: z.string().optional(),
   companyId: z.string().optional(),
   attachments: attachmentsSchema,
+  // The shared due date as an ISO 8601 instant. A service key is a teammate,
+  // so the team window applies (a year back to five years ahead).
+  dueAt: ticketDueAtWireSchema.optional(),
 })
+
+/** A `sort` query value the list understands; anything else falls back to the default. */
+function parseSort(value: string | null): TicketSort | undefined {
+  return value && (TICKET_SORTS as readonly string[]).includes(value)
+    ? (value as TicketSort)
+    : undefined
+}
 
 export const Route = createFileRoute('/api/v1/tickets/')({
   server: {
@@ -61,7 +73,19 @@ export const Route = createFileRoute('/api/v1/tickets/')({
           const requesterPrincipalId =
             (url.searchParams.get('requesterPrincipalId') as PrincipalId | null) ?? undefined
           const companyId = (url.searchParams.get('companyId') as CompanyId | null) ?? undefined
-          const sort = (url.searchParams.get('sort') as TicketSort | null) ?? undefined
+          const sort = parseSort(url.searchParams.get('sort'))
+          // The due filter is a closed set: a typo 400s rather than silently
+          // listing every ticket.
+          const dueParam = url.searchParams.get('due')
+          if (dueParam !== null && !isTicketDueFilter(dueParam)) {
+            return badRequestResponse('Invalid due filter')
+          }
+          const due = isTicketDueFilter(dueParam) ? dueParam : undefined
+          // Only the tickets a teammate watches; a malformed id is a 400.
+          const watcherParam = url.searchParams.get('watcherPrincipalId')
+          const watcherPrincipalId = watcherParam
+            ? parseTypeId<PrincipalId>(watcherParam, 'principal', 'watcher principal ID')
+            : undefined
 
           const actor = {
             principalId: auth.principalId,
@@ -82,6 +106,8 @@ export const Route = createFileRoute('/api/v1/tickets/')({
               stage,
               requesterPrincipalId,
               companyId,
+              due,
+              watcherPrincipalId,
               sort,
               limit,
             },
@@ -139,6 +165,7 @@ export const Route = createFileRoute('/api/v1/tickets/')({
               requesterPrincipalId,
               companyId,
               attachments: toAttachments(parsed.data.attachments),
+              dueAt: parsed.data.dueAt ? new Date(parsed.data.dueAt) : undefined,
               // CONVERGENCE PHASE 1b: a customer-intake path — a CUSTOMER ticket
               // created WITH a requester gets its backing conversation + link in
               // the same transaction (createTicketCore's doc carries the
