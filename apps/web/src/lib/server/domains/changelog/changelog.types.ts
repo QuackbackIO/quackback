@@ -85,6 +85,10 @@ export interface ListChangelogParams {
   search?: string
   /** Filter by status */
   status?: 'draft' | 'scheduled' | 'published' | 'all'
+  /** Filter to entries carrying any of these category (label) ids */
+  categoryIds?: ChangelogCategoryId[]
+  /** Filter to entries carrying any of these category names (case-insensitive) */
+  categories?: string[]
   /** Cursor-based pagination */
   cursor?: string
   /** Number of items to return */
