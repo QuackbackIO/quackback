@@ -24,6 +24,10 @@ export const TIMER_DRIVEN_EVENT_TYPES = [
   'conversation.teammate_unresponsive',
   'sla.approaching_breach',
   'sla.breached',
+  // The ticket-due sweep (domains/tickets/ticket-due.sweep.ts): one id per
+  // ticket per due date, so a repeat tick for the same date dedupes.
+  'ticket.due_soon',
+  'ticket.overdue',
 ] as const
 
 /**
@@ -75,6 +79,14 @@ export const EVENT_TYPES = [
   // Notification-only: a linked tracker issue changed status upstream (fired by
   // the inbound integration webhook path, independent of any status mapping).
   'ticket.external_status_changed',
+  // A teammate, workflow or integration set, moved or cleared the due date.
+  'ticket.due_changed',
+  // Someone started or stopped watching a ticket by hand (their own watch
+  // toggle, or a teammate adding or removing them). Automatic watches
+  // (requester, assignee, replier) are side effects of other events and
+  // announce nothing.
+  'ticket.subscriber_added',
+  'ticket.subscriber_removed',
   'assistant.handed_off',
   'assistant.resolved',
   // Timer-driven triggers (see TIMER_DRIVEN_EVENT_TYPES above for the rationale).
@@ -440,6 +452,9 @@ export interface EventTicketRef {
   priority: 'none' | 'low' | 'medium' | 'high' | 'urgent'
   assignedPrincipalId?: string | null
   assignedTeamId?: string | null
+  /** The ticket's shared due date (ISO), null when none. Optional on the
+   *  wire: payloads recorded before due dates shipped lack the key. */
+  dueAt?: string | null
 }
 
 export interface EventTicketData extends EventTicketRef {
@@ -509,6 +524,48 @@ export interface TicketExternalStatusChangedPayload {
   /** The provider's new status name (e.g. "Done", "Closed"). */
   externalStatus: string
   transition: 'closed' | 'reopened' | null
+}
+
+/**
+ * Payload for ticket.due_changed: the due date was set, moved or cleared.
+ * Not fired for a due date given at creation (ticket.created carries it on
+ * the ticket ref).
+ */
+export interface TicketDueChangedPayload {
+  ticket: EventTicketRef
+  /** Ticket title, for notification copy (the ref carries no title). */
+  title: string
+  /** The new due date (ISO), null when cleared. */
+  dueAt: string | null
+  /** The due date before this change (ISO), null when there was none. */
+  previousDueAt: string | null
+}
+
+/**
+ * Payload for the two ticket-due timer events, ticket.due_soon (within the
+ * next 24 hours) and ticket.overdue (the due date passed while the ticket is
+ * still open). Each fires at most once per ticket per due date.
+ */
+export interface TicketDueAlertPayload {
+  ticket: EventTicketRef
+  title: string
+  /** The due date the alert is about (ISO). */
+  dueAt: string
+}
+
+/**
+ * Payload for ticket.subscriber_added / ticket.subscriber_removed: a watch
+ * changed by hand. The actor is whoever changed it, the subscriber whose watch
+ * it is; they are the same person for a self watch or unwatch. Ids only, no
+ * name or email: consumers hydrate the principal by id.
+ */
+export interface TicketSubscriberChangedPayload {
+  ticket: EventTicketRef
+  /** Ticket title — the ref carries no title, notification copy needs it. */
+  title: string
+  subscriberPrincipalId: string
+  /** Why the subscriber watches (added) or watched (removed) the ticket. */
+  reason: string | null
 }
 
 /** A message attachment carried on a ticket reply/note event. */
@@ -746,6 +803,21 @@ export interface TicketNoteAddedEvent extends EventBase<'ticket.note_added'> {
 export interface TicketExternalStatusChangedEvent extends EventBase<'ticket.external_status_changed'> {
   data: TicketExternalStatusChangedPayload
 }
+export interface TicketDueChangedEvent extends EventBase<'ticket.due_changed'> {
+  data: TicketDueChangedPayload
+}
+export interface TicketDueSoonEvent extends EventBase<'ticket.due_soon'> {
+  data: TicketDueAlertPayload
+}
+export interface TicketOverdueEvent extends EventBase<'ticket.overdue'> {
+  data: TicketDueAlertPayload
+}
+export interface TicketSubscriberAddedEvent extends EventBase<'ticket.subscriber_added'> {
+  data: TicketSubscriberChangedPayload
+}
+export interface TicketSubscriberRemovedEvent extends EventBase<'ticket.subscriber_removed'> {
+  data: TicketSubscriberChangedPayload
+}
 
 export interface AssistantHandedOffEvent extends EventBase<'assistant.handed_off'> {
   data: AssistantHandedOffPayload
@@ -852,6 +924,11 @@ export type EventData =
   | TicketRepliedEvent
   | TicketNoteAddedEvent
   | TicketExternalStatusChangedEvent
+  | TicketDueChangedEvent
+  | TicketDueSoonEvent
+  | TicketOverdueEvent
+  | TicketSubscriberAddedEvent
+  | TicketSubscriberRemovedEvent
   | AssistantHandedOffEvent
   | AssistantResolvedEvent
   | ConversationCustomerUnresponsiveEvent
