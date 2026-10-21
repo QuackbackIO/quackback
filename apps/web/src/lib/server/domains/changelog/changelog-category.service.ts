@@ -7,10 +7,13 @@
  */
 import {
   db,
+  and,
+  or,
   eq,
   inArray,
   asc,
   sql,
+  changelogEntries,
   changelogCategories,
   changelogEntryCategories,
 } from '@/lib/server/db'
@@ -248,4 +251,49 @@ export function categoryGateCondition(actor: Actor, entryId: SQL | AnyPgColumn):
       ON "gated_category"."id" = "gated_link"."category_id"
     WHERE "gated_link"."changelog_entry_id" = ${entryId} AND NOT (${gate})
   )`
+}
+
+/**
+ * Condition restricting a changelog list to entries carrying at least one of
+ * the given categories (labels), by id and/or by case-insensitive name. The
+ * two are OR-ed: `{ categoryIds: [a], categories: ['fixes'] }` matches an
+ * entry with either.
+ *
+ * Shaped as `inArray(changelogEntries.id, <subquery>)` rather than a join, so
+ * it composes into an existing `where` without disturbing `limit + 1` cursor
+ * pagination or fanning out duplicate rows for a multi-label entry. The same
+ * `inArray(entity.id, subquery)` shape as the tagIds filter in post.inbox.ts,
+ * and for the same reason: a relational-query-builder caller can't safely
+ * correlate a raw `EXISTS` subquery to the outer table, because the builder
+ * rewrites column references to the outer alias.
+ *
+ * Returns undefined when neither list has a usable entry, so callers can skip
+ * pushing it into their conditions. Note the asymmetry that makes that safe:
+ * an all-blank `categories` array (e.g. `?labels=,`) yields undefined —
+ * "no filter requested" — whereas a name that is merely unknown yields a
+ * condition matching nothing, which is the honest answer to "give me entries
+ * labelled X" when no such label exists.
+ */
+export function categoryFilterCondition(params: {
+  categoryIds?: ChangelogCategoryId[]
+  categories?: string[]
+}): SQL<unknown> | undefined {
+  const categoryIds = (params.categoryIds ?? []).filter(Boolean)
+  const names = (params.categories ?? []).map((c) => c.trim().toLowerCase()).filter(Boolean)
+
+  if (categoryIds.length === 0 && names.length === 0) return undefined
+
+  const matchConditions: SQL<unknown>[] = []
+  if (categoryIds.length > 0) matchConditions.push(inArray(changelogCategories.id, categoryIds))
+  if (names.length > 0) {
+    matchConditions.push(inArray(sql`lower(trim(${changelogCategories.name}))`, names))
+  }
+
+  const entryIdsWithMatchingCategories = db
+    .selectDistinct({ changelogEntryId: changelogEntryCategories.changelogEntryId })
+    .from(changelogEntryCategories)
+    .innerJoin(changelogCategories, eq(changelogEntryCategories.categoryId, changelogCategories.id))
+    .where(and(or(...matchConditions)))
+
+  return inArray(changelogEntries.id, entryIdsWithMatchingCategories)
 }

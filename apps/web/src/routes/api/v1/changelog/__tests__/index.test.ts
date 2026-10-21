@@ -137,3 +137,65 @@ describe('POST /api/v1/changelog — linked posts', () => {
     expect(mockCreateChangelog).not.toHaveBeenCalled()
   })
 })
+
+const LABEL_RELEASES = {
+  id: 'changelog_category_01h455vb4pex5vsknk084sn02q',
+  name: 'Releases',
+  color: '#22c55e',
+}
+
+describe('GET /api/v1/changelog — labels', () => {
+  it('exposes attached labels on each listed entry', async () => {
+    mockListChangelogs.mockResolvedValue({
+      items: [entry({ categories: [LABEL_RELEASES] })],
+      nextCursor: null,
+      hasMore: false,
+    })
+
+    const res = await GET({ request: new Request('http://t/api/v1/changelog') })
+    const json = await res.json()
+    expect(json.data[0].labels).toEqual([LABEL_RELEASES])
+  })
+
+  it('returns an empty labels array when the entry has none', async () => {
+    const res = await GET({ request: new Request('http://t/api/v1/changelog') })
+    const json = await res.json()
+    expect(json.data[0].labels).toEqual([])
+  })
+
+  it('forwards ?labels= as case-insensitive names', async () => {
+    await GET({ request: new Request('http://t/api/v1/changelog?labels=Releases,fixes') })
+    expect(mockListChangelogs).toHaveBeenCalledWith(
+      expect.objectContaining({ categories: ['Releases', 'fixes'] })
+    )
+  })
+
+  it('forwards ?labelIds= and silently drops malformed ids', async () => {
+    await GET({
+      request: new Request(`http://t/api/v1/changelog?labelIds=${LABEL_RELEASES.id},not-an-id`),
+    })
+    expect(mockListChangelogs).toHaveBeenCalledWith(
+      expect.objectContaining({ categoryIds: [LABEL_RELEASES.id] })
+    )
+  })
+
+  it('treats an absent or blank label param as no filter', async () => {
+    await GET({ request: new Request('http://t/api/v1/changelog') })
+    expect(mockListChangelogs).toHaveBeenCalledWith(
+      expect.objectContaining({ categories: undefined, categoryIds: undefined })
+    )
+
+    mockListChangelogs.mockClear()
+    await GET({ request: new Request('http://t/api/v1/changelog?labels=%20,') })
+    expect(mockListChangelogs).toHaveBeenCalledWith(
+      expect.objectContaining({ categories: undefined })
+    )
+  })
+
+  it('keeps the label filter independent of the published filter', async () => {
+    await GET({ request: new Request('http://t/api/v1/changelog?published=true&labels=releases') })
+    expect(mockListChangelogs).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'published', categories: ['releases'] })
+    )
+  })
+})

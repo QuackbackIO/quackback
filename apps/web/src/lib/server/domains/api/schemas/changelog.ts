@@ -26,6 +26,12 @@ const LinkedPostSchema = z.object({
     .nullable(),
 })
 
+const LabelSchema = z.object({
+  id: TypeIdSchema.meta({ example: 'changelog_category_01h455vb4pex5vsknk084sn02q' }),
+  name: z.string().meta({ example: 'Releases' }),
+  color: HexColorSchema,
+})
+
 const LinkedPostIdsSchema = z
   .array(TypeIdSchema)
   .optional()
@@ -50,6 +56,9 @@ const ChangelogEntrySchema = z.object({
   updatedAt: TimestampSchema,
   linkedPosts: z.array(LinkedPostSchema).meta({
     description: 'Posts linked to this changelog entry',
+  }),
+  labels: z.array(LabelSchema).meta({
+    description: 'Labels attached to this changelog entry',
   }),
 })
 
@@ -102,13 +111,28 @@ registerPath('/changelog', {
   get: {
     tags: ['Changelog'],
     summary: 'List changelog entries',
-    description: 'Returns changelog entries with optional filtering by published status',
+    description:
+      'Returns changelog entries with optional filtering by published status and by label',
     parameters: [
       {
         name: 'published',
         in: 'query',
         schema: { type: 'string', enum: ['true', 'false'] },
         description: 'Filter by published status',
+      },
+      {
+        name: 'labels',
+        in: 'query',
+        schema: { type: 'string' },
+        description:
+          'Comma-separated label names (case-insensitive). Returns entries carrying any of them.',
+      },
+      {
+        name: 'labelIds',
+        in: 'query',
+        schema: { type: 'string' },
+        description:
+          'Comma-separated label IDs. Returns entries carrying any of them; malformed IDs are ignored.',
       },
       {
         name: 'cursor',
