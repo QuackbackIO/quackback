@@ -153,6 +153,8 @@ export interface InboxPostListParams {
   searchMode?: PostSearchMode
   /** Show only soft-deleted posts (within 30-day restorable window) */
   showDeleted?: boolean
+  /** Only posts this principal follows (on the post, or a post merged into it). */
+  followerId?: PrincipalId
   /** Leave out teammates' test ideas (API, MCP and Copilot reads). */
   excludeTest?: boolean
   cursor?: string

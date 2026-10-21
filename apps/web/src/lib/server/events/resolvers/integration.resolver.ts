@@ -4,7 +4,15 @@
  * the board filter, dedupes by (integrationType, channelId), and emits a connection reference
  * per channel. Credentials and current configuration are loaded only at dispatch.
  */
-import { db, integrations, integrationEventMappings, eq, and } from '@/lib/server/db'
+import {
+  db,
+  integrations,
+  integrationEventMappings,
+  integrationDestinations,
+  eq,
+  and,
+  sql,
+} from '@/lib/server/db'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
 import { getEventDefinition } from '../catalogue'
@@ -23,6 +31,13 @@ export interface CachedMapping {
   integrationConfig: unknown
   actionConfig: unknown
   filters: unknown
+  /**
+   * Names (lower-cased) of the connection's destinations that take nothing
+   * outbound: switched off or inbound-only. A mapping routed to one of them
+   * is skipped. Absent from mappings cached before destinations existed; the
+   * worker re-checks the destination before sending anyway.
+   */
+  closedDestinations?: string[]
 }
 
 async function loadMappings(): Promise<CachedMapping[]> {
@@ -36,6 +51,13 @@ async function loadMappings(): Promise<CachedMapping[]> {
       integrationConfig: integrations.config,
       actionConfig: integrationEventMappings.actionConfig,
       filters: integrationEventMappings.filters,
+      closedDestinations: sql<string[]>`coalesce((
+        SELECT array_agg(lower(${integrationDestinations.externalId}))
+        FROM ${integrationDestinations}
+        WHERE ${integrationDestinations.integrationId} = ${integrations.id}
+          AND (${integrationDestinations.enabled} = false
+            OR ${integrationDestinations.config}->>'direction' = 'inbound')
+      ), '{}')`,
     })
     .from(integrationEventMappings)
     .innerJoin(integrations, eq(integrationEventMappings.integrationId, integrations.id))
@@ -76,6 +98,8 @@ export function buildIntegrationTargets(
       log.warn({ integration_type: m.integrationType }, 'no channel id for integration, skipping')
       continue
     }
+
+    if (m.closedDestinations?.includes(channelId.toLowerCase())) continue
 
     const dedupeKey = `${m.integrationType}:${channelId}`
     if (seen.has(dedupeKey)) continue
