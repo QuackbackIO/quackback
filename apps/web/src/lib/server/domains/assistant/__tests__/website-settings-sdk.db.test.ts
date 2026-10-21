@@ -2,8 +2,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
-import type { BrandingTransportState, S3FixtureModule } from './website-settings-sdk.fixture'
-import { BRANDING_PNG } from './website-settings-sdk.fixture'
+import type {
+  BrandingTransportState,
+  PresignerFixtureModule,
+  S3FixtureModule,
+} from './website-settings-sdk.fixture'
+import { BRANDING_PNG, brandingStorageFetch } from './website-settings-sdk.fixture'
 import { createAskMcpFixture } from '@/lib/server/mcp/evals/ask-mcp-fixture'
 import { seedAskGoldenFixture } from '@/lib/server/mcp/evals/ask-golden-fixtures'
 import { openAskSdkHarness, parseAskSdkResult } from '@/lib/server/mcp/evals/ask-sdk-harness'
@@ -85,10 +89,16 @@ vi.mock('@aws-sdk/client-s3', async (original) => {
   const { brandingS3Client } = await import('./website-settings-sdk.fixture')
   return { ...actual, S3Client: brandingS3Client(transport, actual) }
 })
+vi.mock('@aws-sdk/s3-request-presigner', async (original) => {
+  const actual = await original<PresignerFixtureModule>()
+  const { brandingPresigner } = await import('./website-settings-sdk.fixture')
+  return brandingPresigner(transport, actual)
+})
 let fixture: Awaited<ReturnType<typeof createAskMcpFixture>>
 beforeAll(async () => {
   vi.stubEnv('BASE_URL', process.env.BASE_URL || 'http://localhost:3100')
   vi.stubEnv('SECRET_KEY', process.env.SECRET_KEY || 'acme-website-test-secret-0123456789')
+  vi.stubGlobal('fetch', brandingStorageFetch(transport, globalThis.fetch))
   if (transport.live) {
     const endpoint = process.env.S3_ENDPOINT
     if (
@@ -124,6 +134,7 @@ beforeEach(() => {
 afterAll(async () => {
   await fixture?.close()
   vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
 })
 async function run(work: (database: Database) => Promise<void>) {
   await fixture.run(async (database) => {

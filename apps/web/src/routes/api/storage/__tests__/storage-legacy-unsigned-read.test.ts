@@ -95,9 +95,31 @@ vi.mock('@aws-sdk/client-s3', () => {
     CopyObjectCommand: command('copy'),
   }
 })
+/** Presigned URL → the object name it was signed for. */
+const presignedKeys = vi.hoisted(() => new Map<string, string>())
 vi.mock('@aws-sdk/s3-request-presigner', () => ({
-  getSignedUrl: vi.fn(async () => 'https://bucket.example.com/presigned'),
+  getSignedUrl: vi.fn(async (_client: unknown, cmd: { input: { Key: string } }) => {
+    const url = `https://bucket.example.com/presigned/${presignedKeys.size}`
+    presignedKeys.set(url, cmd.input.Key)
+    return url
+  }),
 }))
+
+/**
+ * A proxied read presigns its GET and fetches the bytes natively rather than
+ * sending the command, so the bucket answers that fetch too, and it counts as
+ * a `get` against the name it was signed for.
+ */
+async function bucketFetch(url: string): Promise<Response> {
+  const Key = presignedKeys.get(url)
+  if (Key === undefined) throw new Error(`unexpected fetch: ${url}`)
+  sent.push({ kind: 'get', Key })
+  const body = objects.get(Key)
+  if (!body) return new Response('<Error/>', { status: 404 })
+  return new Response(body, {
+    headers: { 'content-type': 'image/png', 'content-length': String(body.byteLength) },
+  })
+}
 
 const { handleStorageGet } = await import('../$')
 const { getPublicUrlOrNull, isPreNamespaceObject, PRE_NAMESPACE_CACHE_MAX } =
@@ -132,10 +154,12 @@ beforeEach(() => {
   missingStatus.value = 404
   mockConfig.isPooledTenancy = false
   delete process.env.QUACKBACK_TENANCY
+  vi.stubGlobal('fetch', vi.fn(bucketFetch))
 })
 
 afterEach(() => {
   delete process.env.QUACKBACK_TENANCY
+  vi.unstubAllGlobals()
 })
 
 describe('a link from before read tokens, on a single-workspace install', () => {
