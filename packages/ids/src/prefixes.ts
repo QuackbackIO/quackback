@@ -117,6 +117,10 @@ export const ID_PREFIXES = {
   // Integrations
   integration: 'integration',
   platform_cred: 'platform_cred',
+  // One repository, team or project a single integration connection serves.
+  integration_destination: 'integration_destination',
+  // An account on the provider (a GitHub user) matched to a teammate.
+  integration_user_mapping: 'integration_user_mapping',
   event_mapping: 'event_mapping',
   post_external_link: 'post_external_link',
   ticket_external_link: 'ticket_external_link',

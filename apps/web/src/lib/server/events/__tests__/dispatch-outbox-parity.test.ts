@@ -340,6 +340,28 @@ const cases: Array<{ type: string; run: () => Promise<void> }> = [
       ),
   },
   {
+    type: 'ticket.subscriber_added',
+    run: () =>
+      d.dispatchTicketSubscriberAdded(
+        actor(),
+        ticketRef(),
+        'Cannot log in',
+        createId('principal'),
+        'manual'
+      ),
+  },
+  {
+    type: 'ticket.subscriber_removed',
+    run: () =>
+      d.dispatchTicketSubscriberRemoved(
+        actor(),
+        ticketRef(),
+        'Cannot log in',
+        createId('principal'),
+        'assignee'
+      ),
+  },
+  {
     type: 'assistant.handed_off',
     run: () => d.dispatchAssistantHandedOff(actor(), createId('conversation'), 'stuck'),
   },

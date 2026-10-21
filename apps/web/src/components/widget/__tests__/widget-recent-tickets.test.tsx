@@ -17,7 +17,12 @@ vi.mock('@/lib/client/widget-auth', () => ({
 
 const ticket = (
   n: number,
-  overrides: { conversationId?: ConversationId | null; slot?: string | null } = {}
+  overrides: {
+    conversationId?: ConversationId | null
+    slot?: string | null
+    dueAt?: string | null
+    closed?: boolean
+  } = {}
 ) => ({
   ticketId: `tkt_${n}` as TicketId,
   reference: `#${n}`,
@@ -25,12 +30,13 @@ const ticket = (
   stage: {
     slot: ('slot' in overrides ? overrides.slot : 'open') as 'open' | null,
     label: 'Open',
-    closed: false,
+    closed: overrides.closed ?? false,
   },
   conversationId: ('conversationId' in overrides
     ? overrides.conversationId
     : `cnv_${n}`) as ConversationId | null,
   updatedAt: '2026-07-30T10:00:00Z',
+  dueAt: overrides.dueAt ?? null,
 })
 
 const myTickets = { tickets: [ticket(1), ticket(2), ticket(3), ticket(4)] }
@@ -80,5 +86,18 @@ describe('WidgetRecentTicketsCard', () => {
     const { container } = render(<WidgetRecentTicketsCard onOpenTicket={() => {}} />, { wrapper })
     expect(container.firstChild).toBeNull()
     authState.isIdentified = true
+  })
+
+  it('shows the due date on open tickets that have one, never on closed ones', async () => {
+    myTickets.tickets = [
+      ticket(1, { dueAt: '2026-10-21T12:00:00.000Z' }),
+      ticket(2),
+      ticket(3, { dueAt: '2026-11-02T12:00:00.000Z', closed: true }),
+    ]
+    render(<WidgetRecentTicketsCard onOpenTicket={() => {}} />, { wrapper })
+    expect(await screen.findByText('Ticket 1')).toBeTruthy()
+    const dueLabels = screen.getAllByText(/^Due$/)
+    expect(dueLabels.map((el) => el.textContent)).toEqual(['Due Oct 21, 2026'])
+    myTickets.tickets = [ticket(1), ticket(2), ticket(3), ticket(4)]
   })
 })

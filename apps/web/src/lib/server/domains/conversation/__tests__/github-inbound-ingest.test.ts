@@ -156,6 +156,58 @@ describe.skipIf(!fixture.available)('github channel ingest (real DB, rolled back
     expect(thread.externalThreadKey).toBe(githubThreadKey('acme/api', 201))
   })
 
+  // Each repository chooses whether its issues come into the inbox; the
+  // channel connection is the switch over all of them.
+  describe('per repository', () => {
+    const opened = (
+      integration: { id: string; config: unknown },
+      destination?: { externalId: string; enabled: boolean; config: Record<string, unknown> }
+    ) =>
+      ingestGitHubChannelEvent({
+        body: JSON.stringify(issuePayload({})),
+        eventName: 'issues',
+        integration: { id: integration.id as IntegrationId, config: integration.config },
+        destination,
+      })
+    const count = async () => (await testDb.select().from(conversations)).length
+    const repo = (config: Record<string, unknown>, enabled = true) => ({
+      externalId: 'acme/api',
+      enabled,
+      config,
+    })
+
+    it('ingests a repository that brings its issues in', async () => {
+      const { integration } = await seedConnection()
+      await opened(integration, repo({ inboundMode: 'conversations' }))
+      expect(await count()).toBe(1)
+    })
+
+    it('ignores a repository that does not, or that only sends', async () => {
+      const { integration } = await seedConnection()
+      await opened(integration, repo({}))
+      await opened(integration, repo({ inboundMode: 'off' }))
+      await opened(integration, repo({ inboundMode: 'conversations', direction: 'outbound' }))
+      await opened(integration, repo({ inboundMode: 'conversations' }, false))
+      expect(await count()).toBe(0)
+    })
+
+    it('ignores every repository while the channel is off', async () => {
+      const { integration, account } = await seedConnection()
+      await testDb
+        .update(channelAccounts)
+        .set({ deletedAt: new Date() })
+        .where(eq(channelAccounts.id, account.id))
+      await opened(integration, repo({ inboundMode: 'conversations' }))
+      expect(await count()).toBe(0)
+    })
+
+    it('ingests a legacy delivery that was not routed to a repository row', async () => {
+      const { integration } = await seedConnection()
+      await opened(integration)
+      expect(await count()).toBe(1)
+    })
+  })
+
   it('ignores pull-request payloads that reuse the issues event', async () => {
     const { integration } = await seedConnection()
     const payload = issuePayload({}) as Record<string, unknown>
@@ -290,6 +342,56 @@ describe.skipIf(!fixture.available)('github channel ingest (real DB, rolled back
       eventName: 'issue_comment',
       integration: { id: integration.id as IntegrationId, config: integration.config },
     })
+    expect(await testDb.select().from(conversations)).toHaveLength(0)
+  })
+
+  // Issue numbers repeat across repositories: a link to #88 in another
+  // repository does not make this repository's #88 a tracker issue.
+  it('counts a tracker link only when it names this repository', async () => {
+    const { integration } = await seedConnection()
+    const userId = createId('user') as UserId
+    const principalId = createId('principal') as PrincipalId
+    await testDb.insert(user).values({ id: userId, name: 'Poster' })
+    await testDb
+      .insert(principal)
+      .values({ id: principalId, userId, role: 'user', type: 'user', createdAt: new Date() })
+    const [board] = await testDb
+      .insert(boards)
+      .values({ slug: `b_${suffix()}`, name: 'B' })
+      .returning()
+    const [post] = await testDb
+      .insert(posts)
+      .values({ boardId: board.id, title: 'P', content: 'c', principalId })
+      .returning()
+    await testDb.insert(postExternalLinks).values({
+      postId: post.id,
+      integrationType: 'github',
+      externalId: '88',
+      externalDisplayId: 'acme/web#88',
+    })
+    const comment = (id: number) =>
+      ingestGitHubChannelEvent({
+        body: JSON.stringify(
+          issuePayload({
+            action: 'created',
+            number: 88,
+            login: 'jane',
+            comment: { id, login: 'stranger', body: 'hi' },
+          })
+        ),
+        eventName: 'issue_comment',
+        integration: { id: integration.id as IntegrationId, config: integration.config },
+      })
+
+    await comment(10)
+    expect(await testDb.select().from(conversations)).toHaveLength(1)
+
+    await testDb.delete(conversations)
+    await testDb
+      .update(postExternalLinks)
+      .set({ externalDisplayId: 'ACME/api#88' })
+      .where(eq(postExternalLinks.postId, post.id))
+    await comment(11)
     expect(await testDb.select().from(conversations)).toHaveLength(0)
   })
 
