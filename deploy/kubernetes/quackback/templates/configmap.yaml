@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "quackback.fullname" . }}-config
+  labels:
+    {{- include "quackback.labels" . | nindent 4 }}
+data:
+  BASE_URL: {{ required "baseUrl is required" .Values.baseUrl | quote }}
+  PORT: {{ .Values.app.port | quote }}
+  DISABLE_TELEMETRY: {{ .Values.disableTelemetry | quote }}
+  SEED_DATABASE: {{ .Values.seedDatabase | quote }}
+  {{- if .Values.migrations.enabled }}
+  # Migrations run in the pre-install/pre-upgrade hook Job instead — see
+  # templates/migration-job.yaml.
+  SKIP_MIGRATIONS: "true"
+  {{- end }}
+  {{- if .Values.dragonfly.enabled }}
+  REDIS_URL: {{ include "quackback.redisUrl" . | quote }}
+  {{- end }}
+  {{- if .Values.email.from }}
+  EMAIL_FROM: {{ .Values.email.from | quote }}
+  {{- end }}
+  {{- if .Values.email.smtp.host }}
+  EMAIL_SMTP_HOST: {{ .Values.email.smtp.host | quote }}
+  EMAIL_SMTP_PORT: {{ .Values.email.smtp.port | quote }}
+  EMAIL_SMTP_USER: {{ .Values.email.smtp.user | quote }}
+  {{- if .Values.email.smtp.secure }}
+  EMAIL_SMTP_SECURE: {{ .Values.email.smtp.secure | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.ai.openaiBaseUrl }}
+  OPENAI_BASE_URL: {{ .Values.ai.openaiBaseUrl | quote }}
+  {{- end }}
+  {{- if .Values.ai.chatModel }}
+  AI_CHAT_MODEL: {{ .Values.ai.chatModel | quote }}
+  {{- end }}
+  {{- if .Values.ai.embeddingModel }}
+  AI_EMBEDDING_MODEL: {{ .Values.ai.embeddingModel | quote }}
+  {{- end }}
+  {{- if .Values.minio.enabled }}
+  S3_ENDPOINT: {{ include "quackback.minioEndpoint" . | quote }}
+  S3_BUCKET: {{ .Values.minio.bucketName | quote }}
+  S3_REGION: "us-east-1"
+  S3_FORCE_PATH_STYLE: "true"
+  # The bundled MinIO is an in-cluster, HTTP-only ClusterIP service the
+  # browser can't reach directly. Proxy all object I/O through the app
+  # (BASE_URL/api/storage, HTTPS) so presigned URLs never expose the internal
+  # http://...-minio:9000 endpoint (which would otherwise trip Mixed Content
+  # blocks on an HTTPS BASE_URL).
+  S3_PROXY: "true"
+  {{- end }}
