@@ -60,6 +60,7 @@ vi.mock('@/lib/server/domains/tickets/ticket.webhooks', () => ({
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
   emitTicketReplied: vi.fn().mockResolvedValue(undefined),
+  emitTicketRepliedAs: vi.fn().mockResolvedValue(undefined),
   emitTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
   emitTicketExternalStatusChanged: vi.fn().mockResolvedValue(undefined),
 }))

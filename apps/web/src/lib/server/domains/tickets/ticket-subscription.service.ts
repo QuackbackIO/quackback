@@ -26,8 +26,8 @@ import {
 } from '@/lib/server/db'
 import type { TicketId, PrincipalId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
-import { ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
+import { withoutTeammatesWhoCannotSee } from './ticket-visibility'
 
 const log = logger.child({ component: 'ticket-subscriptions' })
 
@@ -44,6 +44,8 @@ export interface TicketWatcher {
   displayName: string | null
   avatarUrl: string | null
   role: string
+  /** A teammate today (admin/member user); false for the requester. */
+  isTeamMember: boolean
 }
 
 interface SubscribeOptions {
@@ -61,20 +63,23 @@ function notMuted() {
 
 /**
  * Subscribe a principal to a ticket (idempotent — an existing row, muted or
- * not, is left untouched, so the first reason wins).
+ * not, is left untouched, so the first reason wins). Resolves whether a row
+ * was added, so a caller announces only a watch that is actually new.
  */
 export async function subscribeToTicket(
   principalId: PrincipalId,
   ticketId: TicketId,
   reason: TicketSubscriptionReason,
   options?: SubscribeOptions
-): Promise<void> {
+): Promise<boolean> {
   log.debug({ ticket_id: ticketId, principal_id: principalId, reason }, 'subscribe to ticket')
   const executor = options?.tx ?? db
-  await executor
+  const inserted = await executor
     .insert(ticketSubscriptions)
     .values({ ticketId, principalId, reason })
     .onConflictDoNothing()
+    .returning({ id: ticketSubscriptions.id })
+  return inserted.length > 0
 }
 
 /**
@@ -97,13 +102,16 @@ export async function safeSubscribeToTicket(
   }
 }
 
-/** Unsubscribe a principal from a ticket (row delete). */
+/**
+ * Unsubscribe a principal from a ticket (row delete). Resolves the removed
+ * row's reason, or null when the principal wasn't watching.
+ */
 export async function unsubscribeFromTicket(
   principalId: PrincipalId,
   ticketId: TicketId
-): Promise<void> {
+): Promise<TicketSubscriptionReason | null> {
   log.debug({ ticket_id: ticketId, principal_id: principalId }, 'unsubscribe from ticket')
-  await db
+  const [removed] = await db
     .delete(ticketSubscriptions)
     .where(
       and(
@@ -111,6 +119,8 @@ export async function unsubscribeFromTicket(
         eq(ticketSubscriptions.ticketId, ticketId)
       )
     )
+    .returning({ reason: ticketSubscriptions.reason })
+  return (removed?.reason as TicketSubscriptionReason | undefined) ?? null
 }
 
 /** Set or clear a subscription's mute (no-ops when the principal isn't watching). */
@@ -177,20 +187,27 @@ export async function getTicketWatchStatus(
 
 /**
  * Principals to fan notifications out to: every watcher whose mute is absent
- * or expired. Actor exclusion and role filtering happen in the resolvers.
+ * or expired, minus any teammate who can no longer see the ticket (it moved
+ * away from them and their team after they started watching). Their row stays,
+ * so the watch resumes if the ticket comes back to them. Actor exclusion and
+ * role filtering happen in the resolvers.
  */
 export async function getTicketWatchersForEvent(ticketId: TicketId): Promise<PrincipalId[]> {
   const rows = await db
     .select({ principalId: ticketSubscriptions.principalId })
     .from(ticketSubscriptions)
     .where(and(eq(ticketSubscriptions.ticketId, ticketId), notMuted()))
-  return rows.map((r) => r.principalId)
+  return withoutTeammatesWhoCannotSee(
+    ticketId,
+    rows.map((r) => r.principalId)
+  )
 }
 
 /**
  * Watchers who are team members (admin/member roles), mute-filtered — the
  * recipient set for agent-only signals like internal-note bells. One joined
- * query so requester-watchers are excluded structurally, not by a second pass.
+ * query so requester-watchers are excluded structurally, not by a second pass;
+ * the visibility filter is the same as getTicketWatchersForEvent's.
  */
 export async function getTicketAgentWatchersForEvent(ticketId: TicketId): Promise<PrincipalId[]> {
   const rows = await db
@@ -205,28 +222,10 @@ export async function getTicketAgentWatchersForEvent(ticketId: TicketId): Promis
         inArray(principal.role, ['admin', 'member'])
       )
     )
-  return rows.map((r) => r.principalId)
-}
-
-/**
- * Admin-added watcher (reason 'manual'): the target must be a team member —
- * requesters watch through their own portal toggle, and adding an arbitrary
- * end user would let an agent point ticket notifications at someone with no
- * relationship to the ticket.
- */
-export async function addManualTicketWatcher(
-  targetPrincipalId: PrincipalId,
-  ticketId: TicketId
-): Promise<void> {
-  const [target] = await db
-    .select({ role: principal.role })
-    .from(principal)
-    .where(eq(principal.id, targetPrincipalId))
-    .limit(1)
-  if (!target || !isTeamMember(target.role)) {
-    throw new ValidationError('INVALID_WATCHER', 'Can only add team members as watchers')
-  }
-  await subscribeToTicket(targetPrincipalId, ticketId, 'manual')
+  return withoutTeammatesWhoCannotSee(
+    ticketId,
+    rows.map((r) => r.principalId)
+  )
 }
 
 /** Full watcher list (principal join) for the admin watch control. */
@@ -239,10 +238,15 @@ export async function listTicketWatchers(ticketId: TicketId): Promise<TicketWatc
       displayName: principal.displayName,
       avatarUrl: principal.avatarUrl,
       role: principal.role,
+      type: principal.type,
     })
     .from(ticketSubscriptions)
     .innerJoin(principal, eq(ticketSubscriptions.principalId, principal.id))
     .where(eq(ticketSubscriptions.ticketId, ticketId))
     .orderBy(ticketSubscriptions.createdAt)
-  return rows.map((r) => ({ ...r, reason: r.reason as TicketSubscriptionReason }))
+  return rows.map(({ type, ...r }) => ({
+    ...r,
+    reason: r.reason as TicketSubscriptionReason,
+    isTeamMember: type === 'user' && isTeamMember(r.role),
+  }))
 }
