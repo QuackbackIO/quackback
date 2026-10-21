@@ -82,11 +82,14 @@ export function getNotificationTarget(
     return { to: '/support' }
   }
 
-  // Internal-note and linked-issue bells only ever reach agents (role-filtered
-  // in the target builder), so the admin inbox is always the destination.
+  // Internal-note, linked-issue and due-date bells only ever reach agents
+  // (role-filtered or assignee-sourced in the target builder), so the admin
+  // inbox is always the destination.
   if (
     (notification.type === 'ticket_note_added' ||
-      notification.type === 'ticket_external_status_changed') &&
+      notification.type === 'ticket_external_status_changed' ||
+      notification.type === 'ticket_due_soon' ||
+      notification.type === 'ticket_overdue') &&
     notification.ticketId
   ) {
     return { to: '/admin/inbox', search: { i: notification.ticketId } }

@@ -591,6 +591,62 @@ describe('buildInboxListParams', () => {
     expect(result.ticketType).toBe('customer')
     expect(result.facet).toBe('open')
   })
+
+  it('carries the due-date sort to the unified endpoint (it ranks both kinds)', () => {
+    expect(
+      buildInboxListParams({ kind: 'view', view: 'all' }, 'open', 'all', '', undefined, 'due').sort
+    ).toBe('due')
+  })
+
+  it('threads the Due date filter through every built-in unified scope', () => {
+    const scopes: InboxNavItem[] = [
+      { kind: 'view', view: 'mine' },
+      { kind: 'view', view: 'unassigned' },
+      { kind: 'view', view: 'all' },
+      { kind: 'team', teamId },
+      { kind: 'view', view: 'tickets_all' },
+      { kind: 'view', view: 'tickets_back_office' },
+    ]
+    for (const nav of scopes) {
+      const params = buildInboxListParams(
+        nav,
+        'open',
+        'all',
+        '',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'overdue'
+      )
+      expect(params.due).toBe('overdue')
+    }
+  })
+
+  it('omits due when no Due date filter is set (stable params and query keys)', () => {
+    const params = buildInboxListParams({ kind: 'view', view: 'all' }, 'open', 'all', '')
+    expect('due' in params).toBe(false)
+  })
+
+  it('a custom view applies its own ticket_due rule, ignoring the URL filter, and keeps both kinds', () => {
+    const params = buildInboxListParams(
+      { kind: 'custom', viewId },
+      'open',
+      'all',
+      '',
+      undefined,
+      undefined,
+      { rules: [{ field: 'ticket_due', value: 'due_soon' }] },
+      undefined,
+      undefined,
+      'overdue'
+    )
+    expect(params.due).toBe('due_soon')
+    // A due rule alone never narrows to tickets: linked tickets list as their
+    // conversation's row.
+    expect(params.kinds).toBeUndefined()
+  })
 })
 
 describe('inboxScopeHasRefinements', () => {

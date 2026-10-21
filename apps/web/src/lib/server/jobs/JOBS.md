@@ -414,6 +414,7 @@ went stale the moment a queue moved.
 | `page-view-partitions`          | `30 2 * * *`   | 1           | 3        | 60s   |
 | `sla-breach-sweep`              | `* * * * *`    | 1           | 3        | 60s   |
 | `snooze-sweep`                  | `* * * * *`    | 1           | 3        | 60s   |
+| `ticket-due-sweep`              | `* * * * *`    | 1           | 3        | 60s   |
 | `workflow-sweep`                | `*/5 * * * *`  | 1           | 3        | 60s   |
 | `workflow-retention`            | `0 4 * * *`    | 1           | 3        | 60s   |
 | `email-log-retention`           | `0 6 * * *`    | 1           | 3        | 60s   |
