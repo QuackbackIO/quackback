@@ -487,9 +487,9 @@ export interface ConversationAssistantActivity {
  * untouched, and get their own small single-purpose reducers
  * (applyTicketThreadEvent, events-reducer.ts). `ticket_message_updated` carries
  * a body edit to a message shown in the ticket thread (ticket-parented, or
- * conversation-parented on a linked pair); reactions and flags on ticket
- * messages still do not broadcast. There is no `ticket_message_deleted` (no
- * delete-ticket-message feature exists yet).
+ * conversation-parented on a linked pair); `ticket_message_deleted` removes a
+ * deleted one from the same thread. Reactions and flags on ticket messages
+ * still do not broadcast.
  *
  * `ticket: TicketDTO` on `ticket_updated` mirrors `conversation: ConversationDTO`
  * on `conversation`: one push refreshes both the list row and an open detail
@@ -501,6 +501,7 @@ export interface ConversationAssistantActivity {
 export type TicketStreamEvent =
   | { kind: 'ticket_message'; ticketId: TicketId; message: ConversationMessageDTO }
   | { kind: 'ticket_message_updated'; ticketId: TicketId; message: ConversationMessageDTO }
+  | { kind: 'ticket_message_deleted'; ticketId: TicketId; messageId: ConversationMessageId }
   | { kind: 'ticket_updated'; ticket: TicketDTO }
   | { kind: 'ticket_read'; ticketId: TicketId; side: MessageSenderType; at: string }
 

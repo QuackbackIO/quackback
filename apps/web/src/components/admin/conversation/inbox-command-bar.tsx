@@ -42,6 +42,9 @@ export interface InboxCommandBarProps {
   /** True when the detail panel's Copilot tab exists for this viewer right
    *  now (flag + copilot.use + ≥xl viewport) — gates the Ask Copilot row. */
   copilotAvailable?: boolean
+  /** True when the target resolves to at least one ticket (a ticket row, or
+   *  a conversation with a linked customer ticket) — gates Set due date. */
+  hasDueTarget?: boolean
 }
 
 export function InboxCommandBar({
@@ -54,6 +57,7 @@ export function InboxCommandBar({
   hasLinkedTicket,
   linkedTicketNumber,
   copilotAvailable,
+  hasDueTarget,
 }: InboxCommandBarProps) {
   function run(id: InboxActionId) {
     onAction(id)
@@ -84,6 +88,7 @@ export function InboxCommandBar({
                       hasTicketTarget,
                       hasLinkedTicket,
                       copilotAvailable,
+                      hasDueTarget,
                     })
                     const label =
                       action.id === 'open_ticket' && linkedTicketNumber != null

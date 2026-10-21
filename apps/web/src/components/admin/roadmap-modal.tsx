@@ -150,6 +150,7 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
               onTagsChange={handleTagsChange}
               isUpdating={isUpdating || updateEta.isPending}
               hideSubscribe
+              teamSubscribe
               hideVote
             />
           </Suspense>

@@ -37,12 +37,16 @@ import { withEmailIdempotencyKey } from '@quackback/email/idempotency'
 import { permittedSendingIdentity } from '@/lib/server/domains/channel-accounts/outbound-identity'
 import { logger } from '@/lib/server/logger'
 
-/** The event types whose email is one of the seven ticket-lifecycle kinds. */
+/** The event types whose email is one of the ten ticket-lifecycle kinds. */
 const TICKET_EMAIL_EVENT_TYPES = new Set<string>([
   'ticket.created',
   'ticket.replied',
+  // A customer ticket shared with someone (kind 'shared').
+  'ticket.subscriber_added',
   'ticket.status_changed',
   'ticket.assigned',
+  'ticket.due_soon',
+  'ticket.overdue',
   'sla.approaching_breach',
   'sla.breached',
 ])
@@ -51,8 +55,9 @@ const TICKET_EMAIL_EVENT_TYPES = new Set<string>([
  * Threading headers for a ticket email. The `created` confirmation IS the thread
  * root (its own Message-ID is the deterministic root id); every later ticket
  * email mints a fresh Message-ID and References the root, so a ticket's emails
- * collapse into one client conversation. SLA emails carry no ticket id (they're
- * conversation-scoped agent alerts) and so thread on nothing.
+ * collapse into one client conversation. The due-soon and overdue alerts carry
+ * the ticket id and so join that thread too. SLA emails carry no ticket id
+ * (they're conversation-scoped agent alerts) and so thread on nothing.
  *
  * These ids are what we ASK for, which is not always what goes out. A transport
  * that owns the Message-ID header replaces ours and reports back the id it
@@ -258,7 +263,7 @@ async function deliverEmail(
         logoUrl: cfg.logoUrl,
       })
     } else if (TICKET_EMAIL_EVENT_TYPES.has(event.type)) {
-      // All six ticket/SLA event types map onto sendTicketEventEmail; the
+      // Every ticket/SLA event type here maps onto sendTicketEventEmail; the
       // per-recipient config already carries the copy `kind`, CTA, per-team
       // From, and reply-by-email Reply-To, so the hook only computes threading.
       const t = config as TicketEmailConfig
