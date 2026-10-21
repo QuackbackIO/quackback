@@ -171,6 +171,30 @@ export function notificationText(n: NotificationTextSource, intl: IntlShape): No
           { name, title: p.ticketTitle }
         ),
       }
+    case 'ticket_due_soon':
+      if (!p.ticketTitle) return stored
+      return {
+        ...stored,
+        title: intl.formatMessage(
+          {
+            id: 'portal.notifications.text.ticketDueSoon',
+            defaultMessage: '{title} is due soon',
+          },
+          { title: p.ticketTitle }
+        ),
+      }
+    case 'ticket_overdue':
+      if (!p.ticketTitle) return stored
+      return {
+        ...stored,
+        title: intl.formatMessage(
+          {
+            id: 'portal.notifications.text.ticketOverdue',
+            defaultMessage: '{title} is overdue',
+          },
+          { title: p.ticketTitle }
+        ),
+      }
     default:
       return stored
   }

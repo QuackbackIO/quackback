@@ -79,6 +79,9 @@ export interface NotificationConfig {
   // approval.requested: the request's id; its server-written summary is
   // `title` above.
   approvalId?: string
+  // ticket.due_soon / ticket.overdue: the due date the alert is about (ISO);
+  // the ticket's title rides `title` above.
+  dueAt?: string
 }
 
 export const notificationHook: HookHandler = {
@@ -403,6 +406,20 @@ function buildNotifications(
       title: `${issueLabel} ${verb} on ${title}`,
       // Recipients are always agent watchers (role-filtered in the target builder).
       metadata: { ticketId, audience: 'admin' },
+    }))
+  }
+
+  if (event.type === 'ticket.due_soon' || event.type === 'ticket.overdue') {
+    const { ticketId, title, dueAt } = config
+    const overdue = event.type === 'ticket.overdue'
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: (overdue ? 'ticket_overdue' : 'ticket_due_soon') as NotificationType,
+      // Worded again in the reader's language from `ticketTitle`
+      // (notification-text.ts); this English must match that default.
+      title: overdue ? `${title} is overdue` : `${title} is due soon`,
+      // Recipients are always the assignee or the assigned team's members.
+      metadata: { ticketId, ticketTitle: title, dueAt, audience: 'admin' },
     }))
   }
 

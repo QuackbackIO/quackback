@@ -13,6 +13,13 @@ export const ticketAttachmentSchema = z.object({
   fileId: z.string().max(64).optional(),
 })
 
+/**
+ * A ticket due date on the wire: an ISO 8601 instant with an explicit zone
+ * (`Z` or an offset). The allowed window is checked server-side by
+ * `assertTicketDueAt`; see `lib/shared/ticket-due.ts`.
+ */
+export const ticketDueAtWireSchema = z.string().datetime({ offset: true })
+
 export const createMyTicketSchema = z.object({
   title: z.string().min(1).max(300),
   description: z.string().max(4000).optional(),
@@ -21,5 +28,7 @@ export const createMyTicketSchema = z.object({
   ticketTypeId: z.string().optional(),
   fieldValues: z.record(z.string(), z.unknown()).optional(),
   email: z.string().optional(),
+  /** The customer's proposed "Needed by" date (end of their chosen day). */
+  dueAt: ticketDueAtWireSchema.optional(),
 })
 export type CreateMyTicketInput = z.infer<typeof createMyTicketSchema>

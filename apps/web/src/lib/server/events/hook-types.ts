@@ -142,7 +142,7 @@ export interface EmailConfig {
  * the same way the changelog/status branches do.
  */
 export interface TicketEmailConfig {
-  /** Which of the seven copy-map kinds to render. */
+  /** Which of the nine copy-map kinds to render. */
   kind:
     | 'created'
     | 'reply'
@@ -151,6 +151,8 @@ export interface TicketEmailConfig {
     | 'assigned_team'
     | 'sla_warning'
     | 'sla_breach'
+    | 'due_soon'
+    | 'overdue'
   workspaceName: string
   /** Formatted reference, e.g. "#142". */
   ticketLabel: string

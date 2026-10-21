@@ -125,6 +125,9 @@ vi.mock('@/lib/server/domains/tickets/ticket-conversation-link.service', () => (
   linkTicketToConversation,
 }))
 vi.mock('@/lib/server/domains/inbox/inbox.query', () => ({ getLinkedCustomerTicket }))
+// set_ticket_due_date writes through the tickets domain's one due-date path.
+const { setTicketDueAt } = vi.hoisted(() => ({ setTicketDueAt: vi.fn() }))
+vi.mock('@/lib/server/domains/tickets/ticket-due.service', () => ({ setTicketDueAt }))
 
 // CSAT-over-email itself now lives in conversation.notify.ts's
 // notifyCsatRequestEmail (action.executor.ts's send_block csat case only
@@ -549,6 +552,27 @@ describe('applyAction', () => {
       )
     })
 
+    it('carries askDueDate into a ticketForm block payload only when the spec sets it', async () => {
+      await applyAction(
+        {
+          type: 'send_block',
+          nodeId: 'n1',
+          block: { kind: 'ticketForm', body, askDueDate: true },
+        },
+        ctx
+      )
+      const withFlag = appendAssistantReply.mock.calls[0]![3].metadata.block
+      expect(withFlag).toMatchObject({ kind: 'ticketForm', askDueDate: true })
+
+      await applyAction(
+        { type: 'send_block', nodeId: 'n2', block: { kind: 'ticketForm', body } },
+        ctx
+      )
+      const withoutFlag = appendAssistantReply.mock.calls[1]![3].metadata.block
+      expect(withoutFlag).toMatchObject({ kind: 'ticketForm' })
+      expect(withoutFlag).not.toHaveProperty('askDueDate')
+    })
+
     it('throws when applied outside a workflow run (no ctx.runId)', async () => {
       await expect(
         applyAction(
@@ -929,6 +953,89 @@ describe('applyAction', () => {
         applyAction({ type: 'set_ticket_status', statusId: 'ticket_status_1' as never }, ctx)
       ).rejects.toThrow(NotFoundError)
       expect(setTicketStatus).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('set_ticket_due_date', () => {
+    const engineActor = {
+      principalId: null,
+      role: 'admin',
+      principalType: 'service',
+      permissions: new Set(['conversation.view']),
+    } as unknown as Actor
+
+    beforeEach(() => {
+      getLinkedCustomerTicket.mockResolvedValue({ id: 'ticket_1' })
+      setTicketDueAt.mockResolvedValue({ id: 'ticket_1' })
+    })
+
+    it('resolves a relative offset to now + seconds when the step runs', async () => {
+      vi.useFakeTimers()
+      try {
+        vi.setSystemTime(new Date('2026-03-01T10:00:00Z'))
+        const result = await applyAction(
+          { type: 'set_ticket_due_date', seconds: 2 * 86400 },
+          { conversationId, actor: engineActor }
+        )
+        expect(result).toEqual({ label: 'ticket due date set' })
+        expect(getLinkedCustomerTicket).toHaveBeenCalledWith(conversationId)
+        const [ticketIdArg, dueAtArg] = setTicketDueAt.mock.calls[0]!
+        expect(ticketIdArg).toBe('ticket_1')
+        expect(dueAtArg).toEqual(new Date('2026-03-03T10:00:00Z'))
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('passes an absolute dueAtIso through as that instant', async () => {
+      const result = await applyAction(
+        { type: 'set_ticket_due_date', dueAtIso: '2026-08-01T17:00:00.000Z' },
+        { conversationId, actor: engineActor }
+      )
+      expect(result).toEqual({ label: 'ticket due date set' })
+      expect(setTicketDueAt.mock.calls[0]![1]).toEqual(new Date('2026-08-01T17:00:00.000Z'))
+    })
+
+    it('clears the due date for dueAtIso null', async () => {
+      const result = await applyAction(
+        { type: 'set_ticket_due_date', dueAtIso: null },
+        { conversationId, actor: engineActor }
+      )
+      expect(result).toEqual({ label: 'ticket due date cleared' })
+      expect(setTicketDueAt.mock.calls[0]![1]).toBeNull()
+    })
+
+    it('runs under the same locally widened ticket actor set_ticket_status uses', async () => {
+      await applyAction(
+        { type: 'set_ticket_due_date', seconds: 3600 },
+        { conversationId, actor: engineActor }
+      )
+      const [, , actorArg] = setTicketDueAt.mock.calls[0]!
+      // Still a service actor, so the ticket.due_changed it fires stays behind
+      // the automated-actor gate (no self-trigger loop).
+      expect(actorArg.principalType).toBe('service')
+      expect(actorArg.permissions.has('conversation.view')).toBe(true)
+      expect(actorArg.permissions.has('ticket.set_status')).toBe(true)
+    })
+
+    it('passes a human actor through unchanged (no widening)', async () => {
+      await applyAction({ type: 'set_ticket_due_date', seconds: 3600 }, ctx)
+      expect(setTicketDueAt.mock.calls[0]![2]).toBe(actor)
+    })
+
+    it('throws NotFound when the conversation has no linked ticket', async () => {
+      getLinkedCustomerTicket.mockResolvedValue(null)
+      await expect(
+        applyAction({ type: 'set_ticket_due_date', seconds: 3600 }, ctx)
+      ).rejects.toThrow(NotFoundError)
+      expect(setTicketDueAt).not.toHaveBeenCalled()
+    })
+
+    it('propagates a rejection from the due-date write path', async () => {
+      setTicketDueAt.mockRejectedValue(new ValidationError('INVALID_DUE_DATE', 'Too far out'))
+      await expect(
+        applyAction({ type: 'set_ticket_due_date', dueAtIso: '2040-01-01T00:00:00Z' }, ctx)
+      ).rejects.toThrow(ValidationError)
     })
   })
 

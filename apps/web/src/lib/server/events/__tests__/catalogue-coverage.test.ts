@@ -92,6 +92,10 @@ describe('event catalogue coverage', () => {
     'teammate_unresponsive',
     'approaching_breach',
     'breached',
+    // ticket due dates: the date moved, is close, or has passed
+    'due_changed',
+    'due_soon',
+    'overdue',
     // approvals: a person is asked, decides, and the change is applied
     'requested',
     'decided',

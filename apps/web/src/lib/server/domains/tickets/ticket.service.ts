@@ -21,6 +21,7 @@ import {
   isNull,
   inArray,
   lt,
+  gt,
   sql,
   asc,
   desc,
@@ -54,6 +55,7 @@ import {
   type KeysetColumn,
 } from '@/lib/server/db/keyset'
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
+import { ticketDueConditionSql } from '@/lib/server/db/ticket-due'
 import { getStageLabels } from '../settings/settings.tickets'
 import { emitTicketStatusChanged, emitTicketAssigned } from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, ticketRowToDTO } from './ticket.dto'
@@ -138,7 +140,7 @@ const priorityRankExpr = priorityRankSql(tickets.priority)
  * conversation sort, so the keyset cursor only ever needs two columns.
  */
 export interface TicketSortDescriptor {
-  primary: 'updatedAt' | 'createdAt' | 'priorityRank'
+  primary: 'updatedAt' | 'createdAt' | 'priorityRank' | 'dueAt'
   direction: 'asc' | 'desc'
 }
 
@@ -150,6 +152,9 @@ export function ticketSortDescriptorFor(sort: TicketSort = 'recent'): TicketSort
       return { primary: 'createdAt', direction: 'desc' }
     case 'priority':
       return { primary: 'priorityRank', direction: 'desc' }
+    case 'due':
+      // Soonest due first, tickets without a due date last (NULLS LAST).
+      return { primary: 'dueAt', direction: 'asc' }
     case 'recent':
     default:
       return { primary: 'updatedAt', direction: 'desc' }
@@ -163,6 +168,9 @@ function orderByForTicketSort(sort: TicketSort): SQL[] {
   switch (d.primary) {
     case 'priorityRank':
       return [desc(priorityRankExpr), idTie]
+    case 'dueAt':
+      // ASC NULLS LAST is the btree default — tickets_due_at_id_idx serves it.
+      return [sql`${tickets.dueAt} ASC NULLS LAST`, idTie]
     case 'createdAt':
       return [d.direction === 'asc' ? asc(tickets.createdAt) : desc(tickets.createdAt), idTie]
     case 'updatedAt':
@@ -192,6 +200,19 @@ function cursorConditionForTicketSort(sort: TicketSort, t: Ticket): SQL {
         strict: lt(priorityRankExpr, rank),
       }
       return buildKeysetCondition([rankCol, idTie])
+    }
+    case 'dueAt': {
+      // due_at ASC NULLS LAST, id ASC — the same NULLS-LAST boundary shape as
+      // conversation.query.ts's waiting sort: a cursor in the NULL tail only
+      // precedes later NULL rows (by id); otherwise later dates OR the whole
+      // NULL tail.
+      const dueCol: KeysetColumn = t.dueAt
+        ? {
+            equal: eq(tickets.dueAt, t.dueAt),
+            strict: or(gt(tickets.dueAt, t.dueAt), isNull(tickets.dueAt))!,
+          }
+        : { equal: isNull(tickets.dueAt), strict: undefined }
+      return buildKeysetCondition([dueCol, idTie])
     }
     case 'createdAt': {
       const col =
@@ -285,6 +306,7 @@ export async function listTickets(filter: TicketListFilter, actor: Actor): Promi
         filter.type ? eq(tickets.type, filter.type) : undefined,
         filter.ticketTypeId ? eq(tickets.ticketTypeId, filter.ticketTypeId) : undefined,
         filter.priority ? eq(tickets.priority, filter.priority) : undefined,
+        filter.due ? ticketDueConditionSql(filter.due, new Date()) : undefined,
         filter.excludeConversationLinked ? excludeConversationLinkedCondition() : undefined,
         filter.statusCategory
           ? inArray(
@@ -939,7 +961,8 @@ export async function setTicketPriority(
 /**
  * Apply one action to many tickets (support platform §4.6's ticket-axis
  * counterpart of the conversation bulk actions). Loops the SAME
- * single-ticket ops (`assignTicket`/`setTicketPriority`/`setTicketStatus`)
+ * single-ticket ops (`assignTicket`/`setTicketPriority`/`setTicketStatus`/
+ * `setTicketDueAt`)
  * their individual server fns call — never a bypass of their `assertCan`
  * checks, realtime publish, or webhook — so a bulk apply is exactly N
  * individual applies. Per-item isolation: one ticket's failure (missing,
@@ -951,6 +974,9 @@ export async function bulkUpdateTickets(
   action: BulkTicketAction,
   actor: Actor
 ): Promise<BulkTicketResult> {
+  // The due-date setter lives in its own module (the max-lines budget) and
+  // imports this one's siblings; loaded lazily so the two never form a cycle.
+  const dueService = action.type === 'set_due' ? await import('./ticket-due.service') : null
   const apply: (id: TicketId) => Promise<unknown> = (() => {
     switch (action.type) {
       case 'assign':
@@ -961,6 +987,8 @@ export async function bulkUpdateTickets(
         return (id) => setTicketPriority(id, action.priority, actor)
       case 'set_status':
         return (id) => setTicketStatus(id, action.statusId, actor)
+      case 'set_due':
+        return (id) => dueService!.setTicketDueAt(id, action.dueAt, actor)
     }
   })()
 
