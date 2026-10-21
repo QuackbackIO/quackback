@@ -185,7 +185,9 @@ export function StatusSyncConfig({
 function CopyableValue({ value }: { value: string }) {
   return (
     <div className="flex items-center gap-2">
-      <code className="flex-1 rounded bg-muted px-3 py-2 text-xs font-mono break-all">{value}</code>
+      <code className="ph-mask flex-1 rounded bg-muted px-3 py-2 text-xs font-mono break-all">
+        {value}
+      </code>
       <CopyButton value={value} variant="outline" size="sm" />
     </div>
   )

@@ -288,6 +288,8 @@ const configSchema = z
     posthogHost: z.preprocess(emptyToUndefined, z.string().url().optional()),
     posthogUiHost: z.preprocess(emptyToUndefined, z.string().url().optional()),
     posthogSessionRecording: envBoolean,
+    posthogSessionRecordingMaskText: envBoolean,
+    posthogSessionRecordingMaskInputs: envBoolean,
   })
   .superRefine((cfg, ctx) => {
     // A wildcard is a routing pattern, never an origin. Refused in every mode:
@@ -450,6 +452,8 @@ function buildConfigFromEnv(): unknown {
     posthogHost: env('POSTHOG_HOST'),
     posthogUiHost: env('POSTHOG_UI_HOST'),
     posthogSessionRecording: env('POSTHOG_SESSION_RECORDING'),
+    posthogSessionRecordingMaskText: env('POSTHOG_SESSION_RECORDING_MASK_TEXT'),
+    posthogSessionRecordingMaskInputs: env('POSTHOG_SESSION_RECORDING_MASK_INPUTS'),
   }
 }
 
@@ -763,12 +767,19 @@ export const config = {
    * a domain content blockers do not list. `uiHost` is the PostHog app the
    * toolbar links to; it follows from a PostHog host and must be given as
    * `POSTHOG_UI_HOST` behind a proxy.
+   *
+   * `maskText` hides every text node in a replay and `maskInputs` every
+   * input value. Both are on unless `POSTHOG_SESSION_RECORDING_MASK_TEXT` or
+   * `POSTHOG_SESSION_RECORDING_MASK_INPUTS` is `false`, since admin screens
+   * show the workspace's customers. Password fields are masked either way.
    */
   get productAnalytics(): {
     key: string
     host: string
     uiHost: string | null
     sessionRecording: boolean
+    maskText: boolean
+    maskInputs: boolean
   } | null {
     const cfg = loadConfig()
     if (!cfg.posthogKey) return null
@@ -780,6 +791,8 @@ export const config = {
       uiHost:
         cfg.posthogUiHost?.replace(/\/+$/, '') ?? (region ? `https://${region}.posthog.com` : null),
       sessionRecording: cfg.posthogSessionRecording ?? true,
+      maskText: cfg.posthogSessionRecordingMaskText ?? true,
+      maskInputs: cfg.posthogSessionRecordingMaskInputs ?? true,
     }
   },
 

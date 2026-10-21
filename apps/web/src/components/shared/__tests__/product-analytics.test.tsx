@@ -25,6 +25,8 @@ const ctx = vi.hoisted(() => ({
     apiHost: string
     uiHost: string | null
     sessionRecording: boolean
+    maskText: boolean
+    maskInputs: boolean
     workspaceId: string | null
   },
   session: null as unknown,
@@ -73,6 +75,8 @@ beforeEach(() => {
     apiHost: 'https://t.example.com',
     uiHost: 'https://eu.posthog.com',
     sessionRecording: true,
+    maskText: true,
+    maskInputs: true,
     workspaceId: 'ws_1',
   }
   ctx.session = teamSession()
@@ -107,7 +111,31 @@ describe('ProductAnalytics', () => {
       disable_session_recording: false,
       mask_all_text: true,
       mask_all_element_attributes: true,
-      session_recording: { maskAllInputs: true, maskTextSelector: '*' },
+      session_recording: {
+        maskAllInputs: true,
+        maskInputOptions: { password: true },
+        maskTextSelector: '*',
+      },
+    })
+  })
+
+  it('shows replay text but still masks inputs when the operator turned text masking off', async () => {
+    ctx.analytics = { ...ctx.analytics!, maskText: false }
+    render(<ProductAnalytics />)
+    await waitFor(() => expect(posthog.init).toHaveBeenCalled())
+    expect(initOptions().session_recording).toEqual({
+      maskAllInputs: true,
+      maskInputOptions: { password: true },
+    })
+  })
+
+  it('masks only password fields when the operator turned input masking off', async () => {
+    ctx.analytics = { ...ctx.analytics!, maskText: false, maskInputs: false }
+    render(<ProductAnalytics />)
+    await waitFor(() => expect(posthog.init).toHaveBeenCalled())
+    expect(initOptions().session_recording).toEqual({
+      maskAllInputs: false,
+      maskInputOptions: { password: true },
     })
   })
 

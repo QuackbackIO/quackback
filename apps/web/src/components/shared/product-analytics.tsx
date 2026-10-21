@@ -43,10 +43,14 @@ let loaded: PostHog | null = null
  * so customer-facing pages never ship it. Pointing `POSTHOG_HOST` at a
  * reverse proxy on a neutral domain keeps content blockers from dropping it.
  *
- * Admin screens show the workspace's own customers, so a replay masks every
- * input and every text node, and autocapture records no element text or
- * attributes. What remains is navigation, clicks and timing: enough to see
- * where people get stuck, never what they were reading or typing.
+ * Admin screens show the workspace's own customers, so by default a replay
+ * masks every input and every text node, and autocapture records no element
+ * text or attributes. What remains is navigation, clicks and timing: enough to
+ * see where people get stuck, never what they were reading or typing. The
+ * operator can unmask text (`POSTHOG_SESSION_RECORDING_MASK_TEXT=false`) and
+ * inputs (`POSTHOG_SESSION_RECORDING_MASK_INPUTS=false`); password fields
+ * stay masked regardless, and so does any element carrying the SDK's
+ * `ph-mask` class, which every revealed secret or recovery code wears.
  *
  * The person is their email (analytics-identity.ts), and the device id lives
  * in a cookie on the parent domain, so someone who signed up on a sibling
@@ -104,7 +108,11 @@ export function ProductAnalytics() {
           mask_all_text: true,
           mask_all_element_attributes: true,
           disable_session_recording: !config.sessionRecording,
-          session_recording: { maskAllInputs: true, maskTextSelector: '*' },
+          session_recording: {
+            maskAllInputs: config.maskInputs,
+            maskInputOptions: { password: true },
+            ...(config.maskText ? { maskTextSelector: '*' } : {}),
+          },
           // The SDK records a client-side navigation before React re-renders,
           // so the URL itself decides, not this component's state.
           before_send: (event) =>

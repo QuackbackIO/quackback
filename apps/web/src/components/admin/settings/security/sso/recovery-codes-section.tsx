@@ -143,7 +143,7 @@ export function RecoveryCodesSection() {
           </DialogHeader>
           {revealedCodes ? (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-1.5 rounded-md border bg-muted/30 p-3 font-mono text-sm">
+              <div className="ph-mask grid grid-cols-2 gap-1.5 rounded-md border bg-muted/30 p-3 font-mono text-sm">
                 {revealedCodes.map((code) => (
                   <span key={code} className="select-all">
                     {code}
