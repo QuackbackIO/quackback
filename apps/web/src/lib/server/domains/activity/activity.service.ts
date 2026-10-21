@@ -40,6 +40,8 @@ export type ActivityType =
   | 'comment.removed'
   | 'comment.restored'
   | 'external.status_changed'
+  | 'subscriber.added'
+  | 'subscriber.removed'
 
 export interface CreateActivityOpts {
   postId: PostId

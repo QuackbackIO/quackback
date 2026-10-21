@@ -106,6 +106,8 @@ export type {
   ConversationMessageTranslationId,
   IntegrationId,
   PlatformCredentialId,
+  IntegrationDestinationId,
+  IntegrationUserMappingId,
   EventMappingId,
   PostExternalLinkId,
   TicketExternalLinkId,
