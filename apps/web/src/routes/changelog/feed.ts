@@ -18,6 +18,7 @@ export const Route = createFileRoute('/changelog/feed')({
           { isChangelogAudienceGranted },
           { getOptionalAuth, policyActorFromAuth },
           { isFeatureEnabled },
+          { categoryGateCondition },
         ] = await Promise.all([
           import('@/lib/server/config'),
           import('@/lib/server/db'),
@@ -27,6 +28,7 @@ export const Route = createFileRoute('/changelog/feed')({
           import('@/lib/server/domains/changelog/changelog.audience'),
           import('@/lib/server/functions/auth-helpers'),
           import('@/lib/server/domains/settings/settings.service'),
+          import('@/lib/server/domains/changelog/changelog-category.service'),
         ])
 
         const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
@@ -47,12 +49,22 @@ export const Route = createFileRoute('/changelog/feed')({
         const audienceGranted = actor ? await isChangelogAudienceGranted(actor) : false
 
         const productEnabled = await isFeatureEnabled('changelog')
+        // The per-category segment gate the portal list and detail readers
+        // apply also has to hold here, or an entry restricted to a segment
+        // is readable by anyone who fetches the RSS URL. Applied in SQL so
+        // the limit counts only entries the caller may see. `actor` is
+        // non-null whenever audienceGranted is true.
         const entries =
-          productEnabled && access.granted && audienceGranted
+          productEnabled && access.granted && audienceGranted && actor
             ? await db
                 .select()
                 .from(changelogEntries)
-                .where(and(...publicChangelogConditions(new Date())))
+                .where(
+                  and(
+                    ...publicChangelogConditions(new Date()),
+                    categoryGateCondition(actor, changelogEntries.id)
+                  )
+                )
                 .orderBy(desc(effectiveDisplayDate))
                 .limit(50)
             : []
