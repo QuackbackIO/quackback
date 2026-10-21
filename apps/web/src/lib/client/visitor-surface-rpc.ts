@@ -22,6 +22,10 @@ import {
   getMyTicketWatchStatusFn,
   watchMyTicketFn,
   unwatchMyTicketFn,
+  getMyTicketSharingFn,
+  listMyTicketColleaguesFn,
+  shareMyTicketFn,
+  removeMyTicketShareFn,
 } from '@/lib/server/functions/tickets'
 
 export const portalVisitorRpc = {
@@ -39,6 +43,10 @@ export const portalVisitorRpc = {
   getMyTicketWatchStatus: getMyTicketWatchStatusFn,
   watchMyTicket: watchMyTicketFn,
   unwatchMyTicket: unwatchMyTicketFn,
+  getMyTicketSharing: getMyTicketSharingFn,
+  listMyTicketColleagues: listMyTicketColleaguesFn,
+  shareMyTicket: shareMyTicketFn,
+  removeMyTicketShare: removeMyTicketShareFn,
 }
 
 export type VisitorSurfaceRpc = typeof portalVisitorRpc
