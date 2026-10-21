@@ -2227,5 +2227,11 @@
   "portal.feedback.list.noSearchResults": "Geen ideeën gevonden voor “{query}”.",
   "portal.feedback.list.postSearchAsIdea": "Plaats het als nieuw idee",
   "portal.feedback.list.searchWidenedMost": "Geen idee bevat al je woorden. Ideeën met de meeste ervan worden getoond.",
-  "portal.feedback.list.searchWidenedSimilar": "Geen exacte resultaten. Ideeën met een vergelijkbare spelling worden getoond."
+  "portal.feedback.list.searchWidenedSimilar": "Geen exacte resultaten. Ideeën met een vergelijkbare spelling worden getoond.",
+  "admin.integrations.oauthError.denied": "De verbinding is geweigerd op {name}. Maak opnieuw verbinding om toegang te geven.",
+  "admin.integrations.oauthError.expired": "Het verbindingsverzoek is verlopen of was ongeldig. Probeer opnieuw verbinding te maken.",
+  "admin.integrations.oauthError.session": "Je sessie is tijdens het verbinden veranderd. Meld je opnieuw aan en maak dan verbinding.",
+  "admin.integrations.oauthError.credentials": "Voeg de app-gegevens van {name} toe voordat je verbinding maakt.",
+  "admin.integrations.oauthError.elsewhere": "Dit {name}-account is al verbonden met een andere Quackback-werkruimte.",
+  "admin.integrations.oauthError.failed": "{name} heeft de verbinding niet voltooid. Probeer opnieuw verbinding te maken."
 }

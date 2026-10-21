@@ -2227,5 +2227,11 @@
   "portal.feedback.list.noSearchResults": "No ideas match “{query}”.",
   "portal.feedback.list.postSearchAsIdea": "Post it as a new idea",
   "portal.feedback.list.searchWidenedMost": "No idea has all your words. Showing ideas with most of them.",
-  "portal.feedback.list.searchWidenedSimilar": "No exact matches. Showing ideas with a similar spelling."
+  "portal.feedback.list.searchWidenedSimilar": "No exact matches. Showing ideas with a similar spelling.",
+  "admin.integrations.oauthError.denied": "The connection was declined on {name}. Connect again to allow access.",
+  "admin.integrations.oauthError.expired": "The connection request expired or was not valid. Try connecting again.",
+  "admin.integrations.oauthError.session": "Your session changed while connecting. Sign in again, then connect.",
+  "admin.integrations.oauthError.credentials": "Add the {name} app credentials before connecting.",
+  "admin.integrations.oauthError.elsewhere": "This {name} account is already connected to another Quackback workspace.",
+  "admin.integrations.oauthError.failed": "{name} didn't finish the connection. Try connecting again."
 }

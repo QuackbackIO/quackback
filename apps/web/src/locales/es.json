@@ -2227,5 +2227,11 @@
   "portal.feedback.list.noSearchResults": "Ninguna idea coincide con “{query}”.",
   "portal.feedback.list.postSearchAsIdea": "Publícala como idea nueva",
   "portal.feedback.list.searchWidenedMost": "Ninguna idea tiene todas tus palabras. Mostrando ideas con la mayoría.",
-  "portal.feedback.list.searchWidenedSimilar": "Sin coincidencias exactas. Mostrando ideas con una ortografía parecida."
+  "portal.feedback.list.searchWidenedSimilar": "Sin coincidencias exactas. Mostrando ideas con una ortografía parecida.",
+  "admin.integrations.oauthError.denied": "La conexión se rechazó en {name}. Vuelve a conectar para permitir el acceso.",
+  "admin.integrations.oauthError.expired": "La solicitud de conexión caducó o no era válida. Vuelve a intentar conectar.",
+  "admin.integrations.oauthError.session": "Tu sesión cambió durante la conexión. Vuelve a iniciar sesión y conecta.",
+  "admin.integrations.oauthError.credentials": "Añade las credenciales de la app de {name} antes de conectar.",
+  "admin.integrations.oauthError.elsewhere": "Esta cuenta de {name} ya está conectada a otro espacio de trabajo de Quackback.",
+  "admin.integrations.oauthError.failed": "{name} no completó la conexión. Vuelve a intentar conectar."
 }

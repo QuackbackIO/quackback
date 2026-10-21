@@ -2227,5 +2227,11 @@
   "portal.feedback.list.noSearchResults": "沒有與「{query}」相符的想法。",
   "portal.feedback.list.postSearchAsIdea": "發布為新想法",
   "portal.feedback.list.searchWidenedMost": "沒有想法包含你的所有詞語。顯示包含其中大部分詞語的想法。",
-  "portal.feedback.list.searchWidenedSimilar": "沒有完全相符的結果。顯示拼寫相近的想法。"
+  "portal.feedback.list.searchWidenedSimilar": "沒有完全相符的結果。顯示拼寫相近的想法。",
+  "admin.integrations.oauthError.denied": "{name} 上的連線遭到拒絕。請重新連線以允許存取。",
+  "admin.integrations.oauthError.expired": "連線要求已過期或無效。請重新嘗試連線。",
+  "admin.integrations.oauthError.session": "連線期間你的工作階段已變更。請重新登入後再連線。",
+  "admin.integrations.oauthError.credentials": "請先新增 {name} 應用程式憑證再連線。",
+  "admin.integrations.oauthError.elsewhere": "此 {name} 帳戶已連線到另一個 Quackback 工作區。",
+  "admin.integrations.oauthError.failed": "{name} 未完成連線。請重新嘗試連線。"
 }

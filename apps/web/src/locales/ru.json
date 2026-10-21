@@ -2227,5 +2227,11 @@
   "portal.feedback.list.noSearchResults": "Нет идей по запросу «{query}».",
   "portal.feedback.list.postSearchAsIdea": "Опубликовать как новую идею",
   "portal.feedback.list.searchWidenedMost": "Ни одна идея не содержит все ваши слова. Показаны идеи с большинством из них.",
-  "portal.feedback.list.searchWidenedSimilar": "Точных совпадений нет. Показаны идеи с похожим написанием."
+  "portal.feedback.list.searchWidenedSimilar": "Точных совпадений нет. Показаны идеи с похожим написанием.",
+  "admin.integrations.oauthError.denied": "Подключение отклонено в {name}. Подключитесь снова, чтобы разрешить доступ.",
+  "admin.integrations.oauthError.expired": "Срок запроса на подключение истёк, или он недействителен. Попробуйте подключиться снова.",
+  "admin.integrations.oauthError.session": "Сеанс изменился во время подключения. Войдите снова, затем подключитесь.",
+  "admin.integrations.oauthError.credentials": "Добавьте учётные данные приложения {name} перед подключением.",
+  "admin.integrations.oauthError.elsewhere": "Этот аккаунт {name} уже подключён к другому рабочему пространству Quackback.",
+  "admin.integrations.oauthError.failed": "{name} не завершил подключение. Попробуйте подключиться снова."
 }

@@ -2227,5 +2227,11 @@
   "portal.feedback.list.noSearchResults": "ไม่มีไอเดียที่ตรงกับ “{query}”",
   "portal.feedback.list.postSearchAsIdea": "โพสต์เป็นไอเดียใหม่",
   "portal.feedback.list.searchWidenedMost": "ไม่มีไอเดียที่มีคำของคุณครบทุกคำ กำลังแสดงไอเดียที่มีคำส่วนใหญ่",
-  "portal.feedback.list.searchWidenedSimilar": "ไม่พบผลลัพธ์ที่ตรงกันทุกประการ กำลังแสดงไอเดียที่สะกดคล้ายกัน"
+  "portal.feedback.list.searchWidenedSimilar": "ไม่พบผลลัพธ์ที่ตรงกันทุกประการ กำลังแสดงไอเดียที่สะกดคล้ายกัน",
+  "admin.integrations.oauthError.denied": "การเชื่อมต่อถูกปฏิเสธบน {name} เชื่อมต่ออีกครั้งเพื่ออนุญาตการเข้าถึง",
+  "admin.integrations.oauthError.expired": "คำขอเชื่อมต่อหมดอายุหรือไม่ถูกต้อง ลองเชื่อมต่ออีกครั้ง",
+  "admin.integrations.oauthError.session": "เซสชันของคุณเปลี่ยนไประหว่างการเชื่อมต่อ ลงชื่อเข้าใช้อีกครั้ง แล้วจึงเชื่อมต่อ",
+  "admin.integrations.oauthError.credentials": "เพิ่มข้อมูลรับรองแอป {name} ก่อนเชื่อมต่อ",
+  "admin.integrations.oauthError.elsewhere": "บัญชี {name} นี้เชื่อมต่อกับพื้นที่ทำงาน Quackback อื่นอยู่แล้ว",
+  "admin.integrations.oauthError.failed": "{name} ไม่ได้ทำการเชื่อมต่อให้เสร็จสิ้น ลองเชื่อมต่ออีกครั้ง"
 }
