@@ -414,6 +414,7 @@ went stale the moment a queue moved.
 | `page-view-partitions`          | `30 2 * * *`   | 1           | 3        | 60s   |
 | `sla-breach-sweep`              | `* * * * *`    | 1           | 3        | 60s   |
 | `snooze-sweep`                  | `* * * * *`    | 1           | 3        | 60s   |
+| `ticket-due-sweep`              | `* * * * *`    | 1           | 3        | 60s   |
 | `workflow-sweep`                | `*/5 * * * *`  | 1           | 3        | 60s   |
 | `workflow-retention`            | `0 4 * * *`    | 1           | 3        | 60s   |
 | `email-log-retention`           | `0 6 * * *`    | 1           | 3        | 60s   |
@@ -615,10 +616,10 @@ summary's AI call. A database call that cannot be cancelled keeps running in
 the background, and its retry may overlap it, which the reactions tolerate
 because their writes are guarded on the state they read.
 
-`event-reactions` (SLA clocks, pair-ticket reopen, CSAT confirm) runs one job
-at a time per worker process, claimed in enqueue order, so in the common case
-its reactions apply in event order. That is all it guarantees. The order is
-not global:
+`event-reactions` (SLA clocks, pair-ticket reopen, CSAT confirm, GitHub issue
+state) runs one job at a time per worker process, claimed in enqueue order, so
+in the common case its reactions apply in event order. That is all it
+guarantees. The order is not global:
 
 - a failed job is retried with `run_at = now() + backoff`, behind later jobs;
 - two worker processes (for example during a deploy overlap) each run one job
@@ -657,6 +658,9 @@ relying on it:
   writes only on the status it read.
 - The CSAT confirm acts only on the involvement the rating was given about,
   the one open when it was submitted.
+- The GitHub issue state closes or reopens the issue of a ticket opened from
+  it only while the ticket still stands where the event left it (closed, or
+  not), read from the row.
 - An SLA recorder ignores an event, and the clocks ignore any message, from
   before the stamp's current application (`appliedAt`), so a reaction that
   runs after the SLA was applied again cannot settle, arm, pause or close the

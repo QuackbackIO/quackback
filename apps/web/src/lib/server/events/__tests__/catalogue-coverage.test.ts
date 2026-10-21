@@ -82,16 +82,28 @@ describe('event catalogue coverage', () => {
     'note_added',
     'published',
     'replied',
+    // a public ticket reply edited or deleted (ticket.reply_updated/_deleted)
+    'reply_updated',
+    'reply_deleted',
+    // a file added to / removed from a sent public ticket reply
+    'attachment_added',
+    'attachment_removed',
     'handed_off',
     'resolved',
     'csat_submitted',
     'csat_comment_added',
     'voted',
     'external_status_changed',
+    'subscriber_added',
+    'subscriber_removed',
     'customer_unresponsive',
     'teammate_unresponsive',
     'approaching_breach',
     'breached',
+    // ticket due dates: the date moved, is close, or has passed
+    'due_changed',
+    'due_soon',
+    'overdue',
     // approvals: a person is asked, decides, and the change is applied
     'requested',
     'decided',

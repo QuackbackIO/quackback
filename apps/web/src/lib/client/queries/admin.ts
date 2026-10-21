@@ -16,6 +16,8 @@ import {
 } from '@/lib/server/functions/admin'
 import { fetchBoardsFn, fetchBoardsWithCountsFn } from '@/lib/server/functions/boards'
 import { fetchPlatformCredentialsMaskedFn } from '@/lib/server/functions/platform-credentials'
+import { listIntegrationDestinationsFn } from '@/lib/server/functions/integration-destinations'
+import { listIntegrationUserMappingsFn } from '@/lib/server/functions/integration-user-mappings'
 import {
   fetchAuthProviderStatusFn,
   fetchAuthProviderCredentialsMaskedFn,
@@ -28,6 +30,7 @@ import { fetchApiKeys } from '@/lib/server/functions/api-keys'
 import { fetchWebhooks } from '@/lib/server/functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server/functions/roadmaps'
 import { fetchPostWithDetails, fetchPostVotersFn } from '@/lib/server/functions/posts'
+import { listPostSubscribersFn } from '@/lib/server/functions/post-subscribers'
 import { fetchMergePreviewFn } from '@/lib/server/functions/post-merge'
 import { fetchPublicStatuses } from '@/lib/server/functions/portal'
 import type { PortalUserListParams } from '@/lib/shared/types'
@@ -266,6 +269,29 @@ export const adminQueries = {
     }),
 
   /**
+   * The destinations (GitHub repositories) a connected integration serves, with
+   * their webhook health. Nested under the integration's key so every
+   * integration mutation refreshes it.
+   */
+  integrationDestinations: (type: string) =>
+    queryOptions({
+      queryKey: ['admin', 'integrations', type, 'destinations'],
+      queryFn: () => listIntegrationDestinationsFn({ data: { integrationType: type } }),
+      staleTime: 30 * 1000,
+    }),
+
+  /**
+   * The accounts on a connected integration (GitHub users) matched to
+   * teammates. Nested under the integration's key like its destinations.
+   */
+  integrationUserMappings: (type: string) =>
+    queryOptions({
+      queryKey: ['admin', 'integrations', type, 'user-mappings'],
+      queryFn: () => listIntegrationUserMappingsFn({ data: { integrationType: type } }),
+      staleTime: 30 * 1000,
+    }),
+
+  /**
    * Get post details by ID
    * NOTE: Uses same query key as inboxKeys.detail() for cache consistency with mutations
    *
@@ -322,6 +348,16 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['inbox', 'voters', postId],
       queryFn: () => fetchPostVotersFn({ data: { id: postId } }),
+      staleTime: 30 * 1000,
+    }),
+
+  /**
+   * Who is subscribed to a post's thread (post.view_private)
+   */
+  postSubscribers: (postId: PostId) =>
+    queryOptions({
+      queryKey: ['inbox', 'subscribers', postId],
+      queryFn: () => listPostSubscribersFn({ data: { postId } }),
       staleTime: 30 * 1000,
     }),
 

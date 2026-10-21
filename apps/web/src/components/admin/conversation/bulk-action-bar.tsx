@@ -2,7 +2,7 @@
  * The floating bulk-action bar (support platform §4.6): appears while a
  * multi-selection is active (or while a value menu is being surfaced for the
  * single open conversation) and applies one action — macro reply, assign, team,
- * priority, snooze, label, or close — to the whole target set. It owns no server logic: the
+ * priority, due date, snooze, label, or close — to the whole target set. It owns no server logic: the
  * inbox route wires each control to the bulk mutation (many rows) or the single
  * conversation fns (the active thread), and toasts the summary.
  *
@@ -11,6 +11,7 @@
  */
 import { XMarkIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
 import { useState } from 'react'
+import { useIntl } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
@@ -20,13 +21,18 @@ import { PriorityMenuItems } from '@/components/admin/conversation/priority-cont
 import { AssigneeMenuItems } from '@/components/admin/conversation/assignee-control'
 import { macrosQuery } from '@/lib/client/queries/macros'
 import { tomorrowAt, inHours, nextMondayAt } from '@/lib/shared/utils'
+import { ticketDueBounds } from '@/lib/shared/ticket-due'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
+import { DateTimePicker } from '@/components/ui/datetime-picker'
+import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,7 +46,7 @@ import {
 import { cn } from '@/lib/shared/utils'
 
 /** The value menus the bar can pop open on demand. */
-export type BulkMenuId = 'assign' | 'assign_team' | 'priority' | 'snooze' | 'tag' | 'macro'
+export type BulkMenuId = 'assign' | 'assign_team' | 'priority' | 'due' | 'snooze' | 'tag' | 'macro'
 
 export interface BulkActionBarProps {
   /** Number of conversations the action targets. */
@@ -56,6 +62,10 @@ export interface BulkActionBarProps {
   onAssign: (assignTo: string | null) => void
   onAssignTeam: (teamId: string) => void
   onPriority: (priority: ConversationPriority) => void
+  /** Set (ISO instant) or clear (null) the due date on every target ticket. A
+   *  conversation targets its linked customer ticket; one with none is
+   *  skipped by the route. */
+  onSetDue: (dueAt: string | null) => void
   onSnooze: (until: string | null) => void
   /** Apply an existing label to the whole target set. */
   onTag: (tagId: string) => void
@@ -72,6 +82,9 @@ export interface BulkActionBarProps {
   /** True when the target includes at least one ticket — a macro reply posts
    *  a conversation message, so the trigger is disabled for ticket targets. */
   disableMacro?: boolean
+  /** True when no target has a ticket to date (no ticket rows, and no
+   *  conversation with a linked ticket). */
+  disableDue?: boolean
   /** Spam-view mode: the bar offers ONLY the spam-lifecycle actions (restore,
    *  delete forever) — triage actions are meaningless on a spam-ended thread. */
   spam?: boolean
@@ -94,6 +107,7 @@ export function BulkActionBar({
   onAssign,
   onAssignTeam,
   onPriority,
+  onSetDue,
   onSnooze,
   onTag,
   onMacro,
@@ -101,6 +115,7 @@ export function BulkActionBar({
   disableSnooze,
   disableTag,
   disableMacro,
+  disableDue,
   spam,
   onRestore,
   onDeleteForever,
@@ -291,6 +306,16 @@ export function BulkActionBar({
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {/* Due date. Tickets carry the date, so a conversation stands in for
+            its linked customer ticket and the trigger is disabled when no
+            target has one. */}
+        <BulkDueMenu
+          open={openMenu === 'due'}
+          onOpenChange={(o) => onOpenMenuChange(o ? 'due' : null)}
+          disabled={pending || !!disableDue}
+          onSetDue={onSetDue}
+        />
+
         {/* Tag. Applies an EXISTING tag to every target — creating taxonomy
             stays in the per-conversation editor, which holds the color picker
             and the manage_tags-gated create. Tickets carry no tags, so the
@@ -369,5 +394,118 @@ export function BulkActionBar({
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * The bar's Due date menu: quick presets, a "Pick a date" popover holding a
+ * date-and-time picker bounded by the teammate window, and Clear. The picker
+ * popover anchors to the trigger so it opens where the menu was.
+ */
+function BulkDueMenu({
+  open,
+  onOpenChange,
+  disabled,
+  onSetDue,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  disabled: boolean
+  onSetDue: (dueAt: string | null) => void
+}) {
+  const intl = useIntl()
+  const [pickOpen, setPickOpen] = useState(false)
+  const [picked, setPicked] = useState<Date | undefined>(undefined)
+  const [bounds, setBounds] = useState(() => ticketDueBounds('team'))
+
+  const openPicker = () => {
+    setPicked(undefined)
+    setBounds(ticketDueBounds('team'))
+    setPickOpen(true)
+  }
+
+  return (
+    <Popover open={pickOpen} onOpenChange={setPickOpen}>
+      <PopoverAnchor asChild>
+        <span className="inline-flex">
+          <DropdownMenu open={open} onOpenChange={onOpenChange}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                disabled={disabled}
+                title={
+                  disabled
+                    ? intl.formatMessage({
+                        id: 'admin.inbox.bulk.due.ticketsOnly',
+                        defaultMessage: 'Only available for tickets',
+                      })
+                    : undefined
+                }
+                className={triggerClass}
+              >
+                {intl.formatMessage({
+                  id: 'admin.inbox.bulk.due.label',
+                  defaultMessage: 'Due date',
+                })}
+                <ChevronUpIcon className="size-3" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" side="top">
+              <DropdownMenuItem onClick={() => onSetDue(inHours(24).toISOString())}>
+                {intl.formatMessage({
+                  id: 'admin.inbox.bulk.due.in24Hours',
+                  defaultMessage: 'In 24 hours',
+                })}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSetDue(tomorrowAt(17).toISOString())}>
+                {intl.formatMessage({
+                  id: 'admin.inbox.bulk.due.tomorrow',
+                  defaultMessage: 'Tomorrow',
+                })}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSetDue(nextMondayAt(9).toISOString())}>
+                {intl.formatMessage({
+                  id: 'admin.inbox.bulk.due.nextMonday',
+                  defaultMessage: 'Next Monday',
+                })}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={openPicker}>
+                {intl.formatMessage({
+                  id: 'admin.inbox.bulk.due.pick',
+                  defaultMessage: 'Pick a date',
+                })}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onSetDue(null)}>
+                {intl.formatMessage({
+                  id: 'admin.inbox.bulk.due.clear',
+                  defaultMessage: 'Clear due date',
+                })}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </span>
+      </PopoverAnchor>
+      <PopoverContent side="top" className="flex w-72 flex-col gap-2 p-3">
+        <DateTimePicker
+          value={picked}
+          onChange={setPicked}
+          minDate={bounds.min}
+          maxDate={bounds.max}
+          className="w-full"
+        />
+        <Button
+          size="sm"
+          disabled={!picked}
+          onClick={() => {
+            if (!picked) return
+            setPickOpen(false)
+            onSetDue(picked.toISOString())
+          }}
+        >
+          {intl.formatMessage({ id: 'admin.inbox.bulk.due.apply', defaultMessage: 'Set due date' })}
+        </Button>
+      </PopoverContent>
+    </Popover>
   )
 }

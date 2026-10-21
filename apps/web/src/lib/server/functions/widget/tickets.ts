@@ -1,6 +1,12 @@
 import { createServerFn } from '@tanstack/react-start'
 import { conversationIdSchema } from '@/lib/shared/schemas/conversation'
-import { ticketIdSchema, createMyTicketSchema } from '@/lib/shared/schemas/tickets'
+import {
+  ticketIdSchema,
+  createMyTicketSchema,
+  ticketColleaguesSchema,
+  shareMyTicketSchema,
+  removeMyTicketShareSchema,
+} from '@/lib/shared/schemas/tickets'
 
 export const widgetGetMyTicketsFn = createServerFn({ method: 'GET' }).handler(async () => {
   const { requireWidgetAuth } = await import('../widget-auth')
@@ -60,4 +66,36 @@ export const widgetUnwatchMyTicketFn = createServerFn({ method: 'POST' })
     const { requireWidgetAuth } = await import('../widget-auth')
     const { runUnwatchMyTicket } = await import('../tickets')
     return runUnwatchMyTicket(await requireWidgetAuth(), data)
+  })
+
+export const widgetGetMyTicketSharingFn = createServerFn({ method: 'GET' })
+  .validator(ticketIdSchema)
+  .handler(async ({ data }) => {
+    const { requireWidgetAuth } = await import('../widget-auth')
+    const { runGetMyTicketSharing } = await import('../tickets')
+    return runGetMyTicketSharing(await requireWidgetAuth(), data)
+  })
+
+export const widgetListMyTicketColleaguesFn = createServerFn({ method: 'GET' })
+  .validator(ticketColleaguesSchema)
+  .handler(async ({ data }) => {
+    const { requireWidgetAuth } = await import('../widget-auth')
+    const { runListMyTicketColleagues } = await import('../tickets')
+    return runListMyTicketColleagues(await requireWidgetAuth(), data)
+  })
+
+export const widgetShareMyTicketFn = createServerFn({ method: 'POST' })
+  .validator(shareMyTicketSchema)
+  .handler(async ({ data }) => {
+    const { requireWidgetAuth } = await import('../widget-auth')
+    const { runShareMyTicket } = await import('../tickets')
+    return runShareMyTicket(await requireWidgetAuth(), data)
+  })
+
+export const widgetRemoveMyTicketShareFn = createServerFn({ method: 'POST' })
+  .validator(removeMyTicketShareSchema)
+  .handler(async ({ data }) => {
+    const { requireWidgetAuth } = await import('../widget-auth')
+    const { runRemoveMyTicketShare } = await import('../tickets')
+    return runRemoveMyTicketShare(await requireWidgetAuth(), data)
   })
