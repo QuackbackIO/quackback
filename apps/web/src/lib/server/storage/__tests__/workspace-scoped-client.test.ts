@@ -125,19 +125,29 @@ describe('every command is namespaced', () => {
   })
 
   it('reads, presigns and deletes through the same namespace', async () => {
-    await withWorkspace('workspace-alpha', () => getS3Object(PUBLIC_KEY))
+    const fetchMock = vi.fn(async (_url: string) => new Response(new Uint8Array([1])))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await withWorkspace('workspace-alpha', () => getS3Object(PUBLIC_KEY))
+    } finally {
+      vi.unstubAllGlobals()
+    }
     await withWorkspace('workspace-alpha', () => deleteObject(PUBLIC_KEY))
     await withWorkspace('workspace-alpha', () => generatePresignedGetUrl(PUBLIC_KEY, 60))
     await withWorkspace('workspace-alpha', () =>
       generatePresignedUploadUrl(PUBLIC_KEY, 'image/png')
     )
 
-    expect(sent.map((c) => c.Key)).toEqual([
+    // Only the delete is sent. A proxied read presigns its GET and fetches the
+    // bytes natively (see get-s3-object.test.ts).
+    expect(sent.map((c) => c.Key)).toEqual([nameFor('workspace-alpha', PUBLIC_KEY)])
+    // Uploads no longer presign a PUT. Reads still do, proxied or redirected.
+    expect(presigned.map((c) => c.Key)).toEqual([
       nameFor('workspace-alpha', PUBLIC_KEY),
       nameFor('workspace-alpha', PUBLIC_KEY),
     ])
-    // Uploads no longer presign a PUT. Reads still do.
-    expect(presigned.map((c) => c.Key)).toEqual([nameFor('workspace-alpha', PUBLIC_KEY)])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]![0]).toContain(encodeURI(nameFor('workspace-alpha', PUBLIC_KEY)))
   })
 
   it('cannot collide two workspaces on one key in one bucket', async () => {
