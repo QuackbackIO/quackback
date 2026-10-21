@@ -45,6 +45,8 @@ import { subscribeToTicket } from './ticket-subscription.service'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { resolveTicketTypeForCreate } from './ticket-type.service'
 import { resolveStage } from './ticket.lifecycle'
+import { assertTicketDueAt } from './ticket-due.rules'
+import { dueAlertMarkersOnSet } from '@/lib/shared/ticket-due'
 import type { CreateTicketInput, TicketDTO } from './ticket.types'
 
 const log = logger.child({ component: 'tickets' })
@@ -165,6 +167,10 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // themselves — their inline images may only reference our own storage.
   const filedByRequester =
     !!actor.principalId && actor.principalId === (input.requesterPrincipalId ?? null)
+  // The shared due date: a requester proposing one for their own ticket gets
+  // the customer window (no past dates); a teammate/integration the wider one.
+  const dueAt = input.dueAt ?? null
+  if (dueAt) assertTicketDueAt(dueAt, filedByRequester ? 'customer' : 'team')
   const openingAttachments = await resolveAttachments(input.attachments, {
     principalId: actor.principalId ?? null,
     canAttachAnyFile: canActAsAgent(actor).allowed,
@@ -241,6 +247,13 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
         assigneePrincipalId: input.assigneePrincipalId ?? null,
         companyId: input.companyId ?? null,
         customAttributes: input.customAttributes ?? {},
+        dueAt,
+        ...dueAlertMarkersOnSet({
+          dueAt,
+          now: new Date(),
+          actorIsAssignee:
+            !!actor.principalId && actor.principalId === (input.assigneePrincipalId ?? null),
+        }),
       })
       .returning()
 
@@ -422,7 +435,10 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
     ticketId: created.ticket.id,
     principalId: actor.principalId,
     type: 'ticket.created',
-    metadata: { ticketType: created.ticket.type },
+    metadata: {
+      ticketType: created.ticket.type,
+      ...(created.ticket.dueAt ? { dueAt: created.ticket.dueAt.toISOString() } : {}),
+    },
   })
   // PHASE 1b: emitted AFTER the pair link exists (same transaction) and after
   // the backing conversation's side effects above — a ticket.created dispatch
