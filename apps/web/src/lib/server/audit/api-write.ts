@@ -73,6 +73,7 @@ export const API_ROUTE_SEGMENTS: ReadonlySet<string> = new Set([
   'merge',
   'messages',
   'moderation',
+  'move',
   'note',
   'openapi',
   'pending',

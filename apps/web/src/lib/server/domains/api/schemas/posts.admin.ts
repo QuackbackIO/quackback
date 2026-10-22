@@ -36,6 +36,18 @@ const MergeResultSchema = z.object({
   duplicatePost: z.object({ id: TypeIdSchema }),
 })
 
+const MoveBodySchema = createRequestBodySchema({
+  boardId: TypeIdSchema.meta({
+    description: 'The board to move the post to',
+    example: 'board_01h455vb4pex5vsknk084sn02q',
+  }),
+})
+
+const MoveResultSchema = z.object({
+  id: TypeIdSchema.meta({ example: 'post_01h455vb4pex5vsknk084sn02q' }),
+  boardId: TypeIdSchema.meta({ example: 'board_01h455vb4pex5vsknk084sn02q' }),
+})
+
 const AcceptBodySchema = createRequestBodySchema({
   swapDirection: z.boolean().optional().meta({
     description: 'Merge the suggestion target into the source instead of the reverse',
@@ -110,6 +122,31 @@ registerPath('/posts/{postId}/merge', {
         },
       },
       ...errorResponses(400, 403, 404, 409),
+    },
+  },
+})
+
+registerPath('/posts/{postId}/move', {
+  post: {
+    tags: ['Posts'],
+    summary: 'Move a post to another board',
+    description:
+      'Moves a post to a different board, keeping its votes and comments, and records a board-changed activity entry. Requires the post.set_board permission.',
+    parameters: [postIdParam],
+    requestBody: {
+      required: true,
+      content: { 'application/json': { schema: asSchema(MoveBodySchema) } },
+    },
+    responses: {
+      200: {
+        description: 'Post moved',
+        content: {
+          'application/json': {
+            schema: createItemResponseSchema(MoveResultSchema, 'Moved post'),
+          },
+        },
+      },
+      ...errorResponses(400, 401, 403, 404),
     },
   },
 })
