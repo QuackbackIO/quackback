@@ -30,6 +30,7 @@ import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-midd
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { ValidationError } from '@/lib/shared/errors'
+import { AI_CHAT_OPTIONS } from '@/lib/server/domains/ai/chat-options'
 
 const DRAFT_SYSTEM_PROMPT = `You help an admin write descriptions for a customer-support conversation attribute that an AI classifier will use to categorize conversations.
 
@@ -105,6 +106,7 @@ export async function draftAttributeDescriptions(
   ].join('\n')
 
   const object = await chat({
+    ...AI_CHAT_OPTIONS,
     adapter: openaiCompatibleText(model, {
       baseURL: config.openaiBaseUrl!,
       apiKey: config.openaiApiKey!,

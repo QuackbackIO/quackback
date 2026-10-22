@@ -70,6 +70,18 @@ beforeEach(() => {
 })
 
 describe('structuredChat', () => {
+  it('keeps the library quiet on every attempt', async () => {
+    hoisted.chat
+      .mockRejectedValueOnce(rejection('json_schema is unsupported'))
+      .mockRejectedValueOnce(rejection('json_object is unsupported', 'response_format'))
+      .mockResolvedValueOnce('{"sentiment":"positive","confidence":1}')
+
+    await structuredChat(base)
+
+    expect(hoisted.chat).toHaveBeenCalledTimes(3)
+    expect(hoisted.chat.mock.calls.every(([options]) => options.debug === false)).toBe(true)
+  })
+
   it('sends json_schema through outputSchema first', async () => {
     hoisted.chat.mockResolvedValueOnce({ sentiment: 'positive', confidence: 0.9 })
     const out = await structuredChat(base)

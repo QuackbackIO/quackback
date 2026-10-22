@@ -48,6 +48,7 @@ import {
 import { buildConversationTranscript, GROUNDING_CHAR_BUDGET } from './transcript'
 import { createId, type ConversationId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { AI_CHAT_OPTIONS } from '@/lib/server/domains/ai/chat-options'
 
 const log = logger.child({ component: 'conversation-summary' })
 
@@ -140,6 +141,7 @@ export async function summarizeConversationOnClose(
     // counts as on-demand Summarize-chip calls; this fire-and-forget path
     // must meter against aiTokensPerMonth without inflating that report.
     const object = await chat({
+      ...AI_CHAT_OPTIONS,
       adapter: openaiCompatibleText(model, {
         baseURL: config.openaiBaseUrl!,
         apiKey: config.openaiApiKey!,
