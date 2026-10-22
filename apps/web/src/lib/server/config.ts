@@ -258,6 +258,7 @@ const configSchema = z
     // AI (optional)
     openaiApiKey: z.string().optional(),
     openaiBaseUrl: z.string().optional(),
+    openaiDefaultHeaders: z.string().optional(),
     aiChatModel: z.string().optional(),
     aiEmbeddingModel: z.string().optional(),
     aiSummaryModel: z.string().optional(),
@@ -420,6 +421,7 @@ function buildConfigFromEnv(): unknown {
     // AI
     openaiApiKey: env('OPENAI_API_KEY'),
     openaiBaseUrl: env('OPENAI_BASE_URL'),
+    openaiDefaultHeaders: env('OPENAI_DEFAULT_HEADERS'),
     aiChatModel: env('AI_CHAT_MODEL'),
     aiEmbeddingModel: env('AI_EMBEDDING_MODEL'),
     aiSummaryModel: env('AI_SUMMARY_MODEL'),
@@ -687,6 +689,9 @@ export const config = {
   },
   get openaiBaseUrl() {
     return loadConfig().openaiBaseUrl
+  },
+  get openaiDefaultHeaders() {
+    return loadConfig().openaiDefaultHeaders
   },
   get aiChatModel() {
     return loadConfig().aiChatModel

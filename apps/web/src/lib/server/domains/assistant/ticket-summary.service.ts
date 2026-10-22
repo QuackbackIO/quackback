@@ -29,6 +29,7 @@
  * (events/event-reactions.ts) runs it off `ticket.status_changed → closed`,
  * exactly as the conversation-close reaction runs its sibling.
  */
+import { getOpenAIClientOptions } from '@/lib/server/domains/ai/client-options'
 import { chat } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
@@ -125,10 +126,7 @@ export async function summarizeTicketOnClose(
     // chip's 'copilot_summary' (analytics/copilot-usage.ts counts only the
     // latter), matching how the conversation on-close path stays off that report.
     const object = await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+      adapter: openaiCompatibleText(model, getOpenAIClientOptions(config)),
       systemPrompts: [SYSTEM_PROMPT],
       messages: [{ role: 'user', content: truncated }],
       outputSchema: TicketSummarySchema,

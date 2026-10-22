@@ -14,6 +14,7 @@
  * catalogue; preview always classifies exactly one, possibly-unsaved
  * definition) and only reach here once they're committed to spending a call.
  */
+import { getOpenAIClientOptions } from '@/lib/server/domains/ai/client-options'
 import { chat } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
@@ -148,10 +149,7 @@ export async function runClassificationCall(
   ].join('\n')
 
   const object = await chat({
-    adapter: openaiCompatibleText(model, {
-      baseURL: config.openaiBaseUrl!,
-      apiKey: config.openaiApiKey!,
-    }),
+    adapter: openaiCompatibleText(model, getOpenAIClientOptions(config)),
     systemPrompts: [CLASSIFICATION_SYSTEM_PROMPT],
     messages: [{ role: 'user', content: userContent }],
     outputSchema: ClassificationResponseSchema,
