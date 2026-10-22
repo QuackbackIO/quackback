@@ -660,6 +660,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'cross-workspace cache.',
   },
   {
+    file: 'packages/email/src/branding.ts',
+    name: 'resolver',
+    category: 'process-lifetime',
+    reason:
+      'Holds a function pointer installed at boot. Each send awaits it, and the function reads ' +
+      'the workspace header-logo settings through the scoped db Proxy, so sharing the pointer is ' +
+      'not a cross-workspace cache.',
+  },
+  {
     file: 'packages/email/src/default-from.ts',
     name: 'resolver',
     category: 'process-lifetime',
