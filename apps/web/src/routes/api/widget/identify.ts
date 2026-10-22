@@ -15,7 +15,10 @@ import {
   isNull,
   sql,
 } from '@/lib/server/db'
-import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
+import {
+  ensurePrincipalForUser,
+  updatePrincipalFields,
+} from '@/lib/server/domains/principals/principal.factory'
 import { isBlocked } from '@/lib/server/domains/principals/blocking'
 import { isTeamMember } from '@/lib/shared/roles'
 import { getWidgetConfig, getWidgetSecret } from '@/lib/server/domains/settings/settings.widget'
@@ -149,6 +152,15 @@ async function findOrCreateSession(
   return { id, token }
 }
 
+/**
+ * The REST identify's bounds for the same fields (api/v1/users/identify.ts).
+ * A claim outside them still reaches the user row as before, but is not
+ * copied onto the principal, whose name and picture are public on posts and
+ * comments.
+ */
+const principalDisplayName = z.string().min(1).max(200)
+const principalAvatarUrl = z.string().url()
+
 interface IdentifiedUser {
   id: string
   email: string
@@ -280,7 +292,7 @@ export const Route = createFileRoute('/api/widget/identify')({
           // Do not write host-app profile fields onto a teammate row.
           const existingPrincipal = await db.query.principal.findFirst({
             where: eq(principal.userId, userRecord.id),
-            columns: { role: true },
+            columns: { role: true, type: true, displayName: true, avatarUrl: true },
           })
           const isTeammate = isTeamMember(existingPrincipal?.role)
 
@@ -346,6 +358,35 @@ export const Route = createFileRoute('/api/widget/identify')({
             if (typeof updates.email === 'string') userRecord.email = updates.email
             if ('image' in updates) userRecord.image = (updates.image as string | null) ?? null
             if (typeof updates.externalId === 'string') userRecord.externalId = updates.externalId
+          }
+
+          // Post and comment author labels read the principal, which
+          // ensurePrincipalForUser never rewrites once it exists. Keep its
+          // public name and picture in step with the claims, as the REST
+          // identify does, for an ordinary portal user only. A principal that
+          // already matches gets no write; the guards make the database
+          // re-check the type and role read above.
+          if (!isTeammate && existingPrincipal?.type === 'user') {
+            const principalUpdates: { displayName?: string; avatarUrl?: string } = {}
+            if (
+              identified.name &&
+              identified.name !== existingPrincipal.displayName &&
+              principalDisplayName.safeParse(identified.name).success
+            ) {
+              principalUpdates.displayName = identified.name
+            }
+            if (
+              identified.avatarURL &&
+              identified.avatarURL !== existingPrincipal.avatarUrl &&
+              principalAvatarUrl.safeParse(identified.avatarURL).success
+            ) {
+              principalUpdates.avatarUrl = identified.avatarURL
+            }
+            if (Object.keys(principalUpdates).length > 0) {
+              await updatePrincipalFields({ userId: userRecord.id as UserId }, principalUpdates, {
+                guards: { onlyType: 'user', onlyRole: 'user' },
+              })
+            }
           }
         } else {
           const [created] = await db
