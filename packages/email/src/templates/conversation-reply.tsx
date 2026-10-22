@@ -1,4 +1,5 @@
 import { Body, Head, Html, Link, Preview, Text } from '@react-email/components'
+import { emailBodyHtml } from './email-body-html'
 
 /**
  * Human correspondence for the email channel: the agent's words are the body.
@@ -107,7 +108,7 @@ export function ConversationReplyEmail({
       <Preview>{preview}</Preview>
       <Body style={page}>
         {bodyHtml ? (
-          <div style={body} dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+          <div style={body} dangerouslySetInnerHTML={{ __html: emailBodyHtml(bodyHtml) }} />
         ) : (
           <Text style={{ ...body, margin: '0 0 13px' }}>{messagePreview}</Text>
         )}
