@@ -1,5 +1,6 @@
 import {
   setDefaultFromResolver,
+  setEmailBrandingResolver,
   setEmailLogSink,
   setEmailPoweredByResolver,
   type EmailLogSinkEntry,
@@ -78,6 +79,16 @@ export function ensureEmailLogSink(): void {
     const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
     const { shouldShowPoweredBy } = await import('@/lib/server/domains/settings/cloud/powered-by')
     return shouldShowPoweredBy(await getCloudConfig())
+  })
+  setEmailBrandingResolver(async () => {
+    const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
+    const settings = await db.query.settings.findFirst({
+      columns: { headerDisplayMode: true, headerLogoKey: true },
+    })
+    // Same rule as the portal header: the wordmark shows only in custom-logo mode.
+    const wordmarkUrl =
+      settings?.headerDisplayMode === 'custom_logo' ? getEmailSafeUrl(settings.headerLogoKey) : null
+    return { wordmarkUrl }
   })
   setDefaultFromResolver(() => getCurrentWorkspace()?.email.from ?? null)
 }

@@ -72,9 +72,11 @@ import { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-
 import { CsatRequestEmail } from './templates/csat-request'
 import { VerifyAddressEmail } from './templates/verify-address'
 export { setEmailPoweredByResolver } from './powered-by'
+export { setEmailBrandingResolver, type EmailBranding } from './branding'
 export { setDefaultFromResolver, resetDefaultFromResolver } from './default-from'
 import { createElement } from 'react'
 import { EmailPoweredByProvider, resolveEmailPoweredBy } from './powered-by'
+import { EmailBrandingProvider, resolveEmailBranding } from './branding'
 import { resolvedDefaultFrom } from './default-from'
 
 /**
@@ -580,12 +582,18 @@ async function sendEmail(
     attachments?: EmailAttachment[]
   } & ThreadingOptions
 ): Promise<EmailResult> {
-  const showPoweredBy = await resolveEmailPoweredBy()
+  const [showPoweredBy, branding] = await Promise.all([
+    resolveEmailPoweredBy(),
+    resolveEmailBranding(),
+  ])
   return dispatch({
     ...options,
-    react: createElement(EmailPoweredByProvider, {
-      value: showPoweredBy,
-      children: options.react,
+    react: createElement(EmailBrandingProvider, {
+      value: branding,
+      children: createElement(EmailPoweredByProvider, {
+        value: showPoweredBy,
+        children: options.react,
+      }),
     }),
   })
 }
