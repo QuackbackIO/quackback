@@ -179,6 +179,13 @@ export interface VisitorConversationThreadProps {
   compact?: boolean
   /** Text the composer starts with on its first mount; a send clears it as usual. */
   initialDraft?: string
+  /**
+   * Files handed over by the embedding page (the widget's `Quackback.attach`).
+   * Each `version` bump (and the first mount) takes the queued files and stages
+   * them in the tray, so they upload, show progress and send exactly like
+   * files the visitor picked.
+   */
+  hostFiles?: { version: number; take: () => File[] }
 }
 
 /**
@@ -209,6 +216,7 @@ export function VisitorConversationThread({
   autofocusComposer = false,
   compact = false,
   initialDraft,
+  hostFiles,
 }: VisitorConversationThreadProps) {
   const intl = useIntl()
   const formatDate = useLocalDateFormatter()
@@ -322,6 +330,13 @@ export function VisitorConversationThread({
     clear: clearAttachments,
     uploading,
   } = useConversationComposerAttachments(uploadFile)
+  const hostFilesVersion = hostFiles?.version
+  const takeHostFiles = hostFiles?.take
+  useEffect(() => {
+    if (!takeHostFiles) return
+    const files = takeHostFiles()
+    if (files.length > 0) void addFiles(files)
+  }, [hostFilesVersion, takeHostFiles, addFiles])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const composerPlaceholder = intl.formatMessage({
     id: 'widget.messenger.placeholder',

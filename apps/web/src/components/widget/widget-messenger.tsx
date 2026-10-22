@@ -21,6 +21,8 @@ interface WidgetMessengerProps {
   autofocusComposer?: boolean
   /** Text the composer starts with (a host's `open({ view: 'chat', body })`). */
   initialDraft?: string
+  /** Files a host handed over with `Quackback.attach(...)`, staged in the composer tray. */
+  hostFiles?: { version: number; take: () => File[] }
 }
 
 /**
@@ -35,6 +37,7 @@ export function WidgetMessenger({
   conversationTarget,
   autofocusComposer = false,
   initialDraft,
+  hostFiles,
 }: WidgetMessengerProps = {}) {
   const queryClient = useQueryClient()
   const { user, ensureSession, sessionVersion } = useWidgetAuth()
@@ -82,6 +85,7 @@ export function WidgetMessenger({
         showHeader={false}
         autofocusComposer={autofocusComposer}
         initialDraft={initialDraft}
+        hostFiles={hostFiles}
         compact
       />
     </VisitorSurfaceRpcProvider>

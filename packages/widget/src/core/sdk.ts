@@ -5,6 +5,9 @@ import type {
   WidgetUser,
   EventName,
   EventHandler,
+  AttachOptions,
+  AttachResult,
+  AttachError,
 } from '../types'
 import { createEmitter } from './events'
 import { createBridge, type Bridge } from './postmessage'
@@ -28,12 +31,43 @@ type Command =
   | 'tracking'
   | 'on'
   | 'off'
+  | 'attach'
 
 export interface SDK {
   dispatch(command: Command, arg1?: unknown, arg2?: unknown): unknown
   isOpen(): boolean
   getUser(): WidgetUser | null
   isIdentified(): boolean
+}
+
+/** How long a sent attach waits for the instance (an instance without the command never answers). */
+const ATTACH_RESULT_TIMEOUT_MS = 15_000
+
+interface PendingAttach {
+  message: { requestId: string; file: Blob; name: string }
+  resolve: (result: AttachResult) => void
+  reject: (error: Error) => void
+  timer: number | null
+}
+
+function attachError(code: AttachError): Error {
+  return new Error(code)
+}
+
+function isAttachmentName(name: unknown): name is string {
+  if (typeof name !== 'string' || name.length === 0 || name.length > 255) return false
+  if (name !== name.trim() || /[\\/]/.test(name) || /^\.+$/.test(name)) return false
+  for (let i = 0; i < name.length; i += 1) {
+    const code = name.charCodeAt(i)
+    if (code < 0x20 || code === 0x7f) return false
+  }
+  return true
+}
+
+let attachCounter = 0
+function newRequestId(): string {
+  attachCounter += 1
+  return `att${Date.now().toString(36)}${attachCounter.toString(36)}`
 }
 
 function isSafeHttpUrl(raw: string): boolean {
@@ -71,6 +105,70 @@ export function createSDK(): SDK {
   let analyticsConfig: { instanceUrl: string; deviceTracking: boolean } | null = null
   let pendingDevice: string | null = null
   const emitter = createEmitter()
+  // Attach requests by id: queued until the iframe is ready, then sent once.
+  const attaches = new Map<string, PendingAttach>()
+
+  function sendAttach(pending: PendingAttach): void {
+    if (!bridge) return
+    bridge.send('quackback:attach', pending.message)
+    pending.timer = window.setTimeout(() => {
+      attaches.delete(pending.message.requestId)
+      pending.reject(attachError('ATTACHMENT_UNAVAILABLE'))
+    }, ATTACH_RESULT_TIMEOUT_MS)
+  }
+
+  function settleAttach(msg: {
+    requestId?: unknown
+    ok?: unknown
+    name?: unknown
+    size?: unknown
+    error?: unknown
+  }): void {
+    if (typeof msg.requestId !== 'string') return
+    const pending = attaches.get(msg.requestId)
+    if (!pending) return
+    attaches.delete(msg.requestId)
+    if (pending.timer !== null) window.clearTimeout(pending.timer)
+    if (msg.ok === true && typeof msg.name === 'string' && typeof msg.size === 'number') {
+      pending.resolve({ name: msg.name, size: msg.size })
+      return
+    }
+    const code =
+      msg.error === 'ATTACHMENT_INVALID' || msg.error === 'ATTACHMENT_TOO_LARGE'
+        ? msg.error
+        : 'ATTACHMENT_UNAVAILABLE'
+    pending.reject(attachError(code))
+  }
+
+  function rejectAllAttaches(): void {
+    for (const pending of attaches.values()) {
+      if (pending.timer !== null) window.clearTimeout(pending.timer)
+      pending.reject(attachError('ATTACHMENT_UNAVAILABLE'))
+    }
+    attaches.clear()
+  }
+
+  function attach(file: unknown, options: unknown): Promise<AttachResult> {
+    if (!config) return Promise.reject(attachError('ATTACHMENT_UNAVAILABLE'))
+    const opts = options && typeof options === 'object' ? (options as AttachOptions) : {}
+    const name =
+      opts.name ?? (typeof File !== 'undefined' && file instanceof File ? file.name : undefined)
+    if (!(file instanceof Blob) || file.size <= 0 || !isAttachmentName(name)) {
+      return Promise.reject(attachError('ATTACHMENT_INVALID'))
+    }
+    // The file is staged in the messenger composer, so the visitor lands there.
+    dispatch('open', { view: 'chat' })
+    return new Promise<AttachResult>((resolve, reject) => {
+      const pending: PendingAttach = {
+        message: { requestId: newRequestId(), file, name },
+        resolve,
+        reject,
+        timer: null,
+      }
+      attaches.set(pending.message.requestId, pending)
+      if (ready && bridge) sendAttach(pending)
+    })
+  }
 
   function sendMobileState(): void {
     if (ready && bridge) bridge.send('quackback:mobile', !!mobileMql?.matches)
@@ -99,11 +197,18 @@ export function createSDK(): SDK {
           bridge!.send('quackback:open', pendingOpen)
           pendingOpen = null
         }
+        // After the open, so the chat view is there for the staged files.
+        for (const pending of attaches.values()) {
+          if (pending.timer === null) sendAttach(pending)
+        }
         sendMobileState()
         emitter.emit('ready', {})
         break
       case 'quackback:close':
         dispatch('close')
+        break
+      case 'quackback:attach-result':
+        settleAttach(msg as Parameters<typeof settleAttach>[0])
         break
       case 'quackback:unread': {
         // Total unread from the iframe → the launcher badge (shown only while
@@ -428,7 +533,10 @@ export function createSDK(): SDK {
           if (ready && bridge) bridge.send('quackback:device', null)
         }
         return
+      case 'attach':
+        return attach(a, b)
       case 'destroy':
+        rejectAllAttaches()
         cancelPanelPreload()
         panel?.destroy()
         launcher?.remove()

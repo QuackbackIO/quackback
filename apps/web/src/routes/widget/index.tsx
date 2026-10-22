@@ -28,6 +28,7 @@ import {
   visibleTabsForVisitor,
 } from '@/components/widget/widget-nav'
 import { resolveOpenCommand, type WidgetComposeRequest } from '@/components/widget/widget-compose'
+import { resolveHostAttachment } from '@/components/widget/widget-host-attach'
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
 import { WidgetHeroBackdrop } from '@/components/widget/widget-hero-backdrop'
@@ -473,6 +474,16 @@ function WidgetPage() {
   // A host's `open({ view: 'chat', body })`. The nonce remounts the messenger
   // so a draft sent while it is already open still lands in the composer.
   const [messengerDraft, setMessengerDraft] = useState<{ nonce: number; body: string } | null>(null)
+  // Files from the host's `Quackback.attach(...)`, waiting for the messenger
+  // composer: it takes them on mount, or as each new one arrives (the version
+  // bump), and stages them in its tray like files the visitor picked.
+  const hostFilesRef = useRef<File[]>([])
+  const [hostFilesVersion, setHostFilesVersion] = useState(0)
+  const takeHostFiles = useCallback(() => {
+    const files = hostFilesRef.current
+    hostFilesRef.current = []
+    return files
+  }, [])
   // Manual size preference: the header's expand/collapse button flips this,
   // and it is STICKY — collapsing turns auto-expansion off for every later
   // item view until the visitor expands again. Persisted per browser.
@@ -594,6 +605,29 @@ function WidgetPage() {
       if (!msg || typeof msg !== 'object') return
       if (msg.type === 'quackback:mobile') {
         setHostIsMobile(!!msg.data)
+        return
+      }
+      if (msg.type === 'quackback:attach') {
+        // The SDK opens the chat view first; the file waits for its composer.
+        const resolved = resolveHostAttachment(msg.data, tabs)
+        if (!resolved.ok) {
+          sendToHost({
+            type: 'quackback:attach-result',
+            requestId: resolved.requestId,
+            ok: false,
+            error: resolved.error,
+          })
+          return
+        }
+        hostFilesRef.current.push(resolved.file)
+        setHostFilesVersion((version) => version + 1)
+        sendToHost({
+          type: 'quackback:attach-result',
+          requestId: resolved.requestId,
+          ok: true,
+          name: resolved.file.name,
+          size: resolved.file.size,
+        })
         return
       }
       if (msg.type !== 'quackback:open') return
@@ -980,6 +1014,7 @@ function WidgetPage() {
           <WidgetMessenger
             key={`${conversationTarget ?? 'active'}:${messengerDraft?.nonce ?? 0}`}
             initialDraft={messengerDraft?.body}
+            hostFiles={{ version: hostFilesVersion, take: takeHostFiles }}
             helpEnabled={tabs.help}
             onArticleSelect={handleHelpArticleSelect}
             conversationTarget={conversationTarget === null ? undefined : conversationTarget}
