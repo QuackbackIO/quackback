@@ -83,6 +83,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   sql: vi.fn(() => ({ kind: 'atomic-metadata-patch' })),
 }))
 
+// The atomic metadata merge's rendered SQL is covered by jsonb-text.test.ts;
+// here it only has to be the atomic expression, not a JS-merged string.
+vi.mock('@/lib/server/db/jsonb-text', () => ({
+  mergeJsonbText: vi.fn(() => ({ kind: 'atomic-metadata-patch' })),
+}))
+
 vi.mock('@quackback/ids', () => ({
   generateId: vi.fn((prefix: string) => `${prefix}_generated123`),
 }))
