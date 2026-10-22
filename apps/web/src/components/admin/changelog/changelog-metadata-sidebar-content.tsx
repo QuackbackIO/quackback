@@ -132,15 +132,44 @@ export function ChangelogMetadataSidebarContent({
       'Pick a date'
     )
 
+  type ShippedPostItem = Awaited<ReturnType<typeof searchShippedPostsFn>>[number]
+  const knownPostsRef = useRef<Map<PostId, ShippedPostItem>>(new Map())
+  const activeIncludeIdsRef = useRef<PostId[]>(linkedPostIds)
+  if (linkedPostIds.some((id) => !knownPostsRef.current.has(id))) {
+    const nextKey = linkedPostIds.join(',')
+    if (activeIncludeIdsRef.current.join(',') !== nextKey) {
+      activeIncludeIdsRef.current = linkedPostIds
+    }
+  }
+  const queryIncludeIds = activeIncludeIdsRef.current
+
   // Search shipped posts
   const { data: posts = [], isLoading: postsLoading } = useQuery({
-    queryKey: ['shipped-posts', search],
-    queryFn: () => searchShippedPostsFn({ data: { query: search || undefined, limit: 30 } }),
+    queryKey: ['shipped-posts', search, queryIncludeIds],
+    queryFn: () =>
+      searchShippedPostsFn({
+        data: {
+          query: search || undefined,
+          limit: 100,
+          ...(linkedPostIds.length > 0 && { includeIds: linkedPostIds }),
+        },
+      }),
+    placeholderData: (prev) => prev,
     staleTime: 30 * 1000,
   })
 
+  for (const post of posts) {
+    knownPostsRef.current.set(post.id, post)
+  }
+
   // Get selected post details
-  const selectedPosts = posts.filter((p) => linkedPostIds.includes(p.id))
+  const selectedPosts = Array.from(knownPostsRef.current.values()).filter((p) =>
+    linkedPostIds.includes(p.id)
+  )
+  const normalizedSearch = search.trim().toLowerCase()
+  const dropdownPosts = normalizedSearch
+    ? posts.filter((p) => p.title.toLowerCase().includes(normalizedSearch))
+    : posts
 
   const handleStatusChange = (value: string) => {
     const type = value as 'draft' | 'scheduled' | 'published'
@@ -374,12 +403,12 @@ export function ChangelogMetadataSidebarContent({
                 <div className="p-1">
                   {postsLoading ? (
                     <div className="py-6 text-center text-sm text-muted-foreground">Loading...</div>
-                  ) : posts.length === 0 ? (
+                  ) : dropdownPosts.length === 0 ? (
                     <div className="py-6 text-center text-sm text-muted-foreground">
                       {search ? 'No shipped posts found.' : 'No shipped posts yet.'}
                     </div>
                   ) : (
-                    posts.map((post) => {
+                    dropdownPosts.map((post) => {
                       const isSelected = linkedPostIds.includes(post.id)
                       return (
                         <div
