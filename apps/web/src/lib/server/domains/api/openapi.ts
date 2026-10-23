@@ -5,6 +5,7 @@
  * This package uses Zod v4's native .meta() method for OpenAPI metadata.
  */
 
+import { sessionCookieNames } from '@/lib/shared/auth-cookies'
 import 'zod-openapi' // TypeScript type augmentation for .meta()
 import { createDocument, type ZodOpenApiPathsObject } from 'zod-openapi'
 import { z } from 'zod'
@@ -76,7 +77,7 @@ export const ErrorResponseSchema = z.object({
 /**
  * Generate the complete OpenAPI specification
  */
-export function generateOpenAPISpec(): ReturnType<typeof createDocument> {
+export function generateOpenAPISpec(cookiePrefix?: string): ReturnType<typeof createDocument> {
   return createDocument({
     openapi: '3.1.0',
     info: {
@@ -176,14 +177,14 @@ Example: \`post_01h455vb4pex5vsknk084sn02q\`
         sessionCookie: {
           type: 'apiKey',
           in: 'cookie',
-          name: '__Secure-better-auth.session_token',
+          name: sessionCookieNames(cookiePrefix).secure,
           description:
             'Signed-in browser session on an HTTPS deployment. Used by the mention lookup endpoints.',
         },
         sessionCookieHttp: {
           type: 'apiKey',
           in: 'cookie',
-          name: 'better-auth.session_token',
+          name: sessionCookieNames(cookiePrefix).plain,
           description:
             'Signed-in browser session on a plain HTTP deployment, such as local development.',
         },

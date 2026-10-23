@@ -52,7 +52,13 @@ vi.mock('@/lib/server/auth/registered-providers', () => ({
 
 const { handleWidgetAccountMutationGate } = await import('../hooks')
 
-function ctx(opts: { path: string; token?: string; cookie?: string; scope?: string | null }) {
+function ctx(opts: {
+  path: string
+  token?: string
+  cookie?: string
+  scope?: string | null
+  cookiePrefix?: string
+}) {
   const headers = new Headers()
   if (opts.token) headers.set('authorization', `Bearer ${opts.token}`)
   if (opts.cookie) headers.set('cookie', opts.cookie)
@@ -60,6 +66,7 @@ function ctx(opts: { path: string; token?: string; cookie?: string; scope?: stri
     path: opts.path,
     headers,
     context: {
+      options: { advanced: { cookiePrefix: opts.cookiePrefix } },
       internalAdapter: {
         findSession: vi.fn(async (token: string) => {
           if (opts.scope === null) return null
@@ -72,6 +79,31 @@ function ctx(opts: { path: string; token?: string; cookie?: string; scope?: stri
 }
 
 describe('handleWidgetAccountMutationGate', () => {
+  it.each(['feedback.session_token', '__Secure-feedback.session_token'])(
+    'enforces widget restrictions with the configured cookie %s',
+    async (name) => {
+      const c = ctx({
+        path: '/change-email',
+        cookiePrefix: 'feedback',
+        cookie: `__Secure-better-auth.session_token=other.sig; ${name}=widget.sig`,
+        scope: 'widget',
+      })
+      await expect(handleWidgetAccountMutationGate(c)).rejects.toThrow(/Widget sessions/)
+      expect(c.context.internalAdapter.findSession).toHaveBeenCalledWith('widget')
+    }
+  )
+
+  it('does not treat another app cookie as a session in a configured namespace', async () => {
+    const c = ctx({
+      path: '/change-email',
+      cookiePrefix: 'feedback',
+      cookie: '__Secure-better-auth.session_token=other.sig; better-auth.session_token=other.sig',
+      scope: 'widget',
+    })
+    await expect(handleWidgetAccountMutationGate(c)).resolves.toBeUndefined()
+    expect(c.context.internalAdapter.findSession).not.toHaveBeenCalled()
+  })
+
   it('rejects a widget Bearer on request-email-change', async () => {
     await expect(
       handleWidgetAccountMutationGate(

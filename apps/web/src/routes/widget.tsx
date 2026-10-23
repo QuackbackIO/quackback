@@ -6,7 +6,7 @@ import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
 import { resolveLocale, loadWidgetMessages } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { FileViewerProvider } from '@/components/shared/files/file-viewer-context'
-import { extractSessionTokenFromCookie } from '@/lib/server/functions/portal-session-token'
+import { getPortalSessionToken } from '@/lib/server/functions/portal-session-token'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
@@ -32,11 +32,7 @@ const getWidgetLocale = createServerFn({ method: 'GET' })
     return resolveLocale(acceptLanguage, data.explicitLocale)
   })
 
-/** Extract the signed session cookie for direct widget session reuse (same-origin only). */
-export const getPortalSessionToken = createServerFn({ method: 'GET' }).handler(async () => {
-  const cookie = getRequestHeaders().get('cookie') ?? ''
-  return extractSessionTokenFromCookie(cookie)
-})
+export { getPortalSessionToken }
 
 export const Route = createFileRoute('/widget')({
   // Render the widget on the client only. The iframe gets zero SEO value
