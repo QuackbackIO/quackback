@@ -1,3 +1,4 @@
+import { hasSessionCookie } from '@/lib/shared/auth-cookies'
 import { createAuthClient } from 'better-auth/client'
 import {
   anonymousClient,
@@ -54,13 +55,14 @@ export const signOut: typeof authClient.signOut = async (...args) => {
 
 /**
  * Check if the browser has an active session cookie.
- * SSR-safe — returns false on the server.
+ * SSR-safe — returns false on the server. Pass the deployment cookie prefix
+ * when AUTH_COOKIE_PREFIX is configured.
  *
  * Note: Better Auth sets HttpOnly on session cookies, so document.cookie
  * cannot read them. This function serves as a best-effort check for
  * non-HttpOnly cookies (e.g. widget identify endpoint sets its own).
  * For portal components, prefer checking the session from route context.
  */
-export function hasSession(): boolean {
-  return typeof document !== 'undefined' && document.cookie.includes('better-auth.session_token')
+export function hasSession(cookiePrefix?: string): boolean {
+  return typeof document !== 'undefined' && hasSessionCookie(document.cookie, cookiePrefix)
 }

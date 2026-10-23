@@ -29,6 +29,22 @@ Use `/api/health/live` for process liveness and `/api/health/ready` for traffic 
 
 For optional email, storage, AI, authentication, and integration settings, see [`.env.example`](../.env.example).
 
+## Auth cookie isolation
+
+`AUTH_COOKIE_PREFIX` defaults to `better-auth`, preserving existing cookie names.
+Use 1–64 ASCII letters, digits, dots, underscores or hyphens.
+Set it to a unique value, such as `quackback`, when another application sets
+Better Auth cookies on a shared parent domain. For example, a cookie scoped to
+`.example.com` can otherwise collide with Quackback's cookie on
+`feedback.example.com`: sign-in succeeds, but subsequent requests resolve the
+other application's cookie and return to sign-in.
+
+The prefix changes cookie names, not their security attributes or domain.
+All replicas serving the same installation must use the same prefix. Restart
+after changing it; users need to sign in again, but accounts and passwords are
+unchanged. When a custom prefix is set, Quackback only reads that namespace and
+does not fall back to `better-auth` cookies.
+
 ## Setting up without a browser
 
 On a new install you can skip the setup wizard. Set `SETUP_TOKEN` to a secret of at least 32 characters, or leave it unset and read the one-time token the server prints to its log on first boot (a line starting `First-run setup token`). Then send it as a bearer token:
