@@ -21,6 +21,8 @@ const createChangelogSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Content is required'),
   publishedAt: z.string().datetime().optional(),
+  displayDate: z.string().datetime().nullable().optional(),
+  featuredImageUrl: z.string().max(2048).nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
 })
 
@@ -99,6 +101,13 @@ export const Route = createFileRoute('/api/v1/changelog/')({
               title: parsed.data.title,
               content: parsed.data.content,
               publishState,
+              ...(parsed.data.displayDate !== undefined && {
+                displayDate:
+                  parsed.data.displayDate === null ? null : new Date(parsed.data.displayDate),
+              }),
+              ...(parsed.data.featuredImageUrl !== undefined && {
+                featuredImageUrl: parsed.data.featuredImageUrl,
+              }),
               linkedPostIds: parseTypeIdArray<PostId>(
                 parsed.data.linkedPostIds,
                 'post',

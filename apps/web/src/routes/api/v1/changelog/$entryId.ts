@@ -24,6 +24,7 @@ const updateChangelogSchema = z.object({
   content: z.string().min(1).optional(),
   publishedAt: z.string().datetime().nullable().optional(),
   displayDate: z.string().datetime().nullable().optional(),
+  featuredImageUrl: z.string().max(2048).nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
 })
 
@@ -101,6 +102,9 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
             ...(parsed.data.displayDate !== undefined && {
               displayDate:
                 parsed.data.displayDate === null ? null : new Date(parsed.data.displayDate),
+            }),
+            ...(parsed.data.featuredImageUrl !== undefined && {
+              featuredImageUrl: parsed.data.featuredImageUrl,
             }),
             ...(linkedPostIds !== undefined && { linkedPostIds }),
           })
