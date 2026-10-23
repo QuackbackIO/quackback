@@ -9,8 +9,8 @@
  * configuration must never sit hidden behind a closed panel.
  *
  * Scopes are tokens rather than a free-text field: a text box cannot show
- * WHICH scope an IdP rejected, and it lets someone delete `openid` without
- * noticing that doing so stops the request being an OIDC request at all.
+ * WHICH scope an IdP rejected. Removing `openid` warns that identity claims
+ * must come from another configured source for OAuth-only providers.
  * A scope the discovery document does not advertise is flagged, never
  * removed silently — `scopes_supported` is only RECOMMENDED and may be
  * incomplete.
@@ -142,19 +142,15 @@ export function ConnectionOptions({
                 className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-2 py-1 font-mono text-xs"
               >
                 {scope}
-                {scope === REQUIRED_OIDC_SCOPE ? (
-                  <span className="text-[11px] text-muted-foreground">required</span>
-                ) : (
-                  <button
-                    type="button"
-                    aria-label={`Remove scope ${scope}`}
-                    disabled={disabled}
-                    onClick={() => onScopesChange(scopes.filter((s) => s !== scope))}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    ×
-                  </button>
-                )}
+                <button
+                  type="button"
+                  aria-label={`Remove scope ${scope}`}
+                  disabled={disabled}
+                  onClick={() => onScopesChange(scopes.filter((s) => s !== scope))}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  ×
+                </button>
               </span>
             ))}
           </div>
@@ -174,6 +170,13 @@ export function ConnectionOptions({
           <p className="text-sm text-muted-foreground">
             Custom claims can require additional scopes.
           </p>
+          {scopes.length > 0 && !scopes.includes(REQUIRED_OIDC_SCOPE) && (
+            <WarningBox
+              variant="warning"
+              title="OpenID Connect scope removed"
+              description="Without openid, the provider may not return an ID token. Configure a supported identity claim source and test sign-in before enabling this connection."
+            />
+          )}
           {unsupported.length > 0 && (
             <div data-testid="scope-mismatch-warning" className="space-y-2">
               <WarningBox
