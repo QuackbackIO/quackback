@@ -9,6 +9,10 @@ import type { AssistantPendingActionId } from '@quackback/ids'
 import { Button } from '@/components/ui/button'
 import { usePendingActionDecision } from '@/lib/client/hooks/use-pending-action-decision'
 import type { CopilotProposedAction } from '@/lib/shared/assistant/copilot-contract'
+import {
+  CONNECTOR_RESPONSE_CHAR_LIMIT,
+  parseConnectorToolName,
+} from '@/lib/shared/assistant/connectors'
 
 /** Terminal-status copy for a decided proposal that ISN'T executed/failed
  *  (those two get their own richer treatment below). Mirrors
@@ -39,6 +43,23 @@ function formatProposedActionFailure(result: unknown): string | null {
   return typeof error === 'string' && error ? error : null
 }
 
+/** Stored connector output is untrusted content, displayed as bounded text only. */
+function connectorResultPreview(result: unknown): { text: string; truncated: boolean } | null {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return null
+  const value = result as Record<string, unknown>
+  if (value.ok !== true || !Object.prototype.hasOwnProperty.call(value, 'data')) return null
+  try {
+    const text = typeof value.data === 'string' ? value.data : JSON.stringify(value.data, null, 2)
+    if (text === undefined) return null
+    return {
+      text: text.slice(0, CONNECTOR_RESPONSE_CHAR_LIMIT),
+      truncated: text.length > CONNECTOR_RESPONSE_CHAR_LIMIT,
+    }
+  } catch {
+    return null
+  }
+}
+
 /**
  * One write-tool call this Copilot turn proposed (P2-C.4, "act-on-approval"):
  * tool label + summary + Approve/Reject, wired to the SAME gated server fns
@@ -55,6 +76,11 @@ export function CopilotProposedActionCard({ action }: { action: CopilotProposedA
   const id = action.id as AssistantPendingActionId
   const { data, isLoading, isError, busy, approving, rejecting, inlineError, approve, reject } =
     usePendingActionDecision(id)
+  const executedConnector =
+    data?.status === 'executed' && parseConnectorToolName(data.toolName) !== null
+  const preview = executedConnector ? connectorResultPreview(data.result) : null
+  const resultSummary = formatProposedActionResult(data?.result) ?? 'Approved and executed'
+  const summaryTruncated = executedConnector && resultSummary.length > CONNECTOR_RESPONSE_CHAR_LIMIT
 
   return (
     <div className="mt-2 flex flex-col gap-1.5 rounded-lg border border-border bg-background p-2.5 text-xs">
@@ -112,9 +138,32 @@ export function CopilotProposedActionCard({ action }: { action: CopilotProposedA
           </Button>
         </div>
       ) : data?.status === 'executed' ? (
-        <div className="flex items-center gap-1.5 pt-0.5 text-emerald-700 dark:text-emerald-400">
-          <CheckCircleIcon className="h-4 w-4 shrink-0" />
-          <span>{formatProposedActionResult(data.result) ?? 'Approved and executed'}</span>
+        <div className="flex min-w-0 flex-col gap-1.5 pt-0.5">
+          <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+            <CheckCircleIcon className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 break-words">
+              {summaryTruncated
+                ? resultSummary.slice(0, CONNECTOR_RESPONSE_CHAR_LIMIT)
+                : resultSummary}
+            </span>
+          </div>
+          {summaryTruncated && (
+            <span className="text-muted-foreground">Result note truncated.</span>
+          )}
+          {preview && (
+            <div className="min-w-0 rounded-md bg-muted/70 px-2.5 py-2">
+              <p className="mb-1 font-medium text-muted-foreground">Connector result</p>
+              <pre
+                aria-label="Connector result"
+                className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-foreground"
+              >
+                {preview.text}
+              </pre>
+              {preview.truncated && (
+                <p className="mt-1 text-muted-foreground">Result preview truncated.</p>
+              )}
+            </div>
+          )}
         </div>
       ) : data?.status === 'failed' ? (
         <span className="pt-0.5 text-destructive">

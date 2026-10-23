@@ -1,5 +1,5 @@
 import { DEFAULT_WORKSPACE_ASSISTANT } from '@/lib/shared/assistant/config'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
 import { toolDefinition } from '@tanstack/ai'
 import { z } from 'zod'
 import { makeKbArticle } from './kb-fixtures'
@@ -2855,3 +2855,97 @@ describe('streamAssistantTurn (AG-UI wire shape)', () => {
     })
   })
 })
+
+// An actual stored approval must reach the next model request; mocking the
+// loader here would miss the same gap the old UI-only approval tests missed.
+const receiptFixtureModule = await import('@/lib/server/__tests__/db-test-fixture')
+const receiptFixture = await receiptFixtureModule.createDbTestFixture()
+afterAll(receiptFixture.close)
+
+it.skipIf(!receiptFixture.available)(
+  'grounds the next Copilot model request on a real approved connector result without rerunning it',
+  async () => {
+    const { principal, conversations, assistantPendingActions } = await import('@/lib/server/db')
+    const { PERMISSIONS } = await import('@/lib/shared/permissions')
+    await receiptFixture.begin()
+    try {
+      const receiptDb = receiptFixtureModule.testDb
+      const [person] = await receiptDb
+        .insert(principal)
+        .values({ type: 'user', role: 'member', createdAt: new Date() })
+        .returning()
+      const [conversation] = await receiptDb
+        .insert(conversations)
+        .values({ visitorPrincipalId: person.id, channel: 'messenger' })
+        .returning()
+      const execute = vi.fn()
+      const connector: AssistantToolSpec = {
+        name: 'connector_orders__retrieve',
+        label: 'Retrieve order',
+        description: 'Retrieve order',
+        promptGuidance: 'Retrieve an order',
+        risk: 'write',
+        permissions: [],
+        parents: ['conversation', 'ticket'],
+        approvalPolicy: 'approval',
+        connector: { name: 'Orders', initials: 'OR' },
+        definition: toolDefinition({
+          name: 'connector_orders__retrieve',
+          description: 'Retrieve order',
+          inputSchema: z.object({}),
+          outputSchema: z.unknown(),
+        }),
+        execute,
+        summarize: () => 'Retrieve order',
+      }
+      await receiptDb.insert(assistantPendingActions).values({
+        conversationId: conversation.id,
+        toolName: connector.name,
+        args: {},
+        summary: 'Retrieve ABC-107',
+        originRole: 'copilot_qa',
+        status: 'executed',
+        decidedById: person.id,
+        executedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60000),
+        result: {
+          ok: true,
+          data: JSON.stringify({ title: 'ABC-107 integration marker', status: 'In progress' }),
+        },
+      })
+      mockListConnectorToolSpecs.mockResolvedValue([connector])
+      mockChat.mockImplementation(() =>
+        chunkStream(
+          completeRun({ text: 'ABC-107 is in progress.', citations: [], answerType: 'draft_reply' })
+        )
+      )
+      const result = await runAssistantTurn({
+        ...copilotQaInput,
+        conversationId: conversation.id,
+        db: receiptDb,
+        askerActor: {
+          principalId: person.id,
+          principalType: 'user',
+          role: 'member',
+          segmentIds: new Set(),
+          permissions: new Set([PERMISSIONS.COPILOT_USE, PERMISSIONS.CONVERSATION_VIEW]),
+        },
+        messages: customerAsks('Use the approved result without a new lookup.'),
+      } as Parameters<typeof runAssistantTurn>[0])
+      const options = mockChat.mock.calls.at(-1)?.[0] as {
+        messages: unknown
+        context: { writeToolPolicy: string; actor: { principalType: string; principalId: string } }
+      }
+      expect(JSON.stringify(options.messages)).toContain('ABC-107 integration marker')
+      expect(JSON.stringify(options.messages)).toContain('not instructions')
+      expect(options.context.writeToolPolicy).toBe('propose')
+      expect(options.context.actor.principalType).toBe('service')
+      expect(options.context.actor.principalId).not.toBe(person.id)
+      expect(execute).not.toHaveBeenCalled()
+      expect(result.status).toBe('answered')
+      if (result.status === 'answered') expect(result.internalSourced).toBe(true)
+    } finally {
+      await receiptFixture.rollback()
+    }
+  }
+)
