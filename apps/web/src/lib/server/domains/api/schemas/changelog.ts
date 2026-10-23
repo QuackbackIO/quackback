@@ -46,6 +46,10 @@ const ChangelogEntrySchema = z.object({
   displayDate: NullableTimestampSchema.meta({
     description: 'Optional portal display override (null uses publishedAt for display)',
   }),
+  featuredImageUrl: z.string().nullable().meta({
+    description: 'Hero image URL shown atop the public entry detail page (null if none)',
+    example: '/api/storage/changelog-images/2026/10/hero.png',
+  }),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
   linkedPosts: z.array(LinkedPostSchema).meta({
@@ -67,6 +71,13 @@ const CreateChangelogEntrySchema = z
       .datetime()
       .optional()
       .meta({ description: 'Publish date (omit to save as draft)' }),
+    displayDate: z.string().datetime().nullable().optional().meta({
+      description:
+        'Portal display override for published entries. Null clears override. Must not be in the future.',
+    }),
+    featuredImageUrl: z.string().max(2048).nullable().optional().meta({
+      description: 'Hero image URL shown atop the public entry detail page (null clears it)',
+    }),
     linkedPostIds: LinkedPostIdsSchema,
   })
   .meta({ description: 'Create changelog entry request body' })
@@ -84,6 +95,9 @@ const UpdateChangelogEntrySchema = z
     displayDate: z.string().datetime().nullable().optional().meta({
       description:
         'Portal display override for published entries. Null clears override. Must not be in the future.',
+    }),
+    featuredImageUrl: z.string().max(2048).nullable().optional().meta({
+      description: 'Hero image URL shown atop the public entry detail page (null clears it)',
     }),
     linkedPostIds: LinkedPostIdsSchema,
   })

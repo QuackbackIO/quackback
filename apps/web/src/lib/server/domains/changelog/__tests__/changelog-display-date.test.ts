@@ -44,8 +44,8 @@ vi.mock('@/lib/server/events/dispatch', () => ({
   dispatchChangelogPublished: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('@/lib/server/events/scheduler', () => ({
-  scheduleDispatch: vi.fn(),
-  cancelScheduledDispatch: vi.fn(),
+  scheduleDispatch: vi.fn().mockResolvedValue(undefined),
+  cancelScheduledDispatch: vi.fn().mockResolvedValue(undefined),
 }))
 
 const ENTRY_ID = 'changelog_01test' as ChangelogId
@@ -110,5 +110,20 @@ describe('displayDate', () => {
     await updateChangelog(ENTRY_ID, { displayDate: sameDay })
 
     expect(mockUpdateSet).toHaveBeenCalledWith(expect.objectContaining({ displayDate: null }))
+  })
+
+  it('preserves existing publishedAt when publishState is published without an explicit publishAt', async () => {
+    const { resolveUpdatedPublishedAt } = await import('../changelog.service')
+
+    expect(resolveUpdatedPublishedAt({ type: 'published' }, PUBLISHED_AT)).toEqual(PUBLISHED_AT)
+
+    const explicitOverride = new Date('2025-07-01T12:00:00Z')
+    expect(
+      resolveUpdatedPublishedAt({ type: 'published', publishAt: explicitOverride }, PUBLISHED_AT)
+    ).toEqual(explicitOverride)
+
+    const fromDraft = resolveUpdatedPublishedAt({ type: 'published' }, null)
+    expect(fromDraft).toBeInstanceOf(Date)
+    expect(fromDraft!.getTime()).toBeGreaterThan(PUBLISHED_AT.getTime())
   })
 })

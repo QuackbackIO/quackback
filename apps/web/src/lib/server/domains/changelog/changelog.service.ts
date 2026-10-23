@@ -221,15 +221,16 @@ export async function updateChangelog(
   if (input.displayDate !== undefined) {
     const publishedAtRef =
       input.publishState !== undefined
-        ? getPublishedAtFromState(input.publishState)
+        ? resolveUpdatedPublishedAt(input.publishState, existing.publishedAt)
         : existing.publishedAt
     validateDisplayDate(publishedAtRef, input.displayDate)
     updateData.displayDate = normalizeDisplayDate(input.displayDate, publishedAtRef)
   }
 
-  // Handle publish state change
+  // Handle publish state change (preserving existing publishedAt when an already-published
+  // entry receives `{ type: 'published' }` without an explicit `publishAt` override).
   if (input.publishState !== undefined) {
-    updateData.publishedAt = getPublishedAtFromState(input.publishState)
+    updateData.publishedAt = resolveUpdatedPublishedAt(input.publishState, existing.publishedAt)
   }
 
   // featuredImageUrl: undefined leaves it, null clears it, a string replaces it.
@@ -598,6 +599,27 @@ function getPublishedAtFromState(state: PublishState): Date | null {
     case 'published':
       return state.publishAt ?? new Date()
   }
+}
+
+/**
+ * Resolve the updated `publishedAt` timestamp on an existing entry.
+ * If the entry is already published (`existingPublishedAt <= now`) and the caller
+ * passes `{ type: 'published' }` without an explicit `publishAt`, preserve the
+ * original `existingPublishedAt` instead of overwriting it with `new Date()`.
+ */
+export function resolveUpdatedPublishedAt(
+  state: PublishState,
+  existingPublishedAt: Date | null
+): Date | null {
+  if (
+    state.type === 'published' &&
+    state.publishAt === undefined &&
+    existingPublishedAt != null &&
+    existingPublishedAt <= new Date()
+  ) {
+    return existingPublishedAt
+  }
+  return getPublishedAtFromState(state)
 }
 
 /**
