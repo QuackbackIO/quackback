@@ -17,9 +17,8 @@
 export const DEFAULT_OIDC_SCOPES = ['openid', 'email', 'profile'] as const
 
 /**
- * The one scope that cannot be dropped. Without it the request is not an OIDC
- * request: the IdP owes no ID token, and the userinfo endpoint has no
- * openid-scoped access token to accept, which removes both identity sources.
+ * The scope required for an OIDC request. OAuth-only providers can omit it
+ * when identity is resolved through their configured claim sources.
  */
 export const REQUIRED_OIDC_SCOPE = 'openid'
 
@@ -60,10 +59,8 @@ export function unsupportedScopes(
 /**
  * The requested set reduced to what the IdP advertises — the one-click fix.
  *
- * `openid` survives regardless. Dropping it would stop the request being an
- * OIDC request at all, leaving no ID token owed and no openid-scoped token for
- * the userinfo endpoint, so a "fix" that removed it would break more than it
- * repaired.
+ * OAuth-only providers may not accept `openid`, so it is filtered like any
+ * other scope. The editor warns when the resulting request is no longer OIDC.
  */
 export function supportedSubset(
   requested: readonly string[],
@@ -71,7 +68,7 @@ export function supportedSubset(
 ): string[] {
   if (!supported || supported.length === 0) return [...requested]
   const advertised = new Set(supported)
-  return requested.filter((scope) => advertised.has(scope) || scope === REQUIRED_OIDC_SCOPE)
+  return requested.filter((scope) => advertised.has(scope))
 }
 
 /**
