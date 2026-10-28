@@ -4,6 +4,8 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 const mockListTickets = vi.fn()
 const mockGetTicket = vi.fn()
 const mockCreateTicket = vi.fn()
+const mockSetTicketStatus = vi.fn()
+const mockListTicketStatuses = vi.fn()
 const mockListMessages = vi.fn()
 const mockSendMessage = vi.fn()
 const mockAddNote = vi.fn()
@@ -12,6 +14,10 @@ vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   listTickets: (...a: unknown[]) => mockListTickets(...a),
   getTicket: (...a: unknown[]) => mockGetTicket(...a),
   createTicket: (...a: unknown[]) => mockCreateTicket(...a),
+  setTicketStatus: (...a: unknown[]) => mockSetTicketStatus(...a),
+}))
+vi.mock('@/lib/server/domains/tickets/ticket-status.service', () => ({
+  listTicketStatuses: (...a: unknown[]) => mockListTicketStatuses(...a),
 }))
 vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
   listTicketMessages: (...a: unknown[]) => mockListMessages(...a),
@@ -89,6 +95,7 @@ describe('ticket MCP tools', () => {
       'link_ticket',
       'list_tickets',
       'reply_to_ticket',
+      'set_ticket_status',
       'unlink_ticket',
     ])
   })
@@ -433,6 +440,77 @@ describe('ticket MCP tools', () => {
     })
     expect(mockUnlink).toHaveBeenCalledTimes(1)
     expect(parse(out).linkedTicketIds).toEqual([])
+  })
+
+  it('set_ticket_status passes a direct ticket_status_ TypeID to setTicketStatus', async () => {
+    mockSetTicketStatus.mockResolvedValue({
+      ...ticketDTO,
+      status: {
+        id: 'ticket_status_resolved',
+        name: 'Resolved',
+        color: '#22c55e',
+        category: 'closed',
+      },
+      stage: { slot: 'resolved', label: 'Resolved' },
+      resolvedAt: '2026-07-04T00:05:00.000Z',
+    })
+    const out = await collect(teamAuth).get('set_ticket_status')!({
+      ticketId: 'ticket_1',
+      statusId: 'ticket_status_resolved',
+    })
+    expect(mockListTicketStatuses).not.toHaveBeenCalled()
+    expect(mockSetTicketStatus).toHaveBeenCalledWith(
+      'ticket_1',
+      'ticket_status_resolved',
+      expect.objectContaining({ principalId: 'principal_key' })
+    )
+    expect(parse(out)).toMatchObject({
+      id: 'ticket_1',
+      status: { id: 'ticket_status_resolved', name: 'Resolved', category: 'closed' },
+      stage: 'resolved',
+      resolvedAt: '2026-07-04T00:05:00.000Z',
+    })
+  })
+
+  it('set_ticket_status resolves a status slug/stage/category via listTicketStatuses', async () => {
+    mockListTicketStatuses.mockResolvedValue([
+      {
+        id: 'ticket_status_open',
+        name: 'New',
+        slug: 'new',
+        category: 'open',
+        publicStage: 'received',
+      },
+      {
+        id: 'ticket_status_resolved',
+        name: 'Resolved',
+        slug: 'resolved',
+        category: 'closed',
+        publicStage: 'resolved',
+      },
+    ])
+    mockSetTicketStatus.mockResolvedValue({
+      ...ticketDTO,
+      status: {
+        id: 'ticket_status_resolved',
+        name: 'Resolved',
+        color: '#22c55e',
+        category: 'closed',
+      },
+      stage: { slot: 'resolved', label: 'Resolved' },
+      resolvedAt: '2026-07-04T00:05:00.000Z',
+    })
+    const out = await collect(teamAuth).get('set_ticket_status')!({
+      ticketId: 'ticket_1',
+      statusId: 'resolved',
+    })
+    expect(mockListTicketStatuses).toHaveBeenCalledTimes(1)
+    expect(mockSetTicketStatus).toHaveBeenCalledWith(
+      'ticket_1',
+      'ticket_status_resolved',
+      expect.objectContaining({ principalId: 'principal_key' })
+    )
+    expect(parse(out).status.category).toBe('closed')
   })
 
   it('write tools require the write:chat scope, not just read:chat', async () => {

@@ -99,6 +99,29 @@ export function registerResources(server: McpServer, auth: McpAuthContext) {
   )
 
   server.resource(
+    'ticket-statuses',
+    'quackback://ticket-statuses',
+    { description: 'List all support ticket statuses' },
+    scopeGated(auth, 'quackback://ticket-statuses', async () => {
+      const { listTicketStatuses } =
+        await import('@/lib/server/domains/tickets/ticket-status.service')
+      const statuses = await listTicketStatuses()
+      return jsonResource(
+        'ticket-statuses',
+        statuses.map((s) => ({
+          id: s.id,
+          name: s.name,
+          slug: s.slug,
+          color: s.color,
+          category: s.category,
+          publicStage: s.publicStage,
+          isDefault: s.isDefault,
+        }))
+      )
+    })
+  )
+
+  server.resource(
     'tags',
     'quackback://tags',
     { description: 'List all tags' },

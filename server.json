@@ -178,6 +178,10 @@
       "description": "Remove a customer ticket from a tracker"
     },
     {
+      "name": "set_ticket_status",
+      "description": "Change a ticket's status"
+    },
+    {
       "name": "widget_install_status",
       "description": "Read whether the Quackback widget is connected on the customer site"
     }

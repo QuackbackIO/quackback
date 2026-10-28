@@ -20,6 +20,7 @@ import {
   conversations,
   conversationMessages,
   ticketConversations,
+  tickets,
   principal,
   user,
   type Conversation,
@@ -1281,10 +1282,13 @@ export async function autoFileConversationAsSpam(
 /**
  * Agent action: permanently delete a spam-ended conversation. Hard delete —
  * every child row (messages, participants, summaries, assignments, …) goes
- * with it through the FK cascades, so this is irreversible by design: it
- * exists for the Spam view's "delete forever", and only a conversation still
- * marked spam may be deleted through it. A live or merely-closed thread is
- * rejected loud — inbox hygiene never destroys a real customer thread.
+ * with it through the FK cascades, and any paired customer ticket is deleted
+ * in the same transaction so `ticket_conversations` + `conversation_messages`
+ * cascades never leave an orphaned customer ticket with zero messages. This is
+ * irreversible by design: it exists for the Spam view's "delete forever", and
+ * only a conversation still marked spam may be deleted through it. A live or
+ * merely-closed thread is rejected loud — inbox hygiene never destroys a real
+ * customer thread.
  */
 export async function deleteConversationPermanently(
   conversationId: ConversationId,
@@ -1296,7 +1300,23 @@ export async function deleteConversationPermanently(
   if (existing.endReason !== 'spam') {
     throw new ValidationError('VALIDATION_ERROR', 'Conversation is not marked as spam')
   }
-  await db.delete(conversations).where(eq(conversations.id, conversationId))
+  await db.transaction(async (tx) => {
+    await tx.delete(tickets).where(
+      inArray(
+        tickets.id,
+        tx
+          .select({ id: ticketConversations.ticketId })
+          .from(ticketConversations)
+          .where(
+            and(
+              eq(ticketConversations.conversationId, conversationId),
+              eq(ticketConversations.ticketType, 'customer')
+            )
+          )
+      )
+    )
+    await tx.delete(conversations).where(eq(conversations.id, conversationId))
+  })
   log.info({ conversation_id: conversationId }, 'conversation permanently deleted')
 }
 
