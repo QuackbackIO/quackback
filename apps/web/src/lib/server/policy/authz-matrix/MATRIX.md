@@ -1058,6 +1058,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | restore_suggestion | write:feedback | ✓ |
 | search | read:article, read:feedback | ✓ |
 | set_conversation_status | write:chat | ✓ |
+| set_ticket_status | write:chat | ✓ |
 | share_post | write:chat | ✓ |
 | suggest_post | write:chat | ✓ |
 | triage_post | write:feedback | ✓ |

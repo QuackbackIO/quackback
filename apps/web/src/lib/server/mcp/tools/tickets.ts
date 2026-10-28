@@ -9,7 +9,7 @@
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { TicketId, TicketTypeId, PrincipalId, CompanyId } from '@quackback/ids'
+import type { TicketId, TicketStatusId, TicketTypeId, PrincipalId, CompanyId } from '@quackback/ids'
 import type {
   TicketType,
   TicketStatusCategory,
@@ -433,6 +433,54 @@ Example: unlink_ticket({ trackerTicketId: "ticket_01tracker...", ticketId: "tick
       return jsonResult({
         trackerTicketId,
         linkedTicketIds: await listLinkedTicketIds(trackerTicketId),
+      })
+    },
+  })
+
+  registerTool<{ ticketId: string; statusId: string }>(server, auth, {
+    name: 'set_ticket_status',
+    permissions: [PERMISSIONS.TICKET_SET_STATUS],
+    description: `Change a ticket's status. Pass a ticket_status TypeID (from the quackback://ticket-statuses resource), or a status slug/name/category (such as "resolved", "closed", "in_progress", "open", or "pending"). Entering a closed status stamps resolvedAt and cascades if the ticket is a tracker.
+
+Example: set_ticket_status({ ticketId: "ticket_01abc...", statusId: "resolved" })`,
+    schema: {
+      ticketId: z.string().describe('Ticket TypeID'),
+      statusId: z
+        .string()
+        .min(1)
+        .describe(
+          'Target ticket status TypeID (from quackback://ticket-statuses), slug (e.g. "resolved"), name, or category ("open" | "pending" | "closed")'
+        ),
+    },
+    annotations: { ...WRITE, idempotentHint: true },
+    scope: 'write:chat',
+    teamOnly: true,
+    handler: async (args) => {
+      const { setTicketStatus } = await import('@/lib/server/domains/tickets/ticket.service')
+      let resolvedStatusId = args.statusId as TicketStatusId
+      if (!args.statusId.startsWith('ticket_status_')) {
+        const { listTicketStatuses } =
+          await import('@/lib/server/domains/tickets/ticket-status.service')
+        const statuses = await listTicketStatuses()
+        const normalized = args.statusId.trim().toLowerCase()
+        const match =
+          statuses.find((s) => s.id === args.statusId) ??
+          statuses.find((s) => s.slug.toLowerCase() === normalized) ??
+          statuses.find((s) => s.name.toLowerCase() === normalized) ??
+          statuses.find((s) => s.publicStage?.toLowerCase() === normalized) ??
+          statuses.find((s) => s.category.toLowerCase() === normalized)
+        if (match) resolvedStatusId = match.id as TicketStatusId
+      }
+      const dto = await setTicketStatus(
+        args.ticketId as TicketId,
+        resolvedStatusId,
+        mcpAgentActor(auth)
+      )
+      return jsonResult({
+        id: dto.id,
+        status: { id: dto.status.id, name: dto.status.name, category: dto.status.category },
+        stage: dto.stage.slot,
+        resolvedAt: dto.resolvedAt,
       })
     },
   })
