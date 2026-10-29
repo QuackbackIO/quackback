@@ -368,8 +368,12 @@ export async function countInboxFilterFacets(
   params: InboxPostListParams
 ): Promise<InboxFilterCounts> {
   const countSql = sql<number>`count(*)::int`
-  const teamRespondedFilter = sql<number>`count(*) filter (where exists (select 1 from post_comments where post_comments.post_id = ${posts.id} and post_comments.is_team_member = true and post_comments.deleted_at is null))::int`
-  const teamUnrespondedFilter = sql<number>`count(*) filter (where not exists (select 1 from post_comments where post_comments.post_id = ${posts.id} and post_comments.is_team_member = true and post_comments.deleted_at is null))::int`
+  // Select-list SQL on a single-table query renders `${posts.id}` as a bare
+  // "id", which the subquery binds to post_comments.id, so the outer column
+  // is written out raw here.
+  const teamResponseExistsInSelect = sql`exists (select 1 from post_comments where post_comments.post_id = posts.id and post_comments.is_team_member = true and post_comments.deleted_at is null)`
+  const teamRespondedFilter = sql<number>`count(*) filter (where ${teamResponseExistsInSelect})::int`
+  const teamUnrespondedFilter = sql<number>`count(*) filter (where not ${teamResponseExistsInSelect})::int`
 
   const [statusRows, boardRows, tagRows, segmentRows, respondedRow, deletedRow] = await Promise.all(
     [
