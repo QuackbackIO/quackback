@@ -85,6 +85,7 @@
   },
   "overrides": {
     "@tanstack/openai-base": "0.10.11",
+    "body-parser": "2.4.0",
     "@tiptap/extension-floating-menu": "3.31.3",
     "prosemirror-model": "1.25.11",
     "prosemirror-view": "1.42.3"
