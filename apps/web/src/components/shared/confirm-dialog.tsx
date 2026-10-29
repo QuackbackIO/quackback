@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { memo, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,7 +30,7 @@ interface ConfirmDialogProps {
   children?: React.ReactNode
 }
 
-export function ConfirmDialog({
+export const ConfirmDialog = memo(function ConfirmDialog({
   open,
   onOpenChange,
   title,
@@ -119,4 +119,4 @@ export function ConfirmDialog({
       </AlertDialogContent>
     </AlertDialog>
   )
-}
+})

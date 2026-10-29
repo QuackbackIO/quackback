@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -132,7 +133,7 @@ function preselectedType(candidates: TicketTypeDTO[]): TicketTypeDTO | null {
  * failed/flaky completion → the quiet fallback: the plain Phase-4 form
  * unchanged, never half-filled.
  */
-export function CreateTicketDialog({
+export const CreateTicketDialog = memo(function CreateTicketDialog({
   open,
   onOpenChange,
   onCreated,
@@ -622,4 +623,4 @@ export function CreateTicketDialog({
       </DialogContent>
     </Dialog>
   )
-}
+})

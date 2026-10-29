@@ -557,12 +557,11 @@ export const journeys: Journey[] = [
     // its lists up. The teardown puts the conversation back as seeded, so no
     // journey after it (nor this one, repeated) sees the reply.
     //
-    // Its componentRenders has two readings, about 620 and 720. The send's
-    // response and the stream's echo of the conversation race: when the
-    // response lands first, the thread takes both in one commit; when the echo
-    // lands first, the thread commits each separately and re-renders its
-    // header twice. The ceiling is the higher reading, so an --update from a
-    // single run that took the fast path must not lower it.
+    // Its componentRenders has two readings, about 410 and 435. The send's
+    // response and the stream's echo of the conversation race: when the echo
+    // lands first, the thread renders once more. The ceiling is the higher
+    // reading, so an --update from a single run that took the fast path must
+    // not lower it.
     kind: 'browser',
     name: 'ui:admin-inbox-send-reply',
     as: 'admin',

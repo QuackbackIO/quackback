@@ -226,7 +226,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 99
+      "componentRenders": 39
     },
     "ui:widget-type-message": {
       "dbQueries": 4,
@@ -995,7 +995,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 721
+      "componentRenders": 435
     },
     "ui:portal-type-post-title": {
       "dbQueries": 6,

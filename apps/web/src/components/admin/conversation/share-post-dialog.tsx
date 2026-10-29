@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/solid'
@@ -24,7 +24,7 @@ interface SharePostDialogProps {
 }
 
 /** Agent action: search existing posts and embed one as a card in the conversation. */
-export function SharePostDialog({
+export const SharePostDialog = memo(function SharePostDialog({
   open,
   onOpenChange,
   conversationId,
@@ -106,4 +106,4 @@ export function SharePostDialog({
       </DialogContent>
     </Dialog>
   )
-}
+})

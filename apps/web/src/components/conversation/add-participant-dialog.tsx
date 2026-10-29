@@ -7,7 +7,7 @@
  * is visible rather than silently idempotent and every row carries its own
  * remove affordance.
  */
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { XMarkIcon } from '@heroicons/react/24/solid'
@@ -28,7 +28,7 @@ import {
   listConversationParticipantsFn,
 } from '@/lib/server/functions/conversation'
 
-export function AddParticipantDialog({
+export const AddParticipantDialog = memo(function AddParticipantDialog({
   open,
   onOpenChange,
   conversationId,
@@ -133,4 +133,4 @@ export function AddParticipantDialog({
       </DialogContent>
     </Dialog>
   )
-}
+})

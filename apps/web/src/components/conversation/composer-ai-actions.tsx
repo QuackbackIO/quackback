@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { memo, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ArrowPathIcon, ChevronDownIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import {
@@ -52,7 +52,7 @@ interface UndoState extends ReplacementState {
   restore: () => void
 }
 
-export function ComposerAiActions({
+export const ComposerAiActions = memo(function ComposerAiActions({
   item,
   activeMode,
   subscribeDraft,
@@ -200,4 +200,4 @@ export function ComposerAiActions({
       </DropdownMenu>
     </>
   )
-}
+})
