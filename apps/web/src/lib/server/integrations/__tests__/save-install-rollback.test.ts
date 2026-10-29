@@ -18,7 +18,7 @@ vi.mock('@/lib/server/db', async (original) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { principal, integrations, eq } from '@/lib/server/db'
+import { principal, integrations, integrationEventMappings, eq } from '@/lib/server/db'
 import { saveIntegration } from '../save'
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -32,6 +32,53 @@ describe.skipIf(!fixture.available)('install registration transaction', () => {
   })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
+  it('reconnects a revoked Slack install in place and preserves notification routing', async () => {
+    const [person] = await testDb
+      .insert(principal)
+      .values({ type: 'anonymous', role: 'user', createdAt: new Date() })
+      .returning()
+    const id = await saveIntegration('slack', {
+      principalId: person.id,
+      accessToken: 'old-token',
+      config: { workspaceId: 'T1', channelId: 'C1' },
+    })
+    const [before] = await testDb.select().from(integrations).where(eq(integrations.id, id))
+    const [mapping] = await testDb
+      .insert(integrationEventMappings)
+      .values({
+        integrationId: id,
+        eventType: 'message.created',
+        actionType: 'notification',
+        actionConfig: { channelId: 'C1' },
+      })
+      .returning()
+    await testDb
+      .update(integrations)
+      .set({ status: 'disconnected', lastError: 'token_revoked', errorCount: 1 })
+      .where(eq(integrations.id, id))
+    await expect(
+      saveIntegration('slack', {
+        principalId: person.id,
+        accessToken: 'new-token',
+        config: { workspaceId: 'T1', workspaceName: 'Acme' },
+      })
+    ).resolves.toBe(id)
+    const [after] = await testDb.select().from(integrations).where(eq(integrations.id, id))
+    expect(after).toMatchObject({
+      status: 'active',
+      principalId: before.principalId,
+      lastError: null,
+      errorCount: 0,
+      config: { workspaceId: 'T1', workspaceName: 'Acme', channelId: 'C1' },
+    })
+    expect(
+      await testDb
+        .select()
+        .from(integrationEventMappings)
+        .where(eq(integrationEventMappings.integrationId, id))
+    ).toEqual([mapping])
+  })
+
   it('rolls back the install and new principal when Cloud rejects ownership', async () => {
     const [person] = await testDb
       .insert(principal)
