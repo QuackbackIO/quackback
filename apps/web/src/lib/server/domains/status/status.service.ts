@@ -891,10 +891,12 @@ export async function listStatusIncidents(
     conditions.push(
       or(
         ilike(statusIncidents.title, pattern),
+        // Raw names for the updates table: the relational query builder
+        // below rewrites every column object onto the incidents alias.
         sql`EXISTS (
-          SELECT 1 FROM ${statusIncidentUpdates}
-          WHERE ${statusIncidentUpdates.incidentId} = ${statusIncidents.id}
-            AND ${statusIncidentUpdates.body} ILIKE ${pattern}
+          SELECT 1 FROM status_incident_updates siu
+          WHERE siu.incident_id = ${statusIncidents.id}
+            AND siu.body ILIKE ${pattern}
         )`
       )!
     )

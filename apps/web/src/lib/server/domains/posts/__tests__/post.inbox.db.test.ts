@@ -1,11 +1,16 @@
 /**
- * Real-DB coverage for the inbox's Team response facet counts.
+ * Real-DB coverage for inbox predicates whose correctness depends on how
+ * Drizzle renders correlated subqueries.
  *
- * The counts select a correlated EXISTS over post_comments. Drizzle renders
- * columns in a single-table select list without their table prefix, so an
- * outer `posts.id` written as a Drizzle column binds to `post_comments.id`
- * inside the subquery and every post counts as unresponded. Only real SQL
- * shows that, so this suite runs against Postgres.
+ * - The Team response counts select a correlated EXISTS. Drizzle renders
+ *   columns in a single-table select list without their table prefix, so an
+ *   outer `posts.id` written as a Drizzle column binds to `post_comments.id`
+ *   inside the subquery and every post counts as unresponded.
+ * - The list reads through the relational query builder, which rewrites every
+ *   column object in a raw `sql` fragment onto the posts alias, so the author
+ *   email EXISTS must name the principal and user columns raw.
+ *
+ * Only real SQL shows either, so this suite runs against Postgres.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type BoardId, type PostId, type PrincipalId, type UserId } from '@quackback/ids'
@@ -28,10 +33,10 @@ const fixture = await createDbTestFixture({
 
 const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 
-async function seedPrincipal(name: string): Promise<PrincipalId> {
+async function seedPrincipal(name: string, email?: string): Promise<PrincipalId> {
   const userId = createId('user') as UserId
   const principalId = createId('principal') as PrincipalId
-  await testDb.insert(user).values({ id: userId, name })
+  await testDb.insert(user).values({ id: userId, name, ...(email && { email }) })
   await testDb.insert(principal).values({
     id: principalId,
     userId,
@@ -69,7 +74,7 @@ async function seedComment(postId: PostId, author: PrincipalId, isTeamMember: bo
     .values({ postId, principalId: author, content: 'comment', isTeamMember })
 }
 
-describe.skipIf(!fixture.available)('inbox Team response facet counts (real DB)', () => {
+describe.skipIf(!fixture.available)('inbox correlated predicates (real DB)', () => {
   beforeEach(fixture.begin)
   afterEach(fixture.rollback)
   afterAll(fixture.close)
@@ -88,5 +93,18 @@ describe.skipIf(!fixture.available)('inbox Team response facet counts (real DB)'
 
     const list = await listInboxPosts({ boardIds: [boardId], responded: 'responded' })
     expect(list.items.map((p) => p.title)).toEqual(['Answered'])
+  })
+
+  it('filters the list by author email, case-insensitively', async () => {
+    const email = `ada-${suffix()}@acme.test`
+    const ada = await seedPrincipal('Ada', email)
+    const other = await seedPrincipal('Other', `other-${suffix()}@acme.test`)
+    const boardId = await seedBoard()
+    await seedPost(boardId, ada, 'By Ada')
+    await seedPost(boardId, other, 'By someone else')
+
+    const list = await listInboxPosts({ authorEmail: email.toUpperCase() })
+
+    expect(list.items.map((p) => p.title)).toEqual(['By Ada'])
   })
 })

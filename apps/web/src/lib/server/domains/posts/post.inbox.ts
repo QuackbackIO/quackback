@@ -10,8 +10,6 @@ import {
   postStatuses,
   postTagAssignments,
   userSegments,
-  principal,
-  user,
   eq,
   and,
   inArray,
@@ -128,12 +126,15 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
     conditions.push(eq(posts.principalId, authorId))
   } else if (authorEmail) {
     const email = authorEmail.toLowerCase()
+    // Raw names for the inner tables: the relational query builder rewrites
+    // every column object onto the posts alias. Only the outer
+    // ${posts.principalId} should follow it.
     conditions.push(
       sql`exists (
-        select 1 from ${principal}
-        inner join ${user} on ${user.id} = ${principal.userId}
-        where ${principal.id} = ${posts.principalId}
-          and lower(${user.email}) = ${email}
+        select 1 from principal author_principal
+        inner join "user" author_user on author_user.id = author_principal.user_id
+        where author_principal.id = ${posts.principalId}
+          and lower(author_user.email) = ${email}
       )`
     )
   }

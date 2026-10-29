@@ -47,8 +47,10 @@ describe('listStatusIncidents search', () => {
   it('also matches update bodies (operators search for error codes posted in updates)', async () => {
     await listStatusIncidents({ search: 'ECONNRESET' })
     const { sql, params } = capturedWhereSql()
+    // Whether the EXISTS survives the relational builder's alias rewrite is
+    // pinned against real SQL in status.incident-search.db.test.ts.
     expect(sql).toContain('exists')
-    expect(sql).toContain('"body" ilike')
+    expect(sql).toContain('siu.body ilike')
     expect(params.filter((p) => p === '%ECONNRESET%')).toHaveLength(2)
   })
 
