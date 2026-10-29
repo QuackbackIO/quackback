@@ -318,6 +318,21 @@ vi.mock('@/lib/server/domains/statuses/status.service', () => ({
     .mockResolvedValue([{ id: 'post_status_test', name: 'Open', slug: 'open', color: '#22c55e' }]),
 }))
 
+vi.mock('@/lib/server/domains/tickets/ticket-status.service', () => ({
+  listTicketStatuses: vi.fn().mockResolvedValue([
+    {
+      id: 'ticket_status_open',
+      name: 'Open',
+      slug: 'open',
+      category: 'open',
+      publicStage: 'received',
+      color: '#3b82f6',
+      isDefault: true,
+      sortOrder: 0,
+    },
+  ]),
+}))
+
 vi.mock('@/lib/server/domains/post-tags/post-tag.service', () => ({
   listPostTags: vi.fn().mockResolvedValue([{ id: 'tag_test', name: 'Bug', color: '#ef4444' }]),
 }))
@@ -730,6 +745,7 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('create_ticket')
       expect(toolNames).toContain('reply_to_ticket')
       expect(toolNames).toContain('add_ticket_note')
+      expect(toolNames).toContain('set_ticket_status')
       expect(toolNames).toContain('link_ticket')
       expect(toolNames).toContain('unlink_ticket')
       expect(toolNames).toContain('upload_file')
@@ -740,7 +756,7 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('navigate_workspace')
       expect(toolNames).toContain('get_approval')
       expect(toolNames).toContain('list_approvals')
-      expect(toolNames).toHaveLength(46)
+      expect(toolNames).toHaveLength(47)
     })
 
     it('should handle resources/list request', async () => {
@@ -755,11 +771,12 @@ describe('MCP HTTP Handler', () => {
       const uris = body.result.resources.map((r) => r.uri)
       expect(uris).toContain('quackback://boards')
       expect(uris).toContain('quackback://statuses')
+      expect(uris).toContain('quackback://ticket-statuses')
       expect(uris).toContain('quackback://tags')
       expect(uris).toContain('quackback://roadmaps')
       expect(uris).toContain('quackback://members')
       expect(uris).toContain('quackback://help-center/categories')
-      expect(uris).toHaveLength(6)
+      expect(uris).toHaveLength(7)
     })
 
     // ── search tool (posts) ─────────────────────────────────────────────────

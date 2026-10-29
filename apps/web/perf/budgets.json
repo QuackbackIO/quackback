@@ -995,7 +995,7 @@
       "jsRequests": 0,
       "jsKB": 0,
       "htmlTransferKB": 0,
-      "componentRenders": 649
+      "componentRenders": 725
     },
     "ui:portal-type-post-title": {
       "dbQueries": 6,

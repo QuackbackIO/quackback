@@ -43,6 +43,7 @@ export const TOOL_SCOPES: Readonly<Record<string, McpScope>> = {
   add_ticket_note: 'write:chat',
   link_ticket: 'write:chat',
   unlink_ticket: 'write:chat',
+  set_ticket_status: 'write:chat',
   upload_file: 'write:chat',
   widget_install_status: 'read:feedback',
   get_settings: 'read:settings',
@@ -55,6 +56,7 @@ export const TOOL_SCOPES: Readonly<Record<string, McpScope>> = {
 export const RESOURCE_SCOPES: Readonly<Record<string, McpScope>> = {
   'quackback://boards': 'read:feedback',
   'quackback://statuses': 'read:feedback',
+  'quackback://ticket-statuses': 'read:chat',
   'quackback://tags': 'read:feedback',
   'quackback://roadmaps': 'read:feedback',
   'quackback://members': 'read:feedback',

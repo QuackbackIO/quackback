@@ -1,4 +1,10 @@
 {
   "_comment": "Reviewed exceptions for `bun audit` (see scripts/audit-check.ts). Each entry suppresses one advisory, keyed by its GHSA id, until `expires` (YYYY-MM-DD, UTC). CI fails on any high/critical production advisory that is not listed here with an unexpired entry, and on any listed entry that has expired while its advisory is still present. Keep this list as short as possible and prefer upgrading or overriding the dependency over adding an exception.",
-  "advisories": []
+  "advisories": [
+    {
+      "ghsa": "GHSA-27r3-jxmh-p828",
+      "reason": "Transitive body-parser dependency; Quackback web runtime serves HTTP requests via Bun/Nitro/Vinxi native Request streams rather than Express body-parser compressed body middleware.",
+      "expires": "2026-11-30"
+    }
+  ]
 }
