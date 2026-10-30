@@ -110,6 +110,19 @@ Each has a setup guide in the [docs](https://feedback.quackback.io/hc/en/collect
 
 Quackback Cloud runs this codebase, so its client side lives here: a default-off `cloud` settings block, plan and entitlement checks, and a control-plane client. On a self-hosted install none of it activates. An install with no cloud configuration is entitled to every feature, shows no upgrade prompts and makes no requests to our control plane. There's nothing to opt out of. We say so here so you never have to discover it in the code.
 
+### Kubernetes
+
+```bash
+helm install quackback ./deploy/kubernetes/quackback \
+  --namespace quackback --create-namespace \
+  --set secretKey="$(openssl rand -base64 32)" \
+  --set baseUrl=https://feedback.example.com \
+  --set ingress.host=feedback.example.com \
+  --set ingress.tls.secretName=feedback-tls
+```
+
+See the [Helm chart guide](deploy/kubernetes/quackback/README.md) for full configuration, including running against an external database and object storage.
+
 ## Contributing
 
 Start with the [Contributing Guide](CONTRIBUTING.md), ask questions in [Discussions](https://github.com/QuackbackIO/quackback/discussions), and see what's being asked for on [our own board](https://feedback.quackback.io).
