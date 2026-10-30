@@ -4,7 +4,7 @@
  * draft bar at once, and Review and publish lists it before it goes live.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { defaultDesign } from '@/lib/shared/design/schema'
@@ -68,6 +68,20 @@ describe('AppearanceView', () => {
     fireEvent.click(await screen.findByRole('radio', { name: 'Compact' }))
     expect(screen.getByTestId('preview').textContent).toBe('compact')
     expect(screen.getByRole('status').textContent).toContain('Draft · 1 change, not live')
+  })
+
+  it('opens Sections when a section is picked in the preview', async () => {
+    mount()
+    expect(screen.queryByText('Menu style')).toBeNull()
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'quackback:preview-section', section: 'band' },
+          origin: window.location.origin,
+        })
+      )
+    })
+    expect(await screen.findByText('Menu style')).toBeTruthy()
   })
 
   it('applies a preset’s whole look to the draft', async () => {

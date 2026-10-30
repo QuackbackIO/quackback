@@ -463,7 +463,7 @@ export function FeedbackContainer({
   }
 
   return (
-    <div>
+    <div data-qb-section="feed">
       <div className="flex gap-6 lg:gap-8 [[data-qb-filters=start]_&]:flex-row-reverse">
         <div className="flex-1 min-w-0">
           <FeedbackHeader

@@ -55,3 +55,25 @@ export function applyDesignAttributes(attributes: Record<string, string>): () =>
     }
   }
 }
+
+/** Outlines the innermost section under the pointer, so it reads as clickable. */
+export const SECTION_OUTLINE_CSS =
+  '[data-qb-section]{cursor:pointer}' +
+  '[data-qb-section]:hover:not(:has([data-qb-section]:hover)){outline:2px dashed oklch(0.55 0 0 / 0.7);outline-offset:4px}'
+
+/**
+ * A click on a section (not on one of its links, buttons or fields) tells
+ * Appearance which section to open. Returns what stops listening.
+ */
+export function startSectionPicking(): () => void {
+  function onClick(event: MouseEvent) {
+    const target = event.target as Element | null
+    if (!target || target.closest('a, button, input, textarea, select, [role="button"]')) return
+    const section = target.closest('[data-qb-section]')?.getAttribute('data-qb-section')
+    if (!section) return
+    event.preventDefault()
+    window.parent.postMessage({ type: 'quackback:preview-section', section }, window.location.origin)
+  }
+  document.addEventListener('click', onClick, true)
+  return () => document.removeEventListener('click', onClick, true)
+}
