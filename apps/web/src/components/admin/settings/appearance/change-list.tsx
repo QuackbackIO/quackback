@@ -24,6 +24,7 @@ const LABELS: Record<string, string> = {
   'layout.density': 'Density',
   'layout.width': 'Page width',
   'layout.filters': 'Filters side',
+  'pages.feedback.defaultSort': 'Default sort',
 }
 
 /** A change's name as the Appearance controls call it. */
@@ -33,6 +34,10 @@ export function changeLabel(path: string): string {
     const name = COLOURS[colour[2]] ?? colour[2]
     return colour[1] === 'dark' ? `Dark ${name.toLowerCase()}` : name
   }
+  if (path.startsWith('pages.feedback.welcome.body')) return 'Welcome message text'
+  if (path === 'pages.feedback.welcome.show') return 'Welcome message'
+  const headline = path.match(/^pages\.feedback\.headline(?:\.(title|subtitle))?/)
+  if (headline) return headline[1] === 'subtitle' ? 'Subtitle' : 'Headline'
   const font = path.match(/^(brand\.fonts\.(?:heading|body))\./)
   return LABELS[font ? font[1] : path] ?? path
 }

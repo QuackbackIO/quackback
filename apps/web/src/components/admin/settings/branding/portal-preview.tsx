@@ -32,6 +32,8 @@ interface PortalPreviewProps {
    * desktop layouts (an inline header, the filter panel) show as visitors see them.
    */
   scaleToDesktop?: boolean
+  /** The feed's sort in the frame; a design's default sort, which changes by reloading it. */
+  sort?: 'trending' | 'top' | 'new'
   /** A draft portal design, resolved: applied in the frame in place of the saved one. */
   design?: {
     css: string
@@ -49,8 +51,11 @@ const DESKTOP_WIDTH = 1280
  * preview flag as a boolean, the default sort included) so the frame loads
  * without a redirect first.
  */
-export function portalPreviewSrc(theme: 'light' | 'dark') {
-  return `/?theme=${theme}&preview=true&sort=trending`
+export function portalPreviewSrc(
+  theme: 'light' | 'dark',
+  sort: 'trending' | 'top' | 'new' = 'trending'
+) {
+  return `/?theme=${theme}&preview=true&sort=${sort}`
 }
 
 /**
@@ -72,6 +77,7 @@ export function PortalPreview({
   faviconUrl,
   design = null,
   scaleToDesktop = false,
+  sort = 'trending',
 }: PortalPreviewProps) {
   const frameBox = useRef<HTMLDivElement>(null)
   const [boxWidth, setBoxWidth] = useState(0)
@@ -171,7 +177,7 @@ export function PortalPreview({
         <iframe
           key={refreshKey}
           ref={iframeRef}
-          src={portalPreviewSrc(theme)}
+          src={portalPreviewSrc(theme, sort)}
           title="Portal preview"
           className="w-full border-0 bg-background"
           style={

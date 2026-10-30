@@ -115,6 +115,7 @@ export function AppearanceView({
             draftDirty
             design={draft.preview}
             scaleToDesktop
+            sort={draft.design.pages.feedback.defaultSort}
             viewport={viewport}
             workspaceName={workspaceName}
             faviconUrl={faviconUrl}

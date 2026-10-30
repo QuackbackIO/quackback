@@ -3,6 +3,7 @@ import { Switch } from '@/components/ui/switch'
 import { SettingRow } from '@/components/admin/settings/setting-row'
 import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-body-editor'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import { ArrowTrendingUpIcon, ClockIcon, FireIcon } from '@heroicons/react/24/solid'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { DesignTiles } from './design-tiles'
@@ -130,6 +131,29 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
             label: capital(cards),
             drawing: <CardsDrawing cards={cards} />,
           }))}
+        />
+        <DesignTiles
+          name="design-sort"
+          label="Default sort"
+          value={design.pages.feedback.defaultSort}
+          onChange={(sort) => update((draft) => void (draft.pages.feedback.defaultSort = sort))}
+          options={[
+            {
+              value: 'trending',
+              label: 'Trending',
+              drawing: <FireIcon className="size-5 text-foreground/50" />,
+            },
+            {
+              value: 'top',
+              label: 'Top',
+              drawing: <ArrowTrendingUpIcon className="size-5 text-foreground/50" />,
+            },
+            {
+              value: 'new',
+              label: 'New',
+              drawing: <ClockIcon className="size-5 text-foreground/50" />,
+            },
+          ]}
         />
         <DesignTiles
           name="design-density"
