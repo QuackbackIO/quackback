@@ -3,7 +3,11 @@
  */
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import type { PrincipalId } from '@quackback/ids'
+import type { IntegrationDestinationId, PrincipalId } from '@quackback/ids'
+import type {
+  GitHubInboundMode,
+  GitHubTicketScope,
+} from '@/lib/server/domains/channel-accounts/github-connection'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ValidationError } from '@/lib/shared/errors'
 
@@ -58,6 +62,23 @@ export const getGitHubConnectUrl = createServerFn({ method: 'GET' })
     return `/oauth/github/connect?state=${encodeURIComponent(state)}`
   })
 
+/** One repository as the inbox channel page shows it. */
+export interface GitHubChannelRepository {
+  id: string
+  repo: string
+  /** Switched on for sync at all (the integration's own switch). */
+  enabled: boolean
+  /** Whether its issues and comments come into the inbox, and whether each opens a ticket. */
+  inboundMode: GitHubInboundMode
+  /** The team and ticket type its tickets get, in `tickets` mode. */
+  ticketScope: GitHubTicketScope
+  /** False for a send-only repository, whose deliveries are never read. */
+  receives: boolean
+  /** The events its webhook was last registered for. */
+  webhookEvents: string[]
+  lastInboundAt: string | null
+}
+
 export interface GitHubChannelStatus {
   connected: boolean
   status: 'active' | 'paused' | 'pending' | null
@@ -70,14 +91,21 @@ export interface GitHubChannelStatus {
   lastErrorAt: string | null
   lastOutboundAt: string | null
   lastInboundAt: string | null
+  repositories: GitHubChannelRepository[]
 }
 
 export const getGitHubChannelStatusFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<GitHubChannelStatus> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { getLiveGitHubConnectionAccount, githubAccessTokenPresent } =
-      await import('@/lib/server/domains/channel-accounts/github-connection')
+    const {
+      getLiveGitHubConnectionAccount,
+      githubAccessTokenPresent,
+      githubInboundMode,
+      githubTicketScope,
+    } = await import('@/lib/server/domains/channel-accounts/github-connection')
+    const { listDestinations, destinationReceives } =
+      await import('@/lib/server/integrations/destinations')
 
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const integration = await db.query.integrations.findFirst({
@@ -98,6 +126,7 @@ export const getGitHubChannelStatusFn = createServerFn({ method: 'GET' }).handle
     }
     const missingTokenError =
       !!inbox && !hasToken ? 'GitHub is not connected. Connect GitHub to send comments.' : null
+    const repositories = integration ? await listDestinations(integration.id, 'repo') : []
     return {
       connected: integration?.status === 'active' || integration?.status === 'paused',
       status: (integration?.status as GitHubChannelStatus['status']) ?? null,
@@ -109,6 +138,16 @@ export const getGitHubChannelStatusFn = createServerFn({ method: 'GET' }).handle
       lastErrorAt: integration?.lastErrorAt?.toISOString() ?? null,
       lastOutboundAt: integration?.lastOutboundAt?.toISOString() ?? null,
       lastInboundAt: integration?.lastInboundAt?.toISOString() ?? null,
+      repositories: repositories.map((repository) => ({
+        id: repository.id,
+        repo: repository.externalId,
+        enabled: repository.enabled,
+        inboundMode: githubInboundMode(repository.config),
+        ticketScope: githubTicketScope(repository.config),
+        receives: destinationReceives({ ...repository, enabled: true }),
+        webhookEvents: repository.webhookEvents ?? [],
+        lastInboundAt: repository.lastInboundAt?.toISOString() ?? null,
+      })),
     }
   }
 )
@@ -123,6 +162,7 @@ export const setGitHubInboxEnabledFn = createServerFn({ method: 'POST' })
       disableGitHubConnectionAccount,
       syncGitHubWebhookEvents,
       githubInboxEnableDeniedReason,
+      optInDefaultGitHubRepository,
     } = await import('@/lib/server/domains/channel-accounts/github-connection')
 
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
@@ -147,6 +187,9 @@ export const setGitHubInboxEnabledFn = createServerFn({ method: 'POST' })
         throw new Error(denied ?? 'Connect GitHub before enabling the inbox channel.')
       }
       await ensureGitHubConnectionAccount(integration.id)
+      const { ensureDestinations } = await import('@/lib/server/integrations/destinations')
+      await ensureDestinations(integration)
+      await optInDefaultGitHubRepository(integration)
     } else {
       await disableGitHubConnectionAccount()
     }
@@ -155,6 +198,47 @@ export const setGitHubInboxEnabledFn = createServerFn({ method: 'POST' })
     } catch {
       // lastError is already recorded; the switch still persists.
     }
+    return { ok: true }
+  })
+
+/**
+ * What one repository does with its issues: nothing, inbox conversations, or
+ * conversations each paired with a ticket (with the team and ticket type
+ * those tickets get). A channel setting (`channel_account.manage`), like the
+ * inbox switch itself; only that repository's webhook is resubscribed.
+ */
+export const setGitHubRepositoryInboxFn = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      destinationId: z.string().max(100),
+      inboundMode: z.enum(['off', 'conversations', 'tickets']),
+      ticketScope: z
+        .object({
+          teamId: z.string().max(100).nullable(),
+          ticketTypeId: z.string().max(100).nullable(),
+        })
+        .optional(),
+    })
+  )
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
+    const { db, eq, integrationDestinations, integrations } = await import('@/lib/server/db')
+    const { NotFoundError } = await import('@/lib/shared/errors')
+
+    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    const [row] = await db
+      .select({ integrationType: integrations.integrationType })
+      .from(integrationDestinations)
+      .innerJoin(integrations, eq(integrations.id, integrationDestinations.integrationId))
+      .where(eq(integrationDestinations.id, data.destinationId as IntegrationDestinationId))
+      .limit(1)
+    if (row?.integrationType !== 'github')
+      throw new NotFoundError('DESTINATION_NOT_FOUND', 'Repository not found')
+    const { updateDestinationConfig } = await import('@/lib/server/integrations/destination-admin')
+    await updateDestinationConfig(data.destinationId, {
+      inboundMode: data.inboundMode,
+      ...(data.ticketScope ? { ticketScope: data.ticketScope } : {}),
+    })
     return { ok: true }
   })
 

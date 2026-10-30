@@ -97,6 +97,14 @@ export const updateIntegrationFn = createServerFn({ method: 'POST' })
             updatedAt: new Date(),
           },
         })
+      // A provider serving several destinations repeats its default mappings
+      // for each of them, so the same switch covers every repository.
+      const { getIntegration } = await import('@/lib/server/integrations')
+      if (getIntegration(integration.integrationType)?.destination?.multiple) {
+        const { mirrorDestinationEventMappings } =
+          await import('@/lib/server/integrations/destination-admin')
+        await mirrorDestinationEventMappings(integrationId)
+      }
     }
 
     const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')
@@ -147,6 +155,27 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
         current.connectedAt?.getTime() !== integration.connectedAt?.getTime()
       )
         throw new Error('Integration was reconnected. Reload before disconnecting.')
+      // A provider with a webhook per destination (one per GitHub repository)
+      // removes them all here, while the token can still authorize it and
+      // before onDisconnect revokes that token. Their rows go with the
+      // connection by cascade. Best effort, like onDisconnect.
+      if (current.secrets && definition?.destination?.multiple) {
+        try {
+          const { unregisterDestinationWebhooks } =
+            await import('@/lib/server/integrations/destinations')
+          const { accessToken } = decryptSecrets<{ accessToken?: string }>(current.secrets)
+          await unregisterDestinationWebhooks({
+            integration: current,
+            accessToken: accessToken ?? '',
+            executor: tx,
+          })
+        } catch (err) {
+          log.error(
+            { err, integration_type: current.integrationType },
+            'destination webhook cleanup failed'
+          )
+        }
+      }
       if (current.secrets && definition?.onDisconnect) {
         try {
           await definition.onDisconnect(

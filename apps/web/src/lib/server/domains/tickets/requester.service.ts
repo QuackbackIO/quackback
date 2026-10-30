@@ -15,12 +15,16 @@ import {
   tickets,
   ticketConversations,
   ticketStatuses,
+  conversationParticipants,
   principal,
   eq,
   and,
   desc,
   inArray,
   isNull,
+  isNotNull,
+  or,
+  sql,
   type Ticket,
 } from '@/lib/server/db'
 import type { ConversationId, TicketId, TicketTypeId, PrincipalId } from '@quackback/ids'
@@ -29,8 +33,13 @@ import type { TiptapContent, ConversationAttachment } from '@/lib/shared/db-type
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
 import { loadTicketOr404, createTicketCore, autoReopenOnRequesterReply } from './ticket.service'
-import { emitTicketReplied } from './ticket.webhooks'
+import {
+  emitTicketReplied,
+  emitTicketSubscriberAdded,
+  emitTicketSubscriberRemoved,
+} from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, toRequesterTicketDTO } from './ticket.dto'
+import { hasParticipantThreadAccess } from '../conversation/conversation-participant.service'
 import { insertTicketMessage, type SendTicketMessageInput } from './ticket-message.service'
 import type { RequesterTicketDTO, TicketStageRef } from './ticket.types'
 import { resolveStage } from './ticket.lifecycle'
@@ -107,16 +116,39 @@ export async function captureRequesterEmail(
   return { captured: res.length > 0 }
 }
 
+/** How a customer relates to a ticket they can see (ticket sharing). */
+export type TicketRelation = 'requester' | 'participant'
+
 /**
- * Load a ticket the actor owns as its requester, or 404. A requester only ever
- * sees their own `customer` tickets; anything else 404s so existence never leaks.
+ * A customer ticket the caller can see: their own, or one shared with them (a
+ * participant with the thread on its pair conversation). A requester only ever
+ * sees `customer` tickets; anything else is NotFound so existence never leaks.
  */
-async function loadOwnedTicketOr404(ticketId: TicketId, principalId: PrincipalId): Promise<Ticket> {
+export async function loadAccessibleTicketOr404(
+  ticketId: TicketId,
+  principalId: PrincipalId
+): Promise<{ ticket: Ticket; relation: TicketRelation; conversationId: ConversationId | null }> {
   const ticket = await loadTicketOr404(ticketId)
-  if (ticket.type !== 'customer' || ticket.requesterPrincipalId !== principalId) {
-    throw new NotFoundError('TICKET_NOT_FOUND', `Ticket ${ticketId} not found`)
+  const notFound = () => new NotFoundError('TICKET_NOT_FOUND', `Ticket ${ticketId} not found`)
+  if (ticket.type !== 'customer') throw notFound()
+  const [pair] = await db
+    .select({ conversationId: ticketConversations.conversationId })
+    .from(ticketConversations)
+    .where(
+      and(
+        eq(ticketConversations.ticketId, ticketId),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    .limit(1)
+  const conversationId = pair?.conversationId ?? null
+  if (ticket.requesterPrincipalId === principalId) {
+    return { ticket, relation: 'requester', conversationId }
   }
-  return ticket
+  if (conversationId && (await hasParticipantThreadAccess(conversationId, principalId))) {
+    return { ticket, relation: 'participant', conversationId }
+  }
+  throw notFound()
 }
 
 /**
@@ -154,6 +186,8 @@ export interface ConversationTicketSummary {
   reference: string
   title: string
   stage: TicketStageRef
+  /** The ticket's shared due date (ISO), null when none. */
+  dueAt: string | null
 }
 
 /**
@@ -167,8 +201,7 @@ export async function getRequesterTicketSummaries(
   conversationIds: ConversationId[],
   requesterPrincipalId: PrincipalId
 ): Promise<Map<ConversationId, ConversationTicketSummary>> {
-  const map = new Map<ConversationId, ConversationTicketSummary>()
-  if (conversationIds.length === 0) return map
+  if (conversationIds.length === 0) return new Map()
   const rows = await db
     .select({
       conversationId: ticketConversations.conversationId,
@@ -176,6 +209,7 @@ export async function getRequesterTicketSummaries(
       number: tickets.number,
       title: tickets.title,
       statusId: tickets.statusId,
+      dueAt: tickets.dueAt,
     })
     .from(ticketConversations)
     .innerJoin(tickets, eq(ticketConversations.ticketId, tickets.id))
@@ -187,6 +221,21 @@ export async function getRequesterTicketSummaries(
         isNull(tickets.deletedAt)
       )
     )
+  return summarizePairs(rows)
+}
+
+/** Stage chip + reference for each pair row (one status read for the batch). */
+export async function summarizePairs(
+  rows: Array<{
+    conversationId: ConversationId
+    ticketId: TicketId
+    number: number
+    title: string
+    statusId: Ticket['statusId']
+    dueAt: Date | null
+  }>
+): Promise<Map<ConversationId, ConversationTicketSummary>> {
+  const map = new Map<ConversationId, ConversationTicketSummary>()
   if (rows.length === 0) return map
   const statusIds = [...new Set(rows.map((r) => r.statusId))]
   const [statusRows, stageLabels] = await Promise.all([
@@ -206,6 +255,7 @@ export async function getRequesterTicketSummaries(
         label: slot ? stageLabels[slot] : null,
         closed: status?.category === 'closed',
       },
+      dueAt: r.dueAt ? r.dueAt.toISOString() : null,
     })
   }
   return map
@@ -226,12 +276,17 @@ export interface MyTicketSummary {
    *  a legacy standalone ticket (pre-pair rows were never backfilled). */
   conversationId: ConversationId | null
   updatedAt: string
+  /** The ticket's shared due date (ISO), null when none. */
+  dueAt: string | null
+  /** The caller's own ticket, or one a colleague or the team shared with them. */
+  relation: TicketRelation
 }
 
 /**
- * The requester's own customer tickets, newest-activity first. Ownership IS
- * the scope (the where clause is the requester id — no ticket.* permission
- * anywhere on this path), so a requester only ever sees their own tickets;
+ * The requester's own customer tickets, plus the ones shared with them,
+ * newest-activity first. Ownership or a share IS the scope (no ticket.*
+ * permission anywhere on this path), so a customer only ever sees tickets
+ * that are theirs or were given to them;
  * internal-only statuses project to a null stage instead of leaking. Each row
  * carries its pair's conversation id so the widget row opens the shared
  * thread straight from the list.
@@ -239,6 +294,8 @@ export interface MyTicketSummary {
 export async function listMyTicketSummaries(
   requesterPrincipalId: PrincipalId
 ): Promise<MyTicketSummary[]> {
+  // One read: the caller's own tickets and those shared with them (a
+  // participant row with thread access on the pair's conversation).
   const rows = await db
     .select({
       ticketId: tickets.id,
@@ -247,6 +304,8 @@ export async function listMyTicketSummaries(
       statusId: tickets.statusId,
       conversationId: ticketConversations.conversationId,
       updatedAt: tickets.updatedAt,
+      dueAt: tickets.dueAt,
+      relation: sql<TicketRelation>`case when ${tickets.requesterPrincipalId} = ${sql.param(requesterPrincipalId, tickets.requesterPrincipalId)} then 'requester' else 'participant' end`,
     })
     .from(tickets)
     .leftJoin(
@@ -256,11 +315,22 @@ export async function listMyTicketSummaries(
         eq(ticketConversations.ticketType, 'customer')
       )
     )
+    .leftJoin(
+      conversationParticipants,
+      and(
+        eq(conversationParticipants.conversationId, ticketConversations.conversationId),
+        eq(conversationParticipants.principalId, requesterPrincipalId),
+        eq(conversationParticipants.threadAccess, true)
+      )
+    )
     .where(
       and(
         eq(tickets.type, 'customer'),
-        eq(tickets.requesterPrincipalId, requesterPrincipalId),
-        isNull(tickets.deletedAt)
+        isNull(tickets.deletedAt),
+        or(
+          eq(tickets.requesterPrincipalId, requesterPrincipalId),
+          isNotNull(conversationParticipants.principalId)
+        )
       )
     )
     .orderBy(desc(tickets.updatedAt))
@@ -286,6 +356,8 @@ export async function listMyTicketSummaries(
       },
       conversationId: r.conversationId,
       updatedAt: r.updatedAt.toISOString(),
+      dueAt: r.dueAt ? r.dueAt.toISOString() : null,
+      relation: r.relation,
     }
   })
 }
@@ -315,6 +387,9 @@ export async function createMyTicket(
     ticketTypeId?: TicketTypeId | null
     /** Validated intake-form answers, stored on the ticket's customAttributes. */
     customAttributes?: Record<string, unknown>
+    /** The requester's proposed "Needed by" date; createTicketCore holds it to
+     *  the customer window (the requester files for themselves). */
+    dueAt?: Date | null
   }
 ): Promise<RequesterTicketDTO> {
   const principalId = requireRequester(actor)
@@ -331,6 +406,7 @@ export async function createMyTicket(
       descriptionJson: input.descriptionJson,
       attachments: input.attachments,
       customAttributes: input.customAttributes,
+      dueAt: input.dueAt ?? null,
       requesterPrincipalId: principalId,
       withBackingConversation: true,
     },
@@ -368,8 +444,10 @@ async function appendRequesterReply(
   actor: Actor
 ): Promise<{ message: ConversationMessageDTO }> {
   // CONVERGENCE PHASE 1a: on a linked pair the insert redirects to the
-  // conversation (the full conversation write pipeline runs there); the
-  // reopen + `ticket.replied` below are ticket-side and fire either way.
+  // conversation (the full conversation write pipeline runs there). The reopen
+  // below is ticket-side and runs either way; `ticket.replied` is emitted here
+  // only for a ticket-parented reply, since the pair-reply reaction raises it
+  // off the conversation's `message.created` (ticket.event-hooks.ts).
   const { message, ticket } = await insertTicketMessage(input, requesterPrincipalId, {
     senderType: 'visitor',
     isInternal: false,
@@ -379,7 +457,7 @@ async function appendRequesterReply(
   const { safeSubscribeToTicket } = await import('./ticket-subscription.service')
   await safeSubscribeToTicket(requesterPrincipalId, ticketId, 'requester')
   await autoReopenOnRequesterReply(ticketId, requesterPrincipalId)
-  void emitTicketReplied(actor, ticket, message)
+  if (!message.conversationId) void emitTicketReplied(actor, ticket, message)
   return { message }
 }
 
@@ -421,20 +499,26 @@ export async function appendInboundTicketReply(
 // portal settings).
 // ---------------------------------------------------------------------------
 
-/** Watch state for the requester's own ticket. */
+/** Watch state for the caller's own ticket, or one shared with them. */
 export async function getMyTicketWatchStatus(actor: Actor, ticketId: TicketId) {
   const principalId = requireRequester(actor)
-  await loadOwnedTicketOr404(ticketId, principalId)
+  await loadAccessibleTicketOr404(ticketId, principalId)
   const { getTicketWatchStatus } = await import('./ticket-subscription.service')
   return getTicketWatchStatus(principalId, ticketId)
 }
 
-/** Re-watch the requester's own ticket (reason 'manual' — an explicit opt-in). */
+/** Re-watch the caller's own ticket (reason 'manual' — an explicit opt-in), or
+ *  one shared with them (reason 'participant'). */
 export async function watchMyTicket(actor: Actor, ticketId: TicketId): Promise<void> {
   const principalId = requireRequester(actor)
-  await loadOwnedTicketOr404(ticketId, principalId)
+  const { ticket, relation } = await loadAccessibleTicketOr404(ticketId, principalId)
+  // Someone the ticket was shared with watches as a participant, whose
+  // notifications carry the customer view (portal links, no internal names).
+  const reason = relation === 'participant' ? 'participant' : 'manual'
   const { subscribeToTicket } = await import('./ticket-subscription.service')
-  await subscribeToTicket(principalId, ticketId, 'manual')
+  if (await subscribeToTicket(principalId, ticketId, reason)) {
+    void emitTicketSubscriberAdded(actor, ticket, principalId, reason)
+  }
 }
 
 /**
@@ -447,7 +531,8 @@ export async function watchMyTicket(actor: Actor, ticketId: TicketId): Promise<v
  */
 export async function unwatchMyTicket(actor: Actor, ticketId: TicketId): Promise<void> {
   const principalId = requireRequester(actor)
-  await loadOwnedTicketOr404(ticketId, principalId)
+  const { ticket } = await loadAccessibleTicketOr404(ticketId, principalId)
   const { unsubscribeFromTicket } = await import('./ticket-subscription.service')
-  await unsubscribeFromTicket(principalId, ticketId)
+  const reason = await unsubscribeFromTicket(principalId, ticketId)
+  if (reason) void emitTicketSubscriberRemoved(actor, ticket, principalId, reason)
 }

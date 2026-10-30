@@ -21,6 +21,8 @@ import {
   softDeleteTicket,
   bulkUpdateTickets,
 } from '../ticket.service'
+import { setTicketDueAt } from '../ticket-due.service'
+import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 
 const powerless: Actor = {
@@ -64,6 +66,28 @@ describe('ticket service permission guards', () => {
       /cannot delete this ticket/i
     )
   })
+
+  it('setTicketDueAt denies an actor without ticket.set_status, for a set and a clear', async () => {
+    await expect(
+      setTicketDueAt(ticketId, new Date(Date.now() + 86_400_000), powerless)
+    ).rejects.toMatchObject({ code: 'FORBIDDEN', message: expect.stringMatching(/due date/i) })
+    await expect(setTicketDueAt(ticketId, null, powerless)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+  })
+
+  it('setTicketDueAt rejects an out-of-window date before loading the ticket', async () => {
+    const admin: Actor = {
+      ...powerless,
+      role: 'admin',
+      permissions: resolveActorPermissions('admin'),
+    }
+    const now = new Date('2026-10-14T12:00:00.000Z')
+    const sixYearsOut = new Date(now.getTime() + 6 * 365 * 86_400_000)
+    await expect(setTicketDueAt(ticketId, sixYearsOut, admin, { now })).rejects.toMatchObject({
+      code: 'INVALID_DUE_DATE',
+    })
+  })
 })
 
 describe('bulkUpdateTickets: does not bypass the single-item authz it loops', () => {
@@ -101,6 +125,13 @@ describe('bulkUpdateTickets: does not bypass the single-item authz it loops', ()
     )
     expect(result.failed).toEqual([
       { id: ticketId, reason: expect.stringMatching(/cannot change this ticket priority/i) },
+    ])
+  })
+
+  it('set_due is denied by the ticket.set_status guard', async () => {
+    const result = await bulkUpdateTickets([ticketId], { type: 'set_due', dueAt: null }, powerless)
+    expect(result.failed).toEqual([
+      { id: ticketId, reason: expect.stringMatching(/cannot change this ticket due date/i) },
     ])
   })
 

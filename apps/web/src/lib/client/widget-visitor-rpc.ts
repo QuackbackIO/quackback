@@ -15,6 +15,10 @@ import {
   widgetGetMyTicketWatchStatusFn,
   widgetWatchMyTicketFn,
   widgetUnwatchMyTicketFn,
+  widgetGetMyTicketSharingFn,
+  widgetListMyTicketColleaguesFn,
+  widgetShareMyTicketFn,
+  widgetRemoveMyTicketShareFn,
 } from '@/lib/server/functions/widget/tickets'
 import type { VisitorSurfaceRpc } from './visitor-surface-rpc'
 
@@ -33,4 +37,8 @@ export const widgetVisitorRpc: VisitorSurfaceRpc = {
   getMyTicketWatchStatus: widgetGetMyTicketWatchStatusFn,
   watchMyTicket: widgetWatchMyTicketFn,
   unwatchMyTicket: widgetUnwatchMyTicketFn,
+  getMyTicketSharing: widgetGetMyTicketSharingFn,
+  listMyTicketColleagues: widgetListMyTicketColleaguesFn,
+  shareMyTicket: widgetShareMyTicketFn,
+  removeMyTicketShare: widgetRemoveMyTicketShareFn,
 }

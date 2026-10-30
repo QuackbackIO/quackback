@@ -1,4 +1,6 @@
 import type { TicketDTO } from '@/lib/server/domains/tickets/ticket.types'
+import type { TicketWatcher } from '@/lib/server/domains/tickets/ticket-subscription.service'
+import type { TicketParticipant } from '@/lib/server/domains/tickets/ticket-sharing.service'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 
@@ -45,5 +47,30 @@ export function serializeTicketMessage(dto: ConversationMessageDTO) {
     contentJson: dto.contentJson ?? null,
     attachments: dto.attachments?.length ? dto.attachments : null,
     createdAt: dto.createdAt,
+  }
+}
+
+/** Public, stable ticket-watcher shape: who watches, why, and whether they're
+ *  muted. Names and avatars only, never an email. */
+export function serializeTicketWatcher(w: TicketWatcher) {
+  return {
+    principalId: w.principalId,
+    displayName: w.displayName,
+    avatarUrl: w.avatarUrl,
+    isTeamMember: w.isTeamMember,
+    reason: w.reason,
+    mutedUntil: w.mutedUntil ? new Date(w.mutedUntil).toISOString() : null,
+  }
+}
+
+/** Public, stable shape of a customer a ticket is shared with. The email is
+ *  the address the team shared it with, for a team API key. */
+export function serializeTicketParticipant(p: TicketParticipant) {
+  return {
+    principalId: p.principalId,
+    displayName: p.displayName,
+    email: p.email,
+    avatarUrl: p.avatarUrl,
+    addedByPrincipalId: p.addedByPrincipalId,
   }
 }

@@ -155,6 +155,17 @@ export interface ParsedIssueRef {
   /** Human-readable reference shown in the UI (e.g. "acme/app#412", "PROJ-42"). */
   externalDisplayId: string
   externalUrl: string | null
+  /**
+   * For a provider serving several destinations: the configured destination
+   * (`integration_destinations.id`) the reference belongs to.
+   */
+  destinationId?: string
+}
+
+/** A destination a connection serves, as `parseRef` matches references against. */
+export interface ConfiguredDestination {
+  id: string
+  externalId: string
 }
 
 /**
@@ -175,7 +186,17 @@ export interface IssueTrackerCapability {
    * ref that violates the connected config (e.g. a foreign repository, when
    * the integration pins one).
    */
-  parseRef?(input: string, config: Record<string, unknown>): ParsedIssueRef | null
+  parseRef?(
+    input: string,
+    config: Record<string, unknown>,
+    /**
+     * The enabled destinations of a connection serving several (GitHub
+     * repositories). When given, the reference must belong to one of them and
+     * the result names it as `destinationId`; otherwise the connection's own
+     * `config.channelId` pin applies.
+     */
+    destinations?: readonly ConfiguredDestination[]
+  ): ParsedIssueRef | null
   /**
    * Create an issue/work item on the connected channel. Abstracts the CALL,
    * not the body format: `bodyMarkdown` is GitHub-flavored markdown and each
@@ -207,6 +228,8 @@ export interface ExternalStatusItem {
 export interface DestinationItem {
   id: string
   name: string
+  /** The provider's immutable id (GitHub's numeric repository id), when it has one. */
+  key?: string
 }
 
 /** A matching remote item returned by `externalLinks.search` (IF WO-15). */
@@ -252,6 +275,55 @@ export interface IntegrationDefinition {
       config: Record<string, unknown>
       accessToken: string
     }) => Promise<boolean>
+    /**
+     * One connection serves several destinations of this `destinations` kind
+     * (GitHub: repositories), each stored in `integration_destinations` with
+     * its own webhook and signing secret. `webhookRegistration` then runs once
+     * per destination with `config.channelId` naming it (see
+     * `destinations.ts`), and `inbound.destinationOf` routes deliveries.
+     */
+    multiple?: {
+      kind: string
+      label: string
+      /**
+       * Validates a patch to one destination's settings
+       * (`integration_destinations.config`): which keys exist and what they
+       * may hold. A key it does not accept is refused.
+       */
+      configSchema: import('zod').ZodType<
+        Partial<import('@/lib/server/db').IntegrationDestinationConfig>
+      >
+      /**
+       * Checks a patch that passed `configSchema` against the workspace (GitHub:
+       * the ticket scope names a live team and a customer ticket type). Throws
+       * a `ValidationError` to refuse it.
+       */
+      validateConfig?: (
+        patch: Partial<import('@/lib/server/db').IntegrationDestinationConfig>
+      ) => Promise<void>
+      /**
+       * Whether anything listens to one destination's webhook, so a newly
+       * added destination should get one. Receives that destination's config
+       * (`destinationConfig`: the connection's config with the destination's
+       * settings over it). Defaults to the connection's status-sync switch.
+       */
+      webhookWanted?: (config: Record<string, unknown>) => Promise<boolean>
+      /**
+       * The settings a destination starts with when it is added or created
+       * for a legacy connection. Defaults to none.
+       */
+      initialConfig?: (
+        integrationId: import('@quackback/ids').IntegrationId
+      ) => Promise<Partial<import('@/lib/server/db').IntegrationDestinationConfig>>
+      /**
+       * Called after a destination's settings change, so the provider can act
+       * on them (GitHub: resubscribe that repository's webhook). Best effort:
+       * a failure is the provider's to record.
+       */
+      onConfigChanged?: (
+        destination: import('./destinations').IntegrationDestination
+      ) => Promise<void>
+    }
   }
   appHooks?: {
     /** The provider executes through the shared ledger, with optional queue scheduling. */
@@ -384,6 +456,8 @@ export interface IntegrationDefinition {
           externalWebhookId?: string
           /** Authenticated provider response may issue the signing secret (e.g. Asana). */
           webhookSecret?: string
+          /** The events the webhook subscribes to, kept on the destination for display. */
+          events?: string[]
         }>
         unregister(params: {
           accessToken: string
