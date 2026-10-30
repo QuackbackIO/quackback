@@ -54,6 +54,8 @@ import type { EventType } from '@/lib/server/events/types'
 export interface Channel {
   id: string
   name: string
+  /** False when the integration can't post here (e.g. its bot can't see the channel). */
+  canPost?: boolean
 }
 
 export interface NotificationChannel {
@@ -241,6 +243,7 @@ function ChannelPicker<TChannel extends Channel>({
         <Button
           variant="outline"
           role="combobox"
+          aria-label="Channel"
           aria-expanded={open}
           className="w-full justify-between font-normal"
         >
@@ -288,23 +291,31 @@ function ChannelPicker<TChannel extends Channel>({
               {search ? 'No channels match your search.' : 'No channels available.'}
             </div>
           ) : (
-            filtered.map((channel) => (
-              <button
-                key={channel.id}
-                type="button"
-                className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors ${
-                  channel.id === value ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
-                }`}
-                onClick={() => {
-                  onSelect(channel.id)
-                  setOpen(false)
-                  setSearch('')
-                }}
-              >
-                {renderChannelIcon(channel)}
-                <span className="truncate">{channel.name}</span>
-              </button>
-            ))
+            filtered.map((channel) => {
+              const blocked = channel.canPost === false
+              return (
+                <button
+                  key={channel.id}
+                  type="button"
+                  disabled={blocked}
+                  title={blocked ? 'Give the bot access to this channel, then refresh' : undefined}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors',
+                    channel.id === value ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50',
+                    blocked && 'cursor-not-allowed text-muted-foreground hover:bg-transparent'
+                  )}
+                  onClick={() => {
+                    onSelect(channel.id)
+                    setOpen(false)
+                    setSearch('')
+                  }}
+                >
+                  {renderChannelIcon(channel)}
+                  <span className="truncate">{channel.name}</span>
+                  {blocked && <span className="ml-auto shrink-0 text-xs">No access</span>}
+                </button>
+              )
+            })
           )}
         </div>
       </PopoverContent>
@@ -527,6 +538,12 @@ function ChannelRow<TChannel extends Channel>({
           })}
         </div>
 
+        {updateMutation.isError && (
+          <p className="px-4 pb-3 pl-11 text-sm text-destructive">
+            {updateMutation.error.message || "Couldn't save the change. Try again."}
+          </p>
+        )}
+
         {expanded && (
           <div className="border-t border-border/30 bg-muted/5 px-4 pb-4">
             <div className="pl-10 pt-3 space-y-3">
@@ -565,6 +582,11 @@ function ChannelRow<TChannel extends Channel>({
               this channel.
             </DialogDescription>
           </DialogHeader>
+          {removeMutation.isError && (
+            <p className="text-sm text-destructive">
+              {removeMutation.error.message || "Couldn't remove the channel. Try again."}
+            </p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmRemove(false)}>
               Cancel
@@ -681,6 +703,7 @@ function AddChannelDialog<TChannel extends Channel>({
     Object.fromEntries(events.map((e) => [e.id, true]))
   )
   const [boardIds, setBoardIds] = useState<string[] | null>(null)
+  const resetAdd = addMutation.reset
 
   // Reset form state whenever the dialog closes (cancel, X, or save).
   useEffect(() => {
@@ -688,8 +711,9 @@ function AddChannelDialog<TChannel extends Channel>({
       setSelectedChannelId('')
       setSelectedEvents(Object.fromEntries(events.map((e) => [e.id, true])))
       setBoardIds(null)
+      resetAdd()
     }
-  }, [open, events])
+  }, [open, events, resetAdd])
 
   const availableChannels = channels.filter((c) => !existingChannelIds.includes(c.id))
   const allEventsSelected = events.every((e) => selectedEvents[e.id])
@@ -730,7 +754,10 @@ function AddChannelDialog<TChannel extends Channel>({
             <ChannelPicker<TChannel>
               channels={availableChannels}
               value={selectedChannelId}
-              onSelect={setSelectedChannelId}
+              onSelect={(channelId) => {
+                setSelectedChannelId(channelId)
+                resetAdd()
+              }}
               loading={loadingChannels}
               onRefresh={onRefreshChannels}
               renderChannelIcon={renderChannelIcon}
@@ -783,6 +810,12 @@ function AddChannelDialog<TChannel extends Channel>({
               disabled={addMutation.isPending}
             />
           </div>
+
+          {addMutation.isError && (
+            <p className="text-sm text-destructive">
+              {addMutation.error.message || "Couldn't add the channel. Try again."}
+            </p>
+          )}
         </div>
 
         <DialogFooter>
