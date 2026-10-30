@@ -1379,6 +1379,8 @@
   "automation.knowledge.copilotHome": "Die Startseite nutzt sie auch, zusammen mit den Connectoren von Copilot.",
   "settings.labs.copilotHome.label": "Copilot auf der Startseite",
   "settings.labs.copilotHome.description": "Stelle Fragen und schlage Änderungen auf der Startseite vor.",
+  "settings.labs.portalDesignV2.label": "Neues Portal-Design",
+  "settings.labs.portalDesignV2.description": "Gestalte das Portal unter Darstellung, mit Entwürfen und Versionen.",
   "ask.destination.home": "Start",
   "ask.destination.feedback": "Feedback",
   "ask.destination.roadmap": "Roadmap",
