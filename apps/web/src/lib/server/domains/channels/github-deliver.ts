@@ -5,6 +5,7 @@ import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { lookupChannelThreadByConversation } from '@/lib/server/domains/conversation/conversation.inbound-resolve'
 import { persistChannelDelivery } from '@/lib/server/domains/conversation/conversation.channel-delivery'
 import { logger } from '@/lib/server/logger'
+import { destinationServes } from '@/lib/server/integrations/destinations'
 import { parseGitHubThreadKey } from './github-thread'
 import type { AgentMessageDeliveryCtx, LifecycleDeliveryCtx, LifecycleKind } from './types'
 
@@ -82,6 +83,18 @@ async function resolveIssueTarget(
   if (!accessToken) {
     log.warn({ conversation_id: conversationId }, 'unreachable on GitHub: no access token')
     return { ok: false, error: 'GitHub is not connected.' }
+  }
+  // The thread key names the repository the issue lives in. A repository
+  // removed or switched off since the conversation started takes no replies.
+  if (!(await destinationServes(integration, parsed.ownerRepo))) {
+    log.warn(
+      { conversation_id: conversationId, repo: parsed.ownerRepo },
+      'unreachable on GitHub: repository no longer synced'
+    )
+    return {
+      ok: false,
+      error: `${parsed.ownerRepo} is no longer synced. Add it back in the GitHub integration to reply.`,
+    }
   }
   return { ok: true, ...parsed, accessToken, integrationId: integration.id }
 }
