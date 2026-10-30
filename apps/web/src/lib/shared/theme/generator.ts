@@ -1,5 +1,6 @@
 import type { ThemeConfig, ThemeMode, ThemeVariables } from './types'
 import { expandTheme, type MinimalThemeVariables } from './expand'
+import { withoutUnsafeThemeValues } from './safe-theme-value'
 
 export const variableMap: Record<string, string> = {
   background: '--background',
@@ -440,10 +441,14 @@ export function generateThemeCSS(config: ThemeConfig): string {
   if (!config) return ''
 
   const themeMode = config.themeMode ?? 'user'
+  // A stored value that could end its declaration counts as absent, so a row
+  // saved before values were checked still loads and the base palette fills in.
+  const light = withoutUnsafeThemeValues(config.light) ?? {}
+  const dark = withoutUnsafeThemeValues(config.dark) ?? {}
   // An unbranded config still emits the default tokens so admin, portal and
   // widget share one source of tokens when branding is absent.
-  const lightVars = themeMode !== 'dark' ? expandTheme(config.light ?? {}, { mode: 'light' }) : {}
-  const darkVars = themeMode !== 'light' ? expandTheme(config.dark ?? {}, { mode: 'dark' }) : {}
+  const lightVars = themeMode !== 'dark' ? expandTheme(light, { mode: 'light' }) : {}
+  const darkVars = themeMode !== 'light' ? expandTheme(dark, { mode: 'dark' }) : {}
   if (lightVars.fontSans) lightVars.fontSans = normalizeFontSans(lightVars.fontSans)
   if (darkVars.fontSans) darkVars.fontSans = normalizeFontSans(darkVars.fontSans)
 
@@ -475,7 +480,7 @@ export function generateThemeCSS(config: ThemeConfig): string {
   // The body restates a radius only when the config sets one, because a body
   // declaration beats a :root one and would hide a radius kept in custom CSS.
   // The stylesheet supplies the default otherwise.
-  const radiusConfigured = typeof config.light?.radius === 'string' && config.light.radius.trim()
+  const radiusConfigured = typeof light.radius === 'string' && light.radius.trim()
   if (lightVars.radius && radiusConfigured) bodyDeclarations.push(`--radius: ${lightVars.radius}`)
   if (bodyDeclarations.length > 0) {
     parts.push(`body { ${bodyDeclarations.join('; ')}; }`)
