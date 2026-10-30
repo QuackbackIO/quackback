@@ -187,11 +187,6 @@ function WidgetLayout() {
           __html: `
             body { overflow: hidden; margin: 0; }
             html, body, #root { height: 100%; }
-            /* Prevent white flash before theme resolves */
-            html.system { background: #fff; }
-            @media (prefers-color-scheme: dark) {
-              html.system { background: #09090b; }
-            }
           `,
         }}
       />
