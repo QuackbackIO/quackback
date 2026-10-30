@@ -43,8 +43,10 @@ const palette = z
     accent: color,
     background: color,
     ink: color,
-    /** Derived when missing. */
+    /** Cards. Derived when missing. */
     surface: color.optional(),
+    /** Raised surfaces such as chips and the vote box. Derived when missing. */
+    raised: color.optional(),
     /** Secondary text. Derived to 4.5:1 when missing. */
     muted: color.optional(),
     border: color.optional(),

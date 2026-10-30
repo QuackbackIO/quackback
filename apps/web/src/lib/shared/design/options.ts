@@ -44,7 +44,7 @@ export type DesignOption = keyof typeof DESIGN_OPTIONS
 /**
  * Fonts a design can use without uploading files: the families the portal
  * self-hosts, plus IBM Plex Sans, Fraunces and Bricolage Grotesque for the
- * presets and reference designs.
+ * presets and reference designs, and the system monospace stack.
  */
 export const BUNDLED_FONT_IDS = [
   'inter',
@@ -67,6 +67,7 @@ export const BUNDLED_FONT_IDS = [
   'ibm-plex-sans',
   'fraunces',
   'bricolage-grotesque',
+  'system-mono',
 ] as const
 export type BlockType = (typeof DESIGN_OPTIONS.blockType)[number]
 export type BlockWidth = (typeof DESIGN_OPTIONS.blockWidth)[number]
