@@ -33,6 +33,8 @@ export const REVISIONS_KEPT = 100
 export interface DesignAuthor {
   principalId: PrincipalId
   actor: AuditActor
+  /** The request, for the audit row's IP and user agent. */
+  headers?: Headers
 }
 
 export interface DesignState {
@@ -225,6 +227,7 @@ export async function publishDraft(
     await recordAuditEventInTransaction(tx, {
       event: 'design.published',
       actor: input.actor,
+      headers: input.headers,
       target: { type: 'portal_design', id: row.id },
       after: { revision: published.number, source: input.source },
       metadata: { principalId: input.principalId, revisionId: published.revisionId },
@@ -266,6 +269,7 @@ export async function restoreRevision(
     await recordAuditEventInTransaction(tx, {
       event: 'design.restored',
       actor: author.actor,
+      headers: author.headers,
       target: { type: 'portal_design', id: row.id },
       before: { revision: old.number },
       after: { revision: published.number },

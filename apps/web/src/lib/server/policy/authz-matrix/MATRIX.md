@@ -101,7 +101,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 755 surfaces
+### Server functions (`requireAuth`) — 761 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -529,6 +529,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/platform-credentials.ts`::deletePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::fetchPlatformCredentialsMaskedFn | integration.manage |
 | `lib/server/functions/portal-access.ts`::updatePortalAccessFn | settings.manage |
+| `lib/server/functions/portal-design.ts`::getPortalDesignFn | settings.branding |
+| `lib/server/functions/portal-design.ts`::savePortalDesignDraftFn | settings.branding |
+| `lib/server/functions/portal-design.ts`::discardPortalDesignDraftFn | settings.branding |
+| `lib/server/functions/portal-design.ts`::publishPortalDesignFn | settings.branding |
+| `lib/server/functions/portal-design.ts`::listPortalDesignVersionsFn | settings.branding |
+| `lib/server/functions/portal-design.ts`::restorePortalDesignVersionFn | settings.branding |
 | `lib/server/functions/portal-invites.ts`::sendPortalInviteFn | settings.manage |
 | `lib/server/functions/portal-invites.ts`::cancelPortalInviteFn | settings.manage |
 | `lib/server/functions/portal-invites.ts`::resendPortalInviteFn | settings.manage |
@@ -861,7 +867,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workspace-copilot.ts`::undoWorkspaceSettingsProposalFn | DYNAMIC (copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 133 surfaces
+### Public REST API (`withApiKeyAuth`) — 137 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -954,6 +960,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/settings/$area.ts`::GET | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `routes/api/v1/settings/$area.ts`::PATCH | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `routes/api/v1/settings/index.ts`::GET | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
+| `routes/api/v1/settings/portal_design.draft.ts`::DELETE | DYNAMIC (settings.branding) |
+| `routes/api/v1/settings/portal_design.ts`::GET | DYNAMIC (settings.branding) |
+| `routes/api/v1/settings/portal_design.ts`::PATCH | DYNAMIC (settings.branding) |
+| `routes/api/v1/settings/portal_design.versions.ts`::GET | DYNAMIC (settings.branding) |
 | `routes/api/v1/settings/receipts.$receiptId.undo.ts`::POST | DYNAMIC (settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `routes/api/v1/status/-service-handlers.ts`::listStatusComponentsHandler | PUBLIC (any valid key) |
 | `routes/api/v1/status/-service-handlers.ts`::createStatusComponentHandler | status_page.manage |
@@ -1020,7 +1030,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-46 tools. "Team" = requires an admin/member role in addition to the scope.
+48 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
@@ -1039,6 +1049,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | get_approval | read:settings | ✓ |
 | get_conversation | read:chat | ✓ |
 | get_details | read:article, read:feedback | ✓ |
+| get_portal_design | read:settings | ✓ |
 | get_post_activity | read:feedback | ✓ |
 | get_settings | read:settings | ✓ |
 | get_ticket | read:chat | ✓ |
@@ -1066,6 +1077,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | update_article | write:article | ✓ |
 | update_changelog | write:changelog | ✓ |
 | update_comment | write:feedback | · |
+| update_portal_design_draft | write:settings | ✓ |
 | update_settings | write:settings | ✓ |
 | upload_file | write:chat | ✓ |
 | vote_post | write:feedback | · |
@@ -1083,7 +1095,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-228 of 1101 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+228 of 1111 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

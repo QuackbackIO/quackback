@@ -24,6 +24,31 @@ export interface DesignSourceInput {
   legacy: LegacyBranding & { customCss: string }
 }
 
+/** The settings a workspace's branding is read from, as the converter takes them. */
+export interface LegacySettings {
+  brandingConfig: LegacyBranding['brandingConfig']
+  portalConfig?: LegacyBranding['portalConfig']
+  customCss?: string | null
+  logoKey?: string | null
+  headerLogoKey?: string | null
+  faviconKey?: string | null
+  headerDisplayMode?: string | null
+  headerDisplayName?: string | null
+}
+
+export function legacyBrandingOf(settings: LegacySettings): DesignSourceInput['legacy'] {
+  return {
+    brandingConfig: settings.brandingConfig,
+    portalConfig: settings.portalConfig,
+    logoKey: settings.logoKey,
+    headerLogoKey: settings.headerLogoKey,
+    faviconKey: settings.faviconKey,
+    headerDisplayMode: settings.headerDisplayMode,
+    headerDisplayName: settings.headerDisplayName,
+    customCss: settings.customCss ?? '',
+  }
+}
+
 /** Custom CSS without comments or whitespace: what a switch would have to carry over. */
 export function advancedCssRemainder(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, '').trim()

@@ -1004,26 +1004,16 @@ async function choosePortalDesign(
   // With the flag off nothing here runs, not even the config read.
   if (!featureFlags.portalDesignV2) return { engine: 'legacy' }
   try {
-    const [{ getPublishedRevision }, { portalDesignView, resolveDesignSource }] = await Promise.all(
-      [
+    const [{ getPublishedRevision }, { legacyBrandingOf, portalDesignView, resolveDesignSource }] =
+      await Promise.all([
         import('@/lib/server/domains/design/design.service'),
         import('@/lib/server/domains/design/engine'),
-      ]
-    )
+      ])
     const source = resolveDesignSource({
       override: config.portalDesignEngine,
       flagOn: true,
       published: await getPublishedRevision(),
-      legacy: {
-        brandingConfig,
-        portalConfig,
-        logoKey: org.logoKey,
-        headerLogoKey: org.headerLogoKey,
-        faviconKey: org.faviconKey,
-        headerDisplayMode: org.headerDisplayMode,
-        headerDisplayName: org.headerDisplayName,
-        customCss: org.customCss ?? '',
-      },
+      legacy: legacyBrandingOf({ ...org, brandingConfig, portalConfig }),
     })
     return portalDesignView(source)
   } catch (error) {
