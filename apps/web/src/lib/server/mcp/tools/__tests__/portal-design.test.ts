@@ -1,7 +1,8 @@
 /**
  * The portal design MCP tools: a person with the branding permission reads
  * the design and edits its draft; a stale revision and a broken design come
- * back as errors the client can act on.
+ * back as errors the client can act on. Asking to publish files an approval
+ * and publishes nothing.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
@@ -10,6 +11,14 @@ import { z } from 'zod'
 const state = vi.hoisted(() => ({
   patchResult: { ok: true } as unknown,
   patches: [] as unknown[],
+  requestResult: null as unknown,
+  requesters: [] as unknown[],
+  engine: 'v2' as 'v2' | 'legacy',
+}))
+
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getWorkspaceSettings: async () => ({ portalDesign: { engine: state.engine } }),
+  isFeatureEnabled: async () => true,
 }))
 
 vi.mock('../../resolve-actor', () => ({
@@ -21,6 +30,16 @@ vi.mock('@/lib/server/domains/design/design.actions', () => ({
     state.patches.push({ patch, author, expected })
     return state.patchResult
   },
+}))
+
+vi.mock('@/lib/server/domains/assistant/design-publish-request', () => ({
+  requestDesignPublish: async (requester: unknown) => {
+    state.requesters.push(requester)
+    return state.requestResult
+  },
+}))
+vi.mock('@/lib/server/domains/assistant/approvals.follow', () => ({
+  approvalUrl: (id: string) => `https://example.com/admin/approvals/${id}`,
 }))
 
 import { registerPortalDesignTools } from '../portal-design'
@@ -52,8 +71,18 @@ function collect(permissions: string[]): Map<string, Handler> {
 const text = (result: CallToolResult) => (result.content[0] as { text: string }).text
 
 beforeEach(() => {
+  state.engine = 'v2'
   state.patchResult = { ok: true }
   state.patches = []
+  state.requesters = []
+  state.requestResult = {
+    ok: true,
+    request: {
+      id: 'assistant_pending_action_1',
+      status: 'proposed',
+      summary: 'Publish the portal design (2 changes)',
+    },
+  }
 })
 
 describe('portal design MCP tools', () => {
@@ -105,5 +134,47 @@ describe('portal design MCP tools', () => {
       expected_revision: 'rev2',
     })
     expect(broken.isError).toBe(true)
+  })
+
+  it('ask a person to publish, and return where they decide', async () => {
+    expect((await collect(['settings.manage']).get('publish_portal_design')!({})).isError).toBe(
+      true
+    )
+    expect(state.requesters).toEqual([])
+
+    const result = await collect(['settings.branding']).get('publish_portal_design')!({})
+    expect(result.isError).not.toBe(true)
+    expect(JSON.parse(text(result))).toMatchObject({
+      requested: true,
+      approvalId: 'assistant_pending_action_1',
+      status: 'pending',
+      url: 'https://example.com/admin/approvals/assistant_pending_action_1',
+    })
+    expect(state.requesters).toEqual([
+      expect.objectContaining({ via: 'mcp', onBehalfOfPrincipalId: 'principal_member' }),
+    ])
+  })
+
+  it('are refused while the portal still uses the legacy theme', async () => {
+    state.engine = 'legacy'
+    const tools = collect(['settings.branding'])
+    for (const name of [
+      'get_portal_design',
+      'update_portal_design_draft',
+      'publish_portal_design',
+    ]) {
+      const result = await tools.get(name)!({ patch: {}, expected_revision: 'rev2' })
+      expect(result.isError).toBe(true)
+      expect(text(result)).toContain('new portal design')
+    }
+    expect(state.patches).toEqual([])
+    expect(state.requesters).toEqual([])
+  })
+
+  it('report a missing draft as an error', async () => {
+    state.requestResult = { ok: false, code: 'NO_DRAFT', message: 'There is no draft to publish.' }
+    const result = await collect(['settings.branding']).get('publish_portal_design')!({})
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('There is no draft to publish.')
   })
 })

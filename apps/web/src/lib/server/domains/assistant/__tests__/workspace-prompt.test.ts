@@ -29,6 +29,8 @@ it('separates cited knowledge answers from live entity lookup and supported sett
   expect(WORKSPACE_WEB_PROMPT).toContain('entity search')
   expect(WORKSPACE_WEB_PROMPT).toContain('propose_settings_change')
   expect(WORKSPACE_WEB_PROMPT).toContain('navigate_workspace')
+  expect(WORKSPACE_WEB_PROMPT).toContain('update_portal_design_draft')
+  expect(WORKSPACE_WEB_PROMPT).toContain('publish_portal_design, which files an approval')
 })
 
 describe('formatAskingTeammateContext', () => {

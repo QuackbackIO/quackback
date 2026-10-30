@@ -30,6 +30,7 @@ const REFUSAL_CODES = [
   'NO_DRAFT',
   'REVISION_NOT_FOUND',
   'REVISION_MISMATCH',
+  'DRAFT_CHANGED',
 ] as const
 export type DesignRefusalCode = (typeof REFUSAL_CODES)[number]
 export type DesignRefusal = { ok: false; code: DesignRefusalCode; message: string }

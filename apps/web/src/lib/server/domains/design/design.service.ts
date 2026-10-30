@@ -24,6 +24,7 @@ import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/erro
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import { portalDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { logger } from '@/lib/server/logger'
+import { digestOf } from '@/lib/server/utils/canonical-json'
 
 const log = logger.child({ module: 'design.service' })
 
@@ -60,6 +61,11 @@ export function validateDesign(input: unknown): PortalDesign {
 
 /** The workspace's default site, the only one until sites ship. */
 const defaultSite = () => isNull(portalDesigns.siteId)
+
+/** A digest of a parsed draft, so a publish can insist on the draft a person was shown. */
+export function draftDigest(draft: unknown): string {
+  return digestOf(draft)
+}
 
 async function designRow(executor: typeof db | Transaction, lock = false) {
   const query = executor.select().from(portalDesigns).where(defaultSite()).limit(1)
@@ -203,40 +209,59 @@ async function publishDocument(
   return { revisionId: created.id, number }
 }
 
+export interface PublishDraftInput extends DesignAuthor {
+  source: PortalDesignSource
+  message?: string
+  /** The draft's digest when the publish was asked for; a draft that moved since is refused. */
+  expectedDraft?: string
+}
+
 export async function publishDraft(
-  input: DesignAuthor & { source: PortalDesignSource; message?: string }
+  input: PublishDraftInput
 ): Promise<{ revisionId: PortalDesignRevisionId; number: number }> {
-  const result = await db.transaction(async (tx) => {
-    const row = await designRow(tx, true)
-    if (!row?.draft) throw new NotFoundError('NO_DRAFT', 'There is no draft to publish.')
-    if (row.draftBaseRevisionId !== row.publishedRevisionId) {
-      throw new ConflictError(
-        'DESIGN_CHANGED',
-        'Another version was published after this draft started. Review the draft against it, then publish again.'
-      )
-    }
-    const document = validateDesign(row.draft)
-    const published = await publishDocument(
-      tx,
-      row.id,
-      document,
-      input,
-      input.source,
-      input.message ?? null
-    )
-    await recordAuditEventInTransaction(tx, {
-      event: 'design.published',
-      actor: input.actor,
-      headers: input.headers,
-      target: { type: 'portal_design', id: row.id },
-      after: { revision: published.number, source: input.source },
-      metadata: { principalId: input.principalId, revisionId: published.revisionId },
-    })
-    return published
-  })
+  const result = await db.transaction((tx) => publishDraftInTransaction(tx, input))
   log.info({ revision: result.number, source: input.source }, 'design published')
   await invalidateSettingsCache()
   return result
+}
+
+/** Publishes the draft inside the caller's transaction; the caller clears the settings cache. */
+export async function publishDraftInTransaction(
+  tx: Transaction,
+  input: PublishDraftInput
+): Promise<{ revisionId: PortalDesignRevisionId; number: number }> {
+  const row = await designRow(tx, true)
+  if (!row?.draft) throw new NotFoundError('NO_DRAFT', 'There is no draft to publish.')
+  if (row.draftBaseRevisionId !== row.publishedRevisionId) {
+    throw new ConflictError(
+      'DESIGN_CHANGED',
+      'Another version was published after this draft started. Review the draft against it, then publish again.'
+    )
+  }
+  const document = validateDesign(row.draft)
+  if (input.expectedDraft && draftDigest(document) !== input.expectedDraft) {
+    throw new ConflictError(
+      'DRAFT_CHANGED',
+      'The draft changed after this was asked for. Ask again to publish the draft as it is now.'
+    )
+  }
+  const published = await publishDocument(
+    tx,
+    row.id,
+    document,
+    input,
+    input.source,
+    input.message ?? null
+  )
+  await recordAuditEventInTransaction(tx, {
+    event: 'design.published',
+    actor: input.actor,
+    headers: input.headers,
+    target: { type: 'portal_design', id: row.id },
+    after: { revision: published.number, source: input.source },
+    metadata: { principalId: input.principalId, revisionId: published.revisionId },
+  })
+  return published
 }
 
 /** Publishes an old revision's document as the next revision. A draft in progress is kept. */

@@ -25,7 +25,7 @@ import { approvalUrl } from '@/lib/server/domains/assistant/approvals.follow'
 import { registerTool, jsonResult, READ_ONLY, WRITE } from './helpers'
 
 /** A key asks as its own service principal; an OAuth client has none and asks as the person. */
-function settingsRequester(auth: McpAuthContext, actor: Actor): ApprovalRequester {
+export function mcpApprovalRequester(auth: McpAuthContext, actor: Actor): ApprovalRequester {
   return {
     via: 'mcp',
     requestedById: auth.authMethod === 'api-key' && !auth.userId ? auth.principalId : null,
@@ -89,7 +89,7 @@ Examples:
         )
       const actor = await resolveMcpActor(auth, 'write:settings')
       const result = await changeSettingsArea(
-        { actor, requester: settingsRequester(auth, actor) },
+        { actor, requester: mcpApprovalRequester(auth, actor) },
         area,
         { patch, expectedRevision: expected_revision, dryRun: dry_run }
       )
@@ -124,7 +124,7 @@ Examples:
         changes,
         auth.workspaceThreadKey,
         undefined,
-        settingsRequester(auth, actor)
+        mcpApprovalRequester(auth, actor)
       )
       return jsonResult({
         proposed: true,

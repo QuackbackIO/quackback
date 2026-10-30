@@ -45,6 +45,10 @@ function stageOf(approval: ApprovalView, decidedHere: boolean, rejecting: boolea
 /** The area a request acts on: the settings it changes, or its conversation or ticket. */
 function useAreaLabel(approval: ApprovalView): string | null {
   const intl = useIntl()
+  if (approval.diff.kind === 'design')
+    return intl.formatMessage(approvalMessages.areaSettings, {
+      areas: settingsAreaLabel(intl, 'branding'),
+    })
   if (approval.diff.kind === 'settings') {
     const areas = [...new Set(approval.diff.changes.map((change) => change.area))]
     return intl.formatMessage(approvalMessages.areaSettings, {
@@ -57,7 +61,9 @@ function useAreaLabel(approval: ApprovalView): string | null {
   return null
 }
 
+/** The settings a request wrote, to refresh once it is carried out; a design publish is branding. */
 function settingsAreasOf(approval: ApprovalView): SettingsArea[] {
+  if (approval.diff.kind === 'design') return ['branding']
   return approval.diff.kind === 'settings'
     ? approval.diff.changes.map((change) => change.area as SettingsArea)
     : []
