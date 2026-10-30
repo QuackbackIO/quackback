@@ -119,13 +119,21 @@ export const tickets = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
-    // SLA + lifecycle timestamps. first_response_at is the first agent reply;
+    // Lifecycle timestamps. first_response_at is the first agent reply;
     // waiting_since is when the requester started waiting (drives waiting sorts);
-    // due_at is the SLA target; resolved_at is set on close, cleared on reopen.
+    // resolved_at is set on close, cleared on reopen.
     firstResponseAt: timestamp('first_response_at', { withTimezone: true }),
     waitingSince: timestamp('waiting_since', { withTimezone: true }),
+    // The ticket's one shared due date: proposed by the customer when they
+    // file it, or set by a teammate, and shown to both sides. Independent of
+    // SLA targets, which live in `sla_applied`. NULL = no due date.
     dueAt: timestamp('due_at', { withTimezone: true }),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    // Due-date alert markers (0305): each holds the `due_at` value the
+    // ticket-due sweep last alerted for, so moving the due date re-arms both
+    // alerts without a reset write. NULL = never alerted.
+    dueSoonNotifiedFor: timestamp('due_soon_notified_for', { withTimezone: true }),
+    overdueNotifiedFor: timestamp('overdue_notified_for', { withTimezone: true }),
     // How many times the ticket has been reopened after resolution.
     reopenedCount: integer('reopened_count').notNull().default(0),
     // Read receipts power unread badges on each side independently, mirroring
@@ -215,6 +223,17 @@ export const tickets = pgTable(
     // explicit .desc(): Postgres serves the DESC/DESC keyset scan via a
     // backward scan of this ascending (createdAt, id) index just as well.
     index('tickets_created_at_id_idx').on(table.createdAt, table.id),
+    // Keyset support for the 'due' sort: due_at ASC NULLS LAST, id ASC is the
+    // btree default order, so the plain ascending index serves it directly.
+    index('tickets_due_at_id_idx').on(table.dueAt, table.id),
+    // Ticket-due sweep + deadline-provider candidate set: open, live tickets
+    // with a due date whose overdue alert has not fired for that date yet.
+    // The sweep repeats this exact clause so the planner proves it applies.
+    index('tickets_due_alert_pending_idx')
+      .on(table.dueAt)
+      .where(
+        sql`${table.dueAt} IS NOT NULL AND ${table.resolvedAt} IS NULL AND ${table.deletedAt} IS NULL AND ${table.overdueNotifiedFor} IS DISTINCT FROM ${table.dueAt}`
+      ),
     // Ticket SLA sweep candidate set — mirrors conversations_sla_unsettled_idx
     // (0187): the predicate selects stamps with an UNSETTLED TTR clock, not
     // just any stamp, so selectivity doesn't degrade as settled tickets

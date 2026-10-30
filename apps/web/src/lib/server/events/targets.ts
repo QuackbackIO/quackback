@@ -35,6 +35,7 @@ import {
   type ContactEmail,
 } from '@/lib/server/email/recipient'
 import { formatTicketNumber } from '@/lib/shared/tickets'
+import { isTeamMember } from '@/lib/shared/roles'
 import { isSupportTicketsEnabled } from '@/lib/server/domains/settings/settings.support'
 import { canViewPost, type Actor } from '@/lib/server/policy'
 import {
@@ -400,6 +401,24 @@ async function filterToTeamMembers(subscribers: Subscriber[]): Promise<Subscribe
   const teamPrincipalIds = new Set(principals.filter((p) => p.role !== 'user').map((p) => p.id))
 
   return subscribers.filter((s) => teamPrincipalIds.has(s.principalId as PrincipalId))
+}
+
+/**
+ * Who did it, for a bell or an email that names them. Targets run on the event
+ * the outbox relays, which keeps the actor's type and id but not their name
+ * (to-legacy-event.ts), so a user actor's name is read from their principal.
+ * A service actor (a workflow, an API key) is an automation.
+ */
+async function actorNameOf(actor: EventActor, fallback: string): Promise<string> {
+  if (actor.displayName) return actor.displayName
+  if (actor.type === 'service') return 'An automation'
+  if (!actor.principalId) return fallback
+  const [row] = await db
+    .select({ displayName: principal.displayName })
+    .from(principal)
+    .where(eq(principal.id, actor.principalId as PrincipalId))
+    .limit(1)
+  return row?.displayName?.trim() || fallback
 }
 
 /**
@@ -956,6 +975,25 @@ async function actorExcludedTicketWatchers(
   return watchers.filter((id) => id !== actorPrincipalId)
 }
 
+/**
+ * The customers among a ticket's watchers: the requester and anyone the ticket
+ * was shared with, never a teammate or a service principal. Their bells and
+ * emails take the customer view (portal links, public stage labels, the
+ * customer email copy); everyone else is on the team.
+ */
+async function customersAmong(ids: readonly PrincipalId[]): Promise<Set<PrincipalId>> {
+  if (ids.length === 0) return new Set()
+  const rows = await db
+    .select({ id: principal.id, type: principal.type, role: principal.role })
+    .from(principal)
+    .where(inArray(principal.id, [...ids]))
+  return new Set(
+    rows
+      .filter((r) => r.type !== 'service' && !(r.type === 'user' && isTeamMember(r.role)))
+      .map((r) => r.id as PrincipalId)
+  )
+}
+
 export async function getTicketStatusChangedTargets(event: EventData): Promise<HookTarget | null> {
   if (event.type !== 'ticket.status_changed') return null
   const { ticket, previousStatus, newStatus, stage, previousStage, requesterPrincipalId, title } =
@@ -993,6 +1031,9 @@ export async function getTicketStatusChangedTargets(event: EventData): Promise<H
       stageLabel,
       previousStageLabel,
       requesterPrincipalId: (requesterPrincipalId as string | undefined) ?? null,
+      // The requester and anyone the ticket was shared with get the portal
+      // thread; teammates the admin inbox.
+      portalPrincipalIds: [...(await customersAmong([...recipients]))],
     },
   }
 }
@@ -1026,6 +1067,7 @@ export async function getTicketRepliedTargets(event: EventData): Promise<HookTar
       authorName: authorName ?? (senderType === 'visitor' ? 'The requester' : 'A teammate'),
       preview: truncate(content, 140),
       requesterPrincipalId: requesterPrincipalId ?? null,
+      portalPrincipalIds: [...(await customersAmong(recipients))],
     },
   }
 }
@@ -1057,6 +1099,39 @@ export async function getTicketNoteAddedTargets(event: EventData): Promise<HookT
       title,
       authorName: authorName ?? 'A teammate',
       preview: truncate(content, 140),
+    },
+  }
+}
+
+/**
+ * Notification target for `ticket.subscriber_added`: the person a teammate
+ * added as a watcher, so they know why the ticket's bells start reaching them.
+ * Nobody hears about their own watch, so a self watch (actor = subscriber)
+ * bells no one. The add is teammate-only and checked against the teammate's
+ * view of the ticket when it is made; the role filter here keeps the bell on
+ * the team even for a row some later path writes for a customer.
+ */
+export async function getTicketSubscriberAddedTargets(
+  event: EventData
+): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.subscriber_added') return null
+  const { ticket, title, subscriberPrincipalId } = event.data
+  if (subscriberPrincipalId === event.actor.principalId) return null
+
+  const [subscriber] = await db
+    .select({ type: principal.type, role: principal.role })
+    .from(principal)
+    .where(eq(principal.id, subscriberPrincipalId as PrincipalId))
+    .limit(1)
+  if (subscriber?.type !== 'user' || !isTeamMember(subscriber.role)) return null
+
+  return {
+    type: 'notification',
+    target: { principalIds: [subscriberPrincipalId as PrincipalId] },
+    config: {
+      ticketId: ticket.id,
+      title,
+      authorName: await actorNameOf(event.actor, 'A teammate'),
     },
   }
 }
@@ -1122,8 +1197,8 @@ export async function getMessageCreatedTargets(event: EventData): Promise<HookTa
 
   // CONVERGENCE PHASE 1a (the one behavior change the changelog flags):
   // suppress the team-wide bell for a conversation paired with a CUSTOMER
-  // ticket. The write redirect (ticket-message.service.ts) emits
-  // `ticket.replied` ALONGSIDE `message.created` on a linked pair, and the
+  // ticket. Every customer-visible message on a pair becomes that ticket's
+  // `ticket.replied` (the pair-reply reaction, ticket.event-hooks.ts), and the
   // watcher-scoped fan-out that rides it (getTicketRepliedTargets +
   // getTicketRepliedEmailTargets) replaces the team-wide bell — non-watcher
   // teammates no longer get belled for pair-conversation visitor messages.
@@ -1297,6 +1372,9 @@ type TicketEmailKind =
   | 'assigned_team'
   | 'sla_warning'
   | 'sla_breach'
+  | 'due_soon'
+  | 'overdue'
+  | 'shared'
 
 interface BaseTicketConfigParams {
   kind: TicketEmailKind
@@ -1311,6 +1389,9 @@ interface BaseTicketConfigParams {
   /** B22: a null-stage close ("Won't do"/"Duplicate") renders generic "was
    *  closed" copy instead of the "was resolved" copy (see ticketEventCopy). */
   closedGeneric?: boolean
+  /** Customer-facing kinds: a customer the ticket was shared with rather than
+   *  the person who opened it (copy never calls it theirs). */
+  audience?: 'requester' | 'participant'
 }
 
 /** The TicketEmailConfig fields every kind shares; the two audience wrappers
@@ -1330,6 +1411,7 @@ function baseTicketConfig(params: BaseTicketConfigParams): Record<string, unknow
     authorName: params.authorName,
     statusChange: params.statusChange,
     closedGeneric: params.closedGeneric,
+    audience: params.audience,
   }
 }
 
@@ -1366,14 +1448,18 @@ function agentFacingConfig(
 
 /**
  * One target per recipient, routing the requester to requesterFacingConfig
- * (portal CTA, per-team From, reply-by-email) and every other watcher to
- * agentFacingConfig (inbox CTA, branded From). Shared by the replied + resolved
- * builders, whose only differences are `kind` and the carried facts.
+ * (portal CTA, per-team From, reply-by-email), a customer the ticket was
+ * shared with to the same customer-facing config in its participant wording,
+ * and every other watcher to agentFacingConfig (inbox CTA, branded From).
+ * Shared by the replied + resolved builders, whose only differences are `kind`
+ * and the carried facts.
  */
 async function buildRequesterOrAgentTargets(params: {
   recipients: PrincipalId[]
   emailMap: Map<PrincipalId, ContactEmail>
   requesterPrincipalId: PrincipalId | null
+  /** Customers the (customer) ticket was shared with, among `recipients`. */
+  participantIds?: ReadonlySet<PrincipalId>
   kind: 'reply' | 'status_resolved'
   ticketId: TicketId
   ticketLabel: string
@@ -1400,13 +1486,15 @@ async function buildRequesterOrAgentTargets(params: {
   const targets: HookTarget[] = []
   for (const id of recipients) {
     const email = emailMap.get(id)!
+    const asParticipant = params.participantIds?.has(id) === true
     const config =
-      requesterPrincipalId != null && id === requesterPrincipalId
+      (requesterPrincipalId != null && id === requesterPrincipalId) || asParticipant
         ? await requesterFacingConfig({
             ...facts,
             ctaUrl: await requesterTicketUrl(context.portalBaseUrl, params.ticketId),
             assignedTeamId: params.assignedTeamId,
             context,
+            audience: asParticipant ? 'participant' : 'requester',
           })
         : agentFacingConfig({
             ...facts,
@@ -1478,6 +1566,11 @@ export async function getTicketCreatedEmailTargets(
  * full reply body; the requester's target is requester-facing (portal CTA,
  * per-team From, reply-by-email), agent watchers get the inbox CTA and branded
  * From (D3 sequencing note).
+ *
+ * On a ticket paired with a conversation the requester (and anyone the ticket
+ * was shared with) is left out: the reply landed on that conversation, whose
+ * own pipeline already emails them (`notifyAgentReply`), so a ticket email on
+ * top would be the same reply twice.
  */
 export async function getTicketRepliedEmailTargets(
   event: EventData,
@@ -1498,9 +1591,17 @@ export async function getTicketRepliedEmailTargets(
   const ticketId = ticket.id as TicketId
   const { getTicketWatchersForEvent } =
     await import('@/lib/server/domains/tickets/ticket-subscription.service')
-  const watchers = (await getTicketWatchersForEvent(ticketId)).filter(
+  const pairedWithConversation =
+    emailableRequester != null && (await pairConversationId(ticketId)) != null
+  const watching = (await getTicketWatchersForEvent(ticketId)).filter(
     (id) => id !== event.actor.principalId
   )
+  // On a pair the conversation's own pipeline emails the requester and the
+  // customers the ticket was shared with, so the ticket email is the team's.
+  const mailedByConversation = pairedWithConversation
+    ? await customersAmong(watching)
+    : new Set<PrincipalId>()
+  const watchers = watching.filter((id) => !mailedByConversation.has(id))
   if (watchers.length === 0) return []
 
   const { recipients, emailMap } = await resolveEligibleRecipients(watchers, 'ticket_replied')
@@ -1522,6 +1623,56 @@ export async function getTicketRepliedEmailTargets(
     messageBody: content,
     authorName: authorName ?? undefined,
   })
+}
+
+/**
+ * `ticket.subscriber_added` with reason 'participant' (a customer ticket was
+ * shared with someone) → one email telling them, with the customer view: the
+ * portal thread link, the team's From, the ticket's reply-by-email address.
+ * The link carries no sign-in of its own (forwarding it grants nothing); a
+ * person without an account takes part by email. Rides the 'ticket_replied'
+ * preference (the replies are what they will hear about), skips teammates and
+ * anyone without a real address, and goes once a day per ticket and person,
+ * so removing and re-adding someone can't be used to mail them repeatedly.
+ */
+export async function getTicketSharedEmailTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'ticket.subscriber_added') return []
+  const { ticket, title, subscriberPrincipalId, reason } = event.data
+  if (reason !== 'participant') return []
+  if ((ticket.type as string) !== 'customer') return []
+  if (!(await isSupportTicketsEnabled())) return []
+  const subscriber = subscriberPrincipalId as PrincipalId
+  if (!(await customersAmong([subscriber])).has(subscriber)) return []
+
+  const { recipients, emailMap } = await resolveEligibleRecipients([subscriber], 'ticket_replied')
+  const email = recipients.length > 0 ? emailMap.get(subscriber) : undefined
+  if (!email) return []
+
+  const { incrementBucket } = await import('@/lib/server/utils/rate-bucket')
+  const { count } = await incrementBucket({
+    key: `ticket:shared-email:${ticket.id}:${subscriber}`,
+    windowSeconds: 24 * 60 * 60,
+  })
+  if (count !== null && count > 1) return []
+
+  const ticketId = ticket.id as TicketId
+  const config = await requesterFacingConfig({
+    kind: 'shared',
+    ticketId,
+    ticketLabel: formatTicketNumber(ticket.number),
+    title,
+    ctaUrl: await requesterTicketUrl(context.portalBaseUrl, ticketId),
+    assignedTeamId: ((ticket.assignedTeamId as string | null | undefined) ?? null) as TeamId | null,
+    context,
+    // Named only for a person; otherwise the copy says the workspace's team.
+    authorName:
+      event.actor.type === 'user' ? (await actorNameOf(event.actor, '')) || undefined : undefined,
+    audience: 'participant',
+  })
+  return [ticketEmailTarget(email, config)]
 }
 
 /**
@@ -1571,6 +1722,13 @@ export async function getTicketResolvedEmailTargets(
   const ids = [...recipientIds]
   const { recipients, emailMap } = await resolveEligibleRecipients(ids, 'ticket_status_changed')
   if (recipients.length === 0) return []
+  // On a customer ticket, the customers it was shared with get the customer
+  // email too (never the agent one with its inbox link).
+  const participantIds = new Set(
+    emailableRequester != null
+      ? [...(await customersAmong(recipients))].filter((id) => id !== emailableRequester)
+      : []
+  )
 
   const { getStageLabels } = await import('@/lib/server/domains/settings/settings.tickets')
   const stageLabels = await getStageLabels()
@@ -1587,6 +1745,7 @@ export async function getTicketResolvedEmailTargets(
     emailMap,
     requesterPrincipalId: emailableRequester as PrincipalId | null,
     kind: 'status_resolved',
+    participantIds,
     ticketId,
     ticketLabel: formatTicketNumber(ticket.number),
     title,
@@ -1642,7 +1801,7 @@ export async function getTicketAssignedEmailTargets(
   )
 }
 
-/** ISO due-date → a short "Jul 17, 02:00 UTC" label for SLA emails. */
+/** ISO due-date → a short "Jul 17, 02:00 UTC" label for SLA and ticket due-date emails. */
 function formatSlaDue(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleString('en-US', {
@@ -1717,6 +1876,74 @@ export async function getSlaEmailTargets(
       agentFacingConfig({ kind, ticketLabel: '', title, ctaUrl, context, clockLabel, dueLabel })
     )
   )
+}
+
+/**
+ * Who hears a ticket's due-date alerts: the assignee when there is one, else
+ * the assigned team's members, else nobody (the getSlaEmailTargets rule). Read
+ * off the event's ticket ref, which the sweep built from the row at the moment
+ * it noticed the deadline. There is no actor to exclude: a timer fired it.
+ */
+async function ticketDueRecipients(ticket: {
+  assignedPrincipalId?: string | null
+  assignedTeamId?: string | null
+}): Promise<PrincipalId[]> {
+  if (ticket.assignedPrincipalId) return [ticket.assignedPrincipalId as PrincipalId]
+  if (!ticket.assignedTeamId) return []
+  const { listTeamMemberPrincipalIds } = await import('@/lib/server/domains/teams')
+  return listTeamMemberPrincipalIds(ticket.assignedTeamId as TeamId)
+}
+
+/**
+ * Notification target for `ticket.due_soon` / `ticket.overdue`: one combined
+ * bell for the ticket's responsible teammates (see ticketDueRecipients). The
+ * handler words the row from the title and stores the due date with it.
+ */
+export async function getTicketDueTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.due_soon' && event.type !== 'ticket.overdue') return null
+  const { ticket, title, dueAt } = event.data
+  const recipients = await ticketDueRecipients(ticket)
+  if (recipients.length === 0) return null
+  return {
+    type: 'notification',
+    target: { principalIds: recipients },
+    config: { ticketId: ticket.id, title, dueAt },
+  }
+}
+
+/**
+ * `ticket.due_soon` / `ticket.overdue` → agent emails to the same teammates as
+ * the bell, filtered by the matrix key of the same name as the notification
+ * type. kinds `due_soon` / `overdue`, inbox CTA, branded From, threaded on the
+ * ticket.
+ */
+export async function getTicketDueEmailTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'ticket.due_soon' && event.type !== 'ticket.overdue') return []
+  if (!(await isSupportTicketsEnabled())) return []
+  const { ticket, title, dueAt } = event.data
+
+  const recipientIds = await ticketDueRecipients(ticket)
+  if (recipientIds.length === 0) return []
+
+  const overdue = event.type === 'ticket.overdue'
+  const matrixKey = overdue ? 'ticket_overdue' : 'ticket_due_soon'
+  const { recipients, emailMap } = await resolveEligibleRecipients(recipientIds, matrixKey)
+  if (recipients.length === 0) return []
+
+  const ticketId = ticket.id as TicketId
+  const config = agentFacingConfig({
+    kind: overdue ? 'overdue' : 'due_soon',
+    ticketId,
+    ticketLabel: formatTicketNumber(ticket.number),
+    title,
+    ctaUrl: inboxUrl(context.portalBaseUrl, ticketId),
+    context,
+    dueLabel: formatSlaDue(dueAt),
+  })
+  return recipients.map((id) => ticketEmailTarget(emailMap.get(id)!, config))
 }
 
 // ============================================================================
