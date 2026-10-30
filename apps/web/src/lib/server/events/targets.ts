@@ -4,7 +4,6 @@
  */
 
 import type {
-  AssistantPendingActionId,
   ConversationId,
   PostId,
   PrincipalId,
@@ -806,28 +805,6 @@ export async function getAssistantHandedOffTargets(event: EventData): Promise<Ho
     type: 'notification',
     target: { principalIds: filtered },
     config: { conversationId, reason },
-  }
-}
-
-/**
- * Notification target for `approval.requested`: every teammate who may decide
- * the request (the approvals service's eligibility rule), never whoever asked.
- * Read from the live row, so a request decided or expired before this runs
- * rings nobody. Exported for direct testing.
- */
-export async function getApprovalRequestedTargets(event: EventData): Promise<HookTarget | null> {
-  if (event.type !== 'approval.requested') return null
-  const { getPendingActionById } =
-    await import('@/lib/server/domains/assistant/pending-actions.service')
-  const { listEligibleDeciders } = await import('@/lib/server/domains/assistant/approvals.service')
-  const row = await getPendingActionById(event.data.approvalId as AssistantPendingActionId)
-  if (!row) return null
-  const principalIds = await listEligibleDeciders(row)
-  if (principalIds.length === 0) return null
-  return {
-    type: 'notification',
-    target: { principalIds },
-    config: { approvalId: row.id, title: row.summary },
   }
 }
 

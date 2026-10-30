@@ -63,14 +63,8 @@ import {
   useBillingEnabled,
   useCloudEnabled,
   useSessionContext,
-  useUserRole,
   useWorkspaceSettings,
 } from '@/lib/client/hooks/use-root-context'
-import { isAdmin } from '@/lib/shared/roles'
-import {
-  useRefreshWaitingOnNewApproval,
-  useWaitingApprovalCount,
-} from '@/components/admin/approvals/use-waiting-approvals'
 
 /** Availability toggle for the account menu (conversation routing). The label shows the
  *  state you'll switch to; the avatar dot shows the current one. */
@@ -102,22 +96,6 @@ interface AdminSidebarProps {
 }
 
 type RailIcon = ComponentType<{ className?: string }>
-
-/**
- * Drawn here rather than imported: the shared icon would be a file of its own
- * that every admin page loads before it can draw the rail.
- */
-function ApprovalsIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
-      <path
-        fillRule="evenodd"
-        d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm4.3-10.4-4.6 6.2-3.2-3.1 1.1-1.1 1.9 1.8 3.5-4.7 1.3.9Z"
-        clipRule="evenodd"
-      />
-    </svg>
-  )
-}
 
 interface RailItem {
   label: string
@@ -196,27 +174,10 @@ const RAIL_ITEMS: RailItem[] = [
   { label: 'Users', labelId: 'admin.nav.users', href: '/admin/users', icon: UsersIcon },
 ]
 
-const APPROVALS_ITEM: RailItem = {
-  label: 'Approvals',
-  labelId: 'admin.nav.approvals',
-  href: '/admin/approvals',
-  icon: ApprovalsIcon,
+/** The rail items a viewer sees: the products that are on. */
+export function buildRailItems(flags: Partial<FeatureFlags> | undefined): RailItem[] {
+  return RAIL_ITEMS.filter((item) => !item.product || isProductEnabled(flags, item.product))
 }
-
-/**
- * The rail items a viewer sees: the products that are on, and Approvals
- * below Home for a viewer who can decide requests.
- */
-export function buildRailItems(
-  flags: Partial<FeatureFlags> | undefined,
-  options: { approvals?: boolean } = {}
-): RailItem[] {
-  const items = RAIL_ITEMS.filter((item) => !item.product || isProductEnabled(flags, item.product))
-  return options.approvals ? [items[0]!, APPROVALS_ITEM, ...items.slice(1)] : items
-}
-
-/** The most the rail's badge spells out. */
-const MAX_BADGE = 99
 
 /**
  * A rail item is active on its page and every page under it, whatever the
@@ -357,17 +318,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   const orgLogo = branding?.logoUrl ?? branding?.headerLogoUrl ?? '/logo.png'
   const orgName = branding?.name ?? 'Quackback'
 
-  // Requests waiting on the viewer. Admins can decide every kind, so they
-  // always have Approvals; a member has it while a request waits on them.
-  const userRole = useUserRole()
-  const waitingApprovals = useWaitingApprovalCount() ?? 0
-  useRefreshWaitingOnNewApproval()
-  const onApprovalsPage = useRouterState({
-    select: (s) => s.location.pathname.startsWith('/admin/approvals'),
-  })
-  const railItems = buildRailItems(flags, {
-    approvals: isAdmin(userRole) || waitingApprovals > 0 || onApprovalsPage,
-  })
+  const railItems = buildRailItems(flags)
   // Posts and comments waiting for review. Shown on Feedback when there are any.
   const feedbackEnabled = isProductEnabled(flags, 'feedback')
   const canReviewPosts = usePermission(PERMISSIONS.POST_APPROVE)
@@ -378,25 +329,9 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   })
   const pendingModeration = reviewEnabled ? (moderation?.pendingCount ?? 0) : 0
   const itemBadge = (item: RailItem) =>
-    item.href === '/admin/feedback' && pendingModeration > 0
-      ? pendingModeration
-      : item.href === APPROVALS_ITEM.href && waitingApprovals > 0
-        ? waitingApprovals > MAX_BADGE
-          ? `${MAX_BADGE}+`
-          : waitingApprovals
-        : null
+    item.href === '/admin/feedback' && pendingModeration > 0 ? pendingModeration : null
   const itemBadgeLabel = (item: RailItem) =>
-    !itemBadge(item)
-      ? undefined
-      : item.href === APPROVALS_ITEM.href
-        ? intl.formatMessage(
-            {
-              id: 'admin.nav.approvalsWaiting',
-              defaultMessage: '{count, plural, one {# waiting} other {# waiting}}',
-            },
-            { count: waitingApprovals }
-          )
-        : `${pendingModeration} waiting for review`
+    itemBadge(item) ? `${pendingModeration} waiting for review` : undefined
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const user = session?.user

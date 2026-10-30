@@ -22,9 +22,6 @@ import type { McpAuthContext } from '../../types'
 const OPEN_TO_EVERY_CALLER = [
   'add_comment',
   'delete_comment',
-  // Team-only; each approval is checked against the follower's permissions per row.
-  'get_approval',
-  'list_approvals',
   'react_to_comment',
   'update_comment',
   'vote_post',

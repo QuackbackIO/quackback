@@ -19,7 +19,6 @@ const h = vi.hoisted(() => ({
   getTicketNoteAddedTargets: vi.fn(),
   getTicketExternalStatusChangedTargets: vi.fn(),
   getMessageCreatedTargets: vi.fn(),
-  getApprovalRequestedTargets: vi.fn(),
   getTicketCreatedEmailTargets: vi.fn(),
   getTicketRepliedEmailTargets: vi.fn(),
   getTicketResolvedEmailTargets: vi.fn(),
@@ -45,7 +44,6 @@ vi.mock('../targets', () => ({
   getTicketNoteAddedTargets: h.getTicketNoteAddedTargets,
   getTicketExternalStatusChangedTargets: h.getTicketExternalStatusChangedTargets,
   getMessageCreatedTargets: h.getMessageCreatedTargets,
-  getApprovalRequestedTargets: h.getApprovalRequestedTargets,
   getTicketCreatedEmailTargets: h.getTicketCreatedEmailTargets,
   getTicketRepliedEmailTargets: h.getTicketRepliedEmailTargets,
   getTicketResolvedEmailTargets: h.getTicketResolvedEmailTargets,
@@ -131,15 +129,6 @@ describe('notification resolver routing (WO-8c)', () => {
   it('routes status publishes to the status builder', async () => {
     const out = await notificationResolver.resolve(evt('status.maintenance_scheduled'))
     expect(out.map((t) => t.type)).toEqual(['status'])
-  })
-
-  it('routes approval.requested to the bell of everyone who may decide it', async () => {
-    h.getApprovalRequestedTargets.mockResolvedValue(T('approval_bell')[0])
-    expect(notificationResolver.interestedIn('approval.requested')).toBe(true)
-    expect(notificationResolver.interestedIn('approval.decided')).toBe(false)
-    const out = await notificationResolver.resolve(evt('approval.requested'))
-    expect(out.map((t) => t.type)).toEqual(['approval_bell'])
-    expect(h.buildHookContext).not.toHaveBeenCalled()
   })
 
   it('routes ticket.status_changed to the ticket requester bell', async () => {

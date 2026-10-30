@@ -1,11 +1,9 @@
 /**
  * What the settings registry does on behalf of a caller, whatever the surface:
- * list the areas, read one, change one (preview, apply, or file an approval)
- * and undo a receipt.
+ * list the areas, read one, change one (preview or apply) and undo a receipt.
  *
  * The REST routes and the MCP tools call these and only translate the result
- * to their own wire format, so a rule such as "medium risk needs an approval"
- * lives once.
+ * to their own wire format, so each rule lives once.
  */
 import { db, eq, principal, settings, user, type Transaction } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
@@ -30,8 +28,6 @@ import {
 } from '@/lib/server/domains/settings/settings.helpers'
 import { requireAreaPermission } from '@/lib/server/domains/assistant/settings-proposals.areas'
 import { prepareSettingsChanges } from '@/lib/server/domains/assistant/settings-proposals.service'
-import { enqueueWorkspaceSettingsProposal } from '@/lib/server/domains/assistant/workspace-settings-actions.service'
-import type { ApprovalRequester } from '@/lib/server/domains/assistant/approvals.service'
 import { settingsProposalRisk } from '@/lib/server/domains/assistant/approval-policy'
 import {
   getSettingsArea,
@@ -39,29 +35,17 @@ import {
   SETTINGS_REGISTRY,
   type SettingsAreaEntry,
 } from './registry'
-import { approvalUrl } from '@/lib/server/domains/assistant/approvals.follow'
 
-/** Who is asking and how the request arrived. */
+/** Who is asking. A change applies with the caller's own permissions. */
 export interface SettingsCaller {
   actor: Actor
-  /** Recorded on an approval this call files. */
-  requester: ApprovalRequester
-  /**
-   * The caller is a person signed in to the app. A key or an OAuth client is
-   * not, and may not undo an approved change without a person deciding it.
-   */
-  signedInSession?: boolean
   /** Checks the credential's own scope for an area it is about to write. */
   assertAreaScope?: (area: SettingsArea) => void
 }
 
-/** What a caller must hold or pass for a change to an area to take effect. */
+/** What a caller must hold for a change to an area to take effect. */
 export interface SettingsGates {
   permission: string
-  /** `required`: the change is filed as an approval and applied when a person decides it. */
-  approval: 'none' | 'required'
-  /** A person must have signed in again just before deciding. */
-  freshSignIn: boolean
 }
 
 export interface SettingsAreaSummary {
@@ -81,11 +65,7 @@ export interface SettingsAreaRead extends SettingsAreaSummary {
 }
 
 function gatesOf(entry: SettingsAreaEntry): SettingsGates {
-  return {
-    permission: entry.permission,
-    approval: entry.risk === 'low' ? 'none' : 'required',
-    freshSignIn: entry.risk === 'high' || entry.risk === 'critical',
-  }
+  return { permission: entry.permission }
 }
 
 function summaryOf(entry: SettingsAreaEntry, row: Awaited<ReturnType<typeof requireSettings>>) {
@@ -148,31 +128,13 @@ export interface SettingsPreview {
   area: SettingsArea
   risk: SettingsRisk
   revision: string
-  /** The change would be filed as an approval, not applied. */
-  requiresApproval: boolean
   changes: SettingsChangeEntry[]
-}
-
-/** The approval a medium-risk change was filed as. */
-export interface FiledApproval {
-  proposed: true
-  approvalId: string
-  /** The same id, under the name earlier clients read. */
-  pendingActionId: string
-  status: 'pending'
-  /** The in-app page where a person decides it. */
-  url: string
-  next: string
-  proposal: unknown
-  preparationNotes?: unknown
-  reviewHref?: string
 }
 
 export type ChangeSettingsResult =
   | { status: 'dry_run'; preview: SettingsPreview }
   | { status: 'noop'; revision: string }
   | { status: 'applied'; receipt: SettingsReceipt }
-  | { status: 'approval_required'; approval: FiledApproval }
 
 /** Strip the quotes and weak marker an If-Match value may carry. */
 export function normalizeRevision(header: string): string {
@@ -233,32 +195,10 @@ export async function auditActor(tx: Transaction, actor: Actor) {
   return { userId: person?.userId, email: person?.email, role: actor.role, type: 'user' as const }
 }
 
-/** The approval fields every surface returns for a filed change. */
-export function filedApproval(action: {
-  id: string
-  args: unknown
-  preparationNotes?: unknown
-  reviewHref?: string
-}): FiledApproval {
-  return {
-    proposed: true,
-    approvalId: action.id,
-    pendingActionId: action.id,
-    status: 'pending',
-    url: approvalUrl(action.id),
-    next: 'Nothing changes until a person approves this in the app, at url. Check its progress with get_approval.',
-    proposal: action.args,
-    ...(action.preparationNotes ? { preparationNotes: action.preparationNotes } : {}),
-    ...(action.reviewHref ? { reviewHref: action.reviewHref } : {}),
-  }
-}
-
 /**
- * Change one area. A low-risk change applies at once, in one transaction that
- * also writes its audit event and returns a receipt. A medium-risk or higher
- * change, judged from the diff itself, is filed as an approval, the same one
- * `propose_settings_change` files, and nothing is written until a person
- * decides it.
+ * Change one area. The change applies at once with the caller's permissions,
+ * in one transaction that also writes its audit event and returns a receipt
+ * the caller can undo.
  */
 export async function changeSettingsArea(
   caller: SettingsCaller,
@@ -291,7 +231,6 @@ export async function changeSettingsArea(
         area: entry.id,
         risk,
         revision,
-        requiresApproval: risk !== 'low' && proposal !== null,
         changes:
           proposal?.changes.map(({ path, before, after }) => ({ path, before, after })) ?? [],
       },
@@ -303,25 +242,6 @@ export async function changeSettingsArea(
       'Send the revision you read as If-Match.'
     )
   if (!proposal) return { status: 'noop', revision }
-
-  if (risk !== 'low') {
-    const action = await enqueueWorkspaceSettingsProposal(
-      actor,
-      [{ area: entry.id, patch }],
-      undefined,
-      undefined,
-      caller.requester,
-      // The row is locked while the card is filed, so a write that landed
-      // after the check above is a mismatch, not a card built on old values.
-      async (tx) => {
-        const [locked] = await tx.select().from(settings).limit(1).for('update')
-        if (!locked) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
-        assertNotLocked(entry, locked, patch)
-        assertRevision(entry, locked, expected)
-      }
-    )
-    return { status: 'approval_required', approval: filedApproval(action) }
-  }
 
   return applyLocked(caller, entry, patch, expected)
 }

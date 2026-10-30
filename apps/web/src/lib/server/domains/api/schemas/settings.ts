@@ -23,10 +23,6 @@ const RevisionSchema = z.string().meta({
 const GatesSchema = z
   .object({
     permission: z.string().meta({ example: 'settings.manage' }),
-    approval: z.enum(['none', 'required']).meta({
-      description: '`required` means a change is filed as an approval, not applied.',
-    }),
-    freshSignIn: z.boolean(),
   })
   .meta({ description: 'What a change to the area needs' })
 
@@ -72,31 +68,11 @@ const ChangeResultSchema = z
     area: AreaIdSchema.optional(),
     risk: z.enum(SETTINGS_RISKS).optional(),
     revision: RevisionSchema.optional(),
-    requiresApproval: z.boolean().optional(),
     changes: z.array(settingsChangeEntrySchema).optional(),
   })
   .meta({
     description:
       'The outcome of a change. `applied` carries a receipt; `dry_run` carries the preview; `noop` means the patch already matched.',
-  })
-
-const ApprovalFiledSchema = z
-  .object({
-    proposed: z.literal(true),
-    approvalId: z.string().meta({ example: 'assistant_action_01h455vb4pex5vsknk084sn02q' }),
-    status: z.literal('pending'),
-    url: z.string().meta({ description: 'The in-app page where a person decides it.' }),
-    next: z.string(),
-    pendingActionId: z.string().meta({
-      description: 'The same id as approvalId, kept for earlier clients.',
-      example: 'assistant_action_01h455vb4pex5vsknk084sn02q',
-    }),
-    proposal: z.unknown(),
-    reviewHref: z.string().optional(),
-  })
-  .meta({
-    description:
-      'The approval a medium-risk or higher change was filed as. Nothing is written until a person decides it.',
   })
 
 const UndoResultSchema = z
@@ -164,7 +140,7 @@ registerPath('/settings/{area}', {
     tags: ['Settings'],
     summary: 'Change a settings area',
     description:
-      'Applies a merge patch. If-Match must carry the revision you read: 428 when missing, 412 when stale, 423 when the patch changes a locked field. A low-risk area applies at once and returns 200 with a receipt. A medium-risk or higher area files an approval and returns 202. Add ?dry_run=true to preview without writing; If-Match is then optional. Requires the write:settings scope.',
+      'Applies a merge patch. If-Match must carry the revision you read: 428 when missing, 412 when stale, 423 when the patch changes a locked field. The change applies at once and returns 200 with a receipt you can undo. Add ?dry_run=true to preview without writing; If-Match is then optional. Requires the write:settings scope.',
     parameters: [
       areaParam,
       {
@@ -194,14 +170,6 @@ registerPath('/settings/{area}', {
           'application/json': { schema: createItemResponseSchema(ChangeResultSchema, 'Outcome') },
         },
       },
-      202: {
-        description: 'Filed as an approval',
-        content: {
-          'application/json': {
-            schema: createItemResponseSchema(ApprovalFiledSchema, 'Approval filed'),
-          },
-        },
-      },
       ...errorResponses(400, 403, 404, 412, 423, 428),
     },
   },
@@ -212,7 +180,7 @@ registerPath('/settings/receipts/{receiptId}/undo', {
     tags: ['Settings'],
     summary: 'Undo a settings change',
     description:
-      'Restores what a receipt recorded while the values have not moved since (409 otherwise). A receipt is the id returned by an applied change, or the id of an approval a person decided. Requires the write:settings scope.',
+      'Restores what a receipt recorded while the values have not moved since (409 otherwise). A receipt is the id returned by an applied change, or the id of a settings card a person applied in the app. Requires the write:settings scope.',
     parameters: [
       {
         name: 'receiptId',

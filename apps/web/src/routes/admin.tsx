@@ -1,7 +1,6 @@
 import { useEffect, type ComponentProps } from 'react'
 import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
-import type { QueryClient } from '@tanstack/react-query'
 import { SearchPaletteProvider } from '@/components/admin/ask/search-palette'
 import { AdminWorkspaceFrame } from '@/components/admin/admin-workspace-frame'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
@@ -10,8 +9,6 @@ import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
-import { approvalWaitingQuery } from '@/lib/client/queries/approval-waiting'
-import { getRailCountsFn } from '@/lib/server/functions/approval-counts'
 import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
 import { AdminProductTourProvider } from '@/components/onboarding/admin-product-tour'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
@@ -49,17 +46,6 @@ async function loadAdminGuard(callbackUrl: string): Promise<AdminGuard> {
     data: { allowedRoles: ['admin', 'member'], callbackUrl },
   })
   return { user, principal, permissions }
-}
-
-/** Seeds the rail's unread and waiting counts from one read; a failed read leaves both to their own queries. */
-async function getRailCounts(queryClient: QueryClient) {
-  try {
-    const { unread, waiting } = await getRailCountsFn()
-    queryClient.setQueryData(unreadCountQuery().queryKey, unread)
-    queryClient.setQueryData(approvalWaitingQuery().queryKey, waiting)
-  } catch {
-    return null
-  }
 }
 
 export const Route = createFileRoute('/admin')({
@@ -148,11 +134,9 @@ export const Route = createFileRoute('/admin')({
             .then((module) => module.getLaunchWindowOpenFn())
             .catch(() => ({ open: false }))
         : { open: false },
-      // The rail's unread badge, and the requests waiting on the viewer (the
-      // Approvals badge and Home's list), ride the document from one read
-      // rather than requests of their own after hydration. Unreadable now,
-      // they are left to the bell and to the first page that asks.
-      getRailCounts(context.queryClient),
+      // The rail's unread badge rides the document rather than a request of
+      // its own after hydration. Unreadable now, it is left to the bell.
+      context.queryClient.ensureQueryData(unreadCountQuery()).catch(() => null),
       // The same goes for the count of posts waiting for review.
       warmModeration
         ? context.queryClient.ensureQueryData(adminQueries.moderationStatus()).catch(() => null)

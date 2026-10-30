@@ -30,11 +30,6 @@ describe('requiredScopeForMcpRpc', () => {
     expect(requiredScopeForMcpRpc(toolsCall('reply_to_conversation'))).toBe('write:chat')
   })
 
-  it('maps the approval reads to read:settings, the scope settings requests are filed under', () => {
-    expect(requiredScopeForMcpRpc(toolsCall('get_approval'))).toBe('read:settings')
-    expect(requiredScopeForMcpRpc(toolsCall('list_approvals'))).toBe('read:settings')
-  })
-
   it('maps search posts to read:feedback and articles to read:article', () => {
     expect(requiredScopeForMcpRpc(toolsCall('search', { query: 'x' }))).toBe('read:feedback')
     expect(requiredScopeForMcpRpc(toolsCall('search', { entity: 'posts' }))).toBe('read:feedback')

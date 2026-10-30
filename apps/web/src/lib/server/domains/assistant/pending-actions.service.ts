@@ -16,7 +16,6 @@ import {
   assistantPendingActions,
   type ApprovalDecisionChannel,
   type ApprovalRisk,
-  type Transaction,
 } from '@/lib/server/db'
 import type {
   AssistantPendingActionId,
@@ -34,12 +33,6 @@ import { quinnActor } from './assistant.actor'
 import { addTicketNote } from '@/lib/server/domains/tickets/ticket-message.service'
 import { logger } from '@/lib/server/logger'
 import type { AssistantRole } from '@/lib/shared/assistant/config'
-import { emit } from '@/lib/server/events/emit'
-import {
-  approvalApplied,
-  approvalDecided,
-  approvalRequested,
-} from '@/lib/server/events/catalogue/approval'
 import {
   approvalContentDigest,
   approvalRiskOf,
@@ -56,16 +49,15 @@ export type AssistantPendingAction = typeof assistantPendingActions.$inferSelect
 const DEFAULT_TTL_HOURS = 24
 
 /**
- * A pending action's polymorphic parent (unified inbox §3.3): at most one of
- * conversation, ticket or workspace thread, mirroring the DB's own
- * `num_nonnulls(...) <= 1` CHECK on `assistant_pending_actions`. A request
- * with none (an API caller's) is decided from the approvals queue.
+ * A pending action's polymorphic parent (unified inbox §3.3): exactly one of
+ * conversation, ticket or workspace thread, where the card is decided. The
+ * DB's own `num_nonnulls(...) <= 1` CHECK on `assistant_pending_actions` also
+ * admits none, which no caller files.
  */
 export type ProposePendingActionParent =
   | { workspaceThreadKey: string; conversationId?: undefined; ticketId?: undefined }
   | { conversationId: ConversationId; ticketId?: undefined; workspaceThreadKey?: undefined }
   | { ticketId: TicketId; conversationId?: undefined; workspaceThreadKey?: undefined }
-  | { conversationId?: undefined; ticketId?: undefined; workspaceThreadKey?: undefined }
 
 export type ProposePendingActionInput = ProposePendingActionParent & {
   involvementId?: AssistantInvolvementId
@@ -129,7 +121,6 @@ export async function proposePendingAction(
       })
       .onConflictDoNothing()
       .returning()
-    if (inserted) await emitApprovalRequested(tx, inserted)
     return inserted
   })
   if (row) {
@@ -252,8 +243,7 @@ export interface PendingActionDecisionOptions {
  * Move a proposal to approved/rejected. Only a still-`proposed`,
  * not-yet-expired action is decidable; returns null otherwise (already
  * decided, the sweep beat this call to expiring it, or the content is not
- * what the decision names). The decision and its `approval.decided` event
- * commit together.
+ * what the decision names).
  */
 export async function decidePendingAction(
   id: AssistantPendingActionId,
@@ -281,19 +271,7 @@ export async function decidePendingAction(
         )
       )
       .returning()
-    if (!row) return null
-    await emit(tx, approvalDecided, {
-      entityId: row.id,
-      actor: { type: 'user', id: decidedById },
-      payload: {
-        ...approvalRef(row),
-        decision,
-        decidedById,
-        decidedVia: row.decidedVia ?? 'app',
-        reason: row.decisionReason,
-      },
-    })
-    return row
+    return row ?? null
   })
 }
 
@@ -319,48 +297,7 @@ async function settleApprovedAction(
         and(eq(assistantPendingActions.id, id), eq(assistantPendingActions.status, 'approved'))
       )
       .returning()
-    if (row?.status === 'executed') {
-      await emit(tx, approvalApplied, {
-        entityId: row.id,
-        actor: row.decidedById ? { type: 'user', id: row.decidedById } : { type: 'system' },
-        payload: { ...approvalRef(row), appliedById: row.decidedById },
-      })
-    }
     return row ?? null
-  })
-}
-
-/** What every approval event says about its request. */
-function approvalRef(row: AssistantPendingAction) {
-  return {
-    approvalId: row.id,
-    toolName: row.toolName,
-    summary: row.summary,
-    risk: approvalRiskOf(row),
-  }
-}
-
-/** Announce a new request on the event spine, in the transaction that filed it. */
-export async function emitApprovalRequested(
-  tx: Transaction,
-  row: AssistantPendingAction
-): Promise<void> {
-  const requester = row.requestedById ?? row.onBehalfOfPrincipalId
-  await emit(tx, approvalRequested, {
-    entityId: row.id,
-    // An agent or key that asked is a service; a person, or a credential acting
-    // as them with no principal of its own, is that person.
-    actor: requester
-      ? { type: row.requestedById && row.requestedVia !== 'ui' ? 'service' : 'user', id: requester }
-      : { type: 'system' },
-    payload: {
-      ...approvalRef(row),
-      requestedVia: row.requestedVia ?? 'assistant',
-      clientName: row.clientName,
-      conversationId: row.conversationId,
-      ticketId: row.ticketId,
-      expiresAt: row.expiresAt.toISOString(),
-    },
   })
 }
 

@@ -11,10 +11,8 @@ vi.mock('@/lib/server/domains/settings/cloud/cloud.service', () => ({
 
 import { registerSettingsTools } from '../settings'
 import { registerNavigationTools } from '../navigation'
-import { registerApprovalTools } from '../approvals'
 import { WORKSPACE_WEB_PROMPT } from '@/lib/server/domains/assistant/workspace-prompt'
 import { settingsProposalInputSchema } from '@/lib/shared/assistant/settings-proposals'
-import { APPROVAL_STATUSES, approvalIdFromReference } from '@/lib/shared/assistant/approvals'
 import type { McpAuthContext } from '../../types'
 
 /** Every JSON object written into a piece of model-facing text. */
@@ -50,7 +48,6 @@ function registered() {
   } as unknown as McpAuthContext
   registerSettingsTools(server as never, auth)
   registerNavigationTools(server as never, auth)
-  registerApprovalTools(server as never, auth)
   return tools
 }
 
@@ -70,23 +67,6 @@ describe('model-facing tool examples', () => {
     )
     expect(proposals.length).toBeGreaterThan(0)
     for (const proposal of proposals) settingsProposalInputSchema.parse(proposal)
-  })
-
-  it('get_approval names every status an approval can be in', () => {
-    const tool = registered().find((candidate) => candidate.name === 'get_approval')!
-    for (const status of APPROVAL_STATUSES) expect(tool.description).toContain(status)
-  })
-
-  it('get_approval url examples are the form the Approvals page opens on', () => {
-    const tool = registered().find((candidate) => candidate.name === 'get_approval')!
-    const urls = jsonExamples(tool.description)
-      .map((example) => (example as { approval: string }).approval)
-      .filter((reference) => reference.startsWith('http'))
-    expect(urls.length).toBeGreaterThan(0)
-    for (const url of urls) {
-      expect(url).toContain('/admin/approvals?id=')
-      expect(approvalIdFromReference(url)).not.toBeNull()
-    }
   })
 
   it('finds a broken example', () => {

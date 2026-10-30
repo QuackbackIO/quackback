@@ -15,7 +15,7 @@ export type NotificationChannel = 'inApp' | 'email' | 'push'
 
 export const NOTIFICATION_CHANNELS: readonly NotificationChannel[] = ['inApp', 'email', 'push']
 
-export type NotificationGroup = 'feedback' | 'support' | 'changelog' | 'approvals'
+export type NotificationGroup = 'feedback' | 'support' | 'changelog'
 
 export interface NotificationTypeMeta {
   type: NotificationType
@@ -165,14 +165,6 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     group: 'changelog',
     surfaces: ['admin', 'portal'],
   },
-  // Approvals
-  {
-    type: 'approval_requested',
-    label: 'Approval requests',
-    description: 'A change waits for someone who can approve it',
-    group: 'approvals',
-    surfaces: ['admin'],
-  },
 ]
 
 /** Filters the catalog down to the rows a given settings surface should render. */
@@ -188,7 +180,6 @@ export function catalogByGroup(
     feedback: [],
     support: [],
     changelog: [],
-    approvals: [],
   }
   for (const meta of metas) {
     grouped[meta.group].push(meta)

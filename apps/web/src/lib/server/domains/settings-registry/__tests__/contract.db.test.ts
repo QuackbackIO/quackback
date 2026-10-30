@@ -1,7 +1,6 @@
 /**
  * One generated contract per registry area, against real Postgres: read, dry
- * run, apply (low risk) or approval (medium and above), undo, revision
- * conflict and a locked field. A new area is covered by adding one case.
+ * run, apply, undo, revision conflict and a locked field. A new area is covered by adding one case.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId } from '@quackback/ids'
@@ -53,7 +52,7 @@ beforeEach(async () => {
     segmentIds: new Set(),
     permissions: new Set(ALL_PERMISSIONS),
   }
-  caller = { actor, requester: { via: 'api', onBehalfOfPrincipalId: principalId } }
+  caller = { actor }
   await testDb.insert(settings).values({
     name: 'Acme',
     slug: `acme-${createId('workspace')}`,
@@ -104,10 +103,7 @@ describe('every settings area keeps one contract', () => {
       expect(read.revision).toMatch(/^[0-9a-f]{32}$/)
       expect(read.risk).toBe(entry.risk)
       expect(read.locked).toEqual([])
-      expect(read.gates).toMatchObject({
-        permission: entry.permission,
-        approval: entry.risk === 'low' ? 'none' : 'required',
-      })
+      expect(read.gates).toEqual({ permission: entry.permission })
       expect(read.secrets).toEqual({})
       const listed = (await listSettingsAreas(actor)).find((a) => a.id === area)
       expect(listed).toMatchObject({ risk: entry.risk, revision: read.revision })
@@ -119,89 +115,67 @@ describe('every settings area keeps one contract', () => {
       const result = await changeSettingsArea(caller, area, { patch, dryRun: true })
       expect(result).toMatchObject({
         status: 'dry_run',
-        preview: { area, risk: entry.risk, requiresApproval: entry.risk !== 'low' },
+        preview: { area, risk: entry.risk },
       })
       expect(result.status === 'dry_run' && result.preview.changes.length).toBeGreaterThan(0)
       expect((await readSettingsArea(actor, area)).revision).toBe(read.revision)
     })
 
-    it(
-      entry.risk === 'low'
-        ? 'applies a low-risk change at once, with a receipt, an audit event and an undo'
-        : 'files an approval for a change and writes nothing until it is decided',
-      async () => {
-        const read = await readSettingsArea(actor, area)
-        const patch = PATCHES[area](read.value)
-        const result = await changeSettingsArea(caller, area, {
-          patch,
-          expectedRevision: read.revision,
-        })
-        const changed = CHANGED[area]
-        if (entry.risk === 'low') {
-          if (result.status !== 'applied') throw new Error(`expected applied, got ${result.status}`)
-          expect(result.receipt.id).toMatch(/^audit_/)
-          expect(result.receipt.undoable).toBe(true)
-          expect(result.receipt.changes.length).toBeGreaterThan(0)
-          expect(result.receipt.after[changed]).not.toEqual(result.receipt.before[changed])
-          const after = await readSettingsArea(actor, area)
-          expect(after.value[changed]).toEqual(result.receipt.after[changed])
-          expect(after.revision).toBe(result.receipt.revision)
-          expect(after.revision).not.toBe(read.revision)
-          const [event] = await testDb
-            .select()
-            .from(auditLog)
-            .where(eq(auditLog.id, result.receipt.id as never))
-          expect(event).toMatchObject({ eventType: 'settings.applied', targetId: area })
+    it('applies a change at once, with a receipt, an audit event and an undo', async () => {
+      const read = await readSettingsArea(actor, area)
+      const patch = PATCHES[area](read.value)
+      const result = await changeSettingsArea(caller, area, {
+        patch,
+        expectedRevision: read.revision,
+      })
+      const changed = CHANGED[area]
+      if (result.status !== 'applied') throw new Error(`expected applied, got ${result.status}`)
+      expect(result.receipt.id).toMatch(/^audit_/)
+      expect(result.receipt.undoable).toBe(true)
+      expect(result.receipt.changes.length).toBeGreaterThan(0)
+      expect(result.receipt.after[changed]).not.toEqual(result.receipt.before[changed])
+      const after = await readSettingsArea(actor, area)
+      expect(after.value[changed]).toEqual(result.receipt.after[changed])
+      expect(after.revision).toBe(result.receipt.revision)
+      expect(after.revision).not.toBe(read.revision)
+      const [event] = await testDb
+        .select()
+        .from(auditLog)
+        .where(eq(auditLog.id, result.receipt.id as never))
+      expect(event).toMatchObject({ eventType: 'settings.applied', targetId: area })
 
-          // Undo restores the value, and only once.
-          const undone = await undoSettingsReceipt(caller, result.receipt.id)
-          expect(undone).toMatchObject({ status: 'undone', result: { undone: true, area } })
-          expect((await readSettingsArea(actor, area)).revision).toBe(read.revision)
-          await expect(undoSettingsReceipt(caller, result.receipt.id)).rejects.toMatchObject({
-            code: 'SETTINGS_UNDO_UNAVAILABLE',
-          })
-        } else {
-          if (result.status !== 'approval_required')
-            throw new Error(`expected approval_required, got ${result.status}`)
-          expect(result.approval).toMatchObject({ proposed: true })
-          expect(result.approval.pendingActionId).toMatch(/^assistant_action_/)
-          expect((await readSettingsArea(actor, area)).revision).toBe(read.revision)
+      // Undo restores the value, and only once.
+      const undone = await undoSettingsReceipt(caller, result.receipt.id)
+      expect(undone).toMatchObject({ status: 'undone', result: { undone: true, area } })
+      expect((await readSettingsArea(actor, area)).revision).toBe(read.revision)
+      await expect(undoSettingsReceipt(caller, result.receipt.id)).rejects.toMatchObject({
+        code: 'SETTINGS_UNDO_UNAVAILABLE',
+      })
+    })
 
-          // A person decides it; the approval is the receipt the undo names.
-          const pendingId = result.approval.pendingActionId as never
-          const { assistantPendingActions } = await import('@/lib/server/db')
-          const [pending] = await testDb
-            .select()
-            .from(assistantPendingActions)
-            .where(eq(assistantPendingActions.id, pendingId))
-          expect(pending).toMatchObject({ risk: entry.risk, requestedVia: 'api' })
-          const ids = (pending.args.changes as { id: string }[]).map((c) => c.id)
-          await applyWorkspaceSettingsProposal(actor, pendingId, ids, {
-            contentHash: pending.argsDigest!,
-          })
-          expect((await readSettingsArea(actor, area)).value[changed]).not.toEqual(
-            read.value[changed]
-          )
-          // A key cannot undo a decided approval: the inverse is filed for a person.
-          const filed = await undoSettingsReceipt(caller, pendingId)
-          if (filed.status !== 'approval_required') throw new Error('expected an approval')
-          expect(filed.approval).toMatchObject({ proposed: true, status: 'pending' })
-          expect(filed.approval.approvalId).not.toBe(pendingId)
-          expect((await readSettingsArea(actor, area)).value[changed]).not.toEqual(
-            read.value[changed]
-          )
-          // A signed-in person undoes it directly, and the audit row names the area.
-          const undone = await undoSettingsReceipt({ ...caller, signedInSession: true }, pendingId)
-          expect(undone).toMatchObject({ status: 'undone', result: { area } })
-          expect((await readSettingsArea(actor, area)).revision).toBe(read.revision)
-          const [undoneEvent] = await testDb
-            .select()
-            .from(auditLog)
-            .where(eq(auditLog.eventType, 'settings.undone'))
-          expect(undoneEvent.metadata).toMatchObject({ area })
-        }
-      }
-    )
+    it('undoes a change a person applied from a settings card', async () => {
+      const read = await readSettingsArea(actor, area)
+      const changed = CHANGED[area]
+      const { enqueueWorkspaceSettingsProposal } =
+        await import('@/lib/server/domains/assistant/workspace-settings-actions.service')
+      const card = await enqueueWorkspaceSettingsProposal(actor, [
+        { area, patch: PATCHES[area](read.value) } as never,
+      ])
+      const ids = (card.args.changes as { id: string }[]).map((c) => c.id)
+      await applyWorkspaceSettingsProposal(actor, card.id as never, ids, {
+        contentHash: card.argsDigest!,
+      })
+      expect((await readSettingsArea(actor, area)).value[changed]).not.toEqual(read.value[changed])
+
+      const undone = await undoSettingsReceipt(caller, card.id)
+      expect(undone).toMatchObject({ status: 'undone', result: { area } })
+      expect((await readSettingsArea(actor, area)).revision).toBe(read.revision)
+      const [undoneEvent] = await testDb
+        .select()
+        .from(auditLog)
+        .where(eq(auditLog.eventType, 'settings.undone'))
+      expect(undoneEvent.metadata).toMatchObject({ area })
+    })
 
     it('refuses a stale revision and applies nothing', async () => {
       const read = await readSettingsArea(actor, area)
