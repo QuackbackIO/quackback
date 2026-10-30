@@ -1,7 +1,7 @@
 import { paletteFromPixels } from '@/lib/shared/design/palette'
 
 /** Pixels read along the image's longer side; enough for its main colours. */
-const SAMPLE_SIZE = 64
+const SAMPLE_SIZE = 128
 
 /** The main colours of an image file, read in the browser; empty when it cannot be read. */
 export async function imagePalette(file: Blob, count = 5): Promise<string[]> {

@@ -48,6 +48,27 @@ describe('paletteFromPixels', () => {
     expect(mostVivid(palette)).toBe('#ff5a36')
   })
 
+  it('finds a brand colour spread thin across shades, as on a small button', () => {
+    // Anti-aliasing splits a coral button into near shades, none common.
+    const data = pixels(
+      [255, 255, 255, 255, 2000],
+      [255, 233, 223, 255, 600],
+      [200, 200, 200, 255, 300],
+      [120, 120, 120, 255, 200],
+      [222, 75, 43, 255, 3],
+      [215, 71, 39, 255, 3],
+      [225, 77, 45, 255, 3],
+      [233, 83, 50, 255, 3]
+    )
+    const palette = paletteFromPixels(data, 3)
+    const vivid = mostVivid(palette)
+    expect(vivid).not.toBeNull()
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(vivid!.slice(i, i + 2), 16))
+    expect(r).toBeGreaterThan(200)
+    expect(g).toBeLessThan(100)
+    expect(b).toBeLessThan(60)
+  })
+
   it('gives nothing for an empty image', () => {
     expect(paletteFromPixels(new Uint8ClampedArray(), 3)).toEqual([])
   })

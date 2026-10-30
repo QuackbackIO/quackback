@@ -15,7 +15,7 @@ import { logger } from '@/lib/server/logger'
 import { DESIGN_OPTIONS, BUNDLED_FONT_IDS } from '@/lib/shared/design/options'
 import { applyPreset, DESIGN_PRESETS } from '@/lib/shared/design/presets'
 import { resolveDesign } from '@/lib/shared/design/resolve'
-import { mostVivid } from '@/lib/shared/design/palette'
+import { colourVividness, mostVivid } from '@/lib/shared/design/palette'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
   applyDesignChanges,
@@ -118,6 +118,12 @@ Example answer: {"reply":"I softened the corners, raised the cards and gave the 
 
 Example request: "Use our green, #0f766e, with a green band. Headline: Help us grow"
 Example answer: {"reply":"The accent is now your green, with a green band behind the new headline.","outOfScope":false,"changes":[{"path":"brand.light.accent","value":"#0f766e"},{"path":"layout.band","value":"brand"},{"path":"pages.feedback.headline.title","value":"Help us grow"}]}`
+
+/** Above this, a page background reads as a colour and drowns the brand colour on it. */
+const MAX_PAGE_VIVIDNESS = 0.2
+
+const quietPage = (background: string) =>
+  !/^#[0-9a-f]{6}$/i.test(background) || colourVividness(background) <= MAX_PAGE_VIVIDNESS
 
 /** A palette for the model: most used first, and which colour is likely the brand's. */
 function paletteText(palette: string[]): string {
@@ -264,7 +270,7 @@ const directionsSchema = z.object({
     .max(3),
 })
 
-const DIRECTIONS_PROMPT = `You suggest three different starting looks for a company's customer feedback portal. Each look starts from one preset and sets the colours and fonts. Make the three clearly different from each other: in layout (the preset), in type and in colour. Keep text readable: dark ink on a light background, or light ink on a dark one. Give each a short headline and subtitle for the feedback page, in the brand's voice, inviting ideas.
+const DIRECTIONS_PROMPT = `You suggest three different starting looks for a company's customer feedback portal. Each look starts from one preset and sets the colours and fonts. Make the three clearly different from each other: in layout (the preset), in type and in colour. Pages stay quiet: a background near white, or a dark one for a dark look; the brand colour belongs on the accent and the band, never the page. Keep text readable: dark ink on a light background, or light ink on a dark one. Give each a short headline and subtitle for the feedback page, in the brand's voice, inviting ideas.
 
 Presets: ${DESIGN_PRESETS.map((preset) => `${preset.id} (${preset.description})`).join('; ')}
 Fonts: ${BUNDLED_FONT_IDS.join(', ')}
@@ -327,7 +333,10 @@ export async function designDirections(input: {
         applyPreset(input.design, preset),
         [
           { path: 'brand.light.accent', value: look.accent },
-          { path: 'brand.light.background', value: look.background },
+          // The page stays quiet; a vivid background keeps the preset's.
+          ...(quietPage(look.background)
+            ? [{ path: 'brand.light.background', value: look.background }]
+            : []),
           { path: 'brand.light.ink', value: look.ink },
           { path: 'brand.fonts.heading', value: look.headingFont },
           { path: 'brand.fonts.body', value: look.bodyFont },

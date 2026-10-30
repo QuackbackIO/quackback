@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultDesign, portalDesign } from '@/lib/shared/design/schema'
 import { resolveDesign } from '@/lib/shared/design/resolve'
+import { DESIGN_PRESETS } from '@/lib/shared/design/presets'
 
 const model = vi.hoisted(() => ({
   configured: true,
@@ -178,6 +179,30 @@ describe('askDesignAi', () => {
 })
 
 describe('designDirections', () => {
+  it('keeps the page quiet when a look paints it in the brand colour', async () => {
+    model.answer = {
+      looks: [
+        {
+          name: 'Gold',
+          description: 'Bright.',
+          preset: 'calm',
+          accent: '#c2410c',
+          background: '#f5b301',
+          ink: '#1c1408',
+          headingFont: 'inter',
+          bodyFont: 'inter',
+          headline: 'Ideas',
+          subtitle: '',
+        },
+      ],
+    }
+    const result = await designDirections({ design: defaultDesign(), site: null, words: 'gold' })
+    if (!result.ok) throw new Error('expected looks')
+    const calm = DESIGN_PRESETS.find((preset) => preset.id === 'calm')!
+    expect(result.looks[0].design.brand.light.background).toBe(calm.look.brand.light.background)
+    expect(result.looks[0].design.brand.light.accent).toBe('#c2410c')
+  })
+
   it('builds each look on its preset, as a valid and readable design', async () => {
     model.answer = {
       looks: [
