@@ -16,6 +16,7 @@ import {
 import type { IntegrationId, PostId, TicketId, PostCommentId, ChangelogId } from '@quackback/ids'
 import type { HookJobData } from '@/lib/server/events/hook-job'
 import { getIntegration } from '../index'
+import { outboundAllowed } from '../destinations'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import type { JobSqlExecutor } from '@/lib/server/jobs/job-queue'
 import { getBaseUrl } from '@/lib/server/config'
@@ -168,6 +169,9 @@ export async function executeHookSync(
       )
     })
   )
+    return { state: 'cancelled', errorCode: 'installation_changed' }
+  // A repository switched off or made inbound-only since this was queued takes nothing.
+  if (!(await outboundAllowed(integration, channel)))
     return { state: 'cancelled', errorCode: 'installation_changed' }
   // Re-read mutable content instead of re-exposing a removed snapshot.
   if (post && 'post' in event.data) {

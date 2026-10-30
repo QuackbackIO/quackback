@@ -7,13 +7,14 @@
  * Unassigned threads render an explicit "Unassigned" label in the same
  * column — the scan line never breaks.
  */
-import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, PrincipalId, TicketId, TicketStatusId } from '@quackback/ids'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
-import type { InboxItemDTO } from '@/lib/shared/inbox/items'
-import { ConversationRow } from '../conversation-list-column'
+import type { InboxItemDTO, LinkedTicketSummary } from '@/lib/shared/inbox/items'
+import type { TicketDTO } from '@/lib/server/domains/tickets'
+import { ConversationRow, TicketRow } from '../conversation-list-column'
 
 function conversation(overrides: Partial<ConversationDTO>): ConversationDTO {
   return {
@@ -113,5 +114,105 @@ describe('ConversationRow test chip', () => {
   it('leaves a real thread unmarked', () => {
     renderRow(conversation({}))
     expect(screen.queryByText('Test')).not.toBeInTheDocument()
+  })
+})
+
+describe('ticket due marker on inbox rows', () => {
+  const NOW = new Date('2026-10-14T12:00:00.000Z')
+  const OVERDUE = '2026-10-14T10:00:00.000Z' // 2h ago
+  const DUE_SOON = '2026-10-14T17:30:00.000Z' // in 5h 30m
+  const LATER = '2026-10-16T12:00:00.000Z' // 2 days out
+
+  afterEach(() => vi.useRealTimers())
+
+  function linked(overrides: Partial<LinkedTicketSummary>): LinkedTicketSummary {
+    return {
+      id: 'ticket_1' as TicketId,
+      number: 142,
+      title: 'Cannot log in',
+      statusName: 'Open',
+      statusCategory: 'open',
+      dueAt: null,
+      ...overrides,
+    }
+  }
+
+  async function renderLinked(ticket: LinkedTicketSummary) {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+    const c = conversation({})
+    render(
+      <IntlProvider locale="en">
+        <ConversationRow
+          item={{ ...item(c), linkedTicket: ticket }}
+          id={c.id}
+          selected={false}
+          onSelect={() => {}}
+        />
+      </IntlProvider>
+    )
+    // The marker reads the clock after mount.
+    await act(async () => {})
+  }
+
+  async function renderTicket(dueAt: string | null, category: 'open' | 'closed' = 'open') {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+    const t = {
+      id: 'ticket_1' as TicketId,
+      number: 142,
+      type: 'customer',
+      title: 'Cannot log in',
+      status: { id: 'ticket_status_1' as TicketStatusId, name: 'Open', color: '#888', category },
+      assignee: { principalId: null, displayName: null, teamId: null, teamName: null },
+      dueAt,
+      lastMessagePreview: null,
+      updatedAt: NOW.toISOString(),
+    } as unknown as TicketDTO
+    render(
+      <IntlProvider locale="en">
+        <TicketRow
+          item={{ kind: 'ticket', ticket: t, unreadCount: 0 }}
+          id={t.id}
+          selected={false}
+          onSelect={() => {}}
+        />
+      </IntlProvider>
+    )
+    await act(async () => {})
+  }
+
+  it('marks an overdue linked ticket in red', async () => {
+    await renderLinked(linked({ dueAt: OVERDUE }))
+    const marker = screen.getByRole('img', { name: 'Overdue by 2h' })
+    expect(marker.textContent).toBe('2h over')
+    expect(marker.className).toContain('text-red-600')
+  })
+
+  it('marks a linked ticket due within a day in amber', async () => {
+    await renderLinked(linked({ dueAt: DUE_SOON }))
+    const marker = screen.getByRole('img', { name: 'Due in 5h 30m' })
+    expect(marker.textContent).toBe('5h 30m')
+    expect(marker.className).toContain('text-amber-700')
+  })
+
+  it('shows nothing for a closed linked ticket or one due further out', async () => {
+    await renderLinked(linked({ dueAt: OVERDUE, statusCategory: 'closed' }))
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    await renderLinked(linked({ dueAt: LATER }))
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('marks an overdue ticket row after its status chip', async () => {
+    await renderTicket(OVERDUE)
+    const marker = screen.getByRole('img', { name: 'Overdue by 2h' })
+    expect(marker.previousElementSibling?.textContent).toContain('Open')
+  })
+
+  it('leaves a closed ticket row, or one with no due date, unmarked', async () => {
+    await renderTicket(OVERDUE, 'closed')
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    await renderTicket(null)
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
 })

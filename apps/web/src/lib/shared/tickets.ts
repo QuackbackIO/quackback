@@ -13,6 +13,11 @@ import { z } from 'zod'
 import { isValidTypeId, type TicketTypeId } from '@quackback/ids'
 import type { TicketType, TicketStage, TicketStatusCategory } from '@/lib/shared/db-types'
 
+/** Every ticket list order. `recent`/`oldest` sort by activity (updatedAt);
+ *  `due` is soonest due date first, tickets without one last. The single list
+ *  shared by the server fns, the v1 API and MCP so they cannot drift. */
+export const TICKET_SORTS = ['recent', 'oldest', 'created', 'priority', 'due'] as const
+
 /** Render a ticket's sequential number for display (plain `#142`). */
 export function formatTicketNumber(n: number): string {
   return `#${n}`

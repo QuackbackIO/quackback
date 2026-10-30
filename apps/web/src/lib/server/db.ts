@@ -274,6 +274,10 @@ export {
   integrationPlatformCredentialsRelations,
   integrations,
   integrationsRelations,
+  integrationDestinations,
+  integrationDestinationsRelations,
+  integrationUserMappings,
+  integrationUserMappingsRelations,
   // Schema tables - external links
   postExternalLinks,
   postExternalLinksRelations,
@@ -544,6 +548,7 @@ export type {
   MacroAction,
 } from '@quackback/db'
 export type { ServiceMetadata } from '@quackback/db'
+export type { IntegrationDestinationConfig } from '@quackback/db'
 export type { FileRecord, NewFileRecord } from '@quackback/db'
 export type { IdentityProviderClaimMapping, ClaimRoleMapping } from '@quackback/db'
 export type { PermissionKey, PermissionCategory, SystemRoleKey } from '@quackback/db'

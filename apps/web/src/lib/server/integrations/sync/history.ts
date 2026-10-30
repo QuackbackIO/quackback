@@ -7,12 +7,15 @@ import {
   postExternalLinks,
   sql,
   integrations,
+  integrationDestinations,
   integrationSyncOperations as operations,
   integrationSyncAttempts as attempts,
   integrationSyncActions as actions,
 } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
-import { installationIdentity } from './identity'
+import type { IntegrationDestinationId } from '@quackback/ids'
+import { installationIdentity, syncDestination, syncHash } from './identity'
+import { destinationTarget } from '../destinations'
 import {
   connectionIsDestination,
   readSlackAssistantEnabled,
@@ -134,7 +137,13 @@ async function present(op: SyncOperation, actor: Actor): Promise<SyncHistoryItem
 }
 
 export async function listSyncHistory(
-  input: { provider: string; filter: SyncFilter; cursor?: { at: string; id: string } },
+  input: {
+    provider: string
+    filter: SyncFilter
+    cursor?: { at: string; id: string }
+    /** Only syncs with this destination (a repository of a connection serving several). */
+    destinationId?: string
+  },
   actor: Actor
 ) {
   const row = await db.query.integrations.findFirst({
@@ -165,6 +174,23 @@ export async function listSyncHistory(
         : input.filter === 'successful'
           ? eq(operations.state, 'succeeded')
           : undefined
+  // A destination's operations carry the same key its links' scopes hash: the
+  // identity of `{ channelId: <repository> }` on this connection.
+  const destination = input.destinationId
+    ? await db.query.integrationDestinations.findFirst({
+        where: and(
+          eq(integrationDestinations.id, input.destinationId as IntegrationDestinationId),
+          eq(integrationDestinations.integrationId, row.id)
+        ),
+      })
+    : undefined
+  if (input.destinationId && !destination) throw new SyncRequestError('Destination unavailable')
+  const destinationFilter = destination
+    ? eq(
+        operations.destinationKey,
+        syncHash(syncDestination(destinationTarget(destination), config, definition))
+      )
+    : undefined
   const rows = await db
     .select()
     .from(operations)
@@ -174,6 +200,7 @@ export async function listSyncHistory(
         eq(operations.integrationId, row.id),
         eq(operations.installation, installationIdentity(row)),
         stateFilter,
+        destinationFilter,
         sql`(${operations.createdAt} > now() - interval '90 days' OR ${operations.state} IN ('queued','running','retry_wait','failed','auth_required','uncertain','conflict'))`,
         input.cursor
           ? sql`(${operations.createdAt}, ${operations.id}) < (${input.cursor.at}::timestamptz, ${input.cursor.id}::uuid)`

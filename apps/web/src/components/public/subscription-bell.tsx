@@ -20,7 +20,7 @@ import {
 import type { PostId } from '@quackback/ids'
 import type { SubscriptionLevel } from '@/lib/shared/types'
 
-interface SubscriptionStatus {
+export interface SubscriptionStatus {
   subscribed: boolean
   level: SubscriptionLevel
   reason: string | null
@@ -31,6 +31,10 @@ interface SubscriptionBellProps {
   initialStatus?: SubscriptionStatus
   disabled?: boolean
   onAuthRequired?: () => void
+  /** `initialStatus` was just read with the page, so skip the read on mount. */
+  initialStatusFresh?: boolean
+  /** The status read back from the server after a change. */
+  onStatusChange?: (status: SubscriptionStatus) => void
 }
 
 export function SubscriptionBell({
@@ -38,6 +42,8 @@ export function SubscriptionBell({
   initialStatus,
   disabled = false,
   onAuthRequired,
+  initialStatusFresh = false,
+  onStatusChange,
 }: SubscriptionBellProps) {
   const intl = useIntl()
   const [status, setStatus] = useState<SubscriptionStatus>(
@@ -46,21 +52,20 @@ export function SubscriptionBell({
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
 
-  // Always fetch fresh status on mount to handle out-of-band changes (email unsubscribe, etc.)
+  // Fetch fresh status on mount to handle out-of-band changes (email unsubscribe,
+  // etc.), unless the page read it just now.
   useEffect(() => {
-    if (!disabled) {
+    if (!disabled && !initialStatusFresh) {
       fetchStatus()
     }
-  }, [postId, disabled])
+  }, [postId, disabled, initialStatusFresh])
 
-  const fetchStatus = async () => {
+  const fetchStatus = async (changed = false) => {
     try {
       const result = await fetchSubscriptionStatus({ data: { postId } })
-      setStatus({
-        subscribed: result.subscribed,
-        level: result.level,
-        reason: result.reason,
-      })
+      const next = { subscribed: result.subscribed, level: result.level, reason: result.reason }
+      setStatus(next)
+      if (changed) onStatusChange?.(next)
     } catch (error) {
       console.error('Failed to fetch subscription status:', error)
     }
@@ -90,14 +95,14 @@ export function SubscriptionBell({
           await unsubscribeFromPostFn({ data: { postId } })
         } else if (!previousStatus.subscribed) {
           // Not subscribed yet - create subscription with level
-          await subscribeToPostFn({ data: { postId, reason: 'manual', level: newLevel } })
+          await subscribeToPostFn({ data: { postId, level: newLevel } })
         } else {
           // Already subscribed - just update the level
           await updateSubscriptionLevelFn({ data: { postId, level: newLevel } })
         }
 
         // Sync with server truth
-        await fetchStatus()
+        await fetchStatus(true)
       } catch {
         setStatus(previousStatus)
         toast.error(
@@ -110,7 +115,7 @@ export function SubscriptionBell({
         setLoading(false)
       }
     },
-    [postId, disabled, onAuthRequired, status, intl]
+    [postId, disabled, onAuthRequired, onStatusChange, status, intl]
   )
 
   const level = status.level

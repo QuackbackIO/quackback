@@ -2,6 +2,7 @@ import { createFileRoute, Navigate, redirect } from '@tanstack/react-router'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { useIntl } from 'react-intl'
 import { ChatBubbleLeftRightIcon, TicketIcon } from '@heroicons/react/24/solid'
 import { isValidTypeId } from '@quackback/ids'
 import type {
@@ -13,6 +14,8 @@ import type {
   TicketStatusId,
 } from '@quackback/ids'
 import { coerceTicketTypeId } from '@/lib/shared/tickets'
+import { isTicketDueFilter, type TicketDueFilter } from '@/lib/shared/ticket-due'
+import { dueTargetTicketIds } from '@/lib/client/inbox/due-targets'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 import {
   isConversationSort,
@@ -64,6 +67,7 @@ import { assignConversationTeamFn } from '@/lib/server/functions/teams'
 import { bulkUpdateTicketsFn, type BulkTicketActionInput } from '@/lib/server/functions/tickets'
 import {
   useAssignTicket,
+  useSetTicketDueAt,
   useSetTicketPriority,
   useSetTicketStatus,
 } from '@/lib/client/mutations/inbox'
@@ -93,7 +97,7 @@ import {
   facetToStatusFilter,
   buildInboxListParams,
   usesUnifiedInboxList,
-  ticketTypeForView,
+  ticketCategoryForView,
   PRIORITY_VALUES,
   type InboxNavItem,
   type InboxSearch,
@@ -181,6 +185,8 @@ function validateInboxSearch(search: Record<string, unknown>): InboxSearch {
     // ticket_type id is accepted (a junk value is dropped, never reaching
     // the uuid-backed ticket query).
     ttype: coerceTicketTypeId(typeof search.ttype === 'string' ? search.ttype : undefined),
+    // The ticket Due date filter; only the canonical values are accepted.
+    due: isTicketDueFilter(search.due) ? search.due : undefined,
     // Quinn-view sub-filter by involvement outcome; only the canonical buckets.
     ai:
       search.ai === 'resolved' || search.ai === 'escalated' || search.ai === 'pending'
@@ -247,6 +253,9 @@ export const Route = createFileRoute('/admin/inbox')({
     // views list), so — like Saved — it hydrates client-side, not here.
     const skipListPrefetch = isSaved || nav.kind === 'custom'
     const useUnified = usesUnifiedInboxList(nav)
+    // The Due date filter applies only where tickets can appear (the same
+    // gate the component reads), so the prefetch key matches its list key.
+    const due = flags?.supportTickets && inboxScopeHasRefinements(nav) ? search.due : undefined
     // A `?company=` deep link SSR-prefetches the FILTERED list under the same
     // factory key the component reads, so the filtered view hydrates too.
     const company = search.company as CompanyId | undefined
@@ -271,7 +280,8 @@ export const Route = createFileRoute('/admin/inbox')({
               sort,
               undefined,
               search.ttype,
-              search.channel
+              search.channel,
+              due
             )
           )
         )
@@ -400,6 +410,7 @@ function patchTicketInInboxLists(queryClient: QueryClient, ticket: TicketDTO): v
               title: ticket.title,
               statusName: ticket.status.name,
               statusCategory: ticket.status.category,
+              dueAt: ticket.dueAt,
             },
           }
         }
@@ -412,6 +423,7 @@ function patchTicketInInboxLists(queryClient: QueryClient, ticket: TicketDTO): v
 
 function InboxPage() {
   const queryClient = useQueryClient()
+  const intl = useIntl()
   const navigate = Route.useNavigate()
   const {
     i: urlI,
@@ -425,6 +437,7 @@ function InboxPage() {
     status: urlStatus,
     priority: urlPriority,
     ttype: urlTicketType,
+    due: urlDue,
     q: urlQ,
     channel: urlChannel,
     company: urlCompany,
@@ -577,6 +590,21 @@ function InboxPage() {
   // Ordering: URL sort wins; else a custom view's saved sort; else the list's
   // implicit default (relevance while searching, most-recent otherwise).
   const sort: ConversationSort = urlSort ?? activeView?.sort ?? defaultConversationSort(!!search)
+
+  // The ticket Due date filter, offered where tickets can appear in the list:
+  // the unified list with its refinements, tickets switched on. A custom view
+  // applies its own `ticket_due` rule instead.
+  const showTickets = useFeatureFlag('supportTickets')
+  const dueApplies = showTickets && showRefinements && usesUnifiedInboxList(nav)
+  const dueFilter: TicketDueFilter | undefined = dueApplies ? urlDue : undefined
+  const setDueFilter = useCallback(
+    (due: TicketDueFilter | undefined) => updateSearch({ due }),
+    [updateSearch]
+  )
+  // A deep link can carry `?due=` into a scope that cannot filter by it.
+  useEffect(() => {
+    if (urlDue && !dueApplies) setDueFilter(undefined)
+  }, [urlDue, dueApplies, setDueFilter])
 
   // Custom-view dialog (create / edit), reachable from the nav "+" and per-view
   // menu. The route owns it so a save can select the new view.
@@ -763,7 +791,11 @@ function InboxPage() {
             queryKey: conversationKeys.agentConversationFiles(conversationId),
           })
         }
-      } else if (evt.kind === 'ticket_message' || evt.kind === 'ticket_message_updated') {
+      } else if (
+        evt.kind === 'ticket_message' ||
+        evt.kind === 'ticket_message_updated' ||
+        evt.kind === 'ticket_message_deleted'
+      ) {
         reconcileCachedThread<TicketThreadCache>(
           queryClient,
           ticketKeys.thread(evt.ticketId),
@@ -798,6 +830,7 @@ function InboxPage() {
     isSaved,
     streamConnected,
     channel: urlChannel,
+    due: dueFilter,
   })
 
   // Quinn-view sub-filter counts (only fetched while that view is open).
@@ -812,7 +845,6 @@ function InboxPage() {
   // closed-category status for a ticket target (§3.4). Gated on the same flag
   // as the Tickets nav section — mirrors TicketDetail's existing assumption
   // that any agent who can reach a ticket item holds ticket.view.
-  const showTickets = useFeatureFlag('supportTickets')
   const { data: ticketStatusList } = useQuery({
     ...ticketQueries.statuses(),
     enabled: showTickets,
@@ -830,9 +862,7 @@ function InboxPage() {
   const ticketTypeOptions = useMemo(() => {
     if (!isTicketScope) return undefined
     const scopeCategory =
-      nav.kind === 'view' && nav.view !== 'tickets_all' && isTicketNavView(nav.view)
-        ? ticketTypeForView(nav.view)
-        : undefined
+      nav.kind === 'view' && isTicketNavView(nav.view) ? ticketCategoryForView(nav.view) : undefined
     return (registryTypes ?? []).filter((t) => !scopeCategory || t.category === scopeCategory)
   }, [isTicketScope, nav, registryTypes])
 
@@ -954,6 +984,7 @@ function InboxPage() {
   const assignTicketMutation = useAssignTicket()
   const priorityTicketMutation = useSetTicketPriority()
   const statusTicketMutation = useSetTicketStatus()
+  const dueTicketMutation = useSetTicketDueAt()
 
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set())
@@ -964,7 +995,7 @@ function InboxPage() {
   // Reset the selection when the visible list changes (scope / facet / priority
   // / company / search) — the checked ids belong to the previous list. The
   // first-mount clear is harmless (the selection starts empty).
-  const selectionScopeKey = `${inboxNavKey(nav)}|${facet}|${priorityFilter}|${urlCompany ?? ''}|${search}`
+  const selectionScopeKey = `${inboxNavKey(nav)}|${facet}|${priorityFilter}|${urlCompany ?? ''}|${dueFilter ?? ''}|${search}`
   useEffect(() => {
     clearSelection()
   }, [selectionScopeKey, clearSelection])
@@ -1163,6 +1194,98 @@ function InboxPage() {
         },
       }),
     [applyVerb, priorityTicketMutation]
+  )
+
+  // Due date lives on tickets. The targets are the selected ticket rows plus
+  // each selected conversation's linked customer ticket (the one-row rule);
+  // a conversation with no linked ticket is skipped and counted. Without a
+  // selection the target is the open item. The bar disables its Due menu
+  // when nothing here has a ticket.
+  const dueTargets = useMemo(
+    () =>
+      dueTargetTicketIds(hasSelection ? selectedIds : selectedRef ? [selectedRef.id] : [], items),
+    [hasSelection, selectedIds, selectedRef, items]
+  )
+  const applySetDue = useCallback(
+    async (dueAt: string | null) => {
+      const { ticketIds, skipped } = dueTargets
+      if (ticketIds.length === 0) {
+        setBulkMenu(null)
+        return
+      }
+      const done = (count: number) =>
+        dueAt
+          ? intl.formatMessage(
+              {
+                id: 'admin.inbox.bulk.due.setToast',
+                defaultMessage: 'Due date set on {count, plural, one {# ticket} other {# tickets}}',
+              },
+              { count }
+            )
+          : intl.formatMessage(
+              {
+                id: 'admin.inbox.bulk.due.clearedToast',
+                defaultMessage:
+                  'Due date cleared on {count, plural, one {# ticket} other {# tickets}}',
+              },
+              { count }
+            )
+      const failedMessage = intl.formatMessage({
+        id: 'admin.inbox.bulk.due.failedToast',
+        defaultMessage: 'Could not update the due date',
+      })
+      // The open item alone goes through the shared mutation hook, which seeds
+      // the ticket's detail cache (the same split as the other solo verbs).
+      if (!hasSelection) {
+        return runSolo(
+          () =>
+            dueTicketMutation.mutateAsync({
+              ticketId: ticketIds[0],
+              dueAt: dueAt ? new Date(dueAt) : null,
+            }),
+          { success: done(1), error: failedMessage }
+        )
+      }
+      try {
+        const res = await bulkUpdateTicketsFn({
+          data: { ticketIds, action: { type: 'set_due', dueAt } },
+        })
+        const ok = res.succeeded.length
+        const failed = res.failed.length
+        const description =
+          skipped > 0
+            ? intl.formatMessage(
+                {
+                  id: 'admin.inbox.bulk.due.skipped',
+                  defaultMessage:
+                    'Skipped {count, plural, one {# conversation} other {# conversations}} with no ticket',
+                },
+                { count: skipped }
+              )
+            : undefined
+        if (failed === 0) {
+          toast.success(done(ok), { description })
+        } else {
+          toast.warning(
+            intl.formatMessage(
+              {
+                id: 'admin.inbox.bulk.due.partialToast',
+                defaultMessage:
+                  '{ok, plural, one {# ticket} other {# tickets}} updated, {failed} failed',
+              },
+              { ok, failed }
+            ),
+            { description }
+          )
+        }
+        refreshInbox()
+        if (failed === 0) clearSelection()
+        else setBulkMenu(null)
+      } catch {
+        toast.error(failedMessage)
+      }
+    },
+    [dueTargets, hasSelection, intl, runSolo, dueTicketMutation, refreshInbox, clearSelection]
   )
 
   // Snooze has no ticket-row equivalent (§2.5: the status axis stands in for
@@ -1404,6 +1527,11 @@ function InboxPage() {
         case 'priority':
           if (needsTarget) setBulkMenu('priority')
           break
+        case 'due':
+          // Opens the bar's Due date menu; a no-op when nothing targeted
+          // has a ticket (mirrors the palette gate on hasDueTarget).
+          if (needsTarget && dueTargets.ticketIds.length > 0) setBulkMenu('due')
+          break
         case 'snooze':
           if (needsTarget && !hasTicketTarget) setBulkMenu('snooze')
           break
@@ -1449,6 +1577,7 @@ function InboxPage() {
       applyClose,
       applyReopen,
       copilotAvailable,
+      dueTargets,
     ]
   )
 
@@ -1557,6 +1686,8 @@ function InboxPage() {
           ticketTypeOptions={ticketTypeOptions}
           channelFilter={urlChannel}
           onChannelFilter={setChannelFilter}
+          dueFilter={dueFilter}
+          onDueFilter={dueApplies ? setDueFilter : undefined}
           sort={sort}
           onSort={setSort}
           loading={listLoading}
@@ -1626,6 +1757,7 @@ function InboxPage() {
           onAssign={applyAssign}
           onAssignTeam={applyAssignTeam}
           onPriority={applyPriority}
+          onSetDue={applySetDue}
           onSnooze={applySnooze}
           onTag={applyTag}
           onMacro={applyMacroReply}
@@ -1633,6 +1765,7 @@ function InboxPage() {
           disableSnooze={hasTicketTarget}
           disableTag={hasTicketTarget}
           disableMacro={hasTicketTarget}
+          disableDue={dueTargets.ticketIds.length === 0}
           spam={nav.kind === 'view' && nav.view === 'spam'}
           onRestore={() => runConversationOnlyBulk({ type: 'restore_spam' }, 'Restored')}
           onDeleteForever={() => runConversationOnlyBulk({ type: 'delete_forever' }, 'Deleted')}
@@ -1649,6 +1782,7 @@ function InboxPage() {
         hasLinkedTicket={!!activeLinkedTicket}
         linkedTicketNumber={activeLinkedTicket?.number}
         copilotAvailable={copilotAvailable}
+        hasDueTarget={dueTargets.ticketIds.length > 0}
       />
       <ShortcutHelpPanel
         open={helpOpen}
