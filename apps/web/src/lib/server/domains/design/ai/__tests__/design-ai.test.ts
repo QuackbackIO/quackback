@@ -116,6 +116,23 @@ describe('askDesignAi', () => {
     expect(result.reply).toBe('That is outside the header, so nothing changed.')
   })
 
+  it('keeps the reply when everything asked for is already set', async () => {
+    model.answer = {
+      reply: 'The header is already stacked.',
+      changes: [{ path: 'layout.header', value: 'stacked' }],
+      outOfScope: false,
+    }
+    const result = await askDesignAi({
+      message: 'Logo above the menu',
+      design: defaultDesign(),
+      scope: 'header',
+      history: [],
+    })
+    if (!result.ok) throw new Error('expected an answer')
+    expect(result.applied).toEqual([])
+    expect(result.reply).toBe('The header is already stacked.')
+  })
+
   it('never claims a change the design refused', async () => {
     model.answer = {
       reply: 'Your cards now float.',

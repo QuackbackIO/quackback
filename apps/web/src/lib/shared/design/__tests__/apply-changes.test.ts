@@ -133,6 +133,29 @@ describe('applyDesignChanges', () => {
     expect(result.applied.map((change) => change.path)).toEqual(['layout.nav'])
   })
 
+  it('writes the welcome message as paragraphs, and reads it back as text', () => {
+    const result = applyDesignChanges(
+      defaultDesign(),
+      [
+        { path: 'pages.feedback.welcome.show', value: true },
+        { path: 'pages.feedback.welcome.body', value: 'Welcome!\n\nTell us what would help.' },
+      ],
+      'welcome'
+    )
+    expect(result.design.pages.feedback.welcome.body).toEqual({
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Welcome!' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Tell us what would help.' }] },
+      ],
+    })
+    expect(result.applied[1]).toEqual({
+      path: 'pages.feedback.welcome.body',
+      before: null,
+      after: 'Welcome!\n\nTell us what would help.',
+    })
+  })
+
   it('lists the fields each section reaches', () => {
     expect(scopeFields('header')).toEqual(['layout.header', 'layout.nav'])
     expect(scopeFields('site')).toEqual([...DESIGN_AI_PATHS])

@@ -72,6 +72,11 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
             drawing: <BandDrawing band={band} />,
           }))}
         />
+        {layout.band !== 'none' && !design.pages.feedback.headline && (
+          <p className="text-xs text-muted-foreground">
+            The band shows behind a headline. Add one below.
+          </p>
+        )}
         {(['title', 'subtitle'] as const).map((field) => (
           <div key={field} className="space-y-1.5">
             <label htmlFor={`design-headline-${field}`} className="text-[13px] font-medium">

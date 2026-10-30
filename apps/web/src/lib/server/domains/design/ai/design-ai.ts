@@ -19,6 +19,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
   applyDesignChanges,
   scopeFields,
+  welcomeText,
   DESIGN_AI_PATHS,
   type AppliedDesignChange,
   type DesignAiScope,
@@ -58,7 +59,8 @@ const OPTIONS_TEXT = [
   'layout.filters (the filter panel side): end (right), start (left)',
   `pages.feedback.defaultSort (the feed's first sort): ${DESIGN_OPTIONS.sort.join(', ')}`,
   'pages.feedback.headline.title and pages.feedback.headline.subtitle (the feedback page headline and the line under it): short plain text; an empty string removes it',
-  'pages.feedback.welcome.show (the welcome message): true or false',
+  'pages.feedback.welcome.show (the welcome message above the feed): true or false',
+  'pages.feedback.welcome.body (the welcome message text): plain sentences, a blank line between paragraphs. When you turn the welcome message on and it has no text, write a short one.',
 ].join('\n')
 
 /** The design fields the model sees: everything it may change, nothing else. */
@@ -81,7 +83,10 @@ function designSummary(doc: PortalDesign) {
     pages: {
       feedback: {
         headline: doc.pages.feedback.headline,
-        welcome: { show: doc.pages.feedback.welcome.show },
+        welcome: {
+          show: doc.pages.feedback.welcome.show,
+          text: welcomeText(doc),
+        },
         defaultSort: doc.pages.feedback.defaultSort,
       },
     },
@@ -130,12 +135,14 @@ const SCOPE_NAMES: Record<Exclude<DesignAiScope, 'site'>, string> = {
 function honestReply(
   answer: z.infer<typeof editSchema>,
   appliedCount: number,
+  /** Changes refused for their value or path; one already set is neither applied nor refused. */
+  refusedCount: number,
   outOfScope: boolean,
   scope: DesignAiScope
 ): string {
   const where = scope === 'site' ? 'the section picked' : `the ${SCOPE_NAMES[scope]}`
   if (appliedCount === 0 && outOfScope) return `That is outside ${where}, so nothing changed.`
-  if (appliedCount === 0 && answer.changes.length > 0)
+  if (appliedCount === 0 && refusedCount > 0)
     return 'Nothing changed: the design does not offer that.'
   if (outOfScope) return `${answer.reply} Part of that is outside ${where} and was left alone.`
   return answer.reply
@@ -188,14 +195,20 @@ export async function askDesignAi(input: {
       systemPrompts: [EDIT_PROMPT + scopeNote, `The design now: ${designSummary(input.design)}`],
       messages: [...input.history.slice(-6), { role: 'user', content: input.message }],
       schema: editSchema,
-      maxTokens: 800,
+      maxTokens: 1200,
     })
     const applied = applyDesignChanges(input.design, answer.changes, input.scope)
     const outOfScope =
       input.scope !== 'site' && (answer.outOfScope || applied.outOfScope.length > 0)
     return {
       ok: true,
-      reply: honestReply(answer, applied.applied.length, outOfScope, input.scope),
+      reply: honestReply(
+        answer,
+        applied.applied.length,
+        applied.skipped - applied.outOfScope.length,
+        outOfScope,
+        input.scope
+      ),
       ...applied,
       outOfScope,
       readability: newAdjustments(input.design, applied.design),
@@ -284,7 +297,7 @@ export async function designDirections(input: {
       systemPrompts: [DIRECTIONS_PROMPT],
       messages: [{ role: 'user', content: brief || 'Suggest three looks for a software company.' }],
       schema: directionsSchema,
-      maxTokens: 900,
+      maxTokens: 2000,
     })
     const looks: DesignLook[] = []
     for (const look of answer.looks) {

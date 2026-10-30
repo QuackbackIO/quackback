@@ -34,19 +34,25 @@ export function useDesignDraft() {
   const latest = useRef(design)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const save = useCallback(async (next: PortalDesign) => {
-    setSaving(true)
-    try {
-      const result = await savePortalDesignDraftFn({ data: { design: next } })
-      if (result.ok) {
-        setReport(result.report)
-        setRefusal(null)
-      } else {
-        setRefusal(result.message)
+  // The save under way, so a reader on the server can wait for it.
+  const inflight = useRef<Promise<void>>(Promise.resolve())
+  const save = useCallback((next: PortalDesign) => {
+    const run = (async () => {
+      setSaving(true)
+      try {
+        const result = await savePortalDesignDraftFn({ data: { design: next } })
+        if (result.ok) {
+          setReport(result.report)
+          setRefusal(null)
+        } else {
+          setRefusal(result.message)
+        }
+      } finally {
+        setSaving(false)
       }
-    } finally {
-      setSaving(false)
-    }
+    })()
+    inflight.current = run
+    return run
   }, [])
 
   useEffect(
@@ -64,14 +70,17 @@ export function useDesignDraft() {
       latest.current = next
       setDesign(next)
       if (timer.current) clearTimeout(timer.current)
-      timer.current = setTimeout(() => void save(next), DRAFT_SAVE_DELAY_MS)
+      timer.current = setTimeout(() => {
+        timer.current = null
+        void save(next)
+      }, DRAFT_SAVE_DELAY_MS)
     },
     [save]
   )
 
-  /** Saves a change still waiting on its pause. */
+  /** Saves a change still waiting on its pause, or waits for the save under way. */
   const flush = useCallback(async () => {
-    if (!timer.current) return
+    if (!timer.current) return inflight.current
     clearTimeout(timer.current)
     timer.current = null
     await save(latest.current)

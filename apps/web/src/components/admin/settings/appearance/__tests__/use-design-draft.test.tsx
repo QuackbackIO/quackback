@@ -11,6 +11,8 @@ import { defaultDesign } from '@/lib/shared/design/schema'
 
 const server = vi.hoisted(() => ({
   saves: [] as unknown[],
+  /** Holds each save open until released, when set. */
+  hold: null as Promise<void> | null,
   publishResult: { ok: true, revisionId: 'portal_design_revision_1', number: 1 } as unknown,
 }))
 
@@ -20,6 +22,7 @@ vi.mock('@/lib/server/functions/portal-design', () => ({
   listPortalDesignVersionsFn: async () => [],
   savePortalDesignDraftFn: async ({ data }: { data: { design: unknown } }) => {
     server.saves.push(data.design)
+    if (server.hold) await server.hold
     return { ok: true, report: { adjustments: [], errors: [] } }
   },
   discardPortalDesignDraftFn: async () => ({ ok: true }),
@@ -93,6 +96,32 @@ describe('useDesignDraft', () => {
       outcome = await result.current.publish()
     })
     expect(outcome).toEqual({ ok: false, message: 'Another version was published.' })
+  })
+
+  it('waits for a save already under way before the server reads the draft', async () => {
+    vi.useFakeTimers()
+    let release!: () => void
+    server.hold = new Promise((resolve) => (release = resolve))
+    const { result } = setup()
+    act(() => result.current.update((draft) => void (draft.layout.density = 'compact')))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS)
+    })
+    expect(server.saves).toHaveLength(1)
+    let flushed = false
+    const flushing = result.current.flush().then(() => (flushed = true))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50)
+    })
+    expect(flushed).toBe(false)
+    release()
+    await act(async () => {
+      await flushing
+    })
+    expect(flushed).toBe(true)
+    // It waited for that save rather than starting another.
+    expect(server.saves).toHaveLength(1)
+    server.hold = null
   })
 
   it('saves a pending change before publishing it', async () => {

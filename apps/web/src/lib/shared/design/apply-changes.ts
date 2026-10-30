@@ -25,6 +25,7 @@ export const DESIGN_AI_PATHS = [
   'pages.feedback.headline.title',
   'pages.feedback.headline.subtitle',
   'pages.feedback.welcome.show',
+  'pages.feedback.welcome.body',
   'pages.feedback.defaultSort',
 ] as const
 
@@ -44,7 +45,7 @@ const SCOPE_PATHS: Record<Exclude<DesignAiScope, 'site'>, (path: string) => bool
   brand: (path) => path === 'mode' || path.startsWith('brand.') || path.startsWith('shape.'),
   header: (path) => path === 'layout.header' || path === 'layout.nav',
   band: (path) => path === 'layout.band' || path.startsWith('pages.feedback.headline.'),
-  welcome: (path) => path === 'pages.feedback.welcome.show',
+  welcome: (path) => path.startsWith('pages.feedback.welcome.'),
   feed: (path) => ['layout.cards', 'layout.density', 'pages.feedback.defaultSort'].includes(path),
   filters: (path) => path === 'layout.filters',
 }
@@ -73,7 +74,38 @@ export interface AppliedDesignChange {
 /** The headline text in English, which other languages fall back to. */
 const HEADLINE_LOCALE = 'en'
 
+const WELCOME_BODY = 'pages.feedback.welcome.body'
+
+/** A rich-text document's text, one paragraph per blank-line-separated block. */
+function docText(doc: unknown): string {
+  const blocks = (doc as { content?: Array<{ content?: Array<{ text?: string }> }> })?.content
+  return (blocks ?? [])
+    .map((block) => (block.content ?? []).map((node) => node.text ?? '').join(''))
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+/** Plain text as a rich-text document, a paragraph for each block. */
+function textDoc(text: string) {
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  return {
+    type: 'doc',
+    content: paragraphs.length
+      ? paragraphs.map((part) => ({ type: 'paragraph', content: [{ type: 'text', text: part }] }))
+      : [{ type: 'paragraph' }],
+  }
+}
+
+/** The welcome message as plain text, as Quackback AI reads and writes it. */
+export function welcomeText(doc: PortalDesign): string {
+  return docText(doc.pages.feedback.welcome.body)
+}
+
 function read(doc: PortalDesign, path: string): DesignValue {
+  if (path === WELCOME_BODY) return docText(doc.pages.feedback.welcome.body) || null
   if (path.startsWith('brand.fonts.') && path !== 'brand.fonts.headingWeight') {
     const font = doc.brand.fonts[path.endsWith('heading') ? 'heading' : 'body']
     return font.kind === 'bundled' ? font.id : font.family
@@ -91,6 +123,13 @@ function read(doc: PortalDesign, path: string): DesignValue {
 /** The draft with one change written in, or null when the value cannot go there. */
 function write(doc: PortalDesign, path: string, value: unknown): PortalDesign | null {
   const next = structuredClone(doc) as PortalDesign
+  if (path === WELCOME_BODY) {
+    if (typeof value !== 'string' && value !== null) return null
+    next.pages.feedback.welcome.body = textDoc(
+      value ?? ''
+    ) as PortalDesign['pages']['feedback']['welcome']['body']
+    return next
+  }
   if (path.startsWith('brand.light.') || path.startsWith('brand.dark.')) {
     const [, mode, key] = path.split('.') as [string, 'light' | 'dark', string]
     if (mode === 'dark') next.brand.dark = { ...next.brand.dark }

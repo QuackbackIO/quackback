@@ -24,6 +24,7 @@ export function ChangeValue({ value }: { value: unknown }) {
     )
   }
   if (typeof value === 'string') return <span>{VALUE_LABELS[value] ?? capital(value)}</span>
+  if (typeof value === 'boolean') return <span>{value ? 'On' : 'Off'}</span>
   return <span>{typeof value === 'object' ? 'Changed' : String(value)}</span>
 }
 

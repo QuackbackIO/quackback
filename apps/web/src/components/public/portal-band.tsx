@@ -13,9 +13,10 @@ export function textForLocale(
 }
 
 /**
- * The band at the top of the feedback page, with its headline. Its look comes
- * from the design's band tokens and data-qb-band, so a plain band with no
- * headline takes no room. Only the design engine draws it.
+ * The band at the top of the feedback page, behind its headline. Its look
+ * comes from the design's band tokens and data-qb-band. With no headline
+ * there is no band, in the preview too, so a style never shows as an empty
+ * block. Only the design engine draws it.
  */
 export function PortalBand() {
   const intl = useIntl()
@@ -28,24 +29,24 @@ export function PortalBand() {
   const headline = draftHeadline !== undefined ? draftHeadline : design.feedback.headline
   const title = textForLocale(headline?.title, intl.locale)
   const subtitle = textForLocale(headline?.subtitle, intl.locale)
-  // A plain band with nothing to say adds nothing to the page. The preview
-  // always draws it, since a draft can change its style there.
-  const inPreview = draftHeadline !== undefined
-  if (!inPreview && design.attributes['data-qb-band'] === 'none' && !title && !subtitle) return null
+  if (!title && !subtitle) return null
   return (
     <section
       data-qb-section="band"
       className="portal-band [background:var(--qb-band-bg)] py-10 [[data-qb-band=none]_&]:py-0"
     >
       {(title || subtitle) && (
-        <div className="mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 pt-6 sm:px-6 [[data-qb-band=none]_&]:pb-0">
+        // Under a centred header the headline centres too.
+        <div className="mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 pt-6 sm:px-6 [[data-qb-band=none]_&]:pb-0 [[data-qb-header=centered]_&]:text-center">
           {title && (
             <h1 className="text-2xl font-semibold text-[var(--qb-band-ink)] sm:text-3xl">
               {title}
             </h1>
           )}
           {subtitle && (
-            <p className="mt-2 max-w-2xl text-base text-[var(--qb-band-muted)]">{subtitle}</p>
+            <p className="mt-2 max-w-2xl text-base text-[var(--qb-band-muted)] [[data-qb-header=centered]_&]:mx-auto">
+              {subtitle}
+            </p>
           )}
         </div>
       )}

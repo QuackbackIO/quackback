@@ -48,8 +48,9 @@ vi.mock('@/lib/client/analytics', () => ({
 vi.mock('@/lib/server/functions/portal-design-ai', () => ({
   getPortalDesignAiStatusFn: async () => ({ available: true }),
   portalDesignDirectionsFn: async () => ({ ok: true, looks: [] }),
-  askPortalDesignAiFn: async ({ data }: { data: { scope: string } }) => {
+  askPortalDesignAiFn: async ({ data }: { data: { scope: string; message: string } }) => {
     server.asks.push(data)
+    if (data.message === 'Break') throw new Error('The server could not be reached')
     if (data.scope === 'header')
       return {
         ok: true,
@@ -132,6 +133,15 @@ describe('AppearanceView', () => {
     expect(await screen.findByText('Menu style')).toBeTruthy()
   })
 
+  it('says a band needs a headline until it has one', async () => {
+    mount()
+    fireEvent.click(screen.getByRole('tab', { name: 'Sections' }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Tint' }))
+    expect(screen.getByText('The band shows behind a headline. Add one below.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Headline'), { target: { value: 'Ideas' } })
+    expect(screen.queryByText('The band shows behind a headline. Add one below.')).toBeNull()
+  })
+
   it('applies a preset’s whole look to the draft', async () => {
     mount()
     fireEvent.click(screen.getByRole('button', { name: 'Start from a preset' }))
@@ -212,6 +222,20 @@ describe('AppearanceView', () => {
       expect.objectContaining({ message: 'Tighter feed', scope: 'site' }),
     ])
     expect(await screen.findByText('Changes applied to your draft')).toBeTruthy()
+  })
+
+  it('answers a request that failed, so the conversation never goes quiet', async () => {
+    mount({ ai: true })
+    fireEvent.change(screen.getByLabelText('Ask Quackback AI'), { target: { value: 'Break' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    })
+    expect(
+      await screen.findByText('Something went wrong, so nothing changed. Try again.')
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Ask Quackback AI'), { target: { value: 'Again' } })
+    expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled()
   })
 
   it('lists the change in Review and publish, then publishes it with its note', async () => {
