@@ -2414,6 +2414,7 @@ export function AgentConversationThread({
             open={addParticipantOpen}
             onOpenChange={setAddParticipantOpen}
             conversationId={conversationId}
+            sharedTicketNumber={!isTicket ? (linkedTicketSummary?.number ?? null) : null}
           />
           <CreateTicketDialog
             open={createTicketOpen}
