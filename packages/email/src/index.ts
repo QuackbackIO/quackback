@@ -1256,6 +1256,8 @@ export type TicketEmailKind =
   | 'assigned_team'
   | 'sla_warning'
   | 'sla_breach'
+  | 'due_soon'
+  | 'overdue'
 
 export interface SendTicketEventEmailParams {
   to: string
@@ -1278,6 +1280,7 @@ export interface SendTicketEventEmailParams {
   closedGeneric?: boolean
   /** SLA kinds: which clock and when it is/was due. */
   clockLabel?: string
+  /** SLA and due-date kinds: when it is/was due, e.g. "Jul 17, 02:00 UTC". */
   dueLabel?: string
   preferencesUrl?: string
   logoUrl?: string
@@ -1302,7 +1305,7 @@ interface TicketEmailCopy {
 
 /**
  * Per-kind copy, derived from structured facts — the sendConversationMessageEmail
- * `direction` pattern generalized to the seven ticket kinds. The app passes
+ * `direction` pattern generalized to the nine ticket kinds. The app passes
  * facts (labels, names, times), never prose.
  */
 function ticketEventCopy(p: SendTicketEventEmailParams): TicketEmailCopy {
@@ -1380,6 +1383,24 @@ function ticketEventCopy(p: SendTicketEventEmailParams): TicketEmailCopy {
         ctaLabel: 'Open in inbox',
         reason: "You're receiving this because you're responsible for this conversation.",
       }
+    case 'due_soon':
+      return {
+        subject: `Ticket ${p.ticketLabel} is due ${p.dueLabel ?? 'soon'}`,
+        heading: 'A ticket is due soon',
+        intro: `${p.ticketLabel} "${p.title}" is due within the next 24 hours.`,
+        factLine: `Due ${p.dueLabel ?? 'soon'}`,
+        ctaLabel: 'Open in inbox',
+        reason: "You're receiving this because you're responsible for this ticket.",
+      }
+    case 'overdue':
+      return {
+        subject: `Ticket ${p.ticketLabel} is overdue`,
+        heading: 'A ticket is overdue',
+        intro: `${p.ticketLabel} "${p.title}" is past its due date and still open.`,
+        factLine: `Was due ${p.dueLabel ?? 'earlier'}`,
+        ctaLabel: 'Open in inbox',
+        reason: "You're receiving this because you're responsible for this ticket.",
+      }
   }
 }
 
@@ -1387,7 +1408,7 @@ function capitalize(s: string): string {
   return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1)
 }
 
-/** Send one of the seven ticket lifecycle emails (single template + copy map). */
+/** Send one of the nine ticket lifecycle emails (single template + copy map). */
 export async function sendTicketEventEmail(
   params: SendTicketEventEmailParams
 ): Promise<EmailResult> {

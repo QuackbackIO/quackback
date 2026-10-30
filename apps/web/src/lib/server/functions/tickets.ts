@@ -29,7 +29,8 @@ import {
   TICKET_STAGES,
   CONVERSATION_PRIORITIES,
 } from '@/lib/shared/db-types'
-import { validateTicketIntakeValues, coerceTicketTypeId } from '@/lib/shared/tickets'
+import { validateTicketIntakeValues, coerceTicketTypeId, TICKET_SORTS } from '@/lib/shared/tickets'
+import { TICKET_DUE_FILTERS } from '@/lib/shared/ticket-due'
 import type {
   AssignTicketInput,
   TicketListFilter,
@@ -43,6 +44,7 @@ import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { conversationIdSchema } from '@/lib/server/domains/assistant/conversation-id.schema'
 import {
   ticketAttachmentSchema,
+  ticketDueAtWireSchema,
   createMyTicketSchema,
   type CreateMyTicketInput,
 } from '@/lib/shared/schemas/tickets'
@@ -68,7 +70,9 @@ const listTicketsSchema = z.object({
   requesterPrincipalId: z.string().optional(),
   companyId: z.string().optional(),
   search: z.string().optional(),
-  sort: z.enum(['recent', 'oldest', 'created', 'priority']).optional(),
+  sort: z.enum(TICKET_SORTS).optional(),
+  // Due-date filter: overdue, due within 24 hours, or no due date.
+  due: z.enum(TICKET_DUE_FILTERS).optional(),
   cursor: z.string().optional(),
   limit: PageLimitMinOneSchema,
 })
@@ -107,6 +111,7 @@ export const listTicketsFn = createServerFn({ method: 'GET' })
           : undefined,
       search: data.search,
       sort: data.sort,
+      due: data.due,
       cursor:
         data.cursor && isValidTypeId(data.cursor, 'ticket') ? (data.cursor as TicketId) : undefined,
       limit: data.limit,
@@ -166,6 +171,8 @@ const createTicketSchema = z.object({
   priority: prioritySchema.optional(),
   companyId: z.string().optional(),
   customAttributes: z.record(z.string(), z.unknown()).optional(),
+  // The shared due date (ISO instant); the service checks the teammate window.
+  dueAt: ticketDueAtWireSchema.optional(),
 })
 
 export const createTicketFn = createServerFn({ method: 'POST' })
@@ -223,6 +230,7 @@ export const createTicketFn = createServerFn({ method: 'POST' })
             ? (data.companyId as CompanyId)
             : undefined,
         customAttributes,
+        dueAt: data.dueAt ? new Date(data.dueAt) : undefined,
       },
       actor
     )
@@ -276,6 +284,24 @@ export const setTicketPriorityFn = createServerFn({ method: 'POST' })
     return setTicketPriority(data.ticketId as TicketId, data.priority, actor)
   })
 
+/**
+ * Set, move or clear (`dueAt: null`) a ticket's shared due date. Gated on
+ * ticket.set_status like priority; the service re-checks, validates the
+ * teammate window and records the change.
+ */
+export const setTicketDueAtFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string(), dueAt: ticketDueAtWireSchema.nullable() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_SET_STATUS })
+    const actor = await policyActorFromAuth(ctx)
+    const { setTicketDueAt } = await import('@/lib/server/domains/tickets/ticket-due.service')
+    return setTicketDueAt(
+      data.ticketId as TicketId,
+      data.dueAt ? new Date(data.dueAt) : null,
+      actor
+    )
+  })
+
 // ---------------------------------------------------------------------------
 // Bulk mutation (support platform §4.6, ticket axis — mirrors
 // bulkUpdateConversationsFn's contract in functions/conversation.ts)
@@ -287,6 +313,8 @@ const bulkTicketActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('assign_team'), teamId: z.string().nullable() }),
   z.object({ type: z.literal('priority'), priority: prioritySchema }),
   z.object({ type: z.literal('set_status'), statusId: z.string() }),
+  // dueAt: an ISO instant, or null to clear the due date.
+  z.object({ type: z.literal('set_due'), dueAt: ticketDueAtWireSchema.nullable() }),
 ])
 
 /** Client-facing action shape (plain strings; the handler narrows to branded
@@ -300,7 +328,7 @@ const bulkUpdateTicketsSchema = z.object({
 })
 
 /** Gate a bulk action on the SAME permission its single-ticket fn uses:
- *  (re)assignment mirrors assignTicketFn (ticket.assign); priority/status
+ *  (re)assignment mirrors assignTicketFn (ticket.assign); priority/status/due
  *  mirror the set-status fns — same split as the conversation bulk fn's
  *  `permissionForBulkAction`. */
 function permissionForBulkTicketAction(type: BulkTicketActionInput['type']) {
@@ -311,14 +339,14 @@ function permissionForBulkTicketAction(type: BulkTicketActionInput['type']) {
 
 /**
  * Apply one inbox action to many tickets in a single call (support platform
- * §4.6, ticket axis: assign, assign_team, priority, set_status). The required
+ * §4.6, ticket axis: assign, assign_team, priority, set_status, set_due). The required
  * permission depends on the action (assign vs status), so the gate is bare
  * and the per-action permission is asserted at runtime, mirroring
  * bulkUpdateConversationsFn. Unlike that fn (which loops the single-
  * conversation ops itself), the per-item loop + isolation here lives in the
  * domain-level `bulkUpdateTickets` (ticket.service.ts), which reuses the same
- * single-ticket ops (`assignTicket`/`setTicketPriority`/`setTicketStatus`)
- * their individual server fns call — this fn only resolves input ('me',
+ * single-ticket ops (`assignTicket`/`setTicketPriority`/`setTicketStatus`/
+ * `setTicketDueAt`) their individual server fns call — this fn only resolves input ('me',
  * team-id) and delegates.
  */
 export const bulkUpdateTicketsFn = createServerFn({ method: 'POST' })
@@ -345,6 +373,8 @@ export const bulkUpdateTicketsFn = createServerFn({ method: 'POST' })
           return { type: 'priority', priority: action.priority }
         case 'set_status':
           return { type: 'set_status', statusId: action.statusId as TicketStatusId }
+        case 'set_due':
+          return { type: 'set_due', dueAt: action.dueAt ? new Date(action.dueAt) : null }
       }
     })()
 
@@ -1094,6 +1124,11 @@ export const runCreateMyTicket = createServerOnlyFn(async function runCreateMyTi
     attachments: data.attachments as ConversationAttachment[] | undefined,
     ticketTypeId: intake.ticketTypeId,
     customAttributes: intake.customAttributes,
+    // The customer's proposed "Needed by" date. The ticket form block's
+    // askDueDate toggle only decides whether the field is SHOWN; it is not a
+    // security boundary — any requester may propose one, and createTicketCore
+    // holds it to the customer window (no past dates, at most two years out).
+    dueAt: data.dueAt ? new Date(data.dueAt) : undefined,
   })
 })
 
