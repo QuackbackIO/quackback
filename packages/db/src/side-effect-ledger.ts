@@ -247,6 +247,18 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
     reason: 'Inbound twin of last_outbound_at, feeding the same panel under the same rule.',
   },
   {
+    column: schema.integrationDestinations.lastOutboundAt,
+    policy: 'preserve',
+    reason:
+      'Per-repository twin of integrations.last_outbound_at: display-only health on the repository card, nothing schedules off it.',
+  },
+  {
+    column: schema.integrationDestinations.lastInboundAt,
+    policy: 'preserve',
+    reason:
+      'Per-repository twin of integrations.last_inbound_at, shown as the last delivery received under the same rule.',
+  },
+  {
     column: schema.connectors.lastSyncedAt,
     policy: 'reset',
     reason:

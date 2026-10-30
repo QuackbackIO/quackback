@@ -18,6 +18,23 @@ describe('provider transport outcomes', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(fetch.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
   })
+  it('counts a status the adapter names as settled as success, not rejection', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 404 }))
+    const deleted = await withSyncTransport(async () => {
+      await integrationFetch(
+        'https://provider.test/items/1',
+        { method: 'DELETE' },
+        { settled: [404] }
+      )
+      return { state: 'succeeded' }
+    })
+    expect(deleted.state).toBe('succeeded')
+    const missing = await withSyncTransport(async () => {
+      await integrationFetch('https://provider.test/items/1', { method: 'PATCH' })
+      return { state: 'succeeded' }
+    })
+    expect(missing.state).toBe('failed')
+  })
   it('does not retry partial success followed by a rejection', async () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response('{}', { status: 201 }))

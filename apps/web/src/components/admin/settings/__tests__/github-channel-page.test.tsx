@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 
 const setInbox = vi.fn()
+const setRepositoryInbox = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -24,6 +26,7 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/integrations/github/server/functions', () => ({
   getGitHubChannelStatusFn: vi.fn(),
   setGitHubInboxEnabledFn: (...a: unknown[]) => setInbox(...a),
+  setGitHubRepositoryInboxFn: (...a: unknown[]) => setRepositoryInbox(...a),
   getGitHubConnectUrl: vi.fn(),
 }))
 vi.mock('@/integrations/github/ui/github-connection-actions', () => ({
@@ -33,11 +36,15 @@ vi.mock('@/integrations/github/ui/github-connection-actions', () => ({
 const { GitHubChannelPage } = await import('../github-channel-page')
 const { githubChannelStatusQuery } =
   await import('@/integrations/github/ui/github-channel-status-query')
+const { inboxTeamsQueryOptions } = await import('@/lib/client/queries/inbox-teams')
+const { ticketQueries } = await import('@/lib/client/queries/inbox')
 
 let client: QueryClient
 
 function renderPage(status: Record<string, unknown>) {
   client.setQueryData(githubChannelStatusQuery().queryKey, status as never)
+  client.setQueryData(inboxTeamsQueryOptions().queryKey, [])
+  client.setQueryData(ticketQueries.types().queryKey, [])
   return render(
     <IntlProvider locale="en" defaultLocale="en">
       <QueryClientProvider client={client}>
@@ -58,12 +65,30 @@ const CONNECTED = {
   lastErrorAt: null,
   lastOutboundAt: null,
   lastInboundAt: new Date(Date.now() - 3600_000).toISOString(),
+  repositories: [] as Record<string, unknown>[],
 }
+
+const repository = (over: Record<string, unknown>) => ({
+  id: 'dest_inbox',
+  repo: 'acme/inbox',
+  enabled: true,
+  inboundMode: 'conversations',
+  ticketScope: { teamId: null, ticketTypeId: null },
+  receives: true,
+  webhookEvents: ['issues', 'issue_comment'],
+  lastInboundAt: null,
+  ...over,
+})
 
 beforeEach(() => {
   setInbox.mockReset()
   setInbox.mockResolvedValue({ ok: true })
+  setRepositoryInbox.mockReset()
+  setRepositoryInbox.mockResolvedValue({ ok: true })
   client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
+  // Radix Select measures and captures pointers, which happy-dom does not.
+  Element.prototype.scrollIntoView = vi.fn()
+  Element.prototype.hasPointerCapture = vi.fn(() => false)
 })
 afterEach(cleanup)
 
@@ -99,6 +124,55 @@ describe('GitHubChannelPage', () => {
       autosave: true,
       showServerMessage: true,
     })
+  })
+
+  it('lists each repository with what its issues open in the inbox', async () => {
+    renderPage({
+      ...CONNECTED,
+      repositories: [
+        repository({}),
+        repository({ id: 'dest_docs', repo: 'acme/docs', inboundMode: 'off' }),
+      ],
+    })
+    const inbox = screen.getByRole('combobox', {
+      name: 'What issues from acme/inbox open in the inbox',
+    })
+    const docs = screen.getByRole('combobox', {
+      name: 'What issues from acme/docs open in the inbox',
+    })
+    expect(inbox).toHaveTextContent('Conversations')
+    expect(docs).toHaveTextContent('Off')
+
+    await userEvent.click(docs)
+    await userEvent.click(screen.getByRole('option', { name: 'Tickets' }))
+    await waitFor(() =>
+      expect(setRepositoryInbox).toHaveBeenCalledWith({
+        data: { destinationId: 'dest_docs', inboundMode: 'tickets' },
+      })
+    )
+  })
+
+  it('says why a repository may not be bringing issues in', () => {
+    renderPage({
+      ...CONNECTED,
+      repositories: [
+        repository({ id: 'a', repo: 'acme/a', enabled: false }),
+        repository({ id: 'b', repo: 'acme/b', receives: false }),
+        repository({ id: 'c', repo: 'acme/c', webhookEvents: ['issues'] }),
+      ],
+    })
+    expect(screen.getByText('Sync is off for this repository.')).toBeInTheDocument()
+    expect(
+      screen.getByText('This repository only sends, so nothing comes in from it.')
+    ).toBeInTheDocument()
+    expect(screen.getByText(/does not deliver comments yet/)).toBeInTheDocument()
+  })
+
+  it('points to the integration when no repository is synced', () => {
+    renderPage(CONNECTED)
+    expect(
+      screen.getByText('No repositories yet. Add one in the GitHub integration.')
+    ).toBeInTheDocument()
   })
 
   it('shows sync times in a Sync card instead of a Health panel', () => {
