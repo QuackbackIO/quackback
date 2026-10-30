@@ -274,6 +274,8 @@ export {
   integrationPlatformCredentialsRelations,
   integrations,
   integrationsRelations,
+  integrationDestinations,
+  integrationDestinationsRelations,
   // Schema tables - external links
   postExternalLinks,
   postExternalLinksRelations,

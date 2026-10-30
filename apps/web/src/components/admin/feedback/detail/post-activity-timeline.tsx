@@ -31,6 +31,7 @@ import {
   HandThumbUpIcon,
   FolderIcon,
   LinkIcon,
+  BellIcon,
 } from '@heroicons/react/16/solid'
 import { IconGitMerge } from '@tabler/icons-react'
 import { SOURCE_TYPE_LABELS } from '@/components/admin/feedback/source-type-icon'
@@ -106,6 +107,24 @@ const ACTIVITY_CONFIG: Partial<Record<ActivityType, ActivityDisplayConfig>> = {
     label: (m, a) => {
       const voter = m.voterName as string | undefined
       return voter ? `${actorLabel(a)} removed ${voter}'s vote` : `${actorLabel(a)} removed a vote`
+    },
+  },
+  'subscriber.added': {
+    icon: BellIcon,
+    label: (m, a) => {
+      const subscriber = m.subscriberName as string | undefined
+      return subscriber
+        ? `${actorLabel(a)} subscribed ${subscriber}`
+        : `${actorLabel(a)} added a subscriber`
+    },
+  },
+  'subscriber.removed': {
+    icon: BellIcon,
+    label: (m, a) => {
+      const subscriber = m.subscriberName as string | undefined
+      return subscriber
+        ? `${actorLabel(a)} unsubscribed ${subscriber}`
+        : `${actorLabel(a)} removed a subscriber`
     },
   },
   'post.deleted': {

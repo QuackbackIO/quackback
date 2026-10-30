@@ -1,6 +1,6 @@
 import { Link, useRouterState } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
-import { UserIcon, Cog6ToothIcon } from '@heroicons/react/24/solid'
+import { UserIcon, Cog6ToothIcon, BellIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
 const navItems = [
@@ -8,6 +8,11 @@ const navItems = [
     label: { id: 'portal.settings.profile.title', defaultMessage: 'Profile' },
     to: '/settings/profile',
     icon: UserIcon,
+  },
+  {
+    label: { id: 'portal.settings.following.title', defaultMessage: 'Following' },
+    to: '/settings/following',
+    icon: BellIcon,
   },
   {
     label: { id: 'portal.settings.preferences.title', defaultMessage: 'Preferences' },
