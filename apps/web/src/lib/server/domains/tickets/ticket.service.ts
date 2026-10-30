@@ -21,6 +21,7 @@ import {
   isNull,
   inArray,
   lt,
+  gt,
   sql,
   asc,
   desc,
@@ -29,6 +30,7 @@ import {
   ticketStatuses,
   conversationMessages,
   ticketConversations,
+  ticketSubscriptions,
   conversations,
   principal,
   teams,
@@ -54,8 +56,14 @@ import {
   type KeysetColumn,
 } from '@/lib/server/db/keyset'
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
+import { ticketDueConditionSql } from '@/lib/server/db/ticket-due'
 import { getStageLabels } from '../settings/settings.tickets'
-import { emitTicketStatusChanged, emitTicketAssigned } from './ticket.webhooks'
+import {
+  emitTicketStatusChanged,
+  emitTicketAssigned,
+  emitTicketUpdated,
+  emitTicketPriorityChanged,
+} from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, ticketRowToDTO } from './ticket.dto'
 import { recordTicketActivity, statusMovedSince } from './ticket-activity.service'
 import { safeSubscribeToTicket } from './ticket-subscription.service'
@@ -138,7 +146,7 @@ const priorityRankExpr = priorityRankSql(tickets.priority)
  * conversation sort, so the keyset cursor only ever needs two columns.
  */
 export interface TicketSortDescriptor {
-  primary: 'updatedAt' | 'createdAt' | 'priorityRank'
+  primary: 'updatedAt' | 'createdAt' | 'priorityRank' | 'dueAt'
   direction: 'asc' | 'desc'
 }
 
@@ -150,6 +158,9 @@ export function ticketSortDescriptorFor(sort: TicketSort = 'recent'): TicketSort
       return { primary: 'createdAt', direction: 'desc' }
     case 'priority':
       return { primary: 'priorityRank', direction: 'desc' }
+    case 'due':
+      // Soonest due first, tickets without a due date last (NULLS LAST).
+      return { primary: 'dueAt', direction: 'asc' }
     case 'recent':
     default:
       return { primary: 'updatedAt', direction: 'desc' }
@@ -163,6 +174,9 @@ function orderByForTicketSort(sort: TicketSort): SQL[] {
   switch (d.primary) {
     case 'priorityRank':
       return [desc(priorityRankExpr), idTie]
+    case 'dueAt':
+      // ASC NULLS LAST is the btree default — tickets_due_at_id_idx serves it.
+      return [sql`${tickets.dueAt} ASC NULLS LAST`, idTie]
     case 'createdAt':
       return [d.direction === 'asc' ? asc(tickets.createdAt) : desc(tickets.createdAt), idTie]
     case 'updatedAt':
@@ -192,6 +206,19 @@ function cursorConditionForTicketSort(sort: TicketSort, t: Ticket): SQL {
         strict: lt(priorityRankExpr, rank),
       }
       return buildKeysetCondition([rankCol, idTie])
+    }
+    case 'dueAt': {
+      // due_at ASC NULLS LAST, id ASC — the same NULLS-LAST boundary shape as
+      // conversation.query.ts's waiting sort: a cursor in the NULL tail only
+      // precedes later NULL rows (by id); otherwise later dates OR the whole
+      // NULL tail.
+      const dueCol: KeysetColumn = t.dueAt
+        ? {
+            equal: eq(tickets.dueAt, t.dueAt),
+            strict: or(gt(tickets.dueAt, t.dueAt), isNull(tickets.dueAt))!,
+          }
+        : { equal: isNull(tickets.dueAt), strict: undefined }
+      return buildKeysetCondition([dueCol, idTie])
     }
     case 'createdAt': {
       const col =
@@ -285,6 +312,7 @@ export async function listTickets(filter: TicketListFilter, actor: Actor): Promi
         filter.type ? eq(tickets.type, filter.type) : undefined,
         filter.ticketTypeId ? eq(tickets.ticketTypeId, filter.ticketTypeId) : undefined,
         filter.priority ? eq(tickets.priority, filter.priority) : undefined,
+        filter.due ? ticketDueConditionSql(filter.due, new Date()) : undefined,
         filter.excludeConversationLinked ? excludeConversationLinkedCondition() : undefined,
         filter.statusCategory
           ? inArray(
@@ -310,6 +338,17 @@ export async function listTickets(filter: TicketListFilter, actor: Actor): Promi
           ? eq(tickets.requesterPrincipalId, filter.requesterPrincipalId)
           : undefined,
         filter.companyId ? eq(tickets.companyId, filter.companyId) : undefined,
+        // Watching: a subscription row, muted or not, on
+        // ticket_subscriptions_principal_idx.
+        filter.watcherPrincipalId
+          ? inArray(
+              tickets.id,
+              db
+                .select({ id: ticketSubscriptions.ticketId })
+                .from(ticketSubscriptions)
+                .where(eq(ticketSubscriptions.principalId, filter.watcherPrincipalId))
+            )
+          : undefined,
         searchCondition,
         // Keyset comparison for the active sort (re-resolved cursor row). id is
         // always the final tiebreak so a page boundary never dupes or skips.
@@ -919,7 +958,8 @@ export async function setTicketPriority(
   const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role), now)
   if (stamp) patch.firstResponseAt = stamp
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
-  // Durable timeline record (fire-and-forget); a no-op re-set records nothing.
+  // Durable timeline record and webhook (fire-and-forget); a no-op re-set
+  // records and fires nothing.
   if (existing.priority !== priority) {
     recordTicketActivity({
       ticketId: id,
@@ -927,7 +967,50 @@ export async function setTicketPriority(
       type: 'priority.changed',
       metadata: { from: existing.priority, to: priority },
     })
+    void emitTicketPriorityChanged(actor, updated, existing.priority)
   }
+  // Realtime signal (unified inbox §3.2, M3).
+  return publishTicketUpdated(updated)
+}
+
+/** The longest ticket title, matching createTicketSchema's title bound. */
+export const TICKET_TITLE_MAX_LENGTH = 300
+
+/**
+ * Rename a ticket. Gated like priority (TICKET_SET_STATUS: the ticket's
+ * triage properties share one permission). The title is trimmed; an empty
+ * or over-long title is refused. A rename to the same title is a no-op that
+ * records no activity and fires no event, but still returns the DTO.
+ */
+export async function setTicketTitle(
+  id: TicketId,
+  title: string,
+  actor: Actor
+): Promise<TicketDTO> {
+  assertCan(actor, PERMISSIONS.TICKET_SET_STATUS, 'rename this ticket')
+  const next = title.trim()
+  if (!next) throw new ValidationError('VALIDATION_ERROR', 'A ticket needs a title')
+  if (next.length > TICKET_TITLE_MAX_LENGTH) {
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      `A ticket title can be at most ${TICKET_TITLE_MAX_LENGTH} characters`
+    )
+  }
+  const existing = await loadTicketOr404(id)
+  if (existing.title === next) return ticketRowToDTO(existing)
+
+  const [updated] = await db
+    .update(tickets)
+    .set({ title: next, updatedAt: new Date() })
+    .where(eq(tickets.id, id))
+    .returning()
+  recordTicketActivity({
+    ticketId: id,
+    principalId: actor.principalId,
+    type: 'title.changed',
+    metadata: { from: existing.title, to: next },
+  })
+  void emitTicketUpdated(actor, updated, existing.title)
   // Realtime signal (unified inbox §3.2, M3).
   return publishTicketUpdated(updated)
 }
@@ -939,7 +1022,8 @@ export async function setTicketPriority(
 /**
  * Apply one action to many tickets (support platform §4.6's ticket-axis
  * counterpart of the conversation bulk actions). Loops the SAME
- * single-ticket ops (`assignTicket`/`setTicketPriority`/`setTicketStatus`)
+ * single-ticket ops (`assignTicket`/`setTicketPriority`/`setTicketStatus`/
+ * `setTicketDueAt`)
  * their individual server fns call — never a bypass of their `assertCan`
  * checks, realtime publish, or webhook — so a bulk apply is exactly N
  * individual applies. Per-item isolation: one ticket's failure (missing,
@@ -951,6 +1035,9 @@ export async function bulkUpdateTickets(
   action: BulkTicketAction,
   actor: Actor
 ): Promise<BulkTicketResult> {
+  // The due-date setter lives in its own module (the max-lines budget) and
+  // imports this one's siblings; loaded lazily so the two never form a cycle.
+  const dueService = action.type === 'set_due' ? await import('./ticket-due.service') : null
   const apply: (id: TicketId) => Promise<unknown> = (() => {
     switch (action.type) {
       case 'assign':
@@ -961,6 +1048,8 @@ export async function bulkUpdateTickets(
         return (id) => setTicketPriority(id, action.priority, actor)
       case 'set_status':
         return (id) => setTicketStatus(id, action.statusId, actor)
+      case 'set_due':
+        return (id) => dueService!.setTicketDueAt(id, action.dueAt, actor)
     }
   })()
 

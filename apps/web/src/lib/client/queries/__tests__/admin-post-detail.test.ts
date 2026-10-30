@@ -1,6 +1,7 @@
 /**
  * Opening a post in the admin modal fetches the post and the panels beside it
- * (voters, merge suggestions, external links, owner roster) in one request,
+ * (voters, merge suggestions, external links, owner roster, subscribers and
+ * the teammate's own follow status) in one request,
  * and seeds each panel's own query from it so the panels render without a
  * request of their own. A panel whose cache is still fresh is not asked for
  * again, and callers that show no panels (the roadmap modal) ask for none.
@@ -29,6 +30,8 @@ const PANELS = {
   mergeSuggestions: [{ id: 'suggestion_1', createdAt: '2026-01-03T00:00:00Z' }],
   externalLinks: [{ id: 'link_1', integrationType: 'linear' }],
   ownerCandidates: [{ principalId: 'principal_a', name: 'Ada', avatarUrl: null }],
+  subscribers: [{ principalId: 'principal_s', reason: 'vote', createdAt: '2026-01-04T00:00:00Z' }],
+  subscription: { subscribed: true, level: 'all', reason: 'manual' },
 }
 
 function detailPayload(panels?: Partial<typeof PANELS>) {
@@ -65,7 +68,15 @@ describe('adminQueries.postDetail with its panels', () => {
     const detail = await client.fetchQuery(adminQueries.postDetail(POST, { withPanels: true }))
 
     expect(requestedPanels()?.sort()).toEqual(
-      ['customerContext', 'externalLinks', 'mergeSuggestions', 'ownerCandidates', 'voters'].sort()
+      [
+        'customerContext',
+        'externalLinks',
+        'mergeSuggestions',
+        'ownerCandidates',
+        'subscribers',
+        'subscription',
+        'voters',
+      ].sort()
     )
     expect(client.getQueryData(adminQueries.postVoters(POST).queryKey)).toEqual(PANELS.voters)
     expect(client.getQueryData(mergeSuggestionQueries.forPost(POST).queryKey)).toEqual(
@@ -74,6 +85,12 @@ describe('adminQueries.postDetail with its panels', () => {
     expect(client.getQueryData(externalLinksKeys.byPost(POST))).toEqual(PANELS.externalLinks)
     expect(client.getQueryData(postOwnerQueries.candidates().queryKey)).toEqual(
       PANELS.ownerCandidates
+    )
+    expect(client.getQueryData(adminQueries.postSubscribers(POST).queryKey)).toEqual(
+      PANELS.subscribers
+    )
+    expect(client.getQueryData(adminQueries.postSubscription(POST).queryKey)).toEqual(
+      PANELS.subscription
     )
     // The panels live in their own caches, not inside the detail entry.
     expect(detail).not.toHaveProperty('panels')
@@ -91,6 +108,8 @@ describe('adminQueries.postDetail with its panels', () => {
       'customerContext',
       'externalLinks',
       'mergeSuggestions',
+      'subscribers',
+      'subscription',
     ])
   })
 

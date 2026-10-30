@@ -21,10 +21,11 @@ import {
   principal,
   user,
   and,
+  eq,
   inArray,
 } from '@/lib/server/db'
 import { PERMISSIONS, type PermissionKey } from '@/lib/server/db'
-import { ticketFilter } from '../tickets'
+import { canViewTicket, ticketFilter } from '../tickets'
 import { ANONYMOUS_ACTOR, type Actor } from '../types'
 
 const fixture = await createDbTestFixture({
@@ -95,7 +96,7 @@ async function seedWorld() {
   ])
 
   const allIds = Object.values(ids) as TicketId[]
-  return { actorA, actorB, ids, allIds }
+  return { actorA, actorB, teamX, ids, allIds }
 }
 
 /** The seeded tickets a given actor's filter admits, keyed back to their labels. */
@@ -186,6 +187,50 @@ describe.skipIf(!fixture.available)('ticketFilter (real DB, rolled back)', () =>
     })
     for (const actor of [service, viewAll, memberA]) {
       expect((await visibleLabels(actor, world)).has('deletedSelfA')).toBe(false)
+    }
+  })
+
+  it('canViewTicket gives the same answer as ticketFilter for every actor and ticket', async () => {
+    const world = await seedWorld()
+    const actors: Array<[Actor, ReadonlySet<TeamId>]> = [
+      [
+        buildActor({
+          principalId: createId('principal') as PrincipalId,
+          principalType: 'service',
+        }),
+        new Set(),
+      ],
+      [
+        buildActor({
+          principalId: createId('principal') as PrincipalId,
+          permissions: new Set([PERMISSIONS.TICKET_VIEW_ALL]),
+        }),
+        new Set(),
+      ],
+      [
+        buildActor({ principalId: world.actorA, permissions: new Set([PERMISSIONS.TICKET_VIEW]) }),
+        new Set([world.teamX]),
+      ],
+      [
+        buildActor({ principalId: world.actorB, permissions: new Set([PERMISSIONS.TICKET_VIEW]) }),
+        new Set(),
+      ],
+      [buildActor({ principalId: world.actorA, permissions: new Set() }), new Set([world.teamX])],
+      [ANONYMOUS_ACTOR, new Set()],
+    ]
+    for (const [actor, teamIds] of actors) {
+      const sqlVisible = await visibleLabels(actor, world)
+      for (const [label, id] of Object.entries(world.ids)) {
+        const [row] = await testDb
+          .select({
+            assigneePrincipalId: tickets.assigneePrincipalId,
+            assigneeTeamId: tickets.assigneeTeamId,
+            deletedAt: tickets.deletedAt,
+          })
+          .from(tickets)
+          .where(eq(tickets.id, id))
+        expect(canViewTicket(actor, row, teamIds).allowed, label).toBe(sqlVisible.has(label))
+      }
     }
   })
 })
