@@ -2227,5 +2227,11 @@
   "portal.feedback.list.noSearchResults": "لا توجد أفكار تطابق “{query}”.",
   "portal.feedback.list.postSearchAsIdea": "انشرها كفكرة جديدة",
   "portal.feedback.list.searchWidenedMost": "لا توجد فكرة تحتوي على كل كلماتك. نعرض الأفكار التي تحتوي على معظمها.",
-  "portal.feedback.list.searchWidenedSimilar": "لا توجد نتائج مطابقة تمامًا. نعرض أفكارًا بتهجئة مشابهة."
+  "portal.feedback.list.searchWidenedSimilar": "لا توجد نتائج مطابقة تمامًا. نعرض أفكارًا بتهجئة مشابهة.",
+  "admin.integrations.oauthError.denied": "تم رفض الاتصال على {name}. اتصل مرة أخرى للسماح بالوصول.",
+  "admin.integrations.oauthError.expired": "انتهت صلاحية طلب الاتصال أو لم يكن صالحًا. حاول الاتصال مرة أخرى.",
+  "admin.integrations.oauthError.session": "تغيرت جلستك أثناء الاتصال. سجّل الدخول مرة أخرى، ثم اتصل.",
+  "admin.integrations.oauthError.credentials": "أضف بيانات اعتماد تطبيق {name} قبل الاتصال.",
+  "admin.integrations.oauthError.elsewhere": "حساب {name} هذا متصل بالفعل بمساحة عمل Quackback أخرى.",
+  "admin.integrations.oauthError.failed": "لم يُكمل {name} الاتصال. حاول الاتصال مرة أخرى."
 }

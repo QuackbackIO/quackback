@@ -2227,5 +2227,11 @@
   "portal.feedback.list.noSearchResults": "Keine Ideen passen zu „{query}“.",
   "portal.feedback.list.postSearchAsIdea": "Als neue Idee posten",
   "portal.feedback.list.searchWidenedMost": "Keine Idee enthält alle deine Wörter. Angezeigt werden Ideen mit den meisten davon.",
-  "portal.feedback.list.searchWidenedSimilar": "Keine genauen Treffer. Angezeigt werden Ideen mit ähnlicher Schreibweise."
+  "portal.feedback.list.searchWidenedSimilar": "Keine genauen Treffer. Angezeigt werden Ideen mit ähnlicher Schreibweise.",
+  "admin.integrations.oauthError.denied": "Die Verbindung wurde bei {name} abgelehnt. Verbinde dich erneut, um den Zugriff zu erlauben.",
+  "admin.integrations.oauthError.expired": "Die Verbindungsanfrage ist abgelaufen oder war ungültig. Versuche es erneut.",
+  "admin.integrations.oauthError.session": "Deine Sitzung hat sich während der Verbindung geändert. Melde dich erneut an und verbinde dich dann.",
+  "admin.integrations.oauthError.credentials": "Hinterlege die App-Zugangsdaten für {name}, bevor du dich verbindest.",
+  "admin.integrations.oauthError.elsewhere": "Dieses {name}-Konto ist bereits mit einem anderen Quackback-Arbeitsbereich verbunden.",
+  "admin.integrations.oauthError.failed": "{name} hat die Verbindung nicht abgeschlossen. Versuche es erneut."
 }

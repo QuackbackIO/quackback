@@ -2227,5 +2227,11 @@
   "portal.feedback.list.noSearchResults": "Немає ідей за запитом «{query}».",
   "portal.feedback.list.postSearchAsIdea": "Опублікувати як нову ідею",
   "portal.feedback.list.searchWidenedMost": "Жодна ідея не містить усіх ваших слів. Показано ідеї з більшістю з них.",
-  "portal.feedback.list.searchWidenedSimilar": "Точних збігів немає. Показано ідеї зі схожим написанням."
+  "portal.feedback.list.searchWidenedSimilar": "Точних збігів немає. Показано ідеї зі схожим написанням.",
+  "admin.integrations.oauthError.denied": "Підключення відхилено в {name}. Підключіться знову, щоб надати доступ.",
+  "admin.integrations.oauthError.expired": "Термін запиту на підключення минув, або він недійсний. Спробуйте підключитися знову.",
+  "admin.integrations.oauthError.session": "Сеанс змінився під час підключення. Увійдіть знову, а потім підключіться.",
+  "admin.integrations.oauthError.credentials": "Додайте облікові дані застосунку {name} перед підключенням.",
+  "admin.integrations.oauthError.elsewhere": "Цей обліковий запис {name} уже підключено до іншого робочого простору Quackback.",
+  "admin.integrations.oauthError.failed": "{name} не завершив підключення. Спробуйте підключитися знову."
 }

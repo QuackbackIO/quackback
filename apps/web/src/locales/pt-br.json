@@ -2227,5 +2227,11 @@
   "portal.feedback.list.noSearchResults": "Nenhuma ideia corresponde a “{query}”.",
   "portal.feedback.list.postSearchAsIdea": "Publicar como nova ideia",
   "portal.feedback.list.searchWidenedMost": "Nenhuma ideia tem todas as suas palavras. Mostrando ideias com a maioria delas.",
-  "portal.feedback.list.searchWidenedSimilar": "Nenhum resultado exato. Mostrando ideias com grafia parecida."
+  "portal.feedback.list.searchWidenedSimilar": "Nenhum resultado exato. Mostrando ideias com grafia parecida.",
+  "admin.integrations.oauthError.denied": "A conexão foi recusada no {name}. Conecte novamente para permitir o acesso.",
+  "admin.integrations.oauthError.expired": "A solicitação de conexão expirou ou não era válida. Tente conectar novamente.",
+  "admin.integrations.oauthError.session": "Sua sessão mudou durante a conexão. Entre novamente e depois conecte.",
+  "admin.integrations.oauthError.credentials": "Adicione as credenciais do app {name} antes de conectar.",
+  "admin.integrations.oauthError.elsewhere": "Esta conta do {name} já está conectada a outro espaço de trabalho do Quackback.",
+  "admin.integrations.oauthError.failed": "O {name} não concluiu a conexão. Tente conectar novamente."
 }

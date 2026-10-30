@@ -12,8 +12,31 @@ function toIntegrationType(param: string): string {
   return param.replace(/-/g, '_')
 }
 
+/** What the OAuth callback appends on its way back here:
+ * `?<integration>=connected` or `?<integration>=error&reason=<code>`
+ * (oauth-handlers.ts buildSettingsUrl). The connection actions read them to
+ * confirm the connection or say why it failed, then strip them. */
+type OAuthResultSearch = { reason?: string; [key: string]: unknown }
+
+const OAUTH_RESULT_KEY = /^[a-z][a-z0-9_-]{0,40}$/
+const OAUTH_REASON = /^[a-z][a-z0-9_]{0,63}$/
+
+function oauthResultSearch(search: Record<string, unknown>): OAuthResultSearch {
+  const result: OAuthResultSearch = {}
+  for (const [key, value] of Object.entries(search)) {
+    if ((value === 'connected' || value === 'error') && OAUTH_RESULT_KEY.test(key)) {
+      result[key] = value
+    }
+  }
+  if (typeof search.reason === 'string' && OAUTH_REASON.test(search.reason)) {
+    result.reason = search.reason
+  }
+  return result
+}
+
 export const Route = createFileRoute('/admin/settings/integrations/$type')({
-  validateSearch: (search: Record<string, unknown>): { tab?: 'history' } => ({
+  validateSearch: (search: Record<string, unknown>): { tab?: 'history' } & OAuthResultSearch => ({
+    ...oauthResultSearch(search),
     tab: search.tab === 'history' ? 'history' : undefined,
   }),
   loader: async ({ context, params }) => {
