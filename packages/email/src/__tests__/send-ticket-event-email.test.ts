@@ -81,6 +81,26 @@ describe('sendTicketEventEmail', () => {
     )
   })
 
+  it.each<[TicketEmailKind, string, string, string]>([
+    ['due_soon', 'Ticket #142 is due Oct 21, 21:59 UTC', 'A ticket is due soon', 'Due Oct 21'],
+    ['overdue', 'Ticket #142 is overdue', 'A ticket is overdue', 'Was due Oct 21'],
+  ])('sends due-date kind %s with its subject, heading and fact line', async (kind, ...copy) => {
+    const [subject, heading, factLine] = copy
+    const result = await sendTicketEventEmail({
+      ...baseParams,
+      kind,
+      ctaUrl: 'https://acme.example.com/admin/inbox?i=ticket_1',
+      dueLabel: 'Oct 21, 21:59 UTC',
+    })
+    expect(result.sent).toBe(true)
+    const call = sendMailMock.mock.calls[0][0]
+    expect(call.subject).toBe(subject)
+    for (const text of [heading, factLine, 'Open in inbox', 'responsible for this ticket']) {
+      expect(call.html).toContain(text)
+    }
+    expect(`${call.subject} ${call.text ?? ''}`).not.toMatch(/[!—]/)
+  })
+
   it('B22: status_resolved with closedGeneric says "closed", never "resolved"', async () => {
     const result = await sendTicketEventEmail({
       ...baseParams,

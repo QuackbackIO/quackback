@@ -56,6 +56,7 @@ import {
   TicketPriorityControl,
   TicketWatchControl,
 } from '@/components/admin/inbox/ticket-controls'
+import { TicketDueChip, TicketDueControl } from '@/components/admin/inbox/ticket-due-control'
 import { TicketLinks } from '@/components/admin/inbox/ticket-links'
 import { TicketActivityTimeline } from '@/components/admin/inbox/ticket-activity-timeline'
 import { TicketTrackerLinks } from '@/components/admin/inbox/ticket-tracker-links'
@@ -68,7 +69,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { MENU_LABEL } from '@/components/ui/menu'
 import { DETAIL_DATE, DetailDate, DetailRow as Row } from '@/components/shared/detail-row'
-import { CalendarDate, useLocalDateFormatter } from '@/components/ui/local-date'
+import { CalendarDate } from '@/components/ui/local-date'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
@@ -105,47 +106,10 @@ function AiOutcomePill({ outcome }: { outcome: AssistantInvolvementOutcome }) {
 }
 
 /**
- * A ticket's `dueAt` countdown, styled like `sla-chip.tsx`'s conversation SLA
- * chip (§2.7's "SLA due (dueAt countdown like the conversation SlaChip
- * idiom)") but reading the ticket's own bare `dueAt`/`resolvedAt` timestamps
- * directly — a ticket carries no policy/target metadata to drive the richer
- * `ConversationSlaDTO` shape. Renders nothing once resolved or with no due
- * date set, and only after mount (the label depends on "now").
- */
-function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt: string | null }) {
-  const formatDate = useLocalDateFormatter()
-  const [now, setNow] = useState<Date | null>(null)
-  useEffect(() => {
-    setNow(new Date())
-    const id = setInterval(() => setNow(new Date()), 30_000)
-    return () => clearInterval(id)
-  }, [])
-  if (!dueAt || resolvedAt || !now) return null
-
-  const remainingMs = new Date(dueAt).getTime() - now.getTime()
-  const tone = dueCountdownTone(remainingMs)
-  const overdue = tone === 'overdue'
-  const abs = Math.abs(remainingMs)
-
-  return (
-    <span
-      className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
-        TONE_CLASSES[tone]
-      )}
-      title={`Due ${formatDate(dueAt, DETAIL_DATE)}`}
-    >
-      <ClockIcon className="h-3 w-3" aria-hidden />
-      {overdue ? `${formatSlaCountdown(abs)} over` : formatSlaCountdown(abs)}
-    </span>
-  )
-}
-
-/**
  * The ticket card's SLA chip (support platform §4.6's ticket-anchored TTR
  * clock): the time-to-resolve countdown off the ticket's SLA stamp, with the
- * same tone ladder + 30s tick as `TicketDueChip` above (which stays as-is —
- * it reads the separate bare `dueAt` column, not the SLA stamp). Shows the
+ * same tone ladder + 30s tick as `TicketDueChip` (ticket-due-control.tsx),
+ * which reads the separate shared `dueAt` column, not the SLA stamp. Shows the
  * paused state while the ticket sits in a pending-category status under a
  * pauseOnPending policy (the DTO's status-derived `paused` flag), and renders
  * nothing once the clock has settled — the first resolution settles TTR
@@ -624,13 +588,16 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                 </Row>
               </>
             )}
-            {ticket.dueAt && !ticket.resolvedAt && (
-              <Row icon={ClockIcon} label="Due">
-                <TicketDueChip dueAt={ticket.dueAt} resolvedAt={ticket.resolvedAt} />
-              </Row>
-            )}
-            {/* The SLA stamp's TTR countdown — separate from the bare `dueAt`
-                row above, which reads the ticket's own due_at column. */}
+            {/* The shared due date: always shown so a teammate can set it,
+                with its countdown chip once set (open tickets only). */}
+            <Row icon={ClockIcon} label="Due">
+              <span className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+                <TicketDueChip dueAt={ticket.dueAt} closed={!!ticket.resolvedAt} />
+                <TicketDueControl ticket={ticket} onChanged={onChanged} />
+              </span>
+            </Row>
+            {/* The SLA stamp's TTR countdown — separate from the shared due
+                date row above, which reads the ticket's own due_at column. */}
             {ticket.sla && !ticket.sla.resolvedAt && (
               <Row icon={ClockIcon} label="SLA">
                 <TicketSlaChip sla={ticket.sla} />

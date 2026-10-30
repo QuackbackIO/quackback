@@ -1,12 +1,15 @@
 /**
  * Support-platform ticket tools: read the ticket list + a single ticket with its
- * thread, and write (open a ticket, reply, add an internal note). Team-only
- * agent surfaces gated on the chat scopes — tickets share the conversation
- * scopes (see api-key-scopes): reads need read:chat, writes need write:chat.
+ * thread, and write (open a ticket, reply, add an internal note, link/unlink a
+ * tracker, set the shared due date). Team-only agent surfaces gated on the chat
+ * scopes — tickets share the conversation scopes (see api-key-scopes): reads
+ * need read:chat, writes need write:chat.
  * Status changes + assignment need an id-discovery tool first; a later slice.
  */
 
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { TICKET_SORTS } from '@/lib/shared/tickets'
+import { TICKET_DUE_FILTERS, type TicketDueFilter } from '@/lib/shared/ticket-due'
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { TicketId, TicketTypeId, PrincipalId, CompanyId } from '@quackback/ids'
@@ -36,8 +39,11 @@ import {
 const TICKET_TYPES = ['customer', 'back_office', 'tracker'] as const
 const TICKET_CATEGORIES = ['open', 'pending', 'closed'] as const
 const TICKET_STAGES = ['received', 'in_progress', 'awaiting_requester', 'resolved'] as const
-const TICKET_SORTS = ['recent', 'oldest', 'created', 'priority'] as const
 const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const
+
+/** The due-date wire format: an exact instant, so the caller owns the time zone. */
+const TICKET_DUE_AT_DESCRIBE =
+  'ISO 8601 instant with a Z or offset (e.g. "2026-11-03T17:00:00Z"); allowed from a year ago to five years ahead'
 
 /** Markdown format note appended to the write tools' content/description fields.
  *  Unlike posts/changelog/articles, ticket messages do not auto-rehost external
@@ -71,15 +77,17 @@ export function registerTicketTools(server: McpServer, auth: McpAuthContext) {
     stage?: TicketStage
     requesterPrincipalId?: string
     companyId?: string
+    due?: TicketDueFilter
     sort?: TicketSort
     limit?: number
   }>(server, auth, {
     name: 'list_tickets',
     permissions: [PERMISSIONS.TICKET_VIEW],
-    description: `List support tickets. Filter by type, registry ticket-type, internal status category, customer-facing stage, requester, or company; sort and cap with limit. A service key sees every ticket; a human caller sees the tickets their role can view.
+    description: `List support tickets. Filter by type, registry ticket-type, internal status category, customer-facing stage, requester, company, or due date; sort and cap with limit. A service key sees every ticket; a human caller sees the tickets their role can view.
 
 Examples:
 - Open customer tickets: list_tickets({ type: "customer", statusCategory: "open" })
+- Overdue tickets, most urgent first: list_tickets({ due: "overdue", sort: "due" })
 - Tickets of one registry type: list_tickets({ ticketTypeId: "ticket_type_01abc..." })
 - A company's tickets: list_tickets({ companyId: "company_01abc..." })`,
     schema: {
@@ -98,7 +106,16 @@ Examples:
         .optional()
         .describe('Filter to a requester (principal TypeID)'),
       companyId: z.string().optional().describe('Filter to a company (company TypeID)'),
-      sort: z.enum(TICKET_SORTS).optional().describe('Sort order (default recent)'),
+      due: z
+        .enum(TICKET_DUE_FILTERS)
+        .optional()
+        .describe(
+          'Filter by due date: overdue (past due, still open), due_soon (due within 24 hours, still open), or none (no due date)'
+        ),
+      sort: z
+        .enum(TICKET_SORTS)
+        .optional()
+        .describe('Sort order (default recent); due puts the soonest due date first'),
       limit: z.number().int().min(1).max(100).optional().describe('Max results (default 20)'),
     },
     annotations: READ_ONLY,
@@ -116,6 +133,7 @@ Examples:
           stage: args.stage,
           requesterPrincipalId: args.requesterPrincipalId as PrincipalId | undefined,
           companyId: args.companyId as CompanyId | undefined,
+          due: args.due,
           sort: args.sort,
           limit: args.limit ?? 20,
         },
@@ -140,6 +158,7 @@ Examples:
           requesterPrincipalId: t.requester?.principalId ?? null,
           assigneePrincipalId: t.assignee.principalId,
           assigneeTeamId: t.assignee.teamId,
+          dueAt: t.dueAt,
           updatedAt: t.updatedAt,
         })),
       })
@@ -236,12 +255,13 @@ Example: get_ticket({ ticketId: "ticket_01abc...", includeInternal: true })`,
     priority?: 'none' | 'low' | 'medium' | 'high' | 'urgent'
     requesterPrincipalId?: string
     companyId?: string
+    dueAt?: string
   }>(server, auth, {
     name: 'create_ticket',
     permissions: [PERMISSIONS.TICKET_CREATE],
-    description: `Open a support ticket. type is customer (a requester's request), back_office (an internal task), or tracker (an umbrella others link to). Pass ticketTypeId to file under a workspace-defined registry type instead — its category then determines type (discover ids via list_tickets' ticketType field). A description opens the thread. Returns the created ticket.
+    description: `Open a support ticket. type is customer (a requester's request), back_office (an internal task), or tracker (an umbrella others link to). Pass ticketTypeId to file under a workspace-defined registry type instead — its category then determines type (discover ids via list_tickets' ticketType field). A description opens the thread. dueAt sets the due date shared with the customer (independent of SLA targets). Returns the created ticket.
 
-Example: create_ticket({ type: "customer", title: "Refund not received", description: "Customer reports a missing refund from last week." })`,
+Example: create_ticket({ type: "customer", title: "Refund not received", description: "Customer reports a missing refund from last week.", dueAt: "2026-11-03T17:00:00Z" })`,
     schema: {
       type: z
         .enum(TICKET_TYPES)
@@ -263,6 +283,11 @@ Example: create_ticket({ type: "customer", title: "Refund not received", descrip
         .optional()
         .describe('The requester principal TypeID (optional)'),
       companyId: z.string().optional().describe('Associated company TypeID (optional)'),
+      dueAt: z
+        .string()
+        .datetime({ offset: true })
+        .optional()
+        .describe(`Due date shared with the customer (optional). ${TICKET_DUE_AT_DESCRIBE}`),
     },
     annotations: WRITE,
     scope: 'write:chat',
@@ -285,6 +310,7 @@ Example: create_ticket({ type: "customer", title: "Refund not received", descrip
           priority: args.priority,
           requesterPrincipalId: args.requesterPrincipalId as PrincipalId | undefined,
           companyId: args.companyId as CompanyId | undefined,
+          dueAt: args.dueAt ? new Date(args.dueAt) : undefined,
           // CONVERGENCE PHASE 1b: a customer-intake path — a CUSTOMER ticket
           // created WITH a requester gets its backing conversation + link in
           // the same transaction (createTicketCore's doc carries the
@@ -302,6 +328,7 @@ Example: create_ticket({ type: "customer", title: "Refund not received", descrip
         status: { name: dto.status.name, category: dto.status.category },
         stage: dto.stage.slot,
         priority: dto.priority,
+        dueAt: dto.dueAt,
       })
     },
   })
@@ -384,6 +411,36 @@ Example: add_ticket_note({ ticketId: "ticket_01abc...", content: "Confirmed the 
         ticketId: message.ticketId,
         createdAt: message.createdAt,
       })
+    },
+  })
+
+  registerTool<{ ticketId: string; dueAt: string | null }>(server, auth, {
+    name: 'set_ticket_due_date',
+    permissions: [PERMISSIONS.TICKET_SET_STATUS],
+    description: `Set, move, or clear (null) a ticket's due date. The customer sees the same date on their ticket; it is independent of SLA targets. Setting the date it already has changes nothing.
+
+Examples:
+- Set: set_ticket_due_date({ ticketId: "ticket_01abc...", dueAt: "2026-11-03T17:00:00Z" })
+- Clear: set_ticket_due_date({ ticketId: "ticket_01abc...", dueAt: null })`,
+    schema: {
+      ticketId: z.string().describe('Ticket TypeID'),
+      dueAt: z
+        .string()
+        .datetime({ offset: true })
+        .nullable()
+        .describe(`New due date, or null to clear it. ${TICKET_DUE_AT_DESCRIBE}`),
+    },
+    annotations: { ...WRITE, idempotentHint: true },
+    scope: 'write:chat',
+    teamOnly: true,
+    handler: async (args) => {
+      const { setTicketDueAt } = await import('@/lib/server/domains/tickets/ticket-due.service')
+      const dto = await setTicketDueAt(
+        args.ticketId as TicketId,
+        args.dueAt === null ? null : new Date(args.dueAt),
+        mcpAgentActor(auth)
+      )
+      return jsonResult({ id: dto.id, reference: dto.reference, dueAt: dto.dueAt })
     },
   })
 

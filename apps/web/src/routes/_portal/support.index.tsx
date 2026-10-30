@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
-import { StageChip } from '@/components/shared/ticket-stage'
+import { StageChip, TicketDueLabel } from '@/components/shared/ticket-stage'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { getMyConversationsFn } from '@/lib/server/functions/conversation'
 import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-support'
@@ -210,6 +210,7 @@ function SupportListPage() {
                           <span className="font-mono text-[11px] text-muted-foreground/70">
                             {ticket.reference}
                           </span>
+                          <TicketDueLabel dueAt={ticket.dueAt} closed={ticket.stage.closed} />
                         </>
                       ) : (
                         <StatusLabel status={c.status} />
