@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { memo, useId } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -67,7 +67,12 @@ interface PortalNavEditorProps {
  * click a label to rename, add external links. Pure controlled component:
  * the page owns the draft array and commits it wholesale on Save.
  */
-export function PortalNavEditor({ items, onChange, gatedTypes, onReset }: PortalNavEditorProps) {
+export const PortalNavEditor = memo(function PortalNavEditor({
+  items,
+  onChange,
+  gatedTypes,
+  onReset,
+}: PortalNavEditorProps) {
   const dndId = useId()
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -131,7 +136,7 @@ export function PortalNavEditor({ items, onChange, gatedTypes, onReset }: Portal
       </div>
     </TooltipProvider>
   )
-}
+})
 
 function NavRow({
   item,
