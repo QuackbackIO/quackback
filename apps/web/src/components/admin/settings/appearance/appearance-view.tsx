@@ -22,9 +22,11 @@ import { useDesignDraft } from './use-design-draft'
 export function AppearanceView({
   workspaceName,
   faviconUrl,
+  logoUrl = null,
 }: {
   workspaceName: string
   faviconUrl: string | null
+  logoUrl?: string | null
 }) {
   const draft = useDesignDraft()
   const [theme, setTheme] = useState<'light' | 'dark'>(
@@ -78,7 +80,7 @@ export function AppearanceView({
             </Button>
           </div>
           <TabsContent value="brand" className="pt-4">
-            <BrandPanel design={draft.design} update={draft.update} />
+            <BrandPanel design={draft.design} update={draft.update} logoUrl={logoUrl} />
           </TabsContent>
           <TabsContent value="sections" className="pt-4">
             <SectionsPanel design={draft.design} update={draft.update} />

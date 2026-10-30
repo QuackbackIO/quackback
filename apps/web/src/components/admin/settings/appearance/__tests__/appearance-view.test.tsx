@@ -14,6 +14,7 @@ const server = vi.hoisted(() => ({ published: [] as unknown[] }))
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: async () => {} }),
   ClientOnly: ({ children }: { children: ReactNode }) => <>{children}</>,
+  Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
 }))
 vi.mock('@/components/admin/settings/branding/portal-preview', () => ({
   PortalPreview: ({ design }: { design: { css: string } }) => (
