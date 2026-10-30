@@ -1,0 +1,134 @@
+{
+  "version": 2,
+  "mode": "auto",
+  "brand": {
+    "light": {
+      "accent": "#f5b301",
+      "background": "#fffaf0",
+      "ink": "#1c1408",
+      "surface": "#ffffff"
+    },
+    "fonts": {
+      "heading": {
+        "kind": "uploaded",
+        "family": "Unbounded",
+        "files": [
+          {
+            "key": "fixtures/kiln/unbounded-700.woff2",
+            "weight": 700,
+            "style": "normal"
+          }
+        ],
+        "fallback": "space-grotesk"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "inter"
+      },
+      "headingWeight": 700
+    },
+    "logo": {
+      "mark": {
+        "light": {
+          "key": "fixtures/kiln/mark-light.png"
+        },
+        "dark": {
+          "key": "fixtures/kiln/mark-dark.png"
+        }
+      },
+      "wordmark": {
+        "light": null,
+        "dark": null
+      },
+      "display": "mark",
+      "name": "Kiln"
+    },
+    "favicon": {
+      "key": "fixtures/kiln/favicon.png"
+    },
+    "shareImage": null,
+    "dark": {
+      "accent": "#f5b301"
+    }
+  },
+  "shape": {
+    "corners": "subtle"
+  },
+  "layout": {
+    "header": "centered",
+    "nav": "tabs",
+    "band": "brand",
+    "cards": "bordered",
+    "density": "compact",
+    "width": "default",
+    "filters": "end"
+  },
+  "pages": {
+    "home": {
+      "headline": null,
+      "blocks": []
+    },
+    "feedback": {
+      "headline": {
+        "title": {
+          "en": "Build the next season with us"
+        },
+        "subtitle": {
+          "en": "Ideas from players shape every update."
+        }
+      },
+      "welcome": {
+        "show": false,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph"
+            }
+          ]
+        }
+      },
+      "defaultSort": "trending",
+      "copy": {}
+    }
+  },
+  "nav": {
+    "home": {
+      "on": false,
+      "tab": false
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": true,
+        "label": "Ideas"
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true,
+        "label": "Patch notes"
+      },
+      {
+        "type": "help",
+        "shown": true,
+        "label": "Help"
+      },
+      {
+        "type": "support",
+        "shown": false
+      },
+      {
+        "type": "status",
+        "shown": true
+      }
+    ]
+  },
+  "vocabulary": {
+    "post": "idea",
+    "board": "board"
+  }
+}
