@@ -58,8 +58,8 @@ Edges (28):
 
 ## 3. Server domains (lib/server/domains)
 
-Nodes (54): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (143):
+Nodes (55): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, design, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
+Edges (145):
 
 - activity -> principals
 - admin-overview -> changelog
@@ -130,6 +130,7 @@ Edges (143):
 - conversation-attributes -> conversation
 - conversation-attributes -> settings
 - conversation-attributes -> workflows
+- design -> settings
 - embeddings -> ai
 - embeddings -> merge-suggestions
 - export -> companies
@@ -171,6 +172,7 @@ Edges (143):
 - sentiment -> ai
 - sentiment -> settings
 - settings -> ai
+- settings -> design
 - settings -> platform-credentials
 - settings -> sla
 - settings-registry -> api
@@ -209,6 +211,6 @@ Edges (143):
 
 Strongly connected components with more than one domain. A new entry here is a new cycle and needs an explicit decision.
 
-- ai <-> settings <-> sla
+- ai <-> design <-> settings <-> sla
 - assistant <-> channel-accounts <-> channels <-> conversation <-> conversation-attributes <-> inbox <-> tickets <-> workflows
 - changelog <-> embeddings <-> merge-suggestions <-> posts <-> subscriptions

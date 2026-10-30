@@ -76,8 +76,6 @@ import { withCurrentStorageReadTokens } from '@/lib/server/content/storage-read-
 
 import { logSettingsReadError } from './settings-log'
 import { config } from '@/lib/server/config'
-import { getPublishedRevision } from '@/lib/server/domains/design/design.service'
-import { portalDesignView, resolveDesignSource } from '@/lib/server/domains/design/engine'
 import type { PortalDesignView } from '@/lib/shared/design/view'
 import { getTierLimits } from './tier-limits.service'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
@@ -1006,6 +1004,12 @@ async function choosePortalDesign(
   // With the flag off nothing here runs, not even the config read.
   if (!featureFlags.portalDesignV2) return { engine: 'legacy' }
   try {
+    const [{ getPublishedRevision }, { portalDesignView, resolveDesignSource }] = await Promise.all(
+      [
+        import('@/lib/server/domains/design/design.service'),
+        import('@/lib/server/domains/design/engine'),
+      ]
+    )
     const source = resolveDesignSource({
       override: config.portalDesignEngine,
       flagOn: true,

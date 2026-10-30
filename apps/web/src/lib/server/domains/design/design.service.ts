@@ -56,10 +56,11 @@ export function validateDesign(input: unknown): PortalDesign {
   return parsed.data
 }
 
-const defaultSite = isNull(portalDesigns.siteId)
+/** The workspace's default site, the only one until sites ship. */
+const defaultSite = () => isNull(portalDesigns.siteId)
 
 async function designRow(executor: typeof db | Transaction, lock = false) {
-  const query = executor.select().from(portalDesigns).where(defaultSite).limit(1)
+  const query = executor.select().from(portalDesigns).where(defaultSite()).limit(1)
   const [row] = lock ? await query.for('update') : await query
   return row ?? null
 }
@@ -104,7 +105,7 @@ export async function getPublishedRevision(): Promise<{
       portalDesignRevisions,
       eq(portalDesignRevisions.id, portalDesigns.publishedRevisionId)
     )
-    .where(defaultSite)
+    .where(defaultSite())
     .limit(1)
   if (!row) return null
   const parsed = portalDesign.safeParse(row.document)
@@ -156,7 +157,7 @@ export async function discardDraft(): Promise<void> {
   await db
     .update(portalDesigns)
     .set({ draft: null, draftBaseRevisionId: null, draftUpdatedAt: null, updatedAt: new Date() })
-    .where(defaultSite)
+    .where(defaultSite())
 }
 
 /** Writes the next revision, makes it the published one, and trims the oldest. */
