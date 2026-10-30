@@ -58,7 +58,7 @@ function ChangelogEntryPage() {
   const { data: entry } = useSuspenseQuery(publicChangelogQueries.detail(entryId))
 
   return (
-    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-8">
+    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-8">
       <div className="animate-in fade-in duration-200 fill-mode-backwards">
         <ChangelogEntryDetail
           id={entry.id}
@@ -77,7 +77,7 @@ function ChangelogEntryPage() {
 
 function ChangelogNotFound() {
   return (
-    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-16 text-center">
+    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-16 text-center">
       <h1 className="text-2xl font-bold mb-2">
         <FormattedMessage
           id="portal.changelog.entryNotFound.title"

@@ -8,6 +8,7 @@
  * workspace on legacy, whatever the flag says.
  */
 import { convertLegacyBranding, type LegacyBranding } from '@/lib/shared/design/convert'
+import { layoutAttributes } from '@/lib/shared/design/components'
 import { fontStack } from '@/lib/shared/design/fonts'
 import { renderDesignCss, resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -50,5 +51,6 @@ export function portalDesignView(source: DesignSource): PortalDesignView {
     themeStyles: renderDesignCss(resolveDesign(doc)),
     customCss: doc.css ? `@layer tenant {\n${doc.css}\n}` : '',
     fontSans: fontStack(doc.brand.fonts.body),
+    attributes: layoutAttributes(doc),
   }
 }

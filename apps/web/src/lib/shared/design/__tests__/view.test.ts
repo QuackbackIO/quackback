@@ -35,6 +35,7 @@ describe('portalTheme', () => {
       themeStyles: '[data-portal-theme] { --qb-accent: #7a1f35; }',
       customCss: '',
       fontSans: '"Fraunces", serif',
+      attributes: {},
     }
     expect(portalTheme({ brandingConfig, customCss: '.x {}', portalDesign })).toEqual({
       themeMode: 'user',
@@ -55,6 +56,7 @@ describe('portalThemeMode', () => {
         themeStyles: '',
         customCss: '',
         fontSans: '',
+        attributes: {},
       },
     })
     expect(portalThemeMode(v2('auto'))).toBe('user')

@@ -461,7 +461,7 @@ export function FeedbackContainer({
 
   return (
     <div>
-      <div className="flex gap-6 lg:gap-8">
+      <div className="flex gap-6 lg:gap-8 [[data-qb-filters=start]_&]:flex-row-reverse">
         <div className="flex-1 min-w-0">
           <FeedbackHeader
             workspaceName={workspaceName}
@@ -592,11 +592,16 @@ export function FeedbackContainer({
                     {intl.formatMessage(WIDENED_SEARCH_MESSAGES[widenedSearch])}
                   </p>
                 )}
-                <div key={listKey} className="space-y-3">
+                <div key={listKey} className="space-y-[var(--qb-feed-gap,0.75rem)]">
                   {posts.map((post, index) => (
                     <div
                       key={post.id}
-                      className="bg-card border border-border/40 rounded-lg shadow-sm overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
+                      className={cn(
+                        'bg-card border border-border/40 rounded-lg shadow-sm overflow-hidden animate-in fade-in duration-200 fill-mode-backwards',
+                        // Raised cards float without an edge; list cards are rows divided by rules.
+                        '[[data-qb-cards=raised]_&]:border-transparent [[data-qb-cards=raised]_&]:shadow-md',
+                        '[[data-qb-cards=list]_&]:rounded-none [[data-qb-cards=list]_&]:border-x-0 [[data-qb-cards=list]_&]:border-t-0 [[data-qb-cards=list]_&]:bg-transparent [[data-qb-cards=list]_&]:shadow-none'
+                      )}
                       style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
                     >
                       <PostCard

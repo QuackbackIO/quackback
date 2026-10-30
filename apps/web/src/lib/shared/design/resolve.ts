@@ -11,6 +11,7 @@ import { hexToOklch } from '@/lib/shared/theme/colors'
 import { variableMap } from '@/lib/shared/theme/generator'
 import type { ThemeVariables } from '@/lib/shared/theme/types'
 import { contrastRatio } from './contrast'
+import { baseTokens, modeTokens, PORTAL_ALIASES, type TokenMap } from './components'
 import { fontStack } from './fonts'
 import type { PortalDesign } from './schema'
 
@@ -33,6 +34,8 @@ export interface ResolvedDesign {
   adjustments: DesignAdjustment[]
   /** Pairs the solver cannot fix without changing a colour the brand chose. */
   errors: string[]
+  /** Component tokens: sizes for both modes, and each mode's colours. */
+  tokens: { base: TokenMap; light: TokenMap; dark: TokenMap }
 }
 
 const CORNER_RADIUS: Record<PortalDesign['shape']['corners'], string> = {
@@ -142,7 +145,7 @@ function solveMode(
     else errors.push(`${mode}: ${reason} cannot reach ${target}:1`)
   }
   solve('mutedForeground', [t.background, t.card, t.muted], 4.5, 'secondary text')
-  solve('accentInk', [t.background, t.card], 4.5, 'links and accent text')
+  solve('accentInk', [t.background, t.card, t.accent], 4.5, 'links and accent text')
   solve('destructive', [t.background], 4.5, 'error text')
   solve('input', [t.background], 3, 'field edges')
   solve('ring', [t.background, t.card], 3, 'the focus ring')
@@ -156,12 +159,19 @@ export function resolveDesign(doc: PortalDesign): ResolvedDesign {
     solveMode(vars, mode, adjustments, errors)
     return vars
   }
+  const light = doc.mode === 'dark' ? null : resolveMode('light')
+  const dark = doc.mode === 'light' ? null : resolveMode('dark')
   return {
     mode: doc.mode,
-    light: doc.mode === 'dark' ? null : resolveMode('light'),
-    dark: doc.mode === 'light' ? null : resolveMode('dark'),
+    light,
+    dark,
     adjustments,
     errors,
+    tokens: {
+      base: baseTokens(doc),
+      light: light ? modeTokens(doc, light, 'light') : {},
+      dark: dark ? modeTokens(doc, dark, 'dark') : {},
+    },
   }
 }
 
@@ -203,13 +213,23 @@ function declarations(vars: ThemeVariables): string {
     .join(' ')
 }
 
-/** The library's names for the semantic tokens; written once, since each mode only changes the tokens. */
+/**
+ * The names components already read, pointed at the tokens: the library's
+ * names and the portal's own. Written once, since each mode only changes the
+ * tokens.
+ */
 function aliases(vars: ThemeVariables): string {
-  return Object.entries(SEMANTIC_TOKENS)
+  const library = Object.entries(SEMANTIC_TOKENS)
     .filter(([key]) => vars[key as keyof ThemeVariables])
     .map(([key, token]) => `${variableMap[key]}: var(${token});`)
-    .join(' ')
+  const portal = Object.entries(PORTAL_ALIASES).map(([name, token]) => `${name}: var(${token});`)
+  return [...library, ...portal].join(' ')
 }
+
+const tokenDeclarations = (tokens: TokenMap) =>
+  Object.entries(tokens)
+    .map(([name, value]) => `${name}: ${value};`)
+    .join(' ')
 
 /**
  * The design as CSS, scoped to `[data-portal-theme]` so only portal documents
@@ -218,9 +238,15 @@ function aliases(vars: ThemeVariables): string {
 export function renderDesignCss(resolved: ResolvedDesign): string {
   const primary = resolved.light ?? resolved.dark
   if (!primary) return ''
-  const parts = [`[data-portal-theme] { ${declarations(primary)} ${aliases(primary)} }`]
+  const { tokens } = resolved
+  const primaryTokens = resolved.light ? tokens.light : tokens.dark
+  const parts = [
+    `[data-portal-theme] { ${declarations(primary)} ${tokenDeclarations(tokens.base)} ${tokenDeclarations(primaryTokens)} ${aliases(primary)} }`,
+  ]
   if (resolved.light && resolved.dark)
-    parts.push(`.dark[data-portal-theme] { ${declarations(resolved.dark)} }`)
+    parts.push(
+      `.dark[data-portal-theme] { ${declarations(resolved.dark)} ${tokenDeclarations(tokens.dark)} }`
+    )
   parts.push(
     `[data-portal-theme] body { --font-sans: ${primary.fontSans}; --radius: ${primary.radius}; }`
   )

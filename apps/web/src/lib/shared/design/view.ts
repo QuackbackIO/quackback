@@ -18,6 +18,8 @@ export type PortalDesignView =
       customCss: string
       /** The body font stack, for the font loader. */
       fontSans: string
+      /** The structural choices, set on `<html>` as `data-qb-*` attributes. */
+      attributes: Record<`data-qb-${string}`, string>
     }
 
 /** The settings a portal page reads its theme from. */

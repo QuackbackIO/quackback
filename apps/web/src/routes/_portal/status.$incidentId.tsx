@@ -162,13 +162,13 @@ function StatusIncidentNotFound() {
   const signInCouldGrantAccess = useStatusSignInCouldGrantAccess()
   if (signInCouldGrantAccess) {
     return (
-      <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-16 text-center">
+      <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-16 text-center">
         <StatusSignInPrompt />
       </div>
     )
   }
   return (
-    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-16 text-center">
+    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-16 text-center">
       <h1 className="text-2xl font-bold mb-2">
         <FormattedMessage
           id="portal.status.incidentDetail.notFound.title"

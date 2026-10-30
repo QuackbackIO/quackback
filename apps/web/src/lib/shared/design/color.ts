@@ -1,4 +1,5 @@
-import { formatOklch } from '@/lib/shared/theme/expand'
+import { formatOklch, parseOklch } from '@/lib/shared/theme/expand'
+import { hexToOklch, oklchToHex } from '@/lib/shared/theme/colors'
 
 const HEX = /^#([\da-f]{3}|[\da-f]{6})$/i
 const RGB = /^rgba?\(\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*\)$/i
@@ -46,4 +47,26 @@ export function normaliseColor(value: string): string | null {
     return formatOklch(l, parseFloat(oklch[2]), parseFloat(oklch[3]))
   }
   return null
+}
+
+/**
+ * `a` mixed into `b` in oklab, `weight` being a's share, as hex so a derived
+ * colour compares exactly with a stored one. Takes hex or oklch().
+ */
+export function mixColor(a: string, b: string, weight: number): string {
+  const lab = (color: string) => {
+    const parsed = parseOklch(color.startsWith('#') ? hexToOklch(color) : color)
+    if (!parsed) throw new Error(`Cannot mix "${color}"`)
+    const radians = (parsed.h * Math.PI) / 180
+    return { l: parsed.l, a: parsed.c * Math.cos(radians), b: parsed.c * Math.sin(radians) }
+  }
+  const x = lab(a)
+  const y = lab(b)
+  const mix = (p: number, q: number) => p * weight + q * (1 - weight)
+  const l = mix(x.l, y.l)
+  const da = mix(x.a, y.a)
+  const db = mix(x.b, y.b)
+  const c = Math.hypot(da, db)
+  const h = c < 1e-6 ? 0 : ((Math.atan2(db, da) * 180) / Math.PI + 360) % 360
+  return oklchToHex(formatOklch(l, c, h))
 }
