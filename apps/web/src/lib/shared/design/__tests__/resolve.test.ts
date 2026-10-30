@@ -118,9 +118,25 @@ describe('renderDesignCss', () => {
     expect(css).not.toContain('.dark[data-portal-theme]')
   })
 
-  it('applies the body font and radius under the scope', () => {
+  it('applies the body font and radius under the scope, without !important', () => {
     const css = renderDesignCss(resolveDesign(defaultDesign()))
     expect(css).toContain('[data-portal-theme] body { --font-sans:')
-    expect(css).toContain('[data-portal-theme] body { font-family:')
+    expect(css).not.toContain('!important')
+  })
+
+  it('sets the heading family, in a layer utilities can override, and the heading weight', () => {
+    const doc = defaultDesign()
+    doc.brand.fonts.heading = { kind: 'bundled', id: 'fraunces' }
+    doc.brand.fonts.headingWeight = 700
+    const resolved = resolveDesign(doc)
+    expect(resolved.tokens.base['--qb-font-heading']).toBe('"Fraunces", ui-serif, Georgia, serif')
+    expect(resolved.tokens.base['--qb-heading-weight']).toBe('700')
+    const css = renderDesignCss(resolved)
+    expect(css).toContain(
+      '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
+    )
+    expect(css).toContain(
+      '[data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); }'
+    )
   })
 })

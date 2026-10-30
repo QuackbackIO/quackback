@@ -250,6 +250,11 @@ export function renderDesignCss(resolved: ResolvedDesign): string {
   parts.push(
     `[data-portal-theme] body { --font-sans: ${primary.fontSans}; --radius: ${primary.radius}; }`
   )
-  parts.push(`[data-portal-theme] body { font-family: ${primary.fontSans} !important; }`)
+  // The heading family sits in the base layer, so a utility on a heading still
+  // wins; the weight has to beat the stylesheet's unlayered heading rule.
+  parts.push(
+    '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
+  )
+  parts.push('[data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); }')
   return parts.join(' ')
 }

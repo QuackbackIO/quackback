@@ -18,6 +18,8 @@ export type PortalDesignView =
       customCss: string
       /** The body font stack, for the font loader. */
       fontSans: string
+      /** The bundled families to load: body, then headings. */
+      fontIds: string[]
       /** The structural choices, set on `<html>` as `data-qb-*` attributes. */
       attributes: Record<`data-qb-${string}`, string>
     }
@@ -41,6 +43,12 @@ export function portalThemeMode(settings: ThemeSettings | null | undefined): The
   const view = settings?.portalDesign
   if (view?.engine === 'v2') return view.mode === 'auto' ? 'user' : view.mode
   return settings?.brandingConfig?.themeMode ?? 'user'
+}
+
+/** The bundled families a v2 design loads; legacy finds its one family from its CSS. */
+export function portalFontIds(settings: ThemeSettings | null | undefined): readonly string[] {
+  const view = settings?.portalDesign
+  return view?.engine === 'v2' ? view.fontIds : []
 }
 
 /** What a portal page injects: the theme, the workspace's CSS and the font to load. */

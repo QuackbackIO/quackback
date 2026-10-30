@@ -172,6 +172,7 @@ describe('the portal’s own theme', () => {
       themeStyles: '',
       customCss: '',
       fontSans: '',
+      fontIds: [],
       attributes: { 'data-qb-nav': 'pills' },
     },
   })

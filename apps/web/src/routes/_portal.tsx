@@ -21,7 +21,8 @@ import { AuthDialog } from '@/components/auth/auth-dialog'
 import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
 import { buildPortalAuthDialogConfig } from '@/components/auth/portal-auth-dialog-config'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
-import { portalTheme } from '@/lib/shared/design/view'
+import { portalFontIds, portalTheme } from '@/lib/shared/design/view'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -442,6 +443,7 @@ function PortalBrandingFontLoader({
   configFontSans: string | null
 }) {
   const draftCss = usePreviewCss()
-  useBrandingFont(draftCss ?? customCss, configFontSans)
+  const settings = useWorkspaceSettings()
+  useBrandingFont(draftCss ?? customCss, configFontSans, portalFontIds(settings))
   return null
 }

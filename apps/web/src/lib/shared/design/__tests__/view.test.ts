@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { generateWorkspaceThemeCSS } from '@/lib/shared/theme'
-import { portalTheme, portalThemeMode } from '../view'
+import { portalFontIds, portalTheme, portalThemeMode } from '../view'
 
 const brandingConfig = {
   themeMode: 'dark' as const,
@@ -35,6 +35,7 @@ describe('portalTheme', () => {
       themeStyles: '[data-portal-theme] { --qb-accent: #7a1f35; }',
       customCss: '',
       fontSans: '"Fraunces", serif',
+      fontIds: ['fraunces'],
       attributes: {},
     }
     expect(portalTheme({ brandingConfig, customCss: '.x {}', portalDesign })).toEqual({
@@ -43,6 +44,23 @@ describe('portalTheme', () => {
       customCss: '',
       configFontSans: '"Fraunces", serif',
     })
+  })
+})
+
+describe('portalFontIds', () => {
+  it('names the design’s families on v2 and none on legacy, which reads its CSS', () => {
+    expect(portalFontIds({ brandingConfig })).toEqual([])
+    const portalDesign = {
+      engine: 'v2' as const,
+      mode: 'auto' as const,
+      revision: null,
+      themeStyles: '',
+      customCss: '',
+      fontSans: '',
+      fontIds: ['inter', 'fraunces'],
+      attributes: {},
+    }
+    expect(portalFontIds({ portalDesign })).toEqual(['inter', 'fraunces'])
   })
 })
 
@@ -56,6 +74,7 @@ describe('portalThemeMode', () => {
         themeStyles: '',
         customCss: '',
         fontSans: '',
+        fontIds: [],
         attributes: {},
       },
     })

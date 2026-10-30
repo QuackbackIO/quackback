@@ -9,6 +9,7 @@
  */
 import type { ThemeVariables } from '@/lib/shared/theme/types'
 import { mixColor } from './color'
+import { fontStack } from './fonts'
 import type { PortalDesign } from './schema'
 
 type Mode = 'light' | 'dark'
@@ -95,6 +96,9 @@ export function baseTokens(doc: PortalDesign): TokenMap {
     '--qb-feed-gap': doc.layout.cards === 'list' ? '0rem' : gap,
     '--qb-title-size': title,
     '--qb-page-max': PAGE_MAX[doc.layout.width],
+    '--qb-font-body': fontStack(doc.brand.fonts.body),
+    '--qb-font-heading': fontStack(doc.brand.fonts.heading),
+    '--qb-heading-weight': String(doc.brand.fonts.headingWeight),
   }
 }
 

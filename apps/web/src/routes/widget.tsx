@@ -2,7 +2,8 @@ import { createFileRoute, Outlet, redirect, useRouter } from '@tanstack/react-ro
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
-import { portalTheme } from '@/lib/shared/design/view'
+import { portalFontIds, portalTheme } from '@/lib/shared/design/view'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { resolveLocale, loadWidgetMessages } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { FileViewerProvider } from '@/components/shared/files/file-viewer-context'
@@ -166,7 +167,7 @@ function WidgetLayout() {
   // custom CSS / theme config font-family cascades into the iframe below) —
   // load the chosen family on demand instead of shipping every self-hosted
   // family's @font-face rules to every embedded widget.
-  useBrandingFont(customCss, configFontSans)
+  useBrandingFont(customCss, configFontSans, portalFontIds(useWorkspaceSettings()))
 
   return (
     <WidgetAuthProvider

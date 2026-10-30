@@ -49,6 +49,12 @@ export function loadBrandingFont(id: BrandingFontId | string | null | undefined)
       return import('@/styles/fonts/fira-code.css')
     case 'jetbrains':
       return import('@/styles/fonts/jetbrains-mono.css')
+    case 'ibm-plex-sans':
+      return import('@/styles/fonts/ibm-plex-sans.css')
+    case 'fraunces':
+      return import('@/styles/fonts/fraunces.css')
+    case 'bricolage-grotesque':
+      return import('@/styles/fonts/bricolage-grotesque.css')
     // 'inter' (static in globals.css), 'system' (no @font-face), and any
     // unrecognized/legacy id all resolve to nothing — the generic font
     // stack in the --font-sans value covers rendering in the meantime.
