@@ -75,6 +75,35 @@ describe('notificationHook — post.mentioned', () => {
     )
   })
 
+  it('names the mentioner the target resolved, as the relayed event carries no name', async () => {
+    const event = {
+      id: 'evt-relayed',
+      type: 'post.mentioned',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_mentioner' },
+      data: {
+        postId: 'post_123',
+        postTitle: 'My post',
+        postUrl: 'https://example.com/posts/post_123',
+        mentionedPrincipalId: 'principal_target',
+        mentioningPrincipalId: 'principal_mentioner',
+        excerpt: '',
+      },
+    } as EventData
+
+    await notificationHook.run(
+      event,
+      { principalIds: ['principal_target' as never] },
+      { mentionerName: 'Bea' }
+    )
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        title: 'Bea mentioned you in a post',
+        metadata: expect.objectContaining({ actorName: 'Bea' }),
+      }),
+    ])
+  })
+
   it('renders title as "Anonymous user mentioned you" when actor has no displayName', async () => {
     const event = {
       id: 'evt-2',

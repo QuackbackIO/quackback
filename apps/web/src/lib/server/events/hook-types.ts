@@ -130,6 +130,8 @@ export interface EmailConfig {
   commenterName?: string
   commentPreview?: string
   isTeamMember?: boolean
+  /** post.mentioned: who mentioned the recipient (null when unknown). */
+  mentionerName?: string | null
   logoUrl?: string
   /** Link to the portal's per-type x per-channel notification preferences
    *  page. Not token-based — requires the recipient to be logged in. */
