@@ -13,6 +13,8 @@ import { defaultDesign } from '@/lib/shared/design/schema'
 const server = vi.hoisted(() => ({
   published: [] as unknown[],
   asks: [] as unknown[],
+  directions: [] as unknown[],
+  logos: [] as unknown[],
   events: [] as Array<[string, unknown]>,
 }))
 
@@ -47,7 +49,10 @@ vi.mock('@/lib/client/analytics', () => ({
 }))
 vi.mock('@/lib/server/functions/portal-design-ai', () => ({
   getPortalDesignAiStatusFn: async () => ({ available: true }),
-  portalDesignDirectionsFn: async () => ({ ok: true, looks: [] }),
+  portalDesignDirectionsFn: async ({ data }: { data: unknown }) => {
+    server.directions.push(data)
+    return { ok: true, looks: [] }
+  },
   askPortalDesignAiFn: async ({ data }: { data: { scope: string; message: string } }) => {
     server.asks.push(data)
     if (data.message === 'Break') throw new Error('The server could not be reached')
@@ -73,6 +78,17 @@ vi.mock('@/lib/server/functions/portal-design-ai', () => ({
       report: { adjustments: [], errors: [] },
     }
   },
+}))
+
+vi.mock('@/lib/client/image-palette', () => ({
+  imagePalette: async () => ['#7a1f35', '#ffffff'],
+}))
+vi.mock('@/lib/client/mutations/settings', () => ({
+  useUploadWorkspaceLogo: () => ({
+    mutateAsync: async (file: unknown) => {
+      server.logos.push(file)
+    },
+  }),
 }))
 
 const { AppearanceView } = await import('../appearance-view')
@@ -104,6 +120,8 @@ afterEach(() => {
   cleanup()
   server.published = []
   server.asks = []
+  server.directions = []
+  server.logos = []
   server.events = []
 })
 
@@ -222,6 +240,42 @@ describe('AppearanceView', () => {
       expect.objectContaining({ message: 'Tighter feed', scope: 'site' }),
     ])
     expect(await screen.findByText('Changes applied to your draft')).toBeTruthy()
+  })
+
+  it('starts from the colours of a logo, and can make it the workspace logo', async () => {
+    mount({ ai: true })
+    const logo = new File(['png'], 'logo.png', { type: 'image/png' })
+    fireEvent.click(screen.getByLabelText('Also make it our logo'))
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Start from your logo or a screenshot'), {
+        target: { files: [logo] },
+      })
+    })
+    await waitFor(() => expect(server.directions).toEqual([{ palette: ['#7a1f35', '#ffffff'] }]))
+    expect(server.logos).toEqual([logo])
+    expect(
+      await screen.findByText('It is now your logo. Here are three looks to start from.')
+    ).toBeTruthy()
+  })
+
+  it('sends the colours of an image attached to a request', async () => {
+    mount({ ai: true })
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Attach an image'), {
+        target: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] },
+      })
+    })
+    expect(await screen.findByText('shot.png')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Ask Quackback AI'), {
+      target: { value: 'Use these colours' },
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    })
+    expect(server.asks).toEqual([
+      expect.objectContaining({ message: 'Use these colours', palette: ['#7a1f35', '#ffffff'] }),
+    ])
+    expect(screen.queryByText('shot.png')).toBeNull()
   })
 
   it('answers a request that failed, so the conversation never goes quiet', async () => {

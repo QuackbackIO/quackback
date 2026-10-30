@@ -116,6 +116,21 @@ describe('askDesignAi', () => {
     expect(result.reply).toBe('That is outside the header, so nothing changed.')
   })
 
+  it('passes the colours of an attached image with the request', async () => {
+    model.answer = { reply: 'Done.', changes: [], outOfScope: false }
+    await askDesignAi({
+      message: 'Use these colours',
+      design: defaultDesign(),
+      scope: 'site',
+      history: [],
+      palette: ['#7a1f35', '#ffffff'],
+    })
+    const sent = model.calls[0] as unknown as { messages: Array<{ content: string }> }
+    expect(sent.messages.at(-1)!.content).toBe(
+      'Use these colours\n\nColours from the attached image: #7a1f35, #ffffff'
+    )
+  })
+
   it('keeps the reply when everything asked for is already set', async () => {
     model.answer = {
       reply: 'The header is already stacked.',
@@ -192,7 +207,15 @@ describe('designDirections', () => {
         },
       ],
     }
-    const result = await designDirections({ design: defaultDesign(), site: null, words: 'calm' })
+    const result = await designDirections({
+      design: defaultDesign(),
+      site: null,
+      words: 'calm',
+      palette: ['#0f766e', '#f8fafc'],
+    })
+    const brief = (model.calls[0] as unknown as { messages: Array<{ content: string }> })
+      .messages[0].content
+    expect(brief).toContain('Colours from their logo or a screenshot: #0f766e, #f8fafc')
     if (!result.ok) throw new Error('expected looks')
     expect(result.looks.map((look) => look.name)).toEqual(['Calm', 'Editorial'])
     expect(result.looks[0].design.layout.band).toBe('tint')

@@ -175,6 +175,8 @@ export async function askDesignAi(input: {
   design: PortalDesign
   scope: DesignAiScope
   history: Array<{ role: 'user' | 'assistant'; content: string }>
+  /** The main colours of an image the person attached. */
+  palette?: string[]
 }): Promise<DesignAiResult> {
   const model = designAiModel()
   if (!model) {
@@ -193,7 +195,15 @@ export async function askDesignAi(input: {
     const answer = await structuredChat({
       model,
       systemPrompts: [EDIT_PROMPT + scopeNote, `The design now: ${designSummary(input.design)}`],
-      messages: [...input.history.slice(-6), { role: 'user', content: input.message }],
+      messages: [
+        ...input.history.slice(-6),
+        {
+          role: 'user',
+          content: input.palette?.length
+            ? `${input.message}\n\nColours from the attached image: ${input.palette.join(', ')}`
+            : input.message,
+        },
+      ],
       schema: editSchema,
       maxTokens: 1200,
     })
@@ -272,6 +282,8 @@ export async function designDirections(input: {
   design: PortalDesign
   site: SiteSignals | null
   words: string | null
+  /** The main colours of their logo or a screenshot. */
+  palette?: string[] | null
 }): Promise<DirectionsResult> {
   const model = designAiModel()
   if (!model) {
@@ -288,6 +300,8 @@ export async function designDirections(input: {
         input.site.description ? `: ${input.site.description}` : ''
       }${input.site.colour ? `. Its brand colour is ${input.site.colour}.` : '.'}`,
     input.words && `In their words: ${input.words}`,
+    input.palette?.length &&
+      `Colours from their logo or a screenshot: ${input.palette.join(', ')}. Build the looks from these.`,
   ]
     .filter(Boolean)
     .join('\n')

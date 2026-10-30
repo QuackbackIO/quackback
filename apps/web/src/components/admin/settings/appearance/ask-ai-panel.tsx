@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { applyDesignChanges, type AppliedDesignChange } from '@/lib/shared/design/apply-changes'
@@ -88,6 +89,22 @@ function DesignChangeCard({
   )
 }
 
+/** The colours read from an image, as small swatches. */
+export function PaletteSwatches({ palette }: { palette: string[] }) {
+  return (
+    <span className="mt-1.5 flex gap-1" aria-label={`Colours: ${palette.join(', ')}`}>
+      {palette.map((colour) => (
+        <span
+          key={colour}
+          aria-hidden="true"
+          className="size-4 rounded-full border border-border"
+          style={{ backgroundColor: colour }}
+        />
+      ))}
+    </span>
+  )
+}
+
 /** A look's fonts, as the font picker names them. */
 function lookFonts(look: DesignLook): string {
   const name = (font: PortalDesign['brand']['fonts']['body']) =>
@@ -110,6 +127,7 @@ export function AskAiPanel({
   onLook,
   onPresets,
   onWiden,
+  onImage,
 }: {
   available: boolean
   turns: DesignAiTurn[]
@@ -120,9 +138,12 @@ export function AskAiPanel({
   onPresets: () => void
   /** Asks a request again about the whole site, when it reached outside the section picked. */
   onWiden: (text: string) => void
+  /** Starts from a logo or a screenshot; `useAsLogo` also makes it the workspace logo. */
+  onImage: (file: File, useAsLogo: boolean) => void
 }) {
   const [site, setSite] = useState('')
   const [words, setWords] = useState('')
+  const [useAsLogo, setUseAsLogo] = useState(false)
 
   if (!available) {
     return (
@@ -181,6 +202,31 @@ export function AskAiPanel({
               Suggest three looks
             </Button>
           </div>
+          <div className="space-y-2">
+            <label htmlFor="ai-image" className="text-[13px] font-medium">
+              Start from your logo or a screenshot
+            </label>
+            <Input
+              id="ai-image"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              disabled={busy}
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) onImage(file, useAsLogo)
+              }}
+            />
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="ai-image-logo"
+                checked={useAsLogo}
+                onCheckedChange={(checked) => setUseAsLogo(checked === true)}
+              />
+              <label htmlFor="ai-image-logo" className="text-xs text-muted-foreground">
+                Also make it our logo
+              </label>
+            </div>
+          </div>
           <Button variant="ghost" size="sm" className="-ms-2" onClick={onPresets}>
             Start from a preset
           </Button>
@@ -191,7 +237,10 @@ export function AskAiPanel({
         {turns.map((turn, index) => (
           <li key={index} className={cn('text-[13.5px]', turn.role === 'user' && 'ms-8')}>
             {turn.role === 'user' ? (
-              <p className="rounded-2xl bg-muted px-3 py-2">{turn.text}</p>
+              <div className="rounded-2xl bg-muted px-3 py-2">
+                <p>{turn.text}</p>
+                {turn.palette && <PaletteSwatches palette={turn.palette} />}
+              </div>
             ) : (
               <div className="space-y-2">
                 <p>{turn.text}</p>
