@@ -57,7 +57,7 @@ export function DesignComposer({
           {scope !== 'site' && (
             <button
               type="button"
-              aria-label="Ask about the whole site"
+              aria-label="Clear the section"
               className="-me-1 rounded-full px-1 hover:bg-muted hover:text-foreground"
               onClick={onClearScope}
             >

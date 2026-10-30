@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { defaultDesign } from '@/lib/shared/design/schema'
-import { applyDesignChanges, DESIGN_AI_PATHS } from '../apply-changes'
+import { applyDesignChanges, DESIGN_AI_PATHS, scopeFields } from '../apply-changes'
 
 describe('applyDesignChanges', () => {
   it('applies colours, fonts and layout, and reports each one', () => {
@@ -97,6 +97,45 @@ describe('applyDesignChanges', () => {
     expect(cleared.design.brand.light.surface).toBeUndefined()
     expect(cleared.design.brand.light.ink).toBe('#0a0a0a')
     expect(cleared.applied.map((change) => change.path)).toEqual(['brand.light.surface'])
+  })
+
+  it('writes the subtitle to the subtitle and the headline to the headline', () => {
+    const result = applyDesignChanges(
+      defaultDesign(),
+      [
+        { path: 'pages.feedback.headline.title', value: 'Help shape Ledger' },
+        { path: 'pages.feedback.headline.subtitle', value: 'Tell us what would help.' },
+      ],
+      'site'
+    )
+    expect(result.design.pages.feedback.headline).toEqual({
+      title: { en: 'Help shape Ledger' },
+      subtitle: { en: 'Tell us what would help.' },
+    })
+    expect(result.applied[1]).toEqual({
+      path: 'pages.feedback.headline.subtitle',
+      before: null,
+      after: 'Tell us what would help.',
+    })
+  })
+
+  it('names the changes it left alone for being outside the section', () => {
+    const result = applyDesignChanges(
+      defaultDesign(),
+      [
+        { path: 'layout.band', value: 'brand' },
+        { path: 'layout.nav', value: 'pills' },
+        { path: 'css', value: 'body {}' },
+      ],
+      'header'
+    )
+    expect(result.outOfScope).toEqual(['layout.band'])
+    expect(result.applied.map((change) => change.path)).toEqual(['layout.nav'])
+  })
+
+  it('lists the fields each section reaches', () => {
+    expect(scopeFields('header')).toEqual(['layout.header', 'layout.nav'])
+    expect(scopeFields('site')).toEqual([...DESIGN_AI_PATHS])
   })
 
   it('offers every path a scope names', () => {

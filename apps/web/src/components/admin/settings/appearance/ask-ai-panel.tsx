@@ -6,28 +6,11 @@ import { applyDesignChanges, type AppliedDesignChange } from '@/lib/shared/desig
 import { BUNDLED_FONTS } from '@/lib/shared/design/fonts'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
-import { changeLabel } from './change-list'
+import { ChangeValue, changeLabel } from './change-list'
+import { LookDrawing } from './preset-gallery'
 import type { DesignAiTurn, DesignLook } from './use-design-ai'
 
 type Update = (change: (draft: PortalDesign) => void) => void
-
-/** A value as a person reads it, with a swatch for a colour. */
-function ChangeValue({ value }: { value: unknown }) {
-  const text = value === null || value === undefined || value === '' ? 'Automatic' : String(value)
-  const colour = typeof value === 'string' && /^(#|oklch\()/.test(value) ? value : null
-  return (
-    <span className="flex min-w-0 items-center gap-2">
-      {colour && (
-        <span
-          aria-hidden="true"
-          className="size-4 shrink-0 rounded border border-border"
-          style={{ backgroundColor: colour }}
-        />
-      )}
-      <span className="min-w-0 truncate">{text}</span>
-    </span>
-  )
-}
 
 /**
  * What one request changed, already in the draft: the applied state of the
@@ -105,27 +88,13 @@ function DesignChangeCard({
   )
 }
 
-/** A look as a small card: its colours and its heading face. */
-function LookSwatch({ look }: { look: DesignLook }) {
-  const { light, fonts } = look.design.brand
-  const heading = fonts.heading.kind === 'bundled' ? fonts.heading.id : null
-  return (
-    <span
-      aria-hidden="true"
-      className="flex h-12 w-20 shrink-0 items-center justify-center gap-2 rounded-md border border-border"
-      style={{ background: light.background, color: light.ink }}
-    >
-      <span className="size-4 rounded-full" style={{ background: light.accent }} />
-      <span
-        style={{
-          fontFamily: heading ? BUNDLED_FONTS[heading].stack : undefined,
-          fontWeight: fonts.headingWeight,
-        }}
-      >
-        Aa
-      </span>
-    </span>
-  )
+/** A look's fonts, as the font picker names them. */
+function lookFonts(look: DesignLook): string {
+  const name = (font: PortalDesign['brand']['fonts']['body']) =>
+    font.kind === 'bundled' ? BUNDLED_FONTS[font.id].label : font.family
+  const { heading, body } = look.design.brand.fonts
+  const [h, b] = [name(heading), name(body)]
+  return h === b ? h : `${h} and ${b}`
 }
 
 /**
@@ -140,6 +109,7 @@ export function AskAiPanel({
   onStart,
   onLook,
   onPresets,
+  onWiden,
 }: {
   available: boolean
   turns: DesignAiTurn[]
@@ -148,6 +118,8 @@ export function AskAiPanel({
   onStart: (kind: 'website' | 'words', value: string) => void
   onLook: (look: DesignLook) => void
   onPresets: () => void
+  /** Asks a request again about the whole site, when it reached outside the section picked. */
+  onWiden: (text: string) => void
 }) {
   const [site, setSite] = useState('')
   const [words, setWords] = useState('')
@@ -223,6 +195,16 @@ export function AskAiPanel({
             ) : (
               <div className="space-y-2">
                 <p>{turn.text}</p>
+                {turn.widen && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => onWiden(turn.widen!)}
+                  >
+                    Ask about the whole site
+                  </Button>
+                )}
                 {turn.changes && turn.changes.length > 0 && (
                   <DesignChangeCard
                     changes={turn.changes}
@@ -242,11 +224,16 @@ export function AskAiPanel({
                           update((draft) => void Object.assign(draft, look.design))
                         }}
                       >
-                        <LookSwatch look={look} />
+                        <span className="w-28 shrink-0">
+                          <LookDrawing look={look.design} />
+                        </span>
                         <span className="min-w-0">
                           <span className="block text-[13px] font-medium">{look.name}</span>
                           <span className="block text-xs text-muted-foreground">
                             {look.description}
+                          </span>
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            {lookFonts(look)}
                           </span>
                         </span>
                       </button>

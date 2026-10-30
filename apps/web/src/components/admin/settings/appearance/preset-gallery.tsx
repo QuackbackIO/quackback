@@ -13,9 +13,9 @@ import { cn } from '@/lib/shared/utils'
 
 const RADIUS = { sharp: '0px', subtle: '3px', rounded: '6px', pill: '999px' } as const
 
-/** A small drawing of a preset: its page, band, heading face and cards. */
-function PresetDrawing({ preset }: { preset: DesignPreset }) {
-  const { brand, shape, layout, mode } = preset.look
+/** A small drawing of a look: its page, band, heading face and cards. */
+export function LookDrawing({ look }: { look: DesignPreset['look'] }) {
+  const { brand, shape, layout, mode } = look
   const page = mode === 'dark' ? (brand.dark?.background ?? '#0a0a0a') : brand.light.background
   const ink = mode === 'dark' ? (brand.dark?.ink ?? '#fafafa') : brand.light.ink
   const heading = brand.fonts.heading.kind === 'bundled' ? brand.fonts.heading.id : 'inter'
@@ -94,7 +94,7 @@ export function PresetGallery({ onApply }: { onApply: (preset: DesignPreset) => 
                 }}
                 className="flex flex-col gap-2 rounded-lg border border-border p-2 text-start transition-colors hover:bg-muted/40"
               >
-                <PresetDrawing preset={preset} />
+                <LookDrawing look={preset.look} />
                 <span className="text-[13px] font-medium">{preset.label}</span>
                 <span className="text-xs text-muted-foreground">{preset.description}</span>
               </button>

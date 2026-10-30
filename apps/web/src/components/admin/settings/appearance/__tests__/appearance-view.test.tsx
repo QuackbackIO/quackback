@@ -48,8 +48,18 @@ vi.mock('@/lib/client/analytics', () => ({
 vi.mock('@/lib/server/functions/portal-design-ai', () => ({
   getPortalDesignAiStatusFn: async () => ({ available: true }),
   portalDesignDirectionsFn: async () => ({ ok: true, looks: [] }),
-  askPortalDesignAiFn: async ({ data }: { data: unknown }) => {
+  askPortalDesignAiFn: async ({ data }: { data: { scope: string } }) => {
     server.asks.push(data)
+    if (data.scope === 'header')
+      return {
+        ok: true,
+        reply: 'That is outside the header, so nothing changed.',
+        design: defaultDesign(),
+        applied: [],
+        skipped: 0,
+        outOfScope: true,
+        readability: [],
+      }
     const design = defaultDesign()
     design.layout.density = 'compact'
     return {
@@ -155,7 +165,7 @@ describe('AppearanceView', () => {
         })
       )
     })
-    expect(await screen.findByRole('button', { name: 'Ask about the whole site' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Clear the section' })).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Ask Quackback AI'), {
       target: { value: 'Tighter please' },
     })
@@ -174,6 +184,34 @@ describe('AppearanceView', () => {
     await waitFor(() =>
       expect(server.events).toContainEqual(['appearance_published', { source: 'ai', changes: 1 }])
     )
+  })
+
+  it('asks again about the whole site when a request reached outside the section', async () => {
+    mount({ ai: true })
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'quackback:preview-section', section: 'header' },
+          origin: window.location.origin,
+        })
+      )
+    })
+    await screen.findByRole('button', { name: 'Clear the section' })
+    fireEvent.change(screen.getByLabelText('Ask Quackback AI'), {
+      target: { value: 'Tighter feed' },
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    })
+    expect(await screen.findByText('That is outside the header, so nothing changed.')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Ask about the whole site' }))
+    })
+    expect(server.asks).toEqual([
+      { message: 'Tighter feed', scope: 'header', history: [] },
+      expect.objectContaining({ message: 'Tighter feed', scope: 'site' }),
+    ])
+    expect(await screen.findByText('Changes applied to your draft')).toBeTruthy()
   })
 
   it('lists the change in Review and publish, then publishes it with its note', async () => {

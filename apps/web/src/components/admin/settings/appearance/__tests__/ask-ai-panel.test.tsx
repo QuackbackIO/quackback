@@ -27,6 +27,7 @@ function mount(props: Partial<Parameters<typeof AskAiPanel>[0]> = {}) {
       onStart={() => {}}
       onLook={() => {}}
       onPresets={() => {}}
+      onWiden={() => {}}
       {...props}
     />
   )
@@ -77,6 +78,8 @@ describe('AskAiPanel', () => {
     mount({ turns })
     expect(screen.getByText('Changes applied to your draft')).toBeTruthy()
     expect(screen.getByText(/also adjusted button text on the accent/)).toBeTruthy()
+    expect(screen.getByText('Comfortable')).toBeTruthy()
+    expect(screen.queryByText('comfortable')).toBeNull()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Undo' })[0])
     expect(draft.layout.density).toBe('comfortable')
@@ -91,14 +94,33 @@ describe('AskAiPanel', () => {
   it('puts a picked look into the draft', () => {
     const design = defaultDesign()
     design.layout.band = 'brand'
-    const look: DesignLook = { name: 'Bold', description: 'Loud.', design }
+    design.brand.fonts.heading = { kind: 'bundled', id: 'fraunces' }
+    const look: DesignLook = { name: 'Bold', description: 'Loud.', preset: 'bold', design }
     const picked: string[] = []
     mount({
       turns: [{ role: 'assistant', text: 'Here are three looks.', looks: [look] }],
       onLook: (chosen) => picked.push(chosen.name),
     })
+    expect(screen.getByText('Fraunces and Inter')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Bold/ }))
     expect(draft.layout.band).toBe('brand')
     expect(picked).toEqual(['Bold'])
+  })
+
+  it('offers to ask about the whole site when a request reached outside the section', () => {
+    const widened: string[] = []
+    mount({
+      turns: [
+        { role: 'user', text: 'A green band' },
+        {
+          role: 'assistant',
+          text: 'That is outside the header, so nothing changed.',
+          widen: 'A green band',
+        },
+      ],
+      onWiden: (text) => widened.push(text),
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask about the whole site' }))
+    expect(widened).toEqual(['A green band'])
   })
 })

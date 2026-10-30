@@ -58,6 +58,7 @@ describe('askDesignAi', () => {
         { path: 'brand.light.accent', value: '#0f766e' },
         { path: 'layout.cards', value: 'floating' },
       ],
+      outOfScope: false,
     }
     const result = await askDesignAi({
       message: 'Make it green with floating cards',
@@ -73,6 +74,7 @@ describe('askDesignAi', () => {
     model.answer = {
       reply: 'Done.',
       changes: [{ path: 'brand.light.accent', value: '#fde047' }],
+      outOfScope: false,
     }
     const teal = defaultDesign()
     teal.brand.light.accent = '#0f766e'
@@ -87,10 +89,48 @@ describe('askDesignAi', () => {
     expect(result.readability).toEqual(['button text on the accent'])
   })
 
-  it('tells the model about the section a person picked', async () => {
-    model.answer = { reply: 'Done.', changes: [] }
+  it('tells the model which fields the section picked reaches', async () => {
+    model.answer = { reply: 'Done.', changes: [], outOfScope: false }
     await askDesignAi({ message: 'Pills', design: defaultDesign(), scope: 'header', history: [] })
-    expect(model.calls[0].systemPrompts[0]).toContain('the header section')
+    expect(model.calls[0].systemPrompts[0]).toContain(
+      'Change only these fields: layout.header, layout.nav'
+    )
+    expect(model.calls[0].systemPrompts[0]).toContain('the menu style')
+  })
+
+  it('says plainly when a request is outside the section, whatever the model wrote', async () => {
+    model.answer = {
+      reply: 'I added a green band behind the headline.',
+      changes: [{ path: 'layout.band', value: 'brand' }],
+      outOfScope: false,
+    }
+    const result = await askDesignAi({
+      message: 'A green band behind the headline',
+      design: defaultDesign(),
+      scope: 'header',
+      history: [],
+    })
+    if (!result.ok) throw new Error('expected an answer')
+    expect(result.applied).toEqual([])
+    expect(result.outOfScope).toBe(true)
+    expect(result.reply).toBe('That is outside the header, so nothing changed.')
+  })
+
+  it('never claims a change the design refused', async () => {
+    model.answer = {
+      reply: 'Your cards now float.',
+      changes: [{ path: 'layout.cards', value: 'floating' }],
+      outOfScope: false,
+    }
+    const result = await askDesignAi({
+      message: 'Floating cards',
+      design: defaultDesign(),
+      scope: 'site',
+      history: [],
+    })
+    if (!result.ok) throw new Error('expected an answer')
+    expect(result.reply).toBe('Nothing changed: the design does not offer that.')
+    expect(result.outOfScope).toBe(false)
   })
 
   it('is a refusal when the answer does not fit the schema', async () => {
@@ -118,6 +158,8 @@ describe('designDirections', () => {
           ink: '#0f172a',
           headingFont: 'nunito',
           bodyFont: 'nunito',
+          headline: 'Help us grow',
+          subtitle: 'Share ideas and vote.',
         },
         {
           name: 'Editorial',
@@ -128,6 +170,8 @@ describe('designDirections', () => {
           ink: '#fefefe',
           headingFont: 'fraunces',
           bodyFont: 'inter',
+          headline: '',
+          subtitle: '',
         },
       ],
     }
@@ -136,6 +180,11 @@ describe('designDirections', () => {
     expect(result.looks.map((look) => look.name)).toEqual(['Calm', 'Editorial'])
     expect(result.looks[0].design.layout.band).toBe('tint')
     expect(result.looks[0].design.brand.light.accent).toBe('#0f766e')
+    expect(result.looks[0].preset).toBe('calm')
+    expect(result.looks[0].design.pages.feedback.headline).toEqual({
+      title: { en: 'Help us grow' },
+      subtitle: { en: 'Share ideas and vote.' },
+    })
     for (const look of result.looks) {
       const doc = portalDesign.parse(look.design)
       expect(resolveDesign(doc).errors).toEqual([])

@@ -42,7 +42,8 @@ export function changeLabel(path: string): string {
   return LABELS[font ? font[1] : path] ?? path
 }
 
-function ChangeValue({ value }: { value: unknown }) {
+/** A design value as the tiles name it: a font's name, a colour swatch, Automatic. */
+export function ChangeValue({ value }: { value: unknown }) {
   if (value === undefined || value === null)
     return <span className="text-muted-foreground">Automatic</span>
   if (typeof value === 'string' && Object.hasOwn(BUNDLED_FONTS, value)) {

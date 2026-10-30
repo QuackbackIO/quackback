@@ -11,6 +11,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 export interface DesignLook {
   name: string
   description: string
+  preset: string
   design: PortalDesign
 }
 
@@ -23,6 +24,8 @@ export type DesignAiTurn =
       /** What the solver adjusted to keep text readable after these changes. */
       readability?: string[]
       looks?: DesignLook[]
+      /** The request, to ask again about the whole site when it reached outside the section. */
+      widen?: string
     }
 
 type Report = { adjustments: DesignAdjustment[]; errors: string[] }
@@ -66,6 +69,7 @@ export function useDesignAi({
           text: result.reply,
           changes: result.applied,
           readability: result.readability,
+          ...(result.outOfScope ? { widen: text } : {}),
         })
       } finally {
         setBusy(false)

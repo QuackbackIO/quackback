@@ -52,6 +52,13 @@ const SCOPE_PATHS: Record<Exclude<DesignAiScope, 'site'>, (path: string) => bool
 /** A value at one design path; null is an optional colour left to be derived. */
 export type DesignValue = string | number | boolean | null
 
+/** The fields a request about one part of the portal may change. */
+export function scopeFields(scope: DesignAiScope): string[] {
+  return scope === 'site'
+    ? [...DESIGN_AI_PATHS]
+    : DESIGN_AI_PATHS.filter((path) => SCOPE_PATHS[scope](path))
+}
+
 export interface DesignChangeRequest {
   path: string
   value: DesignValue
@@ -72,7 +79,7 @@ function read(doc: PortalDesign, path: string): DesignValue {
     return font.kind === 'bundled' ? font.id : font.family
   }
   if (path.startsWith('pages.feedback.headline.')) {
-    const field = path.endsWith('title') ? 'title' : 'subtitle'
+    const field = path.endsWith('.subtitle') ? 'subtitle' : 'title'
     return doc.pages.feedback.headline?.[field][HEADLINE_LOCALE] ?? null
   }
   const value = path
@@ -108,7 +115,7 @@ function write(doc: PortalDesign, path: string, value: unknown): PortalDesign | 
   }
   if (path.startsWith('pages.feedback.headline.')) {
     if (typeof value !== 'string') return null
-    const field = path.endsWith('title') ? 'title' : 'subtitle'
+    const field = path.endsWith('.subtitle') ? 'subtitle' : 'title'
     const headline = next.pages.feedback.headline ?? { title: {}, subtitle: {} }
     if (value.trim()) headline[field][HEADLINE_LOCALE] = value.trim()
     else delete headline[field][HEADLINE_LOCALE]
@@ -135,13 +142,21 @@ export function applyDesignChanges(
   doc: PortalDesign,
   changes: DesignChangeRequest[],
   scope: DesignAiScope
-): { design: PortalDesign; applied: AppliedDesignChange[]; skipped: number } {
+): {
+  design: PortalDesign
+  applied: AppliedDesignChange[]
+  skipped: number
+  /** Changes left alone because they are outside the section picked. */
+  outOfScope: string[]
+} {
   let design = doc
   const applied: AppliedDesignChange[] = []
+  const outOfScope: string[] = []
   let skipped = 0
   for (const { path, value } of changes) {
     const offered = (DESIGN_AI_PATHS as readonly string[]).includes(path)
     const inScope = scope === 'site' || SCOPE_PATHS[scope](path)
+    if (offered && !inScope) outOfScope.push(path)
     const next = offered && inScope ? write(design, path, value) : null
     if (!next || !isValid(next)) {
       skipped++
@@ -153,5 +168,5 @@ export function applyDesignChanges(
     applied.push({ path, before, after })
     design = portalDesign.parse(next)
   }
-  return { design, applied, skipped }
+  return { design, applied, skipped, outOfScope }
 }

@@ -79,7 +79,8 @@ export function AppearanceView({
   )
 
   return (
-    <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)]">
+    // The bottom padding keeps the composer clear of the draft bar.
+    <div className="grid grid-cols-1 items-start gap-6 pb-24 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)]">
       <div className="min-w-0 space-y-4">
         <Tabs
           value={tab}
@@ -109,6 +110,10 @@ export function AppearanceView({
               onPresets={() => {
                 void track('appearance_start_chosen', { start: 'preset' })
                 setTab('brand')
+              }}
+              onWiden={(text) => {
+                setScope('site')
+                void ai.ask(text, 'site')
               }}
             />
           </TabsContent>
