@@ -44,6 +44,8 @@ export interface DesignEditorState {
   /** The design being edited: the draft, else the published design, else today's branding. */
   design: PortalDesign
   source: 'draft' | 'published' | 'converted'
+  /** What visitors see now: the published design, else today's branding converted. */
+  live: PortalDesign
   published: { revisionId: PortalDesignRevisionId; number: number } | null
   report: DesignReport
   /** Moves whenever the draft or the published version moves; the REST API's ETag. */
@@ -88,16 +90,15 @@ export async function readDesignForEditing(): Promise<DesignEditorState> {
   const published = state?.published
     ? { revisionId: state.published.revisionId, number: state.published.number }
     : null
+  const live = state?.published?.document ?? (await convertedDesign())
   const [design, source] = state?.draft
     ? ([state.draft, 'draft'] as const)
-    : state?.published
-      ? ([state.published.document, 'published'] as const)
-      : ([await convertedDesign(), 'converted'] as const)
+    : ([live, state?.published ? 'published' : 'converted'] as const)
   const revision = createHash('sha256')
     .update(JSON.stringify({ published: published?.number ?? null, draft: state?.draft ?? null }))
     .digest('hex')
     .slice(0, 32)
-  return { design, source, published, report: reportOf(design), revision }
+  return { design, source, live, published, report: reportOf(design), revision }
 }
 
 /**

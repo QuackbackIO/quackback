@@ -81,6 +81,11 @@ describe('readDesignForEditing', () => {
     const state = await actions.readDesignForEditing()
     expect(state).toMatchObject({ source: 'published', published: { number: 1 } })
     expect(state.design.brand.light.accent).toBe('#0f766e')
+    expect(state.live).toEqual(state.design)
+    await actions.saveDesignDraft(defaultDesign(), who)
+    const drafted = await actions.readDesignForEditing()
+    expect(drafted.live.brand.light.accent).toBe('#0f766e')
+    expect(drafted.design.brand.light.accent).not.toBe('#0f766e')
   })
 })
 

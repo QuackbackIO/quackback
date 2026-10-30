@@ -114,3 +114,40 @@ describe('PortalPreviewProvider', () => {
     expect(screen.getByTestId('css').textContent).toBe('saved')
   })
 })
+
+describe('a design draft in the preview', () => {
+  afterEach(() => {
+    document.documentElement.removeAttribute('data-qb-nav')
+  })
+
+  it('applies the draft design’s CSS and structure, then puts the saved ones back', () => {
+    document.documentElement.setAttribute('data-qb-nav', 'tabs')
+    post({
+      type: 'quackback:preview-design',
+      design: {
+        css: '[data-portal-theme] { --qb-accent: #0f766e; }',
+        attributes: { 'data-qb-nav': 'pills' },
+        fontIds: [],
+      },
+    })
+    expect(document.querySelector('style[data-preview-design]')?.textContent).toContain(
+      '--qb-accent: #0f766e'
+    )
+    expect(document.documentElement.getAttribute('data-qb-nav')).toBe('pills')
+
+    post({ type: 'quackback:preview-design', design: null })
+    expect(document.querySelector('style[data-preview-design]')).toBeNull()
+    expect(document.documentElement.getAttribute('data-qb-nav')).toBe('tabs')
+  })
+
+  it('ignores attributes outside the design’s own', () => {
+    post({
+      type: 'quackback:preview-design',
+      design: { css: '', attributes: { onload: 'x', 'data-qb-band': 'tint' }, fontIds: [] },
+    })
+    expect(document.documentElement.hasAttribute('onload')).toBe(false)
+    expect(document.documentElement.getAttribute('data-qb-band')).toBe('tint')
+    post({ type: 'quackback:preview-design', design: null })
+    expect(document.documentElement.hasAttribute('data-qb-band')).toBe(false)
+  })
+})

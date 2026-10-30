@@ -27,6 +27,8 @@ interface PortalPreviewProps {
   workspaceName: string
   /** Browser-tab icon slot — the workspace logo (the portal's favicon). */
   faviconUrl?: string | null
+  /** A draft portal design, resolved: applied in the frame in place of the saved one. */
+  design?: { css: string; attributes: Record<string, string>; fontIds: string[] } | null
 }
 
 /**
@@ -55,6 +57,7 @@ export function PortalPreview({
   viewport,
   workspaceName,
   faviconUrl,
+  design = null,
 }: PortalPreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   // What the current frame document holds on each channel: no stylesheet and
@@ -64,6 +67,7 @@ export function PortalPreview({
   // puts the saved values back: an empty stylesheet, the saved structure.
   const frameCss = useRef('')
   const frameDraft = useRef<PortalPreviewDraft | null>(null)
+  const frameDesign = useRef<PortalPreviewProps['design']>(null)
 
   const postDrafts = useCallback(() => {
     const target = iframeRef.current?.contentWindow
@@ -78,7 +82,11 @@ export function PortalPreview({
       target.postMessage({ type: 'quackback:preview-draft', draft }, origin)
       frameDraft.current = draft
     }
-  }, [draftCss, cssDirty, draft, draftDirty])
+    if (design !== frameDesign.current) {
+      target.postMessage({ type: 'quackback:preview-design', design }, origin)
+      frameDesign.current = design
+    }
+  }, [draftCss, cssDirty, draft, draftDirty, design])
 
   // Debounced push on draft changes (typing in the CSS editor / title field).
   useEffect(() => {
@@ -95,6 +103,7 @@ export function PortalPreview({
       if ((event.data as { type?: string } | null)?.type === 'quackback:preview-ready') {
         frameCss.current = ''
         frameDraft.current = null
+        frameDesign.current = null
         postDrafts()
       }
     }
