@@ -28,7 +28,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn } from '@/lib/shared/utils'
-import { voteBoxClasses } from '@/components/shared/vote-box'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import type { ChangelogId, PostId, PostStatusId, PrincipalId } from '@quackback/ids'
@@ -232,12 +231,6 @@ export function PostCard({
     : undefined
 
   // Vote button - always interactive
-  const voteBox = voteBoxClasses({
-    voted: currentHasVoted,
-    interactive: true,
-    pending: isVotePending || isAnonSigningIn,
-    denied: voteNoAccess,
-  })
   const voteButton = (
     <button
       type="button"
@@ -265,10 +258,31 @@ export function PostCard({
       aria-pressed={currentHasVoted}
       onClick={handleVoteClick}
       disabled={isVotePending || isAnonSigningIn}
-      className={voteBox.root}
+      className={cn(
+        'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border transition-colors duration-200',
+        'w-12 py-2 gap-0.5',
+        currentHasVoted
+          ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
+          : 'bg-muted/40 text-muted-foreground border-border/50',
+        // Hover affordances only when the button is actionable (not denied).
+        !currentHasVoted &&
+          !voteNoAccess &&
+          'hover:border-border hover:bg-muted/60 hover:text-foreground/80',
+        (isVotePending || isAnonSigningIn) && 'opacity-70 cursor-wait',
+        voteNoAccess && 'cursor-not-allowed opacity-60'
+      )}
     >
-      <ChevronUpIcon className={voteBox.chevron} />
-      <span data-testid="vote-count" className={voteBox.count}>
+      <ChevronUpIcon
+        className={cn(
+          'transition-transform duration-200 h-4 w-4',
+          currentHasVoted && 'fill-post-card-voted',
+          !isVotePending && !voteNoAccess && 'group-hover/vote:-translate-y-0.5'
+        )}
+      />
+      <span
+        data-testid="vote-count"
+        className={cn('font-semibold tabular-nums text-sm', !currentHasVoted && 'text-foreground')}
+      >
         {currentVoteCount}
       </span>
     </button>

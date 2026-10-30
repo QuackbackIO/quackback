@@ -12,52 +12,17 @@ import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
 import { cn } from '@/lib/shared/utils'
 
-/**
- * The vote box's classes for an embed: the same as voteBoxClasses gives, which
- * a test holds this to. Embeds render inside the admin inbox, and importing
- * the shared helper here would split it into a chunk the inbox then loads.
- */
-export function embedVoteBoxClasses({
-  voted,
-  interactive,
-  pending = false,
-}: {
-  voted: boolean
-  interactive: boolean
-  pending?: boolean
-}) {
-  return {
-    root: cn(
-      'group/vote relative flex shrink-0 items-center justify-center rounded-md border',
-      'flex-col w-12 py-2 gap-0.5',
-      voted
-        ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
-        : 'bg-muted/40 text-muted-foreground border-border/50',
-      interactive && 'transition-colors duration-200',
-      interactive && !voted && 'hover:border-border hover:bg-muted/60 hover:text-foreground/80',
-      pending && 'opacity-70 cursor-wait'
-    ),
-    chevron: cn(
-      'h-4 w-4',
-      interactive && 'transition-transform duration-200',
-      voted && 'fill-post-card-voted',
-      interactive && !pending && 'group-hover/vote:-translate-y-0.5'
-    ),
-    count: cn(
-      'font-semibold tabular-nums',
-      'text-sm',
-      voted ? 'text-post-card-voted' : 'text-foreground'
-    ),
-  }
-}
+// The same vote box as the portal's other cards: the standard size, the voted
+// colour on the count, and a hover edge.
+const voteBoxCls =
+  'group/vote flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border py-2'
 
 /** Display-only vote tally — used in the editor preview (no voting). */
 function StaticVoteBox({ voteCount }: { voteCount: number }) {
-  const voteBox = embedVoteBoxClasses({ voted: false, interactive: false })
   return (
-    <div className={voteBox.root}>
-      <ChevronUpIcon className={voteBox.chevron} />
-      <span className={voteBox.count}>{voteCount}</span>
+    <div className={cn(voteBoxCls, 'border-border/50 bg-muted/40 text-muted-foreground')}>
+      <ChevronUpIcon className="h-4 w-4" />
+      <span className="text-sm font-semibold tabular-nums text-foreground">{voteCount}</span>
     </div>
   )
 }
@@ -86,17 +51,36 @@ function InteractiveVoteBox({
     voteCount,
     getAuthHeaders,
   })
-  const voteBox = embedVoteBoxClasses({ voted: hasVoted, interactive: true, pending: isPending })
   return (
     <button
       type="button"
       onClick={(e) => handleVote(e)}
       disabled={isPending}
       aria-pressed={hasVoted}
-      className={voteBox.root}
+      className={cn(
+        voteBoxCls,
+        'transition-colors duration-200',
+        hasVoted
+          ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
+          : 'border-border/50 bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground/80',
+        isPending && 'cursor-wait opacity-70'
+      )}
     >
-      <ChevronUpIcon className={voteBox.chevron} />
-      <span className={voteBox.count}>{vc}</span>
+      <ChevronUpIcon
+        className={cn(
+          'h-4 w-4 transition-transform duration-200',
+          hasVoted && 'fill-post-card-voted',
+          !isPending && 'group-hover/vote:-translate-y-0.5'
+        )}
+      />
+      <span
+        className={cn(
+          'text-sm font-semibold tabular-nums',
+          hasVoted ? 'text-post-card-voted' : 'text-foreground'
+        )}
+      >
+        {vc}
+      </span>
     </button>
   )
 }
