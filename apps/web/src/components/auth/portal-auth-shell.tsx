@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { PortalBrandMark } from './portal-brand-mark'
 import { generateWorkspaceThemeCSS } from '@/lib/shared/theme'
-import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
+import { PortalDesignStyle } from '@/components/shared/portal-design-style'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 interface PortalAuthShellProps {
@@ -35,10 +35,7 @@ export function PortalAuthShell({ heading, subheading, children, footer }: Porta
 
   return (
     <div className="relative min-h-screen flex items-center justify-center px-4 py-12 overflow-hidden">
-      {themeStyles && (
-        <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
-      )}
-      {customCss && <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(customCss) }} />}
+      <PortalDesignStyle themeStyles={themeStyles} customCss={customCss} />
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[40vh] bg-[radial-gradient(ellipse_at_top,_var(--primary)/0.08,_transparent_60%)]"

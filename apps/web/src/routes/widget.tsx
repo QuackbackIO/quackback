@@ -9,7 +9,7 @@ import { FileViewerProvider } from '@/components/shared/files/file-viewer-contex
 import { extractSessionTokenFromCookie } from '@/lib/server/functions/portal-session-token'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
-import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
+import { PortalDesignStyle } from '@/components/shared/portal-design-style'
 import { Button } from '@/components/ui/button'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
 import { isTeamMember } from '@/lib/shared/roles'
@@ -181,10 +181,7 @@ function WidgetLayout() {
       initialLocale={locale}
       initialMessages={messages}
     >
-      {themeStyles && (
-        <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
-      )}
-      {customCss && <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(customCss) }} />}
+      <PortalDesignStyle themeStyles={themeStyles} customCss={customCss} />
       <style
         dangerouslySetInnerHTML={{
           __html: `

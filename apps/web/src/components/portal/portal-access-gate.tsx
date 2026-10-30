@@ -18,7 +18,7 @@ import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { toast } from 'sonner'
-import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
+import { PortalDesignStyle } from '@/components/shared/portal-design-style'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import {
   ArrowPathIcon,
@@ -579,10 +579,7 @@ export function PortalAccessGate({
     <PortalIntlProvider locale={locale ?? DEFAULT_LOCALE}>
       <div className="relative min-h-screen">
         {/* Theme/custom CSS injected here too so the backdrop looks branded */}
-        {themeStyles && (
-          <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
-        )}
-        {customCss && <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(customCss) }} />}
+        <PortalDesignStyle themeStyles={themeStyles} customCss={customCss} />
 
         {/* Blurred decorative backdrop — a fake board, no real content */}
         <div
