@@ -3,7 +3,6 @@ import { Switch } from '@/components/ui/switch'
 import { SettingRow } from '@/components/admin/settings/setting-row'
 import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-body-editor'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import { ArrowTrendingUpIcon, ClockIcon, FireIcon } from '@heroicons/react/24/solid'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { DesignTiles } from './design-tiles'
@@ -14,6 +13,7 @@ import {
   DensityDrawing,
   FiltersDrawing,
   NavDrawing,
+  SortDrawing,
   WidthDrawing,
 } from './drawings'
 
@@ -141,17 +141,17 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
             {
               value: 'trending',
               label: 'Trending',
-              drawing: <FireIcon className="size-5 text-foreground/50" />,
+              drawing: <SortDrawing sort="trending" />,
             },
             {
               value: 'top',
               label: 'Top',
-              drawing: <ArrowTrendingUpIcon className="size-5 text-foreground/50" />,
+              drawing: <SortDrawing sort="top" />,
             },
             {
               value: 'new',
               label: 'New',
-              drawing: <ClockIcon className="size-5 text-foreground/50" />,
+              drawing: <SortDrawing sort="new" />,
             },
           ]}
         />
