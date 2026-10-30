@@ -4,7 +4,7 @@
  * transparent pixels ignored.
  */
 import { describe, expect, it } from 'vitest'
-import { paletteFromPixels } from '../palette'
+import { mostVivid, paletteFromPixels } from '../palette'
 
 /** RGBA pixels: each entry repeated `count` times. */
 function pixels(...runs: Array<[number, number, number, number, number]>) {
@@ -29,6 +29,23 @@ describe('paletteFromPixels', () => {
   it('ignores transparent pixels', () => {
     const data = pixels([0, 0, 0, 0, 100], [245, 179, 1, 255, 5])
     expect(paletteFromPixels(data, 3)).toEqual(['#f5b301'])
+  })
+
+  it('keeps the most vivid colour that has a real share, even when it is rarely used', () => {
+    // A screenshot: mostly white and peach, with a coral button.
+    const data = pixels(
+      [255, 255, 255, 255, 500],
+      [255, 240, 232, 255, 400],
+      [245, 245, 245, 255, 300],
+      [230, 230, 230, 255, 200],
+      [255, 90, 54, 255, 30],
+      [255, 0, 255, 255, 1]
+    )
+    const palette = paletteFromPixels(data, 3)
+    expect(palette).toHaveLength(3)
+    expect(palette).toContain('#ff5a36')
+    expect(palette).not.toContain('#ff00ff')
+    expect(mostVivid(palette)).toBe('#ff5a36')
   })
 
   it('gives nothing for an empty image', () => {

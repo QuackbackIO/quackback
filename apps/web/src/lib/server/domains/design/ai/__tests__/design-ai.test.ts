@@ -127,7 +127,7 @@ describe('askDesignAi', () => {
     })
     const sent = model.calls[0] as unknown as { messages: Array<{ content: string }> }
     expect(sent.messages.at(-1)!.content).toBe(
-      'Use these colours\n\nColours from the attached image: #7a1f35, #ffffff'
+      'Use these colours\n\nColours from the attached image, most used first: #7a1f35, #ffffff. The most vivid, likely the brand colour: #7a1f35.'
     )
   })
 
@@ -215,7 +215,9 @@ describe('designDirections', () => {
     })
     const brief = (model.calls[0] as unknown as { messages: Array<{ content: string }> })
       .messages[0].content
-    expect(brief).toContain('Colours from their logo or a screenshot: #0f766e, #f8fafc')
+    expect(brief).toContain(
+      'Colours from their logo or a screenshot, most used first: #0f766e, #f8fafc. The most vivid, likely the brand colour: #0f766e.'
+    )
     if (!result.ok) throw new Error('expected looks')
     expect(result.looks.map((look) => look.name)).toEqual(['Calm', 'Editorial'])
     expect(result.looks[0].design.layout.band).toBe('tint')

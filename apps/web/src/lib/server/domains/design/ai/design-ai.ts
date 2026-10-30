@@ -15,6 +15,7 @@ import { logger } from '@/lib/server/logger'
 import { DESIGN_OPTIONS, BUNDLED_FONT_IDS } from '@/lib/shared/design/options'
 import { applyPreset, DESIGN_PRESETS } from '@/lib/shared/design/presets'
 import { resolveDesign } from '@/lib/shared/design/resolve'
+import { mostVivid } from '@/lib/shared/design/palette'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
   applyDesignChanges,
@@ -118,6 +119,12 @@ Example answer: {"reply":"I softened the corners, raised the cards and gave the 
 Example request: "Use our green, #0f766e, with a green band. Headline: Help us grow"
 Example answer: {"reply":"The accent is now your green, with a green band behind the new headline.","outOfScope":false,"changes":[{"path":"brand.light.accent","value":"#0f766e"},{"path":"layout.band","value":"brand"},{"path":"pages.feedback.headline.title","value":"Help us grow"}]}`
 
+/** A palette for the model: most used first, and which colour is likely the brand's. */
+function paletteText(palette: string[]): string {
+  const vivid = mostVivid(palette)
+  return `most used first: ${palette.join(', ')}.${vivid ? ` The most vivid, likely the brand colour: ${vivid}.` : ''}`
+}
+
 const SCOPE_NAMES: Record<Exclude<DesignAiScope, 'site'>, string> = {
   brand: 'brand settings',
   header: 'header',
@@ -200,7 +207,7 @@ export async function askDesignAi(input: {
         {
           role: 'user',
           content: input.palette?.length
-            ? `${input.message}\n\nColours from the attached image: ${input.palette.join(', ')}`
+            ? `${input.message}\n\nColours from the attached image, ${paletteText(input.palette)}`
             : input.message,
         },
       ],
@@ -301,7 +308,7 @@ export async function designDirections(input: {
       }${input.site.colour ? `. Its brand colour is ${input.site.colour}.` : '.'}`,
     input.words && `In their words: ${input.words}`,
     input.palette?.length &&
-      `Colours from their logo or a screenshot: ${input.palette.join(', ')}. Build the looks from these.`,
+      `Colours from their logo or a screenshot, ${paletteText(input.palette)} Build the looks from these.`,
   ]
     .filter(Boolean)
     .join('\n')

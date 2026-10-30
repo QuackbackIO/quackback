@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { defaultDesign } from '@/lib/shared/design/schema'
 
 const server = vi.hoisted(() => ({
+  invalidations: 0,
   published: [] as unknown[],
   asks: [] as unknown[],
   directions: [] as unknown[],
@@ -19,7 +20,11 @@ const server = vi.hoisted(() => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  useRouter: () => ({ invalidate: async () => {} }),
+  useRouter: () => ({
+    invalidate: async () => {
+      server.invalidations++
+    },
+  }),
   ClientOnly: ({ children }: { children: ReactNode }) => <>{children}</>,
   Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
 }))
@@ -118,6 +123,7 @@ function mount({ ai = false }: { ai?: boolean } = {}) {
 
 afterEach(() => {
   cleanup()
+  server.invalidations = 0
   server.published = []
   server.asks = []
   server.directions = []
@@ -253,6 +259,8 @@ describe('AppearanceView', () => {
     })
     await waitFor(() => expect(server.directions).toEqual([{ palette: ['#7a1f35', '#ffffff'] }]))
     expect(server.logos).toEqual([logo])
+    // The new logo reaches the root settings, and with them the preview.
+    expect(server.invalidations).toBeGreaterThan(0)
     expect(
       await screen.findByText('It is now your logo. Here are three looks to start from.')
     ).toBeTruthy()

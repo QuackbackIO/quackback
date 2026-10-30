@@ -93,6 +93,12 @@ export function useDesignDraft() {
     if (nextReport) setReport(nextReport)
   }, [])
 
+  /** Reads what visitors see again after a change made outside the draft, such as a new logo. */
+  const refreshLive = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: portalDesignQueries.editor().queryKey })
+    await router.invalidate()
+  }, [queryClient, router])
+
   /** Reloads the editor and the root settings after the live design moved. */
   const refresh = useCallback(async () => {
     const fresh = await queryClient.fetchQuery({ ...portalDesignQueries.editor(), staleTime: 0 })
@@ -149,6 +155,7 @@ export function useDesignDraft() {
     update,
     flush,
     adopt,
+    refreshLive,
     changes,
     report,
     refusal,

@@ -118,7 +118,15 @@ export function AppearanceView({
                 void ai.ask(text, 'site')
               }}
               onImage={(file, useAsLogo) =>
-                void ai.startFromImage(file, useAsLogo ? uploadLogo.mutateAsync : null)
+                void ai.startFromImage(
+                  file,
+                  useAsLogo
+                    ? async (image) => {
+                        await uploadLogo.mutateAsync(image)
+                        await draft.refreshLive()
+                      }
+                    : null
+                )
               }
             />
           </TabsContent>
@@ -181,7 +189,7 @@ export function AppearanceView({
         <ClientOnly>
           <PortalPreview
             theme={draft.design.mode === 'auto' ? theme : draft.design.mode}
-            refreshKey={String(draft.published?.number ?? 0)}
+            refreshKey={`${draft.published?.number ?? 0}:${logoUrl ?? ''}`}
             draftCss=""
             cssDirty={false}
             draft={structural}
