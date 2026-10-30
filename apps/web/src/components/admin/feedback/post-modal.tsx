@@ -37,6 +37,7 @@ import { AiSummaryCard } from '@/components/admin/feedback/ai-summary-card'
 import { SimilarPostsCard } from '@/components/admin/feedback/similar-posts-card'
 import { PostActivityTimeline } from '@/components/admin/feedback/detail/post-activity-timeline'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
+import { PostSubscribers } from '@/components/admin/feedback/post-subscribers'
 import {
   useUpdatePost,
   useChangePostStatusId,
@@ -104,6 +105,15 @@ export const PostModalContent = memo(function PostModalContent({
   // via the same post.set_owner-gated fn the portal uses; the current owner is
   // resolved from it against the post's ownerPrincipalId (already in payload).
   const canSetOwner = usePermission(PERMISSIONS.POST_SET_OWNER)
+  const canViewSubscribers = usePermission(PERMISSIONS.POST_VIEW_PRIVATE)
+  const canManageSubscribers = usePermission(PERMISSIONS.POST_VOTE_ON_BEHALF)
+  const canSearchPeople = usePermission(PERMISSIONS.PEOPLE_VIEW)
+  // The teammate's own follow bell: its status comes with the post (a panel).
+  const { data: subscription } = useQuery(adminQueries.postSubscription(postId))
+  const refreshSubscription = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: adminQueries.postSubscription(postId).queryKey })
+    void queryClient.invalidateQueries({ queryKey: adminQueries.postSubscribers(postId).queryKey })
+  }, [queryClient, postId])
   const canModerate = usePermission(PERMISSIONS.POST_APPROVE)
   const canManageIntegrations = usePermission(PERMISSIONS.INTEGRATION_MANAGE)
   const approvePost = useApprovePost(postId)
@@ -578,6 +588,17 @@ export const PostModalContent = memo(function PostModalContent({
               onOwnerChange={canSetOwner ? handleOwnerChange : undefined}
               isUpdating={isUpdating}
               hideSubscribe
+              teamSubscribe={{
+                status: subscription,
+                onChange: refreshSubscription,
+                subscribers: canViewSubscribers ? (
+                  <PostSubscribers
+                    postId={postId}
+                    canManage={canManageSubscribers}
+                    canSearchPeople={canSearchPeople}
+                  />
+                ) : undefined,
+              }}
               variant="card"
               manageActions={manageActions}
             />

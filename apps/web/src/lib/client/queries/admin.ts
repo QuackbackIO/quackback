@@ -28,6 +28,8 @@ import { fetchApiKeys } from '@/lib/server/functions/api-keys'
 import { fetchWebhooks } from '@/lib/server/functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server/functions/roadmaps'
 import { fetchPostWithDetails, fetchPostVotersFn } from '@/lib/server/functions/posts'
+import { listPostSubscribersFn } from '@/lib/server/functions/post-subscribers'
+import { fetchSubscriptionStatus } from '@/lib/server/functions/subscriptions'
 import { fetchMergePreviewFn } from '@/lib/server/functions/post-merge'
 import { fetchPublicStatuses } from '@/lib/server/functions/portal'
 import type { PortalUserListParams } from '@/lib/shared/types'
@@ -50,6 +52,8 @@ function postPanelQueries(postId: PostId, authorEmail: string | null | undefined
     externalLinks: postExternalLinksQuery(postId),
     ownerCandidates: postOwnerQueries.candidates(),
     customerContext: authorEmail ? customerContextQuery(authorEmail) : null,
+    subscribers: adminQueries.postSubscribers(postId),
+    subscription: adminQueries.postSubscription(postId),
   } satisfies Record<AdminPostPanel, unknown>
 }
 
@@ -322,6 +326,24 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['inbox', 'voters', postId],
       queryFn: () => fetchPostVotersFn({ data: { id: postId } }),
+      staleTime: 30 * 1000,
+    }),
+
+  /**
+   * Who is subscribed to a post's thread (post.view_private)
+   */
+  postSubscribers: (postId: PostId) =>
+    queryOptions({
+      queryKey: ['inbox', 'subscribers', postId],
+      queryFn: () => listPostSubscribersFn({ data: { postId } }),
+      staleTime: 30 * 1000,
+    }),
+
+  /** The signed-in teammate's own follow status for a post (the sidebar bell). */
+  postSubscription: (postId: PostId) =>
+    queryOptions({
+      queryKey: ['inbox', 'subscription', postId],
+      queryFn: () => fetchSubscriptionStatus({ data: { postId } }),
       staleTime: 30 * 1000,
     }),
 
