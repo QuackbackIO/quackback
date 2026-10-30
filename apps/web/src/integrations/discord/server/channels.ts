@@ -81,6 +81,8 @@ interface BotMember {
   roleIds: string[]
   /** Guild-level permissions: @everyone plus every role the bot holds. */
   base: bigint
+  /** Guild-level @everyone permissions, which decide whether a channel is private. */
+  everyone: bigint
 }
 
 async function discordGet<T>(path: string, botToken: string, what: string): Promise<T> {
@@ -109,9 +111,22 @@ async function getBotMember(botToken: string, guildId: string): Promise<BotMembe
   )
   const rolePermissions = new Map(roles.map((r) => [r.id, BigInt(r.permissions)]))
   // The @everyone role shares the guild's id.
-  let base = rolePermissions.get(guildId) ?? 0n
+  const everyone = rolePermissions.get(guildId) ?? 0n
+  let base = everyone
   for (const roleId of member.roles) base |= rolePermissions.get(roleId) ?? 0n
-  return { userId: user.id, roleIds: member.roles, base }
+  return { userId: user.id, roleIds: member.roles, base, everyone }
+}
+
+const apply = (permissions: bigint, allow: bigint, deny: bigint) => (permissions & ~deny) | allow
+
+/** Private when @everyone can't view it, after the guild-level role and the channel overwrite. */
+function isPrivateChannel(everyone: bigint, guildId: string, channel: DiscordChannel): boolean {
+  if (everyone & ADMINISTRATOR) return false
+  const overwrite = channel.permission_overwrites?.find((o) => o.id === guildId)
+  const permissions = overwrite
+    ? apply(everyone, BigInt(overwrite.allow), BigInt(overwrite.deny))
+    : everyone
+  return (permissions & VIEW_CHANNEL) === 0n
 }
 
 /**
@@ -121,7 +136,6 @@ async function getBotMember(botToken: string, guildId: string): Promise<BotMembe
 function channelPermissions(bot: BotMember, guildId: string, channel: DiscordChannel): bigint {
   if (bot.base & ADMINISTRATOR) return bot.base | POST_PERMISSIONS
   const overwrites = channel.permission_overwrites ?? []
-  const apply = (permissions: bigint, allow: bigint, deny: bigint) => (permissions & ~deny) | allow
 
   let permissions = bot.base
   const everyone = overwrites.find((o) => o.id === guildId)
@@ -158,13 +172,10 @@ export async function listDiscordChannels(
   return channels
     .filter((c) => TEXT_CHANNEL_TYPES.includes(c.type))
     .sort((a, b) => a.position - b.position)
-    .map((c) => {
-      const everyone = c.permission_overwrites?.find((o) => o.id === guildId)
-      return {
-        id: c.id,
-        name: c.name,
-        isPrivate: !!everyone && (BigInt(everyone.deny) & VIEW_CHANNEL) !== 0n,
-        canPost: (channelPermissions(bot, guildId, c) & POST_PERMISSIONS) === POST_PERMISSIONS,
-      }
-    })
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      isPrivate: isPrivateChannel(bot.everyone, guildId, c),
+      canPost: (channelPermissions(bot, guildId, c) & POST_PERMISSIONS) === POST_PERMISSIONS,
+    }))
 }

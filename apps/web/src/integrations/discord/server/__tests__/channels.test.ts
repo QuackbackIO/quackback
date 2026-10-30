@@ -177,6 +177,19 @@ describe('listDiscordChannels', () => {
     expect((await listDiscordChannels(TOKEN, GUILD))[0]?.canPost).toBe(false)
   })
 
+  it('treats channels as private when @everyone cannot view at the guild level', async () => {
+    guild.everyone = SEND
+    guild.channels = [
+      channel('c-members', 'members-only', 0),
+      channel('c-lobby', 'lobby', 1, [{ id: GUILD, type: 0, allow: VIEW }]),
+    ]
+
+    expect(await listDiscordChannels(TOKEN, GUILD)).toEqual([
+      { id: 'c-members', name: 'members-only', isPrivate: true, canPost: true },
+      { id: 'c-lobby', name: 'lobby', isPrivate: false, canPost: true },
+    ])
+  })
+
   it('treats a bot with Administrator as able to post everywhere', async () => {
     guild.roles[BOT_ROLE] = ADMIN
     guild.channels = [channel('c-private', 'private-team', 0, [{ id: GUILD, type: 0, deny: VIEW }])]
