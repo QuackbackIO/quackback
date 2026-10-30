@@ -30,6 +30,11 @@ import {
   dispatchTicketReplied,
   dispatchTicketNoteAdded,
   dispatchTicketExternalStatusChanged,
+  dispatchTicketDueChanged,
+  dispatchTicketSubscriberAdded,
+  dispatchTicketSubscriberRemoved,
+  dispatchTicketUpdated,
+  dispatchTicketPriorityChanged,
 } from '@/lib/server/events/dispatch'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
@@ -48,7 +53,9 @@ function toEventActor(actor: Actor): EventActor {
   return { type: 'user', principalId }
 }
 
-function ticketRef(t: Ticket): EventTicketRef {
+/** The minimal ticket ref every ticket event embeds. Exported for the
+ *  ticket-due sweep, which builds the same ref for its timer events. */
+export function ticketRef(t: Ticket): EventTicketRef {
   return {
     id: t.id,
     number: t.number,
@@ -57,6 +64,7 @@ function ticketRef(t: Ticket): EventTicketRef {
     priority: t.priority,
     assignedPrincipalId: t.assigneePrincipalId ?? null,
     assignedTeamId: t.assigneeTeamId ?? null,
+    dueAt: t.dueAt ? t.dueAt.toISOString() : null,
   }
 }
 
@@ -170,10 +178,54 @@ export async function emitTicketAssigned(
   )
 }
 
+/** The ticket was renamed (setTicketTitle). Only fired on an actual change. */
+export async function emitTicketUpdated(
+  actor: Actor,
+  ticket: Ticket,
+  previousTitle: string
+): Promise<void> {
+  await safe('ticket.updated', () =>
+    dispatchTicketUpdated(toEventActor(actor), ticketRef(ticket), ticket.title, previousTitle, [
+      'title',
+    ])
+  )
+}
+
+/** The triage priority moved (setTicketPriority). Only fired on an actual change. */
+export async function emitTicketPriorityChanged(
+  actor: Actor,
+  ticket: Ticket,
+  previousPriority: string
+): Promise<void> {
+  await safe('ticket.priority_changed', () =>
+    dispatchTicketPriorityChanged(
+      toEventActor(actor),
+      ticketRef(ticket),
+      ticket.title,
+      previousPriority,
+      ticket.priority
+    )
+  )
+}
+
 /** A reply on a customer ticket thread — an agent reply or the requester's own
  *  reply. senderType disambiguates the two for consumers. */
 export async function emitTicketReplied(
   actor: Actor,
+  ticket: Ticket,
+  message: ConversationMessageDTO
+): Promise<void> {
+  await emitTicketRepliedAs(toEventActor(actor), ticket, message)
+}
+
+/**
+ * `emitTicketReplied` for a caller that already holds the event actor rather
+ * than a policy actor: the pair-reply reaction (ticket.event-hooks.ts), which
+ * derives the ticket reply from a conversation's `message.created` and reuses
+ * that event's actor so the reply reads as the same person on both signals.
+ */
+export async function emitTicketRepliedAs(
+  eventActor: EventActor,
   ticket: Ticket,
   message: ConversationMessageDTO
 ): Promise<void> {
@@ -185,7 +237,7 @@ export async function emitTicketReplied(
       author = (await loadAuthors([author.principalId])).get(author.principalId) ?? null
     }
     return dispatchTicketReplied(
-      toEventActor(actor),
+      eventActor,
       ticketRef(ticket),
       message.id,
       contentJsonToMarkdown(message.contentJson, message.content),
@@ -214,6 +266,65 @@ export async function emitTicketNoteAdded(
       'agent',
       ticket.title,
       message.author?.displayName ?? null
+    )
+  )
+}
+
+/** The due date was set, moved or cleared. Called only when the value actually
+ *  changed; a due date given at creation rides ticket.created's ticket ref. */
+export async function emitTicketDueChanged(
+  actor: Actor,
+  ticket: Ticket,
+  previousDueAt: Date | null
+): Promise<void> {
+  await safe('ticket.due_changed', () =>
+    dispatchTicketDueChanged(
+      toEventActor(actor),
+      ticketRef(ticket),
+      ticket.title,
+      ticket.dueAt ? ticket.dueAt.toISOString() : null,
+      previousDueAt ? previousDueAt.toISOString() : null
+    )
+  )
+}
+
+/**
+ * A watch changed by hand: `actor` is whoever changed it, `subscriberPrincipalId`
+ * whose watch it is (the same person for a self watch or unwatch). Automatic
+ * watches never come through here.
+ */
+export async function emitTicketSubscriberAdded(
+  actor: Actor,
+  ticket: Ticket,
+  subscriberPrincipalId: string,
+  reason: string | null,
+  /** Who added them, as the person added sees it (the shared-ticket email). */
+  actorName?: string | null
+): Promise<void> {
+  await safe('ticket.subscriber_added', () =>
+    dispatchTicketSubscriberAdded(
+      { ...toEventActor(actor), ...(actorName ? { displayName: actorName } : {}) },
+      ticketRef(ticket),
+      ticket.title,
+      subscriberPrincipalId,
+      reason
+    )
+  )
+}
+
+export async function emitTicketSubscriberRemoved(
+  actor: Actor,
+  ticket: Ticket,
+  subscriberPrincipalId: string,
+  reason: string | null
+): Promise<void> {
+  await safe('ticket.subscriber_removed', () =>
+    dispatchTicketSubscriberRemoved(
+      toEventActor(actor),
+      ticketRef(ticket),
+      ticket.title,
+      subscriberPrincipalId,
+      reason
     )
   )
 }
