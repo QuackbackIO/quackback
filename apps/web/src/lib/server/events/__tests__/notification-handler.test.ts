@@ -631,6 +631,55 @@ describe('notificationHook — ticket.external_status_changed (agent watchers)',
   })
 })
 
+describe('notificationHook — ticket.due_soon / ticket.overdue (responsible teammates)', () => {
+  function dueEvent(type: 'ticket.due_soon' | 'ticket.overdue'): EventData {
+    return {
+      id: `timer:${type}:ticket_1:2026-07-17T02:00:00.000Z`,
+      type,
+      timestamp: new Date().toISOString(),
+      actor: { type: 'service', principalId: 'principal_timer' },
+      data: {
+        ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+        title: 'Cannot log in',
+        dueAt: '2026-07-17T02:00:00.000Z',
+      },
+    } as EventData
+  }
+  const config = { ticketId: 'ticket_1', title: 'Cannot log in', dueAt: '2026-07-17T02:00:00.000Z' }
+
+  it.each([
+    ['ticket.due_soon', 'ticket_due_soon', 'Cannot log in is due soon'],
+    ['ticket.overdue', 'ticket_overdue', 'Cannot log in is overdue'],
+  ] as const)('words %s for every recipient with admin metadata', async (type, kind, title) => {
+    const target: NotificationTarget = {
+      principalIds: ['principal_agent_1' as never, 'principal_agent_2' as never],
+    }
+    await notificationHook.run(dueEvent(type), target, config)
+    const metadata = {
+      ticketId: 'ticket_1',
+      ticketTitle: 'Cannot log in',
+      dueAt: '2026-07-17T02:00:00.000Z',
+      audience: 'admin',
+    }
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({ principalId: 'principal_agent_1', type: kind, title, metadata }),
+      expect.objectContaining({ principalId: 'principal_agent_2', type: kind, title, metadata }),
+    ])
+  })
+
+  it('drops a principal whose matrix turns ticket_overdue inApp off', async () => {
+    prefsSpy.mockResolvedValueOnce(
+      new Map([['principal_agent_1', { matrix: { ticket_overdue: { inApp: false } } }]])
+    )
+    const target: NotificationTarget = {
+      principalIds: ['principal_agent_1' as never, 'principal_agent_2' as never],
+    }
+    await notificationHook.run(dueEvent('ticket.overdue'), target, config)
+    const batch = batchSpy.mock.calls[0][0] as Array<{ principalId: string }>
+    expect(batch.map((n) => n.principalId)).toEqual(['principal_agent_2'])
+  })
+})
+
 describe('notificationHook — ticket.status_changed (watcher audience)', () => {
   it('marks the requester portal and agent watchers admin when the config carries the requester', async () => {
     const event = {
@@ -931,5 +980,75 @@ describe('notificationHook — changelog.published', () => {
     await notificationHook.run(event, target, config)
     const call = batchSpy.mock.calls[0][0] as Array<{ metadata?: Record<string, unknown> }>
     expect(call[0].metadata).toMatchObject({ changelogId: 'changelog_1' })
+  })
+})
+
+describe('notificationHook — ticket.subscriber_added (the teammate someone added)', () => {
+  it('names who added them and routes the bell to the admin inbox', async () => {
+    const event = {
+      id: 'evt-ticket-sub-1',
+      type: 'ticket.subscriber_added',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_lead' },
+      data: {
+        ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+        title: 'Cannot log in',
+        subscriberPrincipalId: 'principal_agent_1',
+        reason: 'manual',
+      },
+    } as EventData
+    const target: NotificationTarget = { principalIds: ['principal_agent_1' as never] }
+    await notificationHook.run(event, target, {
+      ticketId: 'ticket_1',
+      title: 'Cannot log in',
+      authorName: 'Lea',
+    })
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalId: 'principal_agent_1',
+        type: 'ticket_subscriber_added',
+        title: 'Lea added you as a watcher on Cannot log in',
+        metadata: { ticketId: 'ticket_1', actorName: 'Lea', audience: 'admin' },
+      }),
+    ])
+  })
+})
+
+describe('notificationHook — post.subscriber_added (someone a teammate subscribed)', () => {
+  it('names who subscribed them and carries the post for the bell link', async () => {
+    const event = {
+      id: 'evt-post-sub-1',
+      type: 'post.subscriber_added',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_lead', displayName: 'Lea' },
+      data: {
+        post: { id: 'post_1', title: 'Dark mode', boardId: 'board_1', boardSlug: 'ideas' },
+        subscriberPrincipalId: 'principal_ada',
+        reason: 'added',
+      },
+    } as EventData
+    const target: NotificationTarget = { principalIds: ['principal_ada' as never] }
+    await notificationHook.run(event, target, {
+      postId: 'post_1',
+      postTitle: 'Dark mode',
+      boardSlug: 'ideas',
+      postUrl: 'https://acme.test/b/ideas/posts/post_1',
+      authorName: 'Lea',
+    })
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalId: 'principal_ada',
+        type: 'post_subscriber_added',
+        title: 'Lea subscribed you to a post',
+        body: 'Dark mode',
+        postId: 'post_1',
+        metadata: {
+          postTitle: 'Dark mode',
+          boardSlug: 'ideas',
+          postUrl: 'https://acme.test/b/ideas/posts/post_1',
+          actorName: 'Lea',
+        },
+      }),
+    ])
   })
 })

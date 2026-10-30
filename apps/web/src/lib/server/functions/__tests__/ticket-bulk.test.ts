@@ -18,15 +18,21 @@ import type { Role } from '@/lib/server/auth'
 import type { PermissionKey } from '@/lib/server/db'
 
 // createServerFn → directly-callable fns (mirrors conversation-bulk.test.ts).
+// The registered zod validator runs too, so input validation (e.g. the
+// set_due wire format) is asserted at the same seam the client hits.
 vi.mock('@tanstack/react-start', () => ({
   createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     let _handler: ((args: { data: unknown }) => Promise<unknown>) | null = null
-    const fn = (args: { data: unknown }) => {
+    let _schema: { parse: (data: unknown) => unknown } | null = null
+    const fn = async (args: { data: unknown }) => {
       if (!_handler) throw new Error('handler not registered')
-      return _handler(args)
+      return _handler({ data: _schema ? _schema.parse(args.data) : args.data })
     }
-    fn.validator = () => fn
+    fn.validator = (schema: { parse: (data: unknown) => unknown }) => {
+      _schema = schema
+      return fn
+    }
     fn.handler = (h: (args: { data: unknown }) => Promise<unknown>) => {
       _handler = h
       return fn
@@ -240,5 +246,66 @@ describe('bulkUpdateTicketsFn — action routing + delegation', () => {
       succeeded: ['ticket_t1'],
       failed: [{ id: 'ticket_t2', reason: 'boom' }],
     })
+  })
+})
+
+describe('bulkUpdateTicketsFn — set_due', () => {
+  it('turns the ISO instant into a Date for the domain op', async () => {
+    await call({
+      ticketIds: ['ticket_t1', 'ticket_t2'],
+      action: { type: 'set_due', dueAt: '2026-10-21T17:00:00.000Z' },
+    })
+    expect(hoisted.bulkUpdateTickets).toHaveBeenCalledWith(
+      ['ticket_t1', 'ticket_t2'],
+      { type: 'set_due', dueAt: new Date('2026-10-21T17:00:00.000Z') },
+      ACTOR
+    )
+  })
+
+  it('accepts an instant with a zone offset', async () => {
+    await call({
+      ticketIds: ['ticket_t1'],
+      action: { type: 'set_due', dueAt: '2026-10-21T19:00:00+02:00' },
+    })
+    const [, action] = hoisted.bulkUpdateTickets.mock.calls[0]
+    expect((action as { dueAt: Date }).dueAt.toISOString()).toBe('2026-10-21T17:00:00.000Z')
+  })
+
+  it('passes null through as a clear', async () => {
+    await call({ ticketIds: ['ticket_t1'], action: { type: 'set_due', dueAt: null } })
+    expect(hoisted.bulkUpdateTickets).toHaveBeenCalledWith(
+      ['ticket_t1'],
+      { type: 'set_due', dueAt: null },
+      ACTOR
+    )
+  })
+
+  it('rejects a value that is not an ISO instant, before delegating', async () => {
+    for (const dueAt of ['tomorrow', '2026-10-21', 1_790_000_000_000]) {
+      await expect(
+        call({ ticketIds: ['ticket_t1'], action: { type: 'set_due', dueAt } })
+      ).rejects.toThrow()
+    }
+    // A missing dueAt is not a clear: clearing is an explicit null.
+    await expect(call({ ticketIds: ['ticket_t1'], action: { type: 'set_due' } })).rejects.toThrow()
+    expect(hoisted.bulkUpdateTickets).not.toHaveBeenCalled()
+  })
+
+  it('is gated on ticket.set_status, like priority', async () => {
+    hoisted.requireAuth.mockResolvedValue({ ...AUTH, permissions: [PERMISSIONS.TICKET_VIEW] })
+    await expect(
+      call({ ticketIds: ['ticket_t1'], action: { type: 'set_due', dueAt: null } })
+    ).rejects.toThrow(/ticket\.set_status/)
+    expect(hoisted.bulkUpdateTickets).not.toHaveBeenCalled()
+  })
+
+  it('runs for a role that holds ticket.set_status', async () => {
+    hoisted.requireAuth.mockResolvedValue({
+      ...AUTH,
+      permissions: [PERMISSIONS.TICKET_VIEW, PERMISSIONS.TICKET_SET_STATUS],
+    })
+    hoisted.bulkUpdateTickets.mockResolvedValue({ succeeded: ['ticket_t1'], failed: [] })
+    const res = await call({ ticketIds: ['ticket_t1'], action: { type: 'set_due', dueAt: null } })
+    expect(res.succeeded).toEqual(['ticket_t1'])
   })
 })

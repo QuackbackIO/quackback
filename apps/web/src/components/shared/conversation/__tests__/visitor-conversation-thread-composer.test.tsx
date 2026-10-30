@@ -87,6 +87,10 @@ vi.mock('@/lib/server/functions/tickets', () => ({
   getMyTicketWatchStatusFn: vi.fn(),
   watchMyTicketFn: vi.fn(),
   unwatchMyTicketFn: vi.fn(),
+  getMyTicketSharingFn: vi.fn(),
+  listMyTicketColleaguesFn: vi.fn(),
+  shareMyTicketFn: vi.fn(),
+  removeMyTicketShareFn: vi.fn(),
 }))
 vi.mock('@/components/shared/link-preview-card', () => ({
   LinkPreviews: ({ content }: { content: string }) => {

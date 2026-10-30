@@ -515,6 +515,14 @@ export const conversationParticipants = pgTable(
     principalId: typeIdColumn('principal')('principal_id').notNull(),
     addedByPrincipalId: typeIdColumnNullable('principal')('added_by_principal_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // On a conversation paired with a customer ticket: the participant may
+    // open the shared thread on the portal and in the widget and reply on it
+    // (ticket sharing). False for a plain group thread, where a participant
+    // only gets a copy of agent replies by email.
+    threadAccess: boolean('thread_access').notNull().default(false),
+    // The participant's own read watermark, so their reading never moves the
+    // requester's (conversations.visitor_last_read_at).
+    lastReadAt: timestamp('last_read_at', { withTimezone: true }),
   },
   (table) => [
     // Constraint names match what the SQL migration created.

@@ -10,6 +10,8 @@ export const listIntegrationSyncHistoryFn = createServerFn({ method: 'GET' })
       provider: z.string().min(1).max(50),
       filter: z.enum(['all', 'attention', 'progress', 'successful']).default('all'),
       cursor: z.object({ at: z.iso.datetime(), id: z.uuid() }).optional(),
+      /** One repository of a connection serving several. */
+      destinationId: z.string().max(100).optional(),
     })
   )
   .handler(async ({ data }) => {
