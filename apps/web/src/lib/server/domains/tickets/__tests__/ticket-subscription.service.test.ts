@@ -70,8 +70,8 @@ describe.skipIf(!fixture.available)('ticket-subscription.service (real DB, rolle
     const ticketId = await seedTicket()
     const principalId = await seedPrincipal()
 
-    await subscribeToTicket(principalId, ticketId, 'requester')
-    await subscribeToTicket(principalId, ticketId, 'assignee')
+    expect(await subscribeToTicket(principalId, ticketId, 'requester')).toBe(true)
+    expect(await subscribeToTicket(principalId, ticketId, 'assignee')).toBe(false)
 
     const rows = await readRows(ticketId)
     expect(rows).toHaveLength(1)
@@ -83,7 +83,9 @@ describe.skipIf(!fixture.available)('ticket-subscription.service (real DB, rolle
     const principalId = await seedPrincipal()
 
     await subscribeToTicket(principalId, ticketId, 'requester')
-    await unsubscribeFromTicket(principalId, ticketId)
+    // Resolves the removed row's reason, and null once nothing is left to remove.
+    expect(await unsubscribeFromTicket(principalId, ticketId)).toBe('requester')
+    expect(await unsubscribeFromTicket(principalId, ticketId)).toBeNull()
     expect(await readRows(ticketId)).toHaveLength(0)
 
     await subscribeToTicket(principalId, ticketId, 'assignee')

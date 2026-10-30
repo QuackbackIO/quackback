@@ -14,7 +14,18 @@
  * EventTicketMessageData): ticket events only ever reach admin-configured
  * consumers, never a per-user or public subscription.
  */
-import type { Ticket } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  and,
+  isNull,
+  tickets,
+  type Ticket,
+  type ConversationMessage,
+  type ConversationAttachment,
+} from '@/lib/server/db'
+import { attachmentForClient } from '@/lib/server/messages/message-core'
+import type { TicketId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import type {
@@ -30,6 +41,14 @@ import {
   dispatchTicketReplied,
   dispatchTicketNoteAdded,
   dispatchTicketExternalStatusChanged,
+  dispatchTicketDueChanged,
+  dispatchTicketSubscriberAdded,
+  dispatchTicketSubscriberRemoved,
+  dispatchTicketUpdated,
+  dispatchTicketPriorityChanged,
+  dispatchTicketReplyUpdated,
+  dispatchTicketReplyDeleted,
+  dispatchTicketAttachmentChanged,
 } from '@/lib/server/events/dispatch'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
@@ -48,7 +67,9 @@ function toEventActor(actor: Actor): EventActor {
   return { type: 'user', principalId }
 }
 
-function ticketRef(t: Ticket): EventTicketRef {
+/** The minimal ticket ref every ticket event embeds. Exported for the
+ *  ticket-due sweep, which builds the same ref for its timer events. */
+export function ticketRef(t: Ticket): EventTicketRef {
   return {
     id: t.id,
     number: t.number,
@@ -57,6 +78,7 @@ function ticketRef(t: Ticket): EventTicketRef {
     priority: t.priority,
     assignedPrincipalId: t.assigneePrincipalId ?? null,
     assignedTeamId: t.assigneeTeamId ?? null,
+    dueAt: t.dueAt ? t.dueAt.toISOString() : null,
   }
 }
 
@@ -170,10 +192,54 @@ export async function emitTicketAssigned(
   )
 }
 
+/** The ticket was renamed (setTicketTitle). Only fired on an actual change. */
+export async function emitTicketUpdated(
+  actor: Actor,
+  ticket: Ticket,
+  previousTitle: string
+): Promise<void> {
+  await safe('ticket.updated', () =>
+    dispatchTicketUpdated(toEventActor(actor), ticketRef(ticket), ticket.title, previousTitle, [
+      'title',
+    ])
+  )
+}
+
+/** The triage priority moved (setTicketPriority). Only fired on an actual change. */
+export async function emitTicketPriorityChanged(
+  actor: Actor,
+  ticket: Ticket,
+  previousPriority: string
+): Promise<void> {
+  await safe('ticket.priority_changed', () =>
+    dispatchTicketPriorityChanged(
+      toEventActor(actor),
+      ticketRef(ticket),
+      ticket.title,
+      previousPriority,
+      ticket.priority
+    )
+  )
+}
+
 /** A reply on a customer ticket thread — an agent reply or the requester's own
  *  reply. senderType disambiguates the two for consumers. */
 export async function emitTicketReplied(
   actor: Actor,
+  ticket: Ticket,
+  message: ConversationMessageDTO
+): Promise<void> {
+  await emitTicketRepliedAs(toEventActor(actor), ticket, message)
+}
+
+/**
+ * `emitTicketReplied` for a caller that already holds the event actor rather
+ * than a policy actor: the pair-reply reaction (ticket.event-hooks.ts), which
+ * derives the ticket reply from a conversation's `message.created` and reuses
+ * that event's actor so the reply reads as the same person on both signals.
+ */
+export async function emitTicketRepliedAs(
+  eventActor: EventActor,
   ticket: Ticket,
   message: ConversationMessageDTO
 ): Promise<void> {
@@ -185,7 +251,7 @@ export async function emitTicketReplied(
       author = (await loadAuthors([author.principalId])).get(author.principalId) ?? null
     }
     return dispatchTicketReplied(
-      toEventActor(actor),
+      eventActor,
       ticketRef(ticket),
       message.id,
       contentJsonToMarkdown(message.contentJson, message.content),
@@ -216,4 +282,151 @@ export async function emitTicketNoteAdded(
       message.author?.displayName ?? null
     )
   )
+}
+
+/** The due date was set, moved or cleared. Called only when the value actually
+ *  changed; a due date given at creation rides ticket.created's ticket ref. */
+export async function emitTicketDueChanged(
+  actor: Actor,
+  ticket: Ticket,
+  previousDueAt: Date | null
+): Promise<void> {
+  await safe('ticket.due_changed', () =>
+    dispatchTicketDueChanged(
+      toEventActor(actor),
+      ticketRef(ticket),
+      ticket.title,
+      ticket.dueAt ? ticket.dueAt.toISOString() : null,
+      previousDueAt ? previousDueAt.toISOString() : null
+    )
+  )
+}
+
+/**
+ * A watch changed by hand: `actor` is whoever changed it, `subscriberPrincipalId`
+ * whose watch it is (the same person for a self watch or unwatch). Automatic
+ * watches never come through here.
+ */
+export async function emitTicketSubscriberAdded(
+  actor: Actor,
+  ticket: Ticket,
+  subscriberPrincipalId: string,
+  reason: string | null,
+  /** Who added them, as the person added sees it (the shared-ticket email). */
+  actorName?: string | null
+): Promise<void> {
+  await safe('ticket.subscriber_added', () =>
+    dispatchTicketSubscriberAdded(
+      { ...toEventActor(actor), ...(actorName ? { displayName: actorName } : {}) },
+      ticketRef(ticket),
+      ticket.title,
+      subscriberPrincipalId,
+      reason
+    )
+  )
+}
+
+export async function emitTicketSubscriberRemoved(
+  actor: Actor,
+  ticket: Ticket,
+  subscriberPrincipalId: string,
+  reason: string | null
+): Promise<void> {
+  await safe('ticket.subscriber_removed', () =>
+    dispatchTicketSubscriberRemoved(
+      toEventActor(actor),
+      ticketRef(ticket),
+      ticket.title,
+      subscriberPrincipalId,
+      reason
+    )
+  )
+}
+
+/** The live ticket row a reply edit/delete is announced against, or null when
+ *  the ticket is gone (a deleted ticket's thread changes are not announced). */
+async function liveTicket(ticketId: TicketId): Promise<Ticket | null> {
+  const [row] = await db
+    .select()
+    .from(tickets)
+    .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
+    .limit(1)
+  return row ?? null
+}
+
+/**
+ * A public reply on a ticket thread was edited: a ticket-parented reply, or a
+ * conversation-parented reply on a linked pair (both render in the ticket
+ * thread). The caller passes only public visitor/agent replies; internal notes
+ * and system lines are never announced.
+ */
+export async function emitTicketReplyUpdated(
+  actor: Actor,
+  ticketId: TicketId,
+  message: ConversationMessageDTO,
+  editedAt: Date
+): Promise<void> {
+  await safe('ticket.reply_updated', async () => {
+    const ticket = await liveTicket(ticketId)
+    if (!ticket) return
+    return dispatchTicketReplyUpdated(
+      toEventActor(actor),
+      ticketRef(ticket),
+      message.id,
+      contentJsonToMarkdown(message.contentJson, message.content),
+      messageAttachments(message),
+      message.senderType === 'visitor' ? 'visitor' : 'agent',
+      ticket.title,
+      message.author?.displayName ?? null,
+      editedAt.toISOString()
+    )
+  })
+}
+
+/** A public reply was deleted from a ticket thread (same audience rule as
+ *  emitTicketReplyUpdated). */
+export async function emitTicketReplyDeleted(
+  actor: Actor,
+  ticketId: TicketId,
+  messageId: string,
+  senderType: 'agent' | 'visitor'
+): Promise<void> {
+  await safe('ticket.reply_deleted', async () => {
+    const ticket = await liveTicket(ticketId)
+    if (!ticket) return
+    return dispatchTicketReplyDeleted(
+      toEventActor(actor),
+      ticketRef(ticket),
+      messageId,
+      senderType,
+      ticket.title
+    )
+  })
+}
+
+/** A file was added to or removed from a public reply already sent (same
+ *  audience rule as emitTicketReplyUpdated). The attachment is the stored ref;
+ *  it is placed on a client-reachable URL here, as replies' attachments are. */
+export async function emitTicketAttachmentChanged(
+  change: 'added' | 'removed',
+  actor: Actor,
+  ticketId: TicketId,
+  message: ConversationMessage,
+  attachment: ConversationAttachment
+): Promise<void> {
+  const type = change === 'added' ? 'ticket.attachment_added' : 'ticket.attachment_removed'
+  await safe(type, async () => {
+    const ticket = await liveTicket(ticketId)
+    if (!ticket) return
+    const client = attachmentForClient(attachment)
+    return dispatchTicketAttachmentChanged(
+      type,
+      toEventActor(actor),
+      ticketRef(ticket),
+      message.id,
+      message.senderType === 'visitor' ? 'visitor' : 'agent',
+      ticket.title,
+      { name: client.name, url: client.url, contentType: client.contentType, size: client.size }
+    )
+  })
 }
