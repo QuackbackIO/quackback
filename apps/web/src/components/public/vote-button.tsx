@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn } from '@/lib/shared/utils'
+import { voteBoxClasses } from '@/components/shared/vote-box'
 import type { PostId } from '@quackback/ids'
 
 interface VoteButtonProps {
@@ -73,46 +74,20 @@ export function VoteButton({
 
   const isInteractive = !readonly && !disabled && !noAccessReason
 
-  const sharedClassName = cn(
-    'relative flex items-center justify-center',
-    'border rounded-md',
-    compact
-      ? 'flex-row gap-1 py-1.5 px-2.5 text-xs'
-      : pill
-        ? 'flex-col self-stretch px-3.5 py-1.5 gap-1'
-        : 'flex-col w-12 py-2 gap-0.5',
-    'bg-muted/40 text-muted-foreground',
-    isInteractive && 'group transition-colors duration-200 cursor-pointer',
-    isInteractive &&
-      (hasVoted
-        ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
-        : 'border-border/50 hover:border-border hover:bg-muted/60 hover:text-foreground/80'),
-    (readonly || disabled) && 'border-border/50',
-    isInteractive && isPending && 'opacity-70 cursor-wait',
-    disabled && 'cursor-not-allowed opacity-50',
-    !disabled && noAccessReason && 'cursor-not-allowed opacity-60'
-  )
+  const voteBox = voteBoxClasses({
+    voted: isInteractive && hasVoted,
+    interactive: isInteractive,
+    size: compact ? 'compact' : pill ? 'pill' : 'default',
+    pending: isInteractive && isPending,
+    denied: Boolean(noAccessReason),
+    disabled,
+  })
+  const sharedClassName = cn(voteBox.root, isInteractive && 'cursor-pointer')
 
-  const chevron = (
-    <ChevronUpIcon
-      className={cn(
-        compact || pill ? 'h-3.5 w-3.5' : 'h-4 w-4',
-        isInteractive && 'transition-transform duration-200',
-        isInteractive && hasVoted && 'fill-post-card-voted',
-        isInteractive && !isPending && 'group-hover:-translate-y-0.5'
-      )}
-    />
-  )
+  const chevron = <ChevronUpIcon className={voteBox.chevron} />
 
   const count = (
-    <span
-      data-testid="vote-count"
-      className={cn(
-        'font-semibold tabular-nums',
-        compact || pill ? 'text-xs' : 'text-sm',
-        isInteractive && hasVoted ? 'text-post-card-voted' : 'text-foreground'
-      )}
-    >
+    <span data-testid="vote-count" className={voteBox.count}>
       {displayCount}
     </span>
   )

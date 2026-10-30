@@ -11,16 +11,15 @@ import { getEmbedPreviewFn } from '@/lib/server/functions/embeds'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
 import { cn } from '@/lib/shared/utils'
-
-const voteBoxCls =
-  'flex w-11 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border py-1.5'
+import { voteBoxClasses } from '@/components/shared/vote-box'
 
 /** Display-only vote tally — used in the editor preview (no voting). */
 function StaticVoteBox({ voteCount }: { voteCount: number }) {
+  const voteBox = voteBoxClasses({ voted: false, interactive: false })
   return (
-    <div className={cn(voteBoxCls, 'border-border/50 bg-muted/40 text-muted-foreground')}>
-      <ChevronUpIcon className="h-3.5 w-3.5" />
-      <span className="text-sm font-semibold tabular-nums text-foreground">{voteCount}</span>
+    <div className={voteBox.root}>
+      <ChevronUpIcon className={voteBox.chevron} />
+      <span className={voteBox.count}>{voteCount}</span>
     </div>
   )
 }
@@ -49,23 +48,17 @@ function InteractiveVoteBox({
     voteCount,
     getAuthHeaders,
   })
+  const voteBox = voteBoxClasses({ voted: hasVoted, interactive: true, pending: isPending })
   return (
     <button
       type="button"
       onClick={(e) => handleVote(e)}
       disabled={isPending}
       aria-pressed={hasVoted}
-      className={cn(
-        voteBoxCls,
-        'transition-colors',
-        hasVoted
-          ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
-          : 'border-border/50 bg-muted/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground/80',
-        isPending && 'cursor-wait opacity-70'
-      )}
+      className={voteBox.root}
     >
-      <ChevronUpIcon className={cn('h-3.5 w-3.5', hasVoted && 'fill-post-card-voted')} />
-      <span className="text-sm font-semibold tabular-nums text-foreground">{vc}</span>
+      <ChevronUpIcon className={voteBox.chevron} />
+      <span className={voteBox.count}>{vc}</span>
     </button>
   )
 }

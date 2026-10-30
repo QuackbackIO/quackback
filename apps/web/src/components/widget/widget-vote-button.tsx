@@ -4,6 +4,7 @@ import { useIntl } from 'react-intl'
 import { useWidgetVote } from '@/lib/client/hooks/use-widget-vote'
 import { useWidgetAuth } from './widget-auth-provider'
 import { cn } from '@/lib/shared/utils'
+import { voteBoxClasses } from '@/components/shared/vote-box'
 import type { PostId } from '@quackback/ids'
 
 interface WidgetVoteButtonProps {
@@ -37,6 +38,13 @@ export function WidgetVoteButton({
     postId,
     voteCount: initialVoteCount,
     sessionVersion,
+  })
+  const voteBox = voteBoxClasses({
+    voted: hasVoted,
+    interactive: true,
+    size: compact ? 'compact' : 'default',
+    pending: isPending,
+    denied: Boolean(noAccessReason),
   })
 
   const isHandlingRef = useRef(false)
@@ -88,39 +96,10 @@ export function WidgetVoteButton({
       title={noAccessReason}
       onClick={handleClick}
       disabled={isPending}
-      className={cn(
-        'relative flex items-center justify-center border rounded-md',
-        compact ? 'flex-row gap-1 py-1.5 px-2.5 text-xs' : 'flex-col w-12 py-2 gap-0.5',
-        'group transition-colors duration-200',
-        !noAccessReason && 'cursor-pointer',
-        hasVoted
-          ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
-          : 'bg-muted/40 text-muted-foreground border-border/50',
-        // Hover affordances only when the button is actionable (not denied).
-        !hasVoted &&
-          !noAccessReason &&
-          'hover:border-border hover:bg-muted/60 hover:text-foreground/80',
-        isPending && 'opacity-70 cursor-wait',
-        noAccessReason && 'cursor-not-allowed opacity-60'
-      )}
+      className={cn(voteBox.root, !noAccessReason && 'cursor-pointer')}
     >
-      <ChevronUpIcon
-        className={cn(
-          compact ? 'h-3.5 w-3.5' : 'h-4 w-4',
-          'transition-transform duration-200',
-          hasVoted && 'fill-post-card-voted',
-          !isPending && !noAccessReason && 'group-hover:-translate-y-0.5'
-        )}
-      />
-      <span
-        className={cn(
-          'font-semibold tabular-nums',
-          compact ? 'text-xs' : 'text-sm',
-          hasVoted ? 'text-post-card-voted' : 'text-foreground'
-        )}
-      >
-        {voteCount}
-      </span>
+      <ChevronUpIcon className={voteBox.chevron} />
+      <span className={voteBox.count}>{voteCount}</span>
     </button>
   )
 }
