@@ -7,21 +7,10 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { typeIdSchema, type PortalDesignRevisionId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { actorFromAuth } from '@/lib/server/audit/log'
 import { logger } from '@/lib/server/logger'
-import { requireAuth, type AuthContext } from './auth-helpers'
+import { requireAuth } from './auth-helpers'
 
 const log = logger.child({ module: 'portal-design-fn' })
-
-/** The person a write is recorded for, with the request for the audit row. */
-async function designAuthor(auth: AuthContext) {
-  const { getRequestHeaders } = await import('@tanstack/react-start/server')
-  return {
-    principalId: auth.principal.id,
-    actor: actorFromAuth(auth),
-    headers: getRequestHeaders(),
-  }
-}
 
 export const getPortalDesignFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
@@ -33,6 +22,7 @@ export const savePortalDesignDraftFn = createServerFn({ method: 'POST' })
   .validator(z.object({ design: z.unknown() }))
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    const { designAuthor } = await import('@/lib/server/domains/design/design-author')
     const author = await designAuthor(auth)
     const { saveDesignDraft } = await import('@/lib/server/domains/design/design.actions')
     return saveDesignDraft(data.design, author)
@@ -48,6 +38,7 @@ export const publishPortalDesignFn = createServerFn({ method: 'POST' })
   .validator(z.object({ message: z.string().trim().max(200).optional() }))
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    const { designAuthor } = await import('@/lib/server/domains/design/design-author')
     const author = await designAuthor(auth)
     const { publishDesign } = await import('@/lib/server/domains/design/design.actions')
     const result = await publishDesign({ ...author, source: 'appearance', message: data.message })
@@ -65,6 +56,7 @@ export const restorePortalDesignVersionFn = createServerFn({ method: 'POST' })
   .validator(z.object({ revisionId: typeIdSchema('portal_design_revision') }))
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    const { designAuthor } = await import('@/lib/server/domains/design/design-author')
     const author = await designAuthor(auth)
     const { restoreDesign } = await import('@/lib/server/domains/design/design.actions')
     return restoreDesign(data.revisionId as PortalDesignRevisionId, author)

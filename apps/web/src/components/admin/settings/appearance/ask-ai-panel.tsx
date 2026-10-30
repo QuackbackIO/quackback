@@ -1,0 +1,268 @@
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { applyDesignChanges, type AppliedDesignChange } from '@/lib/shared/design/apply-changes'
+import { BUNDLED_FONTS } from '@/lib/shared/design/fonts'
+import type { PortalDesign } from '@/lib/shared/design/schema'
+import { cn } from '@/lib/shared/utils'
+import { changeLabel } from './change-list'
+import type { DesignAiTurn, DesignLook } from './use-design-ai'
+
+type Update = (change: (draft: PortalDesign) => void) => void
+
+/** A value as a person reads it, with a swatch for a colour. */
+function ChangeValue({ value }: { value: unknown }) {
+  const text = value === null || value === undefined || value === '' ? 'Automatic' : String(value)
+  const colour = typeof value === 'string' && /^(#|oklch\()/.test(value) ? value : null
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      {colour && (
+        <span
+          aria-hidden="true"
+          className="size-4 shrink-0 rounded border border-border"
+          style={{ backgroundColor: colour }}
+        />
+      )}
+      <span className="min-w-0 truncate">{text}</span>
+    </span>
+  )
+}
+
+/**
+ * What one request changed, already in the draft: the applied state of the
+ * admin's settings change card, with an Undo on each row.
+ */
+function DesignChangeCard({
+  changes,
+  readability,
+  update,
+}: {
+  changes: AppliedDesignChange[]
+  readability: string[]
+  update: Update
+}) {
+  const [undone, setUndone] = useState<Set<string>>(new Set())
+  const undo = (rows: AppliedDesignChange[]) => {
+    update((draft) => {
+      const restored = applyDesignChanges(
+        draft,
+        rows.map((row) => ({ path: row.path, value: row.before })),
+        'site'
+      )
+      Object.assign(draft, restored.design)
+    })
+    setUndone((previous) => new Set([...previous, ...rows.map((row) => row.path)]))
+  }
+  const open = changes.filter((change) => !undone.has(change.path))
+  return (
+    <div className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-raise">
+      <p className="text-sm font-medium">
+        {open.length === 0 ? 'Changes undone' : 'Changes applied to your draft'}
+      </p>
+      {changes.map((change) => (
+        <div key={change.path} className="space-y-2 rounded-lg bg-muted/40 p-3 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate font-medium">{changeLabel(change.path)}</span>
+            {undone.has(change.path) ? (
+              <span className="text-xs text-muted-foreground">Undone</span>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="-my-1 focus-visible:ring-muted-foreground"
+                onClick={() => undo([change])}
+              >
+                Undo
+              </Button>
+            )}
+          </div>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 text-xs">
+            <ChangeValue value={change.before} />
+            <span aria-hidden="true">→</span>
+            <ChangeValue value={change.after} />
+          </div>
+        </div>
+      ))}
+      {readability.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          To keep text readable, Quackback AI also adjusted {readability.join(', ')}.
+        </p>
+      )}
+      {open.length > 1 && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="focus-visible:ring-muted-foreground"
+          onClick={() => undo(open)}
+        >
+          Undo all
+        </Button>
+      )}
+    </div>
+  )
+}
+
+/** A look as a small card: its colours and its heading face. */
+function LookSwatch({ look }: { look: DesignLook }) {
+  const { light, fonts } = look.design.brand
+  const heading = fonts.heading.kind === 'bundled' ? fonts.heading.id : null
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-12 w-20 shrink-0 items-center justify-center gap-2 rounded-md border border-border"
+      style={{ background: light.background, color: light.ink }}
+    >
+      <span className="size-4 rounded-full" style={{ background: light.accent }} />
+      <span
+        style={{
+          fontFamily: heading ? BUNDLED_FONTS[heading].stack : undefined,
+          fontWeight: fonts.headingWeight,
+        }}
+      >
+        Aa
+      </span>
+    </span>
+  )
+}
+
+/**
+ * Ask AI: the conversation. Before the first request it offers ways to start;
+ * every start ends in the draft, and nothing is live until a person publishes.
+ */
+export function AskAiPanel({
+  available,
+  turns,
+  busy,
+  update,
+  onStart,
+  onLook,
+  onPresets,
+}: {
+  available: boolean
+  turns: DesignAiTurn[]
+  busy: boolean
+  update: Update
+  onStart: (kind: 'website' | 'words', value: string) => void
+  onLook: (look: DesignLook) => void
+  onPresets: () => void
+}) {
+  const [site, setSite] = useState('')
+  const [words, setWords] = useState('')
+
+  if (!available) {
+    return (
+      <p className="text-[13px] text-muted-foreground">
+        Quackback AI is not set up for this workspace. Brand and Sections work in full.
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {turns.length === 0 && (
+        <div className="space-y-4">
+          <p className="text-[13px] text-muted-foreground">
+            Start from your website, a few words or a preset. Changes go into your draft.
+          </p>
+          <form
+            className="space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (site.trim() && !busy) onStart('website', site.trim())
+            }}
+          >
+            <label htmlFor="ai-site" className="text-[13px] font-medium">
+              Match my website
+            </label>
+            <div className="flex gap-2">
+              <Input
+                id="ai-site"
+                placeholder="example.com"
+                value={site}
+                onChange={(event) => setSite(event.target.value)}
+              />
+              <Button type="submit" variant="outline" disabled={!site.trim() || busy}>
+                Go
+              </Button>
+            </div>
+          </form>
+          <div className="space-y-2">
+            <label htmlFor="ai-words" className="text-[13px] font-medium">
+              Describe your brand
+            </label>
+            <Textarea
+              id="ai-words"
+              rows={2}
+              placeholder="Calm and friendly, deep green, lots of room"
+              value={words}
+              onChange={(event) => setWords(event.target.value)}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!words.trim() || busy}
+              onClick={() => onStart('words', words.trim())}
+            >
+              Suggest three looks
+            </Button>
+          </div>
+          <Button variant="ghost" size="sm" className="-ms-2" onClick={onPresets}>
+            Start from a preset
+          </Button>
+        </div>
+      )}
+
+      <ol className="space-y-3" aria-live="polite">
+        {turns.map((turn, index) => (
+          <li key={index} className={cn('text-[13.5px]', turn.role === 'user' && 'ms-8')}>
+            {turn.role === 'user' ? (
+              <p className="rounded-2xl bg-muted px-3 py-2">{turn.text}</p>
+            ) : (
+              <div className="space-y-2">
+                <p>{turn.text}</p>
+                {turn.changes && turn.changes.length > 0 && (
+                  <DesignChangeCard
+                    changes={turn.changes}
+                    readability={turn.readability ?? []}
+                    update={update}
+                  />
+                )}
+                {turn.looks && (
+                  <div className="grid grid-cols-1 gap-2">
+                    {turn.looks.map((look) => (
+                      <button
+                        key={look.name}
+                        type="button"
+                        className="flex items-center gap-3 rounded-lg border border-border p-2 text-start hover:bg-muted/40"
+                        onClick={() => {
+                          onLook(look)
+                          update((draft) => void Object.assign(draft, look.design))
+                        }}
+                      >
+                        <LookSwatch look={look} />
+                        <span className="min-w-0">
+                          <span className="block text-[13px] font-medium">{look.name}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {look.description}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </li>
+        ))}
+        {busy && (
+          <li className="text-[13px] text-muted-foreground" aria-busy="true">
+            Working on it…
+          </li>
+        )}
+      </ol>
+    </div>
+  )
+}

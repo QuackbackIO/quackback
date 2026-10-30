@@ -102,7 +102,10 @@ export const Route = createFileRoute('/admin/settings/portal')({
       // not imported above: a loader's imports ship in the entry chunk.
       context.settings?.portalDesign?.engine === 'v2'
         ? import('@/lib/client/queries/portal-design').then(({ portalDesignQueries }) =>
-            ensure(portalDesignQueries.editor())
+            Promise.all([
+              ensure(portalDesignQueries.editor()),
+              ensure(portalDesignQueries.aiStatus()),
+            ])
           )
         : undefined,
     ])
