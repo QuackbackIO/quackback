@@ -89,6 +89,29 @@ export function NavDrawing({ nav }: { nav: Layout['nav'] }) {
   )
 }
 
+export function HeaderDrawing({ header }: { header: Layout['header'] }) {
+  const logo = <span className="size-2.5 shrink-0 rounded-sm bg-foreground/50" />
+  const menu = (
+    <span className="flex gap-0.5">
+      <span className="h-1.5 w-3 rounded-sm bg-foreground/30" />
+      <span className="h-1.5 w-3 rounded-sm bg-foreground/30" />
+    </span>
+  )
+  if (header === 'inline')
+    return (
+      <span className="flex w-14 items-center gap-1.5">
+        {logo}
+        {menu}
+      </span>
+    )
+  return (
+    <span className={cn('flex w-14 flex-col gap-1', header === 'centered' && 'items-center')}>
+      {logo}
+      {menu}
+    </span>
+  )
+}
+
 export function BandDrawing({ band }: { band: Layout['band'] }) {
   return (
     <span className="flex h-full w-full flex-col">
