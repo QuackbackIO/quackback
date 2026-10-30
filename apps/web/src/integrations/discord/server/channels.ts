@@ -33,11 +33,15 @@ export async function validateDiscordDestination({
   )
   if (response.status === 404) return false
   // Discord answers 403 Missing Access for a channel hidden from the bot, typically a
-  // private channel whose permissions were never extended to the bot's role.
+  // private channel whose permissions were never extended to the bot's role. `status`
+  // keeps the sync worker's pre-delivery check classifying it as auth_required.
   if (response.status === 403)
-    throw new ValidationError(
-      'DISCORD_CHANNEL_NO_ACCESS',
-      'Give the bot access to this channel in Discord, then try again.'
+    throw Object.assign(
+      new ValidationError(
+        'DISCORD_CHANNEL_NO_ACCESS',
+        'Give the bot access to this channel in Discord, then try again.'
+      ),
+      { status: 403 }
     )
   if (!response.ok)
     throw Object.assign(new Error('Could not verify Discord channel'), { status: response.status })

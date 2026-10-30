@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ValidationError } from '@/lib/shared/errors'
+import { deliveryError } from '@/lib/server/integrations/sync/outcomes'
 import { listDiscordChannels, validateDiscordDestination } from '../channels'
 
 const VIEW = 1n << 10n
@@ -227,6 +228,19 @@ describe('validateDiscordDestination', () => {
     await expect(result).rejects.toThrow(
       'Give the bot access to this channel in Discord, then try again.'
     )
+  })
+
+  it('keeps a hidden channel classified as needing attention when a delivery is checked', async () => {
+    guild.channelStatus = { 'c-private': 403 }
+
+    const error = await validateDiscordDestination({
+      target: { channelId: 'c-private' },
+      config,
+      accessToken: TOKEN,
+    }).catch((e: unknown) => e)
+
+    // The sync worker validates before each delivery; a 403 must not become a retryable outcome.
+    expect(deliveryError(error)).toEqual({ state: 'auth_required', errorCode: 'authentication' })
   })
 
   it('returns false for a channel that does not exist', async () => {

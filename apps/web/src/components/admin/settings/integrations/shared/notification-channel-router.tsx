@@ -722,11 +722,15 @@ function AddChannelDialog<TChannel extends Channel>({
   }, [open, events, resetAdd])
 
   const availableChannels = channels.filter((c) => !existingChannelIds.includes(c.id))
+  // A refresh can mark the picked channel unpostable; treat that as no selection.
+  const channelId = availableChannels.some((c) => c.id === selectedChannelId && c.canPost !== false)
+    ? selectedChannelId
+    : ''
   const allEventsSelected = events.every((e) => selectedEvents[e.id])
   const noEventsSelected = events.every((e) => !selectedEvents[e.id])
 
   const handleSave = () => {
-    if (!selectedChannelId) return
+    if (!channelId) return
     const eventsToSave = Object.entries(selectedEvents)
       .filter(([, enabled]) => enabled)
       .map(([eventType]) => eventType)
@@ -736,7 +740,7 @@ function AddChannelDialog<TChannel extends Channel>({
     addMutation.mutate(
       {
         integrationId,
-        channelId: selectedChannelId,
+        channelId,
         events: eventsToSave,
         boardIds: boardIds ?? undefined,
       },
@@ -759,7 +763,7 @@ function AddChannelDialog<TChannel extends Channel>({
             <Label>Channel</Label>
             <ChannelPicker<TChannel>
               channels={availableChannels}
-              value={selectedChannelId}
+              value={channelId}
               onSelect={(channelId) => {
                 setSelectedChannelId(channelId)
                 resetAdd()
@@ -830,7 +834,7 @@ function AddChannelDialog<TChannel extends Channel>({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!selectedChannelId || noEventsSelected || addMutation.isPending}
+            disabled={!channelId || noEventsSelected || addMutation.isPending}
           >
             {addMutation.isPending ? 'Adding...' : 'Add channel'}
           </Button>

@@ -51,13 +51,13 @@ function renderRouter(channels: Channel[], notificationChannels: NotificationCha
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  return render(
+  const ui = (list: Channel[]) => (
     <QueryClientProvider client={client}>
       <NotificationChannelRouter<Channel>
         integrationId="integration_1"
         enabled
         events={EVENTS}
-        channels={channels}
+        channels={list}
         notificationChannels={notificationChannels}
         boards={[]}
         loadingChannels={false}
@@ -67,6 +67,8 @@ function renderRouter(channels: Channel[], notificationChannels: NotificationCha
       />
     </QueryClientProvider>
   )
+  const result = render(ui(channels))
+  return { ...result, refreshChannels: (list: Channel[]) => result.rerender(ui(list)) }
 }
 
 async function pickChannel(name: string) {
@@ -119,6 +121,21 @@ describe('NotificationChannelRouter', () => {
     )
 
     fireEvent.click(blocked)
+    expect(screen.getByRole('combobox', { name: 'Channel' }).textContent).toContain(
+      'Select a channel'
+    )
+    expect(
+      (screen.getByRole('button', { name: 'Add channel' }) as HTMLButtonElement).disabled
+    ).toBe(true)
+  })
+
+  it('drops a picked channel that a refresh marks as unpostable', async () => {
+    const { refreshChannels } = renderRouter([{ id: 'c1', name: 'general' }])
+
+    await pickChannel('general')
+    expect(screen.getByRole('combobox', { name: 'Channel' }).textContent).toContain('general')
+    refreshChannels([{ id: 'c1', name: 'general', canPost: false }])
+
     expect(screen.getByRole('combobox', { name: 'Channel' }).textContent).toContain(
       'Select a channel'
     )
