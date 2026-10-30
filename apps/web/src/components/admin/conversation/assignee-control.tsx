@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { ChevronDownIcon, CheckIcon, UserCircleIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
@@ -56,7 +57,7 @@ export function AssigneeMenuItems({
 }
 
 /** Header control to assign a conversation to any team member (or unassign). */
-export function AssigneeControl({
+export const AssigneeControl = memo(function AssigneeControl({
   conversationId,
   assignedAgent,
   onChanged,
@@ -108,4 +109,4 @@ export function AssigneeControl({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
+})

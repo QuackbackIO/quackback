@@ -5,6 +5,7 @@
  * COPILOT_PANEL_SHORTCUTS (bound by the panel, not the hook), so it can never
  * list a key nothing binds.
  */
+import { memo } from 'react'
 import { INBOX_ACTIONS, INBOX_ACTION_GROUP_ORDER } from '@/lib/shared/conversation/inbox-actions'
 import { INBOX_GLOBAL_SHORTCUTS } from './use-inbox-keyboard'
 import { COPILOT_PANEL_SHORTCUTS } from './copilot-panel'
@@ -38,7 +39,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-export function ShortcutHelpPanel({
+export const ShortcutHelpPanel = memo(function ShortcutHelpPanel({
   open,
   onOpenChange,
   copilotAvailable,
@@ -89,4 +90,4 @@ export function ShortcutHelpPanel({
       </DialogContent>
     </Dialog>
   )
-}
+})

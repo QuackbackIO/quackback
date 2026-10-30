@@ -7,6 +7,7 @@ import { isValidTypeId } from '@quackback/ids'
 import type {
   ConversationId,
   ConversationMessageId,
+  ConversationViewId,
   CompanyId,
   TicketId,
   TicketStatusId,
@@ -112,6 +113,7 @@ import type { TicketDTO } from '@/lib/server/domains/tickets'
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
+import { useStableCallback } from '@/lib/client/hooks/use-stable-callback'
 import { useInboxListSource } from '@/lib/client/hooks/use-inbox-list-source'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
 import { useCopilotTabGate } from '@/lib/client/hooks/use-copilot-tab-gate'
@@ -1450,6 +1452,15 @@ function InboxPage() {
     ]
   )
 
+  // The page's closed dialogs and command bar are memoised; these keep their
+  // handlers stable so a list or thread update does not render them again.
+  const runInboxAction = useStableCallback(onInboxAction)
+  const openSavedView = useStableCallback((viewId: ConversationViewId) =>
+    setNav({ kind: 'custom', viewId })
+  )
+  const selectCreatedTicket = useStableCallback((id: TicketId) => setSelectedId(id))
+  const clearCloseBlocked = useCallback(() => setCloseBlocked(null), [])
+
   // Bind global shortcuts only when the inbox itself is focused — never behind a
   // modal (command bar, help, the view dialog, or the `?post=` overlay), so their
   // own key handling wins.
@@ -1513,16 +1524,16 @@ function InboxPage() {
         open={viewDialogOpen}
         onOpenChange={setViewDialogOpen}
         editing={editingView}
-        onSaved={(viewId) => setNav({ kind: 'custom', viewId })}
+        onSaved={openSavedView}
       />
-      <RequiredAttributesDialog messages={closeBlocked} onClose={() => setCloseBlocked(null)} />
+      <RequiredAttributesDialog messages={closeBlocked} onClose={clearCloseBlocked} />
       {/* Standalone create-ticket (command bar with nothing selected) — the
           "from a conversation" flow is mounted inside `AgentConversationThread`
           instead, where the conversation data it prefills from already lives. */}
       <CreateTicketDialog
         open={standaloneCreateTicketOpen}
         onOpenChange={setStandaloneCreateTicketOpen}
-        onCreated={(id) => setSelectedId(id)}
+        onCreated={selectCreatedTicket}
         onChanged={refreshInbox}
       />
       {isSaved ? (
@@ -1631,7 +1642,7 @@ function InboxPage() {
       <InboxCommandBar
         open={commandOpen}
         onOpenChange={setCommandOpen}
-        onAction={onInboxAction}
+        onAction={runInboxAction}
         hasSelection={hasSelection}
         hasActiveConversation={hasActiveConversation}
         hasTicketTarget={hasTicketTarget}

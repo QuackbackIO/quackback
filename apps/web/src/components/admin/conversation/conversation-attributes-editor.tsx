@@ -6,7 +6,7 @@
  * envelope. Renders nothing while no definitions exist so the panel stays
  * clean for workspaces that haven't adopted attributes.
  */
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDownIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
@@ -174,7 +174,7 @@ function AttributeEditor({
   }
 }
 
-export function ConversationAttributesEditor({
+export const ConversationAttributesEditor = memo(function ConversationAttributesEditor({
   target,
   customAttributes,
   onChanged,
@@ -240,4 +240,4 @@ export function ConversationAttributesEditor({
       })}
     </div>
   )
-}
+})

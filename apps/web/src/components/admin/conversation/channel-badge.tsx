@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { ChatBubbleLeftRightIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
 import type { Channel } from '@/lib/shared/conversation/types'
 import { channelLabelMap, getChannelDescriptor } from '@/lib/shared/channels'
@@ -13,7 +14,7 @@ const CHANNEL_ICON = {
 } as const
 
 /** Badge showing a non-default (their-surface) channel; first-party messenger is silent. */
-export function ChannelBadge({ channel }: { channel: Channel }) {
+export const ChannelBadge = memo(function ChannelBadge({ channel }: { channel: Channel }) {
   const descriptor = getChannelDescriptor(channel)
   if (!descriptor || descriptor.surface === 'ours') return null
   const label = descriptor.label
@@ -24,7 +25,7 @@ export function ChannelBadge({ channel }: { channel: Channel }) {
       {label}
     </span>
   )
-}
+})
 
 /** Flags to an agent that an offline reply has no address to reach. */
 export function NoEmailBadge() {

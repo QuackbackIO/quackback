@@ -4,7 +4,7 @@
  * body against the live conversation and runs its bundled actions server-side
  * (on use, not on send), then inserts the rendered text and toasts what ran.
  */
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ChatBubbleBottomCenterTextIcon } from '@heroicons/react/24/solid'
@@ -20,7 +20,7 @@ import {
   CommandItem,
 } from '@/components/ui/command'
 
-export function MacroPicker({
+export const MacroPicker = memo(function MacroPicker({
   conversationId,
   onInsert,
   onApplied,
@@ -102,4 +102,4 @@ export function MacroPicker({
       </PopoverContent>
     </Popover>
   )
-}
+})

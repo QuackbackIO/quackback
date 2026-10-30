@@ -6,6 +6,7 @@
  * context, and reports the chosen id to the parent. It owns no behavior — the
  * parent supplies `onAction`.
  */
+import { memo } from 'react'
 import {
   INBOX_ACTIONS,
   INBOX_ACTION_GROUP_ORDER,
@@ -44,7 +45,7 @@ export interface InboxCommandBarProps {
   copilotAvailable?: boolean
 }
 
-export function InboxCommandBar({
+export const InboxCommandBar = memo(function InboxCommandBar({
   open,
   onOpenChange,
   onAction,
@@ -114,4 +115,4 @@ export function InboxCommandBar({
       </DialogContent>
     </Dialog>
   )
-}
+})

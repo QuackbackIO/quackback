@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { ChevronDownIcon, CheckIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
@@ -65,7 +66,7 @@ export function PriorityMenuItems({
 }
 
 /** Header control to view + change a conversation's triage priority. */
-export function PriorityControl({
+export const PriorityControl = memo(function PriorityControl({
   conversationId,
   value,
   onChanged,
@@ -100,4 +101,4 @@ export function PriorityControl({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
+})

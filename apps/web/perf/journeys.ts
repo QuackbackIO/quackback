@@ -557,11 +557,12 @@ export const journeys: Journey[] = [
     // its lists up. The teardown puts the conversation back as seeded, so no
     // journey after it (nor this one, repeated) sees the reply.
     //
-    // Its componentRenders has two readings, about 410 and 435. The send's
-    // response and the stream's echo of the conversation race: when the echo
-    // lands first, the thread renders once more. The ceiling is the higher
-    // reading, so an --update from a single run that took the fast path must
-    // not lower it.
+    // The send's response and the stream's echo of the conversation race, and
+    // when the echo lands first the thread renders once more. That render used
+    // to re-render every closed menu, dialog and detail-panel control (about
+    // 100 renders, so the count read either 621 or 721); with those memoised
+    // it costs about 20, inside the tolerance. If the count starts reading two
+    // values again, budget it at the higher one with --update --repeat.
     kind: 'browser',
     name: 'ui:admin-inbox-send-reply',
     as: 'admin',
