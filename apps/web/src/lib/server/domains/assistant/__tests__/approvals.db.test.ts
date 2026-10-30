@@ -1,24 +1,19 @@
 /**
- * The approval rules, against a real database: who may decide a request, what
- * a decision binds to, and what it emits and notifies.
+ * The approval rules, against a real database: who may decide a request and
+ * what a decision binds to.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
-  and,
   eq,
   principal,
   user,
   settings,
-  events,
   conversations,
   assistantPendingActions,
-  inAppNotifications,
-  roles,
-  principalRoleAssignments,
 } from '@/lib/server/db'
-import { ALL_PERMISSIONS, PERMISSIONS, SYSTEM_ROLE_PERMISSIONS } from '@/lib/shared/permissions'
+import { ALL_PERMISSIONS, PERMISSIONS } from '@/lib/shared/permissions'
 import { permissionsForLegacyRole } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 
@@ -41,14 +36,9 @@ import {
   undoWorkspaceSettingsProposal,
 } from '../workspace-settings-actions.service'
 import { proposePendingAction } from '../pending-actions.service'
-import {
-  approvalFieldsForDisplay,
-  listEligibleDeciders,
-  rejectApproval,
-} from '../approvals.service'
+import { approvalFieldsForDisplay, rejectApproval } from '../approvals.service'
 import { decideAssistantAction } from '../assistant-actions.service'
 import { digestOf } from '@/lib/server/utils/canonical-json'
-import { getApprovalForViewer, listApprovalsForViewer } from '../approvals.queue'
 
 const fixture = await createDbTestFixture()
 
@@ -119,13 +109,6 @@ const rowOf = async (id: string) =>
       .from(assistantPendingActions)
       .where(eq(assistantPendingActions.id, id as never))
   )[0]!
-
-const eventsFor = async (id: string) =>
-  testDb
-    .select({ type: events.type, payload: events.payload, actorId: events.actorId })
-    .from(events)
-    .where(eq(events.entityId, id))
-    .orderBy(events.id)
 
 describe('who may decide', () => {
   it('lets any person with the needed permissions approve, not only the thread owner', async () => {
@@ -211,6 +194,7 @@ describe('who may decide', () => {
 
   it('never lets a person approve a request they filed themselves', async () => {
     const pending = await proposePendingAction({
+      workspaceThreadKey: threadKey,
       toolName: 'propose_settings_change',
       args: (await homeProposal()).args,
       summary: 'ignored',
@@ -471,221 +455,6 @@ describe('server-written summaries and risk', () => {
     expect(await rowOf(pending.id)).toMatchObject({
       summary: 'Turn on Messenger',
       risk: 'medium',
-    })
-  })
-})
-
-describe('events', () => {
-  it('emits requested, decided and applied through the event spine', async () => {
-    const pending = await homeProposal()
-    expect(await eventsFor(pending.id)).toEqual([
-      expect.objectContaining({
-        type: 'approval.requested',
-        payload: expect.objectContaining({
-          approvalId: pending.id,
-          summary: 'Change the workspace name',
-          risk: 'low',
-          requestedVia: 'assistant',
-        }),
-      }),
-    ])
-    await applyWorkspaceSettingsProposal(otherAdmin, pending.id, ['portal.displayName'], {
-      contentHash: pending.argsDigest!,
-    })
-    expect((await eventsFor(pending.id)).map((event) => [event.type, event.actorId])).toEqual([
-      ['approval.requested', expect.anything()],
-      ['approval.decided', otherAdmin.principalId],
-      ['approval.applied', otherAdmin.principalId],
-    ])
-    const decided = (await eventsFor(pending.id))[1]!
-    expect(decided.payload).toMatchObject({ decision: 'approved', decidedVia: 'app' })
-  })
-
-  it('emits a rejection with its reason', async () => {
-    const pending = await homeProposal()
-    await rejectApproval(otherAdmin, pending.id, {
-      contentHash: pending.argsDigest!,
-      reason: 'Not now',
-    })
-    const types = await eventsFor(pending.id)
-    expect(types.map((event) => event.type)).toEqual(['approval.requested', 'approval.decided'])
-    expect(types[1]!.payload).toMatchObject({ decision: 'rejected', reason: 'Not now' })
-  })
-})
-
-describe('notifications', () => {
-  it('goes to people who can decide, never the requester or someone without permission', async () => {
-    const pending = await homeProposal()
-    const deciders = await listEligibleDeciders(await rowOf(pending.id))
-    expect(deciders).toContain(otherAdmin.principalId)
-    // The person whose assistant asked sees the card in their own chat.
-    expect(deciders).not.toContain(owner.principalId)
-    expect(deciders).not.toContain(member.principalId)
-
-    const changelog = await enqueueWorkspaceSettingsProposal(
-      owner,
-      [{ area: 'changelog', patch: { autoSubscribe: false } }],
-      undefined,
-      undefined,
-      { via: 'mcp', onBehalfOfPrincipalId: owner.principalId! }
-    )
-    const changelogDeciders = await listEligibleDeciders(await rowOf(changelog.id))
-    expect(changelogDeciders).toEqual(
-      expect.arrayContaining([owner.principalId, otherAdmin.principalId, member.principalId])
-    )
-
-    await testDb
-      .update(assistantPendingActions)
-      .set({ risk: 'high' })
-      .where(eq(assistantPendingActions.id, changelog.id))
-    const highDeciders = await listEligibleDeciders(await rowOf(changelog.id))
-    expect(highDeciders).toContain(otherAdmin.principalId)
-    expect(highDeciders).not.toContain(member.principalId)
-  })
-
-  it('creates one batched bell per decider instead of one per request', async () => {
-    const { getApprovalRequestedTargets } = await import('@/lib/server/events/targets')
-    const { notificationHook } = await import('@/lib/server/events/handlers/notification')
-    const notify = async (id: string) => {
-      const event = {
-        id: createId('event'),
-        type: 'approval.requested',
-        timestamp: new Date().toISOString(),
-        actor: { type: 'service' },
-        data: { approvalId: id },
-      } as never
-      const target = await getApprovalRequestedTargets(event)
-      expect(target).not.toBeNull()
-      return notificationHook.run(event, target!.target, target!.config)
-    }
-    const first = await homeProposal()
-    expect((await notify(first.id)).success).toBe(true)
-    const [one] = await testDb
-      .select()
-      .from(inAppNotifications)
-      .where(eq(inAppNotifications.principalId, otherAdmin.principalId!))
-    // One request reads as one, with the server's summary of it.
-    expect(one).toMatchObject({ title: 'New approval request', body: 'Change the workspace name' })
-    const second = await homeProposal({ displayName: 'Acme two' })
-    expect((await notify(second.id)).success).toBe(true)
-    const bells = await testDb
-      .select()
-      .from(inAppNotifications)
-      .where(
-        and(
-          eq(inAppNotifications.principalId, otherAdmin.principalId!),
-          eq(inAppNotifications.type, 'approval_requested')
-        )
-      )
-    expect(bells).toHaveLength(1)
-    expect(bells[0]!.metadata).toMatchObject({ approvalId: second.id, count: 2 })
-    expect(bells[0]!.title).toBe('2 new approval requests')
-    const ownerBells = await testDb
-      .select()
-      .from(inAppNotifications)
-      .where(eq(inAppNotifications.principalId, owner.principalId!))
-    expect(ownerBells).toHaveLength(0)
-    const memberBells = await testDb
-      .select()
-      .from(inAppNotifications)
-      .where(eq(inAppNotifications.principalId, member.principalId!))
-    expect(memberBells).toHaveLength(0)
-  })
-})
-
-describe('the approvals queue', () => {
-  it('lists a conversation request for everyone it notifies, assigned or not', async () => {
-    // A teammate who may see every conversation (conversation.view) but has
-    // none assigned: the rule a decision checks for one conversation.
-    const contributor = await seedPerson('member')
-    const [role] = await testDb.select().from(roles).where(eq(roles.key, 'contributor'))
-    await testDb
-      .insert(principalRoleAssignments)
-      .values({ principalId: contributor.principalId!, roleId: role!.id })
-    const scoped: Actor = {
-      ...contributor,
-      permissions: new Set(SYSTEM_ROLE_PERMISSIONS.contributor),
-    }
-    expect(scoped.permissions!.has(PERMISSIONS.CONVERSATION_VIEW_ALL)).toBe(false)
-    const keyPrincipal = await seedServicePrincipal()
-    const [conversation] = await testDb
-      .insert(conversations)
-      .values({ visitorPrincipalId: keyPrincipal, channel: 'messenger', createdAt: new Date() })
-      .returning()
-    const pending = await proposePendingAction({
-      conversationId: conversation!.id,
-      toolName: 'end_conversation',
-      args: {},
-      summary: 'Close the conversation',
-    })
-    expect(await listEligibleDeciders(await rowOf(pending.id))).toContain(contributor.principalId)
-    expect((await listApprovalsForViewer(scoped)).map((row) => row.id)).toContain(pending.id)
-    expect(await getApprovalForViewer(scoped, pending.id)).toMatchObject({
-      id: pending.id,
-      canDecide: true,
-    })
-  })
-
-  it('lists only what the viewer may decide, across parents', async () => {
-    const home = await homeProposal()
-    const keyPrincipal = await seedServicePrincipal()
-    const parentless = await proposePendingAction({
-      toolName: 'propose_settings_change',
-      args: (
-        await enqueueWorkspaceSettingsProposal(
-          owner,
-          [{ area: 'changelog', patch: { autoSubscribe: false } }],
-          undefined,
-          'turn-2'
-        )
-      ).args,
-      summary: 'ignored',
-      originRole: 'workspace_assistant',
-      requester: { via: 'api', requestedById: keyPrincipal, credentialId: 'api_key_2' },
-    })
-    const [conversation] = await testDb
-      .insert(conversations)
-      .values({
-        visitorPrincipalId: keyPrincipal,
-        channel: 'messenger',
-        source: 'widget',
-        createdAt: new Date(),
-      })
-      .returning()
-    const inConversation = await proposePendingAction({
-      conversationId: conversation!.id,
-      toolName: 'end_conversation',
-      args: {},
-      summary: 'Close the conversation',
-    })
-
-    const adminQueue = (await listApprovalsForViewer(otherAdmin)).map((row) => row.id)
-    expect(adminQueue).toEqual(expect.arrayContaining([home.id, parentless.id, inConversation.id]))
-    const memberQueue = (await listApprovalsForViewer(member)).map((row) => row.id)
-    // Branding-free changelog changes and closing a conversation a member can
-    // see are theirs to decide; the workspace name is not.
-    expect(memberQueue).not.toContain(home.id)
-    expect(memberQueue).toContain(parentless.id)
-    expect(memberQueue).toContain(inConversation.id)
-    const keyActor: Actor = { ...otherAdmin, principalId: keyPrincipal, principalType: 'service' }
-    expect(await listApprovalsForViewer(keyActor)).toEqual([])
-
-    const view = await getApprovalForViewer(otherAdmin, home.id)
-    expect(view).toMatchObject({
-      id: home.id,
-      summary: 'Change the workspace name',
-      risk: 'low',
-      contentHash: home.argsDigest,
-      parent: { kind: 'thread' },
-      diff: {
-        kind: 'settings',
-        changes: [
-          expect.objectContaining({ id: 'portal.displayName', before: 'Acme', after: 'Acme team' }),
-        ],
-      },
-    })
-    await expect(getApprovalForViewer(member, home.id)).rejects.toMatchObject({
-      code: 'APPROVAL_NOT_FOUND',
     })
   })
 })

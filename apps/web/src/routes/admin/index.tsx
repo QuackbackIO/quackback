@@ -3,7 +3,6 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HomeActions } from '@/components/admin/home-actions'
-import { WaitingOnYou } from '@/components/admin/approvals/waiting-on-you'
 import { HomeLoadingFrame } from '@/components/admin/home-frame'
 import {
   copilotAvailabilityQuery,
@@ -149,7 +148,6 @@ function AdminHome() {
           paused={
             paused ? <CopilotPaused resetsAt={paused.resetsAt} trial={paused.trial} /> : undefined
           }
-          waiting={<WaitingOnYou />}
           below={
             <>
               {plan}
@@ -168,12 +166,7 @@ function AdminHome() {
           <OverviewDashboard
             actions={<HomeActions flags={flags} />}
             header={header}
-            banner={
-              <>
-                <WaitingOnYou />
-                {plan}
-              </>
-            }
+            banner={plan}
             emptyStates={!planLeads}
           />
           {tourOffer}

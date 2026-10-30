@@ -26,7 +26,7 @@ vi.mock('@/lib/server/domains/settings-registry/service', () => ({
     risk: 'low',
     revision: 'rev',
     locked: [],
-    gates: { permission: 'settings.branding', approval: 'none', freshSignIn: false },
+    gates: { permission: 'settings.branding' },
     value: {},
   }),
   listSettingsAreas: async () => [{ id: 'branding', risk: 'low', revision: 'rev' }],
@@ -47,7 +47,7 @@ import type { McpAuthContext } from '../../types'
 
 type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>
 
-function collect(): Map<string, Handler> {
+function collect(overrides: Partial<McpAuthContext> = {}): Map<string, Handler> {
   const handlers = new Map<string, Handler>()
   const fakeServer = {
     tool: (name: string, _d: string, _s: unknown, _a: unknown, handler: Handler) => {
@@ -64,6 +64,7 @@ function collect(): Map<string, Handler> {
       permissions: new Set(['settings.branding', 'settings.manage']),
       authMethod: 'oauth',
       scopes: ['read:settings', 'write:settings'],
+      ...overrides,
     } as unknown as McpAuthContext
   )
   return handlers
@@ -147,29 +148,22 @@ describe('settings MCP tools follow Copilot on Home', () => {
     ])
   })
 
-  it('update_settings returns the approval in the propose_settings_change shape', async () => {
-    state.flags = { copilotHome: true }
-    state.change = {
-      status: 'approval_required',
-      approval: {
-        proposed: true,
-        approvalId: 'assistant_action_1',
-        pendingActionId: 'assistant_action_1',
-        status: 'pending',
-        proposal: { kind: 'x' },
-      },
-    }
+  it('update_settings applies a medium-risk change and returns its receipt', async () => {
+    const receipt = { id: 'audit_1', area: 'messenger', revision: 'rev2', undoable: true }
+    state.change = { status: 'applied', receipt }
     const result = await collect().get('update_settings')!({
       area: 'messenger',
       patch: { enabled: true },
       expected_revision: 'rev',
     })
-    expect(JSON.parse(text(result))).toMatchObject({
-      proposed: true,
-      approvalId: 'assistant_action_1',
-      status: 'pending',
-      pendingActionId: 'assistant_action_1',
-      proposal: { kind: 'x' },
-    })
+    expect(JSON.parse(text(result))).toMatchObject({ status: 'applied', receipt })
+    expect(state.proposals).toEqual([])
+  })
+
+  it('offers a settings card only to the in-app assistant, not to an outside client', () => {
+    const outside = collect({ auditAttribution: { channel: 'mcp' } as never })
+    expect(outside.has('update_settings')).toBe(true)
+    expect(outside.has('propose_settings_change')).toBe(false)
+    expect(collect().has('propose_settings_change')).toBe(true)
   })
 })

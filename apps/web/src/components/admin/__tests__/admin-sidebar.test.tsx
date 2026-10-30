@@ -46,15 +46,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('@tanstack/react-query', () => ({
   useMutation: () => ({ mutate: vi.fn() }),
-  useQuery: ({
-    queryKey,
-    enabled,
-    select,
-  }: {
-    queryKey?: unknown[]
-    enabled?: boolean
-    select?: (data: never) => unknown
-  }) => {
+  useQuery: ({ queryKey, enabled }: { queryKey?: unknown[]; enabled?: boolean }) => {
     if (Array.isArray(queryKey) && queryKey.includes('owner-workspaces')) {
       return { data: mockBillingEnabled.current ? mockSiblings.current : undefined }
     }
@@ -63,10 +55,6 @@ vi.mock('@tanstack/react-query', () => ({
       if (enabled !== false) launchQueryEnabled.current = true
       return { data: mockLaunchStatus.current }
     }
-    if (Array.isArray(queryKey) && queryKey[0] === 'approvals' && queryKey[1] === 'waiting') {
-      const waiting = mockApprovals.current
-      return { data: select && waiting ? select(waiting as never) : waiting }
-    }
     if (Array.isArray(queryKey) && queryKey.includes('moderationStatus')) {
       moderationQueryEnabled.current = enabled !== false
       if (enabled === false) return { data: undefined }
@@ -74,10 +62,7 @@ vi.mock('@tanstack/react-query', () => ({
     }
     return { data: undefined }
   },
-  useQueryClient: () => ({
-    getQueryData: () => undefined,
-    getQueryCache: () => ({ subscribe: () => () => {} }),
-  }),
+  useQueryClient: () => ({ getQueryData: () => undefined }),
   queryOptions: (opts: unknown) => opts,
 }))
 
@@ -90,7 +75,6 @@ vi.mock('@/lib/server/functions/conversation', () => ({ setAgentAvailabilityFn: 
 const {
   mockSiblings,
   mockBillingEnabled,
-  mockApprovals,
   mockPending,
   moderationQueryEnabled,
   mockLaunchStatus,
@@ -99,7 +83,6 @@ const {
   mockLaunchStatus: { current: undefined as unknown },
   launchQueryEnabled: { current: false },
   mockPending: { current: 0 },
-  mockApprovals: { current: undefined as { count: number; latest: unknown[] } | undefined },
   moderationQueryEnabled: { current: null as boolean | null },
   mockSiblings: {
     current: [] as Array<{ instanceId: string; displayName: string; url: string | null }>,
@@ -403,47 +386,7 @@ describe('AdminSidebar rail', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
     const dialog = await screen.findByRole('dialog')
     const links = [...dialog.querySelectorAll('nav a')].map((a) => a.getAttribute('href'))
-    expect(links.slice(0, 3)).toEqual(['/admin', '/admin/approvals', '/admin/feedback'])
-  })
-})
-
-describe('AdminSidebar: Approvals', () => {
-  afterEach(() => {
-    mockApprovals.current = undefined
-    cleanup()
-  })
-  const approvalsLink = (container: HTMLElement) =>
-    container.querySelector('aside nav a[href="/admin/approvals"]')
-
-  it('puts Approvals below Home for an admin, quiet while nothing waits', () => {
-    mockApprovals.current = { count: 0, latest: [] }
-    const { container } = renderSidebar('admin', { flags: ALL_ON })
-    const links = [...container.querySelectorAll('aside nav a')].map((a) => a.getAttribute('href'))
-    expect(links.slice(0, 2)).toEqual(['/admin', '/admin/approvals'])
-    expect(approvalsLink(container)!.textContent).toBe('Approvals')
-  })
-
-  it('hides Approvals from a member with nothing to decide', () => {
-    mockApprovals.current = { count: 0, latest: [] }
-    const { container } = renderSidebar('member', { flags: ALL_ON })
-    expect(approvalsLink(container)).toBeNull()
-    cleanup()
-    mockApprovals.current = undefined
-    expect(approvalsLink(renderSidebar('member', { flags: ALL_ON }).container)).toBeNull()
-  })
-
-  it('shows a member Approvals with the count of what waits on them', () => {
-    mockApprovals.current = { count: 2, latest: [] }
-    const { container } = renderSidebar('member', { flags: ALL_ON })
-    const link = approvalsLink(container)!
-    expect(link.textContent).toContain('2')
-    expect(link.textContent).toContain('2 waiting')
-  })
-
-  it('caps the badge at 99+', () => {
-    mockApprovals.current = { count: 100, latest: [] }
-    const { container } = renderSidebar('admin', { flags: ALL_ON })
-    expect(approvalsLink(container)!.textContent).toContain('99+')
+    expect(links.slice(0, 3)).toEqual(['/admin', '/admin/feedback', '/admin/roadmap'])
   })
 })
 

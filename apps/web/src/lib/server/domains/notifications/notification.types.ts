@@ -29,7 +29,6 @@ export type NotificationType =
   | 'sla_breach'
   | 'comment_mentioned'
   | 'assistant_handed_off'
-  | 'approval_requested'
 
 /**
  * Input for creating a single notification

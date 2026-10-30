@@ -13,10 +13,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
 
 const getUnreadCountFn = vi.hoisted(() => vi.fn<() => Promise<{ count: number }>>())
-const getRailCountsFn = vi.hoisted(() =>
-  vi.fn<() => Promise<{ unread: number; waiting: { count: number; latest: never[] } }>>()
-)
-vi.mock('@/lib/server/functions/approval-counts', () => ({ getRailCountsFn }))
 vi.mock('@/lib/server/functions/notifications', () => ({
   getUnreadCountFn,
   getNotificationsFn: vi.fn(async () => ({ notifications: [], total: 0, unreadCount: 0 })),
@@ -43,7 +39,6 @@ const loader = (Route as unknown as { options: { loader: Loader } }).options.loa
 afterEach(() => {
   cleanup()
   getUnreadCountFn.mockReset()
-  getRailCountsFn.mockReset()
 })
 
 async function loadAdmin(queryClient: QueryClient) {
@@ -72,19 +67,18 @@ function renderBell(queryClient: QueryClient) {
 
 describe('admin loader: unread count', () => {
   it('hands the bell the count it loaded with the page', async () => {
-    getRailCountsFn.mockResolvedValue({ unread: 3, waiting: { count: 0, latest: [] } })
+    getUnreadCountFn.mockResolvedValue({ count: 3 })
     const queryClient = new QueryClient()
 
     await loadAdmin(queryClient)
     renderBell(queryClient)
 
     expect(screen.getByRole('button', { name: 'Notifications (3 unread)' })).toBeTruthy()
-    expect(getRailCountsFn).toHaveBeenCalledTimes(1)
-    expect(getUnreadCountFn).not.toHaveBeenCalled()
+    expect(getUnreadCountFn).toHaveBeenCalledTimes(1)
   })
 
   it('leaves the count to the bell when it could not be read with the page', async () => {
-    getRailCountsFn.mockRejectedValueOnce(new Error('unavailable'))
+    getUnreadCountFn.mockRejectedValueOnce(new Error('unavailable'))
     getUnreadCountFn.mockResolvedValue({ count: 2 })
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
@@ -94,6 +88,6 @@ describe('admin loader: unread count', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Notifications (2 unread)' })).toBeTruthy()
     )
-    expect(getUnreadCountFn).toHaveBeenCalledTimes(1)
+    expect(getUnreadCountFn).toHaveBeenCalledTimes(2)
   })
 })

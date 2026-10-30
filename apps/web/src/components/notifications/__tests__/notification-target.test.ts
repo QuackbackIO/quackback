@@ -210,14 +210,6 @@ describe('getNotificationTarget', () => {
     })
   })
 
-  it('routes approval_requested to the approvals queue, wherever the requests are', () => {
-    // One bell counts every new request, so it opens the queue rather than one item.
-    for (const extra of [{}, { conversationId: 'conversation_7' }, { ticketId: 'ticket_7' }])
-      expect(
-        getNotificationTarget(buildNotification({ type: 'approval_requested', ...extra }))
-      ).toEqual({ to: '/admin/approvals' })
-  })
-
   it('routes changelog_published with a changelogId to the specific entry', () => {
     const notification = buildNotification({
       type: 'changelog_published',

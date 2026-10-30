@@ -34,7 +34,6 @@ import { assertWorkspaceThreadOwned, createWorkspaceThread } from './workspace-t
 import { publishWorkspaceProposalReviewInTransaction } from './workspace-proposal-review'
 import {
   decidePendingAction,
-  emitApprovalRequested,
   markPendingActionExecuted,
   type AssistantPendingAction,
 } from './pending-actions.service'
@@ -184,7 +183,6 @@ async function insertSettingsRequest(
       ...requesterColumns(requester),
     })
     .returning()
-  await emitApprovalRequested(tx, row)
   return row
 }
 

@@ -92,9 +92,6 @@ export function getNotificationTarget(
     return { to: '/admin/inbox', search: { i: notification.ticketId } }
   }
 
-  // One approval bell counts every new request, so it opens the approvals queue.
-  if (notification.type === 'approval_requested') return { to: '/admin/approvals' }
-
   // Deep-link to the specific changelog entry when we have its id. Rows created
   // before changelogId was threaded through metadata fall back to the index.
   if (notification.type === 'changelog_published') {

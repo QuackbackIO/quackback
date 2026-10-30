@@ -71,23 +71,6 @@ const DYNAMIC_PERMISSION = (
   why: string
 ): Classification => ({ intent: 'DYNAMIC_PERMISSION', resolvesToAny, why })
 
-/** Every permission an approval decision may require: settings areas, assistant tools, and item visibility. */
-const APPROVAL_PERMISSIONS: readonly PermissionKey[] = [
-  PERMISSIONS.CONVERSATION_VIEW,
-  PERMISSIONS.TICKET_VIEW,
-  PERMISSIONS.SETTINGS_MANAGE,
-  PERMISSIONS.SETTINGS_BRANDING,
-  PERMISSIONS.OFFICE_HOURS_MANAGE,
-  PERMISSIONS.CHANGELOG_MANAGE,
-  PERMISSIONS.CONVERSATION_SET_ATTRIBUTES,
-  PERMISSIONS.CONVERSATION_SET_STATUS,
-  PERMISSIONS.CONVERSATION_REPLY,
-  PERMISSIONS.TICKET_CREATE,
-  PERMISSIONS.POST_CREATE,
-  PERMISSIONS.POST_VOTE_ON_BEHALF,
-  PERMISSIONS.AI_TEAMMATE_MANAGE,
-]
-
 /** The permission each settings registry area needs, to read and to write. */
 const SETTINGS_REGISTRY_PERMISSIONS = [
   PERMISSIONS.SETTINGS_MANAGE,
@@ -335,31 +318,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   // linked providers and whether their session is fresh. Nothing is written.
   'lib/server/functions/sign-in-again.ts::getSignInAgainOptionsFn': END_USER(
     'reads how the caller signs in and whether they signed in recently'
-  ),
-  // Approvals: who may see or decide a request is per row, the item's
-  // visibility plus every permission the operation needs (approvals.service).
-  'lib/server/functions/approvals.ts::listApprovalsFn': DYNAMIC_PERMISSION(
-    APPROVAL_PERMISSIONS,
-    'lists only requests the caller may decide: the item is visible and every permission the operation needs is held'
-  ),
-  'lib/server/functions/approval-counts.ts::getRailCountsFn': DYNAMIC_PERMISSION(
-    APPROVAL_PERMISSIONS,
-    'the caller own unread count, and a count of only the requests the caller may decide: the item is visible and every permission the operation needs is held'
-  ),
-  'lib/server/functions/approvals.ts::getApprovalFn': DYNAMIC_PERMISSION(
-    APPROVAL_PERMISSIONS,
-    'caller may decide the request, decided it, or it was filed on their behalf; the item must be visible'
-  ),
-  'lib/server/functions/approvals.ts::approveApprovalFn': DYNAMIC_PERMISSION(
-    APPROVAL_PERMISSIONS,
-    'a person, never the requesting credential, who sees the item and holds every permission the operation needs; the change then runs as that person'
-  ),
-  'lib/server/functions/approvals.ts::markApprovalBellReadFn': END_USER(
-    'reads only the caller own approval bell; the principal comes from the session'
-  ),
-  'lib/server/functions/approvals.ts::rejectApprovalFn': DYNAMIC_PERMISSION(
-    APPROVAL_PERMISSIONS,
-    'a person, never the requesting credential, who sees the item and holds every permission the operation needs'
   ),
   // Assistant proposals are item-scoped after authentication. Reads/rejections
   // require visibility of the concrete parent; approval additionally checks
@@ -620,19 +578,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     ],
     'field-scoped post PATCH — assertApiPermissions authorizes per changed field'
   ),
-  // Approval reads: a key with read:settings reads the requests it filed, and
-  // the requests its creator could decide with the key's own authority (the
-  // creator's current permissions, the key's role, and its scopes), per row.
-  // Read-only: nothing on the API decides a request.
-  'routes/api/v1/approvals/index.ts::GET': DYNAMIC_PERMISSION(
-    APPROVAL_PERMISSIONS,
-    'lists the requests the key filed and those its creator could decide with the key authority'
-  ),
-  'routes/api/v1/approvals/$approvalId.ts::GET': DYNAMIC_PERMISSION(
-    APPROVAL_PERMISSIONS,
-    'the key filed the request, or its creator could decide it with the key authority; else 404'
-  ),
-
   // Bulk inbox action: the permission depends on the action (assign vs tag vs
   // status), so the gate is bare and the per-action permission is asserted at
   // runtime, identical to performing each action through its single-conversation fn.
