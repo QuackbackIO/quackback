@@ -1,51 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { extractCssVariables, loadBrandingFont, normalizeFontSans } from '@/lib/shared/theme'
 import { PreviewDraftProvider, type PortalPreviewDraft } from './preview-draft-context'
 
 type StructuralDraft = Omit<PortalPreviewDraft, 'css'>
 
-/** A draft portal design, resolved by the admin with the code the server uses. */
-interface DesignPreview {
-  css: string
-  attributes: Record<string, string>
-  fontIds: string[]
-}
-
-const DESIGN_ATTRIBUTE = /^data-qb-[a-z]+$/
-const DESIGN_VALUE = /^[a-z_]+$/
-
-/** The message's design, keeping only the structural attributes a design sets. */
-function readDesignPreview(value: unknown): DesignPreview | null {
-  if (!value || typeof value !== 'object') return null
-  const { css, attributes, fontIds } = value as Record<string, unknown>
-  if (typeof css !== 'string') return null
-  const safe = Object.fromEntries(
-    Object.entries((attributes as Record<string, unknown>) ?? {}).filter(
-      ([name, v]) => DESIGN_ATTRIBUTE.test(name) && typeof v === 'string' && DESIGN_VALUE.test(v)
-    )
-  ) as Record<string, string>
-  const fonts = Array.isArray(fontIds) ? fontIds.filter((id) => typeof id === 'string') : []
-  return { css, attributes: safe, fontIds: fonts }
-}
-
-/**
- * Sets a draft design's attributes on <html> and puts each one's saved value
- * back when the draft changes or ends.
- */
-function useDesignAttributes(attributes: Record<string, string> | undefined) {
-  useEffect(() => {
-    if (!attributes) return
-    const root = document.documentElement
-    const saved = Object.keys(attributes).map((name) => [name, root.getAttribute(name)] as const)
-    for (const [name, value] of Object.entries(attributes)) root.setAttribute(name, value)
-    return () => {
-      for (const [name, value] of saved) {
-        if (value === null) root.removeAttribute(name)
-        else root.setAttribute(name, value)
-      }
-    }
-  }, [attributes])
-}
+type DesignChannel = typeof import('./portal-preview-design')
+type DesignPreview = import('./portal-preview-design').DesignPreview
 
 const sameContent = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b)
 
@@ -113,6 +73,7 @@ export function PortalPreviewProvider({
   const [css, setCss] = useState('')
   const [draft, setDraft] = useState<StructuralDraft | null>(null)
   const [design, setDesign] = useState<DesignPreview | null>(null)
+  const designChannel = useRef<DesignChannel | null>(null)
 
   // Only a framed, explicitly preview-flagged document listens.
   const active = enabled && typeof window !== 'undefined' && window.self !== window.top
@@ -124,7 +85,11 @@ export function PortalPreviewProvider({
       const msg = event.data as
         { type?: string; css?: unknown; draft?: unknown; design?: unknown } | null | undefined
       if (msg?.type === 'quackback:preview-design') {
-        setDesign(readDesignPreview(msg.design))
+        const value = msg.design
+        void import('./portal-preview-design').then((channel) => {
+          designChannel.current = channel
+          setDesign(channel.readDesignPreview(value))
+        })
       } else if (msg?.type === 'quackback:preview-css' && typeof msg.css === 'string') {
         setCss(msg.css)
       } else if (msg?.type === 'quackback:preview-draft' && msg.draft) {
@@ -139,7 +104,11 @@ export function PortalPreviewProvider({
   }, [active])
 
   const stylesheet = useMemo(() => (css ? previewStylesheet(css) : ''), [css])
-  useDesignAttributes(design?.attributes)
+  // Sets the draft's attributes on <html> and puts the saved ones back when it changes.
+  useEffect(() => {
+    if (!design || !designChannel.current) return
+    return designChannel.current.applyDesignAttributes(design.attributes)
+  }, [design])
   const fontIds = design?.fontIds.join(' ') ?? ''
   useEffect(() => {
     for (const id of fontIds.split(' ').filter(Boolean)) loadBrandingFont(id).catch(() => {})

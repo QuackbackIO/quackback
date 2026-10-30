@@ -79,7 +79,6 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
-import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import { AppearanceView } from '@/components/admin/settings/appearance/appearance-view'
 
 export const Route = createFileRoute('/admin/settings/portal')({
@@ -100,9 +99,12 @@ export const Route = createFileRoute('/admin/settings/portal')({
       ensure(settingsQueries.customCss()),
       ensure(settingsQueries.portalConfig()),
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
-      // A workspace on the design engine opens on Appearance.
+      // A workspace on the design engine opens on Appearance. Loaded here,
+      // not imported above: a loader's imports ship in the entry chunk.
       context.settings?.portalDesign?.engine === 'v2'
-        ? ensure(portalDesignQueries.editor())
+        ? import('@/lib/client/queries/portal-design').then(({ portalDesignQueries }) =>
+            ensure(portalDesignQueries.editor())
+          )
         : undefined,
     ])
   },
