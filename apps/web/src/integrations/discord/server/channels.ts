@@ -51,6 +51,9 @@ const TEXT_CHANNEL_TYPES = [0, 5]
 const ADMINISTRATOR = 1n << 3n
 const VIEW_CHANNEL = 1n << 10n
 const SEND_MESSAGES = 1n << 11n
+const EMBED_LINKS = 1n << 14n
+/** Every notification is an embed, so a channel that denies Embed Links can't show it. */
+const POST_PERMISSIONS = VIEW_CHANNEL | SEND_MESSAGES | EMBED_LINKS
 
 interface PermissionOverwrite {
   id: string
@@ -112,7 +115,7 @@ async function getBotMember(botToken: string, guildId: string): Promise<BotMembe
  * @everyone overwrite, then all role overwrites combined, then the member overwrite.
  */
 function channelPermissions(bot: BotMember, guildId: string, channel: DiscordChannel): bigint {
-  if (bot.base & ADMINISTRATOR) return bot.base | VIEW_CHANNEL | SEND_MESSAGES
+  if (bot.base & ADMINISTRATOR) return bot.base | POST_PERMISSIONS
   const overwrites = channel.permission_overwrites ?? []
   const apply = (permissions: bigint, allow: bigint, deny: bigint) => (permissions & ~deny) | allow
 
@@ -137,7 +140,7 @@ function channelPermissions(bot: BotMember, guildId: string, channel: DiscordCha
 
 /**
  * List the guild's text channels. `canPost` is false where the bot cannot see the
- * channel or send to it, so the picker can steer admins away before saving.
+ * channel, send to it, or embed in it, so the picker can steer admins away before saving.
  */
 export async function listDiscordChannels(
   botToken: string,
@@ -148,7 +151,6 @@ export async function listDiscordChannels(
     getBotMember(botToken, guildId),
   ])
 
-  const required = VIEW_CHANNEL | SEND_MESSAGES
   return channels
     .filter((c) => TEXT_CHANNEL_TYPES.includes(c.type))
     .sort((a, b) => a.position - b.position)
@@ -158,7 +160,7 @@ export async function listDiscordChannels(
         id: c.id,
         name: c.name,
         isPrivate: !!everyone && (BigInt(everyone.deny) & VIEW_CHANNEL) !== 0n,
-        canPost: (channelPermissions(bot, guildId, c) & required) === required,
+        canPost: (channelPermissions(bot, guildId, c) & POST_PERMISSIONS) === POST_PERMISSIONS,
       }
     })
 }

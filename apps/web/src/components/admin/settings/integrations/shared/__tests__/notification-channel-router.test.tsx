@@ -139,4 +139,24 @@ describe('NotificationChannelRouter', () => {
     expect(await screen.findByText(NO_ACCESS)).toBeTruthy()
     expect(updateFn.mock.calls[0]?.[0]).toMatchObject({ channelId: 'c1' })
   })
+
+  it('clears a failed removal when the confirmation is closed and reopened', async () => {
+    const failure = "Couldn't reach the server"
+    removeFn.mockRejectedValue(new Error(failure))
+    renderRouter(
+      [{ id: 'c1', name: 'general' }],
+      [{ channelId: 'c1', events: [{ eventType: 'post.created', enabled: true }], boardIds: null }]
+    )
+
+    fireEvent.click(screen.getByText('general'))
+    fireEvent.click(await screen.findByRole('button', { name: /remove channel/i }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }))
+    expect(await screen.findByText(failure)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByText('Remove notification channel')).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: /remove channel/i }))
+    await screen.findByText('Remove notification channel')
+    expect(screen.queryByText(failure)).toBeNull()
+  })
 })

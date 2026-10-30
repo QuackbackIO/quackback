@@ -487,6 +487,12 @@ function ChannelRow<TChannel extends Channel>({
     })
   }
 
+  // Closing the confirmation drops a failed attempt so reopening starts clean.
+  const handleConfirmRemoveChange = (open: boolean) => {
+    setConfirmRemove(open)
+    if (!open) removeMutation.reset()
+  }
+
   const handleRemove = () => {
     removeMutation.mutate(
       { integrationId, channelId: channel.channelId },
@@ -573,7 +579,7 @@ function ChannelRow<TChannel extends Channel>({
         )}
       </div>
 
-      <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+      <Dialog open={confirmRemove} onOpenChange={handleConfirmRemoveChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Remove notification channel</DialogTitle>
@@ -588,7 +594,7 @@ function ChannelRow<TChannel extends Channel>({
             </p>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmRemove(false)}>
+            <Button variant="outline" onClick={() => handleConfirmRemoveChange(false)}>
               Cancel
             </Button>
             <Button

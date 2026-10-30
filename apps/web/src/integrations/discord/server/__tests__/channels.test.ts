@@ -159,6 +159,12 @@ describe('listDiscordChannels', () => {
     ])
   })
 
+  it('marks a channel that denies Embed Links as unpostable, since every notification is an embed', async () => {
+    guild.channels = [channel('c-plain', 'plain-text', 0, [{ id: GUILD, type: 0, deny: EMBED }])]
+
+    expect((await listDiscordChannels(TOKEN, GUILD))[0]?.canPost).toBe(false)
+  })
+
   it('applies a member overwrite for the bot after role overwrites', async () => {
     guild.channels = [
       channel('c-muted', 'muted', 0, [
