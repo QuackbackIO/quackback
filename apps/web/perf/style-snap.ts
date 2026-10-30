@@ -105,7 +105,11 @@ const PAGES: (string | ((browser: Browser) => Promise<string>))[] = [
   '/widget',
 ]
 
-/** Every element's styles, keyed by its child-index path from <html>. */
+/**
+ * Every element's styles, keyed by its child-index path from <html>. Scripts,
+ * style sheets and links are not counted, so moving a style element between
+ * the head and the body leaves every path as it was.
+ */
 async function readStyles(page: Page): Promise<Record<string, ElementStyles>> {
   return page.evaluate(
     (properties) => {
@@ -115,11 +119,9 @@ async function readStyles(page: Page): Promise<Record<string, ElementStyles>> {
         const styles: Record<string, string> = {}
         for (const property of properties) styles[property] = computed.getPropertyValue(property)
         out[`${path} ${element.tagName.toLowerCase()}`] = styles
-        Array.from(element.children).forEach((child, index) => {
-          if (child.tagName === 'SCRIPT' || child.tagName === 'STYLE' || child.tagName === 'LINK')
-            return
-          walk(child, `${path}/${index}`)
-        })
+        Array.from(element.children)
+          .filter((child) => !['SCRIPT', 'STYLE', 'LINK'].includes(child.tagName))
+          .forEach((child, index) => walk(child, `${path}/${index}`))
       }
       walk(document.documentElement, '')
       return out
