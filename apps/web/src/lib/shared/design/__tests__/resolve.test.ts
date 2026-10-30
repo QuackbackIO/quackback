@@ -98,8 +98,19 @@ describe('renderDesignCss', () => {
     const css = renderDesignCss(resolveDesign(withAccent('#0f766e')))
     expect(css).toContain('[data-portal-theme] {')
     expect(css).toContain('.dark[data-portal-theme] {')
-    expect(css).toContain('--primary: #0f766e;')
     expect(css).not.toContain(':root')
+  })
+
+  it('names the semantic tokens and points the component names at them', () => {
+    const css = renderDesignCss(resolveDesign(withAccent('#0f766e')))
+    const [light, dark] = css.split('.dark[data-portal-theme] {')
+    expect(light).toContain('--qb-accent: #0f766e;')
+    expect(light).toContain('--primary: var(--qb-accent);')
+    expect(light).toContain('--background: var(--qb-bg);')
+    expect(light).toContain('--input: var(--qb-border-strong);')
+    // The dark block changes the tokens only; the names already point at them.
+    expect(dark).toContain('--qb-accent:')
+    expect(dark).not.toContain('--primary:')
   })
 
   it('writes one block for a design that is always light', () => {

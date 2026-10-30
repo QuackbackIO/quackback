@@ -92,9 +92,36 @@ export async function getDesignState(): Promise<DesignState | null> {
   }
 }
 
+/** The published revision visitors see, or null when the site has never published one. */
+export async function getPublishedRevision(): Promise<{
+  document: PortalDesign
+  number: number
+} | null> {
+  const [row] = await db
+    .select({ document: portalDesignRevisions.document, number: portalDesignRevisions.number })
+    .from(portalDesigns)
+    .innerJoin(
+      portalDesignRevisions,
+      eq(portalDesignRevisions.id, portalDesigns.publishedRevisionId)
+    )
+    .where(defaultSite)
+    .limit(1)
+  if (!row) return null
+  const parsed = portalDesign.safeParse(row.document)
+  if (!parsed.success) {
+    // Every revision was validated when it was published, so this is a stored row gone bad.
+    log.error(
+      { revision: row.number, issues: parsed.error.issues },
+      'published design no longer parses'
+    )
+    return null
+  }
+  return { document: parsed.data, number: row.number }
+}
+
 /** The design visitors see, or null when the site has never published one. */
 export async function getPublishedDesign(): Promise<PortalDesign | null> {
-  return (await getDesignState())?.published?.document ?? null
+  return (await getPublishedRevision())?.document ?? null
 }
 
 /** Replaces the draft. A new draft remembers the revision it started from. */

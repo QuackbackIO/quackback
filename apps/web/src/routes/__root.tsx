@@ -29,6 +29,7 @@ import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/sha
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { rssAlternateLink } from '@/lib/shared/rss-alternate'
 import { isStatusFeedReadable } from '@/lib/shared/status-settings'
+import { portalThemeMode } from '@/lib/shared/design/view'
 
 // The toast renderer is its own chunk: the root module ships with every
 // document (the embedded widget included), and a toast fired before it mounts
@@ -239,7 +240,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     select: (s) => (s.location.search as { theme?: string }).theme,
   })
 
-  const themeMode = settings?.brandingConfig?.themeMode ?? 'user'
+  const themeMode = portalThemeMode(settings)
   const searchForcedTheme =
     (isWidgetRoute || isPortalRoute) && (themeParam === 'light' || themeParam === 'dark')
       ? themeParam
@@ -284,12 +285,17 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // (a first visit, Firefox/Safari) the server can't know the OS preference,
   // so the SSR markup and the hydrated DOM differ by design. This silences
   // that one expected mismatch (one element, one level).
+  // A portal page rendered by the design engine scopes its theme to this
+  // attribute, so dialogs portaled to <body> carry it and the admin never does.
+  const portalThemeScope = isPortalRoute && settings?.portalDesign?.engine === 'v2' ? '' : undefined
+
   return (
     <html
       lang={lang}
       dir={dir}
       className={themeClass}
       style={{ colorScheme }}
+      data-portal-theme={portalThemeScope}
       suppressHydrationWarning
     >
       <head>

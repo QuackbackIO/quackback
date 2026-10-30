@@ -12,6 +12,7 @@ import type { WidgetTranslations } from '@/lib/shared/widget/translations'
 import type { StatusSettings } from '@/lib/shared/status-settings'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 import type { OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
+import type { PortalDesignView } from '@/lib/shared/design/view'
 // Vite aliases this to a no-op stub for the client bundle (see
 // logger.client-stub.ts), so it is safe for this otherwise client-bundled
 // module to import it for the one server-side parse-failure log below.
@@ -1109,6 +1110,8 @@ export interface WorkspaceSettings {
   publicWidgetConfig: PublicWidgetConfig
   /** Product availability flags */
   featureFlags: FeatureFlags
+  /** The design portal pages render with. Absent means today's theme. */
+  portalDesign?: PortalDesignView
   brandingData: SettingsBrandingData
   faviconData: { url: string } | null
   /** Dot-paths managed by `/etc/quackback/config.yaml`. Matching in-app
@@ -1153,6 +1156,10 @@ export interface FeatureFlags {
   /** Copilot on Home: the Home chat that answers from Copilot's knowledge and
    *  proposes reversible settings changes. A Labs switch; on for new workspaces. */
   copilotHome: boolean
+  /** The portal design engine: portal pages render from a design document
+   *  (published, or converted from the branding settings) instead of today's
+   *  theme. A Labs switch; off by default. */
+  portalDesignV2: boolean
 }
 
 /**
@@ -1229,10 +1236,14 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   supportTickets: false,
   statusPage: false,
   copilotHome: false,
+  portalDesignV2: false,
 }
 
 /** Flags that are Labs switches rather than products (Settings › Labs). */
-export const LABS_FEATURE_FLAGS = ['copilotHome'] as const satisfies readonly (keyof FeatureFlags)[]
+export const LABS_FEATURE_FLAGS = [
+  'copilotHome',
+  'portalDesignV2',
+] as const satisfies readonly (keyof FeatureFlags)[]
 
 /** Flags a workspace is created with: the defaults plus Copilot on Home. */
 export const NEW_WORKSPACE_FEATURE_FLAGS: FeatureFlags = {

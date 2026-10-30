@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, redirect, useRouter } from '@tanstack/react-ro
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
-import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
+import { portalTheme } from '@/lib/shared/design/view'
 import { resolveLocale, loadWidgetMessages } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { FileViewerProvider } from '@/components/shared/files/file-viewer-context'
@@ -67,11 +67,7 @@ export const Route = createFileRoute('/widget')({
     await setIframeHeaders()
 
     const brandingData = settings.brandingData ?? null
-    const brandingConfig = settings.brandingConfig ?? {}
-    const customCss = settings.customCss ?? ''
-    const themeMode = brandingConfig.themeMode ?? 'user'
-
-    const themeStyles = generateWorkspaceThemeCSS(brandingConfig)
+    const { themeMode, themeStyles, customCss, configFontSans } = portalTheme(settings)
 
     // If user is logged into the portal (same-origin), extract the signed
     // session cookie so the widget can reuse it directly as a Bearer token.
@@ -119,7 +115,7 @@ export const Route = createFileRoute('/widget')({
       themeMode,
       themeStyles,
       customCss,
-      configFontSans: readFontSans(brandingConfig.light),
+      configFontSans,
       portalUser,
       portalSessionToken,
       hmacRequired: settings?.publicWidgetConfig?.hmacRequired ?? false,

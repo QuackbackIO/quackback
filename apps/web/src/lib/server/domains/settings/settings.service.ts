@@ -75,6 +75,10 @@ import {
 import { withCurrentStorageReadTokens } from '@/lib/server/content/storage-read-urls'
 
 import { logSettingsReadError } from './settings-log'
+import { config } from '@/lib/server/config'
+import { getPublishedRevision } from '@/lib/server/domains/design/design.service'
+import { portalDesignView, resolveDesignSource } from '@/lib/server/domains/design/engine'
+import type { PortalDesignView } from '@/lib/shared/design/view'
 import { getTierLimits } from './tier-limits.service'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
@@ -992,6 +996,39 @@ async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   return settings
 }
 
+/** The design portal pages render with; see design/engine.ts. */
+async function choosePortalDesign(
+  org: SettingsRecord,
+  featureFlags: FeatureFlags,
+  brandingConfig: BrandingConfig,
+  portalConfig: PortalConfig
+): Promise<PortalDesignView> {
+  // With the flag off nothing here runs, not even the config read.
+  if (!featureFlags.portalDesignV2) return { engine: 'legacy' }
+  try {
+    const source = resolveDesignSource({
+      override: config.portalDesignEngine,
+      flagOn: true,
+      published: await getPublishedRevision(),
+      legacy: {
+        brandingConfig,
+        portalConfig,
+        logoKey: org.logoKey,
+        headerLogoKey: org.headerLogoKey,
+        faviconKey: org.faviconKey,
+        headerDisplayMode: org.headerDisplayMode,
+        headerDisplayName: org.headerDisplayName,
+        customCss: org.customCss ?? '',
+      },
+    })
+    return portalDesignView(source)
+  } catch (error) {
+    // The portal still renders with today's theme rather than failing the page.
+    log.error({ err: error }, 'portal design could not be resolved; using the legacy theme')
+    return { engine: 'legacy' }
+  }
+}
+
 async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   try {
     const cached = await cacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
@@ -1030,6 +1067,7 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
     const statusConfig = resolveStatusSettings(org.metadata)
 
     const featureFlags = resolveFeatureFlags(org.featureFlags)
+    const portalDesign = await choosePortalDesign(org, featureFlags, brandingConfig, portalConfig)
 
     const [configuredTypes, passthroughKeys, verifiedDomains] = await Promise.all([
       getConfiguredAuthTypes(),
@@ -1086,6 +1124,7 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
       })(),
       publicWidgetConfig: projectPublicWidgetConfig(widgetConfig, featureFlags, assistantIdentity),
       featureFlags,
+      ...(portalDesign.engine === 'v2' && { portalDesign }),
       brandingData,
       faviconData: brandingData.faviconUrl ? { url: brandingData.faviconUrl } : null,
       managedFieldPaths: org.managedFieldPaths ?? [],

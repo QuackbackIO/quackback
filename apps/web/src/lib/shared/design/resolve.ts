@@ -165,10 +165,49 @@ export function resolveDesign(doc: PortalDesign): ResolvedDesign {
   }
 }
 
+/**
+ * The semantic tokens portal components can read, by the theme variable each
+ * one holds. Inside the scope the component library's names point at these.
+ */
+const SEMANTIC_TOKENS: Partial<Record<keyof ThemeVariables, string>> = {
+  primary: '--qb-accent',
+  primaryForeground: '--qb-on-accent',
+  accentInk: '--qb-accent-text',
+  accent: '--qb-accent-subtle',
+  background: '--qb-bg',
+  card: '--qb-surface',
+  muted: '--qb-raised',
+  foreground: '--qb-ink',
+  mutedForeground: '--qb-muted',
+  border: '--qb-border',
+  input: '--qb-border-strong',
+  ring: '--qb-focus',
+  destructive: '--qb-danger',
+  destructiveForeground: '--qb-on-danger',
+  success: '--qb-success',
+  chart1: '--qb-chart-1',
+  chart2: '--qb-chart-2',
+  chart3: '--qb-chart-3',
+  chart4: '--qb-chart-4',
+  chart5: '--qb-chart-5',
+}
+
+/** One mode's values: semantic tokens by their own name, the rest by the library's. */
 function declarations(vars: ThemeVariables): string {
   return Object.entries(vars)
     .filter(([key, value]) => variableMap[key] && value)
-    .map(([key, value]) => `${variableMap[key]}: ${value};`)
+    .map(([key, value]) => {
+      const name = SEMANTIC_TOKENS[key as keyof ThemeVariables] ?? variableMap[key]
+      return `${name}: ${value};`
+    })
+    .join(' ')
+}
+
+/** The library's names for the semantic tokens; written once, since each mode only changes the tokens. */
+function aliases(vars: ThemeVariables): string {
+  return Object.entries(SEMANTIC_TOKENS)
+    .filter(([key]) => vars[key as keyof ThemeVariables])
+    .map(([key, token]) => `${variableMap[key]}: var(${token});`)
     .join(' ')
 }
 
@@ -179,7 +218,7 @@ function declarations(vars: ThemeVariables): string {
 export function renderDesignCss(resolved: ResolvedDesign): string {
   const primary = resolved.light ?? resolved.dark
   if (!primary) return ''
-  const parts = [`[data-portal-theme] { ${declarations(primary)} }`]
+  const parts = [`[data-portal-theme] { ${declarations(primary)} ${aliases(primary)} }`]
   if (resolved.light && resolved.dark)
     parts.push(`.dark[data-portal-theme] { ${declarations(resolved.dark)} }`)
   parts.push(

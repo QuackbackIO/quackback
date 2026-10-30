@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @import "tw-animate-css";
+/* A portal design's own CSS goes in the last layer, after Tailwind's. */
+@layer theme, base, components, utilities, tenant;
 /* Self-hosted fonts: Inter (the default/UI font, used on every page) loads
    statically here so there is zero regression for the default path. Every
    OTHER font referenced by the branding picker (FONT_OPTIONS in
