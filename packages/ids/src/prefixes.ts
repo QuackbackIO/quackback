@@ -69,6 +69,8 @@ export const ID_PREFIXES = {
 
   // Inbox productivity
   macro: 'macro',
+  portal_design: 'portal_design',
+  portal_design_revision: 'portal_design_revision',
   conversation_view: 'conversation_view',
   conversation_attribute: 'conv_attr',
 

@@ -128,6 +128,8 @@ export type {
   TeamId,
   TeamMemberId,
   MacroId,
+  PortalDesignId,
+  PortalDesignRevisionId,
   ConversationViewId,
   PostViewId,
   ConversationAttributeId,
