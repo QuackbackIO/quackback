@@ -89,6 +89,22 @@ export function NavDrawing({ nav }: { nav: Layout['nav'] }) {
   )
 }
 
+export function BandDrawing({ band }: { band: Layout['band'] }) {
+  return (
+    <span className="flex h-full w-full flex-col">
+      <span
+        className={cn(
+          'h-4 w-full',
+          band === 'tint' && 'bg-primary/20',
+          band === 'fade' && 'bg-gradient-to-b from-primary/25 to-transparent',
+          band === 'brand' && 'bg-primary'
+        )}
+      />
+      <span className="mx-auto mt-1 h-1.5 w-8 rounded-sm bg-foreground/20" />
+    </span>
+  )
+}
+
 export function FiltersDrawing({ filters }: { filters: Layout['filters'] }) {
   return (
     <span className={cn('flex w-14 gap-1', filters === 'start' && 'flex-row-reverse')}>

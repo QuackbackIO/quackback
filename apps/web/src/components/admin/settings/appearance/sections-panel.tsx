@@ -1,14 +1,25 @@
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-body-editor'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { DesignTiles } from './design-tiles'
-import { CardsDrawing, DensityDrawing, FiltersDrawing, NavDrawing, WidthDrawing } from './drawings'
+import {
+  BandDrawing,
+  CardsDrawing,
+  DensityDrawing,
+  FiltersDrawing,
+  NavDrawing,
+  WidthDrawing,
+} from './drawings'
 
 type Update = (change: (draft: PortalDesign) => void) => void
 
 const capital = (value: string) => value[0].toUpperCase() + value.slice(1)
+
+/** The language the headline is written in here; other languages fall back to it. */
+const HEADLINE_LOCALE = 'en'
 
 /**
  * The Sections tab: the choices each part of the portal offers. Core parts
@@ -31,6 +42,45 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
             drawing: <NavDrawing nav={nav} />,
           }))}
         />
+      </section>
+
+      <section className="space-y-4">
+        <h3 className="text-sm font-semibold">Top band</h3>
+        <DesignTiles
+          name="design-band"
+          label="Style"
+          value={layout.band}
+          columns={4}
+          onChange={(band) => update((draft) => void (draft.layout.band = band))}
+          options={DESIGN_OPTIONS.band.map((band) => ({
+            value: band,
+            label: capital(band),
+            drawing: <BandDrawing band={band} />,
+          }))}
+        />
+        {(['title', 'subtitle'] as const).map((field) => (
+          <div key={field} className="space-y-1.5">
+            <label htmlFor={`design-headline-${field}`} className="text-[13px] font-medium">
+              {field === 'title' ? 'Headline' : 'Subtitle'}
+            </label>
+            <Input
+              id={`design-headline-${field}`}
+              value={design.pages.feedback.headline?.[field][HEADLINE_LOCALE] ?? ''}
+              maxLength={280}
+              onChange={(event) =>
+                update((draft) => {
+                  const headline = draft.pages.feedback.headline ?? { title: {}, subtitle: {} }
+                  const text = event.target.value
+                  if (text) headline[field][HEADLINE_LOCALE] = text
+                  else delete headline[field][HEADLINE_LOCALE]
+                  const empty =
+                    Object.keys(headline.title).length + Object.keys(headline.subtitle).length === 0
+                  draft.pages.feedback.headline = empty ? null : headline
+                })
+              }
+            />
+          </div>
+        ))}
       </section>
 
       <section className="space-y-3">

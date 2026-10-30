@@ -1,4 +1,5 @@
-import { oklchToHex } from '@/lib/shared/theme/colors'
+import { hexToOklch, oklchToHex } from '@/lib/shared/theme/colors'
+import { formatOklch, parseOklch } from '@/lib/shared/theme/expand'
 
 interface Rgba {
   r: number
@@ -62,4 +63,32 @@ export function contrastRatio(foreground: string, background: string): number {
   const fg = over(parseColor(foreground), bg)
   const [lighter, darker] = [relativeLuminance(fg), relativeLuminance(bg)].sort((a, b) => b - a)
   return (lighter + 0.05) / (darker + 0.05)
+}
+
+const STEP = 0.005
+
+function toOklch(color: string): { l: number; c: number; h: number } {
+  const parsed = parseOklch(color.startsWith('#') ? hexToOklch(color) : color)
+  if (!parsed) throw new Error(`Cannot adjust "${color}"`)
+  return parsed
+}
+
+const lowest = (color: string, backgrounds: string[]) =>
+  Math.min(...backgrounds.map((bg) => contrastRatio(color, bg)))
+
+/**
+ * The colour nearest to `color` in lightness that reaches `target` against
+ * every background, keeping its chroma and hue. Null when none does.
+ */
+export function solveContrast(color: string, backgrounds: string[], target: number): string | null {
+  if (lowest(color, backgrounds) >= target) return color
+  const { l, c, h } = toOklch(color)
+  // Darker against light backgrounds, lighter against dark ones.
+  const direction =
+    contrastRatio(backgrounds[0], '#000000') > contrastRatio(backgrounds[0], '#ffffff') ? -1 : 1
+  for (let next = l + direction * STEP; next >= 0 && next <= 1; next += direction * STEP) {
+    const candidate = formatOklch(next, c, h)
+    if (lowest(candidate, backgrounds) >= target) return candidate
+  }
+  return null
 }

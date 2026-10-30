@@ -77,6 +77,56 @@ describe('shape and layout choices', () => {
   })
 })
 
+describe('the top band', () => {
+  it('is plain for none and readable on the accent for brand', () => {
+    expect(resolveDesign(design()).tokens.light['--qb-band-bg']).toBe('transparent')
+    const doc = design((d) => {
+      d.layout.band = 'brand'
+      d.brand.light.accent = '#0f766e'
+    })
+    const resolved = resolveDesign(doc)
+    for (const mode of ['light', 'dark'] as const) {
+      const bg = resolved.tokens[mode]['--qb-band-bg']
+      expect(bg, mode).toBe(resolved[mode]!.primary)
+      expect(
+        contrastRatio(resolved.tokens[mode]['--qb-band-ink'], bg),
+        mode
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrastRatio(resolved.tokens[mode]['--qb-band-muted'], bg),
+        mode
+      ).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it('tints with the subtle accent and keeps both text colours readable on it', () => {
+    const doc = design((d) => {
+      d.layout.band = 'tint'
+      d.brand.light.accent = '#f59e0b'
+    })
+    const resolved = resolveDesign(doc)
+    for (const mode of ['light', 'dark'] as const) {
+      const bg = resolved.tokens[mode]['--qb-band-bg']
+      expect(bg, mode).toBe(resolved[mode]!.accent)
+      expect(
+        contrastRatio(resolved.tokens[mode]['--qb-band-ink'], bg),
+        mode
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrastRatio(resolved.tokens[mode]['--qb-band-muted'], bg),
+        mode
+      ).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it('fades from the subtle accent into the page', () => {
+    const resolved = resolveDesign(design((d) => (d.layout.band = 'fade')))
+    expect(resolved.tokens.light['--qb-band-bg']).toBe(
+      `linear-gradient(to bottom, ${resolved.light!.accent}, ${resolved.light!.background})`
+    )
+  })
+})
+
 describe('the voted state', () => {
   it('uses accent text, which the solver keeps readable', () => {
     const doc = design((d) => (d.brand.light.accent = '#facc15'))

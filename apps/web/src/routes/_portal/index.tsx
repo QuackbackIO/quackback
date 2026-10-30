@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { ViewerPortalNoBoards } from '@/components/public/portal-no-boards'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
+import { PortalBand } from '@/components/public/portal-band'
 import { PortalFeedSkeleton } from '@/components/public/feedback/portal-feed-skeleton'
 import { PortalPoweredBy } from '@/components/public/feedback/portal-powered-by'
 import {
@@ -150,24 +151,27 @@ function PublicPortalPage() {
   // Input typed while the feed loads is carried only within this visit's feed.
   const [feedHandoff] = useState(createFeedHandoff)
   return (
-    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-6">
-      {/* Hero renders immediately (context-only, no feed dependency). */}
-      <PortalHero />
-      {/* Only the feed region suspends on the streamed portalData query. */}
-      <FeedHandoffContext.Provider value={feedHandoff}>
-        <Suspense
-          fallback={
-            <PortalFeedSkeleton
-              poweredBy={
-                showPoweredBy ? <PortalPoweredBy workspaceSlug={settings?.slug ?? ''} /> : null
-              }
-            />
-          }
-        >
-          <PortalFeed />
-        </Suspense>
-      </FeedHandoffContext.Provider>
-    </div>
+    <>
+      <PortalBand />
+      <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-6">
+        {/* Hero renders immediately (context-only, no feed dependency). */}
+        <PortalHero />
+        {/* Only the feed region suspends on the streamed portalData query. */}
+        <FeedHandoffContext.Provider value={feedHandoff}>
+          <Suspense
+            fallback={
+              <PortalFeedSkeleton
+                poweredBy={
+                  showPoweredBy ? <PortalPoweredBy workspaceSlug={settings?.slug ?? ''} /> : null
+                }
+              />
+            }
+          >
+            <PortalFeed />
+          </Suspense>
+        </FeedHandoffContext.Provider>
+      </div>
+    </>
   )
 }
 
