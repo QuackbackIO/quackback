@@ -47,8 +47,6 @@ export const TOOL_SCOPES: Readonly<Record<string, McpScope>> = {
   widget_install_status: 'read:feedback',
   get_settings: 'read:settings',
   propose_settings_change: 'write:settings',
-  get_approval: 'read:settings',
-  list_approvals: 'read:settings',
   update_settings: 'write:settings',
 }
 

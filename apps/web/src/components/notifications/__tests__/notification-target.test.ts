@@ -210,14 +210,6 @@ describe('getNotificationTarget', () => {
     })
   })
 
-  it('routes approval_requested to the approvals queue, wherever the requests are', () => {
-    // One bell counts every new request, so it opens the queue rather than one item.
-    for (const extra of [{}, { conversationId: 'conversation_7' }, { ticketId: 'ticket_7' }])
-      expect(
-        getNotificationTarget(buildNotification({ type: 'approval_requested', ...extra }))
-      ).toEqual({ to: '/admin/approvals' })
-  })
-
   it('routes both sending domain bells to the email channel settings', () => {
     for (const type of ['sending_domain_live', 'sending_domain_needs_attention'] as const)
       expect(getNotificationTarget(buildNotification({ type }))).toEqual({

@@ -78,14 +78,14 @@ const MESSENGER_TAB_OFF_COPY = {
 }
 
 /** What else a change turns on or off, as a line under it. */
-export function settingsEffectMessage(effect: MessengerEffect, after: unknown) {
+function settingsEffectMessage(effect: MessengerEffect, after: unknown) {
   return effect === 'messengerTab' && after !== true
     ? MESSENGER_TAB_OFF_COPY
     : MESSENGER_EFFECT_COPY[effect]
 }
 
 /** The settings area a change lives in: "Portal", "Office hours". */
-export function settingsAreaLabel(intl: IntlShape, area: SettingsChange['area']): string {
+function settingsAreaLabel(intl: IntlShape, area: SettingsChange['area']): string {
   return intl.formatMessage({
     id: `ask.settings.area.${area}`,
     defaultMessage: SETTINGS_CARD_AREA_COPY[area],
@@ -93,7 +93,7 @@ export function settingsAreaLabel(intl: IntlShape, area: SettingsChange['area'])
 }
 
 /** The field a change sets, with its appearance when it has one: "Dark · Brand color". */
-export function settingsFieldLabel(intl: IntlShape, path: readonly string[]): string {
+function settingsFieldLabel(intl: IntlShape, path: readonly string[]): string {
   const field = path.at(-1)!
   const fieldLabel = intl.formatMessage({
     id: `ask.settings.field.${field}`,
@@ -151,7 +151,7 @@ function readableColor(color: string): string {
 }
 
 /** A settings value as it reads: On, a color swatch, a logo, a weekly schedule. */
-export function SettingsValue({ value, preview }: { value: unknown; preview?: string | null }) {
+function SettingsValue({ value, preview }: { value: unknown; preview?: string | null }) {
   const intl = useIntl()
   const enums: Record<string, string> = {
     light: 'Light',

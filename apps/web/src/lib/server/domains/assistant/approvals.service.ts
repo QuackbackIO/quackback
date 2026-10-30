@@ -15,13 +15,12 @@
  *   through an approval.
  *
  * The status transitions themselves stay compare-and-set updates in
- * pending-actions.service.ts, which also emits the approval events.
+ * pending-actions.service.ts.
  */
 import {
   db,
   eq,
   and,
-  inArray,
   isNull,
   principal,
   assistantPendingActions,
@@ -280,11 +279,6 @@ function personRequired() {
   return new ForbiddenError('APPROVAL_PERSON_REQUIRED', 'Only a person can decide this request.')
 }
 
-/** Whether the person a request borrows authority from is in the app with it. */
-export function requesterIsPresent(row: Pick<PendingActionRow, 'requestedVia'>): boolean {
-  return row.requestedVia === null || row.requestedVia === 'assistant' || row.requestedVia === 'ui'
-}
-
 /** Can this person see the item a request acts on? */
 async function parentVisibleTo(row: PendingActionRow, actor: Actor): Promise<boolean> {
   try {
@@ -301,55 +295,6 @@ async function parentVisibleTo(row: PendingActionRow, actor: Actor): Promise<boo
     if (err instanceof NotFoundError) return false
     throw err
   }
-}
-
-/**
- * The people a pending request should be brought to: every teammate who may
- * decide it, minus whoever asked. The person whose own assistant asked in the
- * app already has the card in front of them, so they are not told again.
- */
-export async function listEligibleDeciders(row: PendingActionRow): Promise<PrincipalId[]> {
-  if (row.status !== 'proposed' || row.expiresAt.getTime() <= Date.now()) return []
-  if (!isDecidableApproval(row)) return []
-  const risk = approvalRiskOf(row)
-  if (risk === 'critical') return []
-  const required = await requiredApprovalPermissions(row)
-  if (!required) return []
-
-  const people = await db
-    .select({ id: principal.id, role: principal.role })
-    .from(principal)
-    .where(
-      and(
-        eq(principal.type, 'user'),
-        inArray(principal.role, risk === 'high' ? ['admin'] : ['admin', 'member'])
-      )
-    )
-  const excluded = new Set<string | null>([
-    row.requestedById,
-    requesterIsPresent(row) ? row.onBehalfOfPrincipalId : null,
-  ])
-  const { segmentIdsForPrincipal } =
-    await import('@/lib/server/domains/segments/segment-membership.service')
-  const eligible: PrincipalId[] = []
-  for (const person of people) {
-    if (excluded.has(person.id)) continue
-    const role = person.role as 'admin' | 'member'
-    const permissions = await permissionsForPrincipal(person.id, role)
-    if (![...required].every((permission) => permissions.has(permission))) continue
-    if (row.conversationId || row.ticketId) {
-      const actor: Actor = {
-        principalId: person.id,
-        role,
-        principalType: 'user',
-        segmentIds: await segmentIdsForPrincipal(person.id),
-        permissions,
-      }
-      if (!(await parentVisibleTo(row, actor))) continue
-    }
-    eligible.push(person.id)
-  }
-  return eligible
 }
 
 /**
@@ -391,57 +336,6 @@ export function assertStillPending(row: PendingActionRow): void {
       'PENDING_ACTION_NOT_DECIDABLE',
       'This request was already decided or has expired'
     )
-}
-
-/**
- * Approve a request and carry it out with the executor its origin uses: the
- * settings apply for a settings request, the tool-action pipeline for an
- * action on a conversation or ticket. Every rule above applies before
- * anything runs, and the executor checks the content hash again as it
- * decides.
- */
-export async function approveApproval(
-  actor: Actor,
-  id: AssistantPendingActionId,
-  input: ApprovalDecisionInput
-): Promise<PendingActionRow> {
-  const [row] = await db
-    .select()
-    .from(assistantPendingActions)
-    .where(eq(assistantPendingActions.id, id))
-    .limit(1)
-  if (!row || !isDecidableApproval(row) || !(await parentVisibleTo(row, actor)))
-    throw approvalNotFound()
-  assertStillPending(row)
-  const decision: ApprovalDecisionInput = { ...input, via: input.via ?? 'app' }
-
-  if (row.toolName === SETTINGS_PROPOSAL_TOOL) {
-    const parsed = settingsProposalSchema.safeParse(row.args)
-    if (!parsed.success) throw approvalUnavailable()
-    const { applyWorkspaceSettingsProposal } = await import('./workspace-settings-actions.service')
-    return applyWorkspaceSettingsProposal(
-      actor,
-      id,
-      parsed.data.changes.map((change) => change.id),
-      decision
-    )
-  }
-
-  if (!row.conversationId && !row.ticketId) throw approvalUnavailable()
-  const required = (await requiredApprovalPermissions(row)) ?? GONE_TOOL_PERMISSIONS
-  await assertMayDecide(row, actor, decision, required, 'approved')
-  const { decideAssistantAction } = await import('./assistant-actions.service')
-  return decideAssistantAction(id, 'approved', actor.principalId!, actor, undefined, {
-    contentHash: decision.contentHash,
-    via: decision.via,
-  })
-}
-
-function approvalUnavailable() {
-  return new ConflictError(
-    'APPROVAL_NOT_AVAILABLE',
-    'This request can only be decided where it was made.'
-  )
 }
 
 /**

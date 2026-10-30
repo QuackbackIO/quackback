@@ -66,8 +66,6 @@ describe('lazily loaded strings', () => {
       'components/onboarding/branding-step-action.tsx',
       'components/onboarding/launch-task-label.tsx',
       'components/admin/admin-overview.tsx',
-      // Home's "Waiting on you".
-      'components/admin/approvals/waiting-on-you.tsx',
       'components/admin/branding/automatic-branding-notice.tsx',
       'components/admin/branding/use-automatic-website-branding.ts',
       'lib/shared/launch-checklist.ts',
