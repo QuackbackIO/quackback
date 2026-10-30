@@ -9,7 +9,7 @@ import { FileViewerProvider } from '@/components/shared/files/file-viewer-contex
 import { extractSessionTokenFromCookie } from '@/lib/server/functions/portal-session-token'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
-import { PortalDesignStyle } from '@/components/shared/portal-design-style'
+import { PortalDesignStyle } from '@/lib/shared/safe-inline-content'
 import { Button } from '@/components/ui/button'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
 import { isTeamMember } from '@/lib/shared/roles'

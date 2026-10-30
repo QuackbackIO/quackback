@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { PortalBrandMark } from './portal-brand-mark'
 import { generateWorkspaceThemeCSS } from '@/lib/shared/theme'
-import { PortalDesignStyle } from '@/components/shared/portal-design-style'
+import { PortalDesignStyle } from '@/lib/shared/safe-inline-content'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 interface PortalAuthShellProps {

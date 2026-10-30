@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { PortalDesignStyle } from '../portal-design-style'
+import { PortalDesignStyle } from '../safe-inline-content'
 
 const render = (themeStyles: string, customCss: string) =>
   renderToStaticMarkup(<PortalDesignStyle themeStyles={themeStyles} customCss={customCss} />)

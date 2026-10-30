@@ -30,7 +30,7 @@ import {
   recordPortalAccessDeniedFn,
 } from '@/lib/server/functions/portal-access'
 import { parseAuthPromptSearch } from '@/lib/shared/auth-prompt'
-import { PortalDesignStyle } from '@/components/shared/portal-design-style'
+import { PortalDesignStyle } from '@/lib/shared/safe-inline-content'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
