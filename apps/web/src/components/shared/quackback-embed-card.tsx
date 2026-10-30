@@ -11,11 +11,49 @@ import { getEmbedPreviewFn } from '@/lib/server/functions/embeds'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
 import { cn } from '@/lib/shared/utils'
-import { voteBoxClasses } from '@/components/shared/vote-box'
+
+/**
+ * The vote box's classes for an embed: the same as voteBoxClasses gives, which
+ * a test holds this to. Embeds render inside the admin inbox, and importing
+ * the shared helper here would split it into a chunk the inbox then loads.
+ */
+export function embedVoteBoxClasses({
+  voted,
+  interactive,
+  pending = false,
+}: {
+  voted: boolean
+  interactive: boolean
+  pending?: boolean
+}) {
+  return {
+    root: cn(
+      'group/vote relative flex shrink-0 items-center justify-center rounded-md border',
+      'flex-col w-12 py-2 gap-0.5',
+      voted
+        ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
+        : 'bg-muted/40 text-muted-foreground border-border/50',
+      interactive && 'transition-colors duration-200',
+      interactive && !voted && 'hover:border-border hover:bg-muted/60 hover:text-foreground/80',
+      pending && 'opacity-70 cursor-wait'
+    ),
+    chevron: cn(
+      'h-4 w-4',
+      interactive && 'transition-transform duration-200',
+      voted && 'fill-post-card-voted',
+      interactive && !pending && 'group-hover/vote:-translate-y-0.5'
+    ),
+    count: cn(
+      'font-semibold tabular-nums',
+      'text-sm',
+      voted ? 'text-post-card-voted' : 'text-foreground'
+    ),
+  }
+}
 
 /** Display-only vote tally — used in the editor preview (no voting). */
 function StaticVoteBox({ voteCount }: { voteCount: number }) {
-  const voteBox = voteBoxClasses({ voted: false, interactive: false })
+  const voteBox = embedVoteBoxClasses({ voted: false, interactive: false })
   return (
     <div className={voteBox.root}>
       <ChevronUpIcon className={voteBox.chevron} />
@@ -48,7 +86,7 @@ function InteractiveVoteBox({
     voteCount,
     getAuthHeaders,
   })
-  const voteBox = voteBoxClasses({ voted: hasVoted, interactive: true, pending: isPending })
+  const voteBox = embedVoteBoxClasses({ voted: hasVoted, interactive: true, pending: isPending })
   return (
     <button
       type="button"

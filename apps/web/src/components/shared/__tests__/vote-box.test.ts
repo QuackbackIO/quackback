@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { voteBoxClasses } from '../vote-box'
+import { embedVoteBoxClasses } from '../quackback-embed-card'
 
 const classes = (value: string) => value.split(' ')
 
@@ -57,5 +58,19 @@ describe('voteBoxClasses', () => {
     expect(voteBoxClasses({ voted: false, interactive: true, denied: true }).root).toContain(
       'cursor-not-allowed'
     )
+  })
+})
+
+describe('the embed card’s copy', () => {
+  it('draws exactly what voteBoxClasses draws, in every state', () => {
+    for (const state of [
+      { voted: false, interactive: false },
+      { voted: false, interactive: true },
+      { voted: true, interactive: true },
+      { voted: false, interactive: true, pending: true },
+      { voted: true, interactive: true, pending: true },
+    ]) {
+      expect(embedVoteBoxClasses(state), JSON.stringify(state)).toEqual(voteBoxClasses(state))
+    }
   })
 })
