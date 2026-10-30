@@ -1,4 +1,4 @@
-import { Suspense, useDeferredValue, useState } from 'react'
+import { Suspense, useDeferredValue, useMemo, useState } from 'react'
 import { createFileRoute, notFound, redirect, useRouteContext } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
@@ -13,7 +13,11 @@ import {
 } from '@/components/public/feedback/feed-input-handoff'
 import { usePreviewWelcomeCard } from '@/components/public/preview-draft-context'
 import { portalQueries, useSeedPortalStatusesCache } from '@/lib/client/queries/portal'
-import { isProductEnabled } from '@/lib/shared/types/settings'
+import {
+  isProductEnabled,
+  type PortalWelcomeCard as PortalWelcomeCardData,
+} from '@/lib/shared/types/settings'
+import { savedWelcomeCard } from '@/lib/shared/design/view'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
@@ -174,11 +178,24 @@ function PublicPortalPage() {
  */
 function PortalHero() {
   const draftWelcomeCard = usePreviewWelcomeCard()
-  const savedWelcomeCard = useRouteContext({
+  const legacyWelcomeCard = useRouteContext({
     from: '__root__',
     select: (context) => context.settings?.publicPortalConfig?.welcomeCard,
   })
-  return <PortalWelcomeCard welcomeCard={draftWelcomeCard ?? savedWelcomeCard} />
+  // On the design engine the welcome message is part of the design.
+  const design = useRouteContext({
+    from: '__root__',
+    select: (context) => context.settings?.portalDesign,
+  })
+  const savedCard = useMemo(
+    () => savedWelcomeCard(design, legacyWelcomeCard),
+    [design, legacyWelcomeCard]
+  )
+  return (
+    <PortalWelcomeCard
+      welcomeCard={(draftWelcomeCard ?? savedCard) as PortalWelcomeCardData | undefined}
+    />
+  )
 }
 
 /**

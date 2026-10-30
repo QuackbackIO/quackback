@@ -31,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { RichTextEditor, type EditorDocument } from '@/components/ui/rich-text-editor'
 import { cn } from '@/lib/shared/utils'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { DraftBar } from '@/components/admin/settings/draft-bar'
@@ -58,7 +57,7 @@ import {
 import type { ThemeConfig } from '@/lib/shared/theme'
 import { primaryPresetIds, themePresets } from '@/lib/shared/theme/presets'
 import { useUpdatePortalConfig } from '@/lib/client/mutations/settings'
-import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-body-editor'
 import { useStableCallback } from '@/lib/client/hooks/use-stable-callback'
 import { UpgradeModal } from '@/components/admin/upgrade'
 import {
@@ -137,7 +136,7 @@ function DesignedPortalPage({
 }) {
   const { tab } = Route.useSearch()
   const tabs = <PortalTabs current={tab ?? 'appearance'} />
-  if (tab === 'navigation') return <PortalPage tabs={tabs} withAppearance={false} />
+  if (tab === 'navigation') return <PortalPage tabs={tabs} onDesignEngine />
   return (
     <SettingsPage page="/admin/settings/portal" width="wide">
       {tabs}
@@ -178,11 +177,11 @@ function PortalTabs({ current }: { current: 'appearance' | 'navigation' }) {
 
 function PortalPage({
   tabs,
-  withAppearance = true,
+  onDesignEngine = false,
 }: {
   tabs?: ReactNode
-  /** Off on the design engine, where Appearance is a tab of its own. */
-  withAppearance?: boolean
+  /** On the design engine, the theme and the welcome message are edited in Appearance. */
+  onDesignEngine?: boolean
 } = {}) {
   const router = useRouter()
   const settings = useWorkspaceSettings()
@@ -352,7 +351,7 @@ function PortalPage({
       {/* Controls left, live portal preview right (sticky). */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] gap-6 items-start">
         <div className="space-y-4 min-w-0">
-          {withAppearance && (
+          {!onDesignEngine && (
             <SettingsCard
               title="Appearance"
               description="Theme, color palette and typography, also applied to the embedded widget."
@@ -388,12 +387,14 @@ function PortalPage({
             </p>
           </SettingsCard>
 
-          <SettingsCard
-            title="Welcome message"
-            description="Shown above the post list on your portal home. Leave empty to show nothing."
-          >
-            <WelcomeBodyEditor value={welcomeBody} onChange={setWelcomeBody} />
-          </SettingsCard>
+          {!onDesignEngine && (
+            <SettingsCard
+              title="Welcome message"
+              description="Shown above the post list on your portal home. Leave empty to show nothing."
+            >
+              <WelcomeBodyEditor value={welcomeBody} onChange={setWelcomeBody} />
+            </SettingsCard>
+          )}
         </div>
 
         {/* ── Live portal preview ── */}
@@ -624,51 +625,6 @@ const PreviewControls = memo(function PreviewControls({
     </>
   )
 })
-
-/** Isolated so the rich-text editor's heavy deps don't re-render the page. */
-function WelcomeBodyEditor({
-  value,
-  onChange,
-}: {
-  value: TiptapContent
-  onChange: (v: TiptapContent) => void
-}) {
-  const { upload: uploadImage } = useImageUpload({ prefix: 'portal-welcome' })
-  // The editor reports its document once it mounts. The same document again
-  // is not an edit, and adopting that copy would re-render the whole page.
-  // The live preview and the dirty check read the JSON, so each edit takes it.
-  const handleChange = useCallback(
-    (document: EditorDocument) => {
-      const json = document.json()
-      if (JSON.stringify(json) === JSON.stringify(value)) return
-      onChange(json as TiptapContent)
-    },
-    [value, onChange]
-  )
-  return (
-    <RichTextEditor
-      value={value}
-      onDocumentChange={handleChange}
-      placeholder="Tell visitors what kind of feedback you'd love to hear…"
-      minHeight="160px"
-      className="[&_button]:size-6 [&_button_svg]:size-3.5"
-      features={{
-        headings: true,
-        images: true,
-        codeBlocks: true,
-        taskLists: true,
-        blockquotes: true,
-        tables: true,
-        dividers: true,
-        bubbleMenu: true,
-        slashMenu: true,
-        embeds: true,
-        quackbackEmbeds: true,
-      }}
-      onImageUpload={uploadImage}
-    />
-  )
-}
 
 // ==============================================
 // Font Select Group

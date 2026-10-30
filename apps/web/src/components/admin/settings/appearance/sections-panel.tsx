@@ -1,3 +1,6 @@
+import { Switch } from '@/components/ui/switch'
+import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-body-editor'
+import type { TiptapContent } from '@/lib/shared/db-types'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { DesignTiles } from './design-tiles'
@@ -28,6 +31,27 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
             drawing: <NavDrawing nav={nav} />,
           }))}
         />
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 id="design-welcome-label" className="text-sm font-semibold">
+            Welcome message
+          </h3>
+          <Switch
+            aria-labelledby="design-welcome-label"
+            checked={design.pages.feedback.welcome.show}
+            onCheckedChange={(show) =>
+              update((draft) => void (draft.pages.feedback.welcome.show = show))
+            }
+          />
+        </div>
+        {design.pages.feedback.welcome.show && (
+          <WelcomeBodyEditor
+            value={design.pages.feedback.welcome.body as TiptapContent}
+            onChange={(body) => update((draft) => void (draft.pages.feedback.welcome.body = body))}
+          />
+        )}
       </section>
 
       <section className="space-y-4">

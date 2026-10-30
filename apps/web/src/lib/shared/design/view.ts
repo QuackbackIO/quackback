@@ -4,6 +4,10 @@
  */
 import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
 import type { ThemeConfig, ThemeMode } from '@/lib/shared/theme/types'
+import type { TiptapContent } from '@/lib/shared/db-types'
+
+/** Text a visitor reads, by locale. */
+export type LocalizedText = Record<string, string>
 
 export type PortalDesignView =
   | { engine: 'legacy' }
@@ -22,6 +26,12 @@ export type PortalDesignView =
       fontIds: string[]
       /** The structural choices, set on `<html>` as `data-qb-*` attributes. */
       attributes: Record<`data-qb-${string}`, string>
+      /** What the feedback page shows above the feed. */
+      feedback: {
+        /** The welcome message, or null when it is off or empty. */
+        welcome: TiptapContent | null
+        headline: { title: LocalizedText; subtitle: LocalizedText } | null
+      }
     }
 
 /** The settings a portal page reads its theme from. */
@@ -43,6 +53,18 @@ export function portalThemeMode(settings: ThemeSettings | null | undefined): The
   const view = settings?.portalDesign
   if (view?.engine === 'v2') return view.mode === 'auto' ? 'user' : view.mode
   return settings?.brandingConfig?.themeMode ?? 'user'
+}
+
+/**
+ * The feedback page's welcome message: the design's on the design engine,
+ * where it may be off, else the welcome card in the portal settings.
+ */
+export function savedWelcomeCard<T extends { body: unknown }>(
+  design: PortalDesignView | undefined,
+  legacy: T | undefined
+): { body: TiptapContent } | T | undefined {
+  if (design?.engine !== 'v2') return legacy
+  return design.feedback.welcome ? { body: design.feedback.welcome } : undefined
 }
 
 /** The bundled families a v2 design loads; legacy finds its one family from its CSS. */

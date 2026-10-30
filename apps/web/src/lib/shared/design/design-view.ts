@@ -12,6 +12,8 @@ import { designFontIds, fontStack } from './fonts'
 import { renderDesignCss, resolveDesign } from './resolve'
 import type { PortalDesign } from './schema'
 import type { PortalDesignView } from './view'
+import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
+import type { TiptapContent } from '@/lib/shared/db-types'
 
 export function designView(
   doc: PortalDesign,
@@ -26,5 +28,14 @@ export function designView(
     fontSans: fontStack(doc.brand.fonts.body),
     fontIds: designFontIds(doc),
     attributes: layoutAttributes(doc),
+    feedback: {
+      welcome: feedbackWelcome(doc),
+      headline: doc.pages.feedback.headline,
+    },
   }
+}
+
+function feedbackWelcome(doc: PortalDesign): TiptapContent | null {
+  const { show, body } = doc.pages.feedback.welcome
+  return show && !isEmptyTiptapDoc(body as TiptapContent) ? (body as TiptapContent) : null
 }

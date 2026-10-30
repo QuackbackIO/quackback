@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { generateWorkspaceThemeCSS } from '@/lib/shared/theme'
-import { portalFontIds, portalTheme, portalThemeMode } from '../view'
+import { portalFontIds, portalTheme, portalThemeMode, savedWelcomeCard } from '../view'
 
 const brandingConfig = {
   themeMode: 'dark' as const,
@@ -37,6 +37,7 @@ describe('portalTheme', () => {
       fontSans: '"Fraunces", serif',
       fontIds: ['fraunces'],
       attributes: {},
+      feedback: { welcome: null, headline: null },
     }
     expect(portalTheme({ brandingConfig, customCss: '.x {}', portalDesign })).toEqual({
       themeMode: 'user',
@@ -59,6 +60,7 @@ describe('portalFontIds', () => {
       fontSans: '',
       fontIds: ['inter', 'fraunces'],
       attributes: {},
+      feedback: { welcome: null, headline: null },
     }
     expect(portalFontIds({ portalDesign })).toEqual(['inter', 'fraunces'])
   })
@@ -76,11 +78,39 @@ describe('portalThemeMode', () => {
         fontSans: '',
         fontIds: [],
         attributes: {},
+        feedback: { welcome: null, headline: null },
       },
     })
     expect(portalThemeMode(v2('auto'))).toBe('user')
     expect(portalThemeMode(v2('light'))).toBe('light')
     expect(portalThemeMode({ brandingConfig: { themeMode: 'light' }, ...v2('dark') })).toBe('dark')
     expect(portalThemeMode({ brandingConfig: { themeMode: 'light' } })).toBe('light')
+  })
+})
+
+describe('savedWelcomeCard', () => {
+  const legacy = { body: { type: 'doc', content: [] } }
+  const v2 = (welcome: unknown) =>
+    ({
+      engine: 'v2',
+      mode: 'auto',
+      revision: 1,
+      themeStyles: '',
+      customCss: '',
+      fontSans: '',
+      fontIds: [],
+      attributes: {},
+      feedback: { welcome, headline: null },
+    }) as never
+
+  it('keeps the portal settings’ card on legacy', () => {
+    expect(savedWelcomeCard(undefined, legacy)).toBe(legacy)
+    expect(savedWelcomeCard({ engine: 'legacy' }, legacy)).toBe(legacy)
+  })
+
+  it('takes the design’s message on v2, and nothing when it is off', () => {
+    const body = { type: 'doc', content: [{ type: 'paragraph' }] }
+    expect(savedWelcomeCard(v2(body), legacy)).toEqual({ body })
+    expect(savedWelcomeCard(v2(null), legacy)).toBeUndefined()
   })
 })

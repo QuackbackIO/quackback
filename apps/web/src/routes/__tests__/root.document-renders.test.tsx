@@ -174,6 +174,7 @@ describe('the portal’s own theme', () => {
       fontSans: '',
       fontIds: [],
       attributes: { 'data-qb-nav': 'pills' },
+      feedback: { welcome: null, headline: null },
     },
   })
 
