@@ -50,8 +50,6 @@ const baseProps = {
   workspaceName: 'Acme',
   logoUrl: null,
   authConfig: { found: true, oauth: { password: true } },
-  themeStyles: '',
-  customCss: '',
   userEmail: null,
   locale: 'en' as const,
 }

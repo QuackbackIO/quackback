@@ -30,7 +30,8 @@ import {
   recordPortalAccessDeniedFn,
 } from '@/lib/server/functions/portal-access'
 import { parseAuthPromptSearch } from '@/lib/shared/auth-prompt'
-import { PortalDesignStyle } from '@/lib/shared/safe-inline-content'
+import { portalDesignStyles } from '@/lib/shared/safe-inline-content'
+import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
@@ -178,7 +179,6 @@ export const Route = createFileRoute('/_portal')({
         reason: accessResult.reason,
         workspaceName: settings?.name ?? '',
         logoUrl: brandingData?.logoUrl ?? null,
-        themeStyles: theme.themeStyles,
         customCss: theme.customCss,
         configFontSans: theme.configFontSans,
         locale,
@@ -231,7 +231,7 @@ export const Route = createFileRoute('/_portal')({
     const publicPortalConfig = settings?.publicPortalConfig ?? null
 
     // Custom CSS comes after the theme, so it cascades over it.
-    const { themeMode, themeStyles, customCss, configFontSans } = portalTheme(settings)
+    const { themeMode, customCss, configFontSans } = portalTheme(settings)
 
     const initialUserData = session?.user
       ? {
@@ -262,7 +262,6 @@ export const Route = createFileRoute('/_portal')({
       userRole,
       brandingData,
       faviconData,
-      themeStyles,
       customCss,
       configFontSans,
       themeMode,
@@ -275,7 +274,12 @@ export const Route = createFileRoute('/_portal')({
       gate: null,
     }
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, matches }) => {
+    // The theme and custom CSS, from the settings the root already carries.
+    const styles = portalDesignStyles(
+      portalTheme((matches[0]?.context as { settings?: WorkspaceSettings | null })?.settings)
+    )
+
     // Access gate: a valid 200 sign-in page, but keep it out of search indexes.
     if (loaderData?.gate) {
       return {
@@ -284,6 +288,7 @@ export const Route = createFileRoute('/_portal')({
           { name: 'robots', content: 'noindex, nofollow' },
         ],
         links: [{ rel: 'icon', href: loaderData.gate.logoUrl || '/logo.png' }],
+        styles,
       }
     }
 
@@ -309,6 +314,7 @@ export const Route = createFileRoute('/_portal')({
     return {
       meta,
       links: [{ rel: 'icon', href: faviconUrl }],
+      styles,
     }
   },
   component: PortalLayout,
@@ -346,8 +352,6 @@ function PortalLayout() {
             workspaceName={gate.workspaceName}
             logoUrl={gate.logoUrl}
             authConfig={gate.authConfig}
-            themeStyles={gate.themeStyles}
-            customCss={gate.customCss}
             userEmail={gate.userEmail ?? null}
             locale={gate.locale}
             callbackUrl={gate.callbackUrl}
@@ -362,7 +366,6 @@ function PortalLayout() {
     workspaceName,
     userRole,
     brandingData,
-    themeStyles,
     customCss,
     configFontSans,
     themeMode,
@@ -389,7 +392,6 @@ function PortalLayout() {
           <PortalPreviewProvider enabled={preview === true}>
             <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
             <div data-portal="" className="min-h-screen bg-background flex flex-col">
-              <PortalDesignStyle themeStyles={themeStyles} customCss={customCss} />
               <PortalHeader
                 orgName={workspaceName}
                 orgLogo={brandingData?.logoUrl ?? null}

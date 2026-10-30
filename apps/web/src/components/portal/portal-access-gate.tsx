@@ -18,7 +18,6 @@ import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { toast } from 'sonner'
-import { PortalDesignStyle } from '@/lib/shared/safe-inline-content'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import {
   ArrowPathIcon,
@@ -552,18 +551,13 @@ function GateCard({
 export interface PortalAccessGateProps
   extends
     Omit<GateCardProps, 'authConfig'>,
-    Pick<
-      PortalAccessGateError,
-      'authConfig' | 'themeStyles' | 'customCss' | 'userEmail' | 'locale'
-    > {}
+    Pick<PortalAccessGateError, 'authConfig' | 'userEmail' | 'locale'> {}
 
 export function PortalAccessGate({
   reason,
   workspaceName,
   logoUrl,
   authConfig,
-  themeStyles,
-  customCss,
   userEmail,
   locale,
   callbackUrl,
@@ -578,9 +572,6 @@ export function PortalAccessGate({
     // fetches it client-side, which lands well before the form needs it.
     <PortalIntlProvider locale={locale ?? DEFAULT_LOCALE}>
       <div className="relative min-h-screen">
-        {/* Theme/custom CSS injected here too so the backdrop looks branded */}
-        <PortalDesignStyle themeStyles={themeStyles} customCss={customCss} />
-
         {/* Blurred decorative backdrop — a fake board, no real content */}
         <div
           className="absolute inset-0 overflow-hidden blur-sm"

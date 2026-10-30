@@ -13,7 +13,6 @@ export interface PortalAccessGateError {
   reason: 'unauthenticated' | 'unauthorized'
   workspaceName: string
   logoUrl: string | null
-  themeStyles: string
   customCss: string
   /**
    * The structured theme config's light-mode font-family, so the gate can
