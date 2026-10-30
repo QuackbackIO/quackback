@@ -1,5 +1,6 @@
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { SettingRow } from '@/components/admin/settings/setting-row'
 import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-body-editor'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
@@ -84,18 +85,19 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
       </section>
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h3 id="design-welcome-label" className="text-sm font-semibold">
-            Welcome message
-          </h3>
-          <Switch
-            aria-labelledby="design-welcome-label"
-            checked={design.pages.feedback.welcome.show}
-            onCheckedChange={(show) =>
-              update((draft) => void (draft.pages.feedback.welcome.show = show))
-            }
-          />
-        </div>
+        <SettingRow
+          label="Welcome message"
+          htmlFor="design-welcome"
+          control={
+            <Switch
+              id="design-welcome"
+              checked={design.pages.feedback.welcome.show}
+              onCheckedChange={(show) =>
+                update((draft) => void (draft.pages.feedback.welcome.show = show))
+              }
+            />
+          }
+        />
         {design.pages.feedback.welcome.show && (
           <WelcomeBodyEditor
             value={design.pages.feedback.welcome.body as TiptapContent}
