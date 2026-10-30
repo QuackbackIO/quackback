@@ -8,12 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PostId } from '@quackback/ids'
 
 const mockFetchInboxPosts = vi.fn()
+const mockFetchFilterCounts = vi.fn()
 vi.mock('@/lib/server/functions/posts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/functions/posts')>()),
   fetchInboxPostsForAdmin: (...args: unknown[]) => mockFetchInboxPosts(...args),
+  fetchInboxFilterCounts: (...args: unknown[]) => mockFetchFilterCounts(...args),
 }))
 
-const { inboxPostsInfiniteOptions } = await import('../use-inbox-query')
+const { inboxPostsInfiniteOptions, inboxFacetCountsOptions } = await import('../use-inbox-query')
 const { mergeSuggestionQueries } = await import('@/lib/client/queries/signals')
 
 const A = 'post_a' as PostId
@@ -32,6 +34,7 @@ function page(ids: PostId[], counts: { postId: PostId; count: number }[], next: 
 let client: QueryClient
 beforeEach(() => {
   mockFetchInboxPosts.mockReset()
+  mockFetchFilterCounts.mockReset()
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 })
 
@@ -58,5 +61,32 @@ describe('inboxPostsInfiniteOptions', () => {
 
     expect(data.pages[0]).not.toHaveProperty('duplicateCounts')
     expect(data.pages[0]?.items.map((p) => p.id)).toEqual([A])
+  })
+})
+
+describe('the owner filter', () => {
+  const ownerSent = (mock: typeof mockFetchInboxPosts) => mock.mock.calls[0][0].data.ownerId
+
+  it('asks for posts with no owner when the filter is "Unassigned"', async () => {
+    mockFetchInboxPosts.mockResolvedValueOnce(page([], [], null))
+    mockFetchFilterCounts.mockResolvedValueOnce({})
+
+    await client.fetchInfiniteQuery(inboxPostsInfiniteOptions({ owner: 'unassigned' }))
+    await client.fetchQuery(inboxFacetCountsOptions({ owner: 'unassigned' }))
+
+    expect(ownerSent(mockFetchInboxPosts)).toBeNull()
+    expect(ownerSent(mockFetchFilterCounts)).toBeNull()
+  })
+
+  it('passes an owner through, and leaves no owner filter unset', async () => {
+    mockFetchInboxPosts
+      .mockResolvedValueOnce(page([], [], null))
+      .mockResolvedValueOnce(page([], [], null))
+
+    await client.fetchInfiniteQuery(inboxPostsInfiniteOptions({ owner: 'principal_lea' }))
+    await client.fetchInfiniteQuery(inboxPostsInfiniteOptions({}))
+
+    expect(mockFetchInboxPosts.mock.calls[0][0].data.ownerId).toBe('principal_lea')
+    expect(mockFetchInboxPosts.mock.calls[1][0].data.ownerId).toBeUndefined()
   })
 })
