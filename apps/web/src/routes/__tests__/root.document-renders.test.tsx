@@ -23,6 +23,7 @@ import {
 const doc = vi.hoisted(() => ({
   themeRenders: 0,
   defaultTheme: '' as string | undefined,
+  storageKey: '' as string | undefined,
   bootstrap: null as null | Record<string, unknown>,
 }))
 
@@ -30,9 +31,18 @@ vi.mock('@/lib/server/functions/bootstrap', () => ({
   getBootstrapData: async () => doc.bootstrap,
 }))
 vi.mock('@/components/theme-provider', () => ({
-  ThemeProvider: ({ children, defaultTheme }: { children: ReactNode; defaultTheme?: string }) => {
+  ThemeProvider: ({
+    children,
+    defaultTheme,
+    storageKey,
+  }: {
+    children: ReactNode
+    defaultTheme?: string
+    storageKey?: string
+  }) => {
     doc.themeRenders++
     doc.defaultTheme = defaultTheme
+    doc.storageKey = storageKey
     return <>{children}</>
   },
 }))
@@ -57,7 +67,11 @@ afterEach(() => {
   expireRouteContext()
 })
 
-function bootstrap(themeCookie: 'light' | 'dark', settings: Record<string, unknown> = {}) {
+function bootstrap(
+  themeCookie: 'light' | 'dark',
+  settings: Record<string, unknown> = {},
+  portalThemeCookie: 'light' | 'dark' | 'system' = themeCookie
+) {
   doc.bootstrap = {
     baseUrl: 'http://localhost',
     session: null,
@@ -65,6 +79,7 @@ function bootstrap(themeCookie: 'light' | 'dark', settings: Record<string, unkno
     onboarding: { complete: true, needsSetupWizard: false },
     userRole: 'admin',
     themeCookie,
+    portalThemeCookie,
     prefersColorScheme: null,
     managedFieldPaths: [],
     registeredAuthProviders: [],
@@ -160,6 +175,18 @@ describe('the portal’s own theme', () => {
     },
   })
 
+  it('keeps the portal visitor’s light or dark choice apart from the admin’s', async () => {
+    bootstrap('dark', {}, 'light')
+    const router = await mount('/feedback')
+    expect(doc.defaultTheme).toBe('light')
+    expect(doc.storageKey).toBe('portal-theme')
+
+    await act(() => router.navigate({ to: '/admin/inbox' } as never))
+    await screen.findByText('inbox page')
+    expect(doc.defaultTheme).toBe('dark')
+    expect(doc.storageKey).toBe('theme')
+  })
+
   it('scopes a design to portal pages only', async () => {
     bootstrap('light', design('auto'))
     const router = await mount('/feedback')
@@ -177,7 +204,7 @@ describe('the portal’s own theme', () => {
   })
 
   it('forces the mode a design sets', async () => {
-    bootstrap('light', design('dark'))
+    bootstrap('light', design('dark'), 'light')
     await mount('/feedback')
     expect(doc.defaultTheme).toBe('dark')
   })

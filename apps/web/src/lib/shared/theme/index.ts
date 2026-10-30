@@ -2,7 +2,10 @@
 // Theme Cookie Helpers
 // ============================================================================
 
+/** The admin's light or dark choice. */
 export const THEME_COOKIE_NAME = 'theme'
+/** A portal visitor's light or dark choice, kept apart so the two never flip each other. */
+export const PORTAL_THEME_COOKIE_NAME = 'portal-theme'
 export type Theme = 'light' | 'dark' | 'system'
 
 const VALID_THEMES = ['light', 'dark', 'system'] as const
@@ -16,14 +19,26 @@ function parseCookies(cookieHeader: string): Record<string, string> {
   return cookies
 }
 
+const isTheme = (value: string | undefined): value is Theme => VALID_THEMES.includes(value as Theme)
+
 export function getThemeCookie(cookieHeader: string | null): Theme {
   if (!cookieHeader) return 'system'
   const theme = parseCookies(cookieHeader)[THEME_COOKIE_NAME]
-  return VALID_THEMES.includes(theme as Theme) ? (theme as Theme) : 'system'
+  return isTheme(theme) ? theme : 'system'
 }
 
-export function setThemeCookie(themeValue: Theme): void {
-  document.cookie = `${THEME_COOKIE_NAME}=${themeValue};path=/;max-age=31536000;samesite=lax`
+/**
+ * The portal visitor's choice. Until they choose on the portal, the shared
+ * choice made before the two were split still applies.
+ */
+export function getPortalThemeCookie(cookieHeader: string | null): Theme {
+  if (!cookieHeader) return 'system'
+  const theme = parseCookies(cookieHeader)[PORTAL_THEME_COOKIE_NAME]
+  return isTheme(theme) ? theme : getThemeCookie(cookieHeader)
+}
+
+export function setThemeCookie(themeValue: Theme, name: string = THEME_COOKIE_NAME): void {
+  document.cookie = `${name}=${themeValue};path=/;max-age=31536000;samesite=lax`
 }
 
 /**
