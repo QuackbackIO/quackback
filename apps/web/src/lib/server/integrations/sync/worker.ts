@@ -26,6 +26,8 @@ import { executeHookSync, persistSyncLink } from './hooks'
 import { syncErrorOutcome } from './outcomes'
 import type { SyncOutcome } from './types'
 import { executeTicketCreate } from './tickets'
+import { executeTicketCommentSync } from './comments'
+import { executeIssueUpdate } from './issue-updates'
 import { applyIdentifySync } from './identify'
 import {
   fanOutInboundStatus,
@@ -33,6 +35,9 @@ import {
   parseInboundWebhook,
   queueInboundStatus,
 } from './inbound'
+import { applyInboundAssignee, planInboundAssignee, queueInboundAssignee } from './assignees'
+import { applyInboundComment, planInboundComment, queueInboundComment } from './inbound-comments'
+import { planTicketRecovery, queueTicketRecovery } from './ticket-recovery'
 import { executeSegmentSync } from './segment'
 import { installationIdentity } from './identity'
 import { getIntegration } from '../index'
@@ -93,6 +98,9 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
           }
         } else if (payload.executor === 'inbound-webhook') {
           const results = await parseInboundWebhook(integration, payload.data)
+          const assignee = await planInboundAssignee(integration, payload.data)
+          const comment = await planInboundComment(integration, payload.data)
+          const recovery = await planTicketRecovery(integration, payload.data)
           outcome = { state: 'succeeded', result: { received: results.length } }
           localWrite = async (tx) => {
             for (const [index, result] of results.entries())
@@ -102,6 +110,16 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
                 `${payload.data.deliveryKey}:${index}`,
                 tx
               )
+            if (assignee)
+              await queueInboundAssignee(
+                tx,
+                integration,
+                assignee,
+                String(payload.data.deliveryKey)
+              )
+            if (comment)
+              await queueInboundComment(tx, integration, comment, String(payload.data.deliveryKey))
+            if (recovery) await queueTicketRecovery(tx, integration, recovery)
           }
         } else if (payload.executor === 'inbound-status') {
           outcome = { state: 'succeeded' }
@@ -109,6 +127,10 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
             claim.operation.kind === 'receive-status'
               ? fanOutInboundStatus(tx, claim, integration, payload.data)
               : applyInboundStatus(tx, claim, integration, payload.data, updatedTickets)
+        } else if (payload.executor === 'inbound-assignee') {
+          outcome = await applyInboundAssignee(claim, integration, payload.data)
+        } else if (payload.executor === 'inbound-comment') {
+          outcome = await applyInboundComment(claim, integration, payload.data)
         } else if (payload.executor === 'identify') {
           outcome = { state: 'succeeded' }
           localWrite = (tx) => applyIdentifySync(tx, claim, payload.data)
@@ -116,9 +138,17 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
           outcome = await executeHookSync(claim, payload.data, integration)
         else if (payload.executor === 'ticket-create')
           outcome = await executeTicketCreate(claim, integration)
+        else if (payload.executor === 'ticket-comment')
+          outcome = await executeTicketCommentSync(claim, integration)
+        else if (payload.executor === 'remote-update')
+          outcome = await executeIssueUpdate(claim, integration)
         else if (payload.executor === 'segment')
           outcome = await executeSegmentSync(claim, payload.data, integration)
-        else if (payload.executor === 'refresh' || payload.executor === 'archive')
+        else if (
+          payload.executor === 'refresh' ||
+          payload.executor === 'archive' ||
+          payload.executor === 'relink'
+        )
           outcome = { state: 'conflict', errorCode: 'manual_update' }
         else outcome = { state: 'failed', errorCode: 'provider_failed' }
       }

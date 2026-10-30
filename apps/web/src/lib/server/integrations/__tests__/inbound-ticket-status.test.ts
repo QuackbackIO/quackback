@@ -21,6 +21,7 @@ import {
   boards,
   settings,
   integrations,
+  integrationDestinations,
   user,
   principal,
   eq,
@@ -40,6 +41,8 @@ vi.mock('@/lib/server/domains/tickets/ticket.webhooks', () => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
+  emitTicketUpdated: vi.fn().mockResolvedValue(undefined),
+  emitTicketPriorityChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketExternalStatusChanged: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -147,7 +150,11 @@ async function seedGitHubIntegration(config: Record<string, unknown>) {
   return row
 }
 
-async function seedLinkedTicket(actor: Actor, externalId: string): Promise<TicketId> {
+async function seedLinkedTicket(
+  actor: Actor,
+  externalId: string,
+  repository = 'acme/widgets'
+): Promise<TicketId> {
   const integration = (await testDb.query.integrations.findFirst({
     where: eq(integrations.integrationType, 'github'),
   }))!
@@ -156,11 +163,11 @@ async function seedLinkedTicket(actor: Actor, externalId: string): Promise<Ticke
   await testDb.insert(ticketExternalLinks).values({
     ticketId: dto.id,
     integrationId: integration.id,
-    syncScope: scope(integration),
+    syncScope: scope(integration, repository),
     integrationType: 'github',
     externalId,
-    externalDisplayId: `acme/widgets#${externalId}`,
-    externalUrl: `https://github.com/acme/widgets/issues/${externalId}`,
+    externalDisplayId: `${repository}#${externalId}`,
+    externalUrl: `https://github.com/${repository}/issues/${externalId}`,
   })
   return dto.id
 }
@@ -224,8 +231,8 @@ async function systemNotes(ticketId: TicketId, kind: string) {
   )
 }
 
-function scope(integration: typeof integrations.$inferSelect) {
-  return `${installationIdentity(integration)}:${syncHash(syncDestination({ channelId: 'acme/widgets' }, integration.config as Record<string, unknown>, getIntegration(integration.integrationType)))}`
+function scope(integration: typeof integrations.$inferSelect, repository = 'acme/widgets') {
+  return `${installationIdentity(integration)}:${syncHash(syncDestination({ channelId: repository }, integration.config as Record<string, unknown>, getIntegration(integration.integrationType)))}`
 }
 async function drain() {
   for (let n = 0; n < 10; n++) {
@@ -622,6 +629,60 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     })
     const response = await handleInboundWebhook(request, 'github')
     expect(response.status).toBe(200)
+  })
+
+  // Issue numbers repeat across repositories. Each repository's links carry
+  // that repository's scope, so a status from one never reaches a ticket
+  // linked to the same number in another.
+  it('updates only the ticket linked in the repository the issue belongs to', async () => {
+    await seedSettings()
+    const { open, closed } = await seedStatuses()
+    const integration = await seedGitHubIntegration({
+      ticketStatusMappings: { Closed: closed, Open: open },
+    })
+    await testDb.insert(integrationDestinations).values([
+      { integrationId: integration.id, kind: 'repo', externalId: 'acme/widgets' },
+      { integrationId: integration.id, kind: 'repo', externalId: 'acme/gadgets' },
+    ])
+    const actor = await seedActor()
+    const widgets = await seedLinkedTicket(actor, '7')
+    const gadgets = await seedLinkedTicket(actor, '7', 'acme/gadgets')
+
+    const response = await receiveAndDrain(
+      githubWebhookRequest('closed', 7, 'acme/gadgets'),
+      'github'
+    )
+    expect(response.status).toBe(200)
+    expect((await ticketState(gadgets)).statusId).toBe(closed)
+    expect((await ticketState(widgets)).statusId).toBe(open)
+    expect((await systemNotes(gadgets, 'external_status_changed'))[0].content).toBe(
+      'GitHub issue acme/gadgets#7 was closed'
+    )
+  })
+
+  it('acknowledges and drops a delivery from a send-only repository', async () => {
+    await seedSettings()
+    const { open, closed } = await seedStatuses()
+    const integration = await seedGitHubIntegration({
+      ticketStatusMappings: { Closed: closed, Open: open },
+    })
+    await testDb.insert(integrationDestinations).values({
+      integrationId: integration.id,
+      kind: 'repo',
+      externalId: 'acme/widgets',
+      config: { direction: 'outbound' },
+    })
+    const actor = await seedActor()
+    const ticketId = await seedLinkedTicket(actor, '8')
+
+    const response = await receiveAndDrain(githubWebhookRequest('closed', 8), 'github')
+    expect(response.status).toBe(200)
+    expect((await ticketState(ticketId)).statusId).toBe(open)
+    expect(
+      await testDb.query.integrationSyncOperations.findMany({
+        where: eq(operations.integrationId, integration.id),
+      })
+    ).toHaveLength(0)
   })
 
   it('rejects a bad signature', async () => {

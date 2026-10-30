@@ -18,10 +18,15 @@ export function recordDeliveryOutcome(outcome: DeliveryOutcome): void {
   else current.rejection = outcome
 }
 
-/** Bounded transport for provider adapters. Never retries a request internally. */
+/**
+ * Bounded transport for provider adapters. Never retries a request internally.
+ * `settled` names statuses that already mean what a write asked for (a
+ * DELETE's 404: the item is gone), which count as success, not rejection.
+ */
 export async function integrationFetch(
   input: string | URL | Request,
-  init?: RequestInit
+  init?: RequestInit,
+  options?: { settled?: readonly number[] }
 ): Promise<Response> {
   const current = evidence.getStore()
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
@@ -34,9 +39,9 @@ export async function integrationFetch(
       signal: originalSignal ? AbortSignal.any([originalSignal, timeout]) : timeout,
     })
     if (current && write) {
-      if (response.status >= 400 && response.status < 500)
+      if (response.ok || options?.settled?.includes(response.status)) current.writes++
+      else if (response.status >= 400 && response.status < 500)
         current.rejection = httpDeliveryFailure(response)
-      else if (response.ok) current.writes++
       else current.ambiguous = true
     }
     return response
