@@ -4,6 +4,44 @@ import type { BUNDLED_FONT_IDS } from './options'
 
 export type BundledFontId = (typeof BUNDLED_FONT_IDS)[number]
 type DesignFont = PortalDesign['brand']['fonts']['body']
+type UploadedFont = Extract<DesignFont, { kind: 'uploaded' }>
+
+/** Uploaded fonts: woff2 files of up to 400 KB, six to a family, kept under `fonts/`. */
+export const FONT_UPLOADS = {
+  type: 'font/woff2',
+  maxBytes: 400 * 1024,
+  maxFiles: 6,
+  prefix: 'fonts',
+} as const
+
+/** Where the portal loads an uploaded font file from: its own origin. */
+export const uploadedFontUrl = (key: string) => `/api/storage/${key}`
+
+/** An uploaded family's file nearest a weight, upright where it has one. */
+export function uploadedFontFile(
+  font: UploadedFont,
+  weight: number
+): UploadedFont['files'][number] {
+  const upright = font.files.filter((file) => file.style === 'normal')
+  const files = upright.length > 0 ? upright : font.files
+  return files.reduce((best, file) =>
+    Math.abs(file.weight - weight) < Math.abs(best.weight - weight) ? file : best
+  )
+}
+
+/** The `@font-face` rules for a design's uploaded families, one per file. */
+export function uploadedFontFaces(doc: PortalDesign): string {
+  const rules = new Set<string>()
+  for (const font of [doc.brand.fonts.body, doc.brand.fonts.heading]) {
+    if (font.kind !== 'uploaded') continue
+    for (const file of font.files) {
+      rules.add(
+        `@font-face { font-family: "${font.family}"; src: url("${uploadedFontUrl(file.key)}") format("woff2"); font-weight: ${file.weight}; font-style: ${file.style}; font-display: swap; }`
+      )
+    }
+  }
+  return [...rules].join(' ')
+}
 
 export interface BundledFont {
   label: string

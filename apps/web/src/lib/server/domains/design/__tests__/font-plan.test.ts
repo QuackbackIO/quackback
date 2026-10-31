@@ -90,3 +90,24 @@ describe('fontLinks', () => {
     expect(fontPlan(defaultDesign(), FILES)).toEqual({ stylesheets: [], preloads: [] })
   })
 })
+
+describe('fontLinks for an uploaded family', () => {
+  it('preloads its file nearest the weight from storage, with no stylesheet', () => {
+    const doc = design({
+      heading: {
+        kind: 'uploaded',
+        family: 'Unbounded',
+        files: [
+          { key: 'fonts/2026/10/a-unbounded-400.woff2', weight: 400, style: 'normal' },
+          { key: 'fonts/2026/10/b-unbounded-700.woff2', weight: 700, style: 'normal' },
+        ],
+        fallback: 'inter',
+      },
+      headingWeight: 800,
+    })
+    expect(fontPlan(doc, FILES)).toEqual({
+      stylesheets: [],
+      preloads: ['/api/storage/fonts/2026/10/b-unbounded-700.woff2'],
+    })
+  })
+})

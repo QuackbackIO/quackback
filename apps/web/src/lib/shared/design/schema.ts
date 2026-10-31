@@ -54,6 +54,15 @@ const palette = z
   .strict()
 
 const fontId = z.enum(BUNDLED_FONT_IDS)
+
+/**
+ * Where an uploaded font file is kept: a woff2 under `fonts/` in the
+ * workspace's storage. The key is written into the page's CSS, so it holds
+ * only characters that cannot end a `url()`, and no segment starts with a dot.
+ */
+export const UPLOADED_FONT_KEY =
+  /^fonts\/(?:[a-z0-9_-][a-z0-9._-]*\/)*[a-z0-9_-][a-z0-9._-]*\.woff2$/
+
 const font = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('bundled'), id: fontId }).strict(),
   z
@@ -67,7 +76,7 @@ const font = z.discriminatedUnion('kind', [
         .array(
           z
             .object({
-              key: z.string().min(1).max(512),
+              key: z.string().max(512).regex(UPLOADED_FONT_KEY),
               weight: z.number().int().min(100).max(900),
               style: z.enum(['normal', 'italic']),
             })

@@ -125,3 +125,8 @@ export function sniffVideoMime(buf: Buffer): SniffedVideoMime | null {
 
   return null
 }
+
+/** Whether the bytes are a WOFF2 font: its signature is `wOF2`. */
+export function isWoff2(buf: Uint8Array): boolean {
+  return startsWithAt(buf, 0, [0x77, 0x4f, 0x46, 0x32])
+}

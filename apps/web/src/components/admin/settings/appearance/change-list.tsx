@@ -61,6 +61,19 @@ function shownValue(path: string, value: unknown) {
   return value
 }
 
+/**
+ * A font slot's name on one side of the changes: a bundled font's id or an
+ * uploaded family's name, whichever that side has.
+ */
+function fontName(changes: DesignChange[], slot: string, side: 'before' | 'after'): unknown {
+  return changes.find(
+    (change) =>
+      /\.(id|family)$/.test(change.path) &&
+      change.path.startsWith(`${slot}.`) &&
+      change[side] != null
+  )?.[side]
+}
+
 /** Every change a draft makes, with its value now and in the draft. */
 export function ChangeList({ changes }: { changes: DesignChange[] }) {
   // A font change shows once, not once per field of the font.
@@ -70,16 +83,22 @@ export function ChangeList({ changes }: { changes: DesignChange[] }) {
   )
   return (
     <ul className="divide-y divide-border rounded-lg border border-border">
-      {shown.map((change) => (
-        <li key={change.path} className="flex items-center gap-3 px-3 py-2 text-[13px]">
-          <span className="w-36 shrink-0 font-medium">{changeLabel(change.path)}</span>
-          <ChangeValue value={shownValue(change.path, change.before)} />
-          <span aria-hidden="true" className="text-muted-foreground">
-            →
-          </span>
-          <ChangeValue value={shownValue(change.path, change.after)} />
-        </li>
-      ))}
+      {shown.map((change) => {
+        // A font names itself, however many of its fields changed.
+        const slot = /^brand\.fonts\.(heading|body)\./.exec(change.path)?.[0].slice(0, -1)
+        const side = (which: 'before' | 'after') =>
+          (slot && fontName(changes, slot, which)) ?? shownValue(change.path, change[which])
+        return (
+          <li key={change.path} className="flex items-center gap-3 px-3 py-2 text-[13px]">
+            <span className="w-36 shrink-0 font-medium">{changeLabel(change.path)}</span>
+            <ChangeValue value={side('before')} />
+            <span aria-hidden="true" className="text-muted-foreground">
+              →
+            </span>
+            <ChangeValue value={side('after')} />
+          </li>
+        )
+      })}
     </ul>
   )
 }

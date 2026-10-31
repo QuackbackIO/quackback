@@ -257,3 +257,57 @@ export const getAssistantAvatarUploadUrlFn = createServerFn({ method: 'POST' })
     await requireAuth({ permission: PERMISSIONS.AI_CUSTOMER_MANAGE })
     return presignedImageUpload(data, { label: 'assistant avatar', prefix: 'assistant-avatars' })
   })
+
+const fontUploadSchema = z.object({
+  filename: z.string().min(1).max(255),
+  fileSize: z.number().int().positive(),
+})
+
+export type FontUploadResult =
+  | { ok: true; uploadUrl: string; key: string }
+  | {
+      ok: false
+      code: 'STORAGE_UNAVAILABLE' | 'NOT_WOFF2' | 'TOO_LARGE' | 'TIER_LIMIT_EXCEEDED'
+      message: string
+    }
+
+/**
+ * Get a presigned URL for uploading one file of a portal font. Only woff2 of
+ * up to 400 KB; the upload itself checks the file's signature. Uploading
+ * fonts is part of custom CSS on the workspace's plan.
+ */
+export const getFontUploadUrlFn = createServerFn({ method: 'POST' })
+  .validator(fontUploadSchema)
+  .handler(async ({ data }): Promise<FontUploadResult> => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    const { FONT_UPLOADS } = await import('@/lib/shared/design/fonts')
+    if (!isS3Usable()) {
+      return {
+        ok: false,
+        code: 'STORAGE_UNAVAILABLE',
+        message: 'Uploading fonts needs file storage.',
+      }
+    }
+    if (!/\.woff2$/i.test(data.filename)) {
+      return { ok: false, code: 'NOT_WOFF2', message: `${data.filename} is not a woff2 file.` }
+    }
+    if (data.fileSize > FONT_UPLOADS.maxBytes) {
+      return { ok: false, code: 'TOO_LARGE', message: `${data.filename} is over 400 KB.` }
+    }
+    const [{ assertTierFeature }, { TierLimitError }] = await Promise.all([
+      import('@/lib/server/domains/settings/tier-enforce'),
+      import('@/lib/server/errors/tier-limit-error'),
+    ])
+    try {
+      await assertTierFeature('customCss', 'Uploading fonts')
+    } catch (error) {
+      if (error instanceof TierLimitError) {
+        return { ok: false, code: 'TIER_LIMIT_EXCEEDED', message: error.message }
+      }
+      throw error
+    }
+    const key = generateStorageKey(FONT_UPLOADS.prefix, data.filename)
+    const { uploadUrl } = await generatePresignedUploadUrl(key, FONT_UPLOADS.type)
+    log.info({ key }, 'font upload url issued')
+    return { ok: true, uploadUrl, key }
+  })

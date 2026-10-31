@@ -9,7 +9,7 @@
  */
 import { layoutAttributes } from './components'
 import { rewritePartAliases } from './parts'
-import { designFontIds, fontStack } from './fonts'
+import { designFontIds, fontStack, uploadedFontFaces } from './fonts'
 import { renderDesignCss, resolveDesign } from './resolve'
 import type { PortalDesign } from './schema'
 import type { PortalDesignView } from './view'
@@ -24,7 +24,9 @@ export function designView(
     engine: 'v2',
     mode: doc.mode,
     revision,
-    themeStyles: renderDesignCss(resolveDesign(doc)),
+    themeStyles: [uploadedFontFaces(doc), renderDesignCss(resolveDesign(doc))]
+      .filter(Boolean)
+      .join(' '),
     customCss: doc.css ? `@layer tenant {\n${rewritePartAliases(doc.css)}\n}` : '',
     fontSans: fontStack(doc.brand.fonts.body),
     fontIds: designFontIds(doc),

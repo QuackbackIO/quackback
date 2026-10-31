@@ -63,6 +63,21 @@ describe('ChangeList', () => {
     expect(container.textContent).not.toContain('Changed')
   })
 
+  it('names a font by its family when it becomes the workspace’s own', () => {
+    const { container } = render(
+      <ChangeList
+        changes={[
+          { path: 'brand.fonts.heading.kind', before: 'bundled', after: 'uploaded' },
+          { path: 'brand.fonts.heading.id', before: 'fraunces', after: undefined },
+          { path: 'brand.fonts.heading.family', before: undefined, after: 'Unbounded' },
+          { path: 'brand.fonts.heading.files', before: undefined, after: [] },
+        ]}
+      />
+    )
+    expect(container.querySelectorAll('li')).toHaveLength(1)
+    expect(container.textContent).toBe('Heading fontFraunces→Unbounded')
+  })
+
   it('counts the custom CSS in lines rather than showing it', () => {
     const { container } = render(
       <ChangeList changes={[{ path: 'css', before: undefined, after: 'a { b: c }\nd { e: f }' }]} />
