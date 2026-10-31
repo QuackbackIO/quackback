@@ -165,7 +165,11 @@ function HelpCenterLandingPage() {
         style={{ animationDelay: '100ms' }}
       >
         <div className="mb-6 flex items-baseline justify-between gap-4">
-          <h2 id="hc-topics" className="text-2xl font-semibold tracking-tight text-foreground">
+          <h2
+            id="hc-topics"
+            data-qb-part="section-heading"
+            className="text-2xl font-semibold tracking-tight text-foreground"
+          >
             <FormattedMessage id="portal.hc.home.browseByTopic" defaultMessage="Browse by topic" />
           </h2>
           {collectionCount > 0 && (

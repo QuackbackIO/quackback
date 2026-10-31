@@ -137,13 +137,18 @@ function BlockCard({
         span
       )}
     >
-      {title && <h2 className="text-lg font-semibold text-foreground">{title}</h2>}
+      {title && (
+        <h2 data-qb-part="section-heading" className="text-lg font-semibold text-foreground">
+          {title}
+        </h2>
+      )}
       {children}
       {action && (
         <Link
           to={action.to}
           className={cn(
-            'mt-auto pt-1 text-sm font-medium text-[var(--qb-accent-text,var(--primary))] hover:underline',
+            // A 24px target without moving the line it sits on.
+            'relative mt-auto self-start pt-1 text-sm font-medium text-[var(--qb-accent-text,var(--primary))] hover:underline after:absolute after:inset-x-0 after:-bottom-1 after:top-0',
             row && 'md:mt-0 md:shrink-0 md:pt-0'
           )}
         >
@@ -292,7 +297,7 @@ function RoadmapColumnPosts({
           <Link
             to="/b/$slug/posts/$postId"
             params={{ slug: post.board?.slug ?? '', postId: post.id }}
-            className="line-clamp-2 text-sm text-foreground hover:underline"
+            className="line-clamp-2 py-0.5 text-sm text-foreground hover:underline"
           >
             {post.title}
           </Link>

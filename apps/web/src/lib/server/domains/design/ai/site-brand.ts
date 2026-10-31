@@ -109,7 +109,8 @@ export function pageLinks(html: string, base: string) {
 }
 
 /** A CSS colour as hex, or null for one that is transparent or not a colour. */
-function hex(value: string): string | null {
+/** A CSS colour as six-digit hex, or null when it is not one. */
+export function hex(value: string): string | null {
   const colour = normaliseColor(value.trim().replace(/\s*!important$/, ''))
   if (!colour) return null
   return colour.startsWith('#') ? colour : oklchToHex(colour)

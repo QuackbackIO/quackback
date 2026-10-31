@@ -91,6 +91,8 @@ describe('the header logo a design chooses', () => {
     expect(files[0]!.className).toContain('dark:hidden')
     expect(files[1]!.className).toContain('dark:block')
     expect(logo.textContent).toBe('')
+    // The link says whose portal it is, whatever the file shows.
+    expect(logo.getAttribute('aria-label')).toBe('Harbor')
   })
 
   it('keeps the one wordmark file in dark mode when there is no dark file', async () => {

@@ -265,6 +265,7 @@ export function PostCard({
       disabled={isVotePending || isAnonSigningIn}
       className={cn(
         'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border transition-colors duration-200',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         'w-12 py-2 gap-0.5',
         currentHasVoted
           ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
@@ -563,7 +564,8 @@ export function PostCard({
                   onClick={() => onTagClick(tag.id)}
                   className={cn(
                     tagClassName,
-                    'hover:brightness-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                    // A 24px target around a small chip.
+                    'relative after:absolute after:-inset-y-1 after:inset-x-0 hover:brightness-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
                   )}
                   style={style}
                 >

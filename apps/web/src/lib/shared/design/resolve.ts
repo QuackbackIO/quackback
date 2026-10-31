@@ -7,6 +7,7 @@
  * full list of ways a converted portal can look different.
  */
 import { expandTheme } from '@/lib/shared/theme/expand'
+import { tuneColourCss, tuneCss, type TuneSurface } from './tune'
 import { variableMap } from '@/lib/shared/theme/generator'
 import type { ThemeVariables } from '@/lib/shared/theme/types'
 import { contrastRatio, solveContrast } from './contrast'
@@ -35,6 +36,8 @@ export interface ResolvedDesign {
   errors: string[]
   /** Component tokens: sizes for both modes, and each mode's colours. */
   tokens: { base: TokenMap; light: TokenMap; dark: TokenMap }
+  /** The rules the design's exact values need, after the rest. */
+  tuneCss: string
 }
 
 const CORNER_RADIUS: Record<PortalDesign['shape']['corners'], string> = {
@@ -135,18 +138,41 @@ export function resolveDesign(doc: PortalDesign): ResolvedDesign {
   }
   const light = doc.mode === 'dark' ? null : resolveMode('light')
   const dark = doc.mode === 'light' ? null : resolveMode('dark')
+  const tokens = {
+    base: baseTokens(doc),
+    light: light ? modeTokens(doc, light, 'light') : {},
+    dark: dark ? modeTokens(doc, dark, 'dark') : {},
+  }
   return {
     mode: doc.mode,
     light,
     dark,
     adjustments,
     errors,
-    tokens: {
-      base: baseTokens(doc),
-      light: light ? modeTokens(doc, light, 'light') : {},
-      dark: dark ? modeTokens(doc, dark, 'dark') : {},
-    },
+    tokens,
+    tuneCss: [tuneCss(doc.tune), tuneColourCss(doc.tune, tuneSurface(doc, light, tokens.light))]
+      .filter(Boolean)
+      .join(' '),
   }
+}
+
+const SOLID = /^(#[\da-f]{3,8}|oklch\([^)]*\)|rgb\([^)]*\))$/i
+
+/** What a tune's light-mode colours sit on: the page, and the band behind a headline. */
+function tuneSurface(
+  doc: PortalDesign,
+  light: ThemeVariables | null,
+  tokens: TokenMap
+): TuneSurface | null {
+  if (!light?.background) return null
+  const band =
+    doc.layout.band === 'none'
+      ? null
+      : doc.layout.bandShape === 'panel'
+        ? tokens['--qb-band-panel-bg']
+        : tokens['--qb-band-bg']
+  const solid = !!band && SOLID.test(band.trim())
+  return { background: light.background, band: solid ? band : null, mixed: !!band && !solid }
 }
 
 /**
@@ -229,16 +255,16 @@ export function renderDesignCss(resolved: ResolvedDesign): string {
   // utilities, as the app's own unlayered heading rule is elsewhere, and
   // before the workspace's CSS, which may set them for a part.
   parts.push(
-    '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
+    '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } [data-portal-theme] :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; } }'
   )
   parts.push(
-    '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } [data-portal-theme] [data-qb-part=headline] { font-family: var(--qb-font-display); letter-spacing: var(--qb-headline-tracking); text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
+    '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } [data-portal-theme] [data-qb-part=headline] { font-family: var(--qb-font-display); font-weight: var(--qb-headline-weight); letter-spacing: var(--qb-headline-tracking); text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
   )
   // Every card in the portal takes the design's card style: raised cards float
   // without an edge, list cards are rows divided by rules, filled cards are
   // their own colour with larger corners. Bordered cards are as drawn.
   parts.push(
-    '@layer design { [data-qb-cards=raised][data-portal-theme] [data-qb-surface=card] { border-color: transparent; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); } [data-qb-cards=list][data-portal-theme] [data-qb-surface=card] { border-radius: 0; border-inline-width: 0; border-top-width: 0; background: transparent; box-shadow: none; } [data-qb-cards=filled][data-portal-theme] [data-qb-surface=card] { border-color: transparent; box-shadow: none; border-radius: calc(var(--qb-radius-panel, 0.75rem) * 1.6); } }'
+    '@layer design { [data-qb-cards=raised][data-portal-theme] [data-qb-surface=card] { border-color: transparent; } [data-qb-cards=raised][data-portal-theme] [data-qb-surface=card]:not(:focus-visible) { box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); } [data-qb-cards=list][data-portal-theme] [data-qb-surface=card] { border-radius: 0; border-inline-width: 0; border-top-width: 0; background: transparent; } [data-qb-cards=filled][data-portal-theme] [data-qb-surface=card] { border-color: transparent; border-radius: calc(var(--qb-radius-panel, 0.75rem) * 1.6); } [data-qb-cards=list][data-portal-theme] [data-qb-surface=card]:not(:focus-visible), [data-qb-cards=filled][data-portal-theme] [data-qb-surface=card]:not(:focus-visible) { box-shadow: none; } }'
   )
   // Primary buttons in the text colour, when the design asks.
   parts.push(
@@ -252,5 +278,6 @@ export function renderDesignCss(resolved: ResolvedDesign): string {
   parts.push(
     '@layer design { [data-qb-status=ink][data-portal-theme] [data-qb-status-dot] { background: var(--qb-ink); } [data-qb-status=pill][data-portal-theme] [data-qb-part=status-badge] { padding: 0.125rem 0.5rem; border-radius: var(--qb-radius-control); background: color-mix(in oklch, var(--qb-status, var(--qb-muted)) 18%, var(--qb-surface)); } [data-qb-status=pill][data-portal-theme] [data-qb-part=status-badge] > [data-qb-status-dot] { display: none; } }'
   )
+  if (resolved.tuneCss) parts.push(resolved.tuneCss)
   return parts.join(' ')
 }

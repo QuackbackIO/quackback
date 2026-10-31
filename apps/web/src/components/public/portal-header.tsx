@@ -342,7 +342,9 @@ export function PortalHeader({
   const logo = (
     <Link
       to={PORTAL_LANDING}
-      className="portal-header__logo flex items-center gap-2"
+      // Named for what it shows, so a wordmark or a mark alone still says whose portal it is.
+      aria-label={display === 'wordmark' || display === 'mark' ? brandName : undefined}
+      className="portal-header__logo flex min-h-6 items-center gap-2"
       data-qb-part="logo"
       data-qb-logo={display}
     >

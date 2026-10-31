@@ -133,7 +133,7 @@ export function HelpCenterHeroSearch({
       <div
         data-qb-part="search-field"
         className={cn(
-          'flex items-center gap-3 rounded-[var(--qb-radius-composer,1rem)] border border-border bg-muted pr-2 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-4 focus-within:ring-ring/20',
+          'flex items-center gap-3 rounded-[var(--qb-radius-composer,1rem)] border border-border bg-muted pr-2 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-2 focus-within:ring-ring',
           size === 'hero' ? 'pl-5 shadow-lg' : 'bg-background pl-3.5'
         )}
       >

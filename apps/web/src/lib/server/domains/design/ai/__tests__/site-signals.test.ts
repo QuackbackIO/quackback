@@ -86,6 +86,8 @@ describe('readSiteSignals', () => {
         // The header logo with the colour its page gives it, and the link preview image.
         logo: { svg: '<svg viewBox="0 0 120 30"><path fill="#0f766e"/></svg>' },
         shareImage: 'https://example.com/og.jpg',
+        // Nothing on this page sizes its type or shapes.
+        measured: { headline: null, heading: null, button: null, card: null, field: null },
       },
     })
     expect(web.asked[0]!.agent).toMatch(/QuackbackBrandReader/)

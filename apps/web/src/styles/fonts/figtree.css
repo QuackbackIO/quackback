@@ -2,6 +2,7 @@
    documents whose design selects Figtree. Loaded via
    src/lib/shared/theme/font-loader.ts. Keep weights in sync with its
    BUNDLED_FONTS entry in src/lib/shared/design/fonts.ts. */
+@import "@fontsource/figtree/300.css";
 @import "@fontsource/figtree/400.css";
 @import "@fontsource/figtree/500.css";
 @import "@fontsource/figtree/600.css";

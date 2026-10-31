@@ -8,6 +8,7 @@
  * workspace keeps its look.
  */
 import type { ThemeVariables } from '@/lib/shared/theme/types'
+import { tuneTokens } from './tune'
 import { bandArtImage, EDGE_ART, type BandArt } from './band-art'
 import { mixColor, tintOf } from './color'
 import { contrastRatio, solveContrast } from './contrast'
@@ -73,6 +74,12 @@ const HEADLINE: Record<NonNullable<Fonts['scale']>, [string, string]> = {
   display: ['clamp(2.25rem, 1.2rem + 4.6vw, 4.75rem)', '1.02'],
 }
 
+const SUBTITLE: Record<NonNullable<Fonts['scale']>, string> = {
+  standard: '1rem',
+  large: '1.125rem',
+  display: 'clamp(1.0625rem, 0.95rem + 0.4vw, 1.3125rem)',
+}
+
 /** The other pages' titles: a step below Home's headline, on the same scale. */
 const PAGE_TITLE: Record<NonNullable<Fonts['scale']>, string> = {
   standard: 'clamp(1.5rem, 1.3rem + 0.8vw, 1.875rem)',
@@ -90,6 +97,8 @@ function typeTokens(fonts: Fonts): TokenMap {
     '--qb-headline-size': size,
     '--qb-headline-leading': leading,
     '--qb-page-title-size': PAGE_TITLE[fonts.scale ?? 'standard'],
+    // A headline's line grows with it, so it never reads as a caption under a poster.
+    '--qb-subtitle-size': SUBTITLE[fonts.scale ?? 'standard'],
     // Tight tracking is for the page headline; smaller headings keep today's.
     '--qb-headline-tracking': fonts.tracking === 'tight' ? '-0.03em' : '-0.02em',
     '--qb-headline-case': CASE[fonts.headlineCase ?? 'sentence'],
@@ -438,6 +447,8 @@ export function baseTokens(doc: PortalDesign): TokenMap {
   const [button, composer] = buttons === 'match' ? [control, field] : BUTTON_RADII[buttons]
   const [padding, gap, title] = DENSITY[doc.layout.density]
   return {
+    // Headlines take the heading weight unless the design tunes their own.
+    '--qb-headline-weight': String(doc.brand.fonts.headingWeight),
     '--qb-radius-control': control,
     '--qb-radius-field': field,
     '--qb-radius-panel': panel,
@@ -460,6 +471,7 @@ export function baseTokens(doc: PortalDesign): TokenMap {
     '--qb-font-display': fontStack(doc.brand.fonts.display ?? doc.brand.fonts.heading),
     '--qb-heading-weight': String(doc.brand.fonts.headingWeight),
     ...typeTokens(doc.brand.fonts),
+    ...tuneTokens(doc.tune),
   }
 }
 

@@ -8,7 +8,8 @@ import { defaultDesign } from '@/lib/shared/design/schema'
 
 vi.mock('@/lib/server/config', () => ({ config: {} }))
 
-const { DIRECTIONS_EXAMPLE, faithfulAccent, lookDesign } = await import('../design-directions')
+const { DIRECTIONS_EXAMPLE, faithfulAccent, lookDesign, withMeasuredTune } =
+  await import('../design-directions')
 
 const every = [
   'welcome',
@@ -277,5 +278,37 @@ describe('the faithful look’s accent', () => {
 
   it('reads an image’s colours as well', () => {
     expect(faithfulAccent('#3d7a2e', { palette: ['#9fe870'] })).toBe('#9fe870')
+  })
+})
+
+describe('the faithful look’s measured type and shapes', () => {
+  it('takes the brand’s own values, exactly as its page sets them', () => {
+    const site = {
+      fonts: { heading: 'sohne-var', body: 'Acme Text' },
+      measured: {
+        headline: { size: 48, weight: 300, tracking: -0.02, leading: 1.15 },
+        button: { radius: 4, height: 40 },
+      },
+    } as never
+    const design = withMeasuredTune(defaultDesign(), site, allows)
+    expect(design.tune).toEqual({
+      headline: { size: 48, weight: 300, tracking: -0.02, leading: 1.15 },
+      button: { radius: 4, height: 40 },
+    })
+    // Its faces as the closest bundled ones; one it does not know is left to the look.
+    expect(design.brand.fonts.heading).toEqual({ kind: 'bundled', id: 'inter-tight' })
+    expect(design.brand.fonts.body).toEqual(defaultDesign().brand.fonts.body)
+  })
+
+  it('leaves the design alone when nothing was measured', () => {
+    const design = defaultDesign()
+    expect(
+      withMeasuredTune(
+        design,
+        { measured: null, fonts: { heading: null, body: null } } as never,
+        allows
+      )
+    ).toBe(design)
+    expect(withMeasuredTune(design, null, allows)).toBe(design)
   })
 })

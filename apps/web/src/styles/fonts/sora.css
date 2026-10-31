@@ -2,6 +2,7 @@
    documents whose design selects Sora. Loaded via
    src/lib/shared/theme/font-loader.ts. Keep weights in sync with its
    BUNDLED_FONTS entry in src/lib/shared/design/fonts.ts. */
+@import "@fontsource/sora/300.css";
 @import "@fontsource/sora/400.css";
 @import "@fontsource/sora/500.css";
 @import "@fontsource/sora/600.css";
