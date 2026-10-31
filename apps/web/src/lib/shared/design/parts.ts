@@ -67,7 +67,7 @@ export const PORTAL_PARTS = [
       '--qb-heading-weight',
       '--qb-band-ink',
       '--qb-headline-size',
-      '--qb-heading-tracking',
+      '--qb-headline-tracking',
       '--qb-band-accent',
     ],
     files: ['components/public/portal-band.tsx'],
