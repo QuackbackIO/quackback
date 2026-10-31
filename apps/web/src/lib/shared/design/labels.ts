@@ -27,6 +27,9 @@ const LABELS: Record<string, string> = {
   'layout.filters': 'Filters side',
   'pages.feedback.defaultSort': 'Default sort',
   'brand.logo.display': 'Logo display',
+  'nav.home.on': 'Home page',
+  'nav.home.tab': 'Home in the menu',
+  'pages.home.blocks': 'Home blocks',
 }
 
 const IMAGES: Record<string, string> = {
@@ -57,8 +60,11 @@ export function changeLabel(path: string): string {
   }
   if (path.startsWith('pages.feedback.welcome.body')) return 'Welcome message text'
   if (path === 'pages.feedback.welcome.show') return 'Welcome message'
-  const headline = path.match(/^pages\.feedback\.headline(?:\.(title|subtitle))?/)
-  if (headline) return headline[1] === 'subtitle' ? 'Subtitle' : 'Headline'
+  const headline = path.match(/^pages\.(feedback|home)\.headline(?:\.(title|subtitle))?/)
+  if (headline) {
+    const name = headline[2] === 'subtitle' ? 'Subtitle' : 'Headline'
+    return headline[1] === 'home' ? `Home ${name.toLowerCase()}` : name
+  }
   const font = path.match(/^(brand\.fonts\.(?:heading|body))\./)
   return LABELS[font ? font[1] : path] ?? path
 }

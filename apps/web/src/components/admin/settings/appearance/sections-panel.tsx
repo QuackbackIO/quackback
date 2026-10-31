@@ -5,7 +5,9 @@ import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { DesignTiles } from './design-tiles'
+import { HomeSection } from './home-section'
 import {
   BandDrawing,
   CardsDrawing,
@@ -24,14 +26,34 @@ const capital = (value: string) => value[0].toUpperCase() + value.slice(1)
 /** The language the headline is written in here; other languages fall back to it. */
 const HEADLINE_LOCALE = 'en'
 
+/** With Home on, Home has a headline too, so the feed's says whose it is. */
+const HEADLINE_LABELS = {
+  title: { alone: 'Headline', withHome: 'Feedback headline' },
+  subtitle: { alone: 'Subtitle', withHome: 'Feedback subtitle' },
+}
+
 /**
  * The Sections tab: the choices each part of the portal offers. Core parts
  * are restyled here, never hidden.
  */
-export function SectionsPanel({ design, update }: { design: PortalDesign; update: Update }) {
+export function SectionsPanel({
+  design,
+  update,
+  gates,
+  onEditHome,
+}: {
+  design: PortalDesign
+  update: Update
+  /** Which pages the workspace has, for Home's starting layout and its hints. */
+  gates: PortalPageGates
+  /** Called when Home changes, so the preview can show it. */
+  onEditHome: () => void
+}) {
   const { layout } = design
   return (
     <div className="space-y-8">
+      <HomeSection design={design} update={update} gates={gates} onEdit={onEditHome} />
+
       <section id="design-section-header" className="scroll-mt-4 space-y-4">
         <h3 className="text-sm font-semibold">Header</h3>
         <DesignTiles
@@ -80,7 +102,7 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
         {(['title', 'subtitle'] as const).map((field) => (
           <div key={field} className="space-y-1.5">
             <label htmlFor={`design-headline-${field}`} className="text-[13px] font-medium">
-              {field === 'title' ? 'Headline' : 'Subtitle'}
+              {HEADLINE_LABELS[field][design.nav.home.on ? 'withHome' : 'alone']}
             </label>
             <Input
               id={`design-headline-${field}`}

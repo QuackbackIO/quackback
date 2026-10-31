@@ -27,10 +27,18 @@ vi.mock('@tanstack/react-router', () => ({
   }),
   ClientOnly: ({ children }: { children: ReactNode }) => <>{children}</>,
   Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
+  useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
+    select({ settings: { featureFlags: { feedback: true, changelog: true } } }),
+}))
+vi.mock('@/components/admin/settings/branding/welcome-body-editor', () => ({
+  WelcomeBodyEditor: () => null,
+}))
+vi.mock('@/lib/client/queries/admin', () => ({
+  adminQueries: { roadmaps: () => ({ queryKey: ['roadmaps'], queryFn: async () => [] }) },
 }))
 vi.mock('@/components/admin/settings/branding/portal-preview', () => ({
-  PortalPreview: ({ design }: { design: { css: string } }) => (
-    <div data-testid="preview">
+  PortalPreview: ({ design, page }: { design: { css: string }; page: string }) => (
+    <div data-testid="preview" data-page={page}>
       {design.css.includes('--qb-card-padding: 0.75rem') ? 'compact' : 'comfortable'}
     </div>
   ),
@@ -134,6 +142,31 @@ afterEach(() => {
 const selectedTab = () => screen.getByRole('tab', { selected: true }).textContent
 
 describe('AppearanceView', () => {
+  it('previews Home once it is on, with the feed a click away', async () => {
+    mount()
+    const preview = () => screen.getByTestId('preview').dataset.page
+    expect(preview()).toBe('feedback')
+    expect(screen.queryByRole('group', { name: 'Page' })).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Sections' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Home page' }))
+    expect(preview()).toBe('home')
+    // The starting layout holds the pages this workspace has.
+    expect(screen.getByRole('list', { name: 'Home blocks' }).textContent).toContain(
+      'Latest updates'
+    )
+    expect(screen.getByRole('list', { name: 'Home blocks' }).textContent).not.toContain('Status')
+    fireEvent.click(screen.getByRole('button', { name: 'Feedback' }))
+    expect(preview()).toBe('feedback')
+    // Changing Home shows Home again.
+    expect(screen.getByRole('textbox', { name: 'Feedback headline' })).toBeTruthy()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Home headline' }), {
+      target: { value: 'Welcome to Acme' },
+    })
+    expect(preview()).toBe('home')
+    fireEvent.click(screen.getByRole('switch', { name: 'Home page' }))
+    expect(preview()).toBe('feedback')
+  })
+
   it('shows a change in the preview and the draft bar at once', async () => {
     mount()
     expect(screen.queryByText(/not live/)).toBeNull()

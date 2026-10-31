@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useRouteContext } from '@tanstack/react-router'
 import { AreaMessages } from '@/components/shared/area-messages'
 import { PortalBand } from '@/components/public/portal-band'
+import { usePreviewHome } from '@/components/public/preview-draft-context'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { HomeBlockView } from './home-blocks'
 import type { HomeAreaMessages } from './home-prefetch'
@@ -45,7 +46,9 @@ export function PortalHome({
     from: '__root__',
     select: (context) => context.settings?.portalDesign,
   })
+  const draftHome = usePreviewHome()
   if (design?.engine !== 'v2') return null
+  const home = draftHome ?? design.home
   return (
     <>
       <PortalBand page="home" />
@@ -54,7 +57,7 @@ export function PortalHome({
         className="mx-auto grid w-full max-w-[var(--qb-page-max,72rem)] grid-cols-1 gap-[var(--qb-feed-gap,1rem)] px-4 py-6 sm:px-6 md:grid-cols-2 lg:grid-cols-6 [[data-qb-cards=list]_&]:gap-4"
       >
         <WithAreas messages={messages}>
-          {design.home.blocks.map((block, index) => (
+          {home.blocks.map((block, index) => (
             <HomeBlockView
               key={`${block.type}-${index}`}
               block={block}

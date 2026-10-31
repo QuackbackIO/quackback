@@ -4,6 +4,8 @@ import {
   PreviewDraftProvider,
   PreviewAttributesContext,
   PreviewHeadlineContext,
+  PreviewPagesContext,
+  type PreviewDesignPages,
   type PortalPreviewDraft,
 } from './preview-draft-context'
 
@@ -121,6 +123,17 @@ export function PortalPreviewProvider({
       stopPicking()
     }
   }, [design, active])
+  // The channel checks their shape; the admin drafted them through the schema.
+  const pages = useMemo<PreviewDesignPages | undefined>(
+    () =>
+      design
+        ? {
+            home: design.home as PreviewDesignPages['home'],
+            nav: design.nav as PreviewDesignPages['nav'],
+          }
+        : undefined,
+    [design]
+  )
   const fontIds = design?.fontIds.join(' ') ?? ''
   useEffect(() => {
     for (const id of fontIds.split(' ').filter(Boolean)) loadBrandingFont(id).catch(() => {})
@@ -131,9 +144,11 @@ export function PortalPreviewProvider({
   return (
     <PreviewDraftProvider draft={draft} css={css}>
       <PreviewHeadlineContext.Provider value={design ? design.headline : undefined}>
-        <PreviewAttributesContext.Provider value={design?.attributes}>
-          {children}
-        </PreviewAttributesContext.Provider>
+        <PreviewPagesContext.Provider value={pages}>
+          <PreviewAttributesContext.Provider value={design?.attributes}>
+            {children}
+          </PreviewAttributesContext.Provider>
+        </PreviewPagesContext.Provider>
       </PreviewHeadlineContext.Provider>
       {stylesheet ? <style data-preview-override="">{stylesheet}</style> : null}
       {design?.css ? <style data-preview-design="">{design.css}</style> : null}

@@ -2,6 +2,7 @@ import { nameInitial } from '@/lib/shared/utils/initial'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/shared/utils'
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
+import type { PortalDesign } from '@/lib/shared/design/schema'
 
 interface PortalPreviewProps {
   /** Forced preview theme — forwarded to the portal iframe as `?theme=`. */
@@ -40,8 +41,14 @@ interface PortalPreviewProps {
     attributes: Record<string, string>
     fontIds: string[]
     headline: { title: Record<string, string>; subtitle: Record<string, string> } | null
+    home?: PortalDesign['pages']['home']
+    nav?: PortalDesign['nav']
   } | null
+  /** The page the frame shows: the root, Home or the feed at its own address. */
+  page?: PreviewPage
 }
+
+export type PreviewPage = 'root' | 'home' | 'feedback'
 
 /** The width a desktop visitor's browser lays the portal out at. */
 const DESKTOP_WIDTH = 1280
@@ -53,9 +60,11 @@ const DESKTOP_WIDTH = 1280
  */
 export function portalPreviewSrc(
   theme: 'light' | 'dark',
-  sort: 'trending' | 'top' | 'new' = 'trending'
+  sort: 'trending' | 'top' | 'new' = 'trending',
+  page: PreviewPage = 'root'
 ) {
-  return `/?theme=${theme}&preview=true&sort=${sort}`
+  if (page === 'home') return `/?theme=${theme}&preview=true&page=home`
+  return `${page === 'feedback' ? '/feedback' : '/'}?theme=${theme}&preview=true&sort=${sort}`
 }
 
 /**
@@ -78,6 +87,7 @@ export function PortalPreview({
   design = null,
   scaleToDesktop = false,
   sort = 'trending',
+  page = 'root',
 }: PortalPreviewProps) {
   const frameBox = useRef<HTMLDivElement>(null)
   const [boxWidth, setBoxWidth] = useState(0)
@@ -177,7 +187,7 @@ export function PortalPreview({
         <iframe
           key={refreshKey}
           ref={iframeRef}
-          src={portalPreviewSrc(theme, sort)}
+          src={portalPreviewSrc(theme, sort, page)}
           title="Portal preview"
           className="w-full border-0 bg-background"
           style={

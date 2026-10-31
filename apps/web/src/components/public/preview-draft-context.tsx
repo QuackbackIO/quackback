@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { PortalNavConfig, PortalWelcomeCard } from '@/lib/shared/types/settings'
 
 /**
@@ -92,6 +93,24 @@ export const PreviewHeadlineContext = createContext<PreviewHeadline | undefined>
 /** The draft design's feedback page headline, or undefined (always, outside a design preview). */
 export function usePreviewHeadline(): PreviewHeadline | undefined {
   return useContext(PreviewHeadlineContext)
+}
+
+/** A draft design's Home and menu, as the design stores them. */
+export type PreviewDesignPages = {
+  home: PortalDesign['pages']['home'] | null
+  nav: PortalDesign['nav'] | null
+}
+
+export const PreviewPagesContext = createContext<PreviewDesignPages | undefined>(undefined)
+
+/** A draft design's Home, or undefined (always, outside a design preview). */
+export function usePreviewHome(): PortalDesign['pages']['home'] | undefined {
+  return useContext(PreviewPagesContext)?.home ?? undefined
+}
+
+/** A draft design's menu, or undefined (always, outside a design preview). */
+export function usePreviewDesignNav(): PortalDesign['nav'] | undefined {
+  return useContext(PreviewPagesContext)?.nav ?? undefined
 }
 
 export const PreviewAttributesContext = createContext<Record<string, string> | undefined>(undefined)

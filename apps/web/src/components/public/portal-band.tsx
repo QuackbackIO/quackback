@@ -1,6 +1,6 @@
 import { useIntl } from 'react-intl'
 import { useRouteContext } from '@tanstack/react-router'
-import { usePreviewHeadline } from './preview-draft-context'
+import { usePreviewHeadline, usePreviewHome } from './preview-draft-context'
 
 /** Text in the visitor's language, else its base language, else English, else any. */
 export function textForLocale(
@@ -25,10 +25,11 @@ export function PortalBand({ page = 'feedback' }: { page?: 'feedback' | 'home' }
     select: (context) => context.settings?.portalDesign,
   })
   const draftHeadline = usePreviewHeadline()
+  const draftHome = usePreviewHome()
   if (design?.engine !== 'v2') return null
   const headline =
     page === 'home'
-      ? design.home.headline
+      ? (draftHome ?? design.home).headline
       : draftHeadline !== undefined
         ? draftHeadline
         : design.feedback.headline

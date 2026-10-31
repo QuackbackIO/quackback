@@ -24,6 +24,12 @@ describe('changeLabel', () => {
     ['brand.logo.display', 'Logo display'],
     ['brand.favicon.key', 'Favicon'],
     ['brand.shareImage.key', 'Share image'],
+    ['nav.home.on', 'Home page'],
+    ['nav.home.tab', 'Home in the menu'],
+    ['pages.home.headline.title.en', 'Home headline'],
+    ['pages.home.headline', 'Home headline'],
+    ['pages.home.headline.subtitle.fr', 'Home subtitle'],
+    ['pages.home.blocks', 'Home blocks'],
   ])('%s is %s', (path, label) => {
     expect(changeLabel(path)).toBe(label)
   })
@@ -38,5 +44,29 @@ describe('ChangeList', () => {
     )
     expect(container.textContent).toContain('Uploaded image')
     expect(container.textContent).not.toContain('logos/')
+  })
+
+  it('counts Home’s blocks rather than calling them changed', () => {
+    const block = { type: 'status', width: 'third' }
+    const { container } = render(
+      <ChangeList changes={[{ path: 'pages.home.blocks', before: [], after: [block, block] }]} />
+    )
+    expect(container.textContent).toContain('No blocks')
+    expect(container.textContent).toContain('2 blocks')
+    expect(container.textContent).not.toContain('Changed')
+  })
+
+  it('calls an empty headline none, while a colour left unset stays automatic', () => {
+    const { container } = render(
+      <ChangeList
+        changes={[
+          { path: 'pages.home.headline.title.en', before: undefined, after: 'Hello' },
+          { path: 'brand.light.raised', before: undefined, after: '#ffffff' },
+        ]}
+      />
+    )
+    const [headline, colour] = container.querySelectorAll('li')
+    expect(headline!.textContent).toContain('None')
+    expect(colour!.textContent).toContain('Automatic')
   })
 })
