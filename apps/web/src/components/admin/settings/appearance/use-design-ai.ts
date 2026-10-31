@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { track } from '@/lib/client/analytics'
-import { imagePalette } from '@/lib/client/image-palette'
+import { imageForModel, imagePalette } from '@/lib/client/image-palette'
 import {
   askPortalDesignAiFn,
   portalDesignDirectionsFn,
@@ -117,7 +117,7 @@ export function useDesignAi({
       setBusy(true)
       void track('appearance_start_chosen', { start: 'image' })
       try {
-        const palette = await imagePalette(file)
+        const [palette, image] = await Promise.all([imagePalette(file), imageForModel(file)])
         say({ role: 'user', text: file.name, palette })
         if (palette.length === 0) {
           say({ role: 'assistant', text: 'That image could not be read. Try a PNG or a JPEG.' })
@@ -130,7 +130,9 @@ export function useDesignAi({
             () => 'It could not be saved as your logo; set one in Settings › General. '
           )
         }
-        const result = await portalDesignDirectionsFn({ data: { palette } })
+        const result = await portalDesignDirectionsFn({
+          data: { palette, ...(image ? { image } : {}) },
+        })
         if (result.ok)
           say({
             role: 'assistant',

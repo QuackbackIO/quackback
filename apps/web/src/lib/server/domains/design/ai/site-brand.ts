@@ -6,17 +6,17 @@
  * Colours are weighed by where they appear. A colour the site names as its
  * theme, in its manifest or in a custom property called primary, brand or
  * accent counts most; one on buttons and links next; any other a little. The
- * brand colour is the heaviest vivid one, and the page background is what
+ * brand colour is the heaviest colourful one, and the page background is what
  * the body or html is painted.
  */
 import { normaliseColor } from '@/lib/shared/design/color'
-import { colourVividness } from '@/lib/shared/design/palette'
+import { isBrandColour } from '@/lib/shared/design/palette'
 import { oklchToHex } from '@/lib/shared/theme/colors'
 
 export interface SiteBrand {
   title: string | null
   description: string | null
-  /** The brand colour: the heaviest vivid colour the site uses. */
+  /** The brand colour: the heaviest colourful colour the site uses. */
   colour: string | null
   /** Up to five vivid colours, heaviest first, none close to another. */
   palette: string[]
@@ -27,9 +27,6 @@ export interface SiteBrand {
   /** The page is dark. */
   dark: boolean
 }
-
-/** A vivid colour reads as a brand colour; a grey does not. */
-const BRAND_VIVIDNESS = 0.25
 
 /** Pages that answer a visit with a block rather than the site. */
 const BLOCK_PAGE =
@@ -217,7 +214,7 @@ export function readSiteBrand(input: {
       : null)
 
   const vivid = [...weights]
-    .filter(([colour]) => colourVividness(colour) >= BRAND_VIVIDNESS)
+    .filter(([colour]) => isBrandColour(colour))
     .sort((a, b) => b[1] - a[1])
     .map(([colour]) => colour)
   const palette: string[] = []

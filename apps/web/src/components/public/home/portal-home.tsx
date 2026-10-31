@@ -4,7 +4,7 @@ import { AreaMessages } from '@/components/shared/area-messages'
 import { PortalBand } from '@/components/public/portal-band'
 import { usePreviewHome } from '@/components/public/preview-draft-context'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
-import { HomeBlockView } from './home-blocks'
+import { HomeBlockView, HomeSpans } from './home-blocks'
 import type { HomeAreaMessages } from './home-prefetch'
 
 export { loadHome } from './home-prefetch'
@@ -57,14 +57,16 @@ export function PortalHome({
         className="mx-auto grid w-full max-w-[var(--qb-page-max,72rem)] grid-cols-1 gap-[var(--qb-feed-gap,1rem)] px-4 py-6 sm:px-6 md:grid-cols-2 lg:grid-cols-6 [[data-qb-cards=list]_&]:gap-4"
       >
         <WithAreas messages={messages}>
-          {home.blocks.map((block, index) => (
-            <HomeBlockView
-              key={`${block.type}-${index}`}
-              block={block}
-              index={index}
-              gates={gates}
-            />
-          ))}
+          <HomeSpans blocks={home.blocks} gates={gates}>
+            {home.blocks.map((block, index) => (
+              <HomeBlockView
+                key={`${block.type}-${index}`}
+                block={block}
+                index={index}
+                gates={gates}
+              />
+            ))}
+          </HomeSpans>
         </WithAreas>
       </div>
     </>

@@ -1,10 +1,10 @@
 /**
- * The colours of a logo or a screenshot, read in the browser so no image
- * leaves it: the most used colours first, near neighbours merged, and
- * transparent pixels ignored.
+ * The colours of a logo or a screenshot, read in the browser: the brand
+ * colour first, then the most used, near neighbours merged and transparent
+ * pixels ignored. A deep brand colour counts as much as a bright one.
  */
 import { describe, expect, it } from 'vitest'
-import { mostVivid, paletteFromPixels } from '../palette'
+import { brandColour, isBrandColour, paletteFromPixels } from '../palette'
 
 /** RGBA pixels: each entry repeated `count` times. */
 function pixels(...runs: Array<[number, number, number, number, number]>) {
@@ -45,7 +45,8 @@ describe('paletteFromPixels', () => {
     expect(palette).toHaveLength(3)
     expect(palette).toContain('#ff5a36')
     expect(palette).not.toContain('#ff00ff')
-    expect(mostVivid(palette)).toBe('#ff5a36')
+    expect(brandColour(palette)).toBe('#ff5a36')
+    expect(palette[0]).toBe('#ff5a36')
   })
 
   it('finds a brand colour spread thin across shades, as on a small button', () => {
@@ -61,12 +62,41 @@ describe('paletteFromPixels', () => {
       [233, 83, 50, 255, 3]
     )
     const palette = paletteFromPixels(data, 3)
-    const vivid = mostVivid(palette)
+    const vivid = brandColour(palette)
     expect(vivid).not.toBeNull()
     const [r, g, b] = [1, 3, 5].map((i) => parseInt(vivid!.slice(i, i + 2), 16))
     expect(r).toBeGreaterThan(200)
     expect(g).toBeLessThan(100)
     expect(b).toBeLessThan(60)
+  })
+
+  it('takes a deep brand colour that covers the page over a brighter accent used once', () => {
+    // A cream page with pine-green headings and buttons and one copper heading.
+    const data = pixels(
+      [246, 239, 226, 255, 3000],
+      [255, 250, 240, 255, 800],
+      [31, 77, 58, 255, 400],
+      [180, 100, 43, 255, 60],
+      [34, 32, 28, 255, 300]
+    )
+    const palette = paletteFromPixels(data, 4)
+    expect(palette[0]).toBe('#1f4d3a')
+    expect(brandColour(palette)).toBe('#1f4d3a')
+  })
+
+  it('counts deep colours as brand colours, and greys, whites and near-blacks not', () => {
+    expect(['#1f4d3a', '#4a154b', '#0b3d91', '#ff5a36'].map(isBrandColour)).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ])
+    expect(['#6b7280', '#f6efe2', '#0b1020', '#ffffff'].map(isBrandColour)).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ])
   })
 
   it('gives nothing for an empty image', () => {

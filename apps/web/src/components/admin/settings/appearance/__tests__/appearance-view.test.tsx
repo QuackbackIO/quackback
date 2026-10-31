@@ -104,6 +104,7 @@ vi.mock('@/lib/server/functions/portal-design-ai', () => ({
 
 vi.mock('@/lib/client/image-palette', () => ({
   imagePalette: async () => ['#7a1f35', '#ffffff'],
+  imageForModel: async () => 'data:image/jpeg;base64,AAAA',
 }))
 vi.mock('@/lib/client/mutations/settings', () => ({
   useUploadWorkspaceLogo: () => ({
@@ -305,7 +306,12 @@ describe('AppearanceView', () => {
         target: { files: [logo] },
       })
     })
-    await waitFor(() => expect(server.directions).toEqual([{ palette: ['#7a1f35', '#ffffff'] }]))
+    // The colours, and the image itself for a model that reads images.
+    await waitFor(() =>
+      expect(server.directions).toEqual([
+        { palette: ['#7a1f35', '#ffffff'], image: 'data:image/jpeg;base64,AAAA' },
+      ])
+    )
     expect(server.logos).toEqual([logo])
     // The new logo reaches the root settings, and with them the preview.
     expect(server.invalidations).toBeGreaterThan(0)

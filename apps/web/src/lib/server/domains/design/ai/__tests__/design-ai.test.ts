@@ -13,7 +13,8 @@ const model = vi.hoisted(() => ({
   configured: true,
   answer: null as unknown,
   error: null as unknown,
-  calls: [] as Array<{ systemPrompts: string[] }>,
+  calls: [] as Array<{ systemPrompts: string[]; messages: Array<{ content: unknown }> }>,
+  refusesImages: false,
 }))
 
 vi.mock('@/lib/server/config', () => ({ config: { openaiApiKey: 'key', openaiBaseUrl: 'url' } }))
@@ -25,9 +26,14 @@ vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   enforceAiTokenBudget: async () => {},
 }))
 vi.mock('@/lib/server/domains/ai/structured-chat', () => ({
-  structuredChat: async (input: { systemPrompts: string[] }) => {
+  structuredChat: async (input: {
+    systemPrompts: string[]
+    messages: Array<{ content: unknown }>
+  }) => {
     model.calls.push(input)
     if (model.error) throw model.error
+    if (model.refusesImages && Array.isArray(input.messages[0]?.content))
+      throw new Error('this model does not take images')
     return model.answer
   },
 }))
@@ -54,6 +60,7 @@ const ALLOWS: {
 } = { blockTypes: EVERY_BLOCK, writesCss: false, checkCss: () => 'Quackback AI does not write CSS' }
 
 beforeEach(() => {
+  model.refusesImages = false
   model.configured = true
   model.answer = null
   model.error = null
@@ -164,7 +171,7 @@ describe('askDesignAi', () => {
     })
     const sent = model.calls[0] as unknown as { messages: Array<{ content: string }> }
     expect(sent.messages.at(-1)!.content).toBe(
-      'Use these colours\n\nColours from the attached image, most used first: #7a1f35, #ffffff. The most vivid, likely the brand colour: #7a1f35.'
+      'Use these colours\n\nColours from the attached image: #7a1f35, #ffffff. The brand colour, the most used colour that is not a neutral: #7a1f35.'
     )
   })
 
@@ -280,7 +287,7 @@ describe('designDirections', () => {
     const brief = (model.calls[0] as unknown as { messages: Array<{ content: string }> })
       .messages[0].content
     expect(brief).toContain(
-      'Colours from their logo or a screenshot, most used first: #0f766e, #f8fafc. The most vivid, likely the brand colour: #0f766e.'
+      'Colours from their logo or a screenshot: #0f766e, #f8fafc. The brand colour, the most used colour that is not a neutral: #0f766e. Use the brand colour as the accent in the first look, as it is.'
     )
     if (!result.ok) throw new Error('expected looks')
     expect(result.looks.map((look) => look.name)).toEqual(['Calm', 'Editorial'])
@@ -428,5 +435,52 @@ describe('any change to the design', () => {
     expect(model.calls.at(-1)!.systemPrompts[0]).toContain(
       'This workspace can show: welcome, composer.'
     )
+  })
+})
+
+describe('a logo or a screenshot', () => {
+  const look = {
+    name: 'Faithful',
+    description: 'Close to the site.',
+    preset: DESIGN_PRESETS[0]!.id,
+    accent: '#1f4d3a',
+    background: '#f6efe2',
+    ink: '#22201c',
+    headingFont: 'fraunces',
+    bodyFont: 'inter',
+    headline: 'Tell us',
+    subtitle: 'Ideas welcome.',
+  }
+
+  it('is shown to the model as well as its colours', async () => {
+    model.answer = { looks: [look] }
+    await designDirections({
+      design: defaultDesign(),
+      site: null,
+      words: null,
+      palette: ['#1f4d3a', '#f6efe2'],
+      image: 'data:image/jpeg;base64,AAAA',
+    })
+    const content = model.calls[0]!.messages[0]!.content as Array<Record<string, unknown>>
+    expect(content[0]).toMatchObject({ type: 'text' })
+    expect(content[1]).toEqual({
+      type: 'image',
+      source: { type: 'data', value: 'AAAA', mimeType: 'image/jpeg' },
+    })
+  })
+
+  it('leaves a model that does not take images with the colours', async () => {
+    model.answer = { looks: [look] }
+    model.refusesImages = true
+    const result = await designDirections({
+      design: defaultDesign(),
+      site: null,
+      words: null,
+      palette: ['#1f4d3a', '#f6efe2'],
+      image: 'data:image/jpeg;base64,AAAA',
+    })
+    expect(result.ok).toBe(true)
+    expect(model.calls).toHaveLength(2)
+    expect(model.calls[1]!.messages[0]!.content).toContain('#1f4d3a')
   })
 })

@@ -4,7 +4,7 @@
  * has nothing to show. Every block is a `home-block` part and a section the
  * Appearance preview can select.
  */
-import { Suspense, useState, type ReactNode } from 'react'
+import { createContext, Suspense, useContext, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useQuery, useSuspenseInfiniteQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
@@ -30,6 +30,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
 import { useFeedCopy } from '@/components/public/preview-draft-context'
 import { homeMessages } from './home-messages'
+import { filledSpans } from '@/lib/shared/design/home'
 import { popularArticlesQuery } from './home-prefetch'
 
 export type HomeBlock = PortalDesign['pages']['home']['blocks'][number]
@@ -46,6 +47,45 @@ const WIDTH_CLASS: Record<HomeBlock['width'], string> = {
 }
 
 /** A block's card: the brand's card style, its title and its way on. */
+const MEDIUM_SPAN: Record<number, string> = { 1: 'md:col-span-1', 2: 'md:col-span-2' }
+const WIDE_SPAN: Record<number, string> = {
+  2: 'lg:col-span-2',
+  3: 'lg:col-span-3',
+  4: 'lg:col-span-4',
+  5: 'lg:col-span-5',
+  6: 'lg:col-span-6',
+}
+
+/** Each shown block's columns, by its index, once Home's rows are filled. */
+const SpansContext = createContext<ReadonlyMap<number, string>>(new Map())
+
+/**
+ * The columns of the blocks Home shows, by index: a block whose page is off
+ * is left out first, so its neighbours fill the row instead of leaving a hole.
+ */
+export function HomeSpans({
+  blocks,
+  gates,
+  children,
+}: {
+  blocks: HomeBlock[]
+  gates: PortalPageGates
+  children: ReactNode
+}) {
+  const shown = blocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block }) => blockShown(block, gates))
+  const widths = shown.map(({ block }) => block.width)
+  const [medium, wide] = [filledSpans(widths, 'medium'), filledSpans(widths, 'wide')]
+  const spans = new Map(
+    shown.map(({ index }, at) => [index, `${MEDIUM_SPAN[medium[at]!]} ${WIDE_SPAN[wide[at]!]}`])
+  )
+  return <SpansContext.Provider value={spans}>{children}</SpansContext.Provider>
+}
+
+const useSpan = (block: HomeBlock, index: number) =>
+  useContext(SpansContext).get(index) ?? WIDTH_CLASS[block.width]
+
 function BlockCard({
   block,
   index,
@@ -62,6 +102,7 @@ function BlockCard({
   bare?: boolean
   children: ReactNode
 }) {
+  const span = useSpan(block, index)
   return (
     <section
       data-qb-section={`block-${index}`}
@@ -74,7 +115,7 @@ function BlockCard({
           '[[data-qb-cards=raised]_&]:border-transparent [[data-qb-cards=raised]_&]:shadow-md',
           '[[data-qb-cards=list]_&]:rounded-none [[data-qb-cards=list]_&]:border-x-0 [[data-qb-cards=list]_&]:border-t-0 [[data-qb-cards=list]_&]:bg-transparent [[data-qb-cards=list]_&]:shadow-none',
         ],
-        WIDTH_CLASS[block.width]
+        span
       )}
     >
       {title && <h2 className="text-lg font-semibold text-foreground">{title}</h2>}
@@ -92,14 +133,12 @@ function BlockCard({
 }
 
 /** A block waiting on its data: the card's outline, so the grid does not jump. */
-function BlockSkeleton({ block }: { block: HomeBlock }) {
+function BlockSkeleton({ block, index }: { block: HomeBlock; index: number }) {
+  const span = useSpan(block, index)
   return (
     <div
       aria-hidden="true"
-      className={cn(
-        'col-span-1 min-h-32 animate-pulse rounded-lg bg-muted/40',
-        WIDTH_CLASS[block.width]
-      )}
+      className={cn('col-span-1 min-h-32 animate-pulse rounded-lg bg-muted/40', span)}
     />
   )
 }
@@ -496,6 +535,12 @@ const BLOCK_PAGE: Partial<Record<HomeBlock['type'], keyof PortalPageGates>> = {
 }
 
 /** One block, drawn when its page is on, with its data streamed in. */
+/** Whether a block's page is on, so Home draws it. */
+function blockShown(block: HomeBlock, gates: PortalPageGates): boolean {
+  const page = BLOCK_PAGE[block.type]
+  return !page || gates[page]
+}
+
 export function HomeBlockView({
   block,
   index,
@@ -506,8 +551,7 @@ export function HomeBlockView({
   /** Which pages exist, from the loader; a block whose page is off is not drawn. */
   gates: PortalPageGates
 }) {
-  const page = BLOCK_PAGE[block.type]
-  if (page && !gates[page]) return null
+  if (!blockShown(block, gates)) return null
   const body = (() => {
     switch (block.type) {
       case 'welcome':
@@ -532,5 +576,5 @@ export function HomeBlockView({
         return <LinksBlock block={block} index={index} />
     }
   })()
-  return <Suspense fallback={<BlockSkeleton block={block} />}>{body}</Suspense>
+  return <Suspense fallback={<BlockSkeleton block={block} index={index} />}>{body}</Suspense>
 }

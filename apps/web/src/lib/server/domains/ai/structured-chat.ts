@@ -15,6 +15,7 @@
  * `code`s `chat({ outputSchema })` uses, so `isStructuredOutputError` checks
  * in callers cover both paths.
  */
+import type { ContentPart } from '@tanstack/ai'
 import { chat, type ChatMiddleware } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
@@ -87,7 +88,8 @@ function structuredError(code: string, message: string): Error {
 export interface StructuredChatInput<S extends z.ZodType> {
   model: string
   systemPrompts: string[]
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  /** Text, or text and images for a model that reads them. */
+  messages: Array<{ role: 'user' | 'assistant'; content: string | ContentPart[] }>
   schema: S
   maxTokens: number
   middleware?: ChatMiddleware[]

@@ -9,10 +9,10 @@ const MERGE_DISTANCE = 48
 /** Pixels at least this opaque are counted. */
 const MIN_ALPHA = 128
 
-/** Below this, a colour is too dull or dark to read as the brand colour. */
-const MIN_VIVIDNESS = 0.25
-/** A pixel at least this vivid can belong to the brand colour. */
-const VIVID_PIXEL = 0.5
+/** Below this, a colour is too grey or too near black to read as the brand colour. */
+const BRAND_COLOURFULNESS = 0.3
+/** A pixel at least this colourful can belong to the brand colour. */
+const BRAND_PIXEL = 0.4
 /** Fewer vivid pixels of one hue than this are a speck, not a brand colour. */
 const MIN_VIVID_PIXELS = 4
 /** Hue groups of 30 degrees each. */
@@ -34,6 +34,17 @@ function vividness(r: number, g: number, b: number): number {
   return max === 0 ? 0 : ((max - min) / max) * (max / 255)
 }
 
+/**
+ * How much a colour reads as a colour, 0 to 1: its saturation, fading only
+ * toward black. A deep brand colour, a forest green or a navy, counts as much
+ * as a bright one; a grey or near-black does not.
+ */
+function colourfulness(r: number, g: number, b: number): number {
+  const max = Math.max(r, g, b)
+  if (max < 40) return 0
+  return ((max - Math.min(r, g, b)) / max) * Math.min(1, max / 100)
+}
+
 const hex = (r: number, g: number, b: number) =>
   `#${[r, g, b].map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('')}`
 
@@ -48,7 +59,7 @@ export function paletteFromPixels(data: Uint8ClampedArray, count: number): strin
   const hues = Array.from({ length: HUE_GROUPS }, () => ({ r: 0, g: 0, b: 0, n: 0 }))
   for (let i = 0; i + 3 < data.length; i += 4) {
     if (data[i + 3] < MIN_ALPHA) continue
-    if (vividness(data[i], data[i + 1], data[i + 2]) >= VIVID_PIXEL) {
+    if (colourfulness(data[i], data[i + 1], data[i + 2]) >= BRAND_PIXEL) {
       const group = hues[hueGroup(data[i], data[i + 1], data[i + 2])]
       group.r += data[i]
       group.g += data[i + 1]
@@ -78,19 +89,15 @@ export function paletteFromPixels(data: Uint8ClampedArray, count: number): strin
   }
   merged.sort((a, b) => b.n - a.n)
   const top = merged.slice(0, count)
-  // The brand colour: the largest group of vivid pixels of one hue, as their mean.
+  // The brand colour, first: the largest group of colourful pixels of one hue, as their mean.
   const group = hues.reduce((best, next) => (next.n > best.n ? next : best))
   if (group.n >= MIN_VIVID_PIXELS) {
-    const vivid = { r: group.r / group.n, g: group.g / group.n, b: group.b / group.n, n: group.n }
-    const listed = top.some(
-      (kept) =>
-        Math.abs(kept.r - vivid.r) + Math.abs(kept.g - vivid.g) + Math.abs(kept.b - vivid.b) <
-        MERGE_DISTANCE
-    )
-    if (!listed) {
-      if (top.length === count) top[count - 1] = vivid
-      else top.push(vivid)
-    }
+    const brand = { r: group.r / group.n, g: group.g / group.n, b: group.b / group.n, n: group.n }
+    const near = (kept: typeof brand) =>
+      Math.abs(kept.r - brand.r) + Math.abs(kept.g - brand.g) + Math.abs(kept.b - brand.b) <
+      MERGE_DISTANCE
+    const rest = top.filter((kept) => !near(kept)).slice(0, count - 1)
+    return [brand, ...rest].map(({ r, g, b }) => hex(r, g, b))
   }
   return top.map(({ r, g, b }) => hex(r, g, b))
 }
@@ -101,12 +108,13 @@ export function colourVividness(colour: string): number {
   return vividness(r, g, b)
 }
 
-/** The most vivid colour of a palette, when one reads as a brand colour. */
-export function mostVivid(palette: string[]): string | null {
-  let best: { colour: string; score: number } | null = null
-  for (const colour of palette) {
-    const score = colourVividness(colour)
-    if (score >= MIN_VIVIDNESS && (!best || score > best.score)) best = { colour, score }
-  }
-  return best?.colour ?? null
+/** Whether a hex colour can be a brand colour: a colour, not a grey, a white or a near-black. */
+export function isBrandColour(colour: string): boolean {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(colour.slice(i, i + 2), 16))
+  return colourfulness(r!, g!, b!) >= BRAND_COLOURFULNESS
+}
+
+/** A palette's brand colour: the first that can be one, as paletteFromPixels puts it first. */
+export function brandColour(palette: string[]): string | null {
+  return palette.find(isBrandColour) ?? null
 }

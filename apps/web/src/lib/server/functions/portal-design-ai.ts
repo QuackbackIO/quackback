@@ -90,6 +90,12 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
         site: z.string().trim().max(2048).optional(),
         words: z.string().trim().max(500).optional(),
         palette: z.array(hexColour).min(1).max(6).optional(),
+        /** The logo or screenshot, downscaled to a JPEG, for a model that reads images. */
+        image: z
+          .string()
+          .max(700_000)
+          .regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/)
+          .optional(),
       })
       .refine(
         (input) => input.site || input.words || input.palette,
@@ -121,5 +127,6 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
       site,
       words: data.words ?? null,
       palette: data.palette ?? null,
+      image: data.image ?? null,
     })
   })

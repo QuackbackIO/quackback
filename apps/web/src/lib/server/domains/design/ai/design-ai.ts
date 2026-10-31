@@ -6,19 +6,19 @@
  * what reaches the draft.
  */
 import { z } from 'zod'
+import type { ContentPart } from '@tanstack/ai'
 import { config } from '@/lib/server/config'
 import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { logger } from '@/lib/server/logger'
-import { DESIGN_OPTIONS, BUNDLED_FONT_IDS, BLOCK_WIDTHS } from '@/lib/shared/design/options'
-import type { HomeBlockType } from '@/lib/shared/design/home'
-import { PORTAL_PARTS } from '@/lib/shared/design/parts'
+import { BUNDLED_FONT_IDS } from '@/lib/shared/design/options'
+import { editPrompt } from './design-ai-guide'
 import { changeLabel } from '@/lib/shared/design/labels'
 import { applyPreset, DESIGN_PRESETS } from '@/lib/shared/design/presets'
 import { resolveDesign } from '@/lib/shared/design/resolve'
-import { colourVividness, mostVivid } from '@/lib/shared/design/palette'
+import { brandColour, colourVividness } from '@/lib/shared/design/palette'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
   applyDesignChanges,
@@ -29,6 +29,8 @@ import {
   type UntrustedChanges,
 } from '@/lib/shared/design/apply-changes'
 import type { SiteSignals } from './site-signals'
+
+export { EDIT_EXAMPLES } from './design-ai-guide'
 
 const log = logger.child({ module: 'design-ai' })
 
@@ -44,96 +46,6 @@ const isStructuredOutputError = (err: unknown) =>
 export function designAiModel(): string | null {
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl)) return null
   return getChatModel('assistant')
-}
-
-/** The design document's fields, in the words a person uses for them. */
-function fieldGuide(blockTypes: readonly HomeBlockType[], writesCss: boolean): string {
-  const widths = (Object.keys(BLOCK_WIDTHS) as HomeBlockType[])
-    .map((type) => `${type} (${BLOCK_WIDTHS[type].join(', ')})`)
-    .join('; ')
-  return [
-    `mode: ${DESIGN_OPTIONS.mode.join(', ')} (auto follows the visitor's device)`,
-    'brand.light.accent (buttons, links, the band), brand.light.background (the page), brand.light.ink (text), brand.light.surface (cards), brand.light.raised (raised surfaces), brand.light.muted (secondary text), brand.light.border: hex such as #0f766e. brand.dark.*: the same roles in dark mode, without accent. null clears an optional colour.',
-    `brand.fonts.heading and brand.fonts.body: ${BUNDLED_FONT_IDS.join(', ')}. brand.fonts.headingWeight: ${DESIGN_OPTIONS.headingWeight.join(', ')}`,
-    'brand.logo.display: mark_and_name, mark, wordmark (the logo files themselves are uploaded in Settings)',
-    `shape.corners: ${DESIGN_OPTIONS.corners.join(', ')}`,
-    'layout.header: stacked (logo above the menu), inline (one row), centered',
-    `layout.nav (how the menu marks the current page): ${DESIGN_OPTIONS.nav.join(', ')}`,
-    'layout.band (behind a page headline): none, tint, fade, brand. It shows only with a headline; when you add one and there is no headline, write one.',
-    `layout.cards: ${DESIGN_OPTIONS.cards.join(', ')}. layout.density: ${DESIGN_OPTIONS.density.join(', ')}. layout.width: ${DESIGN_OPTIONS.width.join(', ')}. layout.filters: end (right), start (left)`,
-    'pages.feedback.headline.title and .subtitle: text by language, such as {"en":"Help us grow","de":"Hilf uns wachsen"}. Plain text sets English; an empty string removes it.',
-    'pages.feedback.welcome: {show, body}: the message above the feed; body is plain text, a blank line between paragraphs. When you turn it on with no text, write some.',
-    `pages.feedback.defaultSort: ${DESIGN_OPTIONS.sort.join(', ')}`,
-    'pages.feedback.copy.prompt (the composer prompt, 60 characters), .submit (its button, 24), .emptyTitle (the empty feed, 60): text by language, like the headline. Leave them out to use the chosen word.',
-    'pages.home.headline: like the feedback headline, for Home.',
-    `pages.home.blocks: Home's blocks in order on a six-column grid, at most 12: [{"type":..., "width":...}]. Types with their widths: ${widths}. Options: ideas {sort, count 3 or 5}, updates {count 2 to 4}, welcome {body: plain text}, links {title, links: [{label, url}]} with only links the person gave. This workspace can show: ${blockTypes.join(', ')}.`,
-    'nav.home: {on, tab, label}: Home at / (on) and whether it has its own menu tab (tab). With Home off, the first menu page opens at /.',
-    'nav.items: the menu in order. Pages: {"type": feedback, roadmap, changelog, help, support or status, "shown": true or false, "label": optional}. Links: {"type":"link","id","label","url","newTab"}, only links the person gave. With Home off, show at least one page.',
-    `vocabulary.post (what visitors post): ${DESIGN_OPTIONS.postWord.join(', ')}. vocabulary.board (what groups them): ${DESIGN_OPTIONS.boardWord.join(', ')}.`,
-    writesCss &&
-      `css: the workspace's own CSS, styling the portal's parts by name, [data-qb-part="post-card"]. Parts: ${PORTAL_PARTS.map((part) => part.name).join(', ')}. Only for what no field above can do; no url() or @import.`,
-  ]
-    .filter(Boolean)
-    .join('\n')
-}
-
-/** Examples of answers, kept valid against the design by the tests. */
-export const EDIT_EXAMPLES = [
-  {
-    request: 'Make it feel calmer and give the cards more room',
-    answer: {
-      reply: 'I rounded the corners fully, raised the cards and gave the feed more room.',
-      outOfScope: false,
-      changes: [
-        { path: 'shape.corners', value: '"pill"' },
-        { path: 'layout.cards', value: '"raised"' },
-        { path: 'layout.density', value: '"spacious"' },
-      ],
-    },
-  },
-  {
-    request: 'Make us a Home page: a welcome, then status next to the composer, then our top ideas',
-    answer: {
-      reply: 'Home is on, with a welcome, status beside the composer and your top ideas.',
-      outOfScope: false,
-      changes: [
-        { path: 'nav.home.on', value: 'true' },
-        { path: 'pages.home.headline.title', value: '"Welcome to our community"' },
-        {
-          path: 'pages.home.blocks',
-          value:
-            '[{"type":"welcome","width":"full","body":"Share an idea, see what is coming and find help."},{"type":"composer","width":"two_thirds"},{"type":"status","width":"third"},{"type":"ideas","width":"full","sort":"top","count":5}]',
-        },
-      ],
-    },
-  },
-  {
-    request:
-      'We call them feature requests, sorted into categories. Hide the changelog from the menu.',
-    answer: {
-      reply: 'Visitors now post feature requests in categories, and the changelog is off the menu.',
-      outOfScope: false,
-      changes: [
-        { path: 'vocabulary.post', value: '"feature_request"' },
-        { path: 'vocabulary.board', value: '"category"' },
-        {
-          path: 'nav.items',
-          value:
-            '[{"type":"feedback","shown":true},{"type":"roadmap","shown":true},{"type":"changelog","shown":false},{"type":"help","shown":true},{"type":"support","shown":true},{"type":"status","shown":true}]',
-        },
-      ],
-    },
-  },
-] as const
-
-function editPrompt(blockTypes: readonly HomeBlockType[], writesCss: boolean): string {
-  return `You design a company's customer feedback portal by changing its design document. You may set any field below, by its dotted path, to any value it takes; numbers index lists (pages.home.blocks.0.width). To replace a list or a whole part, set its path to the whole new value.
-
-${fieldGuide(blockTypes, writesCss)}
-
-Reply with JSON: a one or two sentence reply to the person, outOfScope, and the changes as a list of {path, value}, where value is the new value written as JSON: "text" in quotes, a number, true or false, null, an object or a list. Change only what the request is about. Never invent a link, an uploaded file or a field. If the request is not about the portal, make no changes and say so.
-
-${EDIT_EXAMPLES.map((example) => `Example request: "${example.request}"\nExample answer: ${JSON.stringify(example.answer)}`).join('\n\n')}`
 }
 
 /** A value from the model: JSON as asked, or the bare text it sometimes sends instead. */
@@ -178,8 +90,8 @@ const quietPage = (background: string) =>
 
 /** A palette for the model: most used first, and which colour is likely the brand's. */
 function paletteText(palette: string[]): string {
-  const vivid = mostVivid(palette)
-  return `most used first: ${palette.join(', ')}.${vivid ? ` The most vivid, likely the brand colour: ${vivid}.` : ''}`
+  const brand = brandColour(palette)
+  return `${palette.join(', ')}.${brand ? ` The brand colour, the most used colour that is not a neutral: ${brand}.` : ''}`
 }
 
 const SCOPE_NAMES: Record<Exclude<DesignAiScope, 'site'>, string> = {
@@ -275,7 +187,7 @@ export async function askDesignAi(input: {
         {
           role: 'user',
           content: input.palette?.length
-            ? `${input.message}\n\nColours from the attached image, ${paletteText(input.palette)}`
+            ? `${input.message}\n\nColours from the attached image: ${paletteText(input.palette)}`
             : input.message,
         },
       ],
@@ -355,6 +267,18 @@ export type DirectionsResult =
   | { ok: true; looks: DesignLook[] }
   | { ok: false; code: 'AI_UNAVAILABLE' | 'AI_FAILED'; message: string }
 
+/** A JPEG data URL as an image part. */
+function imagePart(dataUrl: string): ContentPart {
+  return {
+    type: 'image',
+    source: {
+      type: 'data',
+      value: dataUrl.replace(/^data:image\/jpeg;base64,/, ''),
+      mimeType: 'image/jpeg',
+    },
+  }
+}
+
 /** What the website says about its brand, as the model reads it. */
 function siteBrief(site: SiteSignals): string {
   return [
@@ -377,6 +301,8 @@ export async function designDirections(input: {
   words: string | null
   /** The main colours of their logo or a screenshot. */
   palette?: string[] | null
+  /** The logo or screenshot itself, as a JPEG data URL, for a model that reads images. */
+  image?: string | null
 }): Promise<DirectionsResult> {
   const model = designAiModel()
   if (!model) {
@@ -391,17 +317,35 @@ export async function designDirections(input: {
     input.site && siteBrief(input.site),
     input.words && `In their words: ${input.words}`,
     input.palette?.length &&
-      `Colours from their logo or a screenshot, ${paletteText(input.palette)} Build the looks from these.`,
+      `Colours from their logo or a screenshot: ${paletteText(input.palette)}${brandColour(input.palette) ? ' Use the brand colour as the accent in the first look, as it is.' : ''} Build the looks from these.`,
+    input.image &&
+      'The image is their logo or a screenshot of their website. Read their brand from it: which colour leads, whether the type is serif, geometric, humanist or condensed, how heavy the headings are, how round the shapes are, and how light or dark the pages are. Make the first look as close to it as the options allow.',
   ]
     .filter(Boolean)
     .join('\n')
   try {
-    const answer = await structuredChat({
-      model,
-      systemPrompts: [DIRECTIONS_PROMPT],
-      messages: [{ role: 'user', content: brief || 'Suggest three looks for a software company.' }],
-      schema: directionsSchema,
-      maxTokens: 2000,
+    const text = brief || 'Suggest three looks for a software company.'
+    const ask = (withImage: boolean) =>
+      structuredChat({
+        model,
+        systemPrompts: [DIRECTIONS_PROMPT],
+        messages: [
+          {
+            role: 'user',
+            content:
+              withImage && input.image
+                ? [{ type: 'text', content: text }, imagePart(input.image)]
+                : text,
+          },
+        ],
+        schema: directionsSchema,
+        maxTokens: 2000,
+      })
+    // A model that does not read images still has the colours.
+    const answer = await ask(true).catch((err: unknown) => {
+      if (!input.image || isStructuredOutputError(err)) throw err
+      log.warn({ err }, 'design ai could not read the image; using its colours alone')
+      return ask(false)
     })
     const looks: DesignLook[] = []
     for (const look of answer.looks) {
