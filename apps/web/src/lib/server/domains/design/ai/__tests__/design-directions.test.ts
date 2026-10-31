@@ -90,4 +90,22 @@ describe('lookDesign', () => {
     expect(design.brand.dark).toMatchObject({ background: '#0b1020', ink: '#e8ecf8' })
     expect(design.brand.light.accent).toBe('#c6ff3d')
   })
+
+  it('trims text too long for its field at a word, rather than refusing the look', () => {
+    const { design, refused } = lookDesign(
+      defaultDesign(),
+      {
+        ...DIRECTIONS_EXAMPLE,
+        headline:
+          'A headline that goes on and on well past the eighty characters a headline may have',
+        submit: 'Send your wonderful suggestion',
+      },
+      allows
+    )
+    expect(refused).toEqual([])
+    const headline = design.pages.feedback.headline!.title.en!
+    expect(headline.length).toBeLessThanOrEqual(80)
+    expect(headline.endsWith(' ')).toBe(false)
+    expect(design.pages.feedback.copy.submit).toEqual({ en: 'Send your wonderful' })
+  })
 })

@@ -320,6 +320,28 @@ describe('AppearanceView', () => {
     ).toBeTruthy()
   })
 
+  it('reads a website typed above along with a screenshot of it', async () => {
+    mount({ ai: true })
+    fireEvent.change(screen.getByLabelText('Match my website'), {
+      target: { value: 'example.com' },
+    })
+    expect(screen.getByText('For a closer match, add a screenshot of it below.')).toBeTruthy()
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Start from your logo or a screenshot'), {
+        target: { files: [new File(['png'], 'site.png', { type: 'image/png' })] },
+      })
+    })
+    await waitFor(() =>
+      expect(server.directions).toEqual([
+        {
+          palette: ['#7a1f35', '#ffffff'],
+          image: 'data:image/jpeg;base64,AAAA',
+          site: 'example.com',
+        },
+      ])
+    )
+  })
+
   it('sends the colours of an image attached to a request', async () => {
     mount({ ai: true })
     await act(async () => {

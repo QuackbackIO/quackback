@@ -28,8 +28,8 @@ const WIDTHS = ['third', 'half', 'two_thirds', 'full'] as const
 const hex = z.string().max(32)
 
 const lookSchema = z.object({
-  name: z.string().max(40),
-  description: z.string().max(140),
+  name: z.string(),
+  description: z.string(),
   preset: z.enum(PRESET_IDS),
   mode: z.enum(DESIGN_OPTIONS.mode),
   accent: hex,
@@ -50,14 +50,14 @@ const lookSchema = z.object({
   cards: z.enum(DESIGN_OPTIONS.cards),
   density: z.enum(DESIGN_OPTIONS.density),
   width: z.enum(DESIGN_OPTIONS.width),
-  headline: z.string().max(80),
-  subtitle: z.string().max(140),
+  headline: z.string(),
+  subtitle: z.string(),
   postWord: z.enum(DESIGN_OPTIONS.postWord),
   boardWord: z.enum(DESIGN_OPTIONS.boardWord),
-  prompt: z.string().max(60),
-  submit: z.string().max(24),
-  homeHeadline: z.string().max(80),
-  homeSubtitle: z.string().max(140),
+  prompt: z.string(),
+  submit: z.string(),
+  homeHeadline: z.string(),
+  homeSubtitle: z.string(),
   homeBlocks: z.array(z.object({ type: z.enum(BLOCK_TYPES), width: z.enum(WIDTHS) })).max(8),
 })
 type Look = z.infer<typeof lookSchema>
@@ -134,6 +134,13 @@ const MAX_PAGE_VIVIDNESS = 0.2
 const quietPage = (background: string) =>
   !/^#[0-9a-f]{6}$/i.test(background) || colourVividness(background) <= MAX_PAGE_VIVIDNESS
 
+/** Text cut at a word boundary to fit a field; a long answer is trimmed rather than refused. */
+function fit(text: string, max: number): string {
+  if (text.length <= max) return text
+  const cut = text.slice(0, max)
+  return cut.slice(0, cut.lastIndexOf(' ') > max / 2 ? cut.lastIndexOf(' ') : max).trim()
+}
+
 /** A look as changes to its preset's design, in the order they build on each other. */
 function lookChanges(look: Look): Array<{ path: string; value: unknown }> {
   const dark = look.mode === 'dark'
@@ -164,18 +171,18 @@ function lookChanges(look: Look): Array<{ path: string; value: unknown }> {
     { path: 'layout.cards', value: look.cards },
     { path: 'layout.density', value: look.density },
     { path: 'layout.width', value: look.width },
-    { path: 'pages.feedback.headline.title', value: look.headline },
-    { path: 'pages.feedback.headline.subtitle', value: look.subtitle },
+    { path: 'pages.feedback.headline.title', value: fit(look.headline, 80) },
+    { path: 'pages.feedback.headline.subtitle', value: fit(look.subtitle, 140) },
     { path: 'layout.band', value: look.band },
     { path: 'vocabulary.post', value: look.postWord },
     { path: 'vocabulary.board', value: look.boardWord },
-    ...page(look.prompt, 'pages.feedback.copy.prompt'),
-    ...page(look.submit, 'pages.feedback.copy.submit'),
+    ...page(fit(look.prompt, 60), 'pages.feedback.copy.prompt'),
+    ...page(fit(look.submit, 24), 'pages.feedback.copy.submit'),
     ...(look.homeBlocks.length
       ? [
           { path: 'pages.home.blocks', value: look.homeBlocks },
-          ...page(look.homeHeadline, 'pages.home.headline.title'),
-          ...page(look.homeSubtitle, 'pages.home.headline.subtitle'),
+          ...page(fit(look.homeHeadline, 80), 'pages.home.headline.title'),
+          ...page(fit(look.homeSubtitle, 140), 'pages.home.headline.subtitle'),
           { path: 'nav.home.on', value: true },
           { path: 'nav.home.tab', value: true },
         ]
@@ -309,7 +316,12 @@ export async function designDirections(input: {
       looks: answer.looks.map((look) => {
         const { design, refused } = lookDesign(input.design, look, input.allows)
         if (refused.length) log.info({ look: look.name, refused }, 'design look left choices out')
-        return { name: look.name, description: look.description, preset: look.preset, design }
+        return {
+          name: fit(look.name, 40),
+          description: fit(look.description, 140),
+          preset: look.preset,
+          design,
+        }
       }),
     }
   } catch (err) {

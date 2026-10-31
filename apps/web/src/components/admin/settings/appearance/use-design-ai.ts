@@ -117,7 +117,12 @@ export function useDesignAi({
    * the image also becomes the workspace logo where uploads are set up.
    */
   const startFromImage = useCallback(
-    async (file: File, uploadLogo: ((file: File) => Promise<unknown>) | null) => {
+    async (
+      file: File,
+      uploadLogo: ((file: File) => Promise<unknown>) | null,
+      /** A website to read along with the image. */
+      site: string | null = null
+    ) => {
       setBusy(true)
       void track('appearance_start_chosen', { start: 'image' })
       try {
@@ -135,7 +140,7 @@ export function useDesignAi({
           )
         }
         const result = await portalDesignDirectionsFn({
-          data: { palette, ...(image ? { image } : {}) },
+          data: { palette, ...(image ? { image } : {}), ...(site ? { site } : {}) },
         })
         if (result.ok)
           say({
