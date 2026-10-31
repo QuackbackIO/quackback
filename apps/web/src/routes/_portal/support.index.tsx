@@ -140,24 +140,30 @@ function SupportListPage() {
         )}
 
         {!isLoggedIn ? (
-          <EmptyState
-            icon={ChatBubbleLeftRightIcon}
-            title={intl.formatMessage({
-              id: 'portal.support.signIn.title',
-              defaultMessage: 'Sign in to view your conversations',
-            })}
-            description={intl.formatMessage({
-              id: 'portal.support.signIn.body',
-              defaultMessage: 'Your support conversations are tied to your account.',
-            })}
-            action={
-              authPopover ? (
-                <Button onClick={() => authPopover.openAuthPopover({ mode: 'login' })}>
-                  <FormattedMessage id="portal.support.signIn.cta" defaultMessage="Log in" />
-                </Button>
-              ) : undefined
-            }
-          />
+          // Signed out, the way in sits on a card, as the conversations would.
+          <div
+            data-qb-surface="card"
+            className="mx-auto max-w-xl rounded-xl border border-border/50 bg-card px-6 py-6 shadow-sm"
+          >
+            <EmptyState
+              icon={ChatBubbleLeftRightIcon}
+              title={intl.formatMessage({
+                id: 'portal.support.signIn.title',
+                defaultMessage: 'Sign in to view your conversations',
+              })}
+              description={intl.formatMessage({
+                id: 'portal.support.signIn.body',
+                defaultMessage: 'Your support conversations are tied to your account.',
+              })}
+              action={
+                authPopover ? (
+                  <Button onClick={() => authPopover.openAuthPopover({ mode: 'login' })}>
+                    <FormattedMessage id="portal.support.signIn.cta" defaultMessage="Log in" />
+                  </Button>
+                ) : undefined
+              }
+            />
+          </div>
         ) : isLoading ? (
           <ConversationListSkeleton />
         ) : conversations.length === 0 ? (

@@ -104,6 +104,13 @@ export const PORTAL_PARTS = [
     files: ['components/public/post-card.tsx'],
   },
   {
+    name: 'post-heading',
+    description: "A post's title on its own page.",
+    states: [],
+    tokens: ['--qb-page-title-size', '--qb-font-heading'],
+    files: ['components/public/post-detail/post-content-section.tsx'],
+  },
+  {
     name: 'vote-button',
     description:
       'The vote box at the start of a card, and on a post. Voted once the visitor votes.',
