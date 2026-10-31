@@ -136,7 +136,7 @@ describe('renderDesignCss', () => {
       '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
     )
     expect(css).toContain(
-      '[data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); }'
+      '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } }'
     )
   })
 })
