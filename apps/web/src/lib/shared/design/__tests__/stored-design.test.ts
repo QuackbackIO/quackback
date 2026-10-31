@@ -28,10 +28,14 @@ describe('reading a stored design', () => {
 
   it('drops fields a newer build added, keeping the brand', () => {
     const read = readStoredDesign(
-      written({ future: { on: true }, 'brand.logo.tagline': 'Hello', 'layout.bandShape': 'panel' })
+      written({
+        future: { on: true },
+        'brand.logo.tagline': 'Hello',
+        'layout.bandTexture': 'paper',
+      })
     )
     expect(read?.design).toEqual(stored())
-    expect(read?.dropped.sort()).toEqual(['brand.logo.tagline', 'future', 'layout.bandShape'])
+    expect(read?.dropped.sort()).toEqual(['brand.logo.tagline', 'future', 'layout.bandTexture'])
   })
 
   it('reads an option value a newer build added as the default', () => {

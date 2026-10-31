@@ -77,6 +77,10 @@
       },
       "blocks": [
         {
+          "type": "composer",
+          "width": "full"
+        },
+        {
           "type": "status",
           "width": "third"
         },

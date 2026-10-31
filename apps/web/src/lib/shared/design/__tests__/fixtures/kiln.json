@@ -65,7 +65,8 @@
     "cards": "bordered",
     "density": "compact",
     "width": "default",
-    "filters": "end"
+    "filters": "end",
+    "bandShape": "inset"
   },
   "pages": {
     "home": {

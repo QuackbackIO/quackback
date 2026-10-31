@@ -25,6 +25,12 @@ export const DESIGN_OPTIONS = {
   band: ['none', 'tint', 'fade', 'brand', 'support', 'blend'],
   /** How a blend band runs: in a line, or as a soft mesh beside the words. */
   blend: ['linear', 'mesh'],
+  /** Where the band's words sit. */
+  bandAlign: ['left', 'centre'],
+  /** The band across the page, as a rounded panel within it, or with its words on a panel. */
+  bandShape: ['full', 'inset', 'panel'],
+  /** Home's composer: a block on the grid, or in the band under the headline. */
+  composerPlace: ['block', 'band'],
   cards: ['bordered', 'raised', 'list'],
   density: ['compact', 'comfortable', 'spacious'],
   width: ['narrow', 'default', 'wide'],

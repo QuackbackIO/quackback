@@ -140,7 +140,7 @@ function readHeadline(value: unknown): Headline {
     : { title, subtitle }
 }
 
-const DESIGN_ATTRIBUTE = /^data-qb-[a-z]+$/
+const DESIGN_ATTRIBUTE = /^data-qb-[a-z]+(?:-[a-z]+)*$/
 const DESIGN_VALUE = /^[a-z_]+$/
 
 /** The message's design, keeping only the structural attributes a design sets. */

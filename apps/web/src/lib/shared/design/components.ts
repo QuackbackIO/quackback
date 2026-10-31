@@ -102,6 +102,7 @@ export function modeTokens(doc: PortalDesign, vars: ThemeVariables, mode: Mode):
     // The voted vote box: the solver keeps accent text readable on cards.
     '--qb-vote-active': t.accentInk,
     ...bandTokens(doc, t, mode),
+    ...(headerOnBand(doc) ? headerBandTokens(doc, t, mode) : {}),
   }
   // The underline under the current page comes from the data-qb-nav attribute.
   if (doc.layout.nav === 'underline') tokens['--qb-nav-active-bg'] = 'transparent'
@@ -144,6 +145,32 @@ export function bandError(doc: PortalDesign, vars: ThemeVariables, mode: Mode): 
 export const BAND_TINT = 0.12
 export const BAND_FADE = 0.2
 
+/** Whether the header takes the band's colour: asked for, and the band has one. */
+const headerOnBand = (doc: PortalDesign) =>
+  doc.layout.headerOnBand === true && doc.layout.band !== 'none'
+
+/**
+ * The header in the band's colour, its text and menu in the band's text. Its
+ * button keeps the brand colour where that reads on the band, else takes the
+ * band's text colour, so it never vanishes into the band.
+ */
+function headerBandTokens(doc: PortalDesign, t: Required<ThemeVariables>, mode: Mode): TokenMap {
+  const surface = bandSurface(doc, t, supportColour(doc, mode))
+  const bg = surface.behind[0]!
+  const keepsBrand = contrastRatio(t.primary, bg) >= 3
+  const action = keepsBrand ? t.primary : surface.ink
+  return {
+    '--qb-header-bg': bg,
+    '--qb-header-ink': surface.ink,
+    '--qb-header-rule': 'transparent',
+    '--qb-nav-ink': surface.muted,
+    '--qb-nav-active-bg': mixColor(surface.ink, bg, 0.14),
+    '--qb-nav-active-ink': surface.ink,
+    '--qb-header-action-bg': action,
+    '--qb-header-action-ink': keepsBrand ? t.primaryForeground : (textOn([action], t) ?? bg),
+  }
+}
+
 /** The design's second brand colour in a mode: dark keeps light's unless it sets its own. */
 function supportColour(doc: PortalDesign, mode: Mode): string | undefined {
   return mode === 'dark'
@@ -173,6 +200,19 @@ function bandTokens(doc: PortalDesign, t: Required<ThemeVariables>, mode: Mode):
       surface.behind[0]!,
       support ? 0.35 : 0.25
     ),
+    ...panelTokens(t, support),
+  }
+}
+
+/** A panel the band's words sit on: the second colour, else the card colour. */
+function panelTokens(t: Required<ThemeVariables>, support: string | undefined): TokenMap {
+  const bg = support ?? t.card
+  const ink = textOn([bg], t) ?? t.foreground
+  return {
+    '--qb-band-panel-bg': bg,
+    '--qb-band-panel-ink': ink,
+    '--qb-band-panel-muted': solveContrast(t.mutedForeground, [bg], 4.5) ?? ink,
+    '--qb-band-panel-accent': solveContrast(t.primary, [bg], 3) ?? ink,
   }
 }
 
@@ -288,6 +328,9 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
     'data-qb-header': header,
     'data-qb-nav': nav,
     'data-qb-band': band,
+    'data-qb-band-align': doc.layout.bandAlign ?? (header === 'centered' ? 'centre' : 'left'),
+    'data-qb-band-shape': doc.layout.bandShape ?? 'full',
+    'data-qb-header-band': headerOnBand(doc) ? 'on' : 'off',
     'data-qb-cards': cards,
     'data-qb-filters': filters,
   }

@@ -50,7 +50,9 @@
     "cards": "bordered",
     "density": "comfortable",
     "width": "default",
-    "filters": "start"
+    "filters": "start",
+    "bandShape": "panel",
+    "bandAlign": "centre"
   },
   "pages": {
     "home": {

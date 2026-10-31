@@ -202,12 +202,18 @@ describe('a design draft in the preview', () => {
   it('ignores attributes outside the design’s own', async () => {
     await postDesign({
       type: 'quackback:preview-design',
-      design: { css: '', attributes: { onload: 'x', 'data-qb-band': 'tint' }, fontIds: [] },
+      design: {
+        css: '',
+        attributes: { onload: 'x', 'data-qb-band': 'tint', 'data-qb-band-shape': 'panel' },
+        fontIds: [],
+      },
     })
     expect(document.documentElement.hasAttribute('onload')).toBe(false)
     expect(document.documentElement.getAttribute('data-qb-band')).toBe('tint')
+    expect(document.documentElement.getAttribute('data-qb-band-shape')).toBe('panel')
     await postDesign({ type: 'quackback:preview-design', design: null })
     expect(document.documentElement.hasAttribute('data-qb-band')).toBe(false)
+    expect(document.documentElement.hasAttribute('data-qb-band-shape')).toBe(false)
   })
 })
 

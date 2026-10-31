@@ -200,6 +200,71 @@ describe('a second brand colour', () => {
   })
 })
 
+describe('a panel in the band', () => {
+  it('is the second colour, else the card colour, with readable words', () => {
+    const plain = resolveDesign(
+      design((d) => {
+        d.layout.band = 'brand'
+        d.layout.bandShape = 'panel'
+      })
+    )
+    expect(plain.tokens.light['--qb-band-panel-bg']).toBe(plain.light!.card)
+    const yellow = resolveDesign(
+      design((d) => {
+        d.brand.light.accent = '#0058a3'
+        d.brand.light.support = '#ffdb00'
+        d.layout.band = 'brand'
+        d.layout.bandShape = 'panel'
+      })
+    ).tokens.light
+    expect(yellow['--qb-band-panel-bg']).toBe('#ffdb00')
+    for (const text of ['--qb-band-panel-ink', '--qb-band-panel-muted'] as const)
+      expect(contrastRatio(yellow[text]!, '#ffdb00')).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(yellow['--qb-band-panel-accent']!, '#ffdb00')).toBeGreaterThanOrEqual(3)
+  })
+})
+
+describe('a header on the band', () => {
+  const onBand = (change: (d: PortalDesign) => void) =>
+    resolveDesign(
+      design((d) => {
+        d.layout.headerOnBand = true
+        change(d)
+      })
+    ).tokens.light
+
+  it('takes the band’s colour and text, with no rule under it', () => {
+    const tokens = onBand((d) => {
+      d.brand.light.accent = '#163300'
+      d.brand.light.support = '#9fe870'
+      d.layout.band = 'support'
+    })
+    expect(tokens['--qb-header-bg']).toBe('#9fe870')
+    expect(tokens['--qb-header-ink']).toBe(tokens['--qb-band-ink'])
+    expect(tokens['--qb-header-rule']).toBe('transparent')
+    expect(contrastRatio(tokens['--qb-nav-ink']!, '#9fe870')).toBeGreaterThanOrEqual(4.5)
+    // The brand colour still reads as a button on the band.
+    expect(tokens['--qb-header-action-bg']).toBe('#163300')
+  })
+
+  it('turns its button to the band’s text where the brand colour would vanish', () => {
+    const tokens = onBand((d) => {
+      d.brand.light.accent = '#0f766e'
+      d.layout.band = 'brand'
+    })
+    expect(tokens['--qb-header-bg']).toBe(tokens['--qb-band-bg'])
+    expect(tokens['--qb-header-action-bg']).toBe(tokens['--qb-band-ink'])
+    expect(
+      contrastRatio(tokens['--qb-header-action-ink']!, tokens['--qb-header-action-bg']!)
+    ).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('leaves the header alone on a band with no colour', () => {
+    const tokens = onBand(() => {})
+    expect(tokens['--qb-header-bg']).toBe(resolveDesign(design()).tokens.light['--qb-header-bg'])
+  })
+})
+
 describe('the top band', () => {
   it('is plain for none and readable on the accent for brand', () => {
     expect(resolveDesign(design()).tokens.light['--qb-band-bg']).toBe('transparent')
@@ -303,9 +368,34 @@ describe('layoutAttributes', () => {
       'data-qb-header': 'inline',
       'data-qb-nav': 'pills',
       'data-qb-band': 'none',
+      'data-qb-band-align': 'left',
+      'data-qb-band-shape': 'full',
+      'data-qb-header-band': 'off',
       'data-qb-cards': 'list',
       'data-qb-filters': 'start',
     })
+  })
+
+  it('centres the band under a centred header unless it says otherwise', () => {
+    const centred = design((d) => (d.layout.header = 'centered'))
+    expect(layoutAttributes(centred)['data-qb-band-align']).toBe('centre')
+    centred.layout.bandAlign = 'left'
+    expect(layoutAttributes(centred)['data-qb-band-align']).toBe('left')
+    const inline = design((d) => (d.layout.bandAlign = 'centre'))
+    expect(layoutAttributes(inline)['data-qb-band-align']).toBe('centre')
+  })
+
+  it('names the band’s shape, and a header on the band only where the band has colour', () => {
+    const doc = design((d) => {
+      d.layout.bandShape = 'panel'
+      d.layout.headerOnBand = true
+    })
+    expect(layoutAttributes(doc)).toMatchObject({
+      'data-qb-band-shape': 'panel',
+      'data-qb-header-band': 'off',
+    })
+    doc.layout.band = 'brand'
+    expect(layoutAttributes(doc)['data-qb-header-band']).toBe('on')
   })
 })
 

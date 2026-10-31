@@ -47,6 +47,12 @@ import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-
 import { usePreviewDesignAttributes, usePreviewLogo } from './preview-draft-context'
 import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
+/** On the band, the header's button takes the colour the design picks to read there. */
+const ON_BAND_ACTION =
+  '[[data-qb-header-band=on]_&]:bg-[var(--qb-header-action-bg)] [[data-qb-header-band=on]_&]:text-[var(--qb-header-action-ink)] [[data-qb-header-band=on]_&]:hover:opacity-90'
+const ON_BAND_GHOST =
+  '[[data-qb-header-band=on]_&]:text-[var(--header-foreground)] [[data-qb-header-band=on]_&]:hover:bg-[var(--nav-active-background)]'
+
 interface PortalHeaderProps {
   orgName: string
   orgLogo?: string | null
@@ -264,6 +270,7 @@ export function PortalHeader({
             variant={showSignup ? 'ghost' : 'default'}
             size="sm"
             data-qb-label=""
+            className={showSignup ? ON_BAND_GHOST : ON_BAND_ACTION}
             onClick={() =>
               soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'login' })
             }
@@ -274,6 +281,7 @@ export function PortalHeader({
             <Button
               size="sm"
               data-qb-label=""
+              className={ON_BAND_ACTION}
               onClick={() =>
                 soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'signup' })
               }
@@ -366,7 +374,7 @@ export function PortalHeader({
     />
   )
   const headerClassName =
-    'portal-header sticky top-0 z-40 w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm'
+    'portal-header sticky top-0 z-40 w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm [[data-qb-header-band=on]_&]:shadow-none'
 
   // A design can put the menu beside the logo or centre both. Below md an
   // inline header folds back to two rows, so the menu always has room.
