@@ -84,6 +84,18 @@ describe('paletteFromPixels', () => {
     expect(brandColour(palette)).toBe('#1f4d3a')
   })
 
+  it('takes a brand colour’s solid shade, not the edges blended into the page', () => {
+    // Lime text and a lime button on navy: the edges blend toward navy.
+    const data = pixels(
+      [11, 16, 32, 255, 3000],
+      [198, 255, 61, 255, 120],
+      [150, 190, 50, 255, 40],
+      [110, 140, 45, 255, 40],
+      [80, 100, 40, 255, 40]
+    )
+    expect(paletteFromPixels(data, 3)[0]).toBe('#c6ff3d')
+  })
+
   it('counts deep colours as brand colours, and greys, whites and near-blacks not', () => {
     expect(['#1f4d3a', '#4a154b', '#0b3d91', '#ff5a36'].map(isBrandColour)).toEqual([
       true,

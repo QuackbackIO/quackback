@@ -56,17 +56,24 @@ const hex = (r: number, g: number, b: number) =>
 export function paletteFromPixels(data: Uint8ClampedArray, count: number): string[] {
   // Bucket by the top five bits of each channel, keeping each bucket's mean.
   const buckets = new Map<number, { r: number; g: number; b: number; n: number }>()
-  const hues = Array.from({ length: HUE_GROUPS }, () => ({ r: 0, g: 0, b: 0, n: 0 }))
+  // Colourful pixels by hue, each hue's pixels bucketed again by shade.
+  const hues = Array.from({ length: HUE_GROUPS }, () => ({
+    n: 0,
+    shades: new Map<number, { r: number; g: number; b: number; n: number }>(),
+  }))
   for (let i = 0; i + 3 < data.length; i += 4) {
     if (data[i + 3] < MIN_ALPHA) continue
+    const key = ((data[i] >> 3) << 10) | ((data[i + 1] >> 3) << 5) | (data[i + 2] >> 3)
     if (colourfulness(data[i], data[i + 1], data[i + 2]) >= BRAND_PIXEL) {
       const group = hues[hueGroup(data[i], data[i + 1], data[i + 2])]
-      group.r += data[i]
-      group.g += data[i + 1]
-      group.b += data[i + 2]
+      const shade = group.shades.get(key) ?? { r: 0, g: 0, b: 0, n: 0 }
+      shade.r += data[i]
+      shade.g += data[i + 1]
+      shade.b += data[i + 2]
+      shade.n++
+      group.shades.set(key, shade)
       group.n++
     }
-    const key = ((data[i] >> 3) << 10) | ((data[i + 1] >> 3) << 5) | (data[i + 2] >> 3)
     const bucket = buckets.get(key) ?? { r: 0, g: 0, b: 0, n: 0 }
     bucket.r += data[i]
     bucket.g += data[i + 1]
@@ -89,10 +96,12 @@ export function paletteFromPixels(data: Uint8ClampedArray, count: number): strin
   }
   merged.sort((a, b) => b.n - a.n)
   const top = merged.slice(0, count)
-  // The brand colour, first: the largest group of colourful pixels of one hue, as their mean.
+  // The brand colour, first: the largest group of colourful pixels of one hue, as its
+  // most common shade, so a solid fill wins over the edges anti-aliasing blends.
   const group = hues.reduce((best, next) => (next.n > best.n ? next : best))
   if (group.n >= MIN_VIVID_PIXELS) {
-    const brand = { r: group.r / group.n, g: group.g / group.n, b: group.b / group.n, n: group.n }
+    const shade = [...group.shades.values()].reduce((best, next) => (next.n > best.n ? next : best))
+    const brand = { r: shade.r / shade.n, g: shade.g / shade.n, b: shade.b / shade.n, n: group.n }
     const near = (kept: typeof brand) =>
       Math.abs(kept.r - brand.r) + Math.abs(kept.g - brand.g) + Math.abs(kept.b - brand.b) <
       MERGE_DISTANCE
