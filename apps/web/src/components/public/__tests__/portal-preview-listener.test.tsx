@@ -7,7 +7,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
+import { FormattedMessage, IntlProvider, useIntl } from 'react-intl'
 import { PortalPreviewProvider } from '../portal-preview-listener'
+import { usePortalWords } from '@/lib/client/hooks/use-intl-setup'
 import {
   usePreviewCss,
   usePreviewDesignNav,
@@ -250,3 +252,49 @@ describe('picking a section in a design preview', () => {
     band.remove()
   })
 })
+
+describe('a design draft’s words in the preview', () => {
+  it('reach the page’s messages before they are published', async () => {
+    cleanup()
+    render(
+      <IntlProvider locale="en" onError={() => {}}>
+        <PortalPreviewProvider enabled>
+          <p data-testid="composer">
+            <FormattedMessage
+              id="test.composer"
+              defaultMessage="{postWord, select, idea {What's your idea?} suggestion {What's your suggestion?} other {What's your idea?}}"
+              values={{ postWord: 'idea' }}
+            />
+          </p>
+          <WordReader />
+        </PortalPreviewProvider>
+      </IntlProvider>
+    )
+    await postDesign({
+      type: 'quackback:preview-design',
+      design: {
+        css: '',
+        attributes: {},
+        fontIds: [],
+        vocabulary: { post: 'suggestion', board: 'category' },
+      },
+    })
+    expect(screen.getByTestId('words').textContent).toBe('suggestion category')
+    expect(screen.getByTestId('formatted').textContent).toBe('suggestion category')
+    // A message's own value still wins over the draft's.
+    expect(screen.getByTestId('composer').textContent).toBe("What's your idea?")
+  })
+})
+
+function WordReader() {
+  const { postWord, boardWord } = usePortalWords()
+  const intl = useIntl()
+  return (
+    <>
+      <p data-testid="words">{`${postWord} ${boardWord}`}</p>
+      <p data-testid="formatted">
+        {intl.formatMessage({ id: 'x', defaultMessage: '{postWord} {boardWord}' })}
+      </p>
+    </>
+  )
+}

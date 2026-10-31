@@ -188,14 +188,16 @@ export function PostContentSection({
             onChange={(e) => setEditTitle(e.target.value)}
             placeholder={intl.formatMessage({
               id: 'portal.postDetail.edit.titlePlaceholder',
-              defaultMessage: "What's your idea?",
+              defaultMessage:
+                "{postWord, select, post {What's on your mind?} feature_request {What should we build?} suggestion {What's your suggestion?} other {What's your idea?}}",
             })}
             maxLength={200}
             autoFocus
             disabled={isSaving}
             aria-label={intl.formatMessage({
               id: 'portal.postDetail.edit.titleLabel',
-              defaultMessage: 'Post title',
+              defaultMessage:
+                '{postWord, select, post {Post title} feature_request {Feature request title} suggestion {Suggestion title} other {Idea title}}',
             })}
             className="w-full bg-transparent border-0 outline-none text-xl sm:text-2xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-4"
           />

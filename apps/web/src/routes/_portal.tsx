@@ -22,7 +22,7 @@ import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/f
 import { buildPortalAuthDialogConfig } from '@/components/auth/portal-auth-dialog-config'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
 import { portalFontIds, portalTheme } from '@/lib/shared/design/view'
-import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { usePublishedPortalWords, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -377,9 +377,10 @@ function PortalLayout() {
     prompt,
     permissionKeys,
   } = loaderData
+  const words = usePublishedPortalWords()
 
   return (
-    <PortalIntlProvider locale={locale} messages={messages}>
+    <PortalIntlProvider locale={locale} messages={messages} words={words}>
       <PortalPermissionsProvider permissionKeys={permissionKeys}>
         <AuthPopoverProvider>
           <PortalAuthAutoOpen

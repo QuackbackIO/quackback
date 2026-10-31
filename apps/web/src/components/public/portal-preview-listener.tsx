@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { extractCssVariables, loadBrandingFont, normalizeFontSans } from '@/lib/shared/theme'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import {
   PreviewDraftProvider,
   PreviewAttributesContext,
@@ -146,7 +147,11 @@ export function PortalPreviewProvider({
       <PreviewHeadlineContext.Provider value={design ? design.headline : undefined}>
         <PreviewPagesContext.Provider value={pages}>
           <PreviewAttributesContext.Provider value={design?.attributes}>
-            {children}
+            {design?.words ? (
+              <PortalWordsIntl words={design.words}>{children}</PortalWordsIntl>
+            ) : (
+              children
+            )}
           </PreviewAttributesContext.Provider>
         </PreviewPagesContext.Provider>
       </PreviewHeadlineContext.Provider>

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { createIntl } from 'react-intl'
 import { SUPPORTED_LOCALES, DEFAULT_LOCALE } from '@/lib/shared/i18n'
 
 // Derive the catalog registry from the JSON files on disk rather than a
@@ -20,14 +21,30 @@ const enKeys = Object.keys(en)
 const enKeySet = new Set(enKeys)
 const localesToCheck = SUPPORTED_LOCALES.filter((l) => l !== DEFAULT_LOCALE)
 
-// Collect the top-level ICU argument names in a message: `{name}` -> "name",
-// `{count, plural, ...}` -> "count". Branch keywords (plural/one/other) and the
-// `#` inside a branch are not arguments, so they are intentionally excluded.
+// The ICU argument names in a message, at any depth: `{name}` -> "name",
+// `{count, plural, ...}` -> "count", and the arguments inside each branch of a
+// plural or a select. Branch keywords and branch text are not arguments, so
+// the message is parsed rather than scanned.
+type IcuNode = {
+  type: number
+  value?: string
+  options?: Record<string, { value: IcuNode[] }>
+  children?: IcuNode[]
+}
+const LITERAL = 0
+const POUND = 7
+const TAG = 8
+const parser = createIntl({ locale: 'en', onError: () => {} }).formatters
 function icuArgNames(message: string): Set<string> {
   const names = new Set<string>()
-  const re = /\{\s*([a-zA-Z_][\w]*)\b/g
-  let match: RegExpExecArray | null
-  while ((match = re.exec(message)) !== null) names.add(match[1])
+  const visit = (nodes: IcuNode[]) => {
+    for (const node of nodes) {
+      if (node.type === TAG) visit(node.children ?? [])
+      else if (node.type !== LITERAL && node.type !== POUND && node.value) names.add(node.value)
+      for (const option of Object.values(node.options ?? {})) visit(option.value)
+    }
+  }
+  visit(parser.getMessageFormat(message, 'en').getAst() as IcuNode[])
   return names
 }
 

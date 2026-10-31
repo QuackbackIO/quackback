@@ -6,6 +6,8 @@
  * shared code into a chunk of its own.
  */
 
+import type { PortalWords } from '@/lib/shared/design/view'
+
 /** A page headline by locale; the same shape the preview context carries. */
 type Headline = { title: Record<string, string>; subtitle: Record<string, string> } | null
 
@@ -26,6 +28,19 @@ export interface DesignPreview {
   headline: Headline
   home: Home | null
   nav: Nav | null
+  /** The words the draft's messages select on. */
+  words: PortalWords | null
+}
+
+/** The design's word choices (its options' postWord and boardWord). */
+const POST_WORDS = new Set(['idea', 'post', 'feature_request', 'suggestion'])
+const BOARD_WORDS = new Set(['board', 'category'])
+
+function readWords(value: unknown): PortalWords | null {
+  if (!value || typeof value !== 'object') return null
+  const { post, board } = value as Record<string, unknown>
+  if (!POST_WORDS.has(post as string) || !BOARD_WORDS.has(board as string)) return null
+  return { postWord: post, boardWord: board } as PortalWords
 }
 
 const BLOCK_TYPES = new Set([
@@ -89,7 +104,10 @@ const DESIGN_VALUE = /^[a-z_]+$/
 /** The message's design, keeping only the structural attributes a design sets. */
 export function readDesignPreview(value: unknown): DesignPreview | null {
   if (!value || typeof value !== 'object') return null
-  const { css, attributes, fontIds, headline, home, nav } = value as Record<string, unknown>
+  const { css, attributes, fontIds, headline, home, nav, vocabulary } = value as Record<
+    string,
+    unknown
+  >
   if (typeof css !== 'string') return null
   const safe = Object.fromEntries(
     Object.entries((attributes as Record<string, unknown>) ?? {}).filter(
@@ -104,6 +122,7 @@ export function readDesignPreview(value: unknown): DesignPreview | null {
     headline: readHeadline(headline),
     home: readHome(home),
     nav: readNav(nav),
+    words: readWords(vocabulary),
   }
 }
 

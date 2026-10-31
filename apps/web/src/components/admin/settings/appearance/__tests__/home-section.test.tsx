@@ -132,4 +132,12 @@ describe('Home in Sections', () => {
     expect(block.links.at(-1)).toEqual({ label: 'Docs', url: 'https://docs.example.com' })
     expect(portalDesign.safeParse(seen.design).success).toBe(true)
   })
+
+  it('names the blocks that say the word in the portal’s word', () => {
+    const doc = withHome(newBlock('composer'), newBlock('ideas'))
+    doc.vocabulary.post = 'suggestion'
+    renderSection(doc)
+    expect(screen.getByRole('button', { name: 'Move Make a suggestion down' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Remove Top suggestions' })).toBeTruthy()
+  })
 })

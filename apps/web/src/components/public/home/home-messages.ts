@@ -4,13 +4,30 @@ import { defineMessages } from 'react-intl'
 export const homeMessages = defineMessages({
   composerPlaceholder: {
     id: 'portal.feedback.header.titlePlaceholder',
-    defaultMessage: "What's your idea?",
+    defaultMessage:
+      "{postWord, select, post {What's on your mind?} feature_request {What should we build?} suggestion {What's your suggestion?} other {What's your idea?}}",
   },
-  composerLabel: { id: 'portal.feedback.header.titleLabel', defaultMessage: 'Feedback title' },
+  composerLabel: {
+    id: 'portal.feedback.header.titleLabel',
+    defaultMessage:
+      '{postWord, select, post {Post title} feature_request {Feature request title} suggestion {Suggestion title} other {Idea title}}',
+  },
   composerContinue: { id: 'portal.home.composer.continue', defaultMessage: 'Continue' },
-  ideasTitle: { id: 'portal.home.ideas.title', defaultMessage: 'Top ideas' },
-  ideasAll: { id: 'portal.home.ideas.all', defaultMessage: 'See all ideas' },
-  ideasEmpty: { id: 'portal.home.ideas.empty', defaultMessage: 'No ideas yet. Be the first.' },
+  ideasTitle: {
+    id: 'portal.home.ideas.title',
+    defaultMessage:
+      '{postWord, select, post {Top posts} feature_request {Top feature requests} suggestion {Top suggestions} other {Top ideas}}',
+  },
+  ideasAll: {
+    id: 'portal.home.ideas.all',
+    defaultMessage:
+      '{postWord, select, post {See all posts} feature_request {See all feature requests} suggestion {See all suggestions} other {See all ideas}}',
+  },
+  ideasEmpty: {
+    id: 'portal.home.ideas.empty',
+    defaultMessage:
+      '{postWord, select, post {No posts yet. Be the first.} feature_request {No feature requests yet. Be the first.} suggestion {No suggestions yet. Be the first.} other {No ideas yet. Be the first.}}',
+  },
   roadmapAll: { id: 'portal.home.roadmap.all', defaultMessage: 'See the roadmap' },
   roadmapColumnEmpty: { id: 'portal.home.roadmap.columnEmpty', defaultMessage: 'Nothing here yet' },
   updatesTitle: { id: 'portal.home.updates.title', defaultMessage: 'Latest updates' },

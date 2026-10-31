@@ -19,6 +19,7 @@ import {
   type ReactNode,
 } from 'react'
 import { IntlProvider, useIntl } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import {
   DEFAULT_LOCALE,
   isViewerMessage,
@@ -82,7 +83,7 @@ function LoadedViewerMessages({ children }: { children: ReactNode }) {
       messages={messages}
       onError={intl.onError}
     >
-      {children}
+      <PortalWordsIntl>{children}</PortalWordsIntl>
     </IntlProvider>
   )
 }

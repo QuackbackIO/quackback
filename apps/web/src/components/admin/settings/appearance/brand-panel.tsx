@@ -18,6 +18,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { oklchToHex } from '@/lib/shared/theme/colors'
 import { applyPreset } from '@/lib/shared/design/presets'
 import { DesignTiles } from './design-tiles'
+import { WordsSection } from './words-section'
 import { PresetGallery } from './preset-gallery'
 import { CornersDrawing, ModeDrawing } from './drawings'
 
@@ -314,6 +315,8 @@ export function BrandPanel({
           drawing: <CornersDrawing corners={corners} />,
         }))}
       />
+
+      <WordsSection design={design} update={update} />
     </div>
   )
 }

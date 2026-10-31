@@ -84,6 +84,38 @@ export function portalDefaultSort(
   return view?.engine === 'v2' ? view.feedback.defaultSort : 'trending'
 }
 
+/** What visitors call what they post and what groups it, as the portal's messages take them. */
+export interface PortalWords {
+  postWord: PortalDesign['vocabulary']['post']
+  boardWord: PortalDesign['vocabulary']['board']
+}
+
+/** Idea and board: every portal's words until its design chooses others. */
+export const DEFAULT_PORTAL_WORDS: PortalWords = { postWord: 'idea', boardWord: 'board' }
+
+/** Each word's plural, as English names a page of them. */
+export const PORTAL_WORD_PLURALS: Record<
+  PortalWords['postWord'] | PortalWords['boardWord'],
+  string
+> = {
+  idea: 'ideas',
+  post: 'posts',
+  feature_request: 'feature requests',
+  suggestion: 'suggestions',
+  board: 'boards',
+  category: 'categories',
+}
+
+/** The admin's own words, whatever the portal's: a portal string shown in the admin says post and board. */
+export const ADMIN_WORDS: PortalWords = { postWord: 'post', boardWord: 'board' }
+
+/** A design's words; the legacy theme has the defaults. */
+export function portalWords(view: PortalDesignView | undefined): PortalWords {
+  return view?.engine === 'v2'
+    ? { postWord: view.vocabulary.post, boardWord: view.vocabulary.board }
+    : DEFAULT_PORTAL_WORDS
+}
+
 /** The bundled families a v2 design loads; legacy finds its one family from its CSS. */
 export function portalFontIds(settings: ThemeSettings | null | undefined): readonly string[] {
   const view = settings?.portalDesign

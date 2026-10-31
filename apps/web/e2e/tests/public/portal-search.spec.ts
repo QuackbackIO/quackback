@@ -32,7 +32,7 @@ test.describe('Portal search', () => {
     await page.getByRole('searchbox', { name: 'Search ideas' }).fill('xyzzyplugh')
     await expect(page.getByText('No ideas match “xyzzyplugh”.')).toBeVisible({ timeout: 5000 })
     await page.getByRole('button', { name: 'Post it as a new idea' }).click()
-    await expect(page.getByRole('textbox', { name: 'Feedback title' })).toHaveValue('xyzzyplugh')
+    await expect(page.getByRole('textbox', { name: 'Idea title' })).toHaveValue('xyzzyplugh')
   })
 })
 

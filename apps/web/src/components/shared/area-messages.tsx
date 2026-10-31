@@ -6,6 +6,7 @@
  */
 import { Suspense, use, useMemo, type ReactNode } from 'react'
 import { IntlProvider, useIntl } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import {
   DEFAULT_LOCALE,
   loadAreaMessages,
@@ -78,7 +79,7 @@ function WithMessages({ extra, children }: { extra: Record<string, string>; chil
       messages={messages}
       onError={intl.onError}
     >
-      {children}
+      <PortalWordsIntl>{children}</PortalWordsIntl>
     </IntlProvider>
   )
 }

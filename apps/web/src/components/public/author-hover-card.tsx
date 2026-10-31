@@ -197,7 +197,8 @@ export function AuthorHoverCard({
                 value={profile.postCount}
                 label={intl.formatMessage({
                   id: 'portal.profile.stats.posts',
-                  defaultMessage: 'Posts',
+                  defaultMessage:
+                    '{postWord, select, post {Posts} feature_request {Feature requests} suggestion {Suggestions} other {Ideas}}',
                 })}
               />
               <CardStat

@@ -52,26 +52,31 @@ import { takeArrivedTitle, useFeedHandoff } from '@/components/public/feedback/f
 const EMPTY_VIEW_MESSAGES: Record<PublicFeedView, MessageDescriptor> = {
   mine: {
     id: 'portal.feedback.list.emptyMine',
-    defaultMessage: "You haven't posted any ideas yet.",
+    defaultMessage:
+      "{postWord, select, post {You haven't written any posts yet.} feature_request {You haven't requested any features yet.} suggestion {You haven't made any suggestions yet.} other {You haven't posted any ideas yet.}}",
   },
   voted: {
     id: 'portal.feedback.list.emptyVoted',
-    defaultMessage: "You haven't voted on any ideas yet.",
+    defaultMessage:
+      "{postWord, select, post {You haven't voted on any posts yet.} feature_request {You haven't voted on any feature requests yet.} suggestion {You haven't voted on any suggestions yet.} other {You haven't voted on any ideas yet.}}",
   },
   following: {
     id: 'portal.feedback.list.emptyFollowing',
-    defaultMessage: "You aren't following any ideas yet.",
+    defaultMessage:
+      "{postWord, select, post {You aren't following any posts yet.} feature_request {You aren't following any feature requests yet.} suggestion {You aren't following any suggestions yet.} other {You aren't following any ideas yet.}}",
   },
 }
 
 const WIDENED_SEARCH_MESSAGES: Record<WidenedSearch, MessageDescriptor> = {
   most: {
     id: 'portal.feedback.list.searchWidenedMost',
-    defaultMessage: 'No idea has all your words. Showing ideas with most of them.',
+    defaultMessage:
+      '{postWord, select, post {No post has all your words. Showing posts with most of them.} feature_request {No feature request has all your words. Showing feature requests with most of them.} suggestion {No suggestion has all your words. Showing suggestions with most of them.} other {No idea has all your words. Showing ideas with most of them.}}',
   },
   similar: {
     id: 'portal.feedback.list.searchWidenedSimilar',
-    defaultMessage: 'No exact matches. Showing ideas with a similar spelling.',
+    defaultMessage:
+      '{postWord, select, post {No exact matches. Showing posts with a similar spelling.} feature_request {No exact matches. Showing feature requests with a similar spelling.} suggestion {No exact matches. Showing suggestions with a similar spelling.} other {No exact matches. Showing ideas with a similar spelling.}}',
   },
 }
 
@@ -514,7 +519,8 @@ export function FeedbackContainer({
               {intl.formatMessage(
                 {
                   id: 'portal.feedback.list.resultCount',
-                  defaultMessage: '{count, plural, one {# idea} other {# ideas}}',
+                  defaultMessage:
+                    '{postWord, select, post {{count, plural, one {# post} other {# posts}}} feature_request {{count, plural, one {# feature request} other {# feature requests}}} suggestion {{count, plural, one {# suggestion} other {# suggestions}}} other {{count, plural, one {# idea} other {# ideas}}}}',
                 },
                 { count: facetCounts.total }
               )}
@@ -550,7 +556,8 @@ export function FeedbackContainer({
                     {intl.formatMessage(
                       {
                         id: 'portal.feedback.list.noSearchResults',
-                        defaultMessage: 'No ideas match “{query}”.',
+                        defaultMessage:
+                          '{postWord, select, post {No posts match “{query}”.} feature_request {No feature requests match “{query}”.} suggestion {No suggestions match “{query}”.} other {No ideas match “{query}”.}}',
                       },
                       { query: activeSearch }
                     )}
@@ -563,7 +570,8 @@ export function FeedbackContainer({
                     >
                       {intl.formatMessage({
                         id: 'portal.feedback.list.postSearchAsIdea',
-                        defaultMessage: 'Post it as a new idea',
+                        defaultMessage:
+                          '{postWord, select, post {Make it a new post} feature_request {Request it as a new feature} suggestion {Post it as a new suggestion} other {Post it as a new idea}}',
                       })}
                     </Button>
                   )}
@@ -574,7 +582,8 @@ export function FeedbackContainer({
                     ? intl.formatMessage(EMPTY_VIEW_MESSAGES[activeView])
                     : intl.formatMessage({
                         id: 'portal.feedback.list.noPostsFiltered',
-                        defaultMessage: 'No posts match your filters.',
+                        defaultMessage:
+                          '{postWord, select, post {No posts match your filters.} feature_request {No feature requests match your filters.} suggestion {No suggestions match your filters.} other {No ideas match your filters.}}',
                       })}
                 </p>
               ) : (
@@ -582,7 +591,8 @@ export function FeedbackContainer({
                   <p className="text-base font-medium text-foreground">
                     {intl.formatMessage({
                       id: 'portal.feedback.list.noPostsYetTitle',
-                      defaultMessage: 'Got an idea? Be the first to share it',
+                      defaultMessage:
+                        '{postWord, select, post {Got something to say? Be the first to post} feature_request {Need a feature? Be the first to request it} suggestion {Got a suggestion? Be the first to share it} other {Got an idea? Be the first to share it}}',
                     })}
                   </p>
                   <p className="text-sm text-muted-foreground max-w-sm mx-auto">

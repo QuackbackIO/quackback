@@ -27,6 +27,7 @@ import {
   type HomeBlockType,
 } from '@/lib/shared/design/home'
 import { BLOCK_WIDTHS, DESIGN_OPTIONS } from '@/lib/shared/design/options'
+import type { PostWord } from './words'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 
@@ -57,6 +58,19 @@ const HEADLINE_LOCALE = 'en'
 
 /** Home holds at most this many blocks. */
 const MAX_BLOCKS = 12
+
+/** The two blocks named after what visitors post, in the portal's word. */
+const WORDED_BLOCKS: Record<PostWord, { composer: string; ideas: string }> = {
+  idea: { composer: 'Share an idea', ideas: 'Top ideas' },
+  post: { composer: 'Write a post', ideas: 'Top posts' },
+  feature_request: { composer: 'Request a feature', ideas: 'Top feature requests' },
+  suggestion: { composer: 'Make a suggestion', ideas: 'Top suggestions' },
+}
+
+/** A block's name as Appearance shows it, in the portal's word where it names one. */
+export function blockName(type: HomeBlockType, word: PostWord): string {
+  return type === 'composer' || type === 'ideas' ? WORDED_BLOCKS[word][type] : BLOCK_NAMES[type]
+}
 
 export const BLOCK_NAMES: Record<HomeBlockType, string> = {
   welcome: 'Welcome',
@@ -167,6 +181,7 @@ export function HomeSection({
                 index={index}
                 count={home.blocks.length}
                 gates={gates}
+                word={design.vocabulary.post}
                 edit={edit}
               />
             ))}
@@ -186,7 +201,7 @@ export function HomeSection({
                   key={type}
                   onClick={() => edit((draft) => void draft.pages.home.blocks.push(newBlock(type)))}
                 >
-                  {BLOCK_NAMES[type]}
+                  {blockName(type, design.vocabulary.post)}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -202,15 +217,18 @@ function BlockRow({
   index,
   count,
   gates,
+  word,
   edit,
 }: {
   block: HomeBlock
   index: number
   count: number
   gates: PortalPageGates
+  /** What visitors post, which names the composer and Top ideas blocks. */
+  word: PostWord
   edit: Update
 }) {
-  const name = BLOCK_NAMES[block.type]
+  const name = blockName(block.type, word)
   const page = BLOCK_PAGE[block.type]
   /** Changes this block in the draft. */
   const change = (apply: (draft: HomeBlock) => void) =>

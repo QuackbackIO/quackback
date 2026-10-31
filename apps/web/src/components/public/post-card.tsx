@@ -226,7 +226,8 @@ export function PostCard({
   const voteNoAccessMsg = voteNoAccess
     ? intl.formatMessage({
         id: 'portal.vote.noAccess',
-        defaultMessage: "You don't have access to vote on this board",
+        defaultMessage:
+          "{boardWord, select, category {You don't have access to vote in this category} other {You don't have access to vote on this board}}",
       })
     : undefined
 
@@ -250,7 +251,7 @@ export function PostCard({
               {
                 id: 'portal.postCard.vote.ariaVote',
                 defaultMessage:
-                  'Vote for this post ({count, plural, one {# vote} other {# votes}})',
+                  '{postWord, select, post {Vote for this post ({count, plural, one {# vote} other {# votes}})} feature_request {Vote for this feature request ({count, plural, one {# vote} other {# votes}})} suggestion {Vote for this suggestion ({count, plural, one {# vote} other {# votes}})} other {Vote for this idea ({count, plural, one {# vote} other {# votes}})}}',
               },
               { count: currentVoteCount }
             )
@@ -336,7 +337,8 @@ export function PostCard({
             className="h-7 w-7 hover:bg-muted/50"
             aria-label={intl.formatMessage({
               id: 'portal.postCard.quickActions.open',
-              defaultMessage: 'Open post actions',
+              defaultMessage:
+                '{postWord, select, post {Open post actions} feature_request {Open feature request actions} suggestion {Open suggestion actions} other {Open idea actions}}',
             })}
           >
             <EllipsisHorizontalIcon className="h-4 w-4" />
@@ -373,7 +375,8 @@ export function PostCard({
               className="p-1 -m-1 rounded hover:bg-muted/50 transition-colors"
               aria-label={intl.formatMessage({
                 id: 'portal.postCard.quickActions.options',
-                defaultMessage: 'Post options',
+                defaultMessage:
+                  '{postWord, select, post {Post options} feature_request {Feature request options} suggestion {Suggestion options} other {Idea options}}',
               })}
             >
               <EllipsisHorizontalIcon className="h-4 w-4" />

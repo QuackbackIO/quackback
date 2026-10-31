@@ -113,7 +113,8 @@ export function FeedbackToolbar({
   }, [handOffSearch, handoff])
   const searchLabel = intl.formatMessage({
     id: 'portal.feedback.toolbar.searchLabel',
-    defaultMessage: 'Search ideas',
+    defaultMessage:
+      '{postWord, select, post {Search posts} feature_request {Search feature requests} suggestion {Search suggestions} other {Search ideas}}',
   })
 
   function handleClearSearch(): void {

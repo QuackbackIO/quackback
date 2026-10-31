@@ -59,7 +59,7 @@ test.describe('Identified widget harness', { tag: '@smoke' }, () => {
       timeout: 10000,
     })
 
-    const title = widget.getByRole('textbox', { name: 'Feedback title' })
+    const title = widget.getByRole('textbox', { name: 'Idea title' })
     await expect(title).toBeVisible()
     const idea = `Widget e2e idea ${Date.now()}`
     await title.fill(idea)

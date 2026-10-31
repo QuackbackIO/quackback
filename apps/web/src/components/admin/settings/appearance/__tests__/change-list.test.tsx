@@ -32,6 +32,8 @@ describe('changeLabel', () => {
     ['pages.home.blocks', 'Home blocks'],
     ['nav.items', 'Menu'],
     ['nav.home.label', 'Home tab name'],
+    ['vocabulary.post', 'What people post'],
+    ['vocabulary.board', 'What groups them'],
   ])('%s is %s', (path, label) => {
     expect(changeLabel(path)).toBe(label)
   })
