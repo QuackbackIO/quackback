@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { track } from '@/lib/client/analytics'
+import { imagePalette } from '@/lib/client/image-palette'
 import {
   askPortalDesignAiFn,
   portalDesignDirectionsFn,
@@ -16,7 +17,7 @@ export interface DesignLook {
 }
 
 export type DesignAiTurn =
-  | { role: 'user'; text: string }
+  | { role: 'user'; text: string; palette?: string[] }
   | {
       role: 'assistant'
       text: string
@@ -52,13 +53,15 @@ export function useDesignAi({
   const say = (turn: DesignAiTurn) => setTurns((previous) => [...previous, turn])
 
   const ask = useCallback(
-    async (text: string, scope: DesignAiScope) => {
+    async (text: string, scope: DesignAiScope, palette?: string[]) => {
       setBusy(true)
       const history = turns.map((turn) => ({ role: turn.role, content: turn.text }))
-      say({ role: 'user', text })
+      say({ role: 'user', text, ...(palette?.length ? { palette } : {}) })
       try {
         await flush()
-        const result = await askPortalDesignAiFn({ data: { message: text, scope, history } })
+        const result = await askPortalDesignAiFn({
+          data: { message: text, scope, history, ...(palette?.length ? { palette } : {}) },
+        })
         if (!result.ok) {
           say({ role: 'assistant', text: result.message })
           return
@@ -101,10 +104,49 @@ export function useDesignAi({
     }
   }, [])
 
+  /**
+   * Three looks from the colours of a logo or a screenshot. With `useAsLogo`,
+   * the image also becomes the workspace logo where uploads are set up.
+   */
+  const startFromImage = useCallback(
+    async (file: File, uploadLogo: ((file: File) => Promise<unknown>) | null) => {
+      setBusy(true)
+      void track('appearance_start_chosen', { start: 'image' })
+      try {
+        const palette = await imagePalette(file)
+        say({ role: 'user', text: file.name, palette })
+        if (palette.length === 0) {
+          say({ role: 'assistant', text: 'That image could not be read. Try a PNG or a JPEG.' })
+          return
+        }
+        let logoNote = ''
+        if (uploadLogo) {
+          logoNote = await uploadLogo(file).then(
+            () => 'It is now your logo. ',
+            () => 'It could not be saved as your logo; set one in Settings › General. '
+          )
+        }
+        const result = await portalDesignDirectionsFn({ data: { palette } })
+        if (result.ok)
+          say({
+            role: 'assistant',
+            text: `${logoNote}Here are three looks to start from.`,
+            looks: result.looks,
+          })
+        else say({ role: 'assistant', text: `${logoNote}${result.message}` })
+      } catch {
+        say({ role: 'assistant', text: FAILED })
+      } finally {
+        setBusy(false)
+      }
+    },
+    []
+  )
+
   const lookPicked = useCallback((look: DesignLook) => {
     shaped.current = true
     void track('appearance_look_picked', { look: look.name })
   }, [])
 
-  return { turns, busy, ask, start, lookPicked, shaped }
+  return { turns, busy, ask, start, startFromImage, lookPicked, shaped }
 }

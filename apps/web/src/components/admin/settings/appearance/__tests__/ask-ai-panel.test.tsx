@@ -28,6 +28,7 @@ function mount(props: Partial<Parameters<typeof AskAiPanel>[0]> = {}) {
       onLook={() => {}}
       onPresets={() => {}}
       onWiden={() => {}}
+      onImage={() => {}}
       {...props}
     />
   )

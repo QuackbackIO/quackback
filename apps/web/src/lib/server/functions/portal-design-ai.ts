@@ -9,6 +9,8 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { DESIGN_AI_SCOPES } from '@/lib/shared/design/apply-changes'
 import { requireAuth } from './auth-helpers'
 
+const hexColour = z.string().regex(/^#[0-9a-f]{6}$/i)
+
 export const getPortalDesignAiStatusFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
   const { designAiModel } = await import('@/lib/server/domains/design/ai/design-ai')
@@ -19,6 +21,7 @@ export const askPortalDesignAiFn = createServerFn({ method: 'POST' })
   .validator(
     z.object({
       message: z.string().trim().min(1).max(2000),
+      palette: z.array(hexColour).max(6).optional(),
       scope: z.enum(DESIGN_AI_SCOPES),
       history: z
         .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(2000) }))
@@ -46,8 +49,12 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
       .object({
         site: z.string().trim().max(2048).optional(),
         words: z.string().trim().max(500).optional(),
+        palette: z.array(hexColour).min(1).max(6).optional(),
       })
-      .refine((input) => input.site || input.words, 'Give a website or a few words')
+      .refine(
+        (input) => input.site || input.words || input.palette,
+        'Give a website, a few words or an image'
+      )
   )
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
@@ -57,7 +64,7 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
       import('@/lib/server/domains/design/design.actions'),
     ])
     const site = data.site ? await readSiteSignals(data.site) : null
-    if (data.site && !site && !data.words) {
+    if (data.site && !site && !data.words && !data.palette) {
       return {
         ok: false as const,
         code: 'SITE_UNREADABLE' as const,
@@ -66,5 +73,10 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
       }
     }
     const current = await actions.readDesignForEditing()
-    return designDirections({ design: current.design, site, words: data.words ?? null })
+    return designDirections({
+      design: current.design,
+      site,
+      words: data.words ?? null,
+      palette: data.palette ?? null,
+    })
   })

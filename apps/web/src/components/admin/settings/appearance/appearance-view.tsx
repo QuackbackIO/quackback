@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PortalPreview } from '@/components/admin/settings/branding/portal-preview'
 import { track } from '@/lib/client/analytics'
+import { useUploadWorkspaceLogo } from '@/lib/client/mutations/settings'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import { DESIGN_AI_SCOPES, type DesignAiScope } from '@/lib/shared/design/apply-changes'
 import { cn } from '@/lib/shared/utils'
@@ -38,6 +39,7 @@ export function AppearanceView({
   const draft = useDesignDraft()
   const { available } = useSuspenseQuery(portalDesignQueries.aiStatus()).data
   const ai = useDesignAi({ flush: draft.flush, adopt: draft.adopt })
+  const uploadLogo = useUploadWorkspaceLogo()
   const [theme, setTheme] = useState<'light' | 'dark'>(
     draft.design.mode === 'dark' ? 'dark' : 'light'
   )
@@ -115,6 +117,17 @@ export function AppearanceView({
                 setScope('site')
                 void ai.ask(text, 'site')
               }}
+              onImage={(file, useAsLogo) =>
+                void ai.startFromImage(
+                  file,
+                  useAsLogo
+                    ? async (image) => {
+                        await uploadLogo.mutateAsync(image)
+                        await draft.refreshLive()
+                      }
+                    : null
+                )
+              }
             />
           </TabsContent>
           <TabsContent value="brand" className="pt-4">
@@ -129,9 +142,9 @@ export function AppearanceView({
             scope={scope}
             busy={ai.busy}
             onClearScope={() => setScope('site')}
-            onAsk={(text) => {
+            onAsk={(text, palette) => {
               setTab('ask')
-              void ai.ask(text, scope)
+              void ai.ask(text, scope, palette)
             }}
           />
         )}
@@ -176,7 +189,7 @@ export function AppearanceView({
         <ClientOnly>
           <PortalPreview
             theme={draft.design.mode === 'auto' ? theme : draft.design.mode}
-            refreshKey={String(draft.published?.number ?? 0)}
+            refreshKey={`${draft.published?.number ?? 0}:${logoUrl ?? ''}`}
             draftCss=""
             cssDirty={false}
             draft={structural}

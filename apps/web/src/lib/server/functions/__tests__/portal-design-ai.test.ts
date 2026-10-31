@@ -107,6 +107,11 @@ describe('portal design AI functions', () => {
     expect(hoisted.saved).toEqual([])
   })
 
+  it('starts from the colours of a logo or a screenshot alone', async () => {
+    await directionsFn({ data: { palette: ['#7a1f35'] } })
+    expect(hoisted.directionsInput).toMatchObject({ site: null, words: null, palette: ['#7a1f35'] })
+  })
+
   it('refuses a website it cannot read, and passes one it can', async () => {
     hoisted.site = null
     expect(await directionsFn({ data: { site: 'example.invalid' } })).toMatchObject({

@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultDesign, portalDesign } from '@/lib/shared/design/schema'
 import { resolveDesign } from '@/lib/shared/design/resolve'
+import { DESIGN_PRESETS } from '@/lib/shared/design/presets'
 
 const model = vi.hoisted(() => ({
   configured: true,
@@ -116,6 +117,21 @@ describe('askDesignAi', () => {
     expect(result.reply).toBe('That is outside the header, so nothing changed.')
   })
 
+  it('passes the colours of an attached image with the request', async () => {
+    model.answer = { reply: 'Done.', changes: [], outOfScope: false }
+    await askDesignAi({
+      message: 'Use these colours',
+      design: defaultDesign(),
+      scope: 'site',
+      history: [],
+      palette: ['#7a1f35', '#ffffff'],
+    })
+    const sent = model.calls[0] as unknown as { messages: Array<{ content: string }> }
+    expect(sent.messages.at(-1)!.content).toBe(
+      'Use these colours\n\nColours from the attached image, most used first: #7a1f35, #ffffff. The most vivid, likely the brand colour: #7a1f35.'
+    )
+  })
+
   it('keeps the reply when everything asked for is already set', async () => {
     model.answer = {
       reply: 'The header is already stacked.',
@@ -163,6 +179,30 @@ describe('askDesignAi', () => {
 })
 
 describe('designDirections', () => {
+  it('keeps the page quiet when a look paints it in the brand colour', async () => {
+    model.answer = {
+      looks: [
+        {
+          name: 'Gold',
+          description: 'Bright.',
+          preset: 'calm',
+          accent: '#c2410c',
+          background: '#f5b301',
+          ink: '#1c1408',
+          headingFont: 'inter',
+          bodyFont: 'inter',
+          headline: 'Ideas',
+          subtitle: '',
+        },
+      ],
+    }
+    const result = await designDirections({ design: defaultDesign(), site: null, words: 'gold' })
+    if (!result.ok) throw new Error('expected looks')
+    const calm = DESIGN_PRESETS.find((preset) => preset.id === 'calm')!
+    expect(result.looks[0].design.brand.light.background).toBe(calm.look.brand.light.background)
+    expect(result.looks[0].design.brand.light.accent).toBe('#c2410c')
+  })
+
   it('builds each look on its preset, as a valid and readable design', async () => {
     model.answer = {
       looks: [
@@ -192,7 +232,17 @@ describe('designDirections', () => {
         },
       ],
     }
-    const result = await designDirections({ design: defaultDesign(), site: null, words: 'calm' })
+    const result = await designDirections({
+      design: defaultDesign(),
+      site: null,
+      words: 'calm',
+      palette: ['#0f766e', '#f8fafc'],
+    })
+    const brief = (model.calls[0] as unknown as { messages: Array<{ content: string }> })
+      .messages[0].content
+    expect(brief).toContain(
+      'Colours from their logo or a screenshot, most used first: #0f766e, #f8fafc. The most vivid, likely the brand colour: #0f766e.'
+    )
     if (!result.ok) throw new Error('expected looks')
     expect(result.looks.map((look) => look.name)).toEqual(['Calm', 'Editorial'])
     expect(result.looks[0].design.layout.band).toBe('tint')
