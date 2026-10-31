@@ -43,6 +43,10 @@ export const DESIGN_OPTIONS = {
   bandArt: ['none', 'dots', 'grid', 'lines', 'waves', 'hills', 'petals', 'confetti'],
   /** Where an image is cropped toward when it does not fit. */
   imageFocus: ['left', 'centre', 'right'],
+  /** The other pages' titles: plain on the page, or on the band as Home's headline is. */
+  pageTitles: ['plain', 'band'],
+  /** The pages whose titles a design can word. */
+  titledPage: ['roadmap', 'changelog', 'help', 'support'],
   /** Home's composer: a block on the grid, or in the band under the headline. */
   composerPlace: ['block', 'band'],
   /** `filled` cards have no edge: their own colour on the page, with larger corners. */
@@ -51,6 +55,8 @@ export const DESIGN_OPTIONS = {
   tint: ['neutral', 'support'],
   /** The colour of the band's call to action. */
   action: ['accent', 'support'],
+  /** What fills a primary button: the brand colour, or the text colour, as many brands' black buttons are. */
+  fill: ['accent', 'ink'],
   density: ['compact', 'comfortable', 'spacious'],
   width: ['narrow', 'default', 'wide'],
   /** Which side of the feed the filters sit on, `end` being the reading end. */

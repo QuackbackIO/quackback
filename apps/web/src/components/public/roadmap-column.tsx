@@ -1,4 +1,5 @@
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
+import { StatusColourDot } from '@/components/ui/status-badge'
 import { useIntl } from 'react-intl'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { RoadmapCard } from './roadmap-card'
@@ -51,11 +52,11 @@ export function RoadmapColumn({
   })
 
   return (
-    <Card className="flex-1 min-w-[300px] max-w-[350px] flex flex-col h-full">
+    <Card className="w-full flex flex-col h-full">
       <CardHeader className="pb-3 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
+            <StatusColourDot colour={color} className="size-3" />
             <CardTitle className="text-base">
               {icon && (
                 <span className="me-1.5" aria-hidden>
@@ -98,8 +99,9 @@ export function RoadmapColumn({
                     title={post.title}
                     voteCount={post.voteCount}
                     commentCount={post.commentCount}
-                    board={{ slug: post.board.slug, name: post.board.name }}
+                    board={{ id: post.board.id, slug: post.board.slug, name: post.board.name }}
                     eta={post.eta}
+                    voting
                   />
                 </div>
               ))}

@@ -135,6 +135,7 @@ export function PortalPreviewProvider({
       design
         ? {
             home: design.home as PreviewDesignPages['home'],
+            titles: design.titles,
             nav: design.nav as PreviewDesignPages['nav'],
           }
         : undefined,

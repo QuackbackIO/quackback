@@ -2,16 +2,6 @@ import { defineMessages } from 'react-intl'
 
 /** What Home's blocks say to visitors. */
 export const homeMessages = defineMessages({
-  composerPlaceholder: {
-    id: 'portal.feedback.header.titlePlaceholder',
-    defaultMessage:
-      "{postWord, select, post {What's on your mind?} feature_request {What should we build?} suggestion {What's your suggestion?} other {What's your idea?}}",
-  },
-  composerLabel: {
-    id: 'portal.feedback.header.titleLabel',
-    defaultMessage:
-      '{postWord, select, post {Post title} feature_request {Feature request title} suggestion {Suggestion title} other {Idea title}}',
-  },
   composerContinue: { id: 'portal.home.composer.continue', defaultMessage: 'Continue' },
   ideasTitle: {
     id: 'portal.home.ideas.title',
@@ -33,7 +23,6 @@ export const homeMessages = defineMessages({
   updatesTitle: { id: 'portal.home.updates.title', defaultMessage: 'Latest updates' },
   updatesAll: { id: 'portal.home.updates.all', defaultMessage: 'See all updates' },
   helpSearchTitle: { id: 'portal.home.helpSearch.title', defaultMessage: 'How can we help?' },
-  helpSearchField: { id: 'portal.home.helpSearch.field', defaultMessage: 'Search help articles' },
   helpTopicsTitle: { id: 'portal.home.helpTopics.title', defaultMessage: 'Help topics' },
   helpAll: { id: 'portal.home.help.all', defaultMessage: 'Visit the help center' },
   statusTitle: { id: 'portal.home.status.title', defaultMessage: 'Status' },

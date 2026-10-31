@@ -90,6 +90,9 @@ function lookChanges(
         ]),
     { path: 'brand.fonts.heading', value: look.headingFont },
     { path: 'brand.fonts.body', value: look.bodyFont },
+    ...(look.displayFont && look.displayFont !== look.headingFont
+      ? [{ path: 'brand.fonts.display', value: look.displayFont }]
+      : []),
     { path: 'brand.fonts.headingWeight', value: Number(look.headingWeight) },
     { path: 'shape.corners', value: look.corners },
     { path: 'layout.header', value: look.header },
@@ -106,11 +109,13 @@ function lookChanges(
     { path: 'layout.bandAlign', value: look.bandAlign },
     { path: 'layout.bandShape', value: look.bandShape },
     { path: 'layout.headerOnBand', value: look.headerOnBand },
+    { path: 'layout.pageTitles', value: look.pageTitles },
     { path: 'brand.fonts.scale', value: look.scale },
     { path: 'brand.fonts.tracking', value: look.tracking },
     { path: 'brand.fonts.headlineCase', value: look.headlineCase },
     { path: 'brand.fonts.labelCase', value: look.labelCase },
     { path: 'shape.buttons', value: look.buttons },
+    { path: 'shape.fill', value: look.fill },
     { path: 'shape.action', value: look.action },
     { path: 'layout.tint', value: look.tint },
     { path: 'layout.bandArt', value: look.bandArt },

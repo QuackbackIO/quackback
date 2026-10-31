@@ -187,6 +187,8 @@ export const portalDesignV2 = z
           .object({
             heading: font,
             body: font,
+            /** The page headlines' own face, such as a poster face; absent is the heading font. */
+            display: font.optional(),
             headingWeight: z.union(
               DESIGN_OPTIONS.headingWeight.map((w) => z.literal(w)) as [
                 z.ZodLiteral<500>,
@@ -233,6 +235,8 @@ export const portalDesignV2 = z
         buttons: z.enum(DESIGN_OPTIONS.buttons).optional(),
         /** The band's call to action in the brand colour or the second; absent is the brand colour. */
         action: z.enum(DESIGN_OPTIONS.action).optional(),
+        /** Primary buttons in the brand colour or the text colour; absent is the brand colour. */
+        fill: z.enum(DESIGN_OPTIONS.fill).optional(),
       })
       .strict(),
     layout: z
@@ -256,6 +260,8 @@ export const portalDesignV2 = z
         imagePlace: z.enum(DESIGN_OPTIONS.imagePlace).optional(),
         /** What part of the image stays when it is cropped; absent is the centre. */
         imageFocus: z.enum(DESIGN_OPTIONS.imageFocus).optional(),
+        /** The other pages' titles on the band, as Home's headline is; absent is plain. */
+        pageTitles: z.enum(DESIGN_OPTIONS.pageTitles).optional(),
         /** Art in the brand's colours for a band without an image; absent is none. */
         bandArt: z.enum(DESIGN_OPTIONS.bandArt).optional(),
         cards: z.enum(DESIGN_OPTIONS.cards),
@@ -289,6 +295,8 @@ export const portalDesignV2 = z
               .strict(),
           })
           .strict(),
+        /** The other pages' own titles; a page left out keeps its usual one. */
+        titles: z.partialRecord(z.enum(DESIGN_OPTIONS.titledPage), headline.unwrap()).optional(),
       })
       .strict(),
     nav: z

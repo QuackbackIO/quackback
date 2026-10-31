@@ -394,6 +394,19 @@ export function BrandPanel({
           drawing: <ButtonsDrawing buttons={buttons} />,
         }))}
       />
+      <SettingRow
+        label="Buttons in the text colour"
+        htmlFor="design-fill"
+        control={
+          <Switch
+            id="design-fill"
+            checked={design.shape.fill === 'ink'}
+            onCheckedChange={(on) =>
+              update((draft) => void (draft.shape.fill = on ? 'ink' : 'accent'))
+            }
+          />
+        }
+      />
 
       <WordsSection design={design} update={update} />
     </div>

@@ -4,6 +4,7 @@ import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/reac
 import { useTheme } from 'next-themes'
 import { isHelpPath, isTabActive, type PortalNavItem } from './portal-header-nav'
 import { usePortalNavItems } from './use-portal-nav-items'
+import { NavScroller } from './nav-scroller'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
@@ -407,17 +408,15 @@ export function PortalHeader({
         <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
           <div className="flex h-12 items-center gap-4">
             {logo}
-            <div className="hidden min-w-0 flex-1 overflow-x-auto scrollbar-none md:block">
-              {navigation}
-            </div>
+            <NavScroller className="hidden min-w-0 flex-1 md:block">{navigation}</NavScroller>
             <div className="ms-auto shrink-0">{authButtons}</div>
           </div>
         </div>
-        <div className="mt-2 overflow-x-auto scrollbar-none md:hidden">
+        <NavScroller className="mt-2 md:hidden">
           <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
             {navigation}
           </div>
-        </div>
+        </NavScroller>
       </header>
     )
   }
@@ -437,11 +436,11 @@ export function PortalHeader({
           </div>
         </div>
         {/* Centred while it fits; wider than the screen, it scrolls from its start. */}
-        <div className="mt-2 overflow-x-auto scrollbar-none">
+        <NavScroller className="mt-2">
           <div className="max-w-[var(--qb-page-max,72rem)] mx-auto flex w-max min-w-full justify-center px-4 sm:px-6">
             {navigation}
           </div>
-        </div>
+        </NavScroller>
       </header>
     )
   }
@@ -466,11 +465,11 @@ export function PortalHeader({
       </div>
 
       {/* Row 2: Navigation */}
-      <div className="mt-2 overflow-x-auto scrollbar-none">
+      <NavScroller className="mt-2">
         <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
           {navigation}
         </div>
-      </div>
+      </NavScroller>
     </header>
   )
 }

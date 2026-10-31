@@ -29,7 +29,7 @@ interface Fixture {
     logo: { display: string; tone?: string; nameColour?: string; nameCase?: string }
     bandImage?: { key: string }
   }
-  shape: { corners: string; buttons?: string; action?: string }
+  shape: { corners: string; buttons?: string; action?: string; fill?: string }
   layout: Record<'header' | 'nav' | 'band' | 'cards' | 'density' | 'width' | 'filters', string> & {
     blend?: string
     bandAlign?: string
@@ -39,6 +39,7 @@ interface Fixture {
     tint?: string
     bandArt?: string
     imageFocus?: string
+    pageTitles?: string
   }
   pages: {
     home: {
@@ -58,6 +59,7 @@ interface Fixture {
       defaultSort: string
       copy: Record<string, Record<string, string>>
     }
+    titles?: Record<string, Headline>
   }
   nav: {
     home: { on: boolean; tab: boolean }
@@ -95,8 +97,15 @@ function used(): Record<DesignOption, Set<string>> {
     add('tracking', tracking ?? 'normal')
     add('textCase', headlineCase ?? 'sentence')
     add('textCase', labelCase ?? 'sentence')
-    for (const headline of [doc.pages.home.headline, doc.pages.feedback.headline])
+    const titles = doc.pages.titles ?? {}
+    for (const headline of [
+      doc.pages.home.headline,
+      doc.pages.feedback.headline,
+      ...Object.values(titles),
+    ])
       if (headline?.accent) add('headlineAccent', headline.accent.style)
+    for (const page of Object.keys(titles)) add('titledPage', page)
+    add('pageTitles', doc.layout.pageTitles ?? 'plain')
     for (const key of ['header', 'nav', 'band', 'cards', 'density', 'width', 'filters'] as const)
       add(key, doc.layout[key])
     if (doc.layout.band === 'blend') add('blend', doc.layout.blend ?? 'linear')
@@ -104,6 +113,7 @@ function used(): Record<DesignOption, Set<string>> {
     add('bandShape', doc.layout.bandShape ?? 'full')
     add('buttons', doc.shape.buttons ?? 'match')
     add('action', doc.shape.action ?? 'accent')
+    add('fill', doc.shape.fill ?? 'accent')
     add('tint', doc.layout.tint ?? 'neutral')
     add('bandArt', doc.layout.bandArt ?? 'none')
     if (doc.brand.bandImage) add('imageFocus', doc.layout.imageFocus ?? 'centre')

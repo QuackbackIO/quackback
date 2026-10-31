@@ -101,6 +101,41 @@ describe('the second colour’s tint in the design CSS', () => {
   })
 })
 
+describe('the headline font in the design CSS', () => {
+  it('sets page headlines in their own face, which is the heading font unless the design gives one', () => {
+    const doc = defaultDesign()
+    expect(renderDesignCss(resolveDesign(doc))).toContain(
+      '[data-portal-theme] [data-qb-part=headline] { font-family: var(--qb-font-display);'
+    )
+    expect(renderDesignCss(resolveDesign(doc))).toMatch(/--qb-font-display: [^;]*Inter/)
+    doc.brand.fonts.display = { kind: 'bundled', id: 'oswald' }
+    expect(renderDesignCss(resolveDesign(doc))).toMatch(/--qb-font-display: [^;]*Oswald/)
+  })
+})
+
+describe('the button fill in the design CSS', () => {
+  it('fills primary buttons with the text colour when the design asks', () => {
+    expect(renderDesignCss(resolveDesign(defaultDesign()))).toContain(
+      '[data-qb-fill=ink][data-portal-theme] [data-slot=button][data-variant=default] { background-color: var(--qb-fill-bg); color: var(--qb-fill-ink); }'
+    )
+  })
+})
+
+describe('card styles in the design CSS', () => {
+  it('gives every card surface the design’s card style', () => {
+    const css = renderDesignCss(resolveDesign(defaultDesign()))
+    expect(css).toContain(
+      '[data-qb-cards=raised][data-portal-theme] [data-qb-surface=card] { border-color: transparent;'
+    )
+    expect(css).toContain(
+      '[data-qb-cards=list][data-portal-theme] [data-qb-surface=card] { border-radius: 0; border-inline-width: 0; border-top-width: 0; background: transparent; box-shadow: none; }'
+    )
+    expect(css).toContain(
+      '[data-qb-cards=filled][data-portal-theme] [data-qb-surface=card] { border-color: transparent; box-shadow: none; border-radius: calc(var(--qb-radius-panel, 0.75rem) * 1.6); }'
+    )
+  })
+})
+
 describe('status styles in the design CSS', () => {
   it('draws status dots in the ink, or statuses as tags tinted with their colour', () => {
     const css = renderDesignCss(resolveDesign(defaultDesign()))
@@ -159,7 +194,7 @@ describe('renderDesignCss', () => {
       '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
     )
     expect(css).toContain(
-      '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } [data-portal-theme] [data-qb-part=headline] { letter-spacing: var(--qb-headline-tracking); text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
+      '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } [data-portal-theme] [data-qb-part=headline] { font-family: var(--qb-font-display); letter-spacing: var(--qb-headline-tracking); text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
     )
   })
 })

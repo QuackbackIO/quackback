@@ -74,12 +74,23 @@ function Button({
     const child = React.Children.toArray(children).find(React.isValidElement)
     return useRender({
       render: (render as React.ReactElement | undefined) ?? child,
-      props: { ...props, className: classes, 'data-slot': 'button' },
+      props: {
+        ...props,
+        className: classes,
+        'data-slot': 'button',
+        'data-variant': variant ?? 'default',
+      },
     })
   }
 
   return (
-    <ButtonPrimitive data-slot="button" className={classes} render={render} {...props}>
+    <ButtonPrimitive
+      data-slot="button"
+      data-variant={variant ?? 'default'}
+      className={classes}
+      render={render}
+      {...props}
+    >
       {children}
     </ButtonPrimitive>
   )

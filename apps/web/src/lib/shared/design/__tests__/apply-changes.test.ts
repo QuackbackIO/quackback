@@ -34,6 +34,21 @@ describe('applyDesignChanges', () => {
     expect(result.applied[0]).toMatchObject({ before: 'oklch(0.886 0.176 86)', after: '#0f766e' })
   })
 
+  it('sets the headlines’ own face by name, and gives them back the heading font with null', () => {
+    const set = applyDesignChanges(
+      defaultDesign(),
+      [{ path: 'brand.fonts.display', value: 'oswald' }],
+      'site'
+    )
+    expect(set.design.brand.fonts.display).toEqual({ kind: 'bundled', id: 'oswald' })
+    const cleared = applyDesignChanges(
+      set.design,
+      [{ path: 'brand.fonts.display', value: null }],
+      'site'
+    )
+    expect(cleared.design.brand.fonts.display).toBeUndefined()
+  })
+
   it('refuses a field the design does not have, and a path that reaches outside it', () => {
     const result = applyDesignChanges(
       defaultDesign(),

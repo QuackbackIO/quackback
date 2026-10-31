@@ -1,4 +1,5 @@
 import { useIntl } from 'react-intl'
+import { StatusColourDot } from '@/components/ui/status-badge'
 import { cn } from '@/lib/shared/utils'
 
 interface FilterPillProps {
@@ -48,14 +49,13 @@ export function FilterPill({
       )}
     >
       {color && (
-        <span
-          aria-hidden
-          className={cn('size-1.5 shrink-0', dot === 'round' ? 'rounded-full' : 'rounded-[2px]')}
-          style={{ backgroundColor: color }}
+        <StatusColourDot
+          colour={color}
+          className={cn('size-1.5', dot === 'square' && 'rounded-[2px]')}
         />
       )}
       <span className="min-w-0 truncate">{children}</span>
-      {count && <span className="shrink-0 font-normal tabular-nums opacity-70">{count}</span>}
+      {count && <span className="shrink-0 font-normal tabular-nums">{count}</span>}
     </button>
   )
 }

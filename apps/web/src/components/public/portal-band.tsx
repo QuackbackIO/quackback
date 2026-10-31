@@ -2,7 +2,16 @@ import { useIntl } from 'react-intl'
 import { useRouteContext } from '@tanstack/react-router'
 import type { CSSProperties, ReactNode } from 'react'
 import { cn } from '@/lib/shared/utils'
-import { usePreviewBandImage, usePreviewHeadline, usePreviewHome } from './preview-draft-context'
+import {
+  usePreviewBandImage,
+  usePreviewHeadline,
+  usePreviewHome,
+  usePreviewTitles,
+} from './preview-draft-context'
+import type { PortalDesign } from '@/lib/shared/design/schema'
+
+/** A page whose title a design can word. */
+export type TitledPage = keyof NonNullable<PortalDesign['pages']['titles']>
 
 /** Text in the visitor's language, else its base language, else English, else any. */
 export function textForLocale(
@@ -45,7 +54,7 @@ const ACCENT_CLASS = {
 } as const
 
 /** The title with its accent phrase set apart, when the title holds it. */
-function accented(
+export function accented(
   title: string,
   phrase: string | undefined,
   style: keyof typeof ACCENT_CLASS | undefined
@@ -71,9 +80,12 @@ function accented(
  */
 export function PortalBand({
   page = 'feedback',
+  words,
   children,
 }: {
-  page?: 'feedback' | 'home'
+  page?: 'feedback' | 'home' | TitledPage
+  /** The page's usual title and line, for a page the design does not word. */
+  words?: { title: string; subtitle?: string }
   /** What sits under the headline, such as Home's composer. */
   children?: ReactNode
 }) {
@@ -85,19 +97,31 @@ export function PortalBand({
   const draftHeadline = usePreviewHeadline()
   const draftHome = usePreviewHome()
   const draftImage = usePreviewBandImage()
+  const draftTitles = usePreviewTitles()
   if (design?.engine !== 'v2') return null
   const headline =
     page === 'home'
       ? (draftHome ?? design.home).headline
-      : draftHeadline !== undefined
-        ? draftHeadline
-        : design.feedback.headline
-  const title = textForLocale(headline?.title, intl.locale)
-  const subtitle = textForLocale(headline?.subtitle, intl.locale)
+      : page === 'feedback'
+        ? draftHeadline !== undefined
+          ? draftHeadline
+          : design.feedback.headline
+        : (draftTitles ?? design.titles)[page]
+  const title = textForLocale(headline?.title, intl.locale) || words?.title
+  const subtitle = textForLocale(headline?.subtitle, intl.locale) || words?.subtitle
+  // The other pages' titles sit a step below Home's headline.
+  const titled = page !== 'home' && page !== 'feedback'
   const phrase = textForLocale(headline?.accent?.text, intl.locale)
   if (!title && !subtitle && !children) return null
   const shown = draftImage !== undefined ? draftImage : design.bandImage
-  const image = shown && STORED_FILE.test(shown.url) ? shown : null
+  // A title keeps its band short: an image behind the words stays, one beside
+  // or under them is Home's and the feed's.
+  const image =
+    shown &&
+    STORED_FILE.test(shown.url) &&
+    !(titled && (shown.place === 'side' || shown.place === 'edge'))
+      ? shown
+      : null
   const side = image?.place === 'side'
   return (
     <section
@@ -112,6 +136,7 @@ export function PortalBand({
         BAND_FILL,
         ART_FILL,
         IMAGE_FILL,
+        titled && 'py-6 [[data-qb-band-art=edge]_&]:pb-20',
         // Inset: the band's colour moves onto a rounded panel within the page.
         '[[data-qb-band-shape=inset]_&]:![background:transparent] [[data-qb-band-shape=inset]_&]:py-3'
       )}
@@ -122,6 +147,7 @@ export function PortalBand({
           '[[data-qb-band-align=centre]_&]:text-center',
           '[[data-qb-band-shape=inset]_&]:max-w-[calc(var(--qb-page-max,72rem)-2rem)] [[data-qb-band-shape=inset]_&]:rounded-[calc(var(--qb-radius-panel,0.75rem)*2.5)] [[data-qb-band-shape=inset]_&]:px-6 [[data-qb-band-shape=inset]_&]:py-10 sm:[[data-qb-band-shape=inset]_&]:px-12 sm:[[data-qb-band-shape=inset]_&]:py-14',
           '[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg-narrow,var(--qb-band-bg))] sm:[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg)]',
+          titled && 'sm:[[data-qb-band-shape=inset]_&]:py-10',
           // A side image sits beside the words, and under them on phones.
           side &&
             'md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,var(--qb-image-column,0.85fr))] md:items-center md:gap-10'
@@ -132,7 +158,12 @@ export function PortalBand({
           {title && (
             <h1
               data-qb-part="headline"
-              className="font-semibold text-[var(--qb-band-ink)] [[data-qb-headline=accent]_&]:text-[var(--qb-band-accent)] [font-size:var(--qb-headline-size)] [line-height:var(--qb-headline-leading)]"
+              className={cn(
+                'font-semibold text-[var(--qb-band-ink)] [[data-qb-headline=accent]_&]:text-[var(--qb-band-accent)] [line-height:var(--qb-headline-leading)]',
+                titled
+                  ? '[font-size:var(--qb-page-title-size)]'
+                  : '[font-size:var(--qb-headline-size)]'
+              )}
             >
               {accented(title, phrase, headline?.accent?.style)}
             </h1>

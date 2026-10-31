@@ -3,7 +3,7 @@
  * Home's composer can sit in the band under the headline, leaving the grid to
  * the other blocks; a full-width contact block lays out as one row.
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
@@ -15,6 +15,22 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router'
+vi.mock('@/lib/server/functions/portal', () => ({
+  fetchPublicBoards: async () => [],
+  fetchBoardCapabilitiesFn: async () => ({ permissions: {}, boards: [] }),
+  fetchPublicPosts: vi.fn(),
+  fetchPublicStatuses: vi.fn(),
+  fetchPublicTags: vi.fn(),
+  fetchAvatars: vi.fn(),
+  fetchPublicRoadmaps: vi.fn(),
+  fetchPublicRoadmapPosts: vi.fn(),
+  fetchPortalData: vi.fn(),
+}))
+vi.mock('@/components/auth/auth-popover-context', () => ({
+  useAuthPopover: () => ({ openAuthPopover: vi.fn() }),
+}))
+vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({ useAuthBroadcast: () => {} }))
+
 import { PortalHome } from '../portal-home'
 
 const GATES = {
@@ -71,10 +87,10 @@ describe('Home’s composer in the band', () => {
   it('sits in the band, with a filled button, and leaves the grid', async () => {
     const page = await mountHome({ headline: null, blocks: BLOCKS, composer: 'band' })
     const band = page.querySelector('[data-qb-part=band]')!
-    expect(band.querySelector('form[data-qb-part=composer]')).not.toBeNull()
-    expect(band.querySelector('button[type=submit]')!.className).toContain(
-      'bg-[var(--qb-action-bg,var(--primary))]'
-    )
+    expect(band.querySelector('[data-qb-part=composer]')).not.toBeNull()
+    expect(
+      band.querySelector('[data-qb-part=composer] button[data-qb-label]')!.className
+    ).toContain('bg-[var(--qb-action-bg,var(--primary))]')
     const grid = page.querySelector('[data-qb-section=home]')!
     expect(grid.querySelector('[data-qb-part=composer]')).toBeNull()
     // The contact block keeps its place in the order, for the preview's section picking.

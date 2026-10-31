@@ -27,6 +27,8 @@ export const lookSchema = z.object({
   darkBackground: hex,
   darkInk: hex,
   headingFont: z.enum(BUNDLED_FONT_IDS),
+  /** The headlines' own face, or "" for the heading font. */
+  displayFont: z.enum(['', ...BUNDLED_FONT_IDS]),
   bodyFont: z.enum(BUNDLED_FONT_IDS),
   headingWeight: z.enum(['500', '600', '700', '800']),
   corners: z.enum(DESIGN_OPTIONS.corners),
@@ -39,6 +41,7 @@ export const lookSchema = z.object({
   bandAlign: z.enum(DESIGN_OPTIONS.bandAlign),
   bandShape: z.enum(DESIGN_OPTIONS.bandShape),
   headerOnBand: z.boolean(),
+  pageTitles: z.enum(DESIGN_OPTIONS.pageTitles),
   scale: z.enum(DESIGN_OPTIONS.typeScale),
   tracking: z.enum(DESIGN_OPTIONS.tracking),
   headlineCase: z.enum(DESIGN_OPTIONS.textCase),
@@ -47,6 +50,7 @@ export const lookSchema = z.object({
   accentPhrase: z.string(),
   accentStyle: z.enum(DESIGN_OPTIONS.headlineAccent),
   buttons: z.enum(DESIGN_OPTIONS.buttons),
+  fill: z.enum(DESIGN_OPTIONS.fill),
   status: z.enum(DESIGN_OPTIONS.status),
   logo: z.enum(DESIGN_OPTIONS.logoDisplay),
   composer: z.enum(DESIGN_OPTIONS.composerPlace),
@@ -90,6 +94,7 @@ export const DIRECTIONS_EXAMPLE: Look = {
   darkBackground: '#161412',
   darkInk: '#f3eee8',
   headingFont: 'space-grotesk',
+  displayFont: '',
   bodyFont: 'inter',
   headingWeight: '700',
   corners: 'subtle',
@@ -101,6 +106,7 @@ export const DIRECTIONS_EXAMPLE: Look = {
   bandAlign: 'left',
   bandShape: 'full',
   headerOnBand: false,
+  pageTitles: 'band',
   scale: 'large',
   tracking: 'tight',
   headlineCase: 'sentence',
@@ -108,6 +114,7 @@ export const DIRECTIONS_EXAMPLE: Look = {
   accentPhrase: '',
   accentStyle: 'colour',
   buttons: 'match',
+  fill: 'accent',
   status: 'colour',
   logo: 'name',
   composer: 'band',
@@ -153,15 +160,16 @@ How a brand becomes each choice:
 - mode: dark when their own site is dark (then background and ink are the dark page and its light text), light when their brand is clearly light, auto otherwise. darkBackground and darkInk are dark mode's page and text, tinted toward the brand, or "".
 - support: their second signature colour when they pair two (a bright one with a deep one, or two that share the stage), else "". Never a grey.
 - fonts: the closest bundled fonts to theirs. Serif display: fraunces, playfair, lora, merriweather, source-serif. Geometric: space-grotesk, poppins, manrope, bricolage-grotesque, jakarta, dm-sans, sora, outfit. Grotesque and neo-grotesque: inter-tight, instrument-sans, work-sans, libre-franklin, figtree. Condensed, for heavy poster headlines: barlow-condensed, oswald. Humanist or friendly: nunito, ibm-plex-sans, lato, open-sans, noto-sans, rubik, karla. Neutral: inter, geist, roboto. Monospace for developer tools: jetbrains, fira-code. Body text is usually a plainer sans than the headings.
+- displayFont: their hero headlines' face when it differs from their other headings, such as a condensed poster face over a plain grotesque, else "". Keep headingFont for the section headings, which are small.
 - headingWeight: how heavy their headings are, 500 to 800.
 - scale: display for loud, poster-like heroes with very large headlines; large for confident ones; standard for quiet, text-led brands. tracking: tight for large modern headlines, normal otherwise. headlineCase: upper only when their headlines are set in capitals. labelCase: upper when their menu and buttons are in capitals.
 - accentPhrase: a short phrase copied exactly from your headline to set apart, when their site colours or highlights part of a headline; the whole headline when their headlines are set in their brand colour; "" otherwise. accentStyle: colour on dark or bold bands, highlight on light, editorial ones.
-- buttons: their buttons' shape: square, rounded, pill, or match to follow the corners.
+- buttons: their buttons' shape: square, rounded, pill, or match to follow the corners. fill: ink when their main buttons are black or in their text colour while their brand colour is kept for the logo and links, accent otherwise.
 - status: ink for monochrome and minimal brands, pill for soft and friendly ones, brand when their logo has several colours (only when the brief lists them), colour otherwise.
 - corners: sharp for strict or editorial brands, subtle for most software, rounded for friendly ones, pill for playful ones.
 - header: stacked (logo above the menu), inline (one row, for software), centered (for consumer and editorial brands). nav: tabs, underline or pills.
 - band, behind the headlines: brand when they fill large areas with their colour, such as a hero; support when that colour is their second one; blend when their brand uses a gradient, with blend linear for a bold sweep and mesh for soft colour beside the words on a white page; tint or fade for most light brands; none for minimal and monochrome brands. A dark site takes none (its own dark page) or brand, never fade, which muddies a dark page.
-- bandAlign: centre for consumer and campaign-style heroes, left for software. bandShape: inset when their hero sits in a large rounded card, panel when their hero sets the words on a block of colour over another colour or a photo, full otherwise. headerOnBand: true when their header shares their hero's colour.
+- bandAlign: centre for consumer and campaign-style heroes, left for software. bandShape: inset when their hero sits in a large rounded card, panel when their hero sets the words on a block of colour over another colour or a photo, full otherwise. headerOnBand: true when their header shares their hero's colour. pageTitles: band when their site's other pages open on a coloured hero as their home page does, plain when they open on a simple title.
 - logo: wordmark when the brief says their wordmark was found; mark_and_name when they have a logo mark; name when they have neither and their logo is their name set in type. The name settings below style the name beside a mark too.
 - composer: band for most looks, putting the composer in the hero under Home's headline; block keeps it on the grid. With it in the band, give the contact block the full width.
 - bandArt, for a band with colour and no image: none for most software; hills or waves for outdoor, travel, food and drink brands; petals or confetti for playful consumer ones; dots, grid or lines for a quiet texture. It is drawn in their colours.

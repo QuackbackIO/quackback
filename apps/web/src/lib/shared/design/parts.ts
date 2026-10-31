@@ -83,11 +83,10 @@ export const PORTAL_PARTS = [
     name: 'composer',
     description: 'Where a visitor starts a new post. Open while they write.',
     states: ['open'],
-    tokens: ['--qb-radius-panel'],
+    tokens: ['--qb-radius-panel', '--qb-radius-composer'],
     files: [
       'components/public/feedback/feedback-header-animated.tsx',
       'components/public/feedback/feedback-header.tsx',
-      'components/public/home/home-blocks.tsx',
     ],
   },
   {
@@ -105,16 +104,46 @@ export const PORTAL_PARTS = [
     files: ['components/public/post-card.tsx'],
   },
   {
+    name: 'post-band',
+    description:
+      'The strip of the band a post opens on, with the way back to its board, where page titles are on the band.',
+    states: [],
+    tokens: ['--qb-band-bg', '--qb-band-ink'],
+    files: ['routes/_portal.b.$slug.posts.$postId.tsx'],
+  },
+  {
+    name: 'post-heading',
+    description: "A post's title on its own page.",
+    states: [],
+    tokens: ['--qb-page-title-size', '--qb-font-heading'],
+    files: ['components/public/post-detail/post-content-section.tsx'],
+  },
+  {
     name: 'vote-button',
     description:
       'The vote box at the start of a card, and on a post. Voted once the visitor votes.',
     states: ['voted'],
     tokens: ['--qb-vote-active', '--qb-radius-control'],
+    files: ['components/public/post-card.tsx', 'components/public/vote-button.tsx'],
+  },
+  {
+    name: 'tag',
+    description:
+      "A post's or update's tag, tinted with its colour as status markers are, and plain when they are in the ink.",
+    states: [],
+    tokens: [],
     files: [
       'components/public/post-card.tsx',
-      'components/public/vote-button.tsx',
-      'components/public/home/home-blocks.tsx',
+      'components/public/post-detail/metadata-sidebar.tsx',
+      'components/portal/changelog/changelog-entry-card.tsx',
     ],
+  },
+  {
+    name: 'search-field',
+    description: 'Where a visitor searches the help centre, on its pages and on Home.',
+    states: [],
+    tokens: ['--qb-radius-composer'],
+    files: ['components/help-center/help-center-search.tsx'],
   },
   {
     name: 'status-badge',

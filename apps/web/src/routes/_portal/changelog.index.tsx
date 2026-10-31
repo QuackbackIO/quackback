@@ -3,6 +3,8 @@ import { useIntl } from 'react-intl'
 import { RssIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { PortalPageHeader } from '@/components/public/portal-page-header'
+import { PortalPageTitle, useDesignTitles } from '@/components/public/portal-page-title'
+import { cn } from '@/lib/shared/utils'
 import { ChangelogListPublic, ChangelogSubscribeButton } from '@/components/portal/changelog'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
@@ -44,41 +46,58 @@ function ChangelogPage() {
   const session = useSessionContext()
   const isIdentified = !!session?.user && session.user.principalType !== 'anonymous'
 
-  return (
-    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-8">
-      <PortalPageHeader
-        size="large"
-        title={intl.formatMessage({ id: 'portal.changelog.title', defaultMessage: 'Changelog' })}
-        description={intl.formatMessage({
-          id: 'portal.changelog.description',
-          defaultMessage: 'Stay up to date with the latest product updates and shipped features.',
-        })}
-        action={
-          <div className="flex items-center gap-2">
-            <ChangelogSubscribeButton enabled={isIdentified} />
-            <Button variant="outline" size="sm" asChild className="shrink-0 gap-1.5">
-              <a href="/changelog/feed" target="_blank" rel="noopener noreferrer">
-                <RssIcon className="h-4 w-4" />
-                <span className="sr-only sm:not-sr-only">
-                  {intl.formatMessage({
-                    id: 'portal.changelog.rssFeed',
-                    defaultMessage: 'RSS Feed',
-                  })}
-                </span>
-              </a>
-            </Button>
-          </div>
-        }
-        animate
-        className="mb-8"
-      />
-
-      <div
-        className="animate-in fade-in duration-300 fill-mode-backwards"
-        style={{ animationDelay: '100ms' }}
-      >
-        <ChangelogListPublic />
-      </div>
+  const designTitles = useDesignTitles()
+  const title = intl.formatMessage({ id: 'portal.changelog.title', defaultMessage: 'Changelog' })
+  const description = intl.formatMessage({
+    id: 'portal.changelog.description',
+    defaultMessage: 'Stay up to date with the latest product updates and shipped features.',
+  })
+  const actions = (
+    <div className="flex items-center gap-2">
+      <ChangelogSubscribeButton enabled={isIdentified} />
+      <Button variant="outline" size="sm" asChild className="shrink-0 gap-1.5">
+        <a href="/changelog/feed" target="_blank" rel="noopener noreferrer">
+          <RssIcon className="h-4 w-4" />
+          <span className="sr-only sm:not-sr-only">
+            {intl.formatMessage({
+              id: 'portal.changelog.rssFeed',
+              defaultMessage: 'RSS Feed',
+            })}
+          </span>
+        </a>
+      </Button>
     </div>
+  )
+
+  return (
+    <>
+      {designTitles && (
+        <PortalPageTitle page="changelog" title={title} subtitle={description} action={actions} />
+      )}
+      <div
+        className={cn(
+          'mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6',
+          designTitles ? 'pt-8 pb-8' : 'py-8'
+        )}
+      >
+        {!designTitles && (
+          <PortalPageHeader
+            size="large"
+            title={title}
+            description={description}
+            action={actions}
+            animate
+            className="mb-8"
+          />
+        )}
+
+        <div
+          className="animate-in fade-in duration-300 fill-mode-backwards"
+          style={{ animationDelay: '100ms' }}
+        >
+          <ChangelogListPublic />
+        </div>
+      </div>
+    </>
   )
 }

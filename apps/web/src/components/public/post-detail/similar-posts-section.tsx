@@ -1,4 +1,5 @@
 'use client'
+import { StatusColourDot } from '@/components/ui/status-badge'
 
 import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
@@ -24,11 +25,9 @@ function SimilarPostRow({ post }: { post: SimilarPost }) {
       <span className="flex-1 text-foreground/80 line-clamp-1">{post.title}</span>
 
       {post.status && (
-        <span
-          className="h-1.5 w-1.5 shrink-0 rounded-full"
-          style={{ backgroundColor: post.status.color }}
-          title={post.status.name}
-        />
+        <span title={post.status.name} className="flex">
+          <StatusColourDot colour={post.status.color} className="size-1.5" />
+        </span>
       )}
     </Link>
   )

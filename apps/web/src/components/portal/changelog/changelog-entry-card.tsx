@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { LinkIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { TAG_TINT, useTagStyle } from '@/components/public/tag-tint'
 import { LocalDate } from '@/components/ui/local-date'
 import type { ChangelogId, PostId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
@@ -49,6 +50,7 @@ export function ChangelogEntryCard({
   categories = [],
   className,
 }: ChangelogEntryCardProps) {
+  const tagStyle = useTagStyle()
   return (
     <article className={cn('flex gap-8 lg:gap-16', className)}>
       {/* Date sidebar */}
@@ -75,8 +77,12 @@ export function ChangelogEntryCard({
             {categories.map((category) => (
               <span
                 key={category.id}
-                className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                style={{ backgroundColor: category.color + '1a', color: category.color }}
+                data-qb-part="tag"
+                className={cn(
+                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                  TAG_TINT
+                )}
+                style={tagStyle(category.color)}
               >
                 {category.name}
               </span>

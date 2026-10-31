@@ -25,7 +25,10 @@ export function HelpCenterPopularArticles({ articles }: HelpCenterPopularArticle
       <h2 id="hc-popular" className="mb-5 text-2xl font-semibold tracking-tight text-foreground">
         <FormattedMessage id="portal.hc.popularArticles.title" defaultMessage="Popular articles" />
       </h2>
-      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+      <div
+        data-qb-surface="card"
+        className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card"
+      >
         {articles.map((article) => (
           <Link
             key={article.id}

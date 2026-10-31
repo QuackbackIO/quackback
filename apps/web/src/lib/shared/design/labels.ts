@@ -16,9 +16,11 @@ const LABELS: Record<string, string> = {
   mode: 'Mode',
   'brand.fonts.heading': 'Heading font',
   'brand.fonts.body': 'Body font',
+  'brand.fonts.display': 'Headline font',
   'brand.fonts.headingWeight': 'Heading weight',
   'shape.corners': 'Corners',
   'shape.buttons': 'Buttons',
+  'shape.fill': 'Button colour',
   'brand.light.support': 'Second colour',
   'brand.dark.support': 'Dark second colour',
   'brand.fonts.scale': 'Headline size',
@@ -70,6 +72,12 @@ const LABELS: Record<string, string> = {
   shape: 'Corners',
   brand: 'Brand',
   'pages.home.blocks': 'Home blocks',
+  'layout.pageTitles': 'Page titles',
+  'pages.titles.roadmap': 'Roadmap title',
+  'pages.titles.changelog': 'Changelog title',
+  'pages.titles.help': 'Help Center title',
+  'pages.titles.support': 'Support title',
+  'pages.titles': 'Page titles',
 }
 
 const COPY_LABELS: Record<string, string> = {

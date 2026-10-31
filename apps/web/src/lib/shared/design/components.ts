@@ -73,6 +73,13 @@ const HEADLINE: Record<NonNullable<Fonts['scale']>, [string, string]> = {
   display: ['clamp(2.25rem, 1.2rem + 4.6vw, 4.75rem)', '1.02'],
 }
 
+/** The other pages' titles: a step below Home's headline, on the same scale. */
+const PAGE_TITLE: Record<NonNullable<Fonts['scale']>, string> = {
+  standard: 'clamp(1.5rem, 1.3rem + 0.8vw, 1.875rem)',
+  large: 'clamp(1.75rem, 1.45rem + 1.3vw, 2.375rem)',
+  display: 'clamp(2rem, 1.4rem + 2.4vw, 3.25rem)',
+}
+
 const CASE = { sentence: 'none', upper: 'uppercase' } as const
 
 /** Headline and label type: absent choices are today's. */
@@ -82,6 +89,7 @@ function typeTokens(fonts: Fonts): TokenMap {
   return {
     '--qb-headline-size': size,
     '--qb-headline-leading': leading,
+    '--qb-page-title-size': PAGE_TITLE[fonts.scale ?? 'standard'],
     // Tight tracking is for the page headline; smaller headings keep today's.
     '--qb-headline-tracking': fonts.tracking === 'tight' ? '-0.03em' : '-0.02em',
     '--qb-headline-case': CASE[fonts.headlineCase ?? 'sentence'],
@@ -114,6 +122,12 @@ export function modeTokens(doc: PortalDesign, vars: ThemeVariables, mode: Mode):
     '--qb-nav-active-ink': t.foreground,
     // The voted vote box: the solver keeps accent text readable on cards.
     '--qb-vote-active': t.accentInk,
+    // A primary button in the text colour carries the page's colour as its label.
+    '--qb-fill-bg': t.foreground,
+    '--qb-fill-ink': t.background,
+    // A plain page title's accent phrase, read at 3:1 as large text on the page.
+    '--qb-page-accent': solveContrast(t.primary, [t.background], 3) ?? t.foreground,
+    '--qb-page-highlight': mixColor(t.primary, t.background, 0.25),
     ...bandTokens(doc, t, mode),
     ...(headerOnBand(doc) ? headerBandTokens(doc, t, mode) : {}),
   }
@@ -443,6 +457,7 @@ export function baseTokens(doc: PortalDesign): TokenMap {
     '--qb-image-column': (doc.layout.imageFocus ?? 'centre') === 'centre' ? '0.85fr' : '0.55fr',
     '--qb-font-body': fontStack(doc.brand.fonts.body),
     '--qb-font-heading': fontStack(doc.brand.fonts.heading),
+    '--qb-font-display': fontStack(doc.brand.fonts.display ?? doc.brand.fonts.heading),
     '--qb-heading-weight': String(doc.brand.fonts.headingWeight),
     ...typeTokens(doc.brand.fonts),
   }
@@ -459,9 +474,11 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
     'data-qb-band-shape': doc.layout.bandShape ?? 'full',
     'data-qb-header-band': headerOnBand(doc) ? 'on' : 'off',
     'data-qb-status': doc.layout.status ?? 'colour',
-    // An image behind the words takes the band's place; art beside a side image stays.
     // In the brand colour, a headline takes the band's accent, read where the headline sits.
     'data-qb-headline': doc.brand.fonts.headlineColour === 'accent' ? 'accent' : 'ink',
+    // Titles go on the band only where there is one.
+    'data-qb-page-titles': doc.layout.pageTitles === 'band' && band !== 'none' ? 'band' : 'plain',
+    // An image behind the words takes the band's place; art beside a side image stays.
     'data-qb-band-art':
       !doc.layout.bandArt ||
       doc.layout.bandArt === 'none' ||
@@ -474,6 +491,7 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
     'data-qb-tint':
       doc.layout.tint === 'support' && doc.brand.light.support ? 'support' : 'neutral',
     'data-qb-cards': cards,
+    'data-qb-fill': doc.shape.fill ?? 'accent',
     'data-qb-filters': filters,
   }
 }

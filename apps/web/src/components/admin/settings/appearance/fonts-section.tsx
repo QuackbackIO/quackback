@@ -80,20 +80,26 @@ export function guessFamily(name: string): string {
   return base.replace(/([a-z])([A-Z])/g, '$1 $2').trim()
 }
 
+/** The choice that leaves an optional font to another. */
+const SAME = '__same__'
+
 function FontSelect({
   id,
   label,
   value,
   uploaded,
   onChange,
+  same,
 }: {
   id: string
   label: string
-  value: DesignFont
+  value: DesignFont | undefined
   uploaded: UploadedFont[]
-  onChange: (font: DesignFont) => void
+  onChange: (font: DesignFont | undefined) => void
+  /** Offers leaving it to another font, named so. */
+  same?: string
 }) {
-  const current = value.kind === 'bundled' ? value.id : `${UPLOADED}${value.family}`
+  const current = !value ? SAME : value.kind === 'bundled' ? value.id : `${UPLOADED}${value.family}`
   return (
     <div className="flex items-center gap-2">
       <label htmlFor={id} className="w-32 shrink-0 text-[13px]">
@@ -102,6 +108,7 @@ function FontSelect({
       <Select
         value={current}
         onValueChange={(next) => {
+          if (next === SAME) return onChange(undefined)
           const own = uploaded.find((font) => `${UPLOADED}${font.family}` === next)
           onChange(own ?? { kind: 'bundled', id: next as BundledFontId })
         }}
@@ -110,6 +117,7 @@ function FontSelect({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
+          {same && <SelectItem value={SAME}>{same}</SelectItem>}
           {uploaded.length > 0 && (
             <SelectGroup>
               <SelectLabel>Your fonts</SelectLabel>
@@ -349,10 +357,10 @@ function OwnFont({ update }: { update: Update }) {
 /** Brand › Fonts: the heading and body fonts, the heading weight, and the workspace's own font. */
 export function FontsSection({ design, update }: { design: PortalDesign; update: Update }) {
   const { fonts } = design.brand
-  const uploaded = [fonts.heading, fonts.body].filter(
+  const uploaded = [fonts.heading, fonts.body, fonts.display].filter(
     (font, index, all): font is UploadedFont =>
-      font.kind === 'uploaded' &&
-      all.findIndex((other) => other.kind === 'uploaded' && other.family === font.family) === index
+      font?.kind === 'uploaded' &&
+      all.findIndex((other) => other?.kind === 'uploaded' && other.family === font.family) === index
   )
   const weights = DESIGN_OPTIONS.headingWeight.filter((weight) =>
     fontWeights(fonts.heading).includes(weight)
@@ -369,8 +377,22 @@ export function FontsSection({ design, update }: { design: PortalDesign; update:
           uploaded={uploaded}
           onChange={(font) =>
             update((draft) => {
+              if (!font) return
               draft.brand.fonts.heading = font
               draft.brand.fonts.headingWeight = closestWeight(font, draft.brand.fonts.headingWeight)
+            })
+          }
+        />
+        <FontSelect
+          id="font-display"
+          label="Page headlines"
+          value={fonts.display}
+          uploaded={uploaded}
+          same="Same as headings"
+          onChange={(font) =>
+            update((draft) => {
+              if (font) draft.brand.fonts.display = font
+              else delete draft.brand.fonts.display
             })
           }
         />
@@ -379,7 +401,7 @@ export function FontsSection({ design, update }: { design: PortalDesign; update:
           label="Body"
           value={fonts.body}
           uploaded={uploaded}
-          onChange={(font) => update((draft) => void (draft.brand.fonts.body = font))}
+          onChange={(font) => update((draft) => void (font && (draft.brand.fonts.body = font)))}
         />
         <OwnFont update={update} />
       </section>

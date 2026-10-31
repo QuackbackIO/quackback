@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/shared/utils'
+import { PortalPageTitle, useDesignTitles } from '@/components/public/portal-page-title'
 
 interface HelpCenterHeroProps {
   /** 'home' shows the heading + subtitle above the search; 'compact' is search-only. */
@@ -29,6 +30,21 @@ const GRID_MASK = 'radial-gradient(ellipse 80% 62% at 50% 0%, #000 30%, transpar
  * overflow below it; only the decorative background layer clips its own glow.
  */
 export function HelpCenterHero({ variant, title, description, children }: HelpCenterHeroProps) {
+  // On the design engine the help centre's title is the design's, as every
+  // page's is, and its pages carry no decoration of their own.
+  const designTitles = useDesignTitles()
+  if (designTitles && variant === 'home' && title)
+    return (
+      <PortalPageTitle page="help" title={title} subtitle={description}>
+        <div className="max-w-2xl">{children}</div>
+      </PortalPageTitle>
+    )
+  if (designTitles)
+    return (
+      <section className="relative w-full py-8 sm:py-10">
+        <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6">{children}</div>
+      </section>
+    )
   return (
     <section
       className={cn('relative w-full', variant === 'home' ? 'py-16 sm:py-24' : 'py-8 sm:py-10')}

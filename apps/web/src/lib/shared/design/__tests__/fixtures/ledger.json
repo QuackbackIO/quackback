@@ -48,7 +48,8 @@
     }
   },
   "shape": {
-    "corners": "sharp"
+    "corners": "sharp",
+    "fill": "ink"
   },
   "layout": {
     "header": "stacked",

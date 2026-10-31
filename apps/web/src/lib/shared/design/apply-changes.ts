@@ -42,6 +42,8 @@ const SCOPE_FIELDS: Record<Exclude<DesignAiScope, 'site'>, readonly string[]> = 
     'layout.imagePlace',
     'brand.bandImage',
     'pages.feedback.headline',
+    'layout.pageTitles',
+    'pages.titles',
   ],
   welcome: ['pages.feedback.welcome'],
   feed: [
@@ -191,7 +193,8 @@ function homeBlock(value: unknown): unknown {
 /** The value as the document holds it, from the shorthand a person or the model wrote. */
 function shaped(doc: PortalDesign, path: string, value: unknown): unknown {
   const current = read(doc, path)
-  if (/^brand\.fonts\.(heading|body)$/.test(path) && typeof value === 'string') {
+  if (path === 'brand.fonts.display' && value === null) return undefined
+  if (/^brand\.fonts\.(heading|body|display)$/.test(path) && typeof value === 'string') {
     return (BUNDLED_FONT_IDS as readonly string[]).includes(value)
       ? { kind: 'bundled', id: value }
       : value
