@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDownIcon, ChevronUpIcon, PlusIcon, XMarkIcon } from '@heroicons/react/16/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -32,6 +31,26 @@ import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 
 type Update = (change: (draft: PortalDesign) => void) => void
+
+/**
+ * The section's small icons, drawn here: an icon module this page shared with
+ * others would become a chunk of its own on all of them.
+ */
+function Icon({ path, className }: { path: string; className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" className={className}>
+      <path fillRule="evenodd" clipRule="evenodd" d={path} />
+    </svg>
+  )
+}
+const UP =
+  'M8 4.5a.75.75 0 0 1 .53.22l4 4a.75.75 0 1 1-1.06 1.06L8 6.31 4.53 9.78a.75.75 0 0 1-1.06-1.06l4-4A.75.75 0 0 1 8 4.5Z'
+const DOWN =
+  'M8 11.5a.75.75 0 0 1-.53-.22l-4-4a.75.75 0 0 1 1.06-1.06L8 9.69l3.47-3.47a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-.53.22Z'
+const PLUS =
+  'M8 2.75a.75.75 0 0 1 .75.75v3.75h3.75a.75.75 0 0 1 0 1.5H8.75v3.75a.75.75 0 0 1-1.5 0V8.75H3.5a.75.75 0 0 1 0-1.5h3.75V3.5A.75.75 0 0 1 8 2.75Z'
+const CROSS =
+  'M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 0 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06Z'
 
 /** The language the headline is written in here; other languages fall back to it. */
 const HEADLINE_LOCALE = 'en'
@@ -158,7 +177,7 @@ export function HomeSection({
                 <Button variant="outline" size="sm" disabled={home.blocks.length >= MAX_BLOCKS} />
               }
             >
-              <PlusIcon className="size-4" />
+              <Icon path={PLUS} className="size-4" />
               Add a block
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
@@ -240,7 +259,7 @@ function BlockRow({
             disabled={index === 0}
             onClick={() => move(-1)}
           >
-            <ChevronUpIcon className="size-4" />
+            <Icon path={UP} className="size-4" />
           </Button>
           <Button
             variant="ghost"
@@ -249,7 +268,7 @@ function BlockRow({
             disabled={index === count - 1}
             onClick={() => move(1)}
           >
-            <ChevronDownIcon className="size-4" />
+            <Icon path={DOWN} className="size-4" />
           </Button>
           <Button
             variant="ghost"
@@ -257,7 +276,7 @@ function BlockRow({
             aria-label={`Remove ${name}`}
             onClick={() => edit((draft) => void draft.pages.home.blocks.splice(index, 1))}
           >
-            <XMarkIcon className="size-4" />
+            <Icon path={CROSS} className="size-4" />
           </Button>
         </div>
       </div>
@@ -463,7 +482,7 @@ function LinksOptions({
             disabled={links.length === 1}
             onClick={() => commit(links.filter((_, i) => i !== index))}
           >
-            <XMarkIcon className="size-4" />
+            <Icon path={CROSS} className="size-4" />
           </Button>
         </div>
       ))}
@@ -473,7 +492,7 @@ function LinksOptions({
         disabled={links.length >= 6}
         onClick={() => setLinks([...links, { label: '', url: '' }])}
       >
-        <PlusIcon className="size-4" />
+        <Icon path={PLUS} className="size-4" />
         Add a link
       </Button>
     </div>
