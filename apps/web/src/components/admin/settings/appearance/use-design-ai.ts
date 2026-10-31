@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { track } from '@/lib/client/analytics'
-import { imagePalette } from '@/lib/client/image-palette'
+import { imageForModel, imagePalette } from '@/lib/client/image-palette'
 import {
   askPortalDesignAiFn,
   portalDesignDirectionsFn,
@@ -99,7 +99,11 @@ export function useDesignAi({
         data: kind === 'website' ? { site: value } : { words: value },
       })
       if (result.ok)
-        say({ role: 'assistant', text: 'Here are three looks to start from.', looks: result.looks })
+        say({
+          role: 'assistant',
+          text: `${'logoAdopted' in result && result.logoAdopted ? 'Their logo is now your logo. ' : ''}Here are three looks to start from.`,
+          looks: result.looks,
+        })
       else say({ role: 'assistant', text: result.message })
     } catch {
       say({ role: 'assistant', text: FAILED })
@@ -113,11 +117,16 @@ export function useDesignAi({
    * the image also becomes the workspace logo where uploads are set up.
    */
   const startFromImage = useCallback(
-    async (file: File, uploadLogo: ((file: File) => Promise<unknown>) | null) => {
+    async (
+      file: File,
+      uploadLogo: ((file: File) => Promise<unknown>) | null,
+      /** A website to read along with the image. */
+      site: string | null = null
+    ) => {
       setBusy(true)
       void track('appearance_start_chosen', { start: 'image' })
       try {
-        const palette = await imagePalette(file)
+        const [palette, image] = await Promise.all([imagePalette(file), imageForModel(file)])
         say({ role: 'user', text: file.name, palette })
         if (palette.length === 0) {
           say({ role: 'assistant', text: 'That image could not be read. Try a PNG or a JPEG.' })
@@ -130,7 +139,9 @@ export function useDesignAi({
             () => 'It could not be saved as your logo; set one in Settings › General. '
           )
         }
-        const result = await portalDesignDirectionsFn({ data: { palette } })
+        const result = await portalDesignDirectionsFn({
+          data: { palette, ...(image ? { image } : {}), ...(site ? { site } : {}) },
+        })
         if (result.ok)
           say({
             role: 'assistant',

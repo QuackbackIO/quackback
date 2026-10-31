@@ -12,20 +12,21 @@ import { getChatModel } from '@/lib/server/domains/ai/models'
 import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { logger } from '@/lib/server/logger'
-import { DESIGN_OPTIONS, BUNDLED_FONT_IDS } from '@/lib/shared/design/options'
-import { applyPreset, DESIGN_PRESETS } from '@/lib/shared/design/presets'
+import { editPrompt } from './design-ai-guide'
+import { changeLabel } from '@/lib/shared/design/labels'
 import { resolveDesign } from '@/lib/shared/design/resolve'
-import { colourVividness, mostVivid } from '@/lib/shared/design/palette'
+import { brandColour } from '@/lib/shared/design/palette'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
   applyDesignChanges,
+  docText,
   scopeFields,
-  welcomeText,
-  DESIGN_AI_PATHS,
   type AppliedDesignChange,
   type DesignAiScope,
+  type UntrustedChanges,
 } from '@/lib/shared/design/apply-changes'
-import type { SiteSignals } from './site-signals'
+
+export { EDIT_EXAMPLES } from './design-ai-guide'
 
 const log = logger.child({ module: 'design-ai' })
 
@@ -34,7 +35,7 @@ const STRUCTURED_OUTPUT_ERROR_CODES = new Set([
   'structured-output-validation-failed',
   'structured-output-missing-result',
 ])
-const isStructuredOutputError = (err: unknown) =>
+export const isStructuredOutputError = (err: unknown) =>
   STRUCTURED_OUTPUT_ERROR_CODES.has((err as { code?: string } | null)?.code ?? '')
 
 /** The model Appearance uses, or null when no AI is set up for this workspace. */
@@ -43,92 +44,44 @@ export function designAiModel(): string | null {
   return getChatModel('assistant')
 }
 
-/** Each field the model may set, in the words a person uses for it. */
-const OPTIONS_TEXT = [
-  `mode (light or dark pages; auto follows the visitor's device): ${DESIGN_OPTIONS.mode.join(', ')}`,
-  'brand.light.accent (the brand colour: buttons, links, the band), brand.light.background (the page), brand.light.ink (the text), brand.light.surface (cards), brand.light.raised (raised surfaces), brand.light.muted (secondary text), brand.light.border (borders): hex such as #0f766e',
-  'brand.dark.background, brand.dark.ink, brand.dark.surface, brand.dark.raised, brand.dark.muted, brand.dark.border: the same roles in dark mode, hex',
-  `brand.fonts.heading and brand.fonts.body (the fonts): ${BUNDLED_FONT_IDS.join(', ')}`,
-  `brand.fonts.headingWeight (how bold headings are): ${DESIGN_OPTIONS.headingWeight.join(', ')}`,
-  `shape.corners (the corners of cards, buttons and fields): ${DESIGN_OPTIONS.corners.join(', ')}`,
-  'layout.header (where the logo and menu sit): stacked (logo above the menu), inline (logo and menu on one row), centered',
-  `layout.nav (the menu style, how the current page is marked): ${DESIGN_OPTIONS.nav.join(', ')}`,
-  'layout.band (the band behind the headline): none, tint (a soft tint of the brand colour), fade (a tint fading into the page), brand (the brand colour itself). A band shows only with a headline; when you add one and there is no headline, write one.',
-  'layout.cards (how ideas show in the feed): bordered, raised, list (rows without cards)',
-  `layout.density (the space in the feed): ${DESIGN_OPTIONS.density.join(', ')}`,
-  `layout.width (the page width): ${DESIGN_OPTIONS.width.join(', ')}`,
-  'layout.filters (the filter panel side): end (right), start (left)',
-  `pages.feedback.defaultSort (the feed's first sort): ${DESIGN_OPTIONS.sort.join(', ')}`,
-  'pages.feedback.headline.title and pages.feedback.headline.subtitle (the feedback page headline and the line under it): short plain text; an empty string removes it',
-  'pages.feedback.welcome.show (the welcome message above the feed): true or false',
-  'pages.feedback.welcome.body (the welcome message text): plain sentences, a blank line between paragraphs. When you turn the welcome message on and it has no text, write a short one.',
-].join('\n')
+/** A value from the model: JSON as asked, or the bare text it sometimes sends instead. */
+export function parseValue(value: string): unknown {
+  try {
+    return JSON.parse(value)
+  } catch {
+    return value
+  }
+}
 
-/** The design fields the model sees: everything it may change, nothing else. */
-function designSummary(doc: PortalDesign) {
-  const font = (f: PortalDesign['brand']['fonts']['body']) =>
-    f.kind === 'bundled' ? f.id : f.fallback
-  return JSON.stringify({
-    mode: doc.mode,
-    brand: {
-      light: doc.brand.light,
-      dark: doc.brand.dark ?? {},
-      fonts: {
-        heading: font(doc.brand.fonts.heading),
-        body: font(doc.brand.fonts.body),
-        headingWeight: doc.brand.fonts.headingWeight,
-      },
-    },
-    shape: doc.shape,
-    layout: doc.layout,
-    pages: {
-      feedback: {
-        headline: doc.pages.feedback.headline,
-        welcome: {
-          show: doc.pages.feedback.welcome.show,
-          text: welcomeText(doc),
-        },
-        defaultSort: doc.pages.feedback.defaultSort,
-      },
-    },
-  })
+/** The design as the model reads it: rich text as plain text. */
+function designSummary(doc: PortalDesign): string {
+  const plain = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(plain)
+    if (value && typeof value === 'object') {
+      if ((value as { type?: unknown }).type === 'doc') return docText(value)
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, plain(item)]))
+    }
+    return value
+  }
+  return JSON.stringify(plain(doc))
 }
 
 const editSchema = z.object({
   reply: z.string().max(600),
   /** The request is about something outside the section the person picked. */
   outOfScope: z.boolean(),
-  changes: z
-    .array(
-      z.object({
-        path: z.enum(DESIGN_AI_PATHS),
-        value: z.union([z.string().max(280), z.number(), z.boolean()]),
-      })
-    )
-    .max(20),
+  changes: z.array(z.object({ path: z.string().max(160), value: z.string().max(8000) })).max(30),
 })
 
-const EDIT_PROMPT = `You change the look of a customer feedback portal. You may set only these fields, to only these values:
-${OPTIONS_TEXT}
-
-Reply with JSON: a one or two sentence reply to the person, outOfScope, and the changes as a list of { path, value }. Change only what the request is about. Never invent a field or a value outside the lists. If the request is not about the portal's look, make no changes and say so in the reply.
-
-Example request: "Make it feel calmer and give the cards more room"
-Example answer: {"reply":"I softened the corners, raised the cards and gave the feed more room.","outOfScope":false,"changes":[{"path":"shape.corners","value":"rounded"},{"path":"layout.cards","value":"raised"},{"path":"layout.density","value":"spacious"}]}
-
-Example request: "Use our green, #0f766e, with a green band. Headline: Help us grow"
-Example answer: {"reply":"The accent is now your green, with a green band behind the new headline.","outOfScope":false,"changes":[{"path":"brand.light.accent","value":"#0f766e"},{"path":"layout.band","value":"brand"},{"path":"pages.feedback.headline.title","value":"Help us grow"}]}`
-
-/** Above this, a page background reads as a colour and drowns the brand colour on it. */
-const MAX_PAGE_VIVIDNESS = 0.2
-
-const quietPage = (background: string) =>
-  !/^#[0-9a-f]{6}$/i.test(background) || colourVividness(background) <= MAX_PAGE_VIVIDNESS
+/** Links in what the person wrote, which the model may use. */
+export function linksGiven(texts: string[]): Set<string> {
+  return new Set(texts.flatMap((text) => text.match(/https?:\/\/[^\s"'<>)]+/g) ?? []))
+}
 
 /** A palette for the model: most used first, and which colour is likely the brand's. */
-function paletteText(palette: string[]): string {
-  const vivid = mostVivid(palette)
-  return `most used first: ${palette.join(', ')}.${vivid ? ` The most vivid, likely the brand colour: ${vivid}.` : ''}`
+export function paletteText(palette: string[]): string {
+  const brand = brandColour(palette)
+  return `${palette.join(', ')}.${brand ? ` The brand colour, the most used colour that is not a neutral: ${brand}.` : ''}`
 }
 
 const SCOPE_NAMES: Record<Exclude<DesignAiScope, 'site'>, string> = {
@@ -138,6 +91,7 @@ const SCOPE_NAMES: Record<Exclude<DesignAiScope, 'site'>, string> = {
   welcome: 'welcome message',
   feed: 'feed',
   filters: 'filters',
+  home: 'Home page',
 }
 
 /**
@@ -148,17 +102,22 @@ const SCOPE_NAMES: Record<Exclude<DesignAiScope, 'site'>, string> = {
 function honestReply(
   answer: z.infer<typeof editSchema>,
   appliedCount: number,
-  /** Changes refused for their value or path; one already set is neither applied nor refused. */
-  refusedCount: number,
+  /** Changes refused for their value or path, with why; one already set is neither. */
+  refused: Array<{ path: string; reason: string }>,
   outOfScope: boolean,
   scope: DesignAiScope
 ): string {
   const where = scope === 'site' ? 'the section picked' : `the ${SCOPE_NAMES[scope]}`
+  const why = refused
+    .slice(0, 3)
+    .map((change) => `${changeLabel(change.path)}: ${change.reason}`)
+    .join('; ')
   if (appliedCount === 0 && outOfScope) return `That is outside ${where}, so nothing changed.`
-  if (appliedCount === 0 && refusedCount > 0)
-    return 'Nothing changed: the design does not offer that.'
-  if (outOfScope) return `${answer.reply} Part of that is outside ${where} and was left alone.`
-  return answer.reply
+  if (appliedCount === 0 && refused.length > 0) return `Nothing changed (${why}).`
+  const reply = outOfScope
+    ? `${answer.reply} Part of that is outside ${where} and was left alone.`
+    : answer.reply
+  return refused.length > 0 ? `${reply} Left alone: ${why}.` : reply
 }
 
 function newAdjustments(before: PortalDesign, after: PortalDesign): string[] {
@@ -190,6 +149,8 @@ export async function askDesignAi(input: {
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   /** The main colours of an image the person attached. */
   palette?: string[]
+  /** What the workspace allows: the Home blocks its pages can show, and its CSS. */
+  allows: Omit<UntrustedChanges, 'links'> & { writesCss: boolean }
 }): Promise<DesignAiResult> {
   const model = designAiModel()
   if (!model) {
@@ -203,35 +164,41 @@ export async function askDesignAi(input: {
   const scopeNote =
     input.scope === 'site'
       ? ''
-      : `\nThe person picked the ${SCOPE_NAMES[input.scope]} in the preview. Change only these fields: ${scopeFields(input.scope).join(', ')}. If the request is about anything else, make no changes and set outOfScope to true.`
+      : `\nThe person picked the ${SCOPE_NAMES[input.scope]} in the preview. Change only these fields and what is under them: ${scopeFields(input.scope).join(', ')}. If the request is about anything else, make no changes and set outOfScope to true.`
   try {
     const answer = await structuredChat({
       model,
-      systemPrompts: [EDIT_PROMPT + scopeNote, `The design now: ${designSummary(input.design)}`],
+      systemPrompts: [
+        editPrompt(input.allows.blockTypes, input.allows.writesCss) + scopeNote,
+        `The design now: ${designSummary(input.design)}`,
+      ],
       messages: [
         ...input.history.slice(-6),
         {
           role: 'user',
           content: input.palette?.length
-            ? `${input.message}\n\nColours from the attached image, ${paletteText(input.palette)}`
+            ? `${input.message}\n\nColours from the attached image: ${paletteText(input.palette)}`
             : input.message,
         },
       ],
       schema: editSchema,
       maxTokens: 1200,
     })
-    const applied = applyDesignChanges(input.design, answer.changes, input.scope)
+    const links = linksGiven([
+      input.message,
+      ...input.history.filter((turn) => turn.role === 'user').map((turn) => turn.content),
+    ])
+    const applied = applyDesignChanges(
+      input.design,
+      answer.changes.map((change) => ({ path: change.path, value: parseValue(change.value) })),
+      input.scope,
+      { ...input.allows, links }
+    )
     const outOfScope =
       input.scope !== 'site' && (answer.outOfScope || applied.outOfScope.length > 0)
     return {
       ok: true,
-      reply: honestReply(
-        answer,
-        applied.applied.length,
-        applied.skipped - applied.outOfScope.length,
-        outOfScope,
-        input.scope
-      ),
+      reply: honestReply(answer, applied.applied.length, applied.refused, outOfScope, input.scope),
       ...applied,
       outOfScope,
       readability: newAdjustments(input.design, applied.design),
@@ -247,116 +214,4 @@ export async function askDesignAi(input: {
   }
 }
 
-const PRESET_IDS = DESIGN_PRESETS.map((preset) => preset.id) as [string, ...string[]]
-
-const directionsSchema = z.object({
-  looks: z
-    .array(
-      z.object({
-        name: z.string().max(40),
-        description: z.string().max(120),
-        preset: z.enum(PRESET_IDS),
-        accent: z.string().max(32),
-        background: z.string().max(32),
-        ink: z.string().max(32),
-        headingFont: z.enum(BUNDLED_FONT_IDS),
-        bodyFont: z.enum(BUNDLED_FONT_IDS),
-        /** The feedback page headline in the brand's voice; shown over the preset's band. */
-        headline: z.string().max(80),
-        subtitle: z.string().max(140),
-      })
-    )
-    .min(1)
-    .max(3),
-})
-
-const DIRECTIONS_PROMPT = `You suggest three different starting looks for a company's customer feedback portal. Each look starts from one preset and sets the colours and fonts. Make the three clearly different from each other: in layout (the preset), in type and in colour. Pages stay quiet: a background near white, or a dark one for a dark look; the brand colour belongs on the accent and the band, never the page. Keep text readable: dark ink on a light background, or light ink on a dark one. Give each a short headline and subtitle for the feedback page, in the brand's voice, inviting ideas.
-
-Presets: ${DESIGN_PRESETS.map((preset) => `${preset.id} (${preset.description})`).join('; ')}
-Fonts: ${BUNDLED_FONT_IDS.join(', ')}
-Colours are hex such as #0f766e.
-
-Example answer: {"looks":[{"name":"Calm teal","description":"Soft tint, rounded cards, lots of room.","preset":"calm","accent":"#0f766e","background":"#f8fafc","ink":"#0f172a","headingFont":"nunito","bodyFont":"nunito","headline":"Help us build what's next","subtitle":"Share an idea or vote on the ones you want."},{"name":"Editorial","description":"Serif headings and a narrow column.","preset":"editorial","accent":"#b91c1c","background":"#fffdf8","ink":"#1c1917","headingFont":"fraunces","bodyFont":"inter","headline":"Ideas, considered","subtitle":"Tell us what would make your work easier."},{"name":"Bold","description":"A full-colour band and pill shapes.","preset":"bold","accent":"#e11d48","background":"#ffffff","ink":"#0a0a0a","headingFont":"poppins","bodyFont":"poppins","headline":"Got an idea? Let's hear it","subtitle":"Vote for the features you want next."}]}`
-
-export interface DesignLook {
-  name: string
-  description: string
-  /** The preset the look starts from. */
-  preset: string
-  design: PortalDesign
-}
-
-export type DirectionsResult =
-  | { ok: true; looks: DesignLook[] }
-  | { ok: false; code: 'AI_UNAVAILABLE' | 'AI_FAILED'; message: string }
-
-/** Three looks from a website or a few words; each a valid, solved design. */
-export async function designDirections(input: {
-  design: PortalDesign
-  site: SiteSignals | null
-  words: string | null
-  /** The main colours of their logo or a screenshot. */
-  palette?: string[] | null
-}): Promise<DirectionsResult> {
-  const model = designAiModel()
-  if (!model) {
-    return {
-      ok: false,
-      code: 'AI_UNAVAILABLE',
-      message: 'Quackback AI is not set up for this workspace.',
-    }
-  }
-  await enforceAiTokenBudget()
-  const brief = [
-    input.site &&
-      `Website ${input.site.domain}${input.site.title ? `, titled "${input.site.title}"` : ''}${
-        input.site.description ? `: ${input.site.description}` : ''
-      }${input.site.colour ? `. Its brand colour is ${input.site.colour}.` : '.'}`,
-    input.words && `In their words: ${input.words}`,
-    input.palette?.length &&
-      `Colours from their logo or a screenshot, ${paletteText(input.palette)} Build the looks from these.`,
-  ]
-    .filter(Boolean)
-    .join('\n')
-  try {
-    const answer = await structuredChat({
-      model,
-      systemPrompts: [DIRECTIONS_PROMPT],
-      messages: [{ role: 'user', content: brief || 'Suggest three looks for a software company.' }],
-      schema: directionsSchema,
-      maxTokens: 2000,
-    })
-    const looks: DesignLook[] = []
-    for (const look of answer.looks) {
-      const preset = DESIGN_PRESETS.find((candidate) => candidate.id === look.preset)!
-      const { design, applied } = applyDesignChanges(
-        applyPreset(input.design, preset),
-        [
-          { path: 'brand.light.accent', value: look.accent },
-          // The page stays quiet; a vivid background keeps the preset's.
-          ...(quietPage(look.background)
-            ? [{ path: 'brand.light.background', value: look.background }]
-            : []),
-          { path: 'brand.light.ink', value: look.ink },
-          { path: 'brand.fonts.heading', value: look.headingFont },
-          { path: 'brand.fonts.body', value: look.bodyFont },
-          { path: 'pages.feedback.headline.title', value: look.headline },
-          { path: 'pages.feedback.headline.subtitle', value: look.subtitle },
-        ],
-        'site'
-      )
-      // A look whose colours the solver refused keeps the preset's, which still reads well.
-      looks.push({ name: look.name, description: look.description, preset: preset.id, design })
-      if (applied.length === 0) log.info({ look: look.name }, 'design look kept its preset colours')
-    }
-    return { ok: true, looks }
-  } catch (err) {
-    if (!isStructuredOutputError(err)) throw err
-    log.warn({ err }, 'design ai directions did not fit the schema')
-    return {
-      ok: false,
-      code: 'AI_FAILED',
-      message: 'Quackback AI could not suggest looks. Try again.',
-    }
-  }
-}
+export { designDirections, type DesignLook, type DirectionsResult } from './design-directions'

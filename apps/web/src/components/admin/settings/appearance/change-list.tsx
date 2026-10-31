@@ -1,5 +1,6 @@
 import type { DesignChange } from '@/lib/shared/design/diff'
 import { changeLabel, isImageField } from '@/lib/shared/design/labels'
+import { docText } from '@/lib/shared/design/apply-changes'
 import { BUNDLED_FONTS, type BundledFontId } from '@/lib/shared/design/fonts'
 
 export { changeLabel } from '@/lib/shared/design/labels'
@@ -44,7 +45,7 @@ const capital = (value: string) => value[0].toUpperCase() + value.slice(1).repla
  * person; an empty headline as none; the menu and Home's blocks as how many
  * there are.
  */
-function shownValue(path: string, value: unknown) {
+export function shownValue(path: string, value: unknown): unknown {
   if (isImageField(path)) return value ? 'Uploaded image' : 'None'
   // Text left empty is none, not chosen for the person.
   if (/^pages\.\w+\.headline/.test(path) && value == null) return 'None'
@@ -58,6 +59,20 @@ function shownValue(path: string, value: unknown) {
     return value.length === 0
       ? 'No blocks'
       : `${value.length} block${value.length === 1 ? '' : 's'}`
+  return plainValue(value)
+}
+
+/** An object value as one short line: a font by its name, text by its English or its words. */
+function plainValue(value: unknown): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
+  const record = value as Record<string, unknown>
+  if (record.kind === 'bundled') return record.id
+  if (record.kind === 'uploaded') return record.family
+  if (record.type === 'doc') {
+    const text = docText(record)
+    return text.length > 60 ? `${text.slice(0, 57)}…` : text || 'None'
+  }
+  if (typeof record.en === 'string') return record.en
   return value
 }
 

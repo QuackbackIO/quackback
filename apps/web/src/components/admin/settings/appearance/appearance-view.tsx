@@ -131,7 +131,7 @@ export function AppearanceView({
                 setScope('site')
                 void ai.ask(text, 'site')
               }}
-              onImage={(file, useAsLogo) =>
+              onImage={(file, useAsLogo, site) =>
                 void ai.startFromImage(
                   file,
                   useAsLogo
@@ -139,7 +139,8 @@ export function AppearanceView({
                         await uploadLogo.mutateAsync(image)
                         await draft.refreshLive()
                       }
-                    : null
+                    : null,
+                  site
                 )
               }
             />

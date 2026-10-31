@@ -7,7 +7,7 @@ import { applyDesignChanges, type AppliedDesignChange } from '@/lib/shared/desig
 import { BUNDLED_FONTS } from '@/lib/shared/design/fonts'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
-import { ChangeValue, changeLabel } from './change-list'
+import { ChangeValue, changeLabel, shownValue } from './change-list'
 import { LookDrawing } from './preset-gallery'
 import type { DesignAiTurn, DesignLook } from './use-design-ai'
 
@@ -63,9 +63,9 @@ function DesignChangeCard({
             )}
           </div>
           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 text-xs">
-            <ChangeValue value={change.before} />
+            <ChangeValue value={shownValue(change.path, change.before)} />
             <span aria-hidden="true">→</span>
-            <ChangeValue value={change.after} />
+            <ChangeValue value={shownValue(change.path, change.after)} />
           </div>
         </div>
       ))}
@@ -138,8 +138,11 @@ export function AskAiPanel({
   onPresets: () => void
   /** Asks a request again about the whole site, when it reached outside the section picked. */
   onWiden: (text: string) => void
-  /** Starts from a logo or a screenshot; `useAsLogo` also makes it the workspace logo. */
-  onImage: (file: File, useAsLogo: boolean) => void
+  /**
+   * Starts from a logo or a screenshot; `useAsLogo` also makes it the workspace
+   * logo, and a website typed above is read with it.
+   */
+  onImage: (file: File, useAsLogo: boolean, site: string | null) => void
 }) {
   const [site, setSite] = useState('')
   const [words, setWords] = useState('')
@@ -181,6 +184,11 @@ export function AskAiPanel({
                 Go
               </Button>
             </div>
+            {site.trim() && (
+              <p className="text-xs text-muted-foreground">
+                For a closer match, add a screenshot of it below.
+              </p>
+            )}
           </form>
           <div className="space-y-2">
             <label htmlFor="ai-words" className="text-[13px] font-medium">
@@ -213,7 +221,7 @@ export function AskAiPanel({
               disabled={busy}
               onChange={(event) => {
                 const file = event.target.files?.[0]
-                if (file) onImage(file, useAsLogo)
+                if (file) onImage(file, useAsLogo, site.trim() || null)
               }}
             />
             <div className="flex items-center gap-2">

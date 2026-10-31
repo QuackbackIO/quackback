@@ -363,13 +363,15 @@ export function PortalHeader({
         data-qb-part="header"
       >
         <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
-          <div className="relative flex h-12 items-center justify-center">
+          {/* On a phone the logo leads, clear of the buttons at the end. */}
+          <div className="relative flex h-12 items-center justify-start md:justify-center">
             {logo}
             <div className="absolute end-0">{authButtons}</div>
           </div>
         </div>
+        {/* Centred while it fits; wider than the screen, it scrolls from its start. */}
         <div className="mt-2 overflow-x-auto scrollbar-none">
-          <div className="max-w-[var(--qb-page-max,72rem)] mx-auto flex w-full justify-center px-4 sm:px-6">
+          <div className="max-w-[var(--qb-page-max,72rem)] mx-auto flex w-max min-w-full justify-center px-4 sm:px-6">
             {navigation}
           </div>
         </div>

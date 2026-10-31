@@ -60,7 +60,13 @@ function urlAllowed(rawUrl: string, allowUrl: UrlGuard | undefined): boolean {
  */
 export async function fetchFollowingRedirects(
   rawUrl: string,
-  opts: { allowUrl?: UrlGuard } = {}
+  opts: {
+    allowUrl?: UrlGuard
+    /** In place of a link preview's headers. */
+    headers?: Record<string, string>
+    timeoutMs?: number
+    maxBytes?: number
+  } = {}
 ): Promise<{ response: Response; finalUrl: string } | null> {
   let currentUrl = rawUrl
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -69,12 +75,12 @@ export async function fetchFollowingRedirects(
     try {
       response = await safeFetch(currentUrl, {
         method: 'GET',
-        headers: {
+        headers: opts.headers ?? {
           accept: 'text/html,application/xhtml+xml',
           'user-agent': PAGE_USER_AGENT,
         },
-        timeoutMs: PAGE_TIMEOUT_MS,
-        maxResponseBytes: PAGE_MAX_BYTES,
+        timeoutMs: opts.timeoutMs ?? PAGE_TIMEOUT_MS,
+        maxResponseBytes: opts.maxBytes ?? PAGE_MAX_BYTES,
         onOverflow: 'truncate',
       })
     } catch (err) {
