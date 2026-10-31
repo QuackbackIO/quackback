@@ -88,7 +88,7 @@ describe('a website’s wordmark', () => {
     files.set('https://example.com/badge.png', png(64, 64))
     files.set(
       'https://example.com/logo.svg',
-      '<svg viewBox="0 0 90 36"><path fill="#0058a3"/></svg>'
+      '<?xml version="1.0"?>\n<!-- made by hand --><svg viewBox="0 0 90 36"><path fill="#0058a3"/></svg>'
     )
     expect(
       (await importSiteAssets(signals({ logo: { url: 'https://example.com/logo@2x.png' } })))

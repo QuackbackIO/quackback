@@ -42,9 +42,21 @@ function sniff(bytes: Uint8Array): string | null {
   if (bytes[0] === 0xff && bytes[1] === 0xd8) return 'image/jpeg'
   if (head.startsWith('GIF8')) return 'image/gif'
   if (head.startsWith('RIFF') && head.slice(8, 12) === 'WEBP') return 'image/webp'
-  const text = new TextDecoder().decode(bytes.subarray(0, 2048)).trimStart()
-  if (/^(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*<svg\b/i.test(text)) return 'image/svg+xml'
-  return null
+  return /^<svg\b/i.test(markupStart(new TextDecoder().decode(bytes.subarray(0, 2048))))
+    ? 'image/svg+xml'
+    : null
+}
+
+/** Where a file's markup starts, past an XML declaration and any comments. */
+function markupStart(text: string): string {
+  let rest = text.trimStart()
+  if (rest.startsWith('<?xml')) rest = rest.slice(rest.indexOf('>') + 1).trimStart()
+  while (rest.startsWith('<!--')) {
+    const end = rest.indexOf('-->')
+    if (end < 0) return ''
+    rest = rest.slice(end + 3).trimStart()
+  }
+  return rest
 }
 
 async function fetchFile(url: string, maxBytes: number) {
@@ -75,7 +87,7 @@ async function importWordmark(signals: SiteSignals): Promise<SiteAssets['wordmar
   if ('svg' in logo) svg = logo.svg
   else {
     const file = await fetchFile(logo.url, LOGO_BYTES)
-    if (file?.type === 'image/svg+xml') svg = new TextDecoder().decode(file.bytes)
+    if (file?.type === 'image/svg+xml') svg = markupStart(new TextDecoder().decode(file.bytes))
     else if (file && (RASTER as readonly string[]).includes(file.type)) raster = file
   }
   if (svg !== null) {
