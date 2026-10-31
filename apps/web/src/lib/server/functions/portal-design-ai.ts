@@ -121,12 +121,18 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
             : 'That website could not be read. Check the address, or describe your brand instead.',
       }
     }
-    const current = await actions.readDesignForEditing()
+    const [current, allows, { getWorkspaceSettings }] = await Promise.all([
+      actions.readDesignForEditing(),
+      designAllowances(),
+      import('@/lib/server/domains/settings/settings.service'),
+    ])
     return designDirections({
       design: current.design,
+      name: (await getWorkspaceSettings())?.name ?? null,
       site,
       words: data.words ?? null,
       palette: data.palette ?? null,
       image: data.image ?? null,
+      allows,
     })
   })

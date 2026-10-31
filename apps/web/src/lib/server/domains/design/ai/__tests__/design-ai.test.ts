@@ -15,6 +15,8 @@ const model = vi.hoisted(() => ({
   error: null as unknown,
   calls: [] as Array<{ systemPrompts: string[]; messages: Array<{ content: unknown }> }>,
   refusesImages: false,
+  /** A complete look; a test's look names only what it is about. */
+  fullLook: {} as Record<string, unknown>,
 }))
 
 vi.mock('@/lib/server/config', () => ({ config: { openaiApiKey: 'key', openaiBaseUrl: 'url' } }))
@@ -34,11 +36,16 @@ vi.mock('@/lib/server/domains/ai/structured-chat', () => ({
     if (model.error) throw model.error
     if (model.refusesImages && Array.isArray(input.messages[0]?.content))
       throw new Error('this model does not take images')
+    const answer = model.answer as { looks?: Array<Record<string, unknown>> } | null
+    if (answer?.looks)
+      return { looks: answer.looks.map((look) => ({ ...model.fullLook, homeBlocks: [], ...look })) }
     return model.answer
   },
 }))
 
 const { askDesignAi, designDirections, EDIT_EXAMPLES, parseValue } = await import('../design-ai')
+const { DIRECTIONS_EXAMPLE } = await import('../design-directions')
+model.fullLook = DIRECTIONS_EXAMPLE
 const { applyDesignChanges } = await import('@/lib/shared/design/apply-changes')
 
 const EVERY_BLOCK = [
@@ -242,7 +249,12 @@ describe('designDirections', () => {
         },
       ],
     }
-    const result = await designDirections({ design: defaultDesign(), site: null, words: 'gold' })
+    const result = await designDirections({
+      allows: ALLOWS,
+      design: defaultDesign(),
+      site: null,
+      words: 'gold',
+    })
     if (!result.ok) throw new Error('expected looks')
     const calm = DESIGN_PRESETS.find((preset) => preset.id === 'calm')!
     expect(result.looks[0].design.brand.light.background).toBe(calm.look.brand.light.background)
@@ -279,6 +291,7 @@ describe('designDirections', () => {
       ],
     }
     const result = await designDirections({
+      allows: ALLOWS,
       design: defaultDesign(),
       site: null,
       words: 'calm',
@@ -455,6 +468,7 @@ describe('a logo or a screenshot', () => {
   it('is shown to the model as well as its colours', async () => {
     model.answer = { looks: [look] }
     await designDirections({
+      allows: ALLOWS,
       design: defaultDesign(),
       site: null,
       words: null,
@@ -473,6 +487,7 @@ describe('a logo or a screenshot', () => {
     model.answer = { looks: [look] }
     model.refusesImages = true
     const result = await designDirections({
+      allows: ALLOWS,
       design: defaultDesign(),
       site: null,
       words: null,
