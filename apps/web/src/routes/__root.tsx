@@ -78,9 +78,13 @@ export function isOnboardingExempt(pathname: string): boolean {
 }
 
 // The settings arrive already redacted: getBootstrapData scrubs them on the
-// server, since its response also answers client-side navigations.
-async function loadRootContext() {
-  const { settings, ...bootstrap } = await getBootstrapData()
+// server, since its response also answers client-side navigations. The
+// switch preview frame (`?design=switch`) asks for the portal drawn as it
+// would be after switching to the design.
+async function loadRootContext(search: Record<string, unknown>) {
+  const { settings, ...bootstrap } = await getBootstrapData({
+    data: search.design === 'switch' ? { designPreview: 'switch' } : undefined,
+  })
   return { ...bootstrap, settings }
 }
 
@@ -95,7 +99,7 @@ const rootContext = createRouteContextMemo<RootContext>()
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ location }) => {
-    const context = await rootContext.get(loadRootContext)
+    const context = await rootContext.get(() => loadRootContext(location.search))
     const { session, userRole, onboarding } = context
 
     if (!isOnboardingExempt(location.pathname)) {

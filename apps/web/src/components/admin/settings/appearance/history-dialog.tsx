@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from '@tanstack/react-router'
 import type { PortalDesignRevisionId } from '@quackback/ids'
 import {
   AlertDialog,
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
+import { switchBackPortalDesignFn } from '@/lib/server/functions/portal-design'
 
 const SOURCE: Record<string, string> = {
   appearance: 'Appearance',
@@ -52,6 +54,20 @@ export function HistoryDialog({
     number: number
   } | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
+  // A portal that switched from its old theme can go back to it.
+  const switched = useQuery({ ...portalDesignQueries.switch(), enabled: open })
+  const [confirmingBack, setConfirmingBack] = useState(false)
+  const router = useRouter()
+  const queryClient = useQueryClient()
+
+  async function switchBack() {
+    const outcome = await switchBackPortalDesignFn()
+    setConfirmingBack(false)
+    if (!outcome.ok) return setRefusal(outcome.message)
+    onOpenChange(false)
+    await queryClient.invalidateQueries({ queryKey: ['settings'] })
+    await router.invalidate()
+  }
 
   async function restore() {
     if (!confirming) return
@@ -104,6 +120,14 @@ export function HistoryDialog({
               </li>
             ))}
           </ul>
+          {switched.data?.canSwitchBack && (
+            <div className="flex items-center gap-3 text-[13px]">
+              <span className="flex-1 text-muted-foreground">Switched from the old theme.</span>
+              <Button variant="outline" size="sm" onClick={() => setConfirmingBack(true)}>
+                Switch back
+              </Button>
+            </div>
+          )}
           {refusal && (
             <p role="alert" className="text-[13px] text-destructive">
               {refusal}
@@ -122,6 +146,21 @@ export function HistoryDialog({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={restore}>Restore</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={confirmingBack} onOpenChange={setConfirmingBack}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch back to the old theme?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Visitors see the old theme and its CSS straight away. The design and its versions
+              stay.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={switchBack}>Switch back</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

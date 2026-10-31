@@ -34,6 +34,8 @@ const REFUSAL_CODES = [
   'DRAFT_CHANGED',
   'INVALID_CSS',
   'TIER_LIMIT_EXCEEDED',
+  'NOT_SWITCHABLE',
+  'NOT_SWITCHED',
 ] as const
 export type DesignRefusalCode = (typeof REFUSAL_CODES)[number]
 export type DesignRefusal = { ok: false; code: DesignRefusalCode; message: string }
@@ -63,7 +65,7 @@ function reportOf(doc: PortalDesign): DesignReport {
 }
 
 /** Runs a write, turning a refusal a person can act on into a value. */
-async function refusable<T>(write: () => Promise<T>): Promise<T | DesignRefusal> {
+export async function refusable<T>(write: () => Promise<T>): Promise<T | DesignRefusal> {
   try {
     return await write()
   } catch (error) {

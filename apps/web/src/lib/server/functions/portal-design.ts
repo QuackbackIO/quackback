@@ -52,6 +52,32 @@ export const listPortalDesignVersionsFn = createServerFn({ method: 'GET' }).hand
   return listDesignVersions()
 })
 
+export const getPortalDesignSwitchFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+  const { readDesignSwitch } = await import('@/lib/server/domains/design/switch')
+  return readDesignSwitch()
+})
+
+export const switchPortalDesignFn = createServerFn({ method: 'POST' }).handler(async () => {
+  const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+  const { designAuthor } = await import('@/lib/server/domains/design/design-author')
+  const author = await designAuthor(auth)
+  const { switchToDesign } = await import('@/lib/server/domains/design/switch')
+  const result = await switchToDesign(author)
+  if (result.ok) log.info({ revision: result.number }, 'portal switched to the design')
+  return result
+})
+
+export const switchBackPortalDesignFn = createServerFn({ method: 'POST' }).handler(async () => {
+  const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+  const { designAuthor } = await import('@/lib/server/domains/design/design-author')
+  const author = await designAuthor(auth)
+  const { switchBackFromDesign } = await import('@/lib/server/domains/design/switch')
+  const result = await switchBackFromDesign(author)
+  if (result.ok) log.info('portal switched back to the old theme')
+  return result
+})
+
 export const restorePortalDesignVersionFn = createServerFn({ method: 'POST' })
   .validator(z.object({ revisionId: typeIdSchema('portal_design_revision') }))
   .handler(async ({ data }) => {

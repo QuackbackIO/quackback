@@ -183,153 +183,187 @@ function clientSafeSettings(settings: WorkspaceSettings): WorkspaceSettings {
   return { ...redacted, settings: {} as WorkspaceSettings['settings'] }
 }
 
+/**
+ * The settings with the portal drawn as it would be after switching to the
+ * design, for the preview frame Settings › Portal shows beside today's. Only
+ * for someone who can edit the portal's branding; anyone else, or a portal
+ * with nothing to switch, gets the settings unchanged.
+ */
+async function withSwitchPreview(settings: WorkspaceSettings): Promise<WorkspaceSettings> {
+  const [{ getOptionalAuth }, { PERMISSIONS }] = await Promise.all([
+    import('./auth-helpers'),
+    import('@/lib/shared/permissions'),
+  ])
+  const auth = await getOptionalAuth()
+  if (auth?.scope !== 'dashboard' || !auth.permissions.includes(PERMISSIONS.SETTINGS_BRANDING)) {
+    return settings
+  }
+  const { switchPreviewView } = await import('@/lib/server/domains/design/switch')
+  const view = await switchPreviewView()
+  return view ? { ...settings, portalDesign: view } : settings
+}
+
+/** What a page asks the bootstrap for beyond the defaults. */
+export interface BootstrapOptions {
+  /** `switch`: draw the portal as it would look switched to the design. */
+  designPreview?: 'switch'
+}
+
 let _initialized = false
 
-const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapData> => {
-  const [
-    { getWorkspaceSettings },
-    { getRegisteredAuthProviders },
-    { config },
-    { getRequestHeaders, setResponseHeader },
-    { resolveHelpCenterBaseUrl },
-  ] = await Promise.all([
-    import('@/lib/server/domains/settings/settings.service'),
-    import('@/lib/server/auth/registered-providers'),
-    import('@/lib/server/config'),
-    import('@tanstack/react-start/server'),
-    import('@/lib/server/domains/help-center/help-center-domain.service'),
-  ])
+const getBootstrapDataInternal = createServerOnlyFn(
+  async (options: BootstrapOptions = {}): Promise<BootstrapData> => {
+    const [
+      { getWorkspaceSettings },
+      { getRegisteredAuthProviders },
+      { config },
+      { getRequestHeaders, setResponseHeader },
+      { resolveHelpCenterBaseUrl },
+    ] = await Promise.all([
+      import('@/lib/server/domains/settings/settings.service'),
+      import('@/lib/server/auth/registered-providers'),
+      import('@/lib/server/config'),
+      import('@tanstack/react-start/server'),
+      import('@/lib/server/domains/help-center/help-center-domain.service'),
+    ])
 
-  // Single principal read returns both session.principalType + userRole;
-  // run in parallel with the settings fetch.
-  const [{ session, role: userRole }, settings, registeredAuthProviders] = await Promise.all([
-    getSessionAndRole(),
-    getWorkspaceSettings(),
-    getRegisteredAuthProviders(),
-  ])
+    // Single principal read returns both session.principalType + userRole;
+    // run in parallel with the settings fetch.
+    const [{ session, role: userRole }, settings, registeredAuthProviders] = await Promise.all([
+      getSessionAndRole(),
+      getWorkspaceSettings(),
+      getRegisteredAuthProviders(),
+    ])
 
-  // One-time initialization on first request.
-  //
-  // Role-gated, and the gate is not cosmetic. Telemetry is default-on and this
-  // path had none, so a `role=web` replica walked every workspace in the registry
-  // once an hour — which is precisely what SAAS-HOSTING-STACK.md §1's
-  // scale-to-zero argument says a web replica does not do ("a QUACKBACK_ROLE=web
-  // replica runs none of them"), and what Piece 2 measured. Fixing the
-  // wrong-workspace problem by making the sweep fleet-wide widened its blast
-  // radius from one workspace's database to every workspace's, including on replicas
-  // that must stay silent to let their computes suspend.
-  //
-  // `shouldRunWorkers()` is the same predicate `startup.ts` gates the sweepers
-  // behind, so telemetry now lives on the same side of the split as the rest
-  // of the background work.
-  if (!_initialized && shouldRunWorkers()) {
-    _initialized = true
+    // One-time initialization on first request.
+    //
+    // Role-gated, and the gate is not cosmetic. Telemetry is default-on and this
+    // path had none, so a `role=web` replica walked every workspace in the registry
+    // once an hour — which is precisely what SAAS-HOSTING-STACK.md §1's
+    // scale-to-zero argument says a web replica does not do ("a QUACKBACK_ROLE=web
+    // replica runs none of them"), and what Piece 2 measured. Fixing the
+    // wrong-workspace problem by making the sweep fleet-wide widened its blast
+    // radius from one workspace's database to every workspace's, including on replicas
+    // that must stay silent to let their computes suspend.
+    //
+    // `shouldRunWorkers()` is the same predicate `startup.ts` gates the sweepers
+    // behind, so telemetry now lives on the same side of the split as the rest
+    // of the background work.
+    if (!_initialized && shouldRunWorkers()) {
+      _initialized = true
 
-    // Delay telemetry to let the DB connection initialize
-    setTimeout(() => {
-      // Detached from the request that happened to arm it.
-      //
-      // AsyncLocalStorage carries the arming request's store into this timer,
-      // into `startTelemetry`, and into the hourly `setInterval` it arms — for
-      // the life of the process. Under pooled tenancy that store carries the
-      // WORKSPACE SCOPE, and `withSweepLock` fans a tick across the fleet only
-      // when no scope is active. So without this, whichever workspace rendered the
-      // pod's first page would own the fleet's telemetry forever: the hourly
-      // claim would take the lock in *its* database, no other workspace would ever
-      // be pinged, and `telemetry/instance-id.ts` would keep issuing an
-      // unlocked read-modify-write of *its* `settings.metadata` — the write
-      // SAAS-HOSTING-STACK.md §3 names as able to drop the fingerprint stamp.
-      //
-      // `_initialized` itself is fine shared: it is a once-per-process latch,
-      // and process-lifetime is exactly what it should mean. The bug was that
-      // the work it gates inherited a request's identity.
-      void runWithoutLogContext(async () => {
-        try {
-          const { startTelemetry } = await import('@/lib/server/telemetry')
-          await startTelemetry()
-        } catch {
-          // Silent failure -- telemetry must never affect the application
-        }
-      })
-    }, 10_000)
-  }
+      // Delay telemetry to let the DB connection initialize
+      setTimeout(() => {
+        // Detached from the request that happened to arm it.
+        //
+        // AsyncLocalStorage carries the arming request's store into this timer,
+        // into `startTelemetry`, and into the hourly `setInterval` it arms — for
+        // the life of the process. Under pooled tenancy that store carries the
+        // WORKSPACE SCOPE, and `withSweepLock` fans a tick across the fleet only
+        // when no scope is active. So without this, whichever workspace rendered the
+        // pod's first page would own the fleet's telemetry forever: the hourly
+        // claim would take the lock in *its* database, no other workspace would ever
+        // be pinged, and `telemetry/instance-id.ts` would keep issuing an
+        // unlocked read-modify-write of *its* `settings.metadata` — the write
+        // SAAS-HOSTING-STACK.md §3 names as able to drop the fingerprint stamp.
+        //
+        // `_initialized` itself is fine shared: it is a once-per-process latch,
+        // and process-lifetime is exactly what it should mean. The bug was that
+        // the work it gates inherited a request's identity.
+        void runWithoutLogContext(async () => {
+          try {
+            const { startTelemetry } = await import('@/lib/server/telemetry')
+            await startTelemetry()
+          } catch {
+            // Silent failure -- telemetry must never affect the application
+          }
+        })
+      }, 10_000)
+    }
 
-  const headers = getRequestHeaders()
-  const themeCookie = getThemeCookie(headers.get('cookie') ?? null)
-  const portalThemeCookie = getPortalThemeCookie(headers.get('cookie') ?? null)
-  const updateBannerDismissedVersion = getUpdateBannerDismissedVersionCookie(
-    headers.get('cookie') ?? null
-  )
-  const acceptLanguageLocale = resolveLocale(headers.get('accept-language'))
+    const headers = getRequestHeaders()
+    const themeCookie = getThemeCookie(headers.get('cookie') ?? null)
+    const portalThemeCookie = getPortalThemeCookie(headers.get('cookie') ?? null)
+    const updateBannerDismissedVersion = getUpdateBannerDismissedVersionCookie(
+      headers.get('cookie') ?? null
+    )
+    const acceptLanguageLocale = resolveLocale(headers.get('accept-language'))
 
-  // Ask for the prefers-color-scheme client hint, so Chromium sends the OS
-  // preference with later requests and a `system` theme is rendered here. A
-  // document rendered without it (a first visit, Firefox, Safari) resolves the
-  // theme in a <head> script instead (see colorSchemeHintHeaders).
-  for (const [name, value] of Object.entries(colorSchemeHintHeaders())) {
-    setResponseHeader(name, value)
-  }
-  // This document is keyed on every input we render into it: the `theme` cookie
-  // (and the session/role embedded in the dehydrated context), Accept-Language
-  // for `<html lang>`/`dir`, the color-scheme hint, and now Host (below,
-  // baseUrl switches to the help center's verified custom domain when the
-  // request arrives on it). List them all so a shared cache can never serve
-  // e.g. a dark-cookie document to a no-cookie visitor that happens to share
-  // the same hint.
-  setResponseHeader('Vary', 'Cookie, Accept-Language, Sec-CH-Prefers-Color-Scheme, Host')
-  const prefersColorScheme = parsePrefersColorScheme(headers.get('sec-ch-prefers-color-scheme'))
+    // Ask for the prefers-color-scheme client hint, so Chromium sends the OS
+    // preference with later requests and a `system` theme is rendered here. A
+    // document rendered without it (a first visit, Firefox, Safari) resolves the
+    // theme in a <head> script instead (see colorSchemeHintHeaders).
+    for (const [name, value] of Object.entries(colorSchemeHintHeaders())) {
+      setResponseHeader(name, value)
+    }
+    // This document is keyed on every input we render into it: the `theme` cookie
+    // (and the session/role embedded in the dehydrated context), Accept-Language
+    // for `<html lang>`/`dir`, the color-scheme hint, and now Host (below,
+    // baseUrl switches to the help center's verified custom domain when the
+    // request arrives on it). List them all so a shared cache can never serve
+    // e.g. a dark-cookie document to a no-cookie visitor that happens to share
+    // the same hint.
+    setResponseHeader('Vary', 'Cookie, Accept-Language, Sec-CH-Prefers-Color-Scheme, Host')
+    const prefersColorScheme = parsePrefersColorScheme(headers.get('sec-ch-prefers-color-scheme'))
 
-  // Canonical URLs switch to the help center's custom domain when the
-  // request actually arrived on it (domains/languages §1) -- everywhere else
-  // (boards, changelog, etc.) this is a no-op and baseUrl is just BASE_URL.
-  const baseUrl = resolveHelpCenterBaseUrl({
-    domainConfig: settings?.helpCenterConfig?.domain,
-    currentHost: headers.get('host'),
-    fallback: config.baseUrl,
-  })
-  const cloud = resolveCloudConfig(
-    (settings?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
-  )
-  const setupState = getSetupState(settings?.settings?.setupState ?? null)
+    // Canonical URLs switch to the help center's custom domain when the
+    // request actually arrived on it (domains/languages §1) -- everywhere else
+    // (boards, changelog, etc.) this is a no-op and baseUrl is just BASE_URL.
+    const baseUrl = resolveHelpCenterBaseUrl({
+      domainConfig: settings?.helpCenterConfig?.domain,
+      currentHost: headers.get('host'),
+      fallback: config.baseUrl,
+    })
+    const cloud = resolveCloudConfig(
+      (settings?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
+    )
+    const setupState = getSetupState(settings?.settings?.setupState ?? null)
 
-  return {
-    baseUrl,
-    session,
-    settings: settings ? clientSafeSettings(settings) : null,
-    onboarding: {
-      complete: isOnboardingComplete(setupState),
-      needsSetupWizard: needsCloudOnboardingWizard(setupState),
-    },
-    userRole,
-    themeCookie,
-    portalThemeCookie,
-    prefersColorScheme,
-    managedFieldPaths: settings?.managedFieldPaths ?? [],
-    registeredAuthProviders,
-    acceptLanguageLocale,
-    updateBannerDismissedVersion,
-    billingEnabled: cloud.enabled && (cloud.canUpgrade || cloud.canManageBilling),
-    cloudEnabled: cloud.enabled,
-    productAnalytics: config.productAnalytics
-      ? {
-          key: config.productAnalytics.key,
-          apiHost: config.productAnalytics.host,
-          uiHost: config.productAnalytics.uiHost,
-          sessionRecording: config.productAnalytics.sessionRecording,
-          maskText: config.productAnalytics.maskText,
-          maskInputs: config.productAnalytics.maskInputs,
-          workspaceId: await analyticsWorkspaceKey(
-            getCurrentWorkspace()?.workspaceKey,
-            typeof settings?.settings?.id === 'string' ? settings.settings.id : null
-          ),
-        }
-      : null,
-  }
-})
-
-export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<BootstrapData> => {
-    log.debug('get bootstrap data')
-    return await getBootstrapDataInternal()
+    return {
+      baseUrl,
+      session,
+      settings: settings
+        ? options.designPreview === 'switch'
+          ? await withSwitchPreview(clientSafeSettings(settings))
+          : clientSafeSettings(settings)
+        : null,
+      onboarding: {
+        complete: isOnboardingComplete(setupState),
+        needsSetupWizard: needsCloudOnboardingWizard(setupState),
+      },
+      userRole,
+      themeCookie,
+      portalThemeCookie,
+      prefersColorScheme,
+      managedFieldPaths: settings?.managedFieldPaths ?? [],
+      registeredAuthProviders,
+      acceptLanguageLocale,
+      updateBannerDismissedVersion,
+      billingEnabled: cloud.enabled && (cloud.canUpgrade || cloud.canManageBilling),
+      cloudEnabled: cloud.enabled,
+      productAnalytics: config.productAnalytics
+        ? {
+            key: config.productAnalytics.key,
+            apiHost: config.productAnalytics.host,
+            uiHost: config.productAnalytics.uiHost,
+            sessionRecording: config.productAnalytics.sessionRecording,
+            maskText: config.productAnalytics.maskText,
+            maskInputs: config.productAnalytics.maskInputs,
+            workspaceId: await analyticsWorkspaceKey(
+              getCurrentWorkspace()?.workspaceKey,
+              typeof settings?.settings?.id === 'string' ? settings.settings.id : null
+            ),
+          }
+        : null,
+    }
   }
 )
+
+export const getBootstrapData = createServerFn({ method: 'GET' })
+  .validator((data: BootstrapOptions | undefined): BootstrapOptions =>
+    data?.designPreview === 'switch' ? { designPreview: 'switch' } : {}
+  )
+  .handler(async ({ data }): Promise<BootstrapData> => {
+    log.debug('get bootstrap data')
+    return await getBootstrapDataInternal(data)
+  })

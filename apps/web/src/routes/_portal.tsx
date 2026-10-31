@@ -69,6 +69,7 @@ export const Route = createFileRoute('/_portal')({
     error?: string
     theme?: 'light' | 'dark'
     preview?: boolean
+    design?: 'switch'
   } => ({
     auth:
       search.auth === 'signin' || search.auth === 'signup' ? (search.auth as string) : undefined,
@@ -79,9 +80,12 @@ export const Route = createFileRoute('/_portal')({
     // postMessage draft bridge. Both retained across in-app navigation below.
     theme: search.theme === 'light' || search.theme === 'dark' ? search.theme : undefined,
     preview: search.preview === true || search.preview === 1 || search.preview === '1' || undefined,
+    // The switch preview: the portal drawn as it would be on the design
+    // (see __root.tsx), kept as the frame navigates.
+    design: search.design === 'switch' ? 'switch' : undefined,
   }),
   search: {
-    middlewares: [retainSearchParams(['theme', 'preview'])],
+    middlewares: [retainSearchParams(['theme', 'preview', 'design'])],
   },
   loaderDeps: ({ search }) => ({
     auth: search.auth,

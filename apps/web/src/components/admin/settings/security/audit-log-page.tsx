@@ -95,6 +95,8 @@ const FILTER_EVENT_TYPES: FilterEventOption[] = [
   { group: 'Settings', label: 'Custom CSS changed', value: 'branding.css.changed' },
   { group: 'Settings', label: 'Design published', value: 'design.published' },
   { group: 'Settings', label: 'Design restored', value: 'design.restored' },
+  { group: 'Settings', label: 'Switched to the design', value: 'design.switched' },
+  { group: 'Settings', label: 'Switched back to the old theme', value: 'design.switched_back' },
   { group: 'Settings', label: 'Settings applied', value: 'settings.applied' },
   { group: 'Settings', label: 'Settings undone', value: 'settings.undone' },
   { group: 'Portal', label: 'Widget sign-in changed', value: 'portal.widget_signin.changed' },

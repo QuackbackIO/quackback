@@ -314,6 +314,73 @@ export async function publishStartingDesign(
   return true
 }
 
+/**
+ * Publishes a workspace's design for the first time, from its own theme and
+ * CSS, at a person's request. Refused once a design is published.
+ */
+export async function publishSwitchedDesign(
+  document: PortalDesign,
+  author: DesignAuthor
+): Promise<{ revisionId: PortalDesignRevisionId; number: number }> {
+  const valid = validateDesign(document)
+  const result = await db.transaction(async (tx) => {
+    await tx.insert(portalDesigns).values({}).onConflictDoNothing()
+    const row = (await designRow(tx, true))!
+    if (row.publishedRevisionId) {
+      throw new ConflictError('DESIGN_CHANGED', 'This portal already uses the design system.')
+    }
+    const published = await publishDocument(
+      tx,
+      row.id,
+      valid,
+      author,
+      'conversion',
+      'Switched from custom CSS'
+    )
+    await recordAuditEventInTransaction(tx, {
+      event: 'design.switched',
+      actor: author.actor,
+      headers: author.headers,
+      target: { type: 'portal_design', id: row.id },
+      after: { revision: published.number },
+      metadata: { principalId: author.principalId, revisionId: published.revisionId },
+    })
+    return published
+  })
+  await invalidateSettingsCache()
+  return result
+}
+
+/**
+ * Takes the published design off the portal, so the old theme shows again.
+ * Its versions and any draft stay, ready to publish again.
+ */
+export async function unpublishDesign(author: DesignAuthor): Promise<void> {
+  await db.transaction(async (tx) => {
+    const row = await designRow(tx, true)
+    if (!row?.publishedRevisionId) {
+      throw new ConflictError(
+        'NOT_SWITCHED',
+        'This portal has no published design to switch back from.'
+      )
+    }
+    const published = await revision(tx, row.publishedRevisionId)
+    await tx
+      .update(portalDesigns)
+      .set({ publishedRevisionId: null, updatedAt: new Date() })
+      .where(eq(portalDesigns.id, row.id))
+    await recordAuditEventInTransaction(tx, {
+      event: 'design.switched_back',
+      actor: author.actor,
+      headers: author.headers,
+      target: { type: 'portal_design', id: row.id },
+      before: { revision: published?.number ?? null },
+      metadata: { principalId: author.principalId },
+    })
+  })
+  await invalidateSettingsCache()
+}
+
 /** Publishes an old revision's document as the next revision. A draft in progress is kept. */
 export async function restoreRevision(
   revisionId: PortalDesignRevisionId,

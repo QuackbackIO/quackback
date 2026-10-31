@@ -55,6 +55,16 @@ describe('lintDesignCss', () => {
     ])
   })
 
+  it('offers the part only for a class that is the whole part', () => {
+    const { warnings } = lintDesignCss(
+      '.post-card { border-width: 2px; } .post-card__link { color: red; }'
+    )
+    expect(warnings.map((warning) => warning.fix ?? null)).toEqual([
+      { find: '.post-card', replace: '[data-qb-part="post-card"]' },
+      null,
+    ])
+  })
+
   it('warns on !important, a private token, an unknown part and poor contrast', () => {
     const { errors, warnings } = lintDesignCss(`
       [data-qb-part="header"] { color: #999999 !important; background: #ffffff; }
