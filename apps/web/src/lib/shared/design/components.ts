@@ -289,11 +289,11 @@ function bandTokens(doc: PortalDesign, t: Required<ThemeVariables>, mode: Mode):
     // Over an image, the band's colour veils it so the words keep their contrast.
     '--qb-band-scrim': `color-mix(in oklch, ${surface.behind[0]} 85%, transparent)`,
     '--qb-band-scrim-soft': `color-mix(in oklch, ${surface.behind[0]} 60%, transparent)`,
-    '--qb-band-highlight': mixColor(
-      support ?? t.primary,
-      surface.behind[0]!,
-      support ? 0.35 : 0.25
-    ),
+    // A pale second colour is a highlighter as it is; a deeper one is softened behind the words.
+    '--qb-band-highlight':
+      support && contrastRatio(surface.ink, support) >= 10
+        ? support
+        : mixColor(support ?? t.primary, surface.behind[0]!, support ? 0.35 : 0.25),
     ...panelTokens(t, support),
     ...artTokens(doc, t, support),
   }

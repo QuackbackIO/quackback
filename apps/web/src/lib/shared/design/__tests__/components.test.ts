@@ -214,6 +214,16 @@ describe('a second brand colour', () => {
     expect(light['--qb-band-ink']).toBe(resolveDesign(design()).light!.foreground)
   })
 
+  it('highlights in a pale second colour as it is', () => {
+    const { light } = resolveDesign(
+      design((d) => {
+        d.brand.light.support = '#fdecc8'
+        d.layout.band = 'none'
+      })
+    ).tokens
+    expect(light['--qb-band-highlight']).toBe('#fdecc8')
+  })
+
   it('highlights in it', () => {
     const { light } = withSupport('none').tokens
     expect(light['--qb-band-highlight']).toBe(
