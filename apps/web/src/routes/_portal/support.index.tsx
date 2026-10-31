@@ -208,7 +208,7 @@ function SupportListPage() {
                             closed={ticket.stage.closed}
                             closedLabelId="portal.tickets.stage.closed"
                           />
-                          <span className="font-mono text-[11px] text-muted-foreground/70">
+                          <span className="font-mono text-[11px] text-muted-foreground">
                             {ticket.reference}
                           </span>
                         </>
@@ -219,7 +219,7 @@ function SupportListPage() {
                       <TimeAgo date={c.lastMessageAt} />
                     </span>
                   </span>
-                  <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/50 rtl:rotate-180" />
+                  <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground rtl:rotate-180" />
                 </Link>
               </li>
             )

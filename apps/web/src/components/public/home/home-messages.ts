@@ -33,6 +33,7 @@ export const homeMessages = defineMessages({
   updatesTitle: { id: 'portal.home.updates.title', defaultMessage: 'Latest updates' },
   updatesAll: { id: 'portal.home.updates.all', defaultMessage: 'See all updates' },
   helpSearchTitle: { id: 'portal.home.helpSearch.title', defaultMessage: 'How can we help?' },
+  helpSearchField: { id: 'portal.home.helpSearch.field', defaultMessage: 'Search help articles' },
   helpTopicsTitle: { id: 'portal.home.helpTopics.title', defaultMessage: 'Help topics' },
   helpAll: { id: 'portal.home.help.all', defaultMessage: 'Visit the help center' },
   statusTitle: { id: 'portal.home.status.title', defaultMessage: 'Status' },

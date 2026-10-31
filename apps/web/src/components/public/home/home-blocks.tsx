@@ -18,7 +18,7 @@ import { useIntl } from 'react-intl'
 import { RichTextContent } from '@/components/ui/rich-text-content'
 import { StatusBadge, useStatusColour } from '@/components/ui/status-badge'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
-import { HelpCenterCompactSearch } from '@/components/help-center/help-center-search'
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 import { COMPONENT_STATUS_STYLE, HERO_HEADLINE } from '@/components/portal/status/status-colors'
@@ -432,7 +432,14 @@ function HelpSearchBlock({ block, index }: { block: HomeBlock; index: number }) 
       title={intl.formatMessage(homeMessages.helpSearchTitle)}
       action={{ label: intl.formatMessage(homeMessages.helpAll), to: '/hc' }}
     >
-      <HelpCenterCompactSearch />
+      {/* A way into the help centre's search, shaped like the field it opens on. */}
+      <Link
+        to="/hc"
+        className="flex items-center gap-2 rounded-[var(--qb-radius-field,0.5rem)] border border-border bg-background px-3 py-2 text-sm text-muted-foreground hover:border-foreground/30"
+      >
+        <MagnifyingGlassIcon className="size-4 shrink-0" aria-hidden="true" />
+        {intl.formatMessage(homeMessages.helpSearchField)}
+      </Link>
       {articles.length > 0 && (
         <ul className="divide-y divide-border/60">
           {articles.map((article) => (

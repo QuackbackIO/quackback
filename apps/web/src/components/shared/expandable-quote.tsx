@@ -21,7 +21,7 @@ export function ExpandableQuote({ text, className }: ExpandableQuoteProps) {
     if (el) setIsClamped(el.scrollHeight > el.clientHeight + 1)
   }, [text])
 
-  const base = cn('text-xs text-muted-foreground/70 leading-relaxed whitespace-pre-wrap', className)
+  const base = cn('text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap', className)
 
   if (expanded) {
     return (
@@ -32,7 +32,7 @@ export function ExpandableQuote({ text, className }: ExpandableQuoteProps) {
         <button
           type="button"
           onClick={() => setExpanded(false)}
-          className="text-xs text-muted-foreground/50 hover:text-muted-foreground mt-0.5 cursor-pointer"
+          className="text-xs text-muted-foreground hover:text-muted-foreground mt-0.5 cursor-pointer"
         >
           Show less
         </button>
@@ -49,7 +49,7 @@ export function ExpandableQuote({ text, className }: ExpandableQuoteProps) {
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="text-xs text-muted-foreground/50 hover:text-muted-foreground mt-0.5 cursor-pointer"
+          className="text-xs text-muted-foreground hover:text-muted-foreground mt-0.5 cursor-pointer"
         >
           Show full message
         </button>

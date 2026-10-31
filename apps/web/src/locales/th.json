@@ -2239,6 +2239,7 @@
   "portal.home.updates.title": "อัปเดตล่าสุด",
   "portal.home.updates.all": "ดูอัปเดตทั้งหมด",
   "portal.home.helpSearch.title": "มีอะไรให้เราช่วยไหม",
+  "portal.home.helpSearch.field": "ค้นหาบทความช่วยเหลือ",
   "portal.home.helpTopics.title": "หัวข้อความช่วยเหลือ",
   "portal.home.help.all": "ไปที่ศูนย์ช่วยเหลือ",
   "portal.home.status.title": "สถานะ",

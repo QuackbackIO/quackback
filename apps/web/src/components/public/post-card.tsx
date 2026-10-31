@@ -528,7 +528,7 @@ export function PostCard({
           statusDisplay
         )}
         {/* Title */}
-        <h3
+        <h2
           data-qb-part="post-title"
           className={cn(
             'font-semibold [font-size:var(--qb-title-size,1rem)] leading-normal line-clamp-1',
@@ -536,11 +536,11 @@ export function PostCard({
           )}
         >
           {titleText}
-        </h3>
+        </h2>
 
         {/* Description */}
         {content && (
-          <p className="text-sm text-muted-foreground/60 line-clamp-1 mt-1">
+          <p className="text-sm text-muted-foreground line-clamp-1 mt-1">
             {contentPreview(content)}
           </p>
         )}
@@ -549,7 +549,8 @@ export function PostCard({
         {tags.length > 0 && (
           <div className="flex items-center gap-1 mt-1.5">
             {tags.slice(0, 3).map((tag) => {
-              const style = { backgroundColor: tag.color + '20', color: tag.color }
+              // The tag's colour tints the chip; its text stays in the ink, which reads on it.
+              const style = { backgroundColor: tag.color + '20', color: 'var(--foreground)' }
               return onTagClick ? (
                 <button
                   key={tag.id}
@@ -570,7 +571,7 @@ export function PostCard({
               )
             })}
             {tags.length > 3 && (
-              <span className="text-xs text-muted-foreground/60">+{tags.length - 3}</span>
+              <span className="text-xs text-muted-foreground">+{tags.length - 3}</span>
             )}
           </div>
         )}
@@ -578,10 +579,10 @@ export function PostCard({
         {/* Meta row */}
         <div className="flex items-center text-muted-foreground gap-2 text-xs mt-2.5">
           {authorMeta}
-          <span className="text-muted-foreground/40">·</span>
-          <TimeAgo date={createdAtDate} className="text-muted-foreground/70" />
+          <span className="text-muted-foreground">·</span>
+          <TimeAgo date={createdAtDate} className="text-muted-foreground" />
           {commentCount > 0 && (
-            <span className="flex items-center gap-1 text-muted-foreground/50 ms-auto">
+            <span className="flex items-center gap-1 text-muted-foreground ms-auto">
               <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
               {commentCount}
             </span>

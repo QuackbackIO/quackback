@@ -88,9 +88,6 @@ function typeTokens(fonts: Fonts): TokenMap {
     '--qb-label-case': CASE[labels],
     // Upper-case labels read better spaced out.
     '--qb-label-tracking': labels === 'upper' ? '0.06em' : 'normal',
-    // In the brand colour, a headline takes the band's accent, which reads on the band.
-    '--qb-headline-colour':
-      fonts.headlineColour === 'accent' ? 'var(--qb-band-accent)' : 'var(--qb-band-ink)',
   }
 }
 
@@ -463,6 +460,8 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
     'data-qb-header-band': headerOnBand(doc) ? 'on' : 'off',
     'data-qb-status': doc.layout.status ?? 'colour',
     // An image behind the words takes the band's place; art beside a side image stays.
+    // In the brand colour, a headline takes the band's accent, read where the headline sits.
+    'data-qb-headline': doc.brand.fonts.headlineColour === 'accent' ? 'accent' : 'ink',
     'data-qb-band-art':
       !doc.layout.bandArt ||
       doc.layout.bandArt === 'none' ||
