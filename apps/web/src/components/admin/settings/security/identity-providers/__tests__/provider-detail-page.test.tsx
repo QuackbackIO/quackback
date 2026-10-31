@@ -698,15 +698,43 @@ describe('<ProviderDetailPage> connection options', () => {
     )
   })
 
-  it('prefills the effective scopes and does not offer to remove openid', () => {
+  it('prefills the effective scopes and offers to remove each scope', () => {
     renderPage(makeProvider({ scopes: null }))
     editConnection()
     openConnectionOptions()
     for (const scope of ['openid', 'email', 'profile']) {
       expect(screen.getByTestId(`scope-token-${scope}`)).toBeInTheDocument()
     }
-    expect(screen.queryByRole('button', { name: 'Remove scope openid' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove scope openid' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove scope email' })).toBeInTheDocument()
+  })
+
+  it('saves a custom OAuth scope after removing openid and warns about identity claims', async () => {
+    renderPage(makeProvider({ scopes: null }))
+    editConnection()
+    openConnectionOptions()
+    fireEvent.change(screen.getByLabelText('Add a scope'), { target: { value: 'publicData' } })
+    fireEvent.submit(screen.getByTestId('scope-add-form'))
+    for (const scope of ['openid', 'email', 'profile']) {
+      fireEvent.click(screen.getByRole('button', { name: `Remove scope ${scope}` }))
+    }
+    expect(screen.getByText('OpenID Connect scope removed')).toBeInTheDocument()
+    saveConnection()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert().scopes).toBe('publicData')
+  })
+
+  it('can use advertised OAuth scopes without restoring openid', async () => {
+    discoveryScopesSpy.mockResolvedValueOnce({ scopesSupported: ['publicData'] })
+    renderPage(makeProvider({ scopes: 'openid publicData' }))
+    editConnection()
+    await waitFor(() => expect(screen.getByTestId('scope-mismatch-warning')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Use advertised scopes' }))
+    expect(screen.queryByTestId('scope-token-openid')).not.toBeInTheDocument()
+    expect(screen.getByText('OpenID Connect scope removed')).toBeInTheDocument()
+    saveConnection()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert().scopes).toBe('publicData')
   })
 
   it('saves null for scopes, prompt and client auth when the defaults are untouched', async () => {
