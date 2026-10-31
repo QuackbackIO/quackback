@@ -39,13 +39,17 @@ export function PortalBand({ page = 'feedback' }: { page?: 'feedback' | 'home' }
   return (
     <section
       data-qb-section="band"
+      data-qb-part="band"
       className="portal-band [background:var(--qb-band-bg)] py-10 [[data-qb-band=none]_&]:py-0"
     >
       {(title || subtitle) && (
         // Under a centred header the headline centres too.
         <div className="mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 pt-6 sm:px-6 [[data-qb-band=none]_&]:pb-0 [[data-qb-header=centered]_&]:text-center">
           {title && (
-            <h1 className="text-2xl font-semibold text-[var(--qb-band-ink)] sm:text-3xl">
+            <h1
+              data-qb-part="headline"
+              className="text-2xl font-semibold text-[var(--qb-band-ink)] sm:text-3xl"
+            >
               {title}
             </h1>
           )}

@@ -293,7 +293,11 @@ export function PortalHeader({
     'stacked'
 
   const logo = (
-    <Link to={PORTAL_LANDING} className="portal-header__logo flex items-center gap-2">
+    <Link
+      to={PORTAL_LANDING}
+      className="portal-header__logo flex items-center gap-2"
+      data-qb-part="logo"
+    >
       {orgLogo ? (
         <img
           src={orgLogo}
@@ -327,7 +331,12 @@ export function PortalHeader({
   // inline header folds back to two rows, so the menu always has room.
   if (headerLayout === 'inline') {
     return (
-      <header ref={headerRef} className={headerClassName} data-qb-section="header">
+      <header
+        ref={headerRef}
+        className={headerClassName}
+        data-qb-section="header"
+        data-qb-part="header"
+      >
         <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
           <div className="flex h-12 items-center gap-4">
             {logo}
@@ -347,7 +356,12 @@ export function PortalHeader({
   }
   if (headerLayout === 'centered') {
     return (
-      <header ref={headerRef} className={headerClassName} data-qb-section="header">
+      <header
+        ref={headerRef}
+        className={headerClassName}
+        data-qb-section="header"
+        data-qb-part="header"
+      >
         <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
           <div className="relative flex h-12 items-center justify-center">
             {logo}
@@ -366,7 +380,12 @@ export function PortalHeader({
   // Two-row layout: Logo + Auth on top, Navigation below
   return (
     // A banner landmark, so the logo and account controls sit in one.
-    <header ref={headerRef} className={headerClassName} data-qb-section="header">
+    <header
+      ref={headerRef}
+      className={headerClassName}
+      data-qb-section="header"
+      data-qb-part="header"
+    >
       {/* Row 1: Logo + Name + Auth */}
       <div>
         <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
@@ -421,6 +440,7 @@ function Navigation({
               target={item.newTab ? '_blank' : undefined}
               rel="noopener noreferrer"
               className={navItemClass(false)}
+              data-qb-part="nav-item"
             >
               {item.label}
             </a>
@@ -443,6 +463,7 @@ function Navigation({
             target={external ? '_blank' : undefined}
             rel={external ? 'noopener noreferrer' : undefined}
             className={navItemClass(false)}
+            data-qb-part="nav-item"
           >
             {link.label}
           </a>
@@ -465,7 +486,12 @@ const NavTab = memo(
     const intl = useIntl()
     const isActive = useRouterState({ select: (s) => isTabActive(item, s.location.pathname) })
     return (
-      <Link to={item.to} className={navItemClass(isActive)}>
+      <Link
+        to={item.to}
+        className={navItemClass(isActive)}
+        data-qb-part="nav-item"
+        data-state={isActive ? 'active' : undefined}
+      >
         {item.label ??
           intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })}
         {unread > 0 && (

@@ -313,6 +313,8 @@ export function FeedbackHeaderAnimated({
 
   return (
     <motion.div
+      data-qb-part="composer"
+      data-state={expanded ? 'open' : undefined}
       className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden"
       initial={false}
       animate={{
