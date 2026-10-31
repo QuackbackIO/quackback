@@ -1,8 +1,9 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @import "tw-animate-css";
-/* A portal design's own CSS goes in the last layer, after Tailwind's. */
-@layer theme, base, components, utilities, tenant;
+/* After Tailwind's layers: the portal design's type rules, which beat
+   utilities, then the workspace's own CSS, which beats them. */
+@layer theme, base, components, utilities, design, tenant;
 /* Self-hosted fonts: Inter (the default/UI font, used on every page) loads
    statically here so there is zero regression for the default path. Every
    OTHER font referenced by the branding picker (FONT_OPTIONS in
@@ -628,14 +629,17 @@ a svg,
   --input: #3f3f46;
 }
 
-:root {
+/*
+ * The admin and portals on the old theme. A portal on the design engine sets
+ * these in its design layer, where the workspace's own CSS can override them.
+ * :where keeps the specificity these rules have always had.
+ */
+:where(:root:not([data-portal-theme])) {
   -webkit-font-smoothing: antialiased;
   letter-spacing: -0.01em;
 }
 
-h1,
-h2,
-h3 {
+:where(:root:not([data-portal-theme])) :is(h1, h2, h3) {
   font-weight: 600;
   letter-spacing: -0.02em;
 }

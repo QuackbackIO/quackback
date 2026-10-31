@@ -223,10 +223,14 @@ export function renderDesignCss(resolved: ResolvedDesign): string {
     `[data-portal-theme] body { --font-sans: ${primary.fontSans}; --radius: ${primary.radius}; }`
   )
   // The heading family sits in the base layer, so a utility on a heading still
-  // wins; the weight has to beat the stylesheet's unlayered heading rule.
+  // wins. The tracking and the heading weight sit in the design layer: after
+  // utilities, as the app's own unlayered heading rule is elsewhere, and
+  // before the workspace's CSS, which may set them for a part.
   parts.push(
     '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
   )
-  parts.push('[data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); }')
+  parts.push(
+    '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } }'
+  )
   return parts.join(' ')
 }
