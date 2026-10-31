@@ -17,6 +17,43 @@ export const getPortalDesignAiStatusFn = createServerFn({ method: 'GET' }).handl
   return { available: designAiModel() !== null }
 })
 
+/**
+ * What Quackback AI may bring into this workspace's design: Home blocks for
+ * the pages it has, and CSS the check passes on a plan with custom CSS.
+ */
+async function designAllowances() {
+  const [
+    { getWorkspaceSettings },
+    { portalPageGates },
+    { homeBlockTypes },
+    { lintDesignCss },
+    { assertTierFeature },
+  ] = await Promise.all([
+    import('@/lib/server/domains/settings/settings.service'),
+    import('@/lib/shared/design/paths'),
+    import('@/lib/shared/design/home'),
+    import('@/lib/server/domains/design/css-lint'),
+    import('@/lib/server/domains/settings/tier-enforce'),
+  ])
+  const settings = await getWorkspaceSettings()
+  const cssOnPlan = await assertTierFeature('customCss', 'Custom CSS').then(
+    () => true,
+    () => false
+  )
+  const { config } = await import('@/lib/server/config')
+  const writesCss = !!config.portalDesignAiCss
+  return {
+    blockTypes: homeBlockTypes(portalPageGates(settings, true)),
+    writesCss,
+    checkCss: (css: string) => {
+      if (!writesCss) return 'Quackback AI does not write CSS'
+      if (!cssOnPlan) return 'custom CSS is not on this plan'
+      const [error] = lintDesignCss(css).errors
+      return error ? `${error.line ? `line ${error.line}, ` : ''}${error.message}` : null
+    },
+  }
+}
+
 export const askPortalDesignAiFn = createServerFn({ method: 'POST' })
   .validator(
     z.object({
@@ -35,8 +72,11 @@ export const askPortalDesignAiFn = createServerFn({ method: 'POST' })
       import('@/lib/server/domains/design/design.actions'),
       import('@/lib/server/domains/design/design-author'),
     ])
-    const current = await actions.readDesignForEditing()
-    const result = await askDesignAi({ ...data, design: current.design })
+    const [current, allows] = await Promise.all([
+      actions.readDesignForEditing(),
+      designAllowances(),
+    ])
+    const result = await askDesignAi({ ...data, design: current.design, allows })
     if (!result.ok || result.applied.length === 0) return result
     const saved = await actions.saveDesignDraft(result.design, await designAuthor(auth))
     if (!saved.ok) return saved
@@ -63,13 +103,16 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
       import('@/lib/server/domains/design/ai/site-signals'),
       import('@/lib/server/domains/design/design.actions'),
     ])
-    const site = data.site ? await readSiteSignals(data.site) : null
-    if (data.site && !site && !data.words && !data.palette) {
+    const read = data.site ? await readSiteSignals(data.site) : null
+    const site = read?.ok ? read.signals : null
+    if (read && !read.ok && !data.words && !data.palette) {
       return {
         ok: false as const,
         code: 'SITE_UNREADABLE' as const,
         message:
-          'That website could not be read. Check the address, or describe your brand instead.',
+          read.reason === 'blocked'
+            ? 'That website blocks automated visits. Start from a screenshot of it instead.'
+            : 'That website could not be read. Check the address, or describe your brand instead.',
       }
     }
     const current = await actions.readDesignForEditing()

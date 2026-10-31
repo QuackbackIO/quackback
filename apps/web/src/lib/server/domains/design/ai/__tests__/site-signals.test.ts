@@ -1,25 +1,26 @@
 /**
- * A website's brand signals come from its head: the name, the description and
- * a theme colour dark enough to carry white text. Anything that is not an
- * HTML page gives nothing.
+ * Reading a website for its brand: the page, the stylesheets it links and its
+ * manifest, from the address as given or with or without www. A site that
+ * answers with a bot check or a refusal is reported as blocked, never read;
+ * its manifest may still say something.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const site = vi.hoisted(() => ({
-  html: '',
-  type: 'text/html; charset=utf-8',
-  status: 200,
-  urls: [] as string[],
+const web = vi.hoisted(() => ({
+  pages: {} as Record<string, { body: string; type?: string; status?: number }>,
+  asked: [] as Array<{ url: string; agent: string }>,
 }))
 
 vi.mock('@/lib/server/content/unfurl', () => ({
-  fetchFollowingRedirects: async (url: string) => {
-    site.urls.push(url)
+  fetchFollowingRedirects: async (url: string, opts: { headers?: Record<string, string> }) => {
+    web.asked.push({ url, agent: opts.headers?.['user-agent'] ?? '' })
+    const found = web.pages[url]
+    if (!found) return null
     return {
       finalUrl: url,
-      response: new Response(site.html, {
-        status: site.status,
-        headers: { 'content-type': site.type },
+      response: new Response(found.body, {
+        status: found.status ?? 200,
+        headers: { 'content-type': found.type ?? 'text/html; charset=utf-8' },
       }),
     }
   },
@@ -27,41 +28,85 @@ vi.mock('@/lib/server/content/unfurl', () => ({
 
 const { readSiteSignals } = await import('../site-signals')
 
-const page = (themeColor: string) => `<!doctype html><html><head>
-  <title>Example Tools</title>
+const HOME = `<!doctype html><html><head>
+  <title>Example Tools &amp; Co</title>
   <meta name="description" content="Tools for teams who ship.">
-  <meta name="theme-color" content="${themeColor}">
+  <link rel="stylesheet" href="/assets/site.css">
+  <link rel="manifest" href="/site.webmanifest">
+  <style>.btn-primary { background: #0f766e; }</style>
 </head><body>Hello</body></html>`
 
+const CSS = `:root { --brand-primary: #0f766e; --grey: #e5e7eb; }
+body { background: #fffdf8; font-family: "IBM Plex Sans", sans-serif; }
+h1, h2 { font-family: 'Fraunces', serif; }
+a { color: #b45309; }
+.card { border-color: #e5e7eb; }`
+
 beforeEach(() => {
-  site.html = page('#0F766E')
-  site.type = 'text/html; charset=utf-8'
-  site.status = 200
-  site.urls = []
+  web.pages = {}
+  web.asked = []
 })
 
 describe('readSiteSignals', () => {
-  it('reads the name, the description and the theme colour from the home page', async () => {
-    expect(await readSiteSignals('https://www.example.com/pricing')).toEqual({
-      domain: 'www.example.com',
-      title: 'Example Tools',
-      description: 'Tools for teams who ship.',
-      colour: '#0f766e',
+  it('reads the colours, background and fonts the site uses, saying who is asking', async () => {
+    web.pages['https://example.com/'] = { body: HOME }
+    web.pages['https://example.com/assets/site.css'] = { body: CSS, type: 'text/css' }
+    web.pages['https://example.com/site.webmanifest'] = {
+      body: '{"name":"Example","theme_color":"#0f766e","background_color":"#fffdf8"}',
+      type: 'application/manifest+json',
+    }
+    const read = await readSiteSignals('https://example.com/pricing')
+    expect(read).toEqual({
+      ok: true,
+      signals: {
+        domain: 'example.com',
+        title: 'Example Tools & Co',
+        description: 'Tools for teams who ship.',
+        colour: '#0f766e',
+        palette: ['#0f766e', '#b45309'],
+        background: '#fffdf8',
+        fonts: { heading: 'Fraunces', body: 'IBM Plex Sans' },
+        dark: false,
+      },
     })
-    expect(site.urls).toEqual(['https://www.example.com/'])
+    expect(web.asked[0]!.agent).toMatch(/QuackbackBrandReader/)
   })
 
-  it('drops a theme colour too light to carry white text', async () => {
-    site.html = page('#fefce8')
-    expect((await readSiteSignals('example.com'))?.colour).toBeNull()
+  it('tries the address with www when the bare one does not answer', async () => {
+    web.pages['https://www.example.com/'] = { body: HOME }
+    const read = await readSiteSignals('example.com')
+    expect(read.ok && read.signals.title).toBe('Example Tools & Co')
+    expect(web.asked.map((asked) => asked.url).slice(0, 2)).toEqual([
+      'https://example.com/',
+      'https://www.example.com/',
+    ])
   })
 
-  it('gives nothing for a page that is not HTML, or not there', async () => {
-    site.type = 'application/json'
-    expect(await readSiteSignals('example.com')).toBeNull()
-    site.type = 'text/html'
-    site.status = 404
-    expect(await readSiteSignals('example.com')).toBeNull()
-    expect(await readSiteSignals('not a website')).toBeNull()
+  it('follows a page that only sends the visitor on, once', async () => {
+    web.pages['https://example.com/'] = {
+      body: '<html><head><title>Redirecting</title><meta http-equiv="refresh" content="0; url=https://example.com/en-gb/"></head></html>',
+    }
+    web.pages['https://example.com/en-gb/'] = { body: HOME }
+    const read = await readSiteSignals('example.com')
+    expect(read.ok && read.signals.title).toBe('Example Tools & Co')
+  })
+
+  it('reports a bot check or a refusal as blocked, and reads the manifest if it is served', async () => {
+    web.pages['https://example.com/'] = { body: '<title>Just a moment...</title>', status: 200 }
+    web.pages['https://www.example.com/'] = { body: 'denied', status: 403 }
+    expect(await readSiteSignals('example.com')).toEqual({ ok: false, reason: 'blocked' })
+
+    web.pages['https://example.com/manifest.json'] = {
+      body: '{"name":"Example","theme_color":"#7c3aed"}',
+      type: 'application/json',
+    }
+    const read = await readSiteSignals('example.com')
+    expect(read.ok && read.signals).toMatchObject({ title: 'Example', colour: '#7c3aed' })
+  })
+
+  it('gives unreachable for a page that is not HTML, not there, or not a website', async () => {
+    web.pages['https://example.com/'] = { body: '{}', type: 'application/json' }
+    expect(await readSiteSignals('example.com')).toEqual({ ok: false, reason: 'unreachable' })
+    expect(await readSiteSignals('not a website')).toEqual({ ok: false, reason: 'unreachable' })
   })
 })

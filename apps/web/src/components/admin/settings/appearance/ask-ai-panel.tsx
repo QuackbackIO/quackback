@@ -7,7 +7,7 @@ import { applyDesignChanges, type AppliedDesignChange } from '@/lib/shared/desig
 import { BUNDLED_FONTS } from '@/lib/shared/design/fonts'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
-import { ChangeValue, changeLabel } from './change-list'
+import { ChangeValue, changeLabel, shownValue } from './change-list'
 import { LookDrawing } from './preset-gallery'
 import type { DesignAiTurn, DesignLook } from './use-design-ai'
 
@@ -63,9 +63,9 @@ function DesignChangeCard({
             )}
           </div>
           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 text-xs">
-            <ChangeValue value={change.before} />
+            <ChangeValue value={shownValue(change.path, change.before)} />
             <span aria-hidden="true">→</span>
-            <ChangeValue value={change.after} />
+            <ChangeValue value={shownValue(change.path, change.after)} />
           </div>
         </div>
       ))}

@@ -52,6 +52,12 @@ vi.mock('@/lib/server/domains/design/ai/design-ai', () => ({
 vi.mock('@/lib/server/domains/design/ai/site-signals', () => ({
   readSiteSignals: async () => hoisted.site,
 }))
+// What the workspace allows Quackback AI to bring in.
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getWorkspaceSettings: async () => ({ featureFlags: { feedback: true } }),
+}))
+vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({ assertTierFeature: async () => {} }))
+vi.mock('@/lib/server/config', () => ({ config: { portalDesignAiCss: false } }))
 
 await import('../portal-design-ai')
 const [statusFn, askFn, directionsFn] = hoisted.handlers
@@ -113,14 +119,19 @@ describe('portal design AI functions', () => {
   })
 
   it('refuses a website it cannot read, and passes one it can', async () => {
-    hoisted.site = null
+    hoisted.site = { ok: false, reason: 'unreachable' }
     expect(await directionsFn({ data: { site: 'example.invalid' } })).toMatchObject({
       ok: false,
       code: 'SITE_UNREADABLE',
+      message: 'That website could not be read. Check the address, or describe your brand instead.',
+    })
+    hoisted.site = { ok: false, reason: 'blocked' }
+    expect(await directionsFn({ data: { site: 'example.com' } })).toMatchObject({
+      message: 'That website blocks automated visits. Start from a screenshot of it instead.',
     })
     expect(hoisted.directionsInput).toBeNull()
 
-    hoisted.site = { domain: 'example.com', title: 'Example', description: null, colour: null }
+    hoisted.site = { ok: true, signals: { domain: 'example.com', title: 'Example' } }
     await directionsFn({ data: { site: 'example.com' } })
     expect(hoisted.directionsInput).toMatchObject({ site: { domain: 'example.com' }, words: null })
   })

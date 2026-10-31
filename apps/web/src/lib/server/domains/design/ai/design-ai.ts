@@ -12,18 +12,21 @@ import { getChatModel } from '@/lib/server/domains/ai/models'
 import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { logger } from '@/lib/server/logger'
-import { DESIGN_OPTIONS, BUNDLED_FONT_IDS } from '@/lib/shared/design/options'
+import { DESIGN_OPTIONS, BUNDLED_FONT_IDS, BLOCK_WIDTHS } from '@/lib/shared/design/options'
+import type { HomeBlockType } from '@/lib/shared/design/home'
+import { PORTAL_PARTS } from '@/lib/shared/design/parts'
+import { changeLabel } from '@/lib/shared/design/labels'
 import { applyPreset, DESIGN_PRESETS } from '@/lib/shared/design/presets'
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import { colourVividness, mostVivid } from '@/lib/shared/design/palette'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
   applyDesignChanges,
+  docText,
   scopeFields,
-  welcomeText,
-  DESIGN_AI_PATHS,
   type AppliedDesignChange,
   type DesignAiScope,
+  type UntrustedChanges,
 } from '@/lib/shared/design/apply-changes'
 import type { SiteSignals } from './site-signals'
 
@@ -43,81 +46,129 @@ export function designAiModel(): string | null {
   return getChatModel('assistant')
 }
 
-/** Each field the model may set, in the words a person uses for it. */
-const OPTIONS_TEXT = [
-  `mode (light or dark pages; auto follows the visitor's device): ${DESIGN_OPTIONS.mode.join(', ')}`,
-  'brand.light.accent (the brand colour: buttons, links, the band), brand.light.background (the page), brand.light.ink (the text), brand.light.surface (cards), brand.light.raised (raised surfaces), brand.light.muted (secondary text), brand.light.border (borders): hex such as #0f766e',
-  'brand.dark.background, brand.dark.ink, brand.dark.surface, brand.dark.raised, brand.dark.muted, brand.dark.border: the same roles in dark mode, hex',
-  `brand.fonts.heading and brand.fonts.body (the fonts): ${BUNDLED_FONT_IDS.join(', ')}`,
-  `brand.fonts.headingWeight (how bold headings are): ${DESIGN_OPTIONS.headingWeight.join(', ')}`,
-  `shape.corners (the corners of cards, buttons and fields): ${DESIGN_OPTIONS.corners.join(', ')}`,
-  'layout.header (where the logo and menu sit): stacked (logo above the menu), inline (logo and menu on one row), centered',
-  `layout.nav (the menu style, how the current page is marked): ${DESIGN_OPTIONS.nav.join(', ')}`,
-  'layout.band (the band behind the headline): none, tint (a soft tint of the brand colour), fade (a tint fading into the page), brand (the brand colour itself). A band shows only with a headline; when you add one and there is no headline, write one.',
-  'layout.cards (how ideas show in the feed): bordered, raised, list (rows without cards)',
-  `layout.density (the space in the feed): ${DESIGN_OPTIONS.density.join(', ')}`,
-  `layout.width (the page width): ${DESIGN_OPTIONS.width.join(', ')}`,
-  'layout.filters (the filter panel side): end (right), start (left)',
-  `pages.feedback.defaultSort (the feed's first sort): ${DESIGN_OPTIONS.sort.join(', ')}`,
-  'pages.feedback.headline.title and pages.feedback.headline.subtitle (the feedback page headline and the line under it): short plain text; an empty string removes it',
-  'pages.feedback.welcome.show (the welcome message above the feed): true or false',
-  'pages.feedback.welcome.body (the welcome message text): plain sentences, a blank line between paragraphs. When you turn the welcome message on and it has no text, write a short one.',
-].join('\n')
+/** The design document's fields, in the words a person uses for them. */
+function fieldGuide(blockTypes: readonly HomeBlockType[], writesCss: boolean): string {
+  const widths = (Object.keys(BLOCK_WIDTHS) as HomeBlockType[])
+    .map((type) => `${type} (${BLOCK_WIDTHS[type].join(', ')})`)
+    .join('; ')
+  return [
+    `mode: ${DESIGN_OPTIONS.mode.join(', ')} (auto follows the visitor's device)`,
+    'brand.light.accent (buttons, links, the band), brand.light.background (the page), brand.light.ink (text), brand.light.surface (cards), brand.light.raised (raised surfaces), brand.light.muted (secondary text), brand.light.border: hex such as #0f766e. brand.dark.*: the same roles in dark mode, without accent. null clears an optional colour.',
+    `brand.fonts.heading and brand.fonts.body: ${BUNDLED_FONT_IDS.join(', ')}. brand.fonts.headingWeight: ${DESIGN_OPTIONS.headingWeight.join(', ')}`,
+    'brand.logo.display: mark_and_name, mark, wordmark (the logo files themselves are uploaded in Settings)',
+    `shape.corners: ${DESIGN_OPTIONS.corners.join(', ')}`,
+    'layout.header: stacked (logo above the menu), inline (one row), centered',
+    `layout.nav (how the menu marks the current page): ${DESIGN_OPTIONS.nav.join(', ')}`,
+    'layout.band (behind a page headline): none, tint, fade, brand. It shows only with a headline; when you add one and there is no headline, write one.',
+    `layout.cards: ${DESIGN_OPTIONS.cards.join(', ')}. layout.density: ${DESIGN_OPTIONS.density.join(', ')}. layout.width: ${DESIGN_OPTIONS.width.join(', ')}. layout.filters: end (right), start (left)`,
+    'pages.feedback.headline.title and .subtitle: text by language, such as {"en":"Help us grow","de":"Hilf uns wachsen"}. Plain text sets English; an empty string removes it.',
+    'pages.feedback.welcome: {show, body}: the message above the feed; body is plain text, a blank line between paragraphs. When you turn it on with no text, write some.',
+    `pages.feedback.defaultSort: ${DESIGN_OPTIONS.sort.join(', ')}`,
+    'pages.feedback.copy.prompt (the composer prompt, 60 characters), .submit (its button, 24), .emptyTitle (the empty feed, 60): text by language, like the headline. Leave them out to use the chosen word.',
+    'pages.home.headline: like the feedback headline, for Home.',
+    `pages.home.blocks: Home's blocks in order on a six-column grid, at most 12: [{"type":..., "width":...}]. Types with their widths: ${widths}. Options: ideas {sort, count 3 or 5}, updates {count 2 to 4}, welcome {body: plain text}, links {title, links: [{label, url}]} with only links the person gave. This workspace can show: ${blockTypes.join(', ')}.`,
+    'nav.home: {on, tab, label}: Home at / (on) and whether it has its own menu tab (tab). With Home off, the first menu page opens at /.',
+    'nav.items: the menu in order. Pages: {"type": feedback, roadmap, changelog, help, support or status, "shown": true or false, "label": optional}. Links: {"type":"link","id","label","url","newTab"}, only links the person gave. With Home off, show at least one page.',
+    `vocabulary.post (what visitors post): ${DESIGN_OPTIONS.postWord.join(', ')}. vocabulary.board (what groups them): ${DESIGN_OPTIONS.boardWord.join(', ')}.`,
+    writesCss &&
+      `css: the workspace's own CSS, styling the portal's parts by name, [data-qb-part="post-card"]. Parts: ${PORTAL_PARTS.map((part) => part.name).join(', ')}. Only for what no field above can do; no url() or @import.`,
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
 
-/** The design fields the model sees: everything it may change, nothing else. */
-function designSummary(doc: PortalDesign) {
-  const font = (f: PortalDesign['brand']['fonts']['body']) =>
-    f.kind === 'bundled' ? f.id : f.fallback
-  return JSON.stringify({
-    mode: doc.mode,
-    brand: {
-      light: doc.brand.light,
-      dark: doc.brand.dark ?? {},
-      fonts: {
-        heading: font(doc.brand.fonts.heading),
-        body: font(doc.brand.fonts.body),
-        headingWeight: doc.brand.fonts.headingWeight,
-      },
+/** Examples of answers, kept valid against the design by the tests. */
+export const EDIT_EXAMPLES = [
+  {
+    request: 'Make it feel calmer and give the cards more room',
+    answer: {
+      reply: 'I rounded the corners fully, raised the cards and gave the feed more room.',
+      outOfScope: false,
+      changes: [
+        { path: 'shape.corners', value: '"pill"' },
+        { path: 'layout.cards', value: '"raised"' },
+        { path: 'layout.density', value: '"spacious"' },
+      ],
     },
-    shape: doc.shape,
-    layout: doc.layout,
-    pages: {
-      feedback: {
-        headline: doc.pages.feedback.headline,
-        welcome: {
-          show: doc.pages.feedback.welcome.show,
-          text: welcomeText(doc),
+  },
+  {
+    request: 'Make us a Home page: a welcome, then status next to the composer, then our top ideas',
+    answer: {
+      reply: 'Home is on, with a welcome, status beside the composer and your top ideas.',
+      outOfScope: false,
+      changes: [
+        { path: 'nav.home.on', value: 'true' },
+        { path: 'pages.home.headline.title', value: '"Welcome to our community"' },
+        {
+          path: 'pages.home.blocks',
+          value:
+            '[{"type":"welcome","width":"full","body":"Share an idea, see what is coming and find help."},{"type":"composer","width":"two_thirds"},{"type":"status","width":"third"},{"type":"ideas","width":"full","sort":"top","count":5}]',
         },
-        defaultSort: doc.pages.feedback.defaultSort,
-      },
+      ],
     },
-  })
+  },
+  {
+    request:
+      'We call them feature requests, sorted into categories. Hide the changelog from the menu.',
+    answer: {
+      reply: 'Visitors now post feature requests in categories, and the changelog is off the menu.',
+      outOfScope: false,
+      changes: [
+        { path: 'vocabulary.post', value: '"feature_request"' },
+        { path: 'vocabulary.board', value: '"category"' },
+        {
+          path: 'nav.items',
+          value:
+            '[{"type":"feedback","shown":true},{"type":"roadmap","shown":true},{"type":"changelog","shown":false},{"type":"help","shown":true},{"type":"support","shown":true},{"type":"status","shown":true}]',
+        },
+      ],
+    },
+  },
+] as const
+
+function editPrompt(blockTypes: readonly HomeBlockType[], writesCss: boolean): string {
+  return `You design a company's customer feedback portal by changing its design document. You may set any field below, by its dotted path, to any value it takes; numbers index lists (pages.home.blocks.0.width). To replace a list or a whole part, set its path to the whole new value.
+
+${fieldGuide(blockTypes, writesCss)}
+
+Reply with JSON: a one or two sentence reply to the person, outOfScope, and the changes as a list of {path, value}, where value is the new value written as JSON: "text" in quotes, a number, true or false, null, an object or a list. Change only what the request is about. Never invent a link, an uploaded file or a field. If the request is not about the portal, make no changes and say so.
+
+${EDIT_EXAMPLES.map((example) => `Example request: "${example.request}"\nExample answer: ${JSON.stringify(example.answer)}`).join('\n\n')}`
+}
+
+/** A value from the model: JSON as asked, or the bare text it sometimes sends instead. */
+export function parseValue(value: string): unknown {
+  try {
+    return JSON.parse(value)
+  } catch {
+    return value
+  }
+}
+
+/** The design as the model reads it: rich text as plain text. */
+function designSummary(doc: PortalDesign): string {
+  const plain = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(plain)
+    if (value && typeof value === 'object') {
+      if ((value as { type?: unknown }).type === 'doc') return docText(value)
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, plain(item)]))
+    }
+    return value
+  }
+  return JSON.stringify(plain(doc))
 }
 
 const editSchema = z.object({
   reply: z.string().max(600),
   /** The request is about something outside the section the person picked. */
   outOfScope: z.boolean(),
-  changes: z
-    .array(
-      z.object({
-        path: z.enum(DESIGN_AI_PATHS),
-        value: z.union([z.string().max(280), z.number(), z.boolean()]),
-      })
-    )
-    .max(20),
+  changes: z.array(z.object({ path: z.string().max(160), value: z.string().max(8000) })).max(30),
 })
 
-const EDIT_PROMPT = `You change the look of a customer feedback portal. You may set only these fields, to only these values:
-${OPTIONS_TEXT}
-
-Reply with JSON: a one or two sentence reply to the person, outOfScope, and the changes as a list of { path, value }. Change only what the request is about. Never invent a field or a value outside the lists. If the request is not about the portal's look, make no changes and say so in the reply.
-
-Example request: "Make it feel calmer and give the cards more room"
-Example answer: {"reply":"I softened the corners, raised the cards and gave the feed more room.","outOfScope":false,"changes":[{"path":"shape.corners","value":"rounded"},{"path":"layout.cards","value":"raised"},{"path":"layout.density","value":"spacious"}]}
-
-Example request: "Use our green, #0f766e, with a green band. Headline: Help us grow"
-Example answer: {"reply":"The accent is now your green, with a green band behind the new headline.","outOfScope":false,"changes":[{"path":"brand.light.accent","value":"#0f766e"},{"path":"layout.band","value":"brand"},{"path":"pages.feedback.headline.title","value":"Help us grow"}]}`
+/** Links in what the person wrote, which the model may use. */
+export function linksGiven(texts: string[]): Set<string> {
+  return new Set(texts.flatMap((text) => text.match(/https?:\/\/[^\s"'<>)]+/g) ?? []))
+}
 
 /** Above this, a page background reads as a colour and drowns the brand colour on it. */
 const MAX_PAGE_VIVIDNESS = 0.2
@@ -138,6 +189,7 @@ const SCOPE_NAMES: Record<Exclude<DesignAiScope, 'site'>, string> = {
   welcome: 'welcome message',
   feed: 'feed',
   filters: 'filters',
+  home: 'Home page',
 }
 
 /**
@@ -148,17 +200,22 @@ const SCOPE_NAMES: Record<Exclude<DesignAiScope, 'site'>, string> = {
 function honestReply(
   answer: z.infer<typeof editSchema>,
   appliedCount: number,
-  /** Changes refused for their value or path; one already set is neither applied nor refused. */
-  refusedCount: number,
+  /** Changes refused for their value or path, with why; one already set is neither. */
+  refused: Array<{ path: string; reason: string }>,
   outOfScope: boolean,
   scope: DesignAiScope
 ): string {
   const where = scope === 'site' ? 'the section picked' : `the ${SCOPE_NAMES[scope]}`
+  const why = refused
+    .slice(0, 3)
+    .map((change) => `${changeLabel(change.path)}: ${change.reason}`)
+    .join('; ')
   if (appliedCount === 0 && outOfScope) return `That is outside ${where}, so nothing changed.`
-  if (appliedCount === 0 && refusedCount > 0)
-    return 'Nothing changed: the design does not offer that.'
-  if (outOfScope) return `${answer.reply} Part of that is outside ${where} and was left alone.`
-  return answer.reply
+  if (appliedCount === 0 && refused.length > 0) return `Nothing changed (${why}).`
+  const reply = outOfScope
+    ? `${answer.reply} Part of that is outside ${where} and was left alone.`
+    : answer.reply
+  return refused.length > 0 ? `${reply} Left alone: ${why}.` : reply
 }
 
 function newAdjustments(before: PortalDesign, after: PortalDesign): string[] {
@@ -190,6 +247,8 @@ export async function askDesignAi(input: {
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   /** The main colours of an image the person attached. */
   palette?: string[]
+  /** What the workspace allows: the Home blocks its pages can show, and its CSS. */
+  allows: Omit<UntrustedChanges, 'links'> & { writesCss: boolean }
 }): Promise<DesignAiResult> {
   const model = designAiModel()
   if (!model) {
@@ -203,11 +262,14 @@ export async function askDesignAi(input: {
   const scopeNote =
     input.scope === 'site'
       ? ''
-      : `\nThe person picked the ${SCOPE_NAMES[input.scope]} in the preview. Change only these fields: ${scopeFields(input.scope).join(', ')}. If the request is about anything else, make no changes and set outOfScope to true.`
+      : `\nThe person picked the ${SCOPE_NAMES[input.scope]} in the preview. Change only these fields and what is under them: ${scopeFields(input.scope).join(', ')}. If the request is about anything else, make no changes and set outOfScope to true.`
   try {
     const answer = await structuredChat({
       model,
-      systemPrompts: [EDIT_PROMPT + scopeNote, `The design now: ${designSummary(input.design)}`],
+      systemPrompts: [
+        editPrompt(input.allows.blockTypes, input.allows.writesCss) + scopeNote,
+        `The design now: ${designSummary(input.design)}`,
+      ],
       messages: [
         ...input.history.slice(-6),
         {
@@ -220,18 +282,21 @@ export async function askDesignAi(input: {
       schema: editSchema,
       maxTokens: 1200,
     })
-    const applied = applyDesignChanges(input.design, answer.changes, input.scope)
+    const links = linksGiven([
+      input.message,
+      ...input.history.filter((turn) => turn.role === 'user').map((turn) => turn.content),
+    ])
+    const applied = applyDesignChanges(
+      input.design,
+      answer.changes.map((change) => ({ path: change.path, value: parseValue(change.value) })),
+      input.scope,
+      { ...input.allows, links }
+    )
     const outOfScope =
       input.scope !== 'site' && (answer.outOfScope || applied.outOfScope.length > 0)
     return {
       ok: true,
-      reply: honestReply(
-        answer,
-        applied.applied.length,
-        applied.skipped - applied.outOfScope.length,
-        outOfScope,
-        input.scope
-      ),
+      reply: honestReply(answer, applied.applied.length, applied.refused, outOfScope, input.scope),
       ...applied,
       outOfScope,
       readability: newAdjustments(input.design, applied.design),
@@ -290,6 +355,21 @@ export type DirectionsResult =
   | { ok: true; looks: DesignLook[] }
   | { ok: false; code: 'AI_UNAVAILABLE' | 'AI_FAILED'; message: string }
 
+/** What the website says about its brand, as the model reads it. */
+function siteBrief(site: SiteSignals): string {
+  return [
+    `Website ${site.domain}${site.title ? `, titled "${site.title}"` : ''}${site.description ? `: ${site.description}` : ''}.`,
+    site.colour && `Its brand colour is ${site.colour}.`,
+    site.palette.length > 1 &&
+      `Its other colours, most used first: ${site.palette.slice(1).join(', ')}.`,
+    site.background && `Its pages are ${site.dark ? 'dark' : 'light'}, on ${site.background}.`,
+    (site.fonts.heading || site.fonts.body) &&
+      `It sets headings in ${site.fonts.heading ?? site.fonts.body} and text in ${site.fonts.body ?? site.fonts.heading}; choose the closest fonts from the list.`,
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
 /** Three looks from a website or a few words; each a valid, solved design. */
 export async function designDirections(input: {
   design: PortalDesign
@@ -308,10 +388,7 @@ export async function designDirections(input: {
   }
   await enforceAiTokenBudget()
   const brief = [
-    input.site &&
-      `Website ${input.site.domain}${input.site.title ? `, titled "${input.site.title}"` : ''}${
-        input.site.description ? `: ${input.site.description}` : ''
-      }${input.site.colour ? `. Its brand colour is ${input.site.colour}.` : '.'}`,
+    input.site && siteBrief(input.site),
     input.words && `In their words: ${input.words}`,
     input.palette?.length &&
       `Colours from their logo or a screenshot, ${paletteText(input.palette)} Build the looks from these.`,

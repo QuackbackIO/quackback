@@ -56,3 +56,20 @@ export function starterHomeBlocks(gates: PortalPageGates): HomeBlock[] {
   ]
   return wanted.filter(([, , on]) => on).map(([type, width]) => newBlock(type, width))
 }
+
+/** The block types a workspace's Home can show, from the pages it has. Links and welcome need none. */
+export function homeBlockTypes(gates: PortalPageGates): HomeBlockType[] {
+  const needs: Record<HomeBlockType, boolean> = {
+    welcome: true,
+    links: true,
+    composer: gates.feedback,
+    ideas: gates.feedback,
+    roadmap: gates.roadmap,
+    updates: gates.changelog,
+    help_search: gates.help,
+    help_topics: gates.help,
+    status: gates.status,
+    contact: gates.support,
+  }
+  return (Object.keys(needs) as HomeBlockType[]).filter((type) => needs[type])
+}
