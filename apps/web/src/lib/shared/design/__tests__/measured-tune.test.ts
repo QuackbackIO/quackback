@@ -19,8 +19,8 @@ describe('exact values from a brand’s measurements', () => {
     })
     expect(tune).toEqual({
       headline: { size: 48, weight: 300, tracking: -0.02, leading: 1.15 },
-      // A 32px section heading titles a card at 21px, its tracking and leading eased.
-      heading: { size: 21, weight: 300, tracking: 0, leading: 1.15 },
+      // A 32px light section heading titles a card at 21px, eased to read at that size.
+      heading: { size: 21, weight: 400, tracking: 0, leading: 1.15 },
       label: { size: 14, weight: 400 },
       button: { radius: 4, height: 40 },
       card: { radius: 6, border: 0, shadow: 'none' },
@@ -36,7 +36,7 @@ describe('exact values from a brand’s measurements', () => {
       button: { height: 90, radius: 60 },
       card: { radius: 80, borderWidth: 9 },
     })
-    expect(tune.headline).toEqual({ size: 120, weight: 900, leading: 1.8 })
+    expect(tune.headline).toEqual({ size: 88, weight: 900, leading: 1.8 })
     // A marketing section's hero-sized heading titles a card here.
     expect(tune.heading).toEqual({ size: 24 })
     expect(tune.button).toEqual({ radius: 60, height: 60 })

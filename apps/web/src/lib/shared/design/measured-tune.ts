@@ -65,7 +65,9 @@ const corners = (radius: number | null | undefined, max: number) =>
 /** The exact values a brand's measurements give. */
 export function tuneFromMeasurements(m: BrandMeasurements): Tune {
   const tune: Tune = {}
-  const headline = type(m.headline, [24, 120])
+  // A portal's headline leads a page of content, not a marketing screen: a
+  // poster-sized one is held where it still leaves the page room.
+  const headline = type(m.headline, [24, 88])
   if (headline) tune.headline = headline
   // A site's section headings introduce a screen; in a portal they title a
   // card over 14-16px content. They keep the brand's face, weight and colour,
@@ -75,6 +77,8 @@ export function tuneFromMeasurements(m: BrandMeasurements): Tune {
   if (heading?.size) heading.size = Math.round(within(18 + (heading.size - 18) * 0.2, 18, 24))
   if (heading?.tracking !== undefined) heading.tracking = Math.max(heading.tracking, -0.01)
   if (heading?.leading) heading.leading = within(heading.leading, 1.15, 1.6)
+  // A light weight that carries a 32px heading is too faint at a card title's size.
+  if (heading?.weight) heading.weight = Math.max(heading.weight, 400)
   if (heading) tune.heading = heading
   const label = type(m.label, [12, 18])
   if (label) {
