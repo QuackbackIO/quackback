@@ -797,7 +797,7 @@ test.describe('Public Post List', () => {
 
       // The page should show either posts or an empty state message (not an error page)
       const postCards = page.locator('[data-post-id]')
-      const noPostsMessage = page.getByText(/No posts match/)
+      const noPostsMessage = page.getByText(/No ideas match/)
       const errorPage = page.getByText('Something went wrong')
 
       // Give time for the filter to apply
@@ -945,7 +945,7 @@ test.describe('Post List - Filter Result Verification', () => {
       }
     } else {
       // Acceptable: zero posts with badges means the empty state or posts without statuses
-      const emptyMsg = page.getByText('No posts match your filters.')
+      const emptyMsg = page.getByText('No ideas match your filters.')
       const postLinks = page.locator('[data-post-id]')
       const hasEmpty = (await emptyMsg.count()) > 0
       const hasPosts = (await postLinks.count()) > 0
@@ -1069,7 +1069,7 @@ test.describe('Post List - Filter Result Verification', () => {
     expect(combinedCount).toBeLessThanOrEqual(statusOnlyCount)
   })
 
-  test('empty state shows "No posts match your filters." when no posts match', async ({ page }) => {
+  test('empty state shows "No ideas match your filters." when no posts match', async ({ page }) => {
     // Apply filters via UI (avoids URL encoding issues with TanStack Router's JSON array params)
     await page.goto('/')
     await page.waitForLoadState('networkidle')
@@ -1096,7 +1096,7 @@ test.describe('Post List - Filter Result Verification', () => {
     await page.waitForTimeout(500)
 
     const postLinks = page.locator('[data-post-id]')
-    const emptyMsg = page.getByText('No posts match your filters.')
+    const emptyMsg = page.getByText('No ideas match your filters.')
 
     const hasPosts = (await postLinks.count()) > 0
     const hasSpecificEmptyMsg = (await emptyMsg.count()) > 0
@@ -1257,7 +1257,7 @@ test.describe('Post List - Search Accuracy', () => {
       .toBe(true)
 
     const filteredCount = await postCards.count()
-    const emptyState = page.getByText('No posts match your filters.')
+    const emptyState = page.getByText('No ideas match your filters.')
     const hasEmpty = (await emptyState.count()) > 0
 
     test.skip(
