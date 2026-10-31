@@ -93,6 +93,8 @@ const FILTER_EVENT_TYPES: FilterEventOption[] = [
   { group: 'API and MCP', label: 'MCP tool call', value: 'mcp.tool_call' },
   { group: 'Settings', label: 'Branding changed', value: 'branding.theme.changed' },
   { group: 'Settings', label: 'Custom CSS changed', value: 'branding.css.changed' },
+  { group: 'Settings', label: 'Design published', value: 'design.published' },
+  { group: 'Settings', label: 'Design restored', value: 'design.restored' },
   { group: 'Settings', label: 'Settings applied', value: 'settings.applied' },
   { group: 'Settings', label: 'Settings undone', value: 'settings.undone' },
   { group: 'Portal', label: 'Widget sign-in changed', value: 'portal.widget_signin.changed' },

@@ -23,6 +23,7 @@ import {
 const doc = vi.hoisted(() => ({
   themeRenders: 0,
   defaultTheme: '' as string | undefined,
+  storageKey: '' as string | undefined,
   bootstrap: null as null | Record<string, unknown>,
 }))
 
@@ -30,9 +31,18 @@ vi.mock('@/lib/server/functions/bootstrap', () => ({
   getBootstrapData: async () => doc.bootstrap,
 }))
 vi.mock('@/components/theme-provider', () => ({
-  ThemeProvider: ({ children, defaultTheme }: { children: ReactNode; defaultTheme?: string }) => {
+  ThemeProvider: ({
+    children,
+    defaultTheme,
+    storageKey,
+  }: {
+    children: ReactNode
+    defaultTheme?: string
+    storageKey?: string
+  }) => {
     doc.themeRenders++
     doc.defaultTheme = defaultTheme
+    doc.storageKey = storageKey
     return <>{children}</>
   },
 }))
@@ -57,7 +67,11 @@ afterEach(() => {
   expireRouteContext()
 })
 
-function bootstrap(themeCookie: 'light' | 'dark', settings: Record<string, unknown> = {}) {
+function bootstrap(
+  themeCookie: 'light' | 'dark',
+  settings: Record<string, unknown> = {},
+  portalThemeCookie: 'light' | 'dark' | 'system' = themeCookie
+) {
   doc.bootstrap = {
     baseUrl: 'http://localhost',
     session: null,
@@ -65,6 +79,7 @@ function bootstrap(themeCookie: 'light' | 'dark', settings: Record<string, unkno
     onboarding: { complete: true, needsSetupWizard: false },
     userRole: 'admin',
     themeCookie,
+    portalThemeCookie,
     prefersColorScheme: null,
     managedFieldPaths: [],
     registeredAuthProviders: [],
@@ -75,7 +90,7 @@ function bootstrap(themeCookie: 'light' | 'dark', settings: Record<string, unkno
   }
 }
 
-function buildRouter() {
+function buildRouter(initialPath: string) {
   const inbox = createRoute({
     getParentRoute: () => RootRoute,
     path: '/admin/inbox',
@@ -87,19 +102,24 @@ function buildRouter() {
     path: '/admin/roadmap',
     component: () => <p>roadmap page</p>,
   })
+  const portal = createRoute({
+    getParentRoute: () => RootRoute,
+    path: '/feedback',
+    component: () => <p>portal page</p>,
+  })
   return createRouter({
-    routeTree: RootRoute.addChildren([inbox, roadmap]),
-    history: createMemoryHistory({ initialEntries: ['/admin/inbox'] }),
+    routeTree: RootRoute.addChildren([inbox, roadmap, portal]),
+    history: createMemoryHistory({ initialEntries: [initialPath] }),
     context: { queryClient: {} as never },
   })
 }
 
-async function mount() {
+async function mount(initialPath = '/admin/inbox') {
   doc.themeRenders = 0
-  const router = buildRouter()
+  const router = buildRouter(initialPath)
   // The document renders <html> itself, so it mounts on the document.
   render(<RouterProvider router={router} />, { container: document as never })
-  await screen.findByText('inbox page')
+  await screen.findByText(initialPath === '/feedback' ? 'portal page' : 'inbox page')
   return router
 }
 
@@ -140,6 +160,53 @@ describe('root document renders', () => {
     bootstrap('dark', settings)
     await mount()
     expect(document.documentElement.hasAttribute('data-visual-theme')).toBe(false)
+  })
+})
+
+describe('the portal’s own theme', () => {
+  const design = (mode: 'auto' | 'light' | 'dark') => ({
+    portalDesign: {
+      engine: 'v2',
+      mode,
+      revision: 1,
+      themeStyles: '',
+      customCss: '',
+      fontSans: '',
+    },
+  })
+
+  it('keeps the portal visitor’s light or dark choice apart from the admin’s', async () => {
+    bootstrap('dark', {}, 'light')
+    const router = await mount('/feedback')
+    expect(doc.defaultTheme).toBe('light')
+    expect(doc.storageKey).toBe('portal-theme')
+
+    await act(() => router.navigate({ to: '/admin/inbox' } as never))
+    await screen.findByText('inbox page')
+    expect(doc.defaultTheme).toBe('dark')
+    expect(doc.storageKey).toBe('theme')
+  })
+
+  it('scopes a design to portal pages only', async () => {
+    bootstrap('light', design('auto'))
+    const router = await mount('/feedback')
+    expect(document.documentElement.hasAttribute('data-portal-theme')).toBe(true)
+
+    await act(() => router.navigate({ to: '/admin/inbox' } as never))
+    await screen.findByText('inbox page')
+    expect(document.documentElement.hasAttribute('data-portal-theme')).toBe(false)
+  })
+
+  it('leaves the attribute off while the portal uses today’s theme', async () => {
+    bootstrap('light')
+    await mount('/feedback')
+    expect(document.documentElement.hasAttribute('data-portal-theme')).toBe(false)
+  })
+
+  it('forces the mode a design sets', async () => {
+    bootstrap('light', design('dark'), 'light')
+    await mount('/feedback')
+    expect(doc.defaultTheme).toBe('dark')
   })
 })
 

@@ -48,6 +48,8 @@ export type { JsonValue }
  */
 export type AuditEventType =
   | 'branding.theme.changed'
+  | 'design.published'
+  | 'design.restored'
   | 'branding.css.changed'
   | 'branding.website.applied'
   | 'branding.website.undone'

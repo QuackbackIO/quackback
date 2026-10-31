@@ -16,7 +16,12 @@ import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/boo
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { ThemeProvider } from '@/components/theme-provider'
-import { resolveDocumentTheme, SYSTEM_THEME_SCRIPT } from '@/lib/shared/theme'
+import {
+  PORTAL_THEME_COOKIE_NAME,
+  resolveDocumentTheme,
+  SYSTEM_THEME_SCRIPT,
+  THEME_COOKIE_NAME,
+} from '@/lib/shared/theme'
 import { MinimalDocument } from '@/components/shared/minimal-document'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { DocumentHead, DocumentScripts } from '@/components/shared/document-head'
@@ -29,6 +34,7 @@ import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/sha
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { rssAlternateLink } from '@/lib/shared/rss-alternate'
 import { isStatusFeedReadable } from '@/lib/shared/status-settings'
+import { portalThemeMode } from '@/lib/shared/design/view'
 
 // The toast renderer is its own chunk: the root module ships with every
 // document (the embedded widget included), and a toast fired before it mounts
@@ -42,6 +48,7 @@ export interface RouterContext {
   settings?: WorkspaceSettings | null
   userRole?: Role | null
   themeCookie?: BootstrapData['themeCookie']
+  portalThemeCookie?: BootstrapData['portalThemeCookie']
   prefersColorScheme?: BootstrapData['prefersColorScheme']
   managedFieldPaths?: string[]
   registeredAuthProviders?: string[]
@@ -155,10 +162,15 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
 function RootComponent() {
   return (
-    <RootDocument>
-      <OttHandler />
-      <VisitorBeacon />
-      <ProductAnalytics />
+    <RootDocument
+      effects={
+        <>
+          <OttHandler />
+          <VisitorBeacon />
+          <ProductAnalytics />
+        </>
+      }
+    >
       <Outlet />
     </RootDocument>
   )
@@ -206,11 +218,21 @@ function useSeedRootContext() {
   }, [router])
 }
 
-function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
+function RootDocument({
+  children,
+  effects,
+}: Readonly<{
+  children: ReactNode
+  /** Rendered outside the theme provider, so they mount once per document. */
+  effects?: ReactNode
+}>) {
   // Every read below is selected: the context and the location are new after
   // every navigation, and the document changes only when what it shows does.
   const settings = useWorkspaceSettings()
   const themeCookie = Route.useRouteContext({ select: (context) => context.themeCookie })
+  const portalThemeCookie = Route.useRouteContext({
+    select: (context) => context.portalThemeCookie,
+  })
   const prefersColorScheme = Route.useRouteContext({
     select: (context) => context.prefersColorScheme,
   })
@@ -239,7 +261,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     select: (s) => (s.location.search as { theme?: string }).theme,
   })
 
-  const themeMode = settings?.brandingConfig?.themeMode ?? 'user'
+  const themeMode = portalThemeMode(settings)
   const searchForcedTheme =
     (isWidgetRoute || isPortalRoute) && (themeParam === 'light' || themeParam === 'dark')
       ? themeParam
@@ -249,7 +271,11 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
 
   // next-themes' inline script sets the class on <html> before first paint.
   // We pass the resolved default so the script knows what to apply.
-  const defaultTheme = forcedTheme ?? themeCookie ?? 'system'
+  // The portal and the admin each keep their own choice. Crossing between them
+  // remounts the provider, which reads its storage key only when it mounts.
+  const themeStorageKey = isPortalRoute ? PORTAL_THEME_COOKIE_NAME : THEME_COOKIE_NAME
+  const defaultTheme =
+    forcedTheme ?? (isPortalRoute ? (portalThemeCookie ?? themeCookie) : themeCookie) ?? 'system'
 
   // ...but that script sits in <body>, after content that may paint first, so
   // when the theme is known we also commit the class and color-scheme on the
@@ -284,12 +310,17 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // (a first visit, Firefox/Safari) the server can't know the OS preference,
   // so the SSR markup and the hydrated DOM differ by design. This silences
   // that one expected mismatch (one element, one level).
+  // A portal page rendered by the design engine scopes its theme to this
+  // attribute, so dialogs portaled to <body> carry it and the admin never does.
+  const portalThemeScope = isPortalRoute && settings?.portalDesign?.engine === 'v2' ? '' : undefined
+
   return (
     <html
       lang={lang}
       dir={dir}
       className={themeClass}
       style={{ colorScheme }}
+      data-portal-theme={portalThemeScope}
       suppressHydrationWarning
     >
       <head>
@@ -297,7 +328,10 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <DocumentHead />
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
+        {effects}
         <ThemeProvider
+          key={themeStorageKey}
+          storageKey={themeStorageKey}
           attribute="class"
           defaultTheme={defaultTheme}
           enableSystem={!forcedTheme}
