@@ -151,4 +151,17 @@ describe('pageLinks', () => {
     })
     expect(brand.title).toBe('Tools &lt;b&gt; & more \u2014 \u2014')
   })
+
+  it('counts a page’s own styles over the ones its bundle carries for other screens', () => {
+    const read = readSiteBrand({
+      html: '<a class="btn-go">Send</a>',
+      css: [
+        // Three rules for buttons the page does not have, one for the button it does.
+        `.btn-legacy-a { background: #37517e } .btn-legacy-b { background: #37517e } .btn-legacy-c { background: #37517e }
+         .btn-go { background: #163300 }`,
+      ],
+      manifest: null,
+    })
+    expect(read.palette[0]).toBe('#163300')
+  })
 })

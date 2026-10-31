@@ -49,7 +49,8 @@ export type SiteRead =
 
 const AGENT = 'Mozilla/5.0 (compatible; QuackbackBrandReader/1.0; +https://quackback.io)'
 const PAGE_BYTES = 3 * 1024 * 1024
-const CSS_BYTES = 1024 * 1024
+// A site that bundles its styles into one sheet can ship it at a few megabytes.
+const CSS_BYTES = 4 * 1024 * 1024
 const MAX_STYLESHEETS = 4
 const MANIFEST_PATHS = ['/manifest.json', '/site.webmanifest', '/manifest.webmanifest']
 
