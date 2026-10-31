@@ -15,6 +15,8 @@ const model = vi.hoisted(() => ({
   error: null as unknown,
   calls: [] as Array<{ systemPrompts: string[]; messages: Array<{ content: unknown }> }>,
   refusesImages: false,
+  /** Answers that do not fit the schema before one that does. */
+  misfits: 0,
   /** A complete look; a test's look names only what it is about. */
   fullLook: {} as Record<string, unknown>,
 }))
@@ -34,6 +36,10 @@ vi.mock('@/lib/server/domains/ai/structured-chat', () => ({
   }) => {
     model.calls.push(input)
     if (model.error) throw model.error
+    if (model.misfits > 0) {
+      model.misfits--
+      throw Object.assign(new Error('did not fit'), { code: 'structured-output-validation-failed' })
+    }
     if (model.refusesImages && Array.isArray(input.messages[0]?.content))
       throw new Error('this model does not take images')
     const answer = model.answer as { looks?: Array<Record<string, unknown>> } | null
@@ -67,6 +73,7 @@ const ALLOWS: {
 } = { blockTypes: EVERY_BLOCK, writesCss: false, checkCss: () => 'Quackback AI does not write CSS' }
 
 beforeEach(() => {
+  model.misfits = 0
   model.refusesImages = false
   model.configured = true
   model.answer = null
@@ -498,5 +505,24 @@ describe('a logo or a screenshot', () => {
     expect(result.ok).toBe(true)
     expect(model.calls).toHaveLength(2)
     expect(model.calls[1]!.messages[0]!.content).toContain('#1f4d3a')
+  })
+
+  it('asks again once when the looks do not fit the schema', async () => {
+    model.answer = { looks: [look] }
+    model.misfits = 1
+    const result = await designDirections({
+      allows: ALLOWS,
+      design: defaultDesign(),
+      site: null,
+      words: 'calm',
+    })
+    expect(result.ok).toBe(true)
+    expect(model.calls).toHaveLength(2)
+    model.misfits = 2
+    model.calls = []
+    expect(
+      await designDirections({ allows: ALLOWS, design: defaultDesign(), site: null, words: 'calm' })
+    ).toMatchObject({ ok: false, code: 'AI_FAILED' })
+    expect(model.calls).toHaveLength(2)
   })
 })

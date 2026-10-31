@@ -288,11 +288,18 @@ export async function designDirections(input: {
       maxTokens: 4000,
     })
   try {
-    // A model that does not read images still has the colours.
-    const answer = await ask(true).catch((err: unknown) => {
-      if (!input.image || isStructuredOutputError(err)) throw err
-      log.warn({ err }, 'design ai could not read the image; using its colours alone')
-      return ask(false)
+    // A model that does not read images still has the colours, and a long
+    // answer that does not fit the schema is asked for once more.
+    const once = () =>
+      ask(true).catch((err: unknown) => {
+        if (!input.image || isStructuredOutputError(err)) throw err
+        log.warn({ err }, 'design ai could not read the image; using its colours alone')
+        return ask(false)
+      })
+    const answer = await once().catch((err: unknown) => {
+      if (!isStructuredOutputError(err)) throw err
+      log.warn({ err }, 'design ai looks did not fit the schema; asking again')
+      return once()
     })
     return {
       ok: true,
