@@ -96,7 +96,12 @@ export function ChangelogEntryCard({
           params={{ entryId: id }}
           className="group inline-flex items-center gap-2"
         >
-          <h2 className="text-2xl font-bold group-hover:text-primary transition-colors">{title}</h2>
+          <h2
+            data-qb-part="section-heading"
+            className="text-2xl font-bold group-hover:text-primary transition-colors"
+          >
+            {title}
+          </h2>
           <LinkIcon className="h-4 w-4 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
         </Link>
 

@@ -7,6 +7,7 @@
  * full list of ways a converted portal can look different.
  */
 import { expandTheme } from '@/lib/shared/theme/expand'
+import { tuneCss } from './tune'
 import { variableMap } from '@/lib/shared/theme/generator'
 import type { ThemeVariables } from '@/lib/shared/theme/types'
 import { contrastRatio, solveContrast } from './contrast'
@@ -35,6 +36,8 @@ export interface ResolvedDesign {
   errors: string[]
   /** Component tokens: sizes for both modes, and each mode's colours. */
   tokens: { base: TokenMap; light: TokenMap; dark: TokenMap }
+  /** The rules the design's exact values need, after the rest. */
+  tuneCss: string
 }
 
 const CORNER_RADIUS: Record<PortalDesign['shape']['corners'], string> = {
@@ -146,6 +149,7 @@ export function resolveDesign(doc: PortalDesign): ResolvedDesign {
       light: light ? modeTokens(doc, light, 'light') : {},
       dark: dark ? modeTokens(doc, dark, 'dark') : {},
     },
+    tuneCss: tuneCss(doc.tune),
   }
 }
 
@@ -232,7 +236,7 @@ export function renderDesignCss(resolved: ResolvedDesign): string {
     '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
   )
   parts.push(
-    '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } [data-portal-theme] [data-qb-part=headline] { font-family: var(--qb-font-display); letter-spacing: var(--qb-headline-tracking); text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
+    '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } [data-portal-theme] [data-qb-part=headline] { font-family: var(--qb-font-display); font-weight: var(--qb-headline-weight); letter-spacing: var(--qb-headline-tracking); text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
   )
   // Every card in the portal takes the design's card style: raised cards float
   // without an edge, list cards are rows divided by rules, filled cards are
@@ -252,5 +256,6 @@ export function renderDesignCss(resolved: ResolvedDesign): string {
   parts.push(
     '@layer design { [data-qb-status=ink][data-portal-theme] [data-qb-status-dot] { background: var(--qb-ink); } [data-qb-status=pill][data-portal-theme] [data-qb-part=status-badge] { padding: 0.125rem 0.5rem; border-radius: var(--qb-radius-control); background: color-mix(in oklch, var(--qb-status, var(--qb-muted)) 18%, var(--qb-surface)); } [data-qb-status=pill][data-portal-theme] [data-qb-part=status-badge] > [data-qb-status-dot] { display: none; } }'
   )
+  if (resolved.tuneCss) parts.push(resolved.tuneCss)
   return parts.join(' ')
 }

@@ -3,6 +3,7 @@
  * AI, REST and MCP read and write. Every choice comes from DESIGN_OPTIONS.
  */
 import { z } from 'zod'
+import { tuneSchema } from './tune'
 import { roadmapIdSchema, typeIdSchema } from '@quackback/ids/zod'
 import { tiptapContentSchema } from '@/lib/shared/schemas/posts'
 import { isSafeThemeValue } from '@/lib/shared/theme/safe-theme-value'
@@ -308,6 +309,8 @@ export const portalDesignV2 = z
     vocabulary: z
       .object({ post: z.enum(DESIGN_OPTIONS.postWord), board: z.enum(DESIGN_OPTIONS.boardWord) })
       .strict(),
+    /** Exact values under the choices above; each one left out keeps the choice's. */
+    tune: tuneSchema.optional(),
     /** The workspace's own CSS, in the tenant layer. */
     css: z.string().max(50_000).optional(),
   })

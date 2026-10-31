@@ -8,6 +8,7 @@
  * workspace keeps its look.
  */
 import type { ThemeVariables } from '@/lib/shared/theme/types'
+import { tuneTokens } from './tune'
 import { bandArtImage, EDGE_ART, type BandArt } from './band-art'
 import { mixColor, tintOf } from './color'
 import { contrastRatio, solveContrast } from './contrast'
@@ -438,6 +439,8 @@ export function baseTokens(doc: PortalDesign): TokenMap {
   const [button, composer] = buttons === 'match' ? [control, field] : BUTTON_RADII[buttons]
   const [padding, gap, title] = DENSITY[doc.layout.density]
   return {
+    // Headlines take the heading weight unless the design tunes their own.
+    '--qb-headline-weight': String(doc.brand.fonts.headingWeight),
     '--qb-radius-control': control,
     '--qb-radius-field': field,
     '--qb-radius-panel': panel,
@@ -460,6 +463,7 @@ export function baseTokens(doc: PortalDesign): TokenMap {
     '--qb-font-display': fontStack(doc.brand.fonts.display ?? doc.brand.fonts.heading),
     '--qb-heading-weight': String(doc.brand.fonts.headingWeight),
     ...typeTokens(doc.brand.fonts),
+    ...tuneTokens(doc.tune),
   }
 }
 

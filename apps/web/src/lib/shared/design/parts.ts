@@ -73,6 +73,19 @@ export const PORTAL_PARTS = [
     files: ['components/public/portal-band.tsx'],
   },
   {
+    name: 'section-heading',
+    description:
+      "A section's heading: a Home block's title, the help centre's sections, a changelog entry's title.",
+    states: [],
+    tokens: ['--qb-font-heading', '--qb-heading-weight'],
+    files: [
+      'components/public/home/home-blocks.tsx',
+      'components/help-center/help-center-popular-articles.tsx',
+      'components/portal/changelog/changelog-entry-card.tsx',
+      'routes/_portal/hc/index.tsx',
+    ],
+  },
+  {
     name: 'home-block',
     description: 'A block on Home. `data-qb-block` names its type, such as status.',
     states: [],

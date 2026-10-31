@@ -22,7 +22,11 @@ export function HelpCenterPopularArticles({ articles }: HelpCenterPopularArticle
 
   return (
     <section aria-labelledby="hc-popular" className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
-      <h2 id="hc-popular" className="mb-5 text-2xl font-semibold tracking-tight text-foreground">
+      <h2
+        id="hc-popular"
+        data-qb-part="section-heading"
+        className="mb-5 text-2xl font-semibold tracking-tight text-foreground"
+      >
         <FormattedMessage id="portal.hc.popularArticles.title" defaultMessage="Popular articles" />
       </h2>
       <div

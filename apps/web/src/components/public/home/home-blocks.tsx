@@ -137,7 +137,11 @@ function BlockCard({
         span
       )}
     >
-      {title && <h2 className="text-lg font-semibold text-foreground">{title}</h2>}
+      {title && (
+        <h2 data-qb-part="section-heading" className="text-lg font-semibold text-foreground">
+          {title}
+        </h2>
+      )}
       {children}
       {action && (
         <Link
