@@ -6,7 +6,8 @@
       "accent": "#a21caf",
       "background": "#fcfaff",
       "ink": "#1e1530",
-      "surface": "#ffffff"
+      "surface": "#ffffff",
+      "support": "#ec4899"
     },
     "fonts": {
       "heading": {
@@ -50,7 +51,7 @@
   "layout": {
     "header": "inline",
     "nav": "pills",
-    "band": "fade",
+    "band": "blend",
     "cards": "list",
     "density": "spacious",
     "width": "default",

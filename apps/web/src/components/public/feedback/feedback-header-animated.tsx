@@ -639,7 +639,7 @@ function TitleInput({
         if (!expanded) onExpand()
       }}
       onFocus={() => !expanded && onExpand()}
-      className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary"
+      className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground placeholder:font-normal caret-primary"
       initial={false}
       animate={{
         fontSize: expanded ? '1.25rem' : '1rem',

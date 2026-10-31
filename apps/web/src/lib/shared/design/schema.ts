@@ -50,6 +50,8 @@ const palette = z
     /** Secondary text. Derived to 4.5:1 when missing. */
     muted: color.optional(),
     border: color.optional(),
+    /** A second brand colour, for bands and highlights. Dark keeps light's when missing. */
+    support: color.optional(),
   })
   .strict()
 
@@ -218,6 +220,8 @@ export const portalDesignV2 = z
         header: z.enum(DESIGN_OPTIONS.header),
         nav: z.enum(DESIGN_OPTIONS.nav),
         band: z.enum(DESIGN_OPTIONS.band),
+        /** How a blend band runs; absent is linear. */
+        blend: z.enum(DESIGN_OPTIONS.blend).optional(),
         cards: z.enum(DESIGN_OPTIONS.cards),
         density: z.enum(DESIGN_OPTIONS.density),
         width: z.enum(DESIGN_OPTIONS.width),

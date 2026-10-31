@@ -21,7 +21,10 @@ export const DESIGN_OPTIONS = {
   headlineAccent: ['colour', 'highlight'],
   header: ['stacked', 'inline', 'centered'],
   nav: ['tabs', 'underline', 'pills'],
-  band: ['none', 'tint', 'fade', 'brand'],
+  /** `support` fills with the second brand colour; `blend` runs the two together. */
+  band: ['none', 'tint', 'fade', 'brand', 'support', 'blend'],
+  /** How a blend band runs: in a line, or as a soft mesh beside the words. */
+  blend: ['linear', 'mesh'],
   cards: ['bordered', 'raised', 'list'],
   density: ['compact', 'comfortable', 'spacious'],
   width: ['narrow', 'default', 'wide'],

@@ -6,7 +6,8 @@
       "accent": "#f5b301",
       "background": "#fffaf0",
       "ink": "#1c1408",
-      "surface": "#ffffff"
+      "surface": "#ffffff",
+      "support": "#2b2a28"
     },
     "fonts": {
       "heading": {
@@ -60,7 +61,7 @@
   "layout": {
     "header": "centered",
     "nav": "tabs",
-    "band": "brand",
+    "band": "support",
     "cards": "bordered",
     "density": "compact",
     "width": "default",

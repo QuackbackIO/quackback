@@ -134,6 +134,72 @@ describe('shape and layout choices', () => {
   })
 })
 
+describe('a second brand colour', () => {
+  const withSupport = (band: PortalDesign['layout']['band'], change?: (d: PortalDesign) => void) =>
+    resolveDesign(
+      design((d) => {
+        d.brand.light.accent = '#4a1942'
+        d.brand.light.support = '#e58fae'
+        d.layout.band = band
+        change?.(d)
+      })
+    )
+
+  it('fills a support band with it, with text readable on it', () => {
+    const { light } = withSupport('support').tokens
+    expect(light['--qb-band-bg']).toBe('#e58fae')
+    expect(contrastRatio(light['--qb-band-ink']!, '#e58fae')).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(light['--qb-band-muted']!, '#e58fae')).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('fills a support band with the accent when there is no second colour', () => {
+    const { light } = resolveDesign(design((d) => (d.layout.band = 'support'))).tokens
+    expect(light['--qb-band-bg']).toBe(resolveDesign(design()).light!.primary)
+  })
+
+  it('blends the two in a line, with text readable where it sits', () => {
+    const { light } = withSupport('blend').tokens
+    expect(light['--qb-band-bg']).toBe('linear-gradient(110deg, #4a1942 0%, #e58fae 100%)')
+    const ink = light['--qb-band-ink']!
+    expect(contrastRatio(ink, '#4a1942')).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(ink, mixColor('#4a1942', '#e58fae', 0.5))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('refuses a blend that no text reads across', () => {
+    const doc = design((d) => {
+      d.brand.light.accent = '#22c55e'
+      d.brand.light.support = '#1e1b4b'
+      d.layout.band = 'blend'
+    })
+    expect(resolveDesign(doc).errors).toEqual([
+      'light: no text reaches 4.5:1 across the band',
+      'dark: no text reaches 4.5:1 across the band',
+    ])
+  })
+
+  it('blends the two as a mesh beside the words, plain under them and on phones', () => {
+    const { light } = withSupport('blend', (d) => (d.layout.blend = 'mesh')).tokens
+    const background = resolveDesign(design()).light!.background
+    expect(light['--qb-band-bg']).toContain('radial-gradient(circle at 72% 22%, #4a1942')
+    expect(light['--qb-band-bg']).toContain('#e58fae')
+    expect(light['--qb-band-bg']).toMatch(/^linear-gradient\(90deg, \S+ 34%/)
+    expect(light['--qb-band-bg-narrow']).toBe(background)
+    expect(light['--qb-band-ink']).toBe(resolveDesign(design()).light!.foreground)
+  })
+
+  it('highlights in it', () => {
+    const { light } = withSupport('none').tokens
+    expect(light['--qb-band-highlight']).toBe(
+      mixColor('#e58fae', resolveDesign(design()).light!.background!, 0.35)
+    )
+  })
+
+  it('carries it into dark mode when dark does not set its own', () => {
+    const { dark } = withSupport('support', (d) => (d.mode = 'auto')).tokens
+    expect(dark['--qb-band-bg']).toBe('#e58fae')
+  })
+})
+
 describe('the top band', () => {
   it('is plain for none and readable on the accent for brand', () => {
     expect(resolveDesign(design()).tokens.light['--qb-band-bg']).toBe('transparent')

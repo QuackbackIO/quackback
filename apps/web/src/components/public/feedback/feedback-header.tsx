@@ -56,7 +56,7 @@ export function FeedbackHeaderFallback({ title, onTitleChange, onFocus }: Fallba
             defaultMessage:
               '{postWord, select, post {Post title} feature_request {Feature request title} suggestion {Suggestion title} other {Idea title}}',
           })}
-          className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal"
+          className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground placeholder:font-normal"
         />
       </div>
     </div>

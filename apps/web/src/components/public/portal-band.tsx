@@ -67,7 +67,7 @@ export function PortalBand({ page = 'feedback' }: { page?: 'feedback' | 'home' }
     <section
       data-qb-section="band"
       data-qb-part="band"
-      className="portal-band [background:var(--qb-band-bg)] py-10 [[data-qb-band=none]_&]:py-0"
+      className="portal-band [background:var(--qb-band-bg-narrow,var(--qb-band-bg))] sm:[background:var(--qb-band-bg)] py-10 [[data-qb-band=none]_&]:py-0"
     >
       {(title || subtitle) && (
         // Under a centred header the headline centres too.
