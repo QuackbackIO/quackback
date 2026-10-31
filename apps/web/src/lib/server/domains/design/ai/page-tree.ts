@@ -13,6 +13,8 @@ export interface PageNode extends Element {
   at: number
   /** A link's or button's words. */
   text?: string
+  /** It holds words of its own straight after it opens, not only inside its children. */
+  worded?: boolean
 }
 
 const VOID = new Set([
@@ -73,7 +75,9 @@ export function pageTree(html: string): PageNode[] {
       at: at / Math.max(1, body.length),
     })
     const index = nodes.length - 1
-    if (WORDED.has(tag)) starts.set(index, at + m[0].length)
+    const after = at + m[0].length
+    if (/^[^<]*[\p{L}\p{N}]/u.test(body.slice(after, after + 200))) nodes[index]!.worded = true
+    if (WORDED.has(tag)) starts.set(index, after)
     if (!VOID.has(tag) && !attrs.trimEnd().endsWith('/')) open.push(index)
   }
   return nodes

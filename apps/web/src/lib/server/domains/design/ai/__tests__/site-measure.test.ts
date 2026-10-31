@@ -179,4 +179,25 @@ describe('measuring a brand from its page', () => {
     ]
     expect(measureSite(page, css).headline?.colour).toBe('#061b31')
   })
+
+  it('takes the hero a page shows when its h1 is for screen readers only', () => {
+    const page = `<main><div class="sr-only"><h1 class="t">Commerce</h1></div>
+      <section class="mx-auto"><div><span class="t-1 font-light">Be the next big thing</span></div></section>
+      ${'<p>Copy</p>'.repeat(40)}</main>`
+    const css = [`.t { font-size: 16px } .t-1 { font-size: 96px } .font-light { font-weight: 300 }`]
+    expect(measureSite(page, css).headline).toMatchObject({ size: 96, weight: 300 })
+  })
+
+  it('keeps an h1 near the size of the largest display text', () => {
+    const page = `<h1 class="a">Payments</h1><p class="hero-kicker">Big</p>`
+    const css = [`.a { font-size: 56px } .hero-kicker { font-size: 64px }`]
+    expect(measureSite(page, css).headline?.size).toBe(56)
+  })
+
+  it('passes over a small h1 used as a label for the hero beside it', () => {
+    const page = `<h1 class="label">Payments</h1><p class="display">Financial infrastructure</p>
+      ${'<p>Copy</p>'.repeat(40)}`
+    const css = [`.label { font-size: 16px } .display { font-size: 96px }`]
+    expect(measureSite(page, css).headline?.size).toBe(96)
+  })
 })

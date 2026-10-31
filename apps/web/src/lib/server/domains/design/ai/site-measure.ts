@@ -277,12 +277,23 @@ export function measureSite(
   const visible = nodes.map((_, i) => i).filter((i) => !hidden(i))
   const first = (pick: (el: PageNode, i: number) => boolean) =>
     visible.find((i) => pick(nodes[i]!, i))
-  // Of the page's headlines, the largest: a site may mark a small label up as an h1 too.
-  const h1 = visible
-    .filter((i) => nodes[i]!.tag === 'h1')
-    .slice(0, 12)
-    .map((i) => typeAt(i))
-    .sort((a, b) => (b?.size ?? 0) - (a?.size ?? 0))[0]
+  // The headline is the largest h1 in sight, unless display text near the top
+  // is much larger: a site may mark a small label up as an h1, or keep its h1
+  // for screen readers and show the hero in another element.
+  const largest = (picks: number[]) =>
+    picks
+      .map((i) => typeAt(i))
+      .filter((t) => !!t?.size)
+      .sort((a, b) => (b?.size ?? 0) - (a?.size ?? 0))[0]
+  const h1 = largest(visible.filter((i) => nodes[i]!.tag === 'h1').slice(0, 12))
+  const display = largest(
+    visible
+      .filter(
+        (i) => nodes[i]!.at < 0.3 && !!nodes[i]!.worded && !/^(a|button|label)$/.test(nodes[i]!.tag)
+      )
+      .slice(0, 300)
+  )
+  const headline = h1 && (!display || (h1.size ?? 0) >= (display.size ?? 0) * 0.7) ? h1 : display
   const h2 = first((el, i) => el.tag === 'h2' && !!typeAt(i))
   // The main button is the call to action the page leads with: its words, its
   // place near the top and its styling, among those whose fill can be read. A
@@ -307,7 +318,7 @@ export function measureSite(
   )
   const box = button === undefined ? null : boxAt(button)
   return {
-    headline: h1 ?? null,
+    headline: headline ?? null,
     heading: h2 === undefined ? null : typeAt(h2),
     button: box && ranked[0] ? { ...box, action: true } : box,
     card: card === undefined ? null : boxAt(card),

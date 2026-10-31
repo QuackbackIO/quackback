@@ -26,4 +26,15 @@ describe('pageTree', () => {
     const nodes = pageTree(`<div><script>document.write('<a>Get started</a>')</script></div>`)
     expect(nodes.map((n) => n.tag)).toEqual(['div'])
   })
+
+  it('marks the elements that hold words of their own', () => {
+    const nodes = pageTree(`<section><div><span>Hello</span></div><p> 
+      Text</p></section>`)
+    expect(nodes.map((n) => [n.tag, !!n.worded])).toEqual([
+      ['section', false],
+      ['div', false],
+      ['span', true],
+      ['p', true],
+    ])
+  })
 })
