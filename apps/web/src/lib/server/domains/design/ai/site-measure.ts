@@ -12,6 +12,7 @@ import type {
   MeasuredBox,
   MeasuredType,
 } from '@/lib/shared/design/measured-tune'
+import { hex } from './site-brand'
 
 interface Rule {
   selectors: string[]
@@ -236,9 +237,11 @@ function typeOf(decls: Map<string, string>, props: Map<string, string>): Measure
         : /%$/.test(lh)
           ? parseFloat(lh) / 100
           : (length(lh, props, size) ?? NaN) / size
+  const colour = decls.get('color') && hex(resolveVars(decls.get('color')!, props))
   return {
     size,
     ...(weight && { weight }),
+    ...(colour && { colour }),
     ...(tracking !== undefined && Number.isFinite(tracking) && { tracking }),
     ...(leading !== undefined && Number.isFinite(leading) && { leading }),
   }
@@ -250,12 +253,22 @@ function boxOf(decls: Map<string, string>, props: Map<string, string>): Measured
   const height = length(decls.get('min-height') ?? decls.get('height'), props)
   const border = decls.get('border-width') ?? /^([\d.]+px)\b/.exec(decls.get('border') ?? '')?.[1]
   const shadow = decls.get('box-shadow')
+  const background = decls.get('background-color') ?? decls.get('background')
+  const fill = background && hex(resolveVars(background, props).split(/\s+(?![^(]*\))/)[0] ?? '')
+  const ink = decls.get('color') && hex(resolveVars(decls.get('color')!, props))
+  const rawWeight = decls.get('font-weight') && resolveVars(decls.get('font-weight')!, props).trim()
+  const weight = rawWeight ? (WEIGHTS[rawWeight] ?? (Number(rawWeight) || undefined)) : undefined
+  const transform = decls.get('text-transform')?.trim().toLowerCase()
   const out: MeasuredBox = {
     ...(radius !== null && radius !== undefined && { radius: radius >= 500 ? 999 : radius }),
     ...(height && height > 0 && { height }),
     ...(border !== undefined &&
       length(border, props) !== null && { borderWidth: length(border, props)! }),
     ...(shadow !== undefined && { shadow: !/^none$/i.test(shadow.trim()) }),
+    ...(fill && { fill }),
+    ...(ink && { ink }),
+    ...(weight && { weight }),
+    ...(transform && { upper: transform === 'uppercase' }),
   }
   return Object.keys(out).length ? out : null
 }

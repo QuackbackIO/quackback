@@ -5,6 +5,9 @@
  * what the tiles choose. Every value is bounded, so no tune can break a page.
  */
 import { z } from 'zod'
+import { contrastRatio } from './contrast'
+
+const hex = z.string().regex(/^#[0-9a-f]{6}$/i)
 
 const type = z
   .object({
@@ -18,12 +21,15 @@ const type = z
   })
   .strict()
 
+/** A headline's or heading's own colour, in light mode, where it reads. */
+const coloured = type.extend({ colour: hex.optional() })
+
 export const tuneSchema = z
   .object({
     /** Page headlines. */
-    headline: type.optional(),
+    headline: coloured.optional(),
     /** Section headings, such as a Home block's title. */
-    heading: type.optional(),
+    heading: coloured.optional(),
     /** The menu and buttons. */
     label: type.omit({ leading: true }).optional(),
     button: z
@@ -31,6 +37,11 @@ export const tuneSchema = z
         /** Corners in px; 999 is a pill. */
         radius: z.number().min(0).max(999).optional(),
         height: z.number().min(24).max(72).optional(),
+        /** A primary button's own fill and label, in light mode. */
+        fill: hex.optional(),
+        ink: hex.optional(),
+        weight: z.number().int().min(100).max(900).optional(),
+        case: z.enum(['sentence', 'upper']).optional(),
       })
       .strict()
       .optional(),
@@ -137,6 +148,55 @@ export function tuneCss(tune: Tune | undefined): string {
       rules.push(
         `[data-qb-cards][data-portal-theme] [data-qb-surface=card] { ${parts.join('; ')}; }`
       )
+  }
+  return rules.length ? `@layer design { ${rules.join(' ')} }` : ''
+}
+
+/** The page a tune's colours sit on, in light mode, to check they read there. */
+export interface TuneSurface {
+  background: string
+  /** The band's colour behind a headline, or null with no band. */
+  band: string | null
+  /** The band is a blend or an image: no one colour reads on all of it. */
+  mixed: boolean
+}
+
+const reads = (colour: string, on: Array<string | null>, min: number) =>
+  on.every((surface) => !surface || contrastRatio(colour, surface) >= min)
+
+/**
+ * The rules a tune's colours and button type need, in light mode. A colour
+ * that would not read where it sits is left out: a headline at 3:1 on the
+ * page and the band, a section heading at 3:1 on the page and on a card, and
+ * a button's label at 4.5:1 on its fill, else the fill's best label.
+ */
+export function tuneColourCss(tune: Tune | undefined, surface: TuneSurface | null): string {
+  if (!tune || !surface) return ''
+  const light = '[data-portal-theme]:not(.dark)'
+  const rules: string[] = []
+  const headline = tune.headline?.colour
+  if (headline && !surface.mixed && reads(headline, [surface.background, surface.band], 3))
+    rules.push(`${light} [data-qb-part=headline] { color: ${headline}; }`)
+  const heading = tune.heading?.colour
+  if (heading && reads(heading, [surface.background, '#ffffff'], 3))
+    rules.push(`${light} [data-qb-part=section-heading] { color: ${heading}; }`)
+  const button = tune.button
+  if (button?.fill || button?.weight || button?.case) {
+    const label =
+      button.fill &&
+      (button.ink && contrastRatio(button.ink, button.fill) >= 4.5
+        ? button.ink
+        : contrastRatio('#ffffff', button.fill) >= contrastRatio('#111111', button.fill)
+          ? '#ffffff'
+          : '#111111')
+    const parts = [
+      button.fill && `background-color: ${button.fill}`,
+      label && `color: ${label}`,
+      button.weight && `font-weight: ${button.weight}`,
+      button.case && `text-transform: ${button.case === 'upper' ? 'uppercase' : 'none'}`,
+      button.case === 'upper' && 'letter-spacing: 0.04em',
+    ].filter(Boolean)
+    rules.push(`${light} [data-slot=button][data-variant=default] { ${parts.join('; ')}; }`)
   }
   return rules.length ? `@layer design { ${rules.join(' ')} }` : ''
 }

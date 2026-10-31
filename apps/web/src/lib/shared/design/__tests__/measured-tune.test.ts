@@ -43,6 +43,19 @@ describe('exact values from a brand’s measurements', () => {
     expect(tuneSchema.safeParse(tune).success).toBe(true)
   })
 
+  it('keeps the colours and button type it measured', () => {
+    const tune = tuneFromMeasurements({
+      headline: { size: 64, colour: '#163300' },
+      label: { size: 15, colour: '#163300' },
+      button: { fill: '#163300', ink: '#9FE870', weight: 600, upper: true },
+    })
+    expect(tune.headline).toEqual({ size: 64, colour: '#163300' })
+    // A label's colour is the menu's own, not one a tune sets.
+    expect(tune.label).toEqual({ size: 15 })
+    expect(tune.button).toEqual({ fill: '#163300', ink: '#9fe870', weight: 600, case: 'upper' })
+    expect(tuneSchema.safeParse(tune).success).toBe(true)
+  })
+
   it('sets nothing it did not measure', () => {
     expect(tuneFromMeasurements({ headline: null, button: { radius: null } })).toEqual({})
   })

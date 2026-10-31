@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderDesignCss, resolveDesign } from '../resolve'
 import { defaultDesign, portalDesign } from '../schema'
-import { tuneCss, tuneTokens } from '../tune'
+import { tuneColourCss, tuneCss, tuneTokens } from '../tune'
 
 describe('exact values', () => {
   it('change nothing when a design has none', () => {
@@ -72,5 +72,55 @@ describe('exact values', () => {
     )
     expect(portalDesign.safeParse({ ...doc, tune: { button: { height: 4 } } }).success).toBe(false)
     expect(portalDesign.safeParse({ ...doc, tune: { card: { glow: 1 } } }).success).toBe(false)
+  })
+})
+
+describe('exact colours', () => {
+  const page = { background: '#ffffff', band: null, mixed: false }
+
+  it('colour headlines and section headings where they read, in light mode', () => {
+    const css = tuneColourCss(
+      { headline: { colour: '#163300' }, heading: { colour: '#163300' } },
+      { background: '#ffffff', band: '#9fe870', mixed: false }
+    )
+    expect(css).toContain(
+      '[data-portal-theme]:not(.dark) [data-qb-part=headline] { color: #163300; }'
+    )
+    expect(css).toContain('[data-qb-part=section-heading] { color: #163300; }')
+  })
+
+  it('leave out a colour that would not read on the page or the band', () => {
+    expect(tuneColourCss({ headline: { colour: '#f0f0f0' } }, page)).toBe('')
+    expect(
+      tuneColourCss(
+        { headline: { colour: '#163300' } },
+        { background: '#ffffff', band: '#0b1020', mixed: false }
+      )
+    ).toBe('')
+    // No one colour reads across a blend or an image.
+    expect(
+      tuneColourCss(
+        { headline: { colour: '#163300' } },
+        { background: '#ffffff', band: null, mixed: true }
+      )
+    ).toBe('')
+  })
+
+  it('fill buttons exactly, with their own label where it reads and the fill’s best label where not', () => {
+    expect(
+      tuneColourCss(
+        { button: { fill: '#163300', ink: '#9fe870', case: 'upper', weight: 600 } },
+        page
+      )
+    ).toContain(
+      'background-color: #163300; color: #9fe870; font-weight: 600; text-transform: uppercase'
+    )
+    expect(tuneColourCss({ button: { fill: '#163300', ink: '#1f3f10' } }, page)).toContain(
+      'background-color: #163300; color: #ffffff'
+    )
+  })
+
+  it('change nothing without a light page', () => {
+    expect(tuneColourCss({ headline: { colour: '#163300' } }, null)).toBe('')
   })
 })

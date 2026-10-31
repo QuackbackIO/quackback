@@ -13,6 +13,8 @@ export interface MeasuredType {
   tracking?: number
   /** As a multiple of the size. */
   leading?: number
+  /** Six-digit hex. */
+  colour?: string
 }
 
 export interface MeasuredBox {
@@ -21,6 +23,11 @@ export interface MeasuredBox {
   height?: number
   borderWidth?: number
   shadow?: boolean
+  /** A button's fill and label, six-digit hex. */
+  fill?: string
+  ink?: string
+  weight?: number
+  upper?: boolean
 }
 
 export interface BrandMeasurements {
@@ -46,8 +53,11 @@ function type(m: MeasuredType | null | undefined, [min, max]: [number, number]) 
   if (finite(m.tracking))
     out.tracking = Math.abs(m.tracking) < 0.005 ? 0 : within(+m.tracking.toFixed(3), -0.1, 0.3)
   if (finite(m.leading)) out.leading = within(+m.leading.toFixed(2), 0.9, 1.8)
+  if (m.colour && HEX.test(m.colour)) out.colour = m.colour.toLowerCase()
   return Object.keys(out).length ? out : undefined
 }
+
+const HEX = /^#[0-9a-f]{6}$/i
 
 const corners = (radius: number | null | undefined, max: number) =>
   !finite(radius) ? undefined : radius >= 999 ? 999 : within(Math.round(radius), 0, max)
@@ -64,13 +74,21 @@ export function tuneFromMeasurements(m: BrandMeasurements): Tune {
   const label = type(m.label, [12, 18])
   if (label) {
     delete label.leading
-    tune.label = label
+    delete label.colour
+    if (Object.keys(label).length) tune.label = label
   }
   if (m.button) {
     const radius = corners(m.button.radius, 999)
     const height = finite(m.button.height) ? within(Math.round(m.button.height), 28, 60) : undefined
-    if (radius !== undefined || height !== undefined)
-      tune.button = { ...(radius !== undefined && { radius }), ...(height && { height }) }
+    const button: NonNullable<Tune['button']> = {
+      ...(radius !== undefined && { radius }),
+      ...(height && { height }),
+      ...(m.button.fill && HEX.test(m.button.fill) && { fill: m.button.fill.toLowerCase() }),
+      ...(m.button.ink && HEX.test(m.button.ink) && { ink: m.button.ink.toLowerCase() }),
+      ...(finite(m.button.weight) && { weight: within(step(m.button.weight, 100), 100, 900) }),
+      ...(typeof m.button.upper === 'boolean' && { case: m.button.upper ? 'upper' : 'sentence' }),
+    }
+    if (Object.keys(button).length) tune.button = button
   }
   if (m.card) {
     tune.card = {

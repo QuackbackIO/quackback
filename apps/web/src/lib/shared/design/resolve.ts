@@ -7,7 +7,7 @@
  * full list of ways a converted portal can look different.
  */
 import { expandTheme } from '@/lib/shared/theme/expand'
-import { tuneCss } from './tune'
+import { tuneColourCss, tuneCss, type TuneSurface } from './tune'
 import { variableMap } from '@/lib/shared/theme/generator'
 import type { ThemeVariables } from '@/lib/shared/theme/types'
 import { contrastRatio, solveContrast } from './contrast'
@@ -138,19 +138,41 @@ export function resolveDesign(doc: PortalDesign): ResolvedDesign {
   }
   const light = doc.mode === 'dark' ? null : resolveMode('light')
   const dark = doc.mode === 'light' ? null : resolveMode('dark')
+  const tokens = {
+    base: baseTokens(doc),
+    light: light ? modeTokens(doc, light, 'light') : {},
+    dark: dark ? modeTokens(doc, dark, 'dark') : {},
+  }
   return {
     mode: doc.mode,
     light,
     dark,
     adjustments,
     errors,
-    tokens: {
-      base: baseTokens(doc),
-      light: light ? modeTokens(doc, light, 'light') : {},
-      dark: dark ? modeTokens(doc, dark, 'dark') : {},
-    },
-    tuneCss: tuneCss(doc.tune),
+    tokens,
+    tuneCss: [tuneCss(doc.tune), tuneColourCss(doc.tune, tuneSurface(doc, light, tokens.light))]
+      .filter(Boolean)
+      .join(' '),
   }
+}
+
+const SOLID = /^(#[\da-f]{3,8}|oklch\([^)]*\)|rgb\([^)]*\))$/i
+
+/** What a tune's light-mode colours sit on: the page, and the band behind a headline. */
+function tuneSurface(
+  doc: PortalDesign,
+  light: ThemeVariables | null,
+  tokens: TokenMap
+): TuneSurface | null {
+  if (!light?.background) return null
+  const band =
+    doc.layout.band === 'none'
+      ? null
+      : doc.layout.bandShape === 'panel'
+        ? tokens['--qb-band-panel-bg']
+        : tokens['--qb-band-bg']
+  const solid = !!band && SOLID.test(band.trim())
+  return { background: light.background, band: solid ? band : null, mixed: !!band && !solid }
 }
 
 /**

@@ -33,6 +33,16 @@ describe('measuring a brand from its page', () => {
     expect(m.field).toEqual({ radius: 8 })
   })
 
+  it('reads the colours and type of the headline and the button', () => {
+    const m = measureSite(PAGE, [
+      `:root { --forest: #163300 }
+       .text-display { font-size: 64px; color: var(--forest) }
+       .btn--primary { background: rgb(22, 51, 0); color: #9fe870; font-weight: 600; text-transform: uppercase }`,
+    ])
+    expect(m.headline).toEqual({ size: 64, colour: '#163300' })
+    expect(m.button).toEqual({ fill: '#163300', ink: '#9fe870', weight: 600, upper: true })
+  })
+
   it('reads a wide, light screen: small-screen and dark rules are left out', () => {
     const m = measureSite(PAGE, [
       `.text-display { font-size: 64px }
