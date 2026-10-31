@@ -11,6 +11,7 @@ import { convertLegacyBranding, type LegacyBranding } from '@/lib/shared/design/
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { PortalDesignView } from '@/lib/shared/design/view'
 import { designView } from '@/lib/shared/design/design-view'
+import { fontLinks } from './font-plan'
 
 export type DesignSource =
   { engine: 'legacy' } | { engine: 'v2'; doc: PortalDesign; revision: number | null }
@@ -63,8 +64,8 @@ export function resolveDesignSource(input: DesignSourceInput): DesignSource {
   return { engine: 'legacy' }
 }
 
-/** What a portal page needs from the chosen design: the mode and the CSS to inject. */
+/** What a portal page needs from the chosen design: the mode, the CSS to inject and its fonts' files. */
 export function portalDesignView(source: DesignSource): PortalDesignView {
   if (source.engine === 'legacy') return { engine: 'legacy' }
-  return designView(source.doc, source.revision)
+  return { ...designView(source.doc, source.revision), fontLinks: fontLinks(source.doc) }
 }

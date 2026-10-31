@@ -10,6 +10,11 @@ import type { PortalDesign } from './schema'
 /** Text a visitor reads, by locale. */
 export type LocalizedText = Record<string, string>
 
+/** A link a portal page's head carries for its design's fonts. */
+export type FontLink =
+  | { rel: 'preload'; href: string; as: 'font'; type: 'font/woff2'; crossOrigin: 'anonymous' }
+  | { rel: 'stylesheet'; href: string }
+
 export type PortalDesignView =
   | { engine: 'legacy' }
   | {
@@ -25,6 +30,8 @@ export type PortalDesignView =
       fontSans: string
       /** The bundled families to load: body, then headings. */
       fontIds: string[]
+      /** Their files for the page's head, which only the server's build knows. */
+      fontLinks?: FontLink[]
       /** The structural choices, set on `<html>` as `data-qb-*` attributes. */
       attributes: Record<`data-qb-${string}`, string>
       /** What the feedback page shows above the feed. */
@@ -116,6 +123,12 @@ export function portalWords(view: PortalDesignView | undefined): PortalWords {
   return view?.engine === 'v2'
     ? { postWord: view.vocabulary.post, boardWord: view.vocabulary.board }
     : DEFAULT_PORTAL_WORDS
+}
+
+/** The links a portal page's head carries for its design's fonts. */
+export function portalFontLinks(settings: ThemeSettings | null | undefined): FontLink[] {
+  const view = settings?.portalDesign
+  return view?.engine === 'v2' ? (view.fontLinks ?? []) : []
 }
 
 /** The bundled families a v2 design loads; legacy finds its one family from its CSS. */

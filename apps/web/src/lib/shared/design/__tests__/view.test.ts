@@ -8,6 +8,7 @@ import { defaultDesign } from '../schema'
 import {
   portalDefaultSort,
   portalFontIds,
+  portalFontLinks,
   portalTheme,
   portalThemeMode,
   savedWelcomeCard,
@@ -76,6 +77,48 @@ describe('portalFontIds', () => {
       vocabulary: { post: 'idea' as const, board: 'board' as const },
     }
     expect(portalFontIds({ portalDesign })).toEqual(['inter', 'fraunces'])
+  })
+})
+
+describe('portalFontLinks', () => {
+  it('carries the links the server planned for the design’s fonts, and none on legacy', () => {
+    expect(portalFontLinks({ brandingConfig })).toEqual([])
+    const portalDesign = {
+      engine: 'v2' as const,
+      mode: 'auto' as const,
+      revision: null,
+      themeStyles: '',
+      customCss: '',
+      fontSans: '',
+      fontIds: ['fraunces'],
+      fontLinks: [
+        {
+          rel: 'preload' as const,
+          href: '/assets/fraunces-400.woff2',
+          as: 'font' as const,
+          type: 'font/woff2' as const,
+          crossOrigin: 'anonymous' as const,
+        },
+        { rel: 'stylesheet' as const, href: '/assets/fraunces.css' },
+      ],
+      attributes: {},
+      feedback: { welcome: null, headline: null, defaultSort: 'trending' as const, copy: {} },
+      home: { headline: null, blocks: [] },
+      nav: defaultDesign().nav,
+      vocabulary: { post: 'idea' as const, board: 'board' as const },
+    }
+    expect(portalFontLinks({ portalDesign })).toEqual([
+      {
+        rel: 'preload',
+        href: '/assets/fraunces-400.woff2',
+        as: 'font',
+        type: 'font/woff2',
+        crossOrigin: 'anonymous',
+      },
+      { rel: 'stylesheet', href: '/assets/fraunces.css' },
+    ])
+    const { fontLinks: _, ...unplanned } = portalDesign
+    expect(portalFontLinks({ portalDesign: unplanned })).toEqual([])
   })
 })
 
