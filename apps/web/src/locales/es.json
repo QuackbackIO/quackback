@@ -1379,6 +1379,8 @@
   "automation.knowledge.copilotHome": "Inicio también las usa, junto con los conectores de Copilot.",
   "settings.labs.copilotHome.label": "Copilot en Inicio",
   "settings.labs.copilotHome.description": "Haz preguntas y propón cambios desde Inicio.",
+  "settings.labs.portalDesignV2.label": "Nuevo diseño del portal",
+  "settings.labs.portalDesignV2.description": "Personaliza el portal desde Apariencia, con borradores y versiones.",
   "ask.destination.home": "Inicio",
   "ask.destination.feedback": "Feedback",
   "ask.destination.roadmap": "Roadmap",

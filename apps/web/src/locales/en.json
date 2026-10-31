@@ -1379,6 +1379,8 @@
   "automation.knowledge.copilotHome": "Home uses these too, with Copilot's connectors.",
   "settings.labs.copilotHome.label": "Copilot on Home",
   "settings.labs.copilotHome.description": "Ask questions and propose changes from Home.",
+  "settings.labs.portalDesignV2.label": "New portal design",
+  "settings.labs.portalDesignV2.description": "Brand the portal from Appearance, with drafts and versions.",
   "ask.destination.home": "Home",
   "ask.destination.feedback": "Feedback",
   "ask.destination.roadmap": "Roadmap",

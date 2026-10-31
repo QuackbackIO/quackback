@@ -1379,6 +1379,8 @@
   "automation.knowledge.copilotHome": "Home gebruikt deze ook, samen met de connectoren van Copilot.",
   "settings.labs.copilotHome.label": "Copilot op Home",
   "settings.labs.copilotHome.description": "Stel vragen en stel wijzigingen voor vanaf Home.",
+  "settings.labs.portalDesignV2.label": "Nieuw portaalontwerp",
+  "settings.labs.portalDesignV2.description": "Geef het portaal vorm via Weergave, met concepten en versies.",
   "ask.destination.home": "Home",
   "ask.destination.feedback": "Feedback",
   "ask.destination.roadmap": "Roadmap",

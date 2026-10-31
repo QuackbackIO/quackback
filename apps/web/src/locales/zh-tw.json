@@ -1379,6 +1379,8 @@
   "automation.knowledge.copilotHome": "首頁也會使用這些來源，以及 Copilot 的連接器。",
   "settings.labs.copilotHome.label": "首頁 Copilot",
   "settings.labs.copilotHome.description": "在首頁提問並提出變更建議。",
+  "settings.labs.portalDesignV2.label": "新版入口網站設計",
+  "settings.labs.portalDesignV2.description": "在「外觀」中設計入口網站，支援草稿與版本。",
   "ask.destination.home": "首頁",
   "ask.destination.feedback": "意見回饋",
   "ask.destination.roadmap": "產品藍圖",

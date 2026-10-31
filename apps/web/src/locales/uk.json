@@ -1379,6 +1379,8 @@
   "automation.knowledge.copilotHome": "Головна сторінка також використовує їх разом із конекторами Copilot.",
   "settings.labs.copilotHome.label": "Copilot на головній",
   "settings.labs.copilotHome.description": "Ставте запитання та пропонуйте зміни з головної сторінки.",
+  "settings.labs.portalDesignV2.label": "Новий дизайн порталу",
+  "settings.labs.portalDesignV2.description": "Оформлюйте портал у розділі «Вигляд» із чернетками та версіями.",
   "ask.destination.home": "Головна",
   "ask.destination.feedback": "Відгуки",
   "ask.destination.roadmap": "Дорожня карта",

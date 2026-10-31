@@ -1379,6 +1379,8 @@
   "automation.knowledge.copilotHome": "Главная тоже их использует, вместе с коннекторами Copilot.",
   "settings.labs.copilotHome.label": "Copilot на главной",
   "settings.labs.copilotHome.description": "Задавайте вопросы и предлагайте изменения с главной.",
+  "settings.labs.portalDesignV2.label": "Новый дизайн портала",
+  "settings.labs.portalDesignV2.description": "Оформляйте портал в разделе «Внешний вид» с черновиками и версиями.",
   "ask.destination.home": "Главная",
   "ask.destination.feedback": "Обратная связь",
   "ask.destination.roadmap": "Дорожная карта",

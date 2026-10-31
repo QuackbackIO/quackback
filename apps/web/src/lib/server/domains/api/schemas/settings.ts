@@ -241,6 +241,10 @@ const DesignStateSchema = z
     design: z.record(z.string(), z.unknown()).meta({
       description: 'The portal design document: brand, shape, layout, pages, menu and words.',
     }),
+    live: z.record(z.string(), z.unknown()).meta({
+      description:
+        'What visitors see now: the published design, else the branding settings converted.',
+    }),
     source: z.enum(['draft', 'published', 'converted']).meta({
       description:
         'What is being edited: the draft, else the published design, else the branding settings converted.',

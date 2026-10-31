@@ -1379,6 +1379,8 @@
   "automation.knowledge.copilotHome": "تستخدمها الصفحة الرئيسية أيضًا، مع موصلات Copilot.",
   "settings.labs.copilotHome.label": "Copilot في الصفحة الرئيسية",
   "settings.labs.copilotHome.description": "اطرح الأسئلة واقترح التغييرات من الصفحة الرئيسية.",
+  "settings.labs.portalDesignV2.label": "التصميم الجديد للبوابة",
+  "settings.labs.portalDesignV2.description": "خصّص البوابة من المظهر، مع المسودات والإصدارات.",
   "ask.destination.home": "الرئيسية",
   "ask.destination.feedback": "الملاحظات",
   "ask.destination.roadmap": "خارطة الطريق",
