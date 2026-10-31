@@ -192,4 +192,39 @@ describe('the Sections tab', () => {
     mount('sections', design)
     expect(screen.getByText('Logo colours')).toBeTruthy()
   })
+
+  it('draws art in the band, and offers the second colour’s jobs once there is one', () => {
+    const start = withHeadline()
+    start.layout.band = 'tint'
+    const seen = mount('sections', start)
+    fireEvent.click(screen.getByText('Hills'))
+    expect(seen.design.layout.bandArt).toBe('hills')
+    expect(screen.queryByLabelText('Second colour on vote boxes and the menu')).toBeNull()
+    cleanup()
+    const withSupport = withHeadline()
+    withSupport.brand.light.support = '#e58fae'
+    const tinted = mount('sections', withSupport)
+    fireEvent.click(screen.getByLabelText('Second colour on vote boxes and the menu'))
+    fireEvent.click(screen.getByLabelText("Second colour on the band's button"))
+    expect(tinted.design.layout.tint).toBe('support')
+    expect(tinted.design.shape.action).toBe('support')
+  })
+})
+
+describe('the name as a wordmark, in the Brand tab', () => {
+  it('sets its colour, capitals and a part in colour, and the headline’s colour', () => {
+    const start = defaultDesign()
+    start.brand.logo.display = 'name'
+    const seen = mount('brand', start)
+    fireEvent.click(screen.getByLabelText('Name in the brand colour'))
+    fireEvent.click(screen.getByLabelText('Name in spaced capitals'))
+    fireEvent.change(screen.getByLabelText('Part in colour'), { target: { value: 'line' } })
+    fireEvent.click(screen.getByLabelText('Headlines in the brand colour'))
+    expect(seen.design.brand.logo).toMatchObject({
+      nameColour: 'accent',
+      nameCase: 'upper',
+      nameAccent: 'line',
+    })
+    expect(seen.design.brand.fonts.headlineColour).toBe('accent')
+  })
 })

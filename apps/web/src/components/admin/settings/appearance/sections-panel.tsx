@@ -25,7 +25,9 @@ import { CssSection, type CssWarning } from './css-section'
 import { ImageSlot } from './image-slot'
 import {
   AlignDrawing,
+  BandArtDrawing,
   BandDrawing,
+  FocusDrawing,
   BandShapeDrawing,
   BlendDrawing,
   ImagePlaceDrawing,
@@ -199,6 +201,63 @@ export function SectionsPanel({
           onUploaded={(key) => update((draft) => void (draft.brand.bandImage = { key }))}
           onRemove={() => update((draft) => void delete draft.brand.bandImage)}
         />
+        {layout.band !== 'none' && (
+          <DesignTiles
+            name="design-band-art"
+            label="Art"
+            value={layout.bandArt ?? 'none'}
+            columns={4}
+            onChange={(art) => update((draft) => void (draft.layout.bandArt = art))}
+            options={DESIGN_OPTIONS.bandArt.map((art) => ({
+              value: art,
+              label: capital(art),
+              drawing: <BandArtDrawing art={art} />,
+            }))}
+          />
+        )}
+        {design.brand.bandImage && (
+          <DesignTiles
+            name="design-image-focus"
+            label="Keep in view"
+            value={layout.imageFocus ?? 'centre'}
+            onChange={(focus) => update((draft) => void (draft.layout.imageFocus = focus))}
+            options={DESIGN_OPTIONS.imageFocus.map((focus) => ({
+              value: focus,
+              label: capital(focus),
+              drawing: <FocusDrawing focus={focus} />,
+            }))}
+          />
+        )}
+        {design.brand.light.support && (
+          <>
+            <SettingRow
+              label="Second colour on vote boxes and the menu"
+              htmlFor="design-tint"
+              control={
+                <Switch
+                  id="design-tint"
+                  checked={layout.tint === 'support'}
+                  onCheckedChange={(on) =>
+                    update((draft) => void (draft.layout.tint = on ? 'support' : 'neutral'))
+                  }
+                />
+              }
+            />
+            <SettingRow
+              label="Second colour on the band's button"
+              htmlFor="design-action"
+              control={
+                <Switch
+                  id="design-action"
+                  checked={design.shape.action === 'support'}
+                  onCheckedChange={(on) =>
+                    update((draft) => void (draft.shape.action = on ? 'support' : 'accent'))
+                  }
+                />
+              }
+            />
+          </>
+        )}
         {design.brand.bandImage && (
           <DesignTiles
             name="design-image-place"

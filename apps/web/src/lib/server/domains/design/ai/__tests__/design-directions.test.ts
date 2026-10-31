@@ -208,6 +208,40 @@ describe('lookDesign', () => {
   })
 })
 
+describe('a look’s finishing choices', () => {
+  it('sets band art, headline colour and a two-tone name, and the second colour at work', () => {
+    const look = {
+      ...DIRECTIONS_EXAMPLE,
+      band: 'tint',
+      bandArt: 'hills',
+      headlineColour: 'accent',
+      logo: 'name',
+      nameColour: 'accent',
+      nameAccent: 'line',
+      support: '#c6ff3d',
+      tint: 'support',
+      action: 'support',
+    } as const
+    const { design, refused } = lookDesign(defaultDesign(), look, allows)
+    expect(refused).toEqual([])
+    expect(design.layout).toMatchObject({ bandArt: 'hills', tint: 'support' })
+    expect(design.shape.action).toBe('support')
+    expect(design.brand.fonts.headlineColour).toBe('accent')
+    expect(design.brand.logo).toMatchObject({ nameColour: 'accent', nameAccent: 'line' })
+  })
+
+  it('puts the composer under a Home headline, whatever the look says', () => {
+    const look = {
+      ...DIRECTIONS_EXAMPLE,
+      composer: 'block',
+      homeHeadline: 'Climb with us',
+    } as const
+    expect(lookDesign(defaultDesign(), look, allows).design.pages.home.composer).toBe('band')
+    const bare = { ...look, homeHeadline: '' } as const
+    expect(lookDesign(defaultDesign(), bare, allows).design.pages.home.composer).toBe('block')
+  })
+})
+
 describe('the faithful look’s accent', () => {
   const site = { palette: ['#112231', '#ff4f40', '#218fb7'] } as never
 

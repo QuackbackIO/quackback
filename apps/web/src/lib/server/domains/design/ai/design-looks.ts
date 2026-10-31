@@ -51,6 +51,15 @@ export const lookSchema = z.object({
   logo: z.enum(DESIGN_OPTIONS.logoDisplay),
   composer: z.enum(DESIGN_OPTIONS.composerPlace),
   shareImage: z.enum(['none', 'side', 'edge', 'cover']),
+  imageFocus: z.enum(DESIGN_OPTIONS.imageFocus),
+  bandArt: z.enum(DESIGN_OPTIONS.bandArt),
+  headlineColour: z.enum(DESIGN_OPTIONS.inkOrAccent),
+  nameColour: z.enum(DESIGN_OPTIONS.inkOrAccent),
+  nameCase: z.enum(DESIGN_OPTIONS.textCase),
+  /** A part of the name in the brand colour, or "". */
+  nameAccent: z.string(),
+  tint: z.enum(DESIGN_OPTIONS.tint),
+  action: z.enum(DESIGN_OPTIONS.action),
   cards: z.enum(DESIGN_OPTIONS.cards),
   density: z.enum(DESIGN_OPTIONS.density),
   width: z.enum(DESIGN_OPTIONS.width),
@@ -103,6 +112,14 @@ export const DIRECTIONS_EXAMPLE: Look = {
   logo: 'name',
   composer: 'band',
   shareImage: 'none',
+  imageFocus: 'centre',
+  bandArt: 'none',
+  headlineColour: 'ink',
+  nameColour: 'ink',
+  nameCase: 'sentence',
+  nameAccent: '',
+  tint: 'neutral',
+  action: 'accent',
   cards: 'bordered',
   density: 'comfortable',
   width: 'default',
@@ -147,7 +164,12 @@ How a brand becomes each choice:
 - bandAlign: centre for consumer and campaign-style heroes, left for software. bandShape: inset when their hero sits in a large rounded card, panel when their hero sets the words on a block of colour over another colour or a photo, full otherwise. headerOnBand: true when their header shares their hero's colour.
 - logo: wordmark when the brief says their wordmark was found; name when their logo is their name set in type; mark_and_name otherwise.
 - composer: band for most looks, putting the composer in the hero under Home's headline; block keeps it on the grid. With it in the band, give the contact block the full width.
-- shareImage: when the brief attaches their share image, side if it is a photo of their product, place or people with no words or logo on it, else none. edge or cover only for an illustration or texture with nothing important at its edges.
+- bandArt, for a band with colour and no image: none for most software; hills or waves for outdoor, travel, food and drink brands; petals or confetti for playful consumer ones; dots, grid or lines for a quiet texture. It is drawn in their colours.
+- headlineColour: accent when their headlines are set in their brand colour, ink otherwise.
+- With logo name, the name is their wordmark: nameColour accent when their logo is in their brand colour; nameCase upper when it is set in spaced capitals; nameAccent, the part of the name their logo sets in a second colour, else "".
+- cards: filled when their site puts content on soft panels without edges, its own colour against a tinted page; give surface then.
+- tint: support when they have a second colour that suits the vote box and the current menu item, such as a soft or bright one; neutral otherwise. action: support when their main call to action is in their second colour.
+- shareImage: when the brief attaches their share image, side if it is a photo of their product, place or people, else none. When words or a logo sit down one side of it, still use it, with imageFocus on the side that holds the picture; imageFocus centre otherwise. edge or cover only for an illustration or texture with nothing important at its edges.
 - cards: bordered, raised, or list rows for minimal and developer brands. density: compact for technical audiences, comfortable mostly, spacious for calm brands. width: narrow for editorial, wide for dense tools, default otherwise.
 - words: postWord is what visitors post: feature_request for software and developer tools, suggestion for consumer, retail and hospitality, post for communities, idea otherwise. boardWord: category for consumer brands, board otherwise.
 - headline, subtitle (the feedback page) and homeHeadline, homeSubtitle (Home), prompt (the composer, 60 characters) and submit (its button, 24): in their voice, short, inviting, never generic, never naming a competitor.

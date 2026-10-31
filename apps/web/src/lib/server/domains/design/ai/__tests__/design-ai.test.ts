@@ -113,7 +113,7 @@ describe('askDesignAi', () => {
     // What was left alone is named with why, so the reply never overclaims.
     expect(result).toMatchObject({
       ok: true,
-      reply: 'Done. Left alone: Cards: it takes bordered, raised, list.',
+      reply: 'Done. Left alone: Cards: it takes bordered, raised, list, filled.',
       skipped: 1,
     })
     expect(result.ok && result.applied.map((change) => change.path)).toEqual(['brand.light.accent'])
@@ -221,7 +221,7 @@ describe('askDesignAi', () => {
       allows: ALLOWS,
     })
     if (!result.ok) throw new Error('expected an answer')
-    expect(result.reply).toBe('Nothing changed (Cards: it takes bordered, raised, list).')
+    expect(result.reply).toBe('Nothing changed (Cards: it takes bordered, raised, list, filled).')
     expect(result.outOfScope).toBe(false)
   })
 

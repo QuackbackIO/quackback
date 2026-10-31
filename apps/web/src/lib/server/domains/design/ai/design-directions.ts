@@ -111,6 +111,13 @@ function lookChanges(
     { path: 'brand.fonts.headlineCase', value: look.headlineCase },
     { path: 'brand.fonts.labelCase', value: look.labelCase },
     { path: 'shape.buttons', value: look.buttons },
+    { path: 'shape.action', value: look.action },
+    { path: 'layout.tint', value: look.tint },
+    { path: 'layout.bandArt', value: look.bandArt },
+    { path: 'brand.fonts.headlineColour', value: look.headlineColour },
+    { path: 'brand.logo.nameColour', value: look.nameColour },
+    { path: 'brand.logo.nameCase', value: look.nameCase },
+    ...page(look.nameAccent.trim(), 'brand.logo.nameAccent'),
     // Brand status colours need the logo's colours, which only an imported wordmark gives.
     {
       path: 'layout.status',
@@ -138,6 +145,7 @@ function lookChanges(
       ? [
           { path: 'brand.bandImage', value: { key: assets.shareImage.key } },
           { path: 'layout.imagePlace', value: look.shareImage },
+          { path: 'layout.imageFocus', value: look.imageFocus },
         ]
       : []),
     { path: 'vocabulary.post', value: look.postWord },
@@ -151,7 +159,8 @@ function lookChanges(
           ...page(fit(look.homeHeadline, 80), 'pages.home.headline.title'),
           ...page(fit(look.homeSubtitle, 140), 'pages.home.headline.subtitle'),
           ...accentChanges(look, 'pages.home.headline', look.homeHeadline),
-          { path: 'pages.home.composer', value: look.composer },
+          // With a Home headline the composer sits under it: on the grid it leaves a gap.
+          { path: 'pages.home.composer', value: look.homeHeadline.trim() ? 'band' : look.composer },
           { path: 'nav.home.on', value: true },
           { path: 'nav.home.tab', value: true },
         ]
@@ -331,7 +340,13 @@ export async function designDirections(input: {
       looks: answer.looks.map((answered, index) => {
         // The first look is the faithful one: it keeps their exact brand colour.
         const look =
-          index === 0 ? { ...answered, accent: faithfulAccent(answered.accent, input) } : answered
+          index === 0
+            ? {
+                ...answered,
+                accent: faithfulAccent(answered.accent, input),
+                support: answered.support && faithfulAccent(answered.support, input),
+              }
+            : answered
         const { design, refused } = lookDesign(input.design, look, input.allows, input.assets)
         if (refused.length) log.info({ look: look.name, refused }, 'design look left choices out')
         return {

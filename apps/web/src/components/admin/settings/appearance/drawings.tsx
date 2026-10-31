@@ -54,7 +54,8 @@ export function CardsDrawing({ cards }: { cards: Layout['cards'] }) {
             'h-3 bg-background',
             cards === 'bordered' && 'rounded-sm border border-foreground/40',
             cards === 'raised' && 'rounded-sm shadow-[0_1px_3px_rgba(0,0,0,0.35)]',
-            cards === 'list' && 'border-b border-foreground/40'
+            cards === 'list' && 'border-b border-foreground/40',
+            cards === 'filled' && 'rounded-md bg-foreground/15'
           )}
         />
       ))}
@@ -312,6 +313,46 @@ export function ComposerPlaceDrawing({ place }: { place: 'band' | 'block' }) {
         {place === 'block' && <span className="h-2 w-6 rounded-sm border border-foreground/40" />}
         <span className="h-2 flex-1 rounded-sm bg-foreground/20" />
       </span>
+    </span>
+  )
+}
+
+export function BandArtDrawing({ art }: { art: NonNullable<Layout['bandArt']> }) {
+  const tile: Partial<Record<typeof art, string>> = {
+    dots: 'bg-[radial-gradient(circle,color-mix(in_oklch,var(--primary)_55%,transparent)_1.2px,transparent_1.6px)] bg-[length:7px_7px]',
+    grid: 'bg-[linear-gradient(color-mix(in_oklch,var(--primary)_35%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_oklch,var(--primary)_35%,transparent)_1px,transparent_1px)] bg-[length:8px_8px]',
+    lines:
+      'bg-[repeating-linear-gradient(45deg,color-mix(in_oklch,var(--primary)_35%,transparent)_0_1px,transparent_1px_5px)]',
+    petals:
+      'bg-[radial-gradient(ellipse_3px_1.5px,color-mix(in_oklch,var(--primary)_50%,transparent)_80%,transparent)] bg-[length:10px_9px]',
+    confetti:
+      'bg-[radial-gradient(circle,color-mix(in_oklch,var(--primary)_60%,transparent)_1px,transparent_1.5px),radial-gradient(circle,color-mix(in_oklch,var(--foreground)_35%,transparent)_1px,transparent_1.5px)] bg-[length:9px_9px,13px_11px]',
+  }
+  return (
+    <span
+      className={cn('relative block h-7 w-14 overflow-hidden rounded-sm bg-primary/10', tile[art])}
+    >
+      {art === 'hills' && (
+        <span className="absolute inset-x-0 bottom-0 h-3 rounded-t-[100%] bg-primary/60" />
+      )}
+      {art === 'waves' && (
+        <span className="absolute inset-x-0 bottom-0 h-2.5 bg-[radial-gradient(circle_at_50%_0,transparent_4px,color-mix(in_oklch,var(--primary)_55%,transparent)_4.5px)] bg-[length:10px_10px]" />
+      )}
+    </span>
+  )
+}
+
+export function FocusDrawing({ focus }: { focus: NonNullable<Layout['imageFocus']> }) {
+  return (
+    <span
+      className={cn(
+        'flex h-6 w-14 rounded-sm border border-foreground/30 p-0.5',
+        focus === 'left' && 'justify-start',
+        focus === 'centre' && 'justify-center',
+        focus === 'right' && 'justify-end'
+      )}
+    >
+      <span className="h-full w-5 rounded-[2px] bg-foreground/40" />
     </span>
   )
 }
