@@ -39,6 +39,7 @@ export const lookSchema = z.object({
   bandAlign: z.enum(DESIGN_OPTIONS.bandAlign),
   bandShape: z.enum(DESIGN_OPTIONS.bandShape),
   headerOnBand: z.boolean(),
+  pageTitles: z.enum(DESIGN_OPTIONS.pageTitles),
   scale: z.enum(DESIGN_OPTIONS.typeScale),
   tracking: z.enum(DESIGN_OPTIONS.tracking),
   headlineCase: z.enum(DESIGN_OPTIONS.textCase),
@@ -101,6 +102,7 @@ export const DIRECTIONS_EXAMPLE: Look = {
   bandAlign: 'left',
   bandShape: 'full',
   headerOnBand: false,
+  pageTitles: 'band',
   scale: 'large',
   tracking: 'tight',
   headlineCase: 'sentence',
@@ -161,7 +163,7 @@ How a brand becomes each choice:
 - corners: sharp for strict or editorial brands, subtle for most software, rounded for friendly ones, pill for playful ones.
 - header: stacked (logo above the menu), inline (one row, for software), centered (for consumer and editorial brands). nav: tabs, underline or pills.
 - band, behind the headlines: brand when they fill large areas with their colour, such as a hero; support when that colour is their second one; blend when their brand uses a gradient, with blend linear for a bold sweep and mesh for soft colour beside the words on a white page; tint or fade for most light brands; none for minimal and monochrome brands. A dark site takes none (its own dark page) or brand, never fade, which muddies a dark page.
-- bandAlign: centre for consumer and campaign-style heroes, left for software. bandShape: inset when their hero sits in a large rounded card, panel when their hero sets the words on a block of colour over another colour or a photo, full otherwise. headerOnBand: true when their header shares their hero's colour.
+- bandAlign: centre for consumer and campaign-style heroes, left for software. bandShape: inset when their hero sits in a large rounded card, panel when their hero sets the words on a block of colour over another colour or a photo, full otherwise. headerOnBand: true when their header shares their hero's colour. pageTitles: band when their site's other pages open on a coloured hero as their home page does, plain when they open on a simple title.
 - logo: wordmark when the brief says their wordmark was found; mark_and_name when they have a logo mark; name when they have neither and their logo is their name set in type. The name settings below style the name beside a mark too.
 - composer: band for most looks, putting the composer in the hero under Home's headline; block keeps it on the grid. With it in the band, give the contact block the full width.
 - bandArt, for a band with colour and no image: none for most software; hills or waves for outdoor, travel, food and drink brands; petals or confetti for playful consumer ones; dots, grid or lines for a quiet texture. It is drawn in their colours.

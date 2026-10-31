@@ -42,6 +42,8 @@ const SCOPE_FIELDS: Record<Exclude<DesignAiScope, 'site'>, readonly string[]> = 
     'layout.imagePlace',
     'brand.bandImage',
     'pages.feedback.headline',
+    'layout.pageTitles',
+    'pages.titles',
   ],
   welcome: ['pages.feedback.welcome'],
   feed: [

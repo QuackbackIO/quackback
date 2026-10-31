@@ -70,7 +70,8 @@
     "filters": "end",
     "bandShape": "inset",
     "status": "ink",
-    "bandArt": "lines"
+    "bandArt": "lines",
+    "pageTitles": "plain"
   },
   "pages": {
     "home": {
@@ -105,6 +106,24 @@
       },
       "defaultSort": "trending",
       "copy": {}
+    },
+    "titles": {
+      "help": {
+        "title": {
+          "en": "How can we help?"
+        },
+        "subtitle": {
+          "en": "Guides for every firing."
+        }
+      },
+      "support": {
+        "title": {
+          "en": "Talk to the studio"
+        },
+        "subtitle": {
+          "en": "Your conversations with our team."
+        }
+      }
     }
   },
   "nav": {

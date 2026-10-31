@@ -1,8 +1,10 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { FormattedMessage } from 'react-intl'
+import { useIntl } from 'react-intl'
 import { z } from 'zod'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
+import { PortalPageTitle, useDesignTitles } from '@/components/public/portal-page-title'
+import { cn } from '@/lib/shared/utils'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { isProductEnabled } from '@/lib/shared/types/settings'
@@ -70,35 +72,45 @@ function RoadmapPage() {
   const initialSelectedId = selectedRoadmapFromUrl ?? firstRoadmapId
 
   const isTeamMember = userRole === 'admin' || userRole === 'member'
+  const intl = useIntl()
+  const designTitles = useDesignTitles()
+  const title = intl.formatMessage({ id: 'portal.roadmap.title', defaultMessage: 'Roadmap' })
+  const description = intl.formatMessage({
+    id: 'portal.roadmap.description',
+    defaultMessage: "See what we're working on and what's coming next.",
+  })
 
   return (
-    // From sm up, cap at viewport height so a column with many cards scrolls
-    // internally instead of pushing the body taller. 7rem ≈ PortalHeader. On a
-    // phone the title and toolbar leave too little of that height, so the
-    // page grows and the columns keep a usable height instead of clipping.
-    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-8 min-h-[calc(100dvh-7rem)] sm:h-[calc(100dvh-7rem)] flex flex-col sm:min-h-0">
-      <div className="mb-6 animate-in fade-in duration-200 fill-mode-backwards">
-        <h1 className="text-3xl font-bold mb-2">
-          <FormattedMessage id="portal.roadmap.title" defaultMessage="Roadmap" />
-        </h1>
-        <p className="text-muted-foreground">
-          <FormattedMessage
-            id="portal.roadmap.description"
-            defaultMessage="See what we're working on and what's coming next."
-          />
-        </p>
-      </div>
-
+    <>
+      {designTitles && <PortalPageTitle page="roadmap" title={title} subtitle={description} />}
+      // From sm up, cap at viewport height so a column with many cards scrolls // internally
+      instead of pushing the body taller. 7rem ≈ PortalHeader. On a // phone the title and toolbar
+      leave too little of that height, so the // page grows and the columns keep a usable height
+      instead of clipping.
       <div
-        className="flex-1 min-h-0 flex flex-col animate-in fade-in duration-300 fill-mode-backwards"
-        style={{ animationDelay: '100ms' }}
+        className={cn(
+          'mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 min-h-[calc(100dvh-7rem)] sm:h-[calc(100dvh-7rem)] flex flex-col sm:min-h-0',
+          designTitles ? 'pt-6 pb-8' : 'py-8'
+        )}
       >
-        <RoadmapBoard
-          initialRoadmaps={roadmaps}
-          initialSelectedRoadmapId={initialSelectedId}
-          isTeamMember={isTeamMember}
-        />
+        {!designTitles && (
+          <div className="mb-6 animate-in fade-in duration-200 fill-mode-backwards">
+            <h1 className="text-3xl font-bold mb-2">{title}</h1>
+            <p className="text-muted-foreground">{description}</p>
+          </div>
+        )}
+
+        <div
+          className="flex-1 min-h-0 flex flex-col animate-in fade-in duration-300 fill-mode-backwards"
+          style={{ animationDelay: '100ms' }}
+        >
+          <RoadmapBoard
+            initialRoadmaps={roadmaps}
+            initialSelectedRoadmapId={initialSelectedId}
+            isTeamMember={isTeamMember}
+          />
+        </div>
       </div>
-    </div>
+    </>
   )
 }

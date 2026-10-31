@@ -106,6 +106,7 @@ function lookChanges(
     { path: 'layout.bandAlign', value: look.bandAlign },
     { path: 'layout.bandShape', value: look.bandShape },
     { path: 'layout.headerOnBand', value: look.headerOnBand },
+    { path: 'layout.pageTitles', value: look.pageTitles },
     { path: 'brand.fonts.scale', value: look.scale },
     { path: 'brand.fonts.tracking', value: look.tracking },
     { path: 'brand.fonts.headlineCase', value: look.headlineCase },

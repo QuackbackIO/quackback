@@ -356,3 +356,19 @@ export function FocusDrawing({ focus }: { focus: NonNullable<Layout['imageFocus'
     </span>
   )
 }
+
+export function PageTitlesDrawing({ place }: { place: NonNullable<Layout['pageTitles']> }) {
+  return (
+    <span className="flex h-full w-full flex-col">
+      <span
+        className={cn('flex h-5 w-full items-center px-1.5', place === 'band' && 'bg-primary/25')}
+      >
+        <span className="h-1.5 w-7 rounded-full bg-foreground/60" />
+      </span>
+      <span className="mt-1 flex flex-col gap-1 px-1.5">
+        <span className="h-2 w-full rounded-sm border border-foreground/40" />
+        <span className="h-2 w-full rounded-sm border border-foreground/40" />
+      </span>
+    </span>
+  )
+}

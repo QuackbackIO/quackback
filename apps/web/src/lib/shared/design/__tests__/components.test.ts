@@ -551,6 +551,7 @@ describe('layoutAttributes', () => {
       'data-qb-header-band': 'off',
       'data-qb-status': 'colour',
       'data-qb-headline': 'ink',
+      'data-qb-page-titles': 'plain',
       'data-qb-band-art': 'none',
       'data-qb-tint': 'neutral',
       'data-qb-cards': 'list',

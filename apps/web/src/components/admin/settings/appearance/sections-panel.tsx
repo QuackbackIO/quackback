@@ -20,6 +20,7 @@ import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { DesignTiles } from './design-tiles'
 import { LanguagePicker } from './language-picker'
 import { HomeSection } from './home-section'
+import { PageTitlesSection } from './page-titles-section'
 import { MenuSection } from './menu-section'
 import { CssSection, type CssWarning } from './css-section'
 import { ImageSlot } from './image-slot'
@@ -353,6 +354,8 @@ export function SectionsPanel({
           </div>
         )}
       </section>
+
+      <PageTitlesSection design={design} update={update} gates={gates} />
 
       <section id="design-section-welcome" className="scroll-mt-4 space-y-3">
         <SettingRow

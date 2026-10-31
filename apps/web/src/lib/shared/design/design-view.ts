@@ -38,6 +38,7 @@ export function designView(
       copy: doc.pages.feedback.copy,
     },
     home: doc.pages.home,
+    titles: doc.pages.titles ?? {},
     nav: doc.nav,
     vocabulary: doc.vocabulary,
     logo: designLogo(doc),

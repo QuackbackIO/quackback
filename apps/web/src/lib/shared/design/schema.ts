@@ -256,6 +256,8 @@ export const portalDesignV2 = z
         imagePlace: z.enum(DESIGN_OPTIONS.imagePlace).optional(),
         /** What part of the image stays when it is cropped; absent is the centre. */
         imageFocus: z.enum(DESIGN_OPTIONS.imageFocus).optional(),
+        /** The other pages' titles on the band, as Home's headline is; absent is plain. */
+        pageTitles: z.enum(DESIGN_OPTIONS.pageTitles).optional(),
         /** Art in the brand's colours for a band without an image; absent is none. */
         bandArt: z.enum(DESIGN_OPTIONS.bandArt).optional(),
         cards: z.enum(DESIGN_OPTIONS.cards),
@@ -289,6 +291,8 @@ export const portalDesignV2 = z
               .strict(),
           })
           .strict(),
+        /** The other pages' own titles; a page left out keeps its usual one. */
+        titles: z.partialRecord(z.enum(DESIGN_OPTIONS.titledPage), headline.unwrap()).optional(),
       })
       .strict(),
     nav: z
