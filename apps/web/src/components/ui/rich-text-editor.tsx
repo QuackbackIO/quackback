@@ -1466,6 +1466,10 @@ function RichTextEditorBase({
           borderless ? 'py-0' : 'px-3 py-2'
         ),
         style: `--editor-min-height: ${minHeight}`,
+        // A multi-line text field, named by what it asks for.
+        role: 'textbox',
+        'aria-multiline': 'true',
+        ...(placeholder ? { 'aria-label': placeholder } : {}),
       },
       handleDrop:
         (features.images && onImageUpload) || (features.videos && onVideoUpload)
@@ -1487,7 +1491,15 @@ function RichTextEditorBase({
       },
     }),
 
-    [features.images, features.videos, onImageUpload, onVideoUpload, borderless, minHeight]
+    [
+      features.images,
+      features.videos,
+      onImageUpload,
+      onVideoUpload,
+      borderless,
+      minHeight,
+      placeholder,
+    ]
   )
 
   // Stores the last JSON emitted by onUpdate so the value-sync useEffect can

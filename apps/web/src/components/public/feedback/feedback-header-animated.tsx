@@ -330,7 +330,7 @@ export function FeedbackHeaderAnimated({
       data-state={expanded ? 'open' : undefined}
       className={cn(
         // Typing in it shows as a ring on the whole composer, the way a field's focus does.
-        'bg-card border border-border overflow-hidden focus-within:border-ring focus-within:ring-1 focus-within:ring-ring',
+        'bg-card border border-border overflow-hidden focus-within:border-ring focus-within:outline-1 focus-within:outline-ring',
         place === 'feed'
           ? 'rounded-lg mb-5 shadow-sm'
           : // The brand's composer shape, eased to a card's corners once it opens.
