@@ -41,12 +41,15 @@ const capital = (value: string) => value[0].toUpperCase() + value.slice(1).repla
 
 /**
  * An image reads as uploaded or not, its storage key meaning nothing to a
- * person; an empty headline as none; Home's blocks as how many there are.
+ * person; an empty headline as none; the menu and Home's blocks as how many
+ * there are.
  */
 function shownValue(path: string, value: unknown) {
   if (isImageField(path)) return value ? 'Uploaded image' : 'None'
   // Text left empty is none, not chosen for the person.
   if (/^pages\.\w+\.headline/.test(path) && value == null) return 'None'
+  if (path === 'nav.items' && Array.isArray(value))
+    return `${value.filter((item) => item.type === 'link' || item.shown).length} shown`
   if (path === 'pages.home.blocks' && Array.isArray(value))
     return value.length === 0
       ? 'No blocks'

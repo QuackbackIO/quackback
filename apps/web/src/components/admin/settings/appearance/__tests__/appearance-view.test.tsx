@@ -140,6 +140,12 @@ afterEach(() => {
 })
 
 const selectedTab = () => screen.getByRole('tab', { selected: true }).textContent
+// The menu's drag and drop keeps a status region of its own.
+const draftBar = () =>
+  screen
+    .getAllByRole('status')
+    .map((region) => region.textContent ?? '')
+    .find((text) => text.startsWith('Draft'))
 
 describe('AppearanceView', () => {
   it('previews Home once it is on, with the feed a click away', async () => {
@@ -173,7 +179,7 @@ describe('AppearanceView', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Sections' }))
     fireEvent.click(await screen.findByRole('radio', { name: 'Compact' }))
     expect(screen.getByTestId('preview').textContent).toBe('compact')
-    expect(screen.getByRole('status').textContent).toContain('Draft · 1 change, not live')
+    expect(draftBar()).toContain('Draft · 1 change, not live')
   })
 
   it('opens Sections when a section is picked in the preview', async () => {
@@ -203,7 +209,7 @@ describe('AppearanceView', () => {
     mount()
     fireEvent.click(screen.getByRole('button', { name: 'Start from a preset' }))
     fireEvent.click(await screen.findByRole('button', { name: /Editorial/ }))
-    expect(screen.getByRole('status').textContent).toMatch(/Draft · \d+ changes, not live/)
+    expect(draftBar()).toMatch(/Draft · \d+ changes, not live/)
     fireEvent.click(screen.getByRole('tab', { name: 'Sections' }))
     expect(await screen.findByRole('radio', { name: 'List' })).toHaveAttribute(
       'aria-checked',
@@ -243,7 +249,7 @@ describe('AppearanceView', () => {
     expect(selectedTab()).toBe('Ask AI')
     expect(await screen.findByText('Changes applied to your draft')).toBeTruthy()
     expect(screen.getByTestId('preview').textContent).toBe('compact')
-    expect(screen.getByRole('status').textContent).toContain('Draft · 1 change, not live')
+    expect(draftBar()).toContain('Draft · 1 change, not live')
 
     fireEvent.click(screen.getByRole('button', { name: 'Review and publish' }))
     const dialog = await screen.findByRole('dialog')
