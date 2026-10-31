@@ -251,6 +251,82 @@ describe('a panel in the band', () => {
   })
 })
 
+describe('the name as a wordmark, and the headline’s colour', () => {
+  it('sets the name in the brand colour where it reads, in the header’s text on a band', () => {
+    const tokens = resolveDesign(
+      design((d) => {
+        d.mode = 'light'
+        d.brand.light.accent = '#1f4d3a'
+        Object.assign(d.brand.logo, { nameColour: 'accent', nameCase: 'upper' })
+      })
+    ).tokens
+    expect(tokens.light['--qb-name-ink']).toBe('#1f4d3a')
+    expect(tokens.light).toMatchObject({
+      '--qb-name-case': 'uppercase',
+      '--qb-name-tracking': '0.14em',
+    })
+    const onBand = resolveDesign(
+      design((d) => {
+        d.mode = 'light'
+        d.brand.light.accent = '#1f4d3a'
+        d.brand.logo.nameColour = 'accent'
+        d.layout.band = 'brand'
+        d.layout.headerOnBand = true
+      })
+    ).tokens.light
+    expect(onBand['--qb-name-ink']).toBe(onBand['--qb-header-ink'])
+    expect(
+      contrastRatio(onBand['--qb-name-ink']!, onBand['--qb-header-bg']!)
+    ).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('colours the headline with the band’s accent, which reads on the band', () => {
+    expect(resolveDesign(design()).tokens.base['--qb-headline-colour']).toBe('var(--qb-band-ink)')
+    expect(
+      resolveDesign(design((d) => (d.brand.fonts.headlineColour = 'accent'))).tokens.base[
+        '--qb-headline-colour'
+      ]
+    ).toBe('var(--qb-band-accent)')
+  })
+})
+
+describe('the second colour at work', () => {
+  const petal = (change: (d: PortalDesign) => void) =>
+    resolveDesign(
+      design((d) => {
+        d.mode = 'light'
+        d.brand.light.accent = '#4a1942'
+        d.brand.light.support = '#e58fae'
+        change(d)
+      })
+    )
+
+  it('makes the band’s call to action, with text that reads on it', () => {
+    const { light } = petal((d) => (d.shape.action = 'support')).tokens
+    expect(light['--qb-action-bg']).toBe('#e58fae')
+    expect(contrastRatio(light['--qb-action-ink']!, '#e58fae')).toBeGreaterThanOrEqual(4.5)
+    const accent = petal(() => {})
+    expect(accent.tokens.light['--qb-action-bg']).toBe(accent.light!.primary)
+  })
+
+  it('tints the vote box and the current menu item when the design asks', () => {
+    const resolved = petal((d) => (d.layout.tint = 'support'))
+    const { light } = resolved.tokens
+    const { c, h } = parseOklch(hexToOklch(light['--qb-support-tint']!))!
+    expect(c).toBeGreaterThan(0.01)
+    expect(h > 330 || h < 20).toBe(true)
+    expect(
+      contrastRatio(light['--qb-nav-active-ink']!, light['--qb-nav-active-bg']!)
+    ).toBeGreaterThanOrEqual(4.5)
+    const tinted = design((d) => {
+      d.brand.light.support = '#e58fae'
+      d.layout.tint = 'support'
+    })
+    expect(layoutAttributes(tinted)['data-qb-tint']).toBe('support')
+    expect(petal(() => {}).tokens.light['--qb-support-tint']).toBeUndefined()
+  })
+})
+
 describe('a one-colour wordmark', () => {
   const filter = (change: (d: PortalDesign) => void, mode: 'light' | 'dark' = 'light') =>
     resolveDesign(design(change)).tokens[mode]['--qb-wordmark-filter']
@@ -436,6 +512,7 @@ describe('layoutAttributes', () => {
       'data-qb-band-shape': 'full',
       'data-qb-header-band': 'off',
       'data-qb-status': 'colour',
+      'data-qb-tint': 'neutral',
       'data-qb-cards': 'list',
       'data-qb-filters': 'start',
     })

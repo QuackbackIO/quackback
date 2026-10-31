@@ -69,13 +69,14 @@ const STORED_FILE = /^\/api\/storage\/[\w./-]+$/
 
 function readLogo(value: unknown): DesignLogo | null {
   if (!value || typeof value !== 'object') return null
-  const { display, name, wordmark } = value as Record<string, unknown>
+  const { display, name, wordmark, nameAccent } = value as Record<string, unknown>
   if (!LOGO_DISPLAYS.has(display as string)) return null
   const file = (url: unknown) => (typeof url === 'string' && STORED_FILE.test(url) ? url : null)
   const marks = (wordmark ?? {}) as Record<string, unknown>
   return {
     display: display as DesignLogo['display'],
     name: typeof name === 'string' ? name.slice(0, 60) : null,
+    nameAccent: typeof nameAccent === 'string' ? nameAccent.slice(0, 30) : null,
     wordmark: { light: file(marks.light), dark: file(marks.dark) },
   }
 }

@@ -70,6 +70,8 @@ export interface BandImage {
 export interface DesignLogo {
   display: PortalDesign['brand']['logo']['display']
   name: string | null
+  /** A part of the name set in the brand colour. */
+  nameAccent?: string | null
   wordmark: { light: string | null; dark: string | null }
 }
 

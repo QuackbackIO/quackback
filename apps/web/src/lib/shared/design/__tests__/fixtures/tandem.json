@@ -49,7 +49,7 @@
     "header": "stacked",
     "nav": "underline",
     "band": "blend",
-    "cards": "raised",
+    "cards": "filled",
     "density": "comfortable",
     "width": "default",
     "filters": "end",

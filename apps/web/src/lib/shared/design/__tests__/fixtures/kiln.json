@@ -29,7 +29,8 @@
       "headingWeight": 700,
       "scale": "display",
       "tracking": "tight",
-      "headlineCase": "upper"
+      "headlineCase": "upper",
+      "headlineColour": "accent"
     },
     "logo": {
       "mark": {

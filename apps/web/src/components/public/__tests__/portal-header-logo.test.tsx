@@ -30,6 +30,7 @@ afterEach(cleanup)
 type Logo = {
   display: 'mark_and_name' | 'mark' | 'wordmark' | 'name'
   name: string | null
+  nameAccent?: string | null
   wordmark: { light: string | null; dark: string | null }
 }
 
@@ -127,5 +128,14 @@ describe('the header logo a design chooses', () => {
       wordmark: { light: null, dark: null },
     })
     expect(logo.textContent).toBe('Draft name')
+  })
+
+  it('sets part of the name in the brand colour, and its case from the design', async () => {
+    const logo = await mount(design({ display: 'name', name: 'Voltline', nameAccent: 'line' }))
+    const name = logo.querySelector('.portal-header__name')!
+    expect(name.textContent).toBe('Voltline')
+    expect(name.querySelector('span')!.textContent).toBe('line')
+    expect(name.querySelector('span')!.className).toContain('var(--qb-name-accent)')
+    expect(name.className).toContain('[text-transform:var(--qb-name-case,none)]')
   })
 })

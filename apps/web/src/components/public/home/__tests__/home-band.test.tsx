@@ -72,7 +72,9 @@ describe('Home’s composer in the band', () => {
     const page = await mountHome({ headline: null, blocks: BLOCKS, composer: 'band' })
     const band = page.querySelector('[data-qb-part=band]')!
     expect(band.querySelector('form[data-qb-part=composer]')).not.toBeNull()
-    expect(band.querySelector('button[type=submit]')!.className).toContain('bg-primary')
+    expect(band.querySelector('button[type=submit]')!.className).toContain(
+      'bg-[var(--qb-action-bg,var(--primary))]'
+    )
     const grid = page.querySelector('[data-qb-section=home]')!
     expect(grid.querySelector('[data-qb-part=composer]')).toBeNull()
     // The contact block keeps its place in the order, for the preview's section picking.

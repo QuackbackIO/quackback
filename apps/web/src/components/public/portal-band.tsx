@@ -124,7 +124,7 @@ export function PortalBand({
           {title && (
             <h1
               data-qb-part="headline"
-              className="font-semibold text-[var(--qb-band-ink)] [font-size:var(--qb-headline-size)] [line-height:var(--qb-headline-leading)]"
+              className="font-semibold text-[var(--qb-headline-colour,var(--qb-band-ink))] [font-size:var(--qb-headline-size)] [line-height:var(--qb-headline-leading)]"
             >
               {accented(title, phrase, headline?.accent?.style)}
             </h1>

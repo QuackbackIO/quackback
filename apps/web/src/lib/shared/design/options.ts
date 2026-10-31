@@ -17,6 +17,8 @@ export const DESIGN_OPTIONS = {
   logoDisplay: ['mark_and_name', 'mark', 'wordmark', 'name'],
   /** A wordmark file's ink, so it can turn light on a dark header and dark on a light one. */
   logoTone: ['dark', 'light'],
+  /** Text in the ink, or in the brand colour. */
+  inkOrAccent: ['ink', 'accent'],
   /** How large page headlines are. */
   typeScale: ['standard', 'large', 'display'],
   /** How closely headings are set. */
@@ -39,7 +41,12 @@ export const DESIGN_OPTIONS = {
   imagePlace: ['side', 'edge', 'cover', 'pattern'],
   /** Home's composer: a block on the grid, or in the band under the headline. */
   composerPlace: ['block', 'band'],
-  cards: ['bordered', 'raised', 'list'],
+  /** `filled` cards have no edge: their own colour on the page, with larger corners. */
+  cards: ['bordered', 'raised', 'list', 'filled'],
+  /** What tints the vote box and the current menu item: the neutral raised colour, or the second colour. */
+  tint: ['neutral', 'support'],
+  /** The colour of the band's call to action. */
+  action: ['accent', 'support'],
   density: ['compact', 'comfortable', 'spacious'],
   width: ['narrow', 'default', 'wide'],
   /** Which side of the feed the filters sit on, `end` being the reading end. */

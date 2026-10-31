@@ -200,6 +200,8 @@ export const portalDesignV2 = z
             tracking: z.enum(DESIGN_OPTIONS.tracking).optional(),
             headlineCase: z.enum(DESIGN_OPTIONS.textCase).optional(),
             labelCase: z.enum(DESIGN_OPTIONS.textCase).optional(),
+            /** Page headlines in the ink, or in the brand colour. */
+            headlineColour: z.enum(DESIGN_OPTIONS.inkOrAccent).optional(),
           })
           .strict(),
         logo: z
@@ -209,6 +211,10 @@ export const portalDesignV2 = z
             display: z.enum(DESIGN_OPTIONS.logoDisplay),
             /** The wordmark's ink when it is one colour throughout. */
             tone: z.enum(DESIGN_OPTIONS.logoTone).optional(),
+            /** The name as a wordmark: its colour, its case, and a part of it in the brand colour. */
+            nameColour: z.enum(DESIGN_OPTIONS.inkOrAccent).optional(),
+            nameCase: z.enum(DESIGN_OPTIONS.textCase).optional(),
+            nameAccent: z.string().trim().max(30).optional(),
             name: z.string().trim().max(60).optional(),
           })
           .strict(),
@@ -225,6 +231,8 @@ export const portalDesignV2 = z
         corners: z.enum(DESIGN_OPTIONS.corners),
         /** Absent follows the corners. */
         buttons: z.enum(DESIGN_OPTIONS.buttons).optional(),
+        /** The band's call to action in the brand colour or the second; absent is the brand colour. */
+        action: z.enum(DESIGN_OPTIONS.action).optional(),
       })
       .strict(),
     layout: z
@@ -242,6 +250,8 @@ export const portalDesignV2 = z
         headerOnBand: z.boolean().optional(),
         /** Absent is coloured dots. */
         status: z.enum(DESIGN_OPTIONS.status).optional(),
+        /** Absent is neutral. */
+        tint: z.enum(DESIGN_OPTIONS.tint).optional(),
         /** Where the band's image sits; absent is beside the words. */
         imagePlace: z.enum(DESIGN_OPTIONS.imagePlace).optional(),
         cards: z.enum(DESIGN_OPTIONS.cards),

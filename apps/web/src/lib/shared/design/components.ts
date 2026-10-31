@@ -87,6 +87,9 @@ function typeTokens(fonts: Fonts): TokenMap {
     '--qb-label-case': CASE[labels],
     // Upper-case labels read better spaced out.
     '--qb-label-tracking': labels === 'upper' ? '0.06em' : 'normal',
+    // In the brand colour, a headline takes the band's accent, which reads on the band.
+    '--qb-headline-colour':
+      fonts.headlineColour === 'accent' ? 'var(--qb-band-accent)' : 'var(--qb-band-ink)',
   }
 }
 
@@ -116,6 +119,16 @@ export function modeTokens(doc: PortalDesign, vars: ThemeVariables, mode: Mode):
     ...bandTokens(doc, t, mode),
     ...(headerOnBand(doc) ? headerBandTokens(doc, t, mode) : {}),
   }
+  Object.assign(tokens, supportTokens(doc, t, mode, tokens))
+  Object.assign(
+    tokens,
+    nameTokens(
+      doc,
+      t,
+      tokens['--qb-header-bg'] ?? t.background,
+      tokens['--qb-header-ink'] ?? t.foreground
+    )
+  )
   tokens['--qb-wordmark-filter'] = wordmarkFilter(
     doc.brand.logo.tone,
     tokens['--qb-header-bg'] ?? t.background
@@ -160,6 +173,55 @@ export function bandError(doc: PortalDesign, vars: ThemeVariables, mode: Mode): 
 /** How far a tint band, and the top of a fade, step from the page toward the middle. */
 export const BAND_TINT = 0.045
 export const BAND_FADE = 0.08
+
+/**
+ * The second colour at work: the band's call to action when the design
+ * gives it that, and a pale tint for the vote box and the current menu item
+ * when the design tints with it. Text on each stays readable.
+ */
+function supportTokens(
+  doc: PortalDesign,
+  t: Required<ThemeVariables>,
+  mode: Mode,
+  tokens: TokenMap
+): TokenMap {
+  const support = supportColour(doc, mode)
+  const out: TokenMap = {}
+  const action = support && doc.shape.action === 'support' ? support : t.primary
+  out['--qb-action-bg'] = action
+  out['--qb-action-ink'] =
+    action === t.primary ? t.primaryForeground : (textOn([action], t) ?? t.primaryForeground)
+  if (support && doc.layout.tint === 'support') {
+    out['--qb-support-tint'] = tintOf(support, t.card, 0.06)
+    out['--qb-support-edge'] = mixColor(support, t.card, 0.55)
+    if (!headerOnBand(doc)) {
+      const header = tokens['--qb-header-bg'] ?? t.background
+      out['--qb-nav-active-bg'] = tintOf(support, header, 0.07)
+      out['--qb-nav-active-ink'] = readableOn(t.foreground, out['--qb-nav-active-bg']!)
+    }
+  }
+  return out
+}
+
+/**
+ * The name as a wordmark: in the header's text, or in the brand colour moved
+ * until it reads on the header, with its accent part in the brand colour too.
+ */
+function nameTokens(
+  doc: PortalDesign,
+  t: Required<ThemeVariables>,
+  header: string,
+  ink: string
+): TokenMap {
+  const { nameColour, nameCase } = doc.brand.logo
+  const brand = solveContrast(t.primary, [header], 4.5) ?? ink
+  return {
+    '--qb-name-ink': nameColour === 'accent' && !headerOnBand(doc) ? brand : ink,
+    '--qb-name-accent': solveContrast(t.primary, [header], 3) ?? ink,
+    '--qb-name-case': nameCase === 'upper' ? 'uppercase' : 'none',
+    '--qb-name-tracking': nameCase === 'upper' ? '0.14em' : 'var(--qb-headline-tracking)',
+  }
+}
 
 /**
  * A one-colour wordmark redrawn where its ink would vanish into the header:
@@ -367,6 +429,8 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
     'data-qb-band-shape': doc.layout.bandShape ?? 'full',
     'data-qb-header-band': headerOnBand(doc) ? 'on' : 'off',
     'data-qb-status': doc.layout.status ?? 'colour',
+    'data-qb-tint':
+      doc.layout.tint === 'support' && doc.brand.light.support ? 'support' : 'neutral',
     'data-qb-cards': cards,
     'data-qb-filters': filters,
   }
