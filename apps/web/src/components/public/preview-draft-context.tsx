@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import { useIntl } from 'react-intl'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import type { DesignLogo } from '@/lib/shared/design/view'
+import type { BandImage, DesignLogo } from '@/lib/shared/design/view'
 import type { PortalNavConfig, PortalWelcomeCard } from '@/lib/shared/types/settings'
 
 /**
@@ -136,6 +136,13 @@ export function useFeedCopy(): { prompt?: string; submit?: string; emptyTitle?: 
     }),
     [copy, locale]
   )
+}
+
+export const PreviewBandImageContext = createContext<BandImage | null | undefined>(undefined)
+
+/** A draft design's band image: undefined outside a design preview, null when it has none. */
+export function usePreviewBandImage(): BandImage | null | undefined {
+  return useContext(PreviewBandImageContext)
 }
 
 export const PreviewLogoContext = createContext<DesignLogo | undefined>(undefined)

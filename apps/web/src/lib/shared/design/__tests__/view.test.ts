@@ -55,6 +55,7 @@ describe('portalTheme', () => {
         wordmark: { light: null, dark: null },
       },
       statusColours: null,
+      bandImage: null,
     }
     expect(portalTheme({ brandingConfig, customCss: '.x {}', portalDesign })).toEqual({
       themeMode: 'user',
@@ -87,6 +88,7 @@ describe('portalFontIds', () => {
         wordmark: { light: null, dark: null },
       },
       statusColours: null,
+      bandImage: null,
     }
     expect(portalFontIds({ portalDesign })).toEqual(['inter', 'fraunces'])
   })
@@ -124,6 +126,7 @@ describe('portalFontLinks', () => {
         wordmark: { light: null, dark: null },
       },
       statusColours: null,
+      bandImage: null,
     }
     expect(portalFontLinks({ portalDesign })).toEqual([
       {
@@ -163,6 +166,7 @@ describe('portalThemeMode', () => {
           wordmark: { light: null, dark: null },
         },
         statusColours: null,
+        bandImage: null,
       },
     })
     expect(portalThemeMode(v2('auto'))).toBe('user')
@@ -222,6 +226,7 @@ describe('portalDefaultSort', () => {
         wordmark: { light: null, dark: null },
       },
       statusColours: null,
+      bandImage: null,
     }
     expect(portalDefaultSort({ portalDesign })).toBe('new')
   })

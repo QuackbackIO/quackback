@@ -54,7 +54,14 @@ export type PortalDesignView =
       logo: DesignLogo
       /** The logo's colours that status markers take, when the design asks for them. */
       statusColours: string[] | null
+      /** The band's image and where it sits, or null. */
+      bandImage: BandImage | null
     }
+
+export interface BandImage {
+  url: string
+  place: NonNullable<PortalDesign['layout']['imagePlace']>
+}
 
 /**
  * The header's logo: the display, the name it shows when not the workspace's,

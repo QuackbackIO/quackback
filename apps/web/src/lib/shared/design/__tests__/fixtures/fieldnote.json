@@ -37,7 +37,10 @@
     "favicon": {
       "key": "fixtures/fieldnote/favicon.png"
     },
-    "shareImage": null
+    "shareImage": null,
+    "bandImage": {
+      "key": "portal-images/fieldnote-grid.png"
+    }
   },
   "shape": {
     "corners": "subtle"
@@ -49,7 +52,8 @@
     "cards": "list",
     "density": "compact",
     "width": "default",
-    "filters": "end"
+    "filters": "end",
+    "imagePlace": "pattern"
   },
   "pages": {
     "home": {

@@ -55,7 +55,15 @@ const imageUploadSchema = z.object({
  */
 async function presignedImageUpload(
   data: z.infer<typeof imageUploadSchema>,
-  opts: { label: string; prefix: string }
+  opts: {
+    label: string
+    prefix: string
+    /**
+     * Also SVG, for a wordmark. Storage serves SVG as a sandboxed download,
+     * which an <img> still shows, so it never runs as a page.
+     */
+    svg?: boolean
+  }
 ) {
   log.debug(
     { content_type: data.contentType, file_size: data.fileSize },
@@ -66,8 +74,11 @@ async function presignedImageUpload(
     throw new Error('File storage is not configured. Contact your administrator.')
   }
 
-  if (!isAllowedImageType(data.contentType)) {
-    throw new Error(`Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`)
+  const svg = opts.svg === true && data.contentType === 'image/svg+xml'
+  if (!svg && !isAllowedImageType(data.contentType)) {
+    throw new Error(
+      `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP${opts.svg ? ', SVG' : ''}.`
+    )
   }
 
   const key = generateStorageKey(opts.prefix, data.filename)
@@ -215,6 +226,27 @@ export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     return presignedImageUpload(data, { label: 'header logo', prefix: 'header-logos' })
+  })
+
+/**
+ * Get a presigned URL for uploading a portal design's wordmark, light or dark.
+ * Unlike the workspace logo, which emails carry, it may be an SVG.
+ */
+export const getWordmarkUploadUrlFn = createServerFn({ method: 'POST' })
+  .validator(imageUploadSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    return presignedImageUpload(data, { label: 'wordmark', prefix: 'header-logos', svg: true })
+  })
+
+/**
+ * Get a presigned URL for uploading the image a portal design shows in its band.
+ */
+export const getBandImageUploadUrlFn = createServerFn({ method: 'POST' })
+  .validator(imageUploadSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    return presignedImageUpload(data, { label: 'band image', prefix: 'portal-images' })
   })
 
 /**

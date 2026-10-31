@@ -59,6 +59,18 @@ describe('designView', () => {
     expect(designView(doc, 1).statusColours).toBeNull()
   })
 
+  it('carries the band image and where it sits, beside the words unless it says', () => {
+    const doc = defaultDesign()
+    expect(designView(doc, 1).bandImage).toBeNull()
+    doc.brand.bandImage = { key: 'portal-images/room.jpg' }
+    expect(designView(doc, 1).bandImage).toEqual({
+      url: '/api/storage/portal-images/room.jpg',
+      place: 'side',
+    })
+    doc.layout.imagePlace = 'pattern'
+    expect(designView(doc, 1).bandImage?.place).toBe('pattern')
+  })
+
   it('carries a name the header shows in place of the workspace’s', () => {
     const doc = defaultDesign()
     doc.brand.logo = { ...doc.brand.logo, display: 'name', name: 'Harbor & Pine' }

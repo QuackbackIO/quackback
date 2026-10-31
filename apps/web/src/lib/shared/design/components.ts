@@ -206,6 +206,9 @@ function bandTokens(doc: PortalDesign, t: Required<ThemeVariables>, mode: Mode):
     // A headline's accent phrase: the brand colour, moved until it reads at
     // 3:1 as large text wherever the headline sits, or the band's ink.
     '--qb-band-accent': solveContrast(t.primary, surface.behind, 3) ?? surface.ink,
+    // Over an image, the band's colour veils it so the words keep their contrast.
+    '--qb-band-scrim': `color-mix(in oklch, ${surface.behind[0]} 85%, transparent)`,
+    '--qb-band-scrim-soft': `color-mix(in oklch, ${surface.behind[0]} 60%, transparent)`,
     '--qb-band-highlight': mixColor(
       support ?? t.primary,
       surface.behind[0]!,

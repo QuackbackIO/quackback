@@ -33,6 +33,8 @@ export const DESIGN_OPTIONS = {
   bandAlign: ['left', 'centre'],
   /** The band across the page, as a rounded panel within it, or with its words on a panel. */
   bandShape: ['full', 'inset', 'panel'],
+  /** Where the band's image sits: beside the words, along its bottom, behind them, or tiled. */
+  imagePlace: ['side', 'edge', 'cover', 'pattern'],
   /** Home's composer: a block on the grid, or in the band under the headline. */
   composerPlace: ['block', 'band'],
   cards: ['bordered', 'raised', 'list'],

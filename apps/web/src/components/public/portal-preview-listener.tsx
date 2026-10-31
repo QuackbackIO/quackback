@@ -6,6 +6,7 @@ import {
   PreviewDraftProvider,
   PreviewAttributesContext,
   PreviewLogoContext,
+  PreviewBandImageContext,
   PreviewHeadlineContext,
   PreviewPagesContext,
   FeedCopyContext,
@@ -153,13 +154,15 @@ export function PortalPreviewProvider({
           <PreviewAttributesContext.Provider value={design?.attributes}>
             <PreviewLogoContext.Provider value={design?.logo ?? undefined}>
               <BrandStatusColours colours={design?.statusColours}>
-                <DraftCopy copy={design?.copy}>
-                  {design?.words ? (
-                    <PortalWordsIntl words={design.words}>{children}</PortalWordsIntl>
-                  ) : (
-                    children
-                  )}
-                </DraftCopy>
+                <PreviewBandImageContext.Provider value={design ? design.bandImage : undefined}>
+                  <DraftCopy copy={design?.copy}>
+                    {design?.words ? (
+                      <PortalWordsIntl words={design.words}>{children}</PortalWordsIntl>
+                    ) : (
+                      children
+                    )}
+                  </DraftCopy>
+                </PreviewBandImageContext.Provider>
               </BrandStatusColours>
             </PreviewLogoContext.Provider>
           </PreviewAttributesContext.Provider>

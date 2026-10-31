@@ -38,7 +38,10 @@
     "favicon": {
       "key": "fixtures/bramble/favicon.png"
     },
-    "shareImage": null
+    "shareImage": null,
+    "bandImage": {
+      "key": "portal-images/bramble-kitchen.jpg"
+    }
   },
   "shape": {
     "corners": "pill"
