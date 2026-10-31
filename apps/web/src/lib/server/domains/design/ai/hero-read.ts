@@ -98,11 +98,14 @@ export function withHero(
   confirm: (colour: string) => boolean
 ): Look {
   if (!hero) return look
-  const next: Look = { ...look, bandAlign: hero.align, headerOnBand: hero.headerOnHero }
+  const next: Look = { ...look, bandAlign: hero.align }
   if (hero.upper) next.headlineCase = 'upper'
   if (hero.art === 'hills' || hero.art === 'waves' || hero.art === 'dots') next.bandArt = hero.art
-  if (hero.fill === 'page') next.band = 'none'
+  // A plain hero leaves the band to the look: a brand can carry colour in art or a
+  // gradient beside the words, which the look can give the band. Only a hero with
+  // a fill of its own says what the band is, and whether the header shares it.
   if (hero.fill === 'gradient') next.band = 'blend'
+  if (hero.fill === 'colour' || hero.fill === 'gradient') next.headerOnBand = hero.headerOnHero
   const colour = hero.fill === 'colour' && confirm(hero.colour) ? hero.colour.toLowerCase() : null
   if (colour) {
     if (same(colour, next.accent)) next.band = 'brand'

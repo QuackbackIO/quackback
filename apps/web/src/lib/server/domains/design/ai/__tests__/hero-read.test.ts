@@ -61,6 +61,13 @@ describe('the faithful look’s hero, as the screenshot shows it', () => {
     )
   })
 
+  it('leaves the band to the look when the hero is the plain page (Stripe)', () => {
+    const look = { ...DIRECTIONS_EXAMPLE, band: 'blend' as const, headerOnBand: false }
+    const next = withHero(look, hero({ fill: 'page', headerOnHero: true }), confirmedBy([]))
+    expect(next.band).toBe('blend')
+    expect(next.headerOnBand).toBe(false)
+  })
+
   it('leaves a colour the screenshot does not show, and a logo, to the look', () => {
     const look = { ...DIRECTIONS_EXAMPLE, accent: '#163300', band: 'brand' as const }
     expect(withHero(look, hero({ colour: '#0081ba' }), confirmedBy(['#9fe870'])).band).toBe('brand')

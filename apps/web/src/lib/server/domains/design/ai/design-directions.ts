@@ -372,9 +372,13 @@ export async function designDirections(input: {
     })
     const hero = await heroRead
     // A measured colour overrides the model only where what was seen bears it out.
-    const confirm = confirmedBy(
-      input.palette?.length ? input.palette : (input.site?.palette.slice(0, 3) ?? [])
-    )
+    // Either source will do: a brand colour used only on small buttons is hardly in
+    // a screenshot's colours by area, and an old colour a bundle still styles is in
+    // neither.
+    const confirm = confirmedBy([
+      ...(input.palette ?? []),
+      ...(input.site?.palette.slice(0, 3) ?? []),
+    ])
     return {
       ok: true,
       looks: answer.looks.map((answered, index) => {
