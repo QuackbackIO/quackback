@@ -8,7 +8,7 @@ import { defaultDesign } from '@/lib/shared/design/schema'
 
 vi.mock('@/lib/server/config', () => ({ config: {} }))
 
-const { DIRECTIONS_EXAMPLE, lookDesign } = await import('../design-directions')
+const { DIRECTIONS_EXAMPLE, faithfulAccent, lookDesign } = await import('../design-directions')
 
 const every = [
   'welcome',
@@ -205,5 +205,23 @@ describe('lookDesign', () => {
       allows
     ).design
     expect(onGrid.pages.home.blocks.find((b) => b.type === 'contact')?.width).toBe('half')
+  })
+})
+
+describe('the faithful look’s accent', () => {
+  const site = { palette: ['#112231', '#ff4f40', '#218fb7'] } as never
+
+  it('takes their own colour back when the model only darkened it', () => {
+    expect(faithfulAccent('#9c240b', { site })).toBe('#ff4f40')
+  })
+
+  it('keeps a different hue, a grey, and an accent when they gave no colours', () => {
+    expect(faithfulAccent('#533afd', { site: { palette: ['#ff7a59'] } as never })).toBe('#533afd')
+    expect(faithfulAccent('#1a1a1a', { site })).toBe('#1a1a1a')
+    expect(faithfulAccent('#9c240b', {})).toBe('#9c240b')
+  })
+
+  it('reads an image’s colours as well', () => {
+    expect(faithfulAccent('#3d7a2e', { palette: ['#9fe870'] })).toBe('#9fe870')
   })
 })

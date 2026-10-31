@@ -49,6 +49,17 @@ beforeEach(() => {
 })
 
 describe('readSiteSignals', () => {
+  it('draws a logo in the page’s current colour in the site’s most vivid colour', async () => {
+    web.pages['https://example.com/'] = {
+      body: `<html><head><style>body { color: #112231; background: #ffffff } .btn { background: #112231 } a { color: #ff4f40 }</style></head>
+        <body><header><a class="logo" href="/"><svg viewBox="0 0 120 30"><path fill="currentColor"/></svg></a></header></body></html>`,
+    }
+    const read = await readSiteSignals('example.com')
+    expect(read.ok && read.signals.logo).toEqual({
+      svg: '<svg viewBox="0 0 120 30"><path fill="#ff4f40"/></svg>',
+    })
+  })
+
   it('reads the colours, background and fonts the site uses, saying who is asking', async () => {
     web.pages['https://example.com/'] = { body: HOME }
     web.pages['https://example.com/assets/site.css'] = { body: CSS, type: 'text/css' }

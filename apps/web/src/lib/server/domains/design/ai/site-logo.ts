@@ -12,7 +12,8 @@ import { normaliseColor } from '@/lib/shared/design/color'
 import { parseOklch } from '@/lib/shared/theme/expand'
 import { hexToOklch } from '@/lib/shared/theme/colors'
 
-export type LogoCandidate = { svg: string } | { url: string }
+/** An inline logo carries the classes it and its element wear, which may set its colour. */
+export type LogoCandidate = { svg: string; classes?: string[] } | { url: string }
 
 const MAX_SVG = 200_000
 /** Marked as a logo by class, id or a test hook; logo walls of customers are not the site's own. */
@@ -57,10 +58,15 @@ function imageSource(tag: string, base: string): string | null {
   return src && !src.startsWith('data:') ? absolute(src, base) : null
 }
 
+const classesOf = (tag: string) => (attr(tag, 'class') ?? '').split(/\s+/).filter(Boolean)
+
 /** The logo inside an element's markup: its inline SVG, else its dark-on-light image. */
-function logoWithin(markup: string, base: string): LogoCandidate | null {
+function logoWithin(markup: string, base: string, element: string): LogoCandidate | null {
   const svg = /<svg\b[\s\S]*?<\/svg>/i.exec(markup)?.[0]
-  if (svg && svg.length <= MAX_SVG) return { svg }
+  if (svg && svg.length <= MAX_SVG) {
+    const classes = [...classesOf(element), ...classesOf(/<svg\b[^>]*>/i.exec(svg)![0])]
+    return classes.length ? { svg, classes } : { svg }
+  }
   const images = [...markup.matchAll(/<img\b[^>]*>/gi)].map((match) => match[0])
   const preferred = images.find((tag) => /black|dark/i.test(attr(tag, 'src') ?? '')) ?? images[0]
   const url = preferred ? imageSource(preferred, base) : null
@@ -85,7 +91,7 @@ export function findHeaderLogo(html: string, base: string): LogoCandidate | null
       }
       const rest = scope.slice(match.index! + tag.length, match.index! + tag.length + 60_000)
       const close = rest.search(new RegExp(`</${name}>`, 'i'))
-      const found = logoWithin(close >= 0 ? rest.slice(0, close) : rest.slice(0, 20_000), base)
+      const found = logoWithin(close >= 0 ? rest.slice(0, close) : rest.slice(0, 20_000), base, tag)
       if (found) return found
     }
   }
@@ -119,13 +125,35 @@ function customProperties(css: readonly string[]): Map<string, string> {
   return found
 }
 
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** The text colour the site's CSS gives any of these classes, as it is first set. */
+function classColour(css: readonly string[], classes: readonly string[]): string | null {
+  for (const name of classes) {
+    const rule = new RegExp(`\\.${escape(name)}(?![\\w-])[^{}]*\\{([^}]*)\\}`, 'g')
+    for (const sheet of css)
+      for (const [, body] of sheet.matchAll(rule)) {
+        const value = /(?:^|[;\s{])color\s*:\s*([^;}]+)/i.exec(body!)?.[1]
+        if (value && !/var\(|inherit|currentcolor/i.test(value)) return value.trim()
+      }
+  }
+  return null
+}
+
 /**
  * An inline SVG with the colours it takes from its page written in: custom
- * properties from the site's CSS, and `currentColor` as the brand colour.
- * Copied out of the page, it would otherwise draw in black.
+ * properties from the site's CSS, and `currentColor` as the colour the CSS
+ * gives the logo's own classes, else the brand colour. Copied out of the
+ * page, it would otherwise draw in black.
  */
-export function resolveSvgColours(svg: string, css: readonly string[], fallback: string): string {
+export function resolveSvgColours(
+  svg: string,
+  css: readonly string[],
+  fallback: string,
+  classes: readonly string[] = []
+): string {
   const properties = customProperties(css)
+  const ownColour = classColour(css, classes) ?? fallback
   const resolve = (value: string, depth = 0): string =>
     depth > 4
       ? fallback
@@ -137,7 +165,7 @@ export function resolveSvgColours(svg: string, css: readonly string[], fallback:
             return alternative ? resolve(alternative.trim(), depth + 1) : fallback
           }
         )
-  return resolve(svg).replace(/currentColor/gi, fallback)
+  return resolve(svg).replace(/currentColor/gi, ownColour)
 }
 
 /** What an SVG may not hold to be stored: anything that runs, embeds a page or reaches out. */

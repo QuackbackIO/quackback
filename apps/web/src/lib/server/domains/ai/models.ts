@@ -31,6 +31,9 @@ export type ChatFeature =
   // Phase 1): one structured-output call per classification moment, over all
   // ai_detect=true attributes for a conversation.
   | 'classification'
+  // Quackback AI in Appearance: starting looks and design changes. Without its
+  // own model it rides the assistant's.
+  | 'design'
 
 /**
  * Resolve an effective model: per-feature override wins over the role default;
@@ -64,6 +67,7 @@ export function getChatModel(feature: ChatFeature): string | null {
     assistant: config.aiAssistantModel,
     inboxTranslation: config.aiInboxTranslationModel,
     classification: config.aiClassificationModel,
+    design: config.aiDesignModel ?? config.aiAssistantModel,
   }
   return resolveModel(overrides[feature], config.aiChatModel)
 }

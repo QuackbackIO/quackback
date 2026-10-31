@@ -16,7 +16,7 @@ const WORDMARK =
 describe('finding a website’s header logo', () => {
   it('takes the inline SVG in an element marked as the logo', () => {
     const html = `<html><body><nav><a class="nav__logo" href="/en-gb/">${WORDMARK}</a></nav></body></html>`
-    expect(findHeaderLogo(html, BASE)).toEqual({ svg: WORDMARK })
+    expect(findHeaderLogo(html, BASE)).toEqual({ svg: WORDMARK, classes: ['nav__logo'] })
   })
 
   it('takes the first link home when nothing is marked, skipping a wall of customer logos', () => {
@@ -67,6 +67,13 @@ describe('an inline SVG copied out of its page', () => {
       ':root { --brand-ink: var(--green-900); --green-900: #163300 }',
     ]
     expect(resolveSvgColours(WORDMARK, css, '#ff4f40')).toContain('fill="#163300"')
+  })
+
+  it('draws currentColor in the colour the site gives the logo’s own class', () => {
+    const css = ['.Header_logo__x9{display:flex;color:#ff4f40}', '.other{color:#111}']
+    expect(
+      resolveSvgColours('<svg fill="currentColor"/>', css, '#112231', ['Header_logo__x9'])
+    ).toBe('<svg fill="#ff4f40"/>')
   })
 
   it('takes a property’s fallback, and the brand colour for currentColor or an unknown property', () => {

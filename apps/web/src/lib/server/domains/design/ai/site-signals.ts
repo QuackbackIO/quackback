@@ -14,7 +14,19 @@ import { fetchFollowingRedirects } from '@/lib/server/content/unfurl'
 import { logger } from '@/lib/server/logger'
 import { isStandardWebsiteUrl, parseWebsiteInput } from '@/lib/shared/website-branding'
 import { isBlockPage, pageLinks, readSiteBrand, type SiteBrand } from './site-brand'
+import { colourVividness } from '@/lib/shared/design/palette'
 import { findHeaderLogo, findShareImage, resolveSvgColours, type LogoCandidate } from './site-logo'
+
+/**
+ * The colour a logo drawn in the page's current colour most likely takes: a
+ * monochrome brand's near-black, else the most vivid colour the site uses,
+ * which a logo usually is.
+ */
+function logoColour(brand: SiteBrand): string {
+  if (brand.monochrome) return '#111111'
+  const vivid = [...brand.palette].sort((a, b) => colourVividness(b) - colourVividness(a))[0]
+  return vivid ?? brand.colour ?? '#111111'
+}
 
 const log = logger.child({ module: 'site-signals' })
 
@@ -132,7 +144,7 @@ export async function readSiteSignals(site: string): Promise<SiteRead> {
     const header = findHeaderLogo(found.html, found.url)
     const logo =
       header && 'svg' in header
-        ? { svg: resolveSvgColours(header.svg, sheets, brand.colour ?? '#111111') }
+        ? { svg: resolveSvgColours(header.svg, sheets, logoColour(brand), header.classes) }
         : header
     const shareImage = findShareImage(found.html, found.url)
     log.info(
