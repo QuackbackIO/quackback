@@ -39,6 +39,9 @@ const NEAREST: ReadonlyArray<readonly [RegExp, BundledFontId]> = [
   [/sf mono|menlo|monaco|consolas|berkeley mono|jetbrains/, 'jetbrains'],
 ]
 
+const GENERIC =
+  /^(system-ui|-apple-system|blinkmacsystemfont|sans-serif|serif|monospace|ui-[\w-]+|segoe ui|roboto|helvetica( neue)?|arial|apple color emoji|segoe ui emoji|noto color emoji)$/i
+
 const simplify = (name: string) =>
   name
     .toLowerCase()
@@ -66,7 +69,10 @@ function nearestOne(family: string): BundledFontId | null {
  */
 export function nearestBundledFont(family: string | null | undefined): BundledFontId | null {
   if (!family) return null
-  for (const one of family.split(',')) {
+  const stack = family.split(',')
+  for (const [index, one] of stack.entries()) {
+    // A generic family past the first is a fallback, not the brand's face.
+    if (index > 0 && GENERIC.test(one.trim().replace(/["']/g, ''))) continue
     const found = nearestOne(one)
     if (found) return found
   }

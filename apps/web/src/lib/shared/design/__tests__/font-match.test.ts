@@ -26,6 +26,9 @@ describe('the bundled face closest to a brand’s', () => {
       nearestBundledFont('Salesforce-Avant-Garde, "Helvetica Neue", Helvetica, sans-serif')
     ).toBe('outfit')
     expect(nearestBundledFont('Acme Sans, Fraunces, serif')).toBe('fraunces')
+    // A generic fallback is not the brand's face; leading the stack, it is.
+    expect(nearestBundledFont('Grotesk, system-ui, sans-serif')).toBeNull()
+    expect(nearestBundledFont('system-ui, sans-serif')).toBe('system')
   })
 
   it('leaves a face it does not know to be chosen', () => {
