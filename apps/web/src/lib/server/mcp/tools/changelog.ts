@@ -43,6 +43,25 @@ const createChangelogSchema = {
     .describe(
       'ISO 8601 datetime to publish at (e.g. "2025-03-15T12:00:00Z"). Overrides publish flag. Past dates backdate the entry, future dates schedule it.'
     ),
+  displayDate: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      'ISO 8601 portal display override for published entries. Null clears the override. Must not be in the future.'
+    ),
+  featuredImageUrl: z
+    .string()
+    .max(2048)
+    .nullable()
+    .optional()
+    .describe(
+      'Hero image URL rendered at the top of the public entry detail page (null clears it)'
+    ),
+  linkedPostIds: z
+    .array(z.string())
+    .optional()
+    .describe('Post TypeIDs to link to this changelog entry'),
 }
 
 const updateChangelogSchema = {
@@ -67,6 +86,14 @@ const updateChangelogSchema = {
     .describe(
       'ISO 8601 portal display override for published entries. Null clears the override. Must not be in the future.'
     ),
+  featuredImageUrl: z
+    .string()
+    .max(2048)
+    .nullable()
+    .optional()
+    .describe(
+      'Hero image URL rendered at the top of the public entry detail page (null clears it)'
+    ),
   linkedPostIds: z
     .array(z.string())
     .optional()
@@ -88,6 +115,9 @@ type CreateChangelogArgs = {
   content: string
   publish: boolean
   publishedAt?: string
+  displayDate?: string | null
+  featuredImageUrl?: string | null
+  linkedPostIds?: string[]
 }
 
 type UpdateChangelogArgs = {
@@ -97,6 +127,7 @@ type UpdateChangelogArgs = {
   publish?: boolean
   publishedAt?: string
   displayDate?: string | null
+  featuredImageUrl?: string | null
   linkedPostIds?: string[]
 }
 
@@ -129,6 +160,13 @@ Examples:
           title: args.title,
           content: args.content,
           publishState,
+          ...(args.displayDate !== undefined && {
+            displayDate: args.displayDate === null ? null : new Date(args.displayDate),
+          }),
+          ...(args.featuredImageUrl !== undefined && {
+            featuredImageUrl: args.featuredImageUrl,
+          }),
+          linkedPostIds: args.linkedPostIds as PostId[] | undefined,
         },
         { principalId: auth.principalId, name: auth.name }
       )
@@ -138,6 +176,9 @@ Examples:
         title: result.title,
         status: result.status,
         publishedAt: result.publishedAt,
+        displayDate: result.displayDate,
+        featuredImageUrl: result.featuredImageUrl,
+        linkedPosts: result.linkedPosts,
         createdAt: result.createdAt,
       })
     },
@@ -146,13 +187,14 @@ Examples:
   registerTool<UpdateChangelogArgs>(server, auth, {
     name: 'update_changelog',
     permissions: [PERMISSIONS.CHANGELOG_MANAGE],
-    description: `Update title, content, publish state, and/or linked posts on an existing changelog entry.
+    description: `Update title, content, publish state, featured image, and/or linked posts on an existing changelog entry.
 
 Examples:
 - Update title: update_changelog({ changelogId: "changelog_01abc...", title: "v2.0 Release" })
 - Publish: update_changelog({ changelogId: "changelog_01abc...", publish: true })
 - Backdate display: update_changelog({ changelogId: "changelog_01abc...", displayDate: "2025-03-15T12:00:00Z" })
 - Clear display override: update_changelog({ changelogId: "changelog_01abc...", displayDate: null })
+- Set hero image: update_changelog({ changelogId: "changelog_01abc...", featuredImageUrl: "/api/storage/changelog-images/..." })
 - Link posts: update_changelog({ changelogId: "changelog_01abc...", linkedPostIds: ["post_01a...", "post_01b..."] })${CONTENT_FORMAT_BLOCK}`,
     schema: updateChangelogSchema,
     annotations: WRITE,
@@ -176,6 +218,9 @@ Examples:
         ...(args.displayDate !== undefined && {
           displayDate: args.displayDate === null ? null : new Date(args.displayDate),
         }),
+        ...(args.featuredImageUrl !== undefined && {
+          featuredImageUrl: args.featuredImageUrl,
+        }),
       })
 
       return jsonResult({
@@ -184,6 +229,8 @@ Examples:
         status: result.status,
         publishedAt: result.publishedAt,
         displayDate: result.displayDate,
+        featuredImageUrl: result.featuredImageUrl,
+        linkedPosts: result.linkedPosts,
         updatedAt: result.updatedAt,
       })
     },
