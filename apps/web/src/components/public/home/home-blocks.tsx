@@ -140,6 +140,7 @@ function BlockCard({
           'rounded-lg border border-border/40 bg-card p-[var(--qb-card-padding,1rem)] shadow-sm',
           '[[data-qb-cards=raised]_&]:border-transparent [[data-qb-cards=raised]_&]:shadow-md',
           '[[data-qb-cards=list]_&]:rounded-none [[data-qb-cards=list]_&]:border-x-0 [[data-qb-cards=list]_&]:border-t-0 [[data-qb-cards=list]_&]:bg-transparent [[data-qb-cards=list]_&]:shadow-none',
+          '[[data-qb-cards=filled]_&]:border-transparent [[data-qb-cards=filled]_&]:shadow-none [[data-qb-cards=filled]_&]:rounded-[calc(var(--qb-radius-panel,0.75rem)*1.6)]',
         ],
         row && 'md:flex-row md:items-center md:gap-6 md:[&>p]:flex-1',
         span
@@ -217,7 +218,9 @@ export function HomeComposer({ inBand = false }: { inBand?: boolean }) {
       action={HOME_FEED_PATH}
       className={cn(
         'flex items-center gap-3 rounded-[var(--qb-radius-composer,0.5rem)] border border-border bg-card px-4 py-3.5 shadow-sm',
-        inBand && 'flex-wrap py-3 shadow-lg sm:flex-nowrap'
+        // In the band it follows the cards: raised casts a shadow, the rest sit flat.
+        inBand &&
+          'flex-wrap py-3 shadow-none sm:flex-nowrap [[data-qb-cards=raised]_&]:shadow-lg [[data-qb-cards=filled]_&]:border-transparent'
       )}
       onSubmit={(event) => {
         event.preventDefault()
@@ -247,7 +250,7 @@ export function HomeComposer({ inBand = false }: { inBand?: boolean }) {
         className={cn(
           'shrink-0 text-sm font-medium',
           inBand
-            ? 'basis-full rounded-[var(--qb-radius-button,999px)] bg-primary px-4 py-2 font-semibold text-primary-foreground hover:bg-primary/90 sm:basis-auto'
+            ? 'basis-full rounded-[var(--qb-radius-button,999px)] bg-[var(--qb-action-bg,var(--primary))] px-4 py-2 font-semibold text-[var(--qb-action-ink,var(--primary-foreground))] hover:opacity-90 sm:basis-auto'
             : 'rounded-full px-3 py-1.5 text-[var(--qb-accent-text,var(--primary))] hover:bg-muted'
         )}
       >

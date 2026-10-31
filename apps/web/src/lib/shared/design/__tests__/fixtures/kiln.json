@@ -29,7 +29,8 @@
       "headingWeight": 700,
       "scale": "display",
       "tracking": "tight",
-      "headlineCase": "upper"
+      "headlineCase": "upper",
+      "headlineColour": "accent"
     },
     "logo": {
       "mark": {
@@ -68,7 +69,8 @@
     "width": "default",
     "filters": "end",
     "bandShape": "inset",
-    "status": "ink"
+    "status": "ink",
+    "bandArt": "lines"
   },
   "pages": {
     "home": {

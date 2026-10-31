@@ -247,3 +247,19 @@ export function imageSize(bytes: Uint8Array): { width: number; height: number } 
   }
   return null
 }
+
+/** A logo's ink when every colour it draws in is dark, or every one light; else null. */
+export function svgTone(svg: string): 'dark' | 'light' | null {
+  const lightness: number[] = []
+  for (const [, value] of svg.matchAll(
+    /(?:fill|stroke|stop-color)\s*[=:]\s*["']?\s*(#[\da-f]{3,6}\b|rgb\([^)]*\))/gi
+  )) {
+    const colour = normaliseColor(value!)
+    const oklch = colour?.startsWith('#') ? parseOklch(hexToOklch(colour)) : null
+    if (oklch) lightness.push(oklch.l)
+  }
+  if (lightness.length === 0) return null
+  if (lightness.every((l) => l < 0.5)) return 'dark'
+  if (lightness.every((l) => l > 0.8)) return 'light'
+  return null
+}

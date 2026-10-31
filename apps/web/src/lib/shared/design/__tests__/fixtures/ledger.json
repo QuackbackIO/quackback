@@ -36,7 +36,8 @@
         }
       },
       "display": "wordmark",
-      "name": "Ledger"
+      "name": "Ledger",
+      "tone": "dark"
     },
     "favicon": {
       "key": "fixtures/ledger/favicon.png"
@@ -57,7 +58,9 @@
     "density": "comfortable",
     "width": "narrow",
     "filters": "end",
-    "imagePlace": "edge"
+    "imagePlace": "edge",
+    "bandArt": "grid",
+    "imageFocus": "centre"
   },
   "pages": {
     "home": {

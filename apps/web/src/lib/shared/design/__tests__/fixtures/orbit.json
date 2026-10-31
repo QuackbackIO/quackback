@@ -34,7 +34,11 @@
         "dark": null
       },
       "display": "name",
-      "name": "orbit"
+      "name": "orbit",
+      "tone": "light",
+      "nameColour": "accent",
+      "nameCase": "upper",
+      "nameAccent": "bit"
     },
     "favicon": {
       "key": "fixtures/orbit/favicon.png"
@@ -49,7 +53,8 @@
   },
   "shape": {
     "corners": "rounded",
-    "buttons": "pill"
+    "buttons": "pill",
+    "action": "accent"
   },
   "layout": {
     "header": "inline",
@@ -59,7 +64,9 @@
     "density": "comfortable",
     "width": "wide",
     "filters": "end",
-    "status": "pill"
+    "status": "pill",
+    "tint": "neutral",
+    "bandArt": "none"
   },
   "pages": {
     "home": {

@@ -32,6 +32,8 @@ export interface SiteBrand {
   bold: boolean
   /** Its buttons are black or near-black: a monochrome brand that uses colour sparingly. */
   monochrome: boolean
+  /** The colour it fills hero and banner sections with, when it fills them with one. */
+  hero: string | null
 }
 
 /** Pages that answer a visit with a block rather than the site. */
@@ -293,5 +295,6 @@ export function readSiteBrand(input: {
     button: css.button,
     bold: !!palette[0] && css.fields.some((field) => distance(field, palette[0]!) < 48),
     monochrome: !!css.button && !isBrandColour(css.button) && luminance(css.button) < 0.2,
+    hero: css.fields.find(isBrandColour) ?? null,
   }
 }

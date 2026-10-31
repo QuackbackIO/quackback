@@ -175,6 +175,55 @@ export function BrandPanel({
           drawing: <LogoDrawing display={display} />,
         }))}
       />
+      {design.brand.logo.display === 'name' && (
+        <div className="space-y-2">
+          <SettingRow
+            label="Name in the brand colour"
+            htmlFor="design-name-colour"
+            control={
+              <Switch
+                id="design-name-colour"
+                checked={design.brand.logo.nameColour === 'accent'}
+                onCheckedChange={(on) =>
+                  update((draft) => void (draft.brand.logo.nameColour = on ? 'accent' : 'ink'))
+                }
+              />
+            }
+          />
+          <SettingRow
+            label="Name in spaced capitals"
+            htmlFor="design-name-case"
+            control={
+              <Switch
+                id="design-name-case"
+                checked={design.brand.logo.nameCase === 'upper'}
+                onCheckedChange={(on) =>
+                  update((draft) => void (draft.brand.logo.nameCase = on ? 'upper' : 'sentence'))
+                }
+              />
+            }
+          />
+          <div className="flex items-center gap-2">
+            <label htmlFor="design-name-accent" className="w-32 shrink-0 text-[13px]">
+              Part in colour
+            </label>
+            <Input
+              id="design-name-accent"
+              value={design.brand.logo.nameAccent ?? ''}
+              maxLength={30}
+              placeholder="Part of the name"
+              onChange={(event) =>
+                update((draft) => {
+                  const part = event.target.value
+                  if (part.trim()) draft.brand.logo.nameAccent = part
+                  else delete draft.brand.logo.nameAccent
+                })
+              }
+              className="h-8 text-[13px]"
+            />
+          </div>
+        </div>
+      )}
       {design.brand.logo.display === 'wordmark' && (
         <div className="space-y-2">
           {(['light', 'dark'] as const).map((mode) => {
@@ -293,6 +342,19 @@ export function BrandPanel({
           label: style[0].toUpperCase() + style.slice(1),
           drawing: <TypeStyleDrawing style={style} />,
         }))}
+      />
+      <SettingRow
+        label="Headlines in the brand colour"
+        htmlFor="design-headline-colour"
+        control={
+          <Switch
+            id="design-headline-colour"
+            checked={design.brand.fonts.headlineColour === 'accent'}
+            onCheckedChange={(on) =>
+              update((draft) => void (draft.brand.fonts.headlineColour = on ? 'accent' : 'ink'))
+            }
+          />
+        }
       />
       <SettingRow
         label="Menu and buttons in capitals"

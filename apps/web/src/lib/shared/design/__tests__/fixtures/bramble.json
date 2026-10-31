@@ -55,7 +55,9 @@
     "width": "default",
     "filters": "start",
     "bandShape": "panel",
-    "bandAlign": "centre"
+    "bandAlign": "centre",
+    "bandArt": "petals",
+    "imageFocus": "left"
   },
   "pages": {
     "home": {

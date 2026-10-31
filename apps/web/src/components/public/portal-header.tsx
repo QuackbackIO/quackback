@@ -47,6 +47,19 @@ import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-
 import { usePreviewDesignAttributes, usePreviewLogo } from './preview-draft-context'
 import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
+/** The name with its accent part, where it holds it, in the brand colour. */
+function twoTone(name: string, part: string | null | undefined) {
+  const at = part ? name.lastIndexOf(part) : -1
+  if (at < 0) return name
+  return (
+    <>
+      {name.slice(0, at)}
+      <span className="text-[var(--qb-name-accent)]">{part}</span>
+      {name.slice(at + part!.length)}
+    </>
+  )
+}
+
 /** On the band, the header's button takes the colour the design picks to read there. */
 const ON_BAND_ACTION =
   '[[data-qb-header-band=on]_&]:bg-[var(--qb-header-action-bg)] [[data-qb-header-band=on]_&]:text-[var(--qb-header-action-ink)] [[data-qb-header-band=on]_&]:hover:opacity-90'
@@ -333,7 +346,7 @@ export function PortalHeader({
           <img
             src={(wordmark?.light ?? wordmark?.dark)!}
             alt={brandName}
-            className={`h-8 w-auto max-w-[12rem] object-contain ${wordmark?.dark && wordmark.light ? 'dark:hidden' : ''}`}
+            className={`h-8 w-auto max-w-[12rem] object-contain [filter:var(--qb-wordmark-filter,none)] ${wordmark?.dark && wordmark.light ? 'dark:hidden' : ''}`}
           />
           {wordmark?.dark && wordmark.light ? (
             <img
@@ -347,9 +360,9 @@ export function PortalHeader({
         // The name as a wordmark: set in the heading font, and shown on phones too.
         <span
           title={brandName}
-          className="portal-header__name max-w-[18ch] truncate text-xl leading-none text-[var(--header-foreground)] [font-family:var(--qb-font-heading)] [font-weight:var(--qb-heading-weight)] [letter-spacing:var(--qb-headline-tracking)]"
+          className="portal-header__name max-w-[18ch] truncate text-xl leading-none text-[var(--qb-name-ink,var(--header-foreground))] [font-family:var(--qb-font-heading)] [font-weight:var(--qb-heading-weight)] [letter-spacing:var(--qb-name-tracking,var(--qb-headline-tracking))] [text-transform:var(--qb-name-case,none)]"
         >
-          {brandName}
+          {twoTone(brandName, designLogo?.nameAccent)}
         </span>
       ) : (
         <>

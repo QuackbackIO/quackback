@@ -24,17 +24,21 @@ interface Fixture {
       tracking?: string
       headlineCase?: string
       labelCase?: string
+      headlineColour?: string
     }
-    logo: { display: string }
+    logo: { display: string; tone?: string; nameColour?: string; nameCase?: string }
     bandImage?: { key: string }
   }
-  shape: { corners: string; buttons?: string }
+  shape: { corners: string; buttons?: string; action?: string }
   layout: Record<'header' | 'nav' | 'band' | 'cards' | 'density' | 'width' | 'filters', string> & {
     blend?: string
     bandAlign?: string
     bandShape?: string
     status?: string
     imagePlace?: string
+    tint?: string
+    bandArt?: string
+    imageFocus?: string
   }
   pages: {
     home: {
@@ -81,6 +85,10 @@ function used(): Record<DesignOption, Set<string>> {
     add('fontKind', doc.brand.fonts.heading.kind)
     add('fontKind', doc.brand.fonts.body.kind)
     add('logoDisplay', doc.brand.logo.display)
+    if (doc.brand.logo.tone) add('logoTone', doc.brand.logo.tone)
+    add('inkOrAccent', doc.brand.logo.nameColour ?? 'ink')
+    add('inkOrAccent', doc.brand.fonts.headlineColour ?? 'ink')
+    add('textCase', doc.brand.logo.nameCase ?? 'sentence')
     // An absent type choice is today's type.
     const { scale, tracking, headlineCase, labelCase } = doc.brand.fonts
     add('typeScale', scale ?? 'standard')
@@ -95,6 +103,10 @@ function used(): Record<DesignOption, Set<string>> {
     add('bandAlign', doc.layout.bandAlign ?? (doc.layout.header === 'centered' ? 'centre' : 'left'))
     add('bandShape', doc.layout.bandShape ?? 'full')
     add('buttons', doc.shape.buttons ?? 'match')
+    add('action', doc.shape.action ?? 'accent')
+    add('tint', doc.layout.tint ?? 'neutral')
+    add('bandArt', doc.layout.bandArt ?? 'none')
+    if (doc.brand.bandImage) add('imageFocus', doc.layout.imageFocus ?? 'centre')
     add('status', doc.layout.status ?? 'colour')
     if (doc.brand.bandImage) add('imagePlace', doc.layout.imagePlace ?? 'side')
     if (doc.pages.home.blocks.some((block) => block.type === 'composer'))

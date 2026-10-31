@@ -93,6 +93,14 @@ describe('resolveDesign', () => {
   })
 })
 
+describe('the second colour’s tint in the design CSS', () => {
+  it('tints vote boxes that are not voted', () => {
+    expect(renderDesignCss(resolveDesign(defaultDesign()))).toContain(
+      '[data-qb-tint=support][data-portal-theme] [data-qb-part=vote-button]:not([data-state=voted]) { background: var(--qb-support-tint); border-color: var(--qb-support-edge); }'
+    )
+  })
+})
+
 describe('status styles in the design CSS', () => {
   it('draws status dots in the ink, or statuses as tags tinted with their colour', () => {
     const css = renderDesignCss(resolveDesign(defaultDesign()))
