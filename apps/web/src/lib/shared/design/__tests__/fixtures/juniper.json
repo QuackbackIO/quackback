@@ -1,0 +1,176 @@
+{
+  "version": 2,
+  "mode": "light",
+  "brand": {
+    "light": {
+      "accent": "#2f5d3a",
+      "background": "#fbf8f1",
+      "ink": "#1f2a22",
+      "surface": "#fffdf8"
+    },
+    "fonts": {
+      "heading": {
+        "kind": "bundled",
+        "id": "fraunces"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "inter"
+      },
+      "headingWeight": 600
+    },
+    "logo": {
+      "mark": {
+        "light": {
+          "key": "fixtures/juniper/mark-light.png"
+        },
+        "dark": {
+          "key": "fixtures/juniper/mark-dark.png"
+        }
+      },
+      "wordmark": {
+        "light": null,
+        "dark": null
+      },
+      "display": "mark_and_name",
+      "name": "Juniper"
+    },
+    "favicon": {
+      "key": "fixtures/juniper/favicon.png"
+    },
+    "shareImage": null
+  },
+  "shape": {
+    "corners": "pill"
+  },
+  "layout": {
+    "header": "centered",
+    "nav": "underline",
+    "band": "brand",
+    "cards": "raised",
+    "density": "spacious",
+    "width": "default",
+    "filters": "end"
+  },
+  "pages": {
+    "home": {
+      "headline": {
+        "title": {
+          "en": "Help us grow Juniper"
+        },
+        "subtitle": {
+          "en": "Ideas, updates and help for everything Juniper."
+        }
+      },
+      "blocks": [
+        {
+          "type": "composer",
+          "width": "two_thirds"
+        },
+        {
+          "type": "links",
+          "width": "third",
+          "links": [
+            {
+              "label": "Shop the range",
+              "url": "https://shop.example.com"
+            },
+            {
+              "label": "Track an order",
+              "url": "https://shop.example.com/orders"
+            },
+            {
+              "label": "Social",
+              "url": "https://social.example.com/juniper"
+            }
+          ]
+        },
+        {
+          "type": "ideas",
+          "width": "half",
+          "sort": "trending",
+          "count": 3
+        },
+        {
+          "type": "updates",
+          "width": "half",
+          "count": 3
+        },
+        {
+          "type": "help_topics",
+          "width": "full",
+          "categoryIds": []
+        }
+      ]
+    },
+    "feedback": {
+      "headline": {
+        "title": {
+          "en": "Help us grow Juniper"
+        },
+        "subtitle": {
+          "en": "Tell us what would make your mornings better. We read every idea."
+        }
+      },
+      "welcome": {
+        "show": false,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph"
+            }
+          ]
+        }
+      },
+      "defaultSort": "trending",
+      "copy": {}
+    }
+  },
+  "nav": {
+    "home": {
+      "on": true,
+      "tab": false
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": true,
+        "label": "Suggestions"
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true,
+        "label": "What’s new"
+      },
+      {
+        "type": "help",
+        "shown": true,
+        "label": "Help"
+      },
+      {
+        "type": "support",
+        "shown": false
+      },
+      {
+        "type": "status",
+        "shown": false
+      },
+      {
+        "type": "link",
+        "id": "shop",
+        "label": "Shop",
+        "url": "https://shop.example.com",
+        "newTab": true
+      }
+    ]
+  },
+  "vocabulary": {
+    "post": "suggestion",
+    "board": "board"
+  }
+}

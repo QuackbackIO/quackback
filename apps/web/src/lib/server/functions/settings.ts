@@ -395,8 +395,21 @@ export const updateThemeFn = createServerFn({ method: 'POST' })
   .validator(updateThemeSchema)
   .handler(async ({ data }) => {
     log.info('update theme')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await updateBrandingConfig(data.brandingConfig as BrandingConfig)
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    const before = await getBrandingConfig()
+    const saved = await updateBrandingConfig(data.brandingConfig as BrandingConfig)
+    if (JSON.stringify(before) !== JSON.stringify(saved)) {
+      const { getRequestHeaders } = await import('@tanstack/react-start/server')
+      await recordAuditEvent({
+        event: 'branding.theme.changed',
+        actor: actorFromAuth(auth),
+        headers: getRequestHeaders(),
+        target: { type: 'settings', id: 'branding' },
+        before,
+        after: saved,
+      })
+    }
+    return saved
   })
 
 export const updatePortalConfigFn = createServerFn({ method: 'POST' })
@@ -696,8 +709,21 @@ export const updateCustomCssFn = createServerFn({ method: 'POST' })
   .validator(updateCustomCssSchema)
   .handler(async ({ data }) => {
     log.info({ css_length: data.customCss.length }, 'update custom css')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await updateCustomCss(data.customCss)
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    const before = await getCustomCss()
+    const saved = await updateCustomCss(data.customCss)
+    if (before !== saved) {
+      const { getRequestHeaders } = await import('@tanstack/react-start/server')
+      await recordAuditEvent({
+        event: 'branding.css.changed',
+        actor: actorFromAuth(auth),
+        headers: getRequestHeaders(),
+        target: { type: 'settings', id: 'custom-css' },
+        before: { customCss: before },
+        after: { customCss: saved },
+      })
+    }
+    return saved
   })
 
 // ============================================

@@ -1,0 +1,158 @@
+{
+  "version": 2,
+  "mode": "light",
+  "brand": {
+    "light": {
+      "accent": "#2952e3",
+      "background": "#f7f9fc",
+      "ink": "#0f172a",
+      "surface": "#ffffff"
+    },
+    "fonts": {
+      "heading": {
+        "kind": "bundled",
+        "id": "nunito"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "nunito"
+      },
+      "headingWeight": 700
+    },
+    "logo": {
+      "mark": {
+        "light": {
+          "key": "fixtures/tandem/mark-light.png"
+        },
+        "dark": {
+          "key": "fixtures/tandem/mark-dark.png"
+        }
+      },
+      "wordmark": {
+        "light": null,
+        "dark": null
+      },
+      "display": "mark_and_name",
+      "name": "Tandem"
+    },
+    "favicon": {
+      "key": "fixtures/tandem/favicon.png"
+    },
+    "shareImage": null
+  },
+  "shape": {
+    "corners": "rounded"
+  },
+  "layout": {
+    "header": "stacked",
+    "nav": "underline",
+    "band": "none",
+    "cards": "raised",
+    "density": "comfortable",
+    "width": "default",
+    "filters": "end"
+  },
+  "pages": {
+    "home": {
+      "headline": null,
+      "blocks": [
+        {
+          "type": "welcome",
+          "width": "two_thirds",
+          "body": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Search before you post, vote for what matters to you, and follow along as ideas move from planned to shipped."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "status",
+          "width": "third"
+        },
+        {
+          "type": "ideas",
+          "width": "third",
+          "sort": "top",
+          "count": 5
+        },
+        {
+          "type": "roadmap",
+          "width": "two_thirds",
+          "roadmapId": null
+        },
+        {
+          "type": "updates",
+          "width": "full",
+          "count": 4
+        }
+      ]
+    },
+    "feedback": {
+      "headline": null,
+      "welcome": {
+        "show": true,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Search before you post, as your idea may already be here. Vote for what matters to you, and we will tell you when it moves."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "defaultSort": "top",
+      "copy": {}
+    }
+  },
+  "nav": {
+    "home": {
+      "on": true,
+      "tab": true
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": false
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true
+      },
+      {
+        "type": "help",
+        "shown": true
+      },
+      {
+        "type": "support",
+        "shown": true
+      },
+      {
+        "type": "status",
+        "shown": false
+      }
+    ]
+  },
+  "vocabulary": {
+    "post": "post",
+    "board": "board"
+  }
+}

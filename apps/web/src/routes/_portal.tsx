@@ -30,7 +30,7 @@ import {
   recordPortalAccessDeniedFn,
 } from '@/lib/server/functions/portal-access'
 import { parseAuthPromptSearch } from '@/lib/shared/auth-prompt'
-import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
+import { PortalDesignStyle } from '@/lib/shared/safe-inline-content'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
@@ -394,13 +394,7 @@ function PortalLayout() {
           <PortalPreviewProvider enabled={preview === true}>
             <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
             <div data-portal="" className="min-h-screen bg-background flex flex-col">
-              {themeStyles && (
-                <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
-              )}
-              {/* Custom CSS is injected after theme styles so it can override */}
-              {customCss && (
-                <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(customCss) }} />
-              )}
+              <PortalDesignStyle themeStyles={themeStyles} customCss={customCss} />
               <PortalHeader
                 orgName={workspaceName}
                 orgLogo={brandingData?.logoUrl ?? null}
