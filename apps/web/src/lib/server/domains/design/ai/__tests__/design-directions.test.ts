@@ -186,4 +186,24 @@ describe('lookDesign', () => {
       lookDesign(defaultDesign(), DIRECTIONS_EXAMPLE, allows).design.layout.blend
     ).toBeUndefined()
   })
+
+  it('gives the contact block a row of its own when the composer moves into the band', () => {
+    const blocks = [
+      { type: 'composer', width: 'full' },
+      { type: 'contact', width: 'half' },
+      { type: 'ideas', width: 'half' },
+    ] as const
+    const inBand = lookDesign(
+      defaultDesign(),
+      { ...DIRECTIONS_EXAMPLE, homeBlocks: [...blocks] },
+      allows
+    ).design
+    expect(inBand.pages.home.blocks.find((b) => b.type === 'contact')?.width).toBe('full')
+    const onGrid = lookDesign(
+      defaultDesign(),
+      { ...DIRECTIONS_EXAMPLE, composer: 'block', homeBlocks: [...blocks] },
+      allows
+    ).design
+    expect(onGrid.pages.home.blocks.find((b) => b.type === 'contact')?.width).toBe('half')
+  })
 })

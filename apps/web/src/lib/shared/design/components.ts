@@ -81,7 +81,8 @@ function typeTokens(fonts: Fonts): TokenMap {
   return {
     '--qb-headline-size': size,
     '--qb-headline-leading': leading,
-    '--qb-heading-tracking': fonts.tracking === 'tight' ? '-0.035em' : '-0.02em',
+    // Tight tracking is for the page headline; smaller headings keep today's.
+    '--qb-headline-tracking': fonts.tracking === 'tight' ? '-0.03em' : '-0.02em',
     '--qb-headline-case': CASE[fonts.headlineCase ?? 'sentence'],
     '--qb-label-case': CASE[labels],
     // Upper-case labels read better spaced out.

@@ -75,7 +75,7 @@ describe('type style', () => {
     const { tokens } = resolveDesign(design())
     expect(tokens.base).toMatchObject({
       '--qb-headline-size': 'clamp(1.5rem, 1.25rem + 1vw, 1.875rem)',
-      '--qb-heading-tracking': '-0.02em',
+      '--qb-headline-tracking': '-0.02em',
       '--qb-headline-case': 'none',
       '--qb-label-case': 'none',
       '--qb-label-tracking': 'normal',
@@ -96,7 +96,7 @@ describe('type style', () => {
     expect(tokens.base).toMatchObject({
       '--qb-headline-size': 'clamp(2.25rem, 1.2rem + 4.6vw, 4.75rem)',
       '--qb-headline-leading': '1.02',
-      '--qb-heading-tracking': '-0.035em',
+      '--qb-headline-tracking': '-0.03em',
       '--qb-headline-case': 'uppercase',
       '--qb-label-case': 'uppercase',
       '--qb-label-tracking': '0.06em',

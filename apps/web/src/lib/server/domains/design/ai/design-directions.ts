@@ -115,7 +115,7 @@ function lookChanges(
     ...accentChanges(look, 'pages.feedback.headline', look.headline),
     ...(look.homeBlocks.length
       ? [
-          { path: 'pages.home.blocks', value: look.homeBlocks },
+          { path: 'pages.home.blocks', value: homeBlocks(look) },
           ...page(fit(look.homeHeadline, 80), 'pages.home.headline.title'),
           ...page(fit(look.homeSubtitle, 140), 'pages.home.headline.subtitle'),
           ...accentChanges(look, 'pages.home.headline', look.homeHeadline),
@@ -125,6 +125,18 @@ function lookChanges(
         ]
       : []),
   ]
+}
+
+/**
+ * Home's blocks as the look lays them out. With the composer in the band,
+ * the contact block takes the full width as one row, rather than standing
+ * beside a list it cannot match in height.
+ */
+function homeBlocks(look: Look): Look['homeBlocks'] {
+  if (look.composer !== 'band') return look.homeBlocks
+  return look.homeBlocks.map((block) =>
+    block.type === 'contact' ? { ...block, width: 'full' as const } : block
+  )
 }
 
 /** A headline's accent phrase, where the headline holds it. */

@@ -119,6 +119,6 @@ export const BLOCK_WIDTHS: Record<BlockType, readonly BlockWidth[]> = {
   help_search: ['half', 'two_thirds', 'full'],
   help_topics: ['half', 'two_thirds', 'full'],
   status: ['third', 'half'],
-  contact: ['third', 'half'],
+  contact: ['third', 'half', 'full'],
   links: ['third', 'half'],
 }

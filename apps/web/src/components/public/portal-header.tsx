@@ -347,7 +347,7 @@ export function PortalHeader({
         // The name as a wordmark: set in the heading font, and shown on phones too.
         <span
           title={brandName}
-          className="portal-header__name max-w-[18ch] truncate text-xl leading-none text-[var(--header-foreground)] [font-family:var(--qb-font-heading)] [font-weight:var(--qb-heading-weight)] [letter-spacing:var(--qb-heading-tracking)]"
+          className="portal-header__name max-w-[18ch] truncate text-xl leading-none text-[var(--header-foreground)] [font-family:var(--qb-font-heading)] [font-weight:var(--qb-heading-weight)] [letter-spacing:var(--qb-headline-tracking)]"
         >
           {brandName}
         </span>
