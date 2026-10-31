@@ -1,6 +1,7 @@
 import { Button, Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
 import { typography, button, colors } from './shared-styles'
+import { postNoun, type PostWord } from '../post-word'
 
 interface StatusChangeEmailProps {
   postTitle: string
@@ -11,6 +12,8 @@ interface StatusChangeEmailProps {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** What visitors call what they post; idea when not given. */
+  postWord?: PostWord
 }
 
 function getStatusEmoji(status: string): string {
@@ -41,23 +44,25 @@ export function StatusChangeEmail({
   unsubscribeUrl,
   preferencesUrl,
   logoUrl,
+  postWord,
 }: StatusChangeEmailProps) {
+  const noun = postNoun(postWord)
   const emoji = getStatusEmoji(newStatus)
   const formattedNewStatus = capitalizeStatus(newStatus)
   const formattedPreviousStatus = capitalizeStatus(previousStatus)
 
   return (
     <EmailLayout
-      preview={`${emoji} Your feedback is now ${formattedNewStatus}`}
+      preview={`${emoji} Your ${noun} is now ${formattedNewStatus}`}
       logoUrl={logoUrl}
       logoAlt={organizationName}
     >
       {/* Content */}
       <Heading style={typography.h1}>
-        {emoji} Your feedback is now {formattedNewStatus}!
+        {emoji} Your {noun} is now {formattedNewStatus}!
       </Heading>
       <Text style={typography.text}>
-        Great news! The status of your feedback has been updated on {organizationName}.
+        Great news! The status of your {noun} has been updated on {organizationName}.
       </Text>
 
       {/* Post Title */}
@@ -84,13 +89,13 @@ export function StatusChangeEmail({
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
         <Button style={button.primary} href={postUrl}>
-          View Feedback
+          View {noun}
         </Button>
       </Section>
 
       {/* Footer */}
       <NotificationFooter
-        reason="You received this email because you submitted or subscribed to this feedback."
+        reason={`You received this email because you submitted or subscribed to this ${noun}.`}
         unsubscribeUrl={unsubscribeUrl}
         preferencesUrl={preferencesUrl}
       />

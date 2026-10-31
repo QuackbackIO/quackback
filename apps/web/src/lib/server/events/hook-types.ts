@@ -6,6 +6,7 @@
  * Both share event inputs; the respective queues own delivery orchestration.
  */
 
+import type { PortalWords } from '@/lib/shared/design/view'
 import type { EventData } from './types'
 import type { ContactEmail } from '@/lib/server/email/recipient'
 
@@ -134,6 +135,8 @@ export interface EmailConfig {
   /** Link to the portal's per-type x per-channel notification preferences
    *  page. Not token-based — requires the recipient to be logged in. */
   preferencesUrl?: string
+  /** What visitors call what they post, for the email to name it */
+  postWord?: PortalWords['postWord']
 }
 
 /**
