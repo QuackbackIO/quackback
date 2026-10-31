@@ -42,8 +42,9 @@ function type(m: MeasuredType | null | undefined, [min, max]: [number, number]) 
   const out: NonNullable<Tune['headline']> = {}
   if (finite(m.size)) out.size = within(Math.round(m.size), min, max)
   if (finite(m.weight)) out.weight = within(step(m.weight, 100), 100, 900)
-  if (finite(m.tracking) && Math.abs(m.tracking) >= 0.005)
-    out.tracking = within(+m.tracking.toFixed(3), -0.1, 0.3)
+  // Measured as none, tracking is none: the portal's own default would add some.
+  if (finite(m.tracking))
+    out.tracking = Math.abs(m.tracking) < 0.005 ? 0 : within(+m.tracking.toFixed(3), -0.1, 0.3)
   if (finite(m.leading)) out.leading = within(+m.leading.toFixed(2), 0.9, 1.8)
   return Object.keys(out).length ? out : undefined
 }

@@ -16,6 +16,8 @@ import { isStandardWebsiteUrl, parseWebsiteInput } from '@/lib/shared/website-br
 import { isBlockPage, pageLinks, readSiteBrand, type SiteBrand } from './site-brand'
 import { colourVividness } from '@/lib/shared/design/palette'
 import { findHeaderLogo, findShareImage, resolveSvgColours, type LogoCandidate } from './site-logo'
+import { measureSite } from './site-measure'
+import type { BrandMeasurements } from '@/lib/shared/design/measured-tune'
 
 /**
  * The colour a logo drawn in the page's current colour most likely takes: a
@@ -36,6 +38,8 @@ export interface SiteSignals extends SiteBrand {
   logo: LogoCandidate | null
   /** The image it gives link previews. */
   shareImage: string | null
+  /** Its type and shapes as its page's CSS sets them, as far as it can be read. */
+  measured: BrandMeasurements | null
 }
 
 export type SiteRead =
@@ -157,7 +161,8 @@ export async function readSiteSignals(site: string): Promise<SiteRead> {
       },
       'website read for its brand'
     )
-    return { ok: true, signals: { domain: host, ...brand, logo, shareImage } }
+    const measured = measureSite(found.html, sheets)
+    return { ok: true, signals: { domain: host, ...brand, logo, shareImage, measured } }
   }
   if (blocked) {
     // The page refused, but a manifest is a static file sites often serve to anyone.
@@ -165,7 +170,10 @@ export async function readSiteSignals(site: string): Promise<SiteRead> {
     const brand = siteManifest ? readSiteBrand({ html: '', css: [], manifest: siteManifest }) : null
     if (brand && (brand.colour || brand.title)) {
       log.info({ host }, 'website blocked its page; read its manifest')
-      return { ok: true, signals: { domain: host, ...brand, logo: null, shareImage: null } }
+      return {
+        ok: true,
+        signals: { domain: host, ...brand, logo: null, shareImage: null, measured: null },
+      }
     }
   }
   log.info({ host, blocked }, 'website could not be read for its brand')

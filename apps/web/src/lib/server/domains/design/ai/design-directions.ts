@@ -20,6 +20,11 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { designAiModel, isStructuredOutputError, paletteText } from './design-ai'
 import type { SiteAssets } from './site-assets'
 import type { SiteSignals } from './site-signals'
+import {
+  tuneFromMeasurements,
+  type BrandMeasurements,
+  type MeasuredType,
+} from '@/lib/shared/design/measured-tune'
 
 const log = logger.child({ module: 'design-directions' })
 
@@ -196,6 +201,25 @@ function accentChanges(look: Look, headline: string, title: string) {
     : []
 }
 
+/**
+ * The faithful look with the brand's own type and shapes, exactly as its page
+ * sets them, where they could be read. The other looks are directions of
+ * their own and keep their tiles' steps.
+ */
+export function withMeasuredTune(
+  design: PortalDesign,
+  site: SiteSignals | null | undefined,
+  allows: Omit<UntrustedChanges, 'links'>
+): PortalDesign {
+  const tune = site?.measured ? tuneFromMeasurements(site.measured) : {}
+  if (!Object.keys(tune).length) return design
+  return applyDesignChanges(design, [{ path: 'tune', value: tune }], 'site', {
+    ...allows,
+    links: new Set(),
+    files: new Set(),
+  }).design
+}
+
 /** A look's design: its preset with every choice it makes that the design accepts. */
 export function lookDesign(
   base: PortalDesign,
@@ -251,6 +275,23 @@ function assetsBrief(assets: SiteAssets | null, imageFirst: boolean): string | n
     .join(' ')
 }
 
+const typeText = (t: MeasuredType | null | undefined) =>
+  t?.size ? `${Math.round(t.size)}px${t.weight ? ` at weight ${t.weight}` : ''}` : null
+
+/** What was measured on the page, so the looks' steps start near it. */
+function measuredBrief(m: BrandMeasurements | null): string | null {
+  if (!m) return null
+  const button = m.button?.radius ?? null
+  const card = m.card?.radius ?? null
+  const parts = [
+    typeText(m.headline) && `headlines ${typeText(m.headline)}`,
+    typeText(m.heading) && `section headings ${typeText(m.heading)}`,
+    button !== null && `buttons with ${button >= 999 ? 'pill' : `${Math.round(button)}px`} corners`,
+    card !== null && `cards with ${Math.round(card)}px corners`,
+  ].filter(Boolean)
+  return parts.length ? `Measured on its page: ${parts.join(', ')}.` : null
+}
+
 /** What the website says about its brand, as the model reads it. */
 function siteBrief(site: SiteSignals): string {
   return [
@@ -265,6 +306,7 @@ function siteBrief(site: SiteSignals): string {
     site.monochrome &&
       'It is a monochrome brand: black buttons and little colour. Keep the first look monochrome: a near-black accent, white pages and no coloured band.',
     site.bold && 'It fills large areas, such as its hero, with its brand colour.',
+    measuredBrief(site.measured),
   ]
     .filter(Boolean)
     .join(' ')
@@ -358,7 +400,13 @@ export async function designDirections(input: {
                 support: answered.support && faithfulAccent(answered.support, input),
               }
             : answered
-        const { design, refused } = lookDesign(input.design, look, input.allows, input.assets)
+        const { design: looked, refused } = lookDesign(
+          input.design,
+          look,
+          input.allows,
+          input.assets
+        )
+        const design = index === 0 ? withMeasuredTune(looked, input.site, input.allows) : looked
         if (refused.length) log.info({ look: look.name, refused }, 'design look left choices out')
         return {
           name: fit(look.name, 40),

@@ -19,7 +19,7 @@ describe('exact values from a brand’s measurements', () => {
     })
     expect(tune).toEqual({
       headline: { size: 48, weight: 300, tracking: -0.02, leading: 1.15 },
-      heading: { size: 32, weight: 300, leading: 1.1 },
+      heading: { size: 32, weight: 300, tracking: 0, leading: 1.1 },
       label: { size: 14, weight: 400 },
       button: { radius: 4, height: 40 },
       card: { radius: 6, border: 0, shadow: 'none' },
