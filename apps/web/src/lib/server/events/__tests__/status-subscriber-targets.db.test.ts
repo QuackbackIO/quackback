@@ -84,6 +84,7 @@ const context: HookContext = {
   workspaceName: 'Status Target Test',
   portalBaseUrl: 'https://portal.example.com',
   logoUrl: null,
+  postWord: 'idea' as const,
 }
 
 const incidentCreated: EventData = {

@@ -339,6 +339,7 @@ async function buildEmailTargets(
           workspaceName: context.workspaceName,
           logoUrl: context.logoUrl ?? undefined,
           preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+          postWord: context.postWord,
           ...eventConfig,
         }
       ),
@@ -644,6 +645,7 @@ export async function getMentionTargets(
           workspaceName: context.workspaceName,
           logoUrl: context.logoUrl ?? undefined,
           preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+          postWord: context.postWord,
           eventType: 'post.mentioned',
         })
       )

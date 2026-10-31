@@ -9,6 +9,7 @@ import { db } from '@/lib/server/db'
 import { getBaseUrl } from '@/lib/server/config'
 import { getEmailSafeUrl } from '@/lib/server/storage/s3'
 import { logger } from '@/lib/server/logger'
+import { portalWords, type PortalWords } from '@/lib/shared/design/view'
 
 const log = logger.child({ component: 'hook-context' })
 
@@ -23,6 +24,22 @@ export interface HookContext {
   portalBaseUrl: string
   /** Brand logo URL (proxied through app), or null if not set */
   logoUrl: string | null
+  /** What visitors call what they post, as the portal says it */
+  postWord: PortalWords['postWord']
+}
+
+/**
+ * The portal's word for what visitors post, read as the portal reads it. An
+ * email still goes out, saying idea, if the design cannot be read.
+ */
+async function portalPostWord(): Promise<PortalWords['postWord']> {
+  try {
+    const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+    return portalWords((await getWorkspaceSettings())?.portalDesign).postWord
+  } catch (error) {
+    log.warn({ err: error }, 'portal words unavailable; emails say idea')
+    return portalWords(undefined).postWord
+  }
 }
 
 /**
@@ -44,5 +61,6 @@ export async function buildHookContext(): Promise<HookContext | null> {
     workspaceName: settings.name,
     portalBaseUrl: getBaseUrl(),
     logoUrl: getEmailSafeUrl(settings.logoKey),
+    postWord: await portalPostWord(),
   }
 }

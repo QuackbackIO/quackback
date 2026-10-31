@@ -170,6 +170,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        postWord: cfg.postWord,
       })
     } else if (event.type === 'comment.created') {
       result = await sendNewCommentEmail({
@@ -183,6 +184,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        postWord: cfg.postWord,
       })
     } else if (event.type === 'post.mentioned') {
       const data = event.data as EventPostMentionedData
@@ -196,6 +198,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        postWord: cfg.postWord,
       })
     } else if (event.type === 'conversation.note_mentioned') {
       const c = config as unknown as NoteMentionEmailConfig

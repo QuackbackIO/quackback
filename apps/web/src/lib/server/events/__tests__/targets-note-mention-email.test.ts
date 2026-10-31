@@ -44,6 +44,7 @@ const context: HookContext = {
   portalBaseUrl: 'https://w.example',
   workspaceName: 'Acme Support',
   logoUrl: null,
+  postWord: 'idea' as const,
 }
 
 beforeEach(() => {
