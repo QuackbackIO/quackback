@@ -441,6 +441,9 @@ export function baseTokens(doc: PortalDesign): TokenMap {
     '--qb-image-focus': { left: 'left', centre: 'center', right: 'right' }[
       doc.layout.imageFocus ?? 'centre'
     ],
+    // Focused to one side, a side image crops to a portrait in a narrower column.
+    '--qb-image-aspect': (doc.layout.imageFocus ?? 'centre') === 'centre' ? '4 / 3' : '4 / 5',
+    '--qb-image-column': (doc.layout.imageFocus ?? 'centre') === 'centre' ? '0.85fr' : '0.55fr',
     '--qb-font-body': fontStack(doc.brand.fonts.body),
     '--qb-font-heading': fontStack(doc.brand.fonts.heading),
     '--qb-heading-weight': String(doc.brand.fonts.headingWeight),

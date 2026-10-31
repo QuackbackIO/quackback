@@ -48,6 +48,8 @@ async function designAllowances() {
   return {
     /** The workspace's name, which its portal shows. */
     name: settings?.name ?? null,
+    /** Whether the workspace has a logo mark. */
+    hasMark: !!settings?.settings?.logoKey,
     blockTypes: homeBlockTypes(portalPageGates(settings, true)),
     writesCss,
     checkCss: (css: string) => {
@@ -162,6 +164,7 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
     const result = await designDirections({
       design: current.design,
       name: allows.name,
+      hasMark: allows.hasMark || logoAdopted,
       site,
       words: data.words ?? null,
       palette: data.palette ?? null,

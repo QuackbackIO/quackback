@@ -201,10 +201,30 @@ describe('lookDesign', () => {
     expect(inBand.pages.home.blocks.find((b) => b.type === 'contact')?.width).toBe('full')
     const onGrid = lookDesign(
       defaultDesign(),
-      { ...DIRECTIONS_EXAMPLE, composer: 'block', homeBlocks: [...blocks] },
+      { ...DIRECTIONS_EXAMPLE, composer: 'block', homeHeadline: '', homeBlocks: [...blocks] },
       allows
     ).design
     expect(onGrid.pages.home.blocks.find((b) => b.type === 'contact')?.width).toBe('half')
+  })
+
+  it('gives the contact block its row when a Home headline moves the composer into the band', () => {
+    const blocks = [
+      { type: 'composer', width: 'full' },
+      { type: 'contact', width: 'half' },
+      { type: 'ideas', width: 'half' },
+    ] as const
+    const moved = lookDesign(
+      defaultDesign(),
+      {
+        ...DIRECTIONS_EXAMPLE,
+        composer: 'block',
+        homeHeadline: 'Climb with us',
+        homeBlocks: [...blocks],
+      },
+      allows
+    ).design.pages.home
+    expect(moved.composer).toBe('band')
+    expect(moved.blocks.find((b) => b.type === 'contact')?.width).toBe('full')
   })
 })
 

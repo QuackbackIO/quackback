@@ -160,7 +160,7 @@ function lookChanges(
           ...page(fit(look.homeSubtitle, 140), 'pages.home.headline.subtitle'),
           ...accentChanges(look, 'pages.home.headline', look.homeHeadline),
           // With a Home headline the composer sits under it: on the grid it leaves a gap.
-          { path: 'pages.home.composer', value: look.homeHeadline.trim() ? 'band' : look.composer },
+          { path: 'pages.home.composer', value: composerPlace(look) },
           { path: 'nav.home.on', value: true },
           { path: 'nav.home.tab', value: true },
         ]
@@ -168,13 +168,16 @@ function lookChanges(
   ]
 }
 
+/** Where Home's composer sits: under a Home headline always, as on the grid it leaves a gap. */
+const composerPlace = (look: Look) => (look.homeHeadline.trim() ? 'band' : look.composer)
+
 /**
  * Home's blocks as the look lays them out. With the composer in the band,
  * the contact block takes the full width as one row, rather than standing
  * beside a list it cannot match in height.
  */
 function homeBlocks(look: Look): Look['homeBlocks'] {
-  if (look.composer !== 'band') return look.homeBlocks
+  if (composerPlace(look) !== 'band') return look.homeBlocks
   return look.homeBlocks.map((block) =>
     block.type === 'contact' ? { ...block, width: 'full' as const } : block
   )
@@ -267,6 +270,8 @@ export async function designDirections(input: {
   design: PortalDesign
   /** The workspace's name, which the portal shows. */
   name?: string | null
+  /** Whether the workspace has a logo mark, which the header can show beside the name. */
+  hasMark?: boolean
   site: SiteSignals | null
   words: string | null
   /** The main colours of their logo or a screenshot. */
@@ -288,6 +293,7 @@ export async function designDirections(input: {
   await enforceAiTokenBudget()
   const brief = [
     input.name && `The company: ${input.name}.`,
+    input.hasMark && 'They have a logo mark, a square icon the header can show beside their name.',
     input.site && siteBrief(input.site),
     input.words && `In their words: ${input.words}`,
     input.palette?.length &&
