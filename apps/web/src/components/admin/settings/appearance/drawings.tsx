@@ -241,11 +241,11 @@ export function ButtonsDrawing({
 }
 
 export function StatusDrawing({ status }: { status: NonNullable<Layout['status']> }) {
-  const colours = ['bg-amber-500', 'bg-sky-500', 'bg-emerald-500']
+  const colours = ['bg-warning', 'bg-primary', 'bg-success']
   if (status === 'pill')
     return (
       <span className="flex gap-1">
-        {['bg-amber-500/25', 'bg-sky-500/25'].map((tint) => (
+        {['bg-warning/25', 'bg-success/25'].map((tint) => (
           <span key={tint} className={cn('h-2.5 w-5 rounded-sm', tint)} />
         ))}
       </span>
