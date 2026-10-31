@@ -200,4 +200,12 @@ describe('measuring a brand from its page', () => {
     const css = [`.label { font-size: 16px } .display { font-size: 96px }`]
     expect(measureSite(page, css).headline?.size).toBe(96)
   })
+
+  it('finds the hero after long markup, but not text far down the page', () => {
+    const bulky = `<nav data-menu="${'x'.repeat(60000)}"><span>Home</span></nav>`
+    const page = `${bulky}<h1 class="sr-only">News</h1><h2 class="promo">Today's story</h2>
+      ${'<p>Copy</p>'.repeat(200)}<p class="giant">Footer</p>`
+    const css = [`.promo { font-size: 32px; font-weight: 700 } .giant { font-size: 120px }`]
+    expect(measureSite(page, css).headline).toMatchObject({ size: 32, weight: 700 })
+  })
 })

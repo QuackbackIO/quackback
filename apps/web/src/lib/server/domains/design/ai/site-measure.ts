@@ -20,6 +20,8 @@ import { hex } from './site-brand'
 const ROOT_PX = 16
 const VIEWPORT = 1440
 const VIEWPORT_HEIGHT = 900
+/** How many of a page's first worded elements can be its display headline. */
+const DISPLAY_REACH = 150
 const INHERITED = ['color', 'font-weight', 'letter-spacing', 'text-transform'] as const
 
 /** The page's custom properties at its root. Elements below inherit and override them. */
@@ -288,10 +290,9 @@ export function measureSite(
   const h1 = largest(visible.filter((i) => nodes[i]!.tag === 'h1').slice(0, 12))
   const display = largest(
     visible
-      .filter(
-        (i) => nodes[i]!.at < 0.3 && !!nodes[i]!.worded && !/^(a|button|label)$/.test(nodes[i]!.tag)
-      )
-      .slice(0, 300)
+      .filter((i) => !!nodes[i]!.worded && !/^(a|button|label)$/.test(nodes[i]!.tag))
+      // Near the top in reading order: a page's markup can be long before what it shows first.
+      .slice(0, DISPLAY_REACH)
   )
   const headline = h1 && (!display || (h1.size ?? 0) >= (display.size ?? 0) * 0.7) ? h1 : display
   const h2 = first((el, i) => el.tag === 'h2' && !!typeAt(i))
