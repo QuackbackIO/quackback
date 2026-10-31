@@ -1245,10 +1245,14 @@ export const LABS_FEATURE_FLAGS = [
   'portalDesignV2',
 ] as const satisfies readonly (keyof FeatureFlags)[]
 
-/** Flags a workspace is created with: the defaults plus Copilot on Home. */
+/**
+ * Flags a workspace is created with: the defaults plus Copilot on Home and the
+ * portal design engine. Existing workspaces turn the design engine on in Labs.
+ */
 export const NEW_WORKSPACE_FEATURE_FLAGS: FeatureFlags = {
   ...DEFAULT_FEATURE_FLAGS,
   copilotHome: true,
+  portalDesignV2: true,
 }
 
 /**
