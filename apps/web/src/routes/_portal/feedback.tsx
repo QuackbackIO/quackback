@@ -64,6 +64,11 @@ export const feedSearchSchema = z.object({
 
 export type FeedSearch = z.infer<typeof feedSearchSchema>
 
+/** Whether a search is a feed's, so the root can send an old feed link on to the feed. */
+export function hasFeedSearch(search: Record<string, unknown>): boolean {
+  return Object.keys(feedSearchSchema.shape).some((key) => search[key] !== undefined)
+}
+
 /** Build the portalData query params from the current search + session. */
 function portalDataParams(
   searchParams: FeedSearch,

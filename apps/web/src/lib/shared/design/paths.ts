@@ -83,38 +83,3 @@ export function portalFeedbackPath(
 ): '/' | '/feedback' {
   return portalLanding(settings, gates).kind === 'feed' ? '/' : '/feedback'
 }
-
-/**
- * The feedback pages a sitemap lists: the root unless it only redirects, the
- * feed at its one address, and the roadmap. Other pages list themselves.
- */
-export function portalSitemapPaths(settings: PortalPathSettings, gates: PortalPageGates): string[] {
-  const landing = portalLanding(settings, gates)
-  const paths: string[] = []
-  if (landing.kind === 'home' || (landing.kind === 'feed' && gates.feedback)) paths.push('/')
-  if (gates.feedback) {
-    if (landing.kind !== 'feed') paths.push('/feedback')
-    paths.push('/roadmap')
-  }
-  return paths
-}
-
-/** The feed's own search parameters, which an old link to `/` may carry. */
-const FEED_SEARCH_KEYS = [
-  'board',
-  'search',
-  'sort',
-  'status',
-  'tagIds',
-  'minVotes',
-  'dateFrom',
-  'responded',
-  'owner',
-  'segmentIds',
-  'view',
-] as const
-
-/** Whether a search is a feed's, so `/` can send it on to the feed. */
-export function hasFeedSearch(search: Record<string, unknown>): boolean {
-  return FEED_SEARCH_KEYS.some((key) => search[key] !== undefined)
-}

@@ -2246,5 +2246,6 @@
   "portal.home.contact.title": "联系我们",
   "portal.home.contact.body": "提出问题或告诉我们遇到的困难，我们会尽快回复。",
   "portal.home.contact.start": "发起对话",
-  "portal.home.links.title": "链接"
+  "portal.home.links.title": "链接",
+  "portal.home.composer.continue": "继续"
 }

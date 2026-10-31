@@ -18,9 +18,10 @@ vi.mock('@tanstack/react-router', () => ({
   redirect: (options: object) => ({ redirect: options }),
 }))
 vi.mock('@/lib/server/functions/powered-by', () => ({ getShowPoweredByFn: async () => false }))
-vi.mock('@/components/public/home/home-prefetch', () => ({
-  prefetchHome: () => {
+vi.mock('@/components/public/home/portal-home', () => ({
+  loadHome: async () => {
     hoisted.prefetched++
+    return {}
   },
 }))
 vi.mock('../feedback', async () => {
@@ -28,6 +29,7 @@ vi.mock('../feedback', async () => {
   return {
     feedHead: () => ({}),
     feedSearchSchema: z.object({}).passthrough(),
+    hasFeedSearch: (search: Record<string, unknown>) => search.board !== undefined,
     loadFeed: async (_context: unknown, _location: unknown, canonical: string) => {
       hoisted.feeds.push(canonical)
       return { workspaceName: 'Acme', baseUrl: '', canonicalPath: canonical, showPoweredBy: false }

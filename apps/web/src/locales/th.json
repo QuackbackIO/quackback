@@ -2246,5 +2246,6 @@
   "portal.home.contact.title": "คุยกับเรา",
   "portal.home.contact.body": "ถามคำถามหรือแจ้งปัญหา แล้วเราจะติดต่อกลับ",
   "portal.home.contact.start": "เริ่มการสนทนา",
-  "portal.home.links.title": "ลิงก์"
+  "portal.home.links.title": "ลิงก์",
+  "portal.home.composer.continue": "ดำเนินการต่อ"
 }

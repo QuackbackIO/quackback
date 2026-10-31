@@ -247,7 +247,24 @@ export default defineConfig(({ mode }) => {
       viteReact(),
       // A route's chunks import the chunk of the route they render under, so
       // what a layout shares with its pages stays in the layout's chunk.
-      routeChunksImportTheirParent(path.resolve(__dirname, 'src/routeTree.gen.ts')),
+      routeChunksImportTheirParent(path.resolve(__dirname, 'src/routeTree.gen.ts'), {
+        // Home is loaded by the portal root itself, so its chunk shares the
+        // portal layout's modules the way the root's own split would.
+        lazyChildren: {
+          [path.resolve(__dirname, 'src/components/public/home/portal-home.tsx')]: path.resolve(
+            __dirname,
+            'src/routes/_portal/index.tsx'
+          ),
+        },
+        // The root renders the feed while it is the landing page, so the
+        // feed's chunk is preloaded there as well as at /feedback.
+        sharedComponents: {
+          [path.resolve(__dirname, 'src/routes/_portal/feedback.tsx')]: path.resolve(
+            __dirname,
+            'src/routes/_portal/index.tsx'
+          ),
+        },
+      }),
     ].filter(Boolean) as PluginOption[],
   }
 })

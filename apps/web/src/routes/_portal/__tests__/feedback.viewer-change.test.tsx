@@ -102,7 +102,7 @@ vi.mock('@/components/public/feedback/feedback-container', () => ({
   },
 }))
 
-import { Route } from '../feedback'
+import { hasFeedSearch, Route } from '../feedback'
 
 const Page = (Route as unknown as { component: React.ComponentType }).component
 
@@ -180,5 +180,14 @@ describe('portal feed when the viewer changes', () => {
 
     await waitFor(() => expect(feed.pending.has('user_b')).toBe(true))
     expect(feed.pending.has(undefined)).toBe(false)
+  })
+})
+
+describe('hasFeedSearch', () => {
+  it('spots the feed’s own parameters, so an old link can follow the feed', () => {
+    expect(hasFeedSearch({ board: 'bugs' })).toBe(true)
+    expect(hasFeedSearch({ sort: 'top', status: ['open'] })).toBe(true)
+    expect(hasFeedSearch({})).toBe(false)
+    expect(hasFeedSearch({ utm_source: 'mail', theme: 'dark' })).toBe(false)
   })
 })

@@ -5,7 +5,7 @@ import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
-import { useRouter } from '@tanstack/react-router'
+import { useRouter, useRouterState } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { PortalPoweredBy } from '@/components/public/feedback/portal-powered-by'
@@ -47,7 +47,7 @@ import type { PostId, PostStatusId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { shownName } from '@/lib/shared/greeting-name'
-import { useFeedHandoff } from '@/components/public/feedback/feed-input-handoff'
+import { takeArrivedTitle, useFeedHandoff } from '@/components/public/feedback/feed-input-handoff'
 
 const EMPTY_VIEW_MESSAGES: Record<PublicFeedView, MessageDescriptor> = {
   mine: {
@@ -380,6 +380,14 @@ export function FeedbackContainer({
     const title = handoff?.take('composeTitle')
     if (title !== undefined) setDraft({ title, key: Date.now() })
   }, [handoff])
+  // Home's Share an idea sends what was typed there with the navigation.
+  const arrivedTitle = useRouterState({
+    select: (state) => (state.location.state as { composeTitle?: unknown }).composeTitle,
+  })
+  useEffect(() => {
+    const title = takeArrivedTitle(router.state.location.state)
+    if (title !== undefined) setDraft({ title, key: Date.now() })
+  }, [arrivedTitle, router])
   const canStartIdea =
     !isRealUser || canPostTo(boardPermissions, boardLocked ? boardIdForCreate : undefined)
 

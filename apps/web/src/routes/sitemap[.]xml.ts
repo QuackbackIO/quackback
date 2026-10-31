@@ -57,13 +57,15 @@ async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
     { publicChangelogConditions },
     { toIsoDateOnly },
     { getFeatureFlags, getWorkspaceSettings },
-    { portalPageGates, portalSitemapPaths },
+    { portalPageGates },
+    { portalSitemapPaths },
   ] = await Promise.all([
     import('@/lib/server/db'),
     import('@/lib/server/domains/changelog/changelog.public'),
     import('@/lib/shared/utils/date'),
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/shared/design/paths'),
+    import('@/lib/shared/design/sitemap-paths'),
   ])
 
   const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`

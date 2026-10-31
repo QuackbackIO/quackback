@@ -4,6 +4,7 @@
  * the portal starts on Home.
  */
 import type { QueryClient } from '@tanstack/react-query'
+import { loadAreaMessages, type SupportedLocale } from '@/lib/shared/i18n'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
@@ -19,15 +20,32 @@ export const popularArticlesQuery = () => ({
   staleTime: 5 * 60 * 1000,
 })
 
-export function prefetchHome(
+/** The strings Home's help and status blocks speak, which stay out of the catalog every page seeds. */
+export type HomeAreaMessages = Partial<Record<'helpCenter' | 'statusPage', Record<string, string>>>
+
+/** Starts the blocks' data and loads their pages' strings, for the route loader. */
+export async function loadHome(
   queryClient: QueryClient,
   blocks: PortalDesign['pages']['home']['blocks'],
   gates: PortalPageGates,
-  feed: { sort: 'trending' | 'top' | 'new'; userId: string | undefined }
+  locale: SupportedLocale
+): Promise<HomeAreaMessages> {
+  prefetchHome(queryClient, blocks, gates)
+  const areas = [
+    blocks.some((block) => block.type === 'help_search' || block.type === 'help_topics') &&
+      ('helpCenter' as const),
+    blocks.some((block) => block.type === 'status') && ('statusPage' as const),
+  ].filter((area): area is 'helpCenter' | 'statusPage' => !!area)
+  const loaded = await Promise.all(areas.map((area) => loadAreaMessages(locale, area)))
+  return Object.fromEntries(areas.map((area, index) => [area, loaded[index]]))
+}
+
+export function prefetchHome(
+  queryClient: QueryClient,
+  blocks: PortalDesign['pages']['home']['blocks'],
+  gates: PortalPageGates
 ): void {
   for (const block of blocks) {
-    if (block.type === 'composer' && gates.feedback)
-      void queryClient.prefetchQuery(portalQueries.portalData(feed))
     if (block.type === 'ideas' && gates.feedback) {
       void queryClient.prefetchQuery(portalQueries.posts({ sort: block.sort }))
       void queryClient.prefetchQuery(portalQueries.statuses())

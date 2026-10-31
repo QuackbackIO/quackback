@@ -6,13 +6,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { defaultDesign, type PortalDesign } from '../schema'
-import {
-  hasFeedSearch,
-  portalFeedbackPath,
-  portalLanding,
-  portalSitemapPaths,
-  type PortalPathSettings,
-} from '../paths'
+import { portalFeedbackPath, portalLanding, type PortalPathSettings } from '../paths'
+import { portalSitemapPaths } from '../sitemap-paths'
 
 const ALL_ON = {
   feedback: true,
@@ -103,14 +98,5 @@ describe('portalSitemapPaths', () => {
     expect(
       portalSitemapPaths({ engine: 'legacy' }, { ...ALL_ON, feedback: false, roadmap: false })
     ).toEqual([])
-  })
-})
-
-describe('hasFeedSearch', () => {
-  it('spots the feed’s own parameters, so an old link can follow the feed', () => {
-    expect(hasFeedSearch({ board: 'bugs' })).toBe(true)
-    expect(hasFeedSearch({ sort: 'top', status: ['open'] })).toBe(true)
-    expect(hasFeedSearch({})).toBe(false)
-    expect(hasFeedSearch({ utm_source: 'mail' })).toBe(false)
   })
 })

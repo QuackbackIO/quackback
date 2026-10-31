@@ -2246,5 +2246,6 @@
   "portal.home.contact.title": "Talk to us",
   "portal.home.contact.body": "Ask a question or tell us about a problem, and we will get back to you.",
   "portal.home.contact.start": "Start a conversation",
-  "portal.home.links.title": "Links"
+  "portal.home.links.title": "Links",
+  "portal.home.composer.continue": "Continue"
 }

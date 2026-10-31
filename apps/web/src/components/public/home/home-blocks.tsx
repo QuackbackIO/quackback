@@ -4,7 +4,7 @@
  * has nothing to show. Every block is a `home-block` part and a section the
  * Appearance preview can select.
  */
-import { Suspense, type ReactNode } from 'react'
+import { Suspense, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useQuery, useSuspenseInfiniteQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
@@ -15,7 +15,6 @@ import { HelpCenterCompactSearch } from '@/components/help-center/help-center-se
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 import { COMPONENT_STATUS_STYLE, HERO_HEADLINE } from '@/components/portal/status/status-colors'
-import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
@@ -24,17 +23,18 @@ import {
   usePublicRoadmapPosts,
   flattenRoadmapViewPosts,
 } from '@/lib/client/hooks/use-roadmap-posts-query'
-import { useFeedbackPath, usePortalPageGates } from '@/lib/client/hooks/use-portal-paths'
-import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import { portalDefaultSort } from '@/lib/shared/design/view'
 import { cn } from '@/lib/shared/utils'
 import { homeMessages } from './home-messages'
 import { popularArticlesQuery } from './home-prefetch'
 
 export type HomeBlock = PortalDesign['pages']['home']['blocks'][number]
+
+/** Where the feed lives while Home shows. */
+const HOME_FEED_PATH = '/feedback'
 
 /** Columns at each size: below md every block is full width, and thirds become halves until lg. */
 const WIDTH_CLASS: Record<HomeBlock['width'], string> = {
@@ -118,30 +118,50 @@ function WelcomeBlock({
   )
 }
 
+/**
+ * Share an idea: the feed's composer, collapsed. What a visitor types goes
+ * with them to the feed, whose composer opens with it.
+ */
 function ComposerBlock({ block, index }: { block: HomeBlock; index: number }) {
-  const session = useSessionContext()
-  const settings = useWorkspaceSettings()
+  const intl = useIntl()
   const navigate = useNavigate()
-  const { data } = useSuspenseQuery(
-    portalQueries.portalData({
-      sort: portalDefaultSort(settings),
-      userId: session?.user?.id,
-    })
-  )
-  if (data.boards.length === 0) return null
+  const [title, setTitle] = useState('')
+  const open = () =>
+    void navigate({ to: HOME_FEED_PATH, state: { composeTitle: title.trim() } as never })
   return (
     <BlockCard block={block} index={index} bare>
-      <FeedbackHeader
-        workspaceName={settings?.name ?? ''}
-        boards={data.boards}
-        defaultBoardId={data.boards[0]?.id}
-        user={session?.user ?? null}
-        boardPermissions={data.boardPermissions}
-        onPostCreated={(postId, boardSlug) =>
-          void navigate({ to: '/b/$slug/posts/$postId', params: { slug: boardSlug, postId } })
-        }
-        boardLocked={false}
-      />
+      <form
+        action={HOME_FEED_PATH}
+        className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5 shadow-sm"
+        onSubmit={(event) => {
+          event.preventDefault()
+          open()
+        }}
+      >
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
+            <path
+              d="M11.1 2.3a1.6 1.6 0 0 1 2.3 2.3L5.6 12.4 2.5 13.5l1.1-3.1z"
+              fill="currentColor"
+            />
+          </svg>
+        </span>
+        <input
+          type="text"
+          value={title}
+          maxLength={200}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder={intl.formatMessage(homeMessages.composerPlaceholder)}
+          aria-label={intl.formatMessage(homeMessages.composerLabel)}
+          className="min-w-0 flex-1 border-0 bg-transparent font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground/60"
+        />
+        <button
+          type="submit"
+          className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-[var(--qb-accent-text,var(--primary))] hover:bg-muted"
+        >
+          {intl.formatMessage(homeMessages.composerContinue)}
+        </button>
+      </form>
     </BlockCard>
   )
 }
@@ -154,7 +174,6 @@ function IdeasBlock({
   index: number
 }) {
   const intl = useIntl()
-  const feedbackPath = useFeedbackPath()
   const { data } = useSuspenseQuery(portalQueries.posts({ sort: block.sort }))
   const { data: statuses } = useQuery(portalQueries.statuses())
   const posts = data.items.slice(0, block.count)
@@ -163,7 +182,7 @@ function IdeasBlock({
       block={block}
       index={index}
       title={intl.formatMessage(homeMessages.ideasTitle)}
-      action={{ label: intl.formatMessage(homeMessages.ideasAll), to: feedbackPath }}
+      action={{ label: intl.formatMessage(homeMessages.ideasAll), to: HOME_FEED_PATH }}
     >
       {posts.length === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -459,21 +478,28 @@ function LinksBlock({
 }
 
 /** Which page a block depends on; a block whose page is off is not drawn. */
-const BLOCK_PAGE: Partial<Record<HomeBlock['type'], keyof ReturnType<typeof usePortalPageGates>>> =
-  {
-    composer: 'feedback',
-    ideas: 'feedback',
-    roadmap: 'roadmap',
-    updates: 'changelog',
-    help_search: 'help',
-    help_topics: 'help',
-    status: 'status',
-    contact: 'support',
-  }
+const BLOCK_PAGE: Partial<Record<HomeBlock['type'], keyof PortalPageGates>> = {
+  composer: 'feedback',
+  ideas: 'feedback',
+  roadmap: 'roadmap',
+  updates: 'changelog',
+  help_search: 'help',
+  help_topics: 'help',
+  status: 'status',
+  contact: 'support',
+}
 
 /** One block, drawn when its page is on, with its data streamed in. */
-export function HomeBlockView({ block, index }: { block: HomeBlock; index: number }) {
-  const gates = usePortalPageGates()
+export function HomeBlockView({
+  block,
+  index,
+  gates,
+}: {
+  block: HomeBlock
+  index: number
+  /** Which pages exist, from the loader; a block whose page is off is not drawn. */
+  gates: PortalPageGates
+}) {
   const page = BLOCK_PAGE[block.type]
   if (page && !gates[page]) return null
   const body = (() => {

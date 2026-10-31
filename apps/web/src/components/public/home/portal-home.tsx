@@ -2,9 +2,13 @@ import type { ReactNode } from 'react'
 import { useRouteContext } from '@tanstack/react-router'
 import { AreaMessages } from '@/components/shared/area-messages'
 import { PortalBand } from '@/components/public/portal-band'
+import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { HomeBlockView } from './home-blocks'
+import type { HomeAreaMessages } from './home-prefetch'
 
-type AreaStrings = Partial<Record<'helpCenter' | 'statusPage', Record<string, string>>>
+export { loadHome } from './home-prefetch'
+
+type AreaStrings = HomeAreaMessages
 
 /** The help and status blocks' strings, loaded with the page. */
 function WithAreas({ messages, children }: { messages: AreaStrings; children: ReactNode }) {
@@ -29,7 +33,14 @@ function WithAreas({ messages, children }: { messages: AreaStrings; children: Re
  * columns at large sizes. Blocks fill rows in order and wrap when the next
  * one does not fit; there is no free positioning.
  */
-export function PortalHome({ messages = {} }: { messages?: AreaStrings }) {
+export function PortalHome({
+  messages = {},
+  gates,
+}: {
+  messages?: AreaStrings
+  /** Which pages exist, from the loader. */
+  gates: PortalPageGates
+}) {
   const design = useRouteContext({
     from: '__root__',
     select: (context) => context.settings?.portalDesign,
@@ -44,7 +55,12 @@ export function PortalHome({ messages = {} }: { messages?: AreaStrings }) {
       >
         <WithAreas messages={messages}>
           {design.home.blocks.map((block, index) => (
-            <HomeBlockView key={`${block.type}-${index}`} block={block} index={index} />
+            <HomeBlockView
+              key={`${block.type}-${index}`}
+              block={block}
+              index={index}
+              gates={gates}
+            />
           ))}
         </WithAreas>
       </div>

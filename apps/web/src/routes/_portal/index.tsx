@@ -1,19 +1,20 @@
 import { lazy, Suspense } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { hasFeedSearch, portalLanding } from '@/lib/shared/design/paths'
-import { DEFAULT_LOCALE, loadAreaMessages, type MessageArea } from '@/lib/shared/i18n'
+import { portalLanding } from '@/lib/shared/design/paths'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import {
   feedHead,
   feedSearchSchema,
+  hasFeedSearch,
   loadFeed,
   portalPathsOf,
   Route as FeedbackRoute,
 } from './feedback'
 
-const PortalHome = lazy(() =>
-  import('@/components/public/home/portal-home').then((module) => ({ default: module.PortalHome }))
-)
+/** Home's module: its page, and what its loader starts. One import serves both. */
+const importHome = () => import('@/components/public/home/portal-home')
+const PortalHome = lazy(() => importHome().then((module) => ({ default: module.PortalHome })))
 
 /** The feed route's own component, loaded from its chunk. */
 const FeedComponent = FeedbackRoute.options.component as NonNullable<
@@ -40,34 +41,20 @@ export const Route = createFileRoute('/_portal/')({
       if (hasFeedSearch(location.search))
         throw redirect({ to: '/feedback', search: location.search, statusCode: 301 })
       const design = context.settings.portalDesign
-      const blocks = design?.engine === 'v2' ? design.home.blocks : []
-      if (design?.engine === 'v2') {
-        const { prefetchHome } = await import('@/components/public/home/home-prefetch')
-        prefetchHome(context.queryClient, blocks, gates, {
-          sort: design.feedback.defaultSort,
-          userId: context.session?.user?.id,
-        })
-      }
-      // The help and status blocks speak their own pages' strings, which stay
-      // out of the catalog every page seeds.
-      const areas = [
-        blocks.some((block) => block.type === 'help_search' || block.type === 'help_topics') &&
-          ('helpCenter' as const),
-        blocks.some((block) => block.type === 'status') && ('statusPage' as const),
-      ].filter((area): area is MessageArea & ('helpCenter' | 'statusPage') => !!area)
-      const locale = context.acceptLanguageLocale ?? DEFAULT_LOCALE
-      const [showPoweredBy, ...areaMessages] = await Promise.all([
-        getShowPoweredByFn(),
-        ...areas.map((area) => loadAreaMessages(locale, area)),
-      ])
+      const [home, showPoweredBy] = await Promise.all([importHome(), getShowPoweredByFn()])
+      const messages = await home.loadHome(
+        context.queryClient,
+        design?.engine === 'v2' ? design.home.blocks : [],
+        gates,
+        context.acceptLanguageLocale ?? DEFAULT_LOCALE
+      )
       return {
         landing: 'home' as const,
         workspaceName: context.settings.name,
         baseUrl: context.baseUrl ?? '',
         showPoweredBy,
-        messages: Object.fromEntries(
-          areas.map((area, index) => [area, areaMessages[index]])
-        ) as Partial<Record<'helpCenter' | 'statusPage', Record<string, string>>>,
+        gates,
+        messages,
       }
     }
     const [feed] = await Promise.all([
@@ -77,21 +64,11 @@ export const Route = createFileRoute('/_portal/')({
     ])
     return { landing: 'feed' as const, ...feed }
   },
-  head: ({ loaderData }) => {
-    if (loaderData?.landing !== 'home') return feedHead(loaderData)
-    const { workspaceName, baseUrl } = loaderData
-    const description = `Share ideas, follow what is coming and find help from ${workspaceName}.`
-    return {
-      meta: [
-        { title: workspaceName },
-        { name: 'description', content: description },
-        { property: 'og:title', content: workspaceName },
-        { property: 'og:description', content: description },
-        ...(baseUrl ? [{ property: 'og:url', content: baseUrl }] : []),
-      ],
-      links: baseUrl ? [{ rel: 'canonical', href: baseUrl }] : [],
-    }
-  },
+  // Home's title, description and share tags are the portal's own, from its layout.
+  head: ({ loaderData }) =>
+    loaderData?.landing === 'home'
+      ? { links: loaderData.baseUrl ? [{ rel: 'canonical', href: loaderData.baseUrl }] : [] }
+      : feedHead(loaderData),
   component: PortalLanding,
 })
 
@@ -100,7 +77,7 @@ function PortalLanding() {
   if (data.landing === 'home')
     return (
       <Suspense fallback={null}>
-        <PortalHome messages={data.messages} />
+        <PortalHome messages={data.messages} gates={data.gates} />
       </Suspense>
     )
   return <FeedComponent />

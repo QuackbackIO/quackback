@@ -2246,5 +2246,6 @@
   "portal.home.contact.title": "Свяжитесь с нами",
   "portal.home.contact.body": "Задайте вопрос или опишите проблему, и мы ответим.",
   "portal.home.contact.start": "Начать разговор",
-  "portal.home.links.title": "Ссылки"
+  "portal.home.links.title": "Ссылки",
+  "portal.home.composer.continue": "Продолжить"
 }

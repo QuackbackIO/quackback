@@ -14,7 +14,8 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useFeedbackPath } from '@/lib/client/hooks/use-portal-paths'
+import { savedFeedbackPath } from '@/lib/shared/design/saved-feedback-path'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import type { BoardId, PostId, PostStatusId, PostTagId, PrincipalId } from '@quackback/ids'
@@ -57,7 +58,12 @@ export function usePortalTeamPostActions({
 }: UsePortalTeamPostActionsOptions) {
   const intl = useIntl()
   const navigate = useNavigate()
-  const feedbackPath = useFeedbackPath()
+  const settings = useWorkspaceSettings()
+  const session = useSessionContext()
+  const feedbackPath = savedFeedbackPath(
+    settings,
+    !!session?.user && session.user.principalType !== 'anonymous'
+  )
   const queryClient = useQueryClient()
   const { can } = usePortalPermissions()
 
