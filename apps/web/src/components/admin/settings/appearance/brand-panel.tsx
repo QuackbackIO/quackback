@@ -1,24 +1,15 @@
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { normaliseColor } from '@/lib/shared/design/color'
-import { BUNDLED_FONTS, type BundledFontId } from '@/lib/shared/design/fonts'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { oklchToHex } from '@/lib/shared/theme/colors'
 import { applyPreset } from '@/lib/shared/design/presets'
 import { DesignTiles } from './design-tiles'
 import { WordsSection } from './words-section'
+import { FontsSection } from './fonts-section'
 import { PresetGallery } from './preset-gallery'
 import { CornersDrawing, ModeDrawing } from './drawings'
 
@@ -37,24 +28,6 @@ const MORE_COLOURS: Array<{ key: 'surface' | 'raised' | 'muted' | 'border'; labe
   { key: 'muted', label: 'Secondary text' },
   { key: 'border', label: 'Borders' },
 ]
-const FONT_CATEGORIES = [
-  ['sans', 'Sans serif'],
-  ['serif', 'Serif'],
-  ['mono', 'Monospace'],
-  ['system', 'System'],
-] as const
-
-type HeadingWeight = PortalDesign['brand']['fonts']['headingWeight']
-
-/** The heading weight to keep with a new heading font: the same one if it loads, else 600, else the first it has. */
-function closestWeight(id: BundledFontId, current: HeadingWeight): HeadingWeight {
-  const offered = DESIGN_OPTIONS.headingWeight.filter((weight) =>
-    BUNDLED_FONTS[id].weights.includes(weight)
-  )
-  if (offered.includes(current)) return current
-  return offered.includes(600) ? 600 : (offered[0] ?? 600)
-}
-
 const toHex = (value: string | undefined) =>
   value ? (value.startsWith('#') ? value : oklchToHex(value)) : '#ffffff'
 
@@ -107,46 +80,6 @@ function ColourField({
   )
 }
 
-function FontSelect({
-  id,
-  label,
-  value,
-  onChange,
-}: {
-  id: string
-  label: string
-  value: PortalDesign['brand']['fonts']['body']
-  onChange: (id: BundledFontId) => void
-}) {
-  const current = value.kind === 'bundled' ? value.id : value.fallback
-  return (
-    <div className="flex items-center gap-2">
-      <label htmlFor={id} className="w-32 shrink-0 text-[13px]">
-        {label}
-      </label>
-      <Select value={current} onValueChange={(next) => onChange(next as BundledFontId)}>
-        <SelectTrigger id={id} className="h-8 flex-1">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {FONT_CATEGORIES.map(([category, heading]) => (
-            <SelectGroup key={category}>
-              <SelectLabel>{heading}</SelectLabel>
-              {Object.entries(BUNDLED_FONTS)
-                .filter(([, font]) => font.category === category)
-                .map(([fontId, font]) => (
-                  <SelectItem key={fontId} value={fontId}>
-                    <span style={{ fontFamily: font.stack }}>{font.label}</span>
-                  </SelectItem>
-                ))}
-            </SelectGroup>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  )
-}
-
 /** The Brand tab: the logo, mode, colours, fonts and corners. */
 export function BrandPanel({
   design,
@@ -159,11 +92,7 @@ export function BrandPanel({
   logoUrl?: string | null
 }) {
   const [moreColours, setMoreColours] = useState(false)
-  const { light, dark, fonts } = design.brand
-  const headingFont = fonts.heading.kind === 'bundled' ? fonts.heading.id : fonts.heading.fallback
-  const weights = DESIGN_OPTIONS.headingWeight.filter((weight) =>
-    BUNDLED_FONTS[headingFont].weights.includes(weight)
-  )
+  const { light, dark } = design.brand
 
   return (
     <div className="space-y-6">
@@ -256,52 +185,7 @@ export function BrandPanel({
         </section>
       )}
 
-      <section className="space-y-2">
-        <p className="text-[13px] font-medium">Fonts</p>
-        <FontSelect
-          id="font-heading"
-          label="Headings"
-          value={fonts.heading}
-          onChange={(id) =>
-            update((draft) => {
-              draft.brand.fonts.heading = { kind: 'bundled', id }
-              draft.brand.fonts.headingWeight = closestWeight(id, draft.brand.fonts.headingWeight)
-            })
-          }
-        />
-        <FontSelect
-          id="font-body"
-          label="Body"
-          value={fonts.body}
-          onChange={(id) =>
-            update((draft) => void (draft.brand.fonts.body = { kind: 'bundled', id }))
-          }
-        />
-      </section>
-
-      <DesignTiles
-        name="design-heading-weight"
-        label="Heading weight"
-        value={String(fonts.headingWeight)}
-        columns={4}
-        onChange={(weight) =>
-          update(
-            (draft) => void (draft.brand.fonts.headingWeight = Number(weight) as HeadingWeight)
-          )
-        }
-        options={weights.map((weight) => ({
-          value: String(weight),
-          label: String(weight),
-          drawing: (
-            <span
-              className="text-base"
-              style={{ fontWeight: weight, fontFamily: BUNDLED_FONTS[headingFont].stack }}
-            >
-              Aa
-            </span>
-          ),
-        }))}
-      />
+      <FontsSection design={design} update={update} />
 
       <DesignTiles
         name="design-corners"
