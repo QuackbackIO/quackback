@@ -16,9 +16,53 @@ import { nearestBundledFont } from '@/lib/shared/design/font-match'
 import { parseOklch } from '@/lib/shared/theme/expand'
 import { hexToOklch } from '@/lib/shared/theme/colors'
 import type { SiteSignals } from './site-signals'
+import type { Tune } from '@/lib/shared/design/tune'
 
 const oklchOf = (colour: string) =>
   /^#[0-9a-f]{6}$/i.test(colour) ? parseOklch(hexToOklch(colour)) : null
+
+const lab = (colour: string) => {
+  const c = oklchOf(colour)
+  return c
+    ? [c.l, c.c * Math.cos((c.h * Math.PI) / 180), c.c * Math.sin((c.h * Math.PI) / 180)]
+    : null
+}
+
+/** A colour no evidence is needed for: a label's black or white. */
+const neutralLabel = (colour: string) => {
+  const c = oklchOf(colour)
+  return !!c && c.c < 0.03 && (c.l < 0.25 || c.l > 0.92)
+}
+
+/**
+ * Whether a colour measured on the site is borne out by what was seen: the
+ * screenshot's colours where there is one, else the site's leading colours.
+ * A measurement can land on the wrong element, such as an old button a
+ * site's bundle still styles, and then it must not override what the model
+ * saw.
+ */
+export function confirmedBy(seen: readonly string[]): (colour: string) => boolean {
+  const points = seen.map(lab).filter((p): p is number[] => !!p)
+  return (colour) => {
+    const p = lab(colour)
+    if (!p) return false
+    return points.some((q) => Math.hypot(p[0]! - q[0]!, p[1]! - q[1]!, p[2]! - q[2]!) < 0.09)
+  }
+}
+
+/** The tune with only the colours that were borne out. */
+function confirmedTune(tune: Tune, confirm: (colour: string) => boolean): Tune {
+  const out = structuredClone(tune)
+  if (out.headline?.colour && !confirm(out.headline.colour)) delete out.headline.colour
+  if (out.heading?.colour && !confirm(out.heading.colour)) delete out.heading.colour
+  if (out.button?.fill && !confirm(out.button.fill)) {
+    delete out.button.fill
+    delete out.button.ink
+  }
+  if (out.button?.ink && !neutralLabel(out.button.ink) && !confirm(out.button.ink))
+    delete out.button.ink
+  return out
+}
 
 /**
  * The faithful look with the brand's own type and shapes, exactly as its page
@@ -29,9 +73,10 @@ const oklchOf = (colour: string) =>
 export function withMeasuredTune(
   design: PortalDesign,
   site: SiteSignals | null | undefined,
-  allows: Omit<UntrustedChanges, 'links'>
+  allows: Omit<UntrustedChanges, 'links'>,
+  confirm: (colour: string) => boolean = () => true
 ): PortalDesign {
-  const tune = site?.measured ? tuneFromMeasurements(site.measured) : {}
+  const tune = site?.measured ? confirmedTune(tuneFromMeasurements(site.measured), confirm) : {}
   const heading = nearestBundledFont(site?.fonts.heading)
   const body = nearestBundledFont(site?.fonts.body)
   const changes = [
@@ -52,14 +97,17 @@ export function withMeasuredTune(
  * is the brand colour, and a black or near-black one fills buttons with the
  * text colour. A pale or grey fill says nothing about the brand.
  */
-export function measuredButton(site: SiteSignals | null | undefined): {
+export function measuredButton(
+  site: SiteSignals | null | undefined,
+  confirm: (colour: string) => boolean = () => true
+): {
   accent?: string
   fill?: 'ink'
 } {
   const fill = site?.measured?.button?.fill
   const colour = fill ? oklchOf(fill) : null
   if (!fill || !colour) return {}
-  if (colour.c >= 0.04) return { accent: fill }
+  if (colour.c >= 0.04) return confirm(fill) ? { accent: fill } : {}
   return colour.l < 0.3 ? { fill: 'ink' } : {}
 }
 
@@ -69,12 +117,13 @@ export function measuredButton(site: SiteSignals | null | undefined): {
  */
 export function measuredBand(
   site: SiteSignals | null | undefined,
-  accent: string
+  accent: string,
+  confirm: (colour: string) => boolean = () => true
 ): { band?: 'brand' | 'support'; support?: string } {
   const hero = site?.hero
   const fill = hero ? oklchOf(hero) : null
   const own = oklchOf(accent)
-  if (!hero || !fill || fill.c < 0.04) return {}
+  if (!hero || !fill || fill.c < 0.04 || !confirm(hero)) return {}
   const turn = own ? Math.abs(fill.h - own.h) % 360 : 180
   const same = own && Math.min(turn, 360 - turn) <= 20 && Math.abs(fill.l - own.l) < 0.08
   return same ? { band: 'brand' } : { band: 'support', support: hero }

@@ -9,7 +9,8 @@ import { defaultDesign } from '@/lib/shared/design/schema'
 vi.mock('@/lib/server/config', () => ({ config: {} }))
 
 const { DIRECTIONS_EXAMPLE, faithfulAccent, lookDesign } = await import('../design-directions')
-const { measuredBand, measuredButton, withMeasuredTune } = await import('../faithful-look')
+const { confirmedBy, measuredBand, measuredButton, withMeasuredTune } =
+  await import('../faithful-look')
 
 const every = [
   'welcome',
@@ -339,5 +340,34 @@ describe('the faithful look’s band, as the site’s hero', () => {
     expect(measuredBand({ hero: '#0058a3' } as never, '#0058a3')).toEqual({ band: 'brand' })
     expect(measuredBand({ hero: '#f5f5f5' } as never, '#0058a3')).toEqual({})
     expect(measuredBand(null, '#0058a3')).toEqual({})
+  })
+})
+
+describe('a measured colour, borne out by what was seen', () => {
+  // Wise's screenshot: its lime and forest green, with white and near-black.
+  const seen = confirmedBy(['#9fe870', '#163300', '#ffffff', '#0e0f0c'])
+
+  it('overrides the model only where the screenshot shows it', () => {
+    const site = (fill: string) => ({ measured: { button: { fill } } }) as never
+    expect(measuredButton(site('#163300'), seen)).toEqual({ accent: '#163300' })
+    // An old blue button the bundle still styles is not the brand's.
+    expect(measuredButton(site('#0081ba'), seen)).toEqual({})
+    expect(measuredBand({ hero: '#0081ba' } as never, '#163300', seen)).toEqual({})
+  })
+
+  it('keeps exact type and shapes, and drops the colours nothing bears out', () => {
+    const design = withMeasuredTune(
+      defaultDesign(),
+      {
+        fonts: { heading: null, body: null },
+        measured: {
+          headline: { size: 88, colour: '#37517e' },
+          button: { fill: '#0081ba', ink: '#ffffff', radius: 999 },
+        },
+      } as never,
+      allows,
+      seen
+    )
+    expect(design.tune).toEqual({ headline: { size: 88 }, button: { radius: 999 } })
   })
 })

@@ -22,6 +22,7 @@ import type { SiteAssets } from './site-assets'
 import type { SiteSignals } from './site-signals'
 import { BUNDLED_FONT_IDS } from '@/lib/shared/design/options'
 import {
+  confirmedBy,
   fontBrief,
   measuredBand,
   measuredBrief,
@@ -366,6 +367,10 @@ export async function designDirections(input: {
       log.warn({ err }, 'design ai looks did not fit the schema; asking again')
       return once()
     })
+    // A measured colour overrides the model only where what was seen bears it out.
+    const confirm = confirmedBy(
+      input.palette?.length ? input.palette : (input.site?.palette.slice(0, 3) ?? [])
+    )
     return {
       ok: true,
       looks: answer.looks.map((answered, index) => {
@@ -374,11 +379,15 @@ export async function designDirections(input: {
           index === 0
             ? {
                 ...answered,
-                accent: measuredButton(input.site).accent ?? faithfulAccent(answered.accent, input),
-                ...(measuredButton(input.site).fill && { fill: 'ink' as const }),
+                accent:
+                  measuredButton(input.site, confirm).accent ??
+                  faithfulAccent(answered.accent, input),
+                ...(measuredButton(input.site, confirm).fill && { fill: 'ink' as const }),
                 ...measuredBand(
                   input.site,
-                  measuredButton(input.site).accent ?? faithfulAccent(answered.accent, input)
+                  measuredButton(input.site, confirm).accent ??
+                    faithfulAccent(answered.accent, input),
+                  confirm
                 ),
                 support: answered.support && faithfulAccent(answered.support, input),
               }
@@ -389,7 +398,8 @@ export async function designDirections(input: {
           input.allows,
           input.assets
         )
-        const design = index === 0 ? withMeasuredTune(looked, input.site, input.allows) : looked
+        const design =
+          index === 0 ? withMeasuredTune(looked, input.site, input.allows, confirm) : looked
         if (refused.length) log.info({ look: look.name, refused }, 'design look left choices out')
         return {
           name: fit(look.name, 40),
