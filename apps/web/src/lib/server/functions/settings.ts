@@ -120,8 +120,7 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
     await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
     // Subquery: latest session timestamp per user. Left-joined so
-    // a team member with no sessions still appears (lastSignInAt
-    // = null) — useful for spotting stale accounts.
+    // members remain visible after their sessions have been pruned.
     const { session, max, sql: sqlOp } = await import('@/lib/server/db')
     const lastSession = db
       .select({
@@ -143,7 +142,7 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
         userImageKey: user.imageKey,
         userName: user.name,
         userEmail: user.email,
-        lastSignInAt: sqlOp<Date | null>`${lastSession.lastSignInAt}`,
+        lastSignInAt: sqlOp<Date | null>`greatest(${lastSession.lastSignInAt}, ${principal.lastSsoSignInAt})`,
       })
       .from(principal)
       .innerJoin(user, eq(principal.userId, user.id))
