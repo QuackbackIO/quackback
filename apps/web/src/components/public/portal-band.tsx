@@ -1,6 +1,7 @@
 import { useIntl } from 'react-intl'
 import { useRouteContext } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
+import { cn } from '@/lib/shared/utils'
 import { usePreviewHeadline, usePreviewHome } from './preview-draft-context'
 
 /** Text in the visitor's language, else its base language, else English, else any. */
@@ -12,6 +13,10 @@ export function textForLocale(
   const base = locale.split('-')[0]
   return text[locale] || text[base] || text.en || Object.values(text).find(Boolean)
 }
+
+/** The band's colour: plain on phones where the design asks, as a mesh crosses the words there. */
+const BAND_FILL =
+  '[background:var(--qb-band-bg-narrow,var(--qb-band-bg))] sm:[background:var(--qb-band-bg)]'
 
 const ACCENT_CLASS = {
   colour: 'text-[var(--qb-band-accent)]',
@@ -44,7 +49,14 @@ function accented(
  * there is no band, in the preview too, so a style never shows as an empty
  * block. Only the design engine draws it.
  */
-export function PortalBand({ page = 'feedback' }: { page?: 'feedback' | 'home' }) {
+export function PortalBand({
+  page = 'feedback',
+  children,
+}: {
+  page?: 'feedback' | 'home'
+  /** What sits under the headline, such as Home's composer. */
+  children?: ReactNode
+}) {
   const intl = useIntl()
   const design = useRouteContext({
     from: '__root__',
@@ -62,16 +74,28 @@ export function PortalBand({ page = 'feedback' }: { page?: 'feedback' | 'home' }
   const title = textForLocale(headline?.title, intl.locale)
   const subtitle = textForLocale(headline?.subtitle, intl.locale)
   const phrase = textForLocale(headline?.accent?.text, intl.locale)
-  if (!title && !subtitle) return null
+  if (!title && !subtitle && !children) return null
   return (
     <section
       data-qb-section="band"
       data-qb-part="band"
-      className="portal-band [background:var(--qb-band-bg-narrow,var(--qb-band-bg))] sm:[background:var(--qb-band-bg)] py-10 [[data-qb-band=none]_&]:py-0"
+      className={cn(
+        'portal-band py-10 [[data-qb-band=none]_&]:py-0',
+        BAND_FILL,
+        // Inset: the band's colour moves onto a rounded panel within the page.
+        '[[data-qb-band-shape=inset]_&]:![background:transparent] [[data-qb-band-shape=inset]_&]:py-3'
+      )}
     >
-      {(title || subtitle) && (
-        // Under a centred header the headline centres too.
-        <div className="mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 pt-6 sm:px-6 [[data-qb-band=none]_&]:pb-0 [[data-qb-header=centered]_&]:text-center">
+      <div
+        className={cn(
+          'mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 pt-6 sm:px-6 [[data-qb-band=none]_&]:pb-0',
+          '[[data-qb-band-align=centre]_&]:text-center',
+          '[[data-qb-band-shape=inset]_&]:max-w-[calc(var(--qb-page-max,72rem)-2rem)] [[data-qb-band-shape=inset]_&]:rounded-[calc(var(--qb-radius-panel,0.75rem)*2.5)] [[data-qb-band-shape=inset]_&]:px-6 [[data-qb-band-shape=inset]_&]:py-10 sm:[[data-qb-band-shape=inset]_&]:px-12 sm:[[data-qb-band-shape=inset]_&]:py-14',
+          '[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg-narrow,var(--qb-band-bg))] sm:[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg)]'
+        )}
+      >
+        {/* Panel: the words sit on a block of the second colour, in its own text colours. */}
+        <div className="[[data-qb-band-shape=panel]_&]:max-w-3xl [[data-qb-band-shape=panel]_&]:rounded-[var(--qb-radius-panel,0.75rem)] [[data-qb-band-shape=panel]_&]:bg-[var(--qb-band-panel-bg)] [[data-qb-band-shape=panel]_&]:p-6 sm:[[data-qb-band-shape=panel]_&]:p-10 [[data-qb-band-shape=panel]_&]:[--qb-band-ink:var(--qb-band-panel-ink)] [[data-qb-band-shape=panel]_&]:[--qb-band-muted:var(--qb-band-panel-muted)] [[data-qb-band-shape=panel]_&]:[--qb-band-accent:var(--qb-band-panel-accent)] [[data-qb-band-align=centre]_&]:mx-auto">
           {title && (
             <h1
               data-qb-part="headline"
@@ -81,12 +105,17 @@ export function PortalBand({ page = 'feedback' }: { page?: 'feedback' | 'home' }
             </h1>
           )}
           {subtitle && (
-            <p className="mt-2 max-w-2xl text-base text-[var(--qb-band-muted)] [[data-qb-header=centered]_&]:mx-auto">
+            <p className="mt-2 max-w-2xl text-base text-[var(--qb-band-muted)] [[data-qb-band-align=centre]_&]:mx-auto">
               {subtitle}
             </p>
           )}
+          {children && (
+            <div className="mt-7 max-w-[40rem] [[data-qb-band-align=centre]_&]:mx-auto [[data-qb-band-align=centre]_&]:text-left">
+              {children}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </section>
   )
 }

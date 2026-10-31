@@ -66,15 +66,18 @@ const SpansContext = createContext<ReadonlyMap<number, string>>(new Map())
 export function HomeSpans({
   blocks,
   gates,
+  skip,
   children,
 }: {
   blocks: HomeBlock[]
   gates: PortalPageGates
+  /** A block drawn elsewhere, such as the composer in the band. */
+  skip?: number
   children: ReactNode
 }) {
   const shown = blocks
     .map((block, index) => ({ block, index }))
-    .filter(({ block }) => blockShown(block, gates))
+    .filter(({ block, index }) => index !== skip && blockShown(block, gates))
   const widths = shown.map(({ block }) => block.width)
   const [medium, wide] = [filledSpans(widths, 'medium'), filledSpans(widths, 'wide')]
   const spans = new Map(
@@ -92,6 +95,7 @@ function BlockCard({
   title,
   action,
   bare = false,
+  row = false,
   children,
 }: {
   block: HomeBlock
@@ -100,6 +104,8 @@ function BlockCard({
   action?: { label: string; to: string }
   /** A block that is already a card, such as the composer, takes no card of its own. */
   bare?: boolean
+  /** A wide block's title, text and action on one line. */
+  row?: boolean
   children: ReactNode
 }) {
   const span = useSpan(block, index)
@@ -115,6 +121,7 @@ function BlockCard({
           '[[data-qb-cards=raised]_&]:border-transparent [[data-qb-cards=raised]_&]:shadow-md',
           '[[data-qb-cards=list]_&]:rounded-none [[data-qb-cards=list]_&]:border-x-0 [[data-qb-cards=list]_&]:border-t-0 [[data-qb-cards=list]_&]:bg-transparent [[data-qb-cards=list]_&]:shadow-none',
         ],
+        row && 'md:flex-row md:items-center md:gap-6 md:[&>p]:flex-1',
         span
       )}
     >
@@ -123,7 +130,10 @@ function BlockCard({
       {action && (
         <Link
           to={action.to}
-          className="mt-auto pt-1 text-sm font-medium text-[var(--qb-accent-text,var(--primary))] hover:underline"
+          className={cn(
+            'mt-auto pt-1 text-sm font-medium text-[var(--qb-accent-text,var(--primary))] hover:underline',
+            row && 'md:mt-0 md:shrink-0 md:pt-0'
+          )}
         >
           {action.label}
         </Link>
@@ -163,6 +173,18 @@ function WelcomeBlock({
  * with them to the feed, whose composer opens with it.
  */
 function ComposerBlock({ block, index }: { block: HomeBlock; index: number }) {
+  return (
+    <BlockCard block={block} index={index} bare>
+      <HomeComposer />
+    </BlockCard>
+  )
+}
+
+/**
+ * Home's composer, on the grid or in the band. In the band its button is
+ * filled, and on phones it takes a line of its own below the field.
+ */
+export function HomeComposer({ inBand = false }: { inBand?: boolean }) {
   const intl = useIntl()
   const copy = useFeedCopy()
   const navigate = useNavigate()
@@ -170,42 +192,48 @@ function ComposerBlock({ block, index }: { block: HomeBlock; index: number }) {
   const open = () =>
     void navigate({ to: HOME_FEED_PATH, state: { composeTitle: title.trim() } as never })
   return (
-    <BlockCard block={block} index={index} bare>
-      <form
-        data-qb-part="composer"
-        action={HOME_FEED_PATH}
-        className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5 shadow-sm"
-        onSubmit={(event) => {
-          event.preventDefault()
-          open()
-        }}
+    <form
+      data-qb-part="composer"
+      action={HOME_FEED_PATH}
+      className={cn(
+        'flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5 shadow-sm',
+        inBand && 'flex-wrap py-3 shadow-lg sm:flex-nowrap'
+      )}
+      onSubmit={(event) => {
+        event.preventDefault()
+        open()
+      }}
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
+          <path
+            d="M11.1 2.3a1.6 1.6 0 0 1 2.3 2.3L5.6 12.4 2.5 13.5l1.1-3.1z"
+            fill="currentColor"
+          />
+        </svg>
+      </span>
+      <input
+        type="text"
+        value={title}
+        maxLength={200}
+        onChange={(event) => setTitle(event.target.value)}
+        placeholder={copy.prompt ?? intl.formatMessage(homeMessages.composerPlaceholder)}
+        aria-label={intl.formatMessage(homeMessages.composerLabel)}
+        className="min-w-0 flex-1 border-0 bg-transparent font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground"
+      />
+      <button
+        type="submit"
+        data-qb-label=""
+        className={cn(
+          'shrink-0 text-sm font-medium',
+          inBand
+            ? 'basis-full rounded-[var(--qb-radius-control,999px)] bg-primary px-4 py-2 font-semibold text-primary-foreground hover:bg-primary/90 sm:basis-auto'
+            : 'rounded-full px-3 py-1.5 text-[var(--qb-accent-text,var(--primary))] hover:bg-muted'
+        )}
       >
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
-            <path
-              d="M11.1 2.3a1.6 1.6 0 0 1 2.3 2.3L5.6 12.4 2.5 13.5l1.1-3.1z"
-              fill="currentColor"
-            />
-          </svg>
-        </span>
-        <input
-          type="text"
-          value={title}
-          maxLength={200}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder={copy.prompt ?? intl.formatMessage(homeMessages.composerPlaceholder)}
-          aria-label={intl.formatMessage(homeMessages.composerLabel)}
-          className="min-w-0 flex-1 border-0 bg-transparent font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground"
-        />
-        <button
-          type="submit"
-          data-qb-label=""
-          className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-[var(--qb-accent-text,var(--primary))] hover:bg-muted"
-        >
-          {copy.submit ?? intl.formatMessage(homeMessages.composerContinue)}
-        </button>
-      </form>
-    </BlockCard>
+        {copy.submit ?? intl.formatMessage(homeMessages.composerContinue)}
+      </button>
+    </form>
   )
 }
 
@@ -481,6 +509,7 @@ function ContactBlock({ block, index }: { block: HomeBlock; index: number }) {
     <BlockCard
       block={block}
       index={index}
+      row={block.width === 'full'}
       title={intl.formatMessage(homeMessages.contactTitle)}
       action={{ label: intl.formatMessage(homeMessages.contactStart), to: '/support' }}
     >
@@ -537,7 +566,7 @@ const BLOCK_PAGE: Partial<Record<HomeBlock['type'], keyof PortalPageGates>> = {
 
 /** One block, drawn when its page is on, with its data streamed in. */
 /** Whether a block's page is on, so Home draws it. */
-function blockShown(block: HomeBlock, gates: PortalPageGates): boolean {
+export function blockShown(block: HomeBlock, gates: PortalPageGates): boolean {
   const page = BLOCK_PAGE[block.type]
   return !page || gates[page]
 }

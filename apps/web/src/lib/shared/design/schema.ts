@@ -222,6 +222,12 @@ export const portalDesignV2 = z
         band: z.enum(DESIGN_OPTIONS.band),
         /** How a blend band runs; absent is linear. */
         blend: z.enum(DESIGN_OPTIONS.blend).optional(),
+        /** Absent follows the header: centred under a centred header, else left. */
+        bandAlign: z.enum(DESIGN_OPTIONS.bandAlign).optional(),
+        /** Absent is full. */
+        bandShape: z.enum(DESIGN_OPTIONS.bandShape).optional(),
+        /** The header in the band's colour, so the two read as one. */
+        headerOnBand: z.boolean().optional(),
         cards: z.enum(DESIGN_OPTIONS.cards),
         density: z.enum(DESIGN_OPTIONS.density),
         width: z.enum(DESIGN_OPTIONS.width),
@@ -230,7 +236,14 @@ export const portalDesignV2 = z
       .strict(),
     pages: z
       .object({
-        home: z.object({ headline, blocks: z.array(homeBlock).max(12) }).strict(),
+        home: z
+          .object({
+            headline,
+            blocks: z.array(homeBlock).max(12),
+            /** Where its composer block shows; absent is on the grid. */
+            composer: z.enum(DESIGN_OPTIONS.composerPlace).optional(),
+          })
+          .strict(),
         feedback: z
           .object({
             headline,

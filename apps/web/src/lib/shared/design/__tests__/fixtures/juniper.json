@@ -50,7 +50,8 @@
     "cards": "raised",
     "density": "spacious",
     "width": "default",
-    "filters": "end"
+    "filters": "end",
+    "headerOnBand": true
   },
   "pages": {
     "home": {
@@ -101,7 +102,8 @@
           "width": "full",
           "categoryIds": []
         }
-      ]
+      ],
+      "composer": "band"
     },
     "feedback": {
       "headline": {

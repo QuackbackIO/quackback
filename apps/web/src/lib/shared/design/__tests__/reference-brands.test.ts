@@ -30,10 +30,13 @@ interface Fixture {
   shape: { corners: string }
   layout: Record<'header' | 'nav' | 'band' | 'cards' | 'density' | 'width' | 'filters', string> & {
     blend?: string
+    bandAlign?: string
+    bandShape?: string
   }
   pages: {
     home: {
       headline: Headline
+      composer?: string
       blocks: Array<{
         type: string
         width: string
@@ -86,6 +89,10 @@ function used(): Record<DesignOption, Set<string>> {
     for (const key of ['header', 'nav', 'band', 'cards', 'density', 'width', 'filters'] as const)
       add(key, doc.layout[key])
     if (doc.layout.band === 'blend') add('blend', doc.layout.blend ?? 'linear')
+    add('bandAlign', doc.layout.bandAlign ?? (doc.layout.header === 'centered' ? 'centre' : 'left'))
+    add('bandShape', doc.layout.bandShape ?? 'full')
+    if (doc.pages.home.blocks.some((block) => block.type === 'composer'))
+      add('composerPlace', doc.pages.home.composer ?? 'block')
     add('sort', doc.pages.feedback.defaultSort)
     for (const block of doc.pages.home.blocks) {
       add('blockType', block.type)
