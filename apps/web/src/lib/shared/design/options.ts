@@ -39,6 +39,10 @@ export const DESIGN_OPTIONS = {
   bandShape: ['full', 'inset', 'panel'],
   /** Where the band's image sits: beside the words, along its bottom, behind them, or tiled. */
   imagePlace: ['side', 'edge', 'cover', 'pattern'],
+  /** Quiet art drawn in the brand's colours, for a band without an image. */
+  bandArt: ['none', 'dots', 'grid', 'lines', 'waves', 'hills', 'petals', 'confetti'],
+  /** Where an image is cropped toward when it does not fit. */
+  imageFocus: ['left', 'centre', 'right'],
   /** Home's composer: a block on the grid, or in the band under the headline. */
   composerPlace: ['block', 'band'],
   /** `filled` cards have no edge: their own colour on the page, with larger corners. */

@@ -254,6 +254,10 @@ export const portalDesignV2 = z
         tint: z.enum(DESIGN_OPTIONS.tint).optional(),
         /** Where the band's image sits; absent is beside the words. */
         imagePlace: z.enum(DESIGN_OPTIONS.imagePlace).optional(),
+        /** What part of the image stays when it is cropped; absent is the centre. */
+        imageFocus: z.enum(DESIGN_OPTIONS.imageFocus).optional(),
+        /** Art in the brand's colours for a band without an image; absent is none. */
+        bandArt: z.enum(DESIGN_OPTIONS.bandArt).optional(),
         cards: z.enum(DESIGN_OPTIONS.cards),
         density: z.enum(DESIGN_OPTIONS.density),
         width: z.enum(DESIGN_OPTIONS.width),

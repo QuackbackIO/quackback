@@ -69,7 +69,8 @@
     "width": "default",
     "filters": "end",
     "bandShape": "inset",
-    "status": "ink"
+    "status": "ink",
+    "bandArt": "lines"
   },
   "pages": {
     "home": {

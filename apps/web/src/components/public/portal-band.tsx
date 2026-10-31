@@ -22,9 +22,15 @@ const STORED_FILE = /^\/api\/storage\/[\w./-]+$/
  * veiled by the band's colour so the words keep their contrast, or tiled
  * under a lighter veil.
  */
+/** Band art in the brand's colours: along the bottom, or tiled faintly behind the words. */
+const ART_FILL = [
+  '[[data-qb-band-art=edge]_&]:[background:var(--qb-band-art)_center_bottom/var(--qb-band-art-size)_no-repeat,var(--qb-band-bg)] [[data-qb-band-art=edge]_&]:pb-32',
+  '[[data-qb-band-art=tile]_&]:[background:var(--qb-band-art)_0_0/var(--qb-band-art-size)_repeat,var(--qb-band-bg)]',
+].join(' ')
+
 const IMAGE_FILL = [
   'sm:[&[data-qb-band-image=edge]]:[background:var(--qb-band-image)_center_bottom/100%_auto_no-repeat,var(--qb-band-bg)] sm:[&[data-qb-band-image=edge]]:pb-44',
-  '[&[data-qb-band-image=cover]]:[background:linear-gradient(var(--qb-band-scrim),var(--qb-band-scrim)),var(--qb-band-image)_center/cover_no-repeat,var(--qb-band-bg)]',
+  '[&[data-qb-band-image=cover]]:[background:linear-gradient(var(--qb-band-scrim),var(--qb-band-scrim)),var(--qb-band-image)_var(--qb-image-focus,center)/cover_no-repeat,var(--qb-band-bg)]',
   '[&[data-qb-band-image=pattern]]:[background:linear-gradient(var(--qb-band-scrim-soft),var(--qb-band-scrim-soft)),var(--qb-band-image)_0_0/280px_auto_repeat,var(--qb-band-bg)]',
 ].join(' ')
 
@@ -104,6 +110,7 @@ export function PortalBand({
       className={cn(
         'portal-band py-10 [[data-qb-band=none]_&]:py-0',
         BAND_FILL,
+        ART_FILL,
         IMAGE_FILL,
         // Inset: the band's colour moves onto a rounded panel within the page.
         '[[data-qb-band-shape=inset]_&]:![background:transparent] [[data-qb-band-shape=inset]_&]:py-3'
@@ -145,7 +152,7 @@ export function PortalBand({
             src={image.url}
             alt=""
             data-qb-part="band-image"
-            className="mt-6 max-h-48 w-full rounded-[var(--qb-radius-panel,0.75rem)] object-cover md:mt-0 md:h-full md:max-h-[22rem]"
+            className="mt-6 max-h-48 w-full rounded-[var(--qb-radius-panel,0.75rem)] object-cover [object-position:var(--qb-image-focus,center)] md:mt-0 md:h-full md:max-h-[22rem]"
           />
         )}
       </div>

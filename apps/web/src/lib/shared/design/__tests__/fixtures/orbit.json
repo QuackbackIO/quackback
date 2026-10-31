@@ -65,7 +65,8 @@
     "width": "wide",
     "filters": "end",
     "status": "pill",
-    "tint": "neutral"
+    "tint": "neutral",
+    "bandArt": "none"
   },
   "pages": {
     "home": {

@@ -37,6 +37,8 @@ interface Fixture {
     status?: string
     imagePlace?: string
     tint?: string
+    bandArt?: string
+    imageFocus?: string
   }
   pages: {
     home: {
@@ -103,6 +105,8 @@ function used(): Record<DesignOption, Set<string>> {
     add('buttons', doc.shape.buttons ?? 'match')
     add('action', doc.shape.action ?? 'accent')
     add('tint', doc.layout.tint ?? 'neutral')
+    add('bandArt', doc.layout.bandArt ?? 'none')
+    if (doc.brand.bandImage) add('imageFocus', doc.layout.imageFocus ?? 'centre')
     add('status', doc.layout.status ?? 'colour')
     if (doc.brand.bandImage) add('imagePlace', doc.layout.imagePlace ?? 'side')
     if (doc.pages.home.blocks.some((block) => block.type === 'composer'))

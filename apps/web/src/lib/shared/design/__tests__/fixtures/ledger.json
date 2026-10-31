@@ -58,7 +58,9 @@
     "density": "comfortable",
     "width": "narrow",
     "filters": "end",
-    "imagePlace": "edge"
+    "imagePlace": "edge",
+    "bandArt": "grid",
+    "imageFocus": "centre"
   },
   "pages": {
     "home": {

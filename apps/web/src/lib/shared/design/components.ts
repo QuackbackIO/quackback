@@ -8,6 +8,7 @@
  * workspace keeps its look.
  */
 import type { ThemeVariables } from '@/lib/shared/theme/types'
+import { bandArtImage, EDGE_ART, type BandArt } from './band-art'
 import { mixColor, tintOf } from './color'
 import { contrastRatio, solveContrast } from './contrast'
 import { fontStack } from './fonts'
@@ -294,6 +295,32 @@ function bandTokens(doc: PortalDesign, t: Required<ThemeVariables>, mode: Mode):
       support ? 0.35 : 0.25
     ),
     ...panelTokens(t, support),
+    ...artTokens(doc, t, support),
+  }
+}
+
+/** How large each tile of a tiled motif is drawn; edge art spans the band. */
+const ART_TILE: Record<BandArt, string> = {
+  dots: '24px',
+  grid: '32px',
+  lines: '16px',
+  petals: '200px',
+  confetti: '160px',
+  waves: '100% 120px',
+  hills: '100% 120px',
+}
+
+/** Band art in the brand colour and the second, when the design draws some and its band has colour. */
+function artTokens(
+  doc: PortalDesign,
+  t: Required<ThemeVariables>,
+  support: string | undefined
+): TokenMap {
+  const art = doc.layout.bandArt
+  if (!art || art === 'none' || doc.layout.band === 'none') return {}
+  return {
+    '--qb-band-art': bandArtImage(art, t.primary, support ?? t.primary),
+    '--qb-band-art-size': ART_TILE[art],
   }
 }
 
@@ -411,6 +438,9 @@ export function baseTokens(doc: PortalDesign): TokenMap {
     '--qb-feed-gap': doc.layout.cards === 'list' ? '0rem' : gap,
     '--qb-title-size': title,
     '--qb-page-max': PAGE_MAX[doc.layout.width],
+    '--qb-image-focus': { left: 'left', centre: 'center', right: 'right' }[
+      doc.layout.imageFocus ?? 'centre'
+    ],
     '--qb-font-body': fontStack(doc.brand.fonts.body),
     '--qb-font-heading': fontStack(doc.brand.fonts.heading),
     '--qb-heading-weight': String(doc.brand.fonts.headingWeight),
@@ -429,6 +459,16 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
     'data-qb-band-shape': doc.layout.bandShape ?? 'full',
     'data-qb-header-band': headerOnBand(doc) ? 'on' : 'off',
     'data-qb-status': doc.layout.status ?? 'colour',
+    // An image behind the words takes the band's place; art beside a side image stays.
+    'data-qb-band-art':
+      !doc.layout.bandArt ||
+      doc.layout.bandArt === 'none' ||
+      band === 'none' ||
+      (doc.brand.bandImage && (doc.layout.imagePlace ?? 'side') !== 'side')
+        ? 'none'
+        : EDGE_ART.has(doc.layout.bandArt)
+          ? 'edge'
+          : 'tile',
     'data-qb-tint':
       doc.layout.tint === 'support' && doc.brand.light.support ? 'support' : 'neutral',
     'data-qb-cards': cards,

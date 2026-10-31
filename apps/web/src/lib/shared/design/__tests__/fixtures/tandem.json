@@ -53,7 +53,8 @@
     "density": "comfortable",
     "width": "default",
     "filters": "end",
-    "blend": "mesh"
+    "blend": "mesh",
+    "bandArt": "dots"
   },
   "pages": {
     "home": {

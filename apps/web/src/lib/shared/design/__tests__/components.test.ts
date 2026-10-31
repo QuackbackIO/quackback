@@ -327,6 +327,36 @@ describe('the second colour at work', () => {
   })
 })
 
+describe('band art and image focus', () => {
+  it('draws art only on a band with colour, and steps aside for an image behind the words', () => {
+    const hills = design((d) => {
+      d.layout.band = 'tint'
+      d.layout.bandArt = 'hills'
+    })
+    expect(resolveDesign(hills).tokens.light['--qb-band-art']).toMatch(
+      /^url\("data:image\/svg\+xml,/
+    )
+    expect(layoutAttributes(hills)['data-qb-band-art']).toBe('edge')
+    expect(layoutAttributes(design((d) => (d.layout.bandArt = 'dots')))['data-qb-band-art']).toBe(
+      'none'
+    )
+    hills.brand.bandImage = { key: 'portal-images/a.jpg' }
+    expect(layoutAttributes(hills)['data-qb-band-art']).toBe('edge')
+    hills.layout.imagePlace = 'cover'
+    expect(layoutAttributes(hills)['data-qb-band-art']).toBe('none')
+    hills.layout.bandArt = 'petals'
+    hills.layout.imagePlace = 'side'
+    expect(layoutAttributes(hills)['data-qb-band-art']).toBe('tile')
+  })
+
+  it('crops images toward the focus the design gives', () => {
+    expect(resolveDesign(design()).tokens.base['--qb-image-focus']).toBe('center')
+    expect(
+      resolveDesign(design((d) => (d.layout.imageFocus = 'right'))).tokens.base['--qb-image-focus']
+    ).toBe('right')
+  })
+})
+
 describe('a one-colour wordmark', () => {
   const filter = (change: (d: PortalDesign) => void, mode: 'light' | 'dark' = 'light') =>
     resolveDesign(design(change)).tokens[mode]['--qb-wordmark-filter']
@@ -512,6 +542,7 @@ describe('layoutAttributes', () => {
       'data-qb-band-shape': 'full',
       'data-qb-header-band': 'off',
       'data-qb-status': 'colour',
+      'data-qb-band-art': 'none',
       'data-qb-tint': 'neutral',
       'data-qb-cards': 'list',
       'data-qb-filters': 'start',

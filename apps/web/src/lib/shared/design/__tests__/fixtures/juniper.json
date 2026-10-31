@@ -53,7 +53,8 @@
     "width": "default",
     "filters": "end",
     "headerOnBand": true,
-    "status": "brand"
+    "status": "brand",
+    "bandArt": "hills"
   },
   "pages": {
     "home": {
