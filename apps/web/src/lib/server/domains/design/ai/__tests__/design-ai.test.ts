@@ -189,6 +189,43 @@ describe('askDesignAi', () => {
     )
   })
 
+  it('shows the model the attached picture itself, so a request to match it can be read', async () => {
+    model.answer = { reply: 'Done.', changes: [], outOfScope: false }
+    await askDesignAi({
+      message: 'Match our site',
+      design: defaultDesign(),
+      scope: 'site',
+      history: [],
+      allows: ALLOWS,
+      palette: ['#163300'],
+      image: 'data:image/jpeg;base64,AAAA',
+    })
+    const content = model.calls[0]!.messages.at(-1)!.content as Array<Record<string, unknown>>
+    expect(content[0]).toMatchObject({ type: 'text' })
+    expect(content[1]).toEqual({
+      type: 'image',
+      source: { type: 'data', value: 'AAAA', mimeType: 'image/jpeg' },
+    })
+  })
+
+  it('asks once more when an answer does not fit, then without the picture', async () => {
+    model.answer = { reply: 'Done.', changes: [], outOfScope: false }
+    model.misfits = 2
+    const result = await askDesignAi({
+      message: 'Match our site',
+      design: defaultDesign(),
+      scope: 'site',
+      history: [],
+      allows: ALLOWS,
+      palette: ['#163300'],
+      image: 'data:image/jpeg;base64,AAAA',
+    })
+    expect(result.ok).toBe(true)
+    expect(model.calls).toHaveLength(3)
+    // The last ask carries the picture's colours, not the picture.
+    expect(typeof model.calls[2]!.messages.at(-1)!.content).toBe('string')
+  })
+
   it('keeps the reply when everything asked for is already set', async () => {
     model.answer = {
       reply: 'The header is already stacked.',

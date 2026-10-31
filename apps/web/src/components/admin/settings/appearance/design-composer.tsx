@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { imagePalette } from '@/lib/client/image-palette'
+import { imageForModel, imagePalette } from '@/lib/client/image-palette'
 import type { DesignAiScope } from '@/lib/shared/design/apply-changes'
 import { PaletteSwatches } from './ask-ai-panel'
 
@@ -30,16 +30,18 @@ export function DesignComposer({
   scope: DesignAiScope
   busy: boolean
   onClearScope: () => void
-  onAsk: (text: string, palette?: string[]) => void
+  onAsk: (text: string, attachment?: { palette: string[]; image?: string }) => void
 }) {
   const [query, setQuery] = useState('')
-  const [image, setImage] = useState<{ name: string; palette: string[] } | null>(null)
+  const [image, setImage] = useState<{ name: string; palette: string[]; data?: string } | null>(
+    null
+  )
   const text = query.trim()
   const send = () => {
     if (!text || busy) return
     setQuery('')
     setImage(null)
-    onAsk(text, image?.palette)
+    onAsk(text, image ? { palette: image.palette, image: image.data } : undefined)
   }
   return (
     <div className="rounded-2xl border border-border bg-card p-3 shadow-float transition-[box-shadow,border-color] duration-300 ease-out focus-within:border-muted-foreground focus-within:shadow-float-focus motion-reduce:transition-none">
@@ -86,8 +88,9 @@ export function DesignComposer({
               const file = event.target.files?.[0]
               event.target.value = ''
               if (!file) return
-              const palette = await imagePalette(file)
-              if (palette.length) setImage({ name: file.name, palette })
+              // Its colours, and the picture itself for a model that reads images.
+              const [palette, data] = await Promise.all([imagePalette(file), imageForModel(file)])
+              if (palette.length) setImage({ name: file.name, palette, ...(data && { data }) })
             }}
           />
           <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">

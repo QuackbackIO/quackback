@@ -149,6 +149,8 @@ export async function askDesignAi(input: {
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   /** The main colours of an image the person attached. */
   palette?: string[]
+  /** The image itself, a JPEG data URL, for a model that reads images. */
+  image?: string
   /** What the workspace allows: the Home blocks its pages can show, and its CSS. */
   allows: Omit<UntrustedChanges, 'links'> & { writesCss: boolean }
 }): Promise<DesignAiResult> {
@@ -165,8 +167,11 @@ export async function askDesignAi(input: {
     input.scope === 'site'
       ? ''
       : `\nThe person picked the ${SCOPE_NAMES[input.scope]} in the preview. Change only these fields and what is under them: ${scopeFields(input.scope).join(', ')}. If the request is about anything else, make no changes and set outOfScope to true.`
-  try {
-    const answer = await structuredChat({
+  const text = input.palette?.length
+    ? `${input.message}\n\nColours from the attached image: ${paletteText(input.palette)}`
+    : input.message
+  const ask = (withImage: boolean) =>
+    structuredChat({
       model,
       systemPrompts: [
         editPrompt(input.allows.blockTypes, input.allows.writesCss) + scopeNote,
@@ -176,14 +181,40 @@ export async function askDesignAi(input: {
         ...input.history.slice(-6),
         {
           role: 'user',
-          content: input.palette?.length
-            ? `${input.message}\n\nColours from the attached image: ${paletteText(input.palette)}`
-            : input.message,
+          // The picture itself where one is attached, so "match this" can be read from it.
+          content:
+            withImage && input.image
+              ? [
+                  { type: 'text', content: text },
+                  {
+                    type: 'image',
+                    source: {
+                      type: 'data',
+                      value: input.image.replace(/^data:image\/jpeg;base64,/, ''),
+                      mimeType: 'image/jpeg',
+                    },
+                  },
+                ]
+              : text,
         },
       ],
       schema: editSchema,
-      maxTokens: 1200,
+      // A change to match a picture can touch many fields.
+      maxTokens: 4000,
     })
+  try {
+    // An answer that does not fit is asked for once more, then without the
+    // picture, which still leaves its colours.
+    const answer = await ask(true)
+      .catch((err: unknown) => {
+        if (!isStructuredOutputError(err)) throw err
+        log.warn({ err }, 'design ai answer did not fit the schema; asking again')
+        return ask(true)
+      })
+      .catch((err: unknown) => {
+        if (!isStructuredOutputError(err) || !input.image) throw err
+        return ask(false)
+      })
     const links = linksGiven([
       input.message,
       ...input.history.filter((turn) => turn.role === 'user').map((turn) => turn.content),

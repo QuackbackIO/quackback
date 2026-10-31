@@ -66,6 +66,12 @@ export const askPortalDesignAiFn = createServerFn({ method: 'POST' })
     z.object({
       message: z.string().trim().min(1).max(2000),
       palette: z.array(hexColour).max(6).optional(),
+      /** An attached image, downscaled to a JPEG, for a model that reads images. */
+      image: z
+        .string()
+        .max(700_000)
+        .regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/)
+        .optional(),
       scope: z.enum(DESIGN_AI_SCOPES),
       history: z
         .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(2000) }))
