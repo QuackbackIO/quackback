@@ -6,12 +6,12 @@ import { getWordmarkUploadUrlFn } from '@/lib/server/functions/uploads'
 import { designAssetUrl } from '@/lib/shared/design/design-view'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
-import { normaliseColor } from '@/lib/shared/design/color'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import { oklchToHex } from '@/lib/shared/theme/colors'
 import { applyPreset } from '@/lib/shared/design/presets'
 import { DesignTiles } from './design-tiles'
+import { ColourField } from './colour-field'
+import { TuneSection } from './tune-section'
 import { WordsSection } from './words-section'
 import { FontsSection } from './fonts-section'
 import { PresetGallery } from './preset-gallery'
@@ -76,58 +76,6 @@ const presignWordmark = async (file: File) =>
   getWordmarkUploadUrlFn({
     data: { filename: file.name, contentType: file.type, fileSize: file.size },
   })
-
-const toHex = (value: string | undefined) =>
-  value ? (value.startsWith('#') ? value : oklchToHex(value)) : '#ffffff'
-
-/** A colour as a picker and its value; a typed value applies once it parses. */
-function ColourField({
-  id,
-  label,
-  value,
-  placeholder,
-  onChange,
-}: {
-  id: string
-  label: string
-  value: string | undefined
-  placeholder?: string
-  onChange: (value: string | undefined) => void
-}) {
-  const [text, setText] = useState(value ?? '')
-  const [shown, setShown] = useState(value)
-  if (value !== shown) {
-    setShown(value)
-    setText(value ?? '')
-  }
-  return (
-    <div className="flex items-center gap-2">
-      <label htmlFor={id} className="w-32 shrink-0 text-[13px]">
-        {label}
-      </label>
-      <input
-        type="color"
-        aria-label={`${label} picker`}
-        value={toHex(value ?? placeholder)}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-8 w-10 shrink-0 cursor-pointer rounded-field border border-border bg-transparent"
-      />
-      <Input
-        id={id}
-        value={text}
-        placeholder={placeholder ? 'Automatic' : undefined}
-        onChange={(event) => {
-          const next = event.target.value
-          setText(next)
-          if (next.trim() === '' && placeholder !== undefined) onChange(undefined)
-          const colour = normaliseColor(next.trim())
-          if (colour) onChange(colour)
-        }}
-        className="h-8 font-mono text-xs"
-      />
-    </div>
-  )
-}
 
 /** The Brand tab: the logo, mode, colours, fonts and corners. */
 export function BrandPanel({
@@ -407,6 +355,8 @@ export function BrandPanel({
           />
         }
       />
+
+      <TuneSection design={design} update={update} />
 
       <WordsSection design={design} update={update} />
     </div>
