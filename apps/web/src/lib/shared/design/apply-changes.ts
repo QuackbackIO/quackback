@@ -33,8 +33,16 @@ export type DesignAiScope = (typeof DESIGN_AI_SCOPES)[number]
 
 const SCOPE_FIELDS: Record<Exclude<DesignAiScope, 'site'>, readonly string[]> = {
   brand: ['mode', 'brand', 'shape', 'vocabulary'],
-  header: ['layout.header', 'layout.nav', 'nav', 'brand.logo.display'],
-  band: ['layout.band', 'pages.feedback.headline'],
+  header: ['layout.header', 'layout.nav', 'layout.headerOnBand', 'nav', 'brand.logo'],
+  band: [
+    'layout.band',
+    'layout.blend',
+    'layout.bandAlign',
+    'layout.bandShape',
+    'layout.imagePlace',
+    'brand.bandImage',
+    'pages.feedback.headline',
+  ],
   welcome: ['pages.feedback.welcome'],
   feed: [
     'layout.cards',
@@ -42,6 +50,7 @@ const SCOPE_FIELDS: Record<Exclude<DesignAiScope, 'site'>, readonly string[]> = 
     'layout.width',
     'pages.feedback.defaultSort',
     'pages.feedback.copy',
+    'layout.status',
   ],
   filters: ['layout.filters'],
   home: ['pages.home', 'nav.home'],
@@ -80,6 +89,8 @@ export interface UntrustedChanges {
   links: ReadonlySet<string>
   /** Why the CSS cannot be saved, or null when it can. */
   checkCss: (css: string) => string | null
+  /** Files stored for this request, such as a website's wordmark, which the model may place. */
+  files?: ReadonlySet<string>
 }
 
 /** The language a translated field's plain-text shorthand writes. */
@@ -248,7 +259,7 @@ function untrustedRefusal(
   checks: UntrustedChanges
 ): string | null {
   const files = valuesNamed('key', before)
-  if ([...valuesNamed('key', after)].some((key) => !files.has(key)))
+  if ([...valuesNamed('key', after)].some((key) => !files.has(key) && !checks.files?.has(key)))
     return 'images and fonts are uploaded in Brand'
   const had = valuesNamed('url', before)
   const link = [...valuesNamed('url', after)].find((url) => !had.has(url) && !checks.links.has(url))

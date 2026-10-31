@@ -129,11 +129,13 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
   )
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    const [{ designDirections }, { readSiteSignals }, actions] = await Promise.all([
-      import('@/lib/server/domains/design/ai/design-ai'),
-      import('@/lib/server/domains/design/ai/site-signals'),
-      import('@/lib/server/domains/design/design.actions'),
-    ])
+    const [{ designDirections }, { readSiteSignals }, { importSiteAssets }, actions] =
+      await Promise.all([
+        import('@/lib/server/domains/design/ai/design-ai'),
+        import('@/lib/server/domains/design/ai/site-signals'),
+        import('@/lib/server/domains/design/ai/site-assets'),
+        import('@/lib/server/domains/design/design.actions'),
+      ])
     const [read, logoAdopted] = data.site
       ? await Promise.all([
           readSiteSignals(data.site),
@@ -151,9 +153,11 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
             : 'That website could not be read. Check the address, or describe your brand instead.',
       }
     }
-    const [current, allows] = await Promise.all([
+    const [current, allows, assets] = await Promise.all([
       actions.readDesignForEditing(),
       designAllowances(),
+      // The site's wordmark and share image, stored for the looks to place.
+      site ? importSiteAssets(site) : null,
     ])
     const result = await designDirections({
       design: current.design,
@@ -162,6 +166,7 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
       words: data.words ?? null,
       palette: data.palette ?? null,
       image: data.image ?? null,
+      assets,
       allows,
     })
     return result.ok ? { ...result, logoAdopted } : result

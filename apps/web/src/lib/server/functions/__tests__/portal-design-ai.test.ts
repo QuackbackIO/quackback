@@ -17,6 +17,7 @@ const hoisted = vi.hoisted(() => ({
   branding: null as null | { domain: string; logoKey: string; quality: 'good' | 'weak' },
   savedLogos: [] as string[],
   directionsInput: null as unknown,
+  imported: [] as unknown[],
 }))
 
 vi.mock('@tanstack/react-start', () => ({
@@ -52,6 +53,12 @@ vi.mock('@/lib/server/domains/design/ai/design-ai', () => ({
     return { ok: true, looks: [] }
   },
 }))
+vi.mock('@/lib/server/domains/design/ai/site-assets', () => ({
+  importSiteAssets: async (signals: unknown) => {
+    hoisted.imported.push(signals)
+    return { wordmark: { key: 'header-logos/site-a.svg', colours: [] }, shareImage: null }
+  },
+}))
 vi.mock('@/lib/server/domains/design/ai/site-signals', () => ({
   readSiteSignals: async () => hoisted.site,
 }))
@@ -81,6 +88,7 @@ const [statusFn, askFn, directionsFn] = hoisted.handlers
 beforeEach(() => {
   hoisted.saved = []
   hoisted.directionsInput = null
+  hoisted.imported = []
   requireAuth.mockReset()
   requireAuth.mockResolvedValue({
     principal: { id: 'principal_1' },
@@ -153,9 +161,17 @@ describe('portal design AI functions', () => {
     })
     expect(hoisted.directionsInput).toBeNull()
 
+    expect(hoisted.imported).toEqual([])
+
     hoisted.site = { ok: true, signals: { domain: 'example.com', title: 'Example' } }
     await directionsFn({ data: { site: 'example.com' } })
-    expect(hoisted.directionsInput).toMatchObject({ site: { domain: 'example.com' }, words: null })
+    // The site's files are stored for the looks to place.
+    expect(hoisted.imported).toEqual([{ domain: 'example.com', title: 'Example' }])
+    expect(hoisted.directionsInput).toMatchObject({
+      site: { domain: 'example.com' },
+      words: null,
+      assets: { wordmark: { key: 'header-logos/site-a.svg' } },
+    })
   })
 
   it('takes the website’s logo when the workspace has none, for someone who may change settings', async () => {

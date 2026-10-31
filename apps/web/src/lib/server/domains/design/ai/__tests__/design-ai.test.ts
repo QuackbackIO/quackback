@@ -149,7 +149,7 @@ describe('askDesignAi', () => {
       allows: ALLOWS,
     })
     expect(model.calls[0].systemPrompts[0]).toContain(
-      'Change only these fields and what is under them: layout.header, layout.nav, nav, brand.logo.display'
+      'Change only these fields and what is under them: layout.header, layout.nav, layout.headerOnBand, nav, brand.logo'
     )
     expect(model.calls[0].systemPrompts[0]).toContain('how the menu marks the current page')
   })

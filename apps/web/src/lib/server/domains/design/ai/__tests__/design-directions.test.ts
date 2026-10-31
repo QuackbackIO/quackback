@@ -108,4 +108,82 @@ describe('lookDesign', () => {
     expect(headline.endsWith(' ')).toBe(false)
     expect(design.pages.feedback.copy.submit).toEqual({ en: 'Send your wonderful' })
   })
+
+  it('sets the look’s type, band, buttons and Home composer', () => {
+    const { design } = lookDesign(defaultDesign(), DIRECTIONS_EXAMPLE, allows)
+    expect(design.brand.fonts).toMatchObject({ scale: 'large', tracking: 'tight' })
+    expect(design.layout).toMatchObject({ band: 'brand', bandShape: 'full', headerOnBand: false })
+    expect(design.brand.logo.display).toBe('name')
+    expect(design.pages.home.composer).toBe('band')
+  })
+
+  it('places a website’s wordmark and share image, and nothing else the model names', () => {
+    const assets = {
+      wordmark: { key: 'header-logos/site-a.svg', colours: ['#ecb22e', '#36c5f0', '#e01e5a'] },
+      shareImage: { key: 'portal-images/site-b.jpeg', mimeType: 'image/jpeg', base64: '' },
+    }
+    const look = {
+      ...DIRECTIONS_EXAMPLE,
+      logo: 'wordmark',
+      status: 'brand',
+      shareImage: 'side',
+    } as const
+    const { design, refused } = lookDesign(defaultDesign(), look, allows, assets)
+    expect(refused).toEqual([])
+    expect(design.brand.logo).toMatchObject({
+      display: 'wordmark',
+      wordmark: { light: { key: 'header-logos/site-a.svg' } },
+    })
+    expect(design.brand.logoColours).toEqual(['#ecb22e', '#36c5f0', '#e01e5a'])
+    expect(design.layout.status).toBe('brand')
+    expect(design.brand.bandImage).toEqual({ key: 'portal-images/site-b.jpeg' })
+    expect(design.layout.imagePlace).toBe('side')
+  })
+
+  it('falls back where the website gave nothing: no wordmark, no logo colours, no image', () => {
+    const look = {
+      ...DIRECTIONS_EXAMPLE,
+      logo: 'wordmark',
+      status: 'brand',
+      shareImage: 'side',
+    } as const
+    const { design } = lookDesign(defaultDesign(), look, allows)
+    expect(design.brand.logo.display).toBe('mark_and_name')
+    expect(design.layout.status).toBe('colour')
+    expect(design.brand.bandImage).toBeUndefined()
+  })
+
+  it('sets an accent phrase apart only where the headline holds it', () => {
+    const look = {
+      ...DIRECTIONS_EXAMPLE,
+      headline: 'What should we set next?',
+      homeHeadline: 'Climb with us',
+      accentPhrase: 'set next',
+      accentStyle: 'highlight',
+    } as const
+    const { design } = lookDesign(defaultDesign(), look, allows)
+    expect(design.pages.feedback.headline?.accent).toEqual({
+      style: 'highlight',
+      text: { en: 'set next' },
+    })
+    expect(design.pages.home.headline?.accent).toBeUndefined()
+  })
+
+  it('sets the second colour and a mesh only where the look asks', () => {
+    const look = {
+      ...DIRECTIONS_EXAMPLE,
+      accent: '#533afd',
+      background: '#ffffff',
+      support: '#ff7a59',
+      band: 'blend',
+      blend: 'mesh',
+    } as const
+    const { design, refused } = lookDesign(defaultDesign(), look, allows)
+    expect(refused).toEqual([])
+    expect(design.brand.light.support).toBe('#ff7a59')
+    expect(design.layout).toMatchObject({ band: 'blend', blend: 'mesh' })
+    expect(
+      lookDesign(defaultDesign(), DIRECTIONS_EXAMPLE, allows).design.layout.blend
+    ).toBeUndefined()
+  })
 })
