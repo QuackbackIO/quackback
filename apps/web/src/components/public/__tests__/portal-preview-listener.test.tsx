@@ -10,6 +10,7 @@ import { act, cleanup, render, screen } from '@testing-library/react'
 import { FormattedMessage, IntlProvider, useIntl } from 'react-intl'
 import { PortalPreviewProvider } from '../portal-preview-listener'
 import { usePortalWords } from '@/lib/client/hooks/use-intl-setup'
+import { FeedCopyContext, useFeedCopy } from '../preview-draft-context'
 import {
   usePreviewCss,
   usePreviewDesignNav,
@@ -298,3 +299,27 @@ function WordReader() {
     </>
   )
 }
+
+describe('a design draft’s own wording in the preview', () => {
+  it('replaces the saved wording before it is published', async () => {
+    cleanup()
+    function Copy() {
+      return <p data-testid="copy">{useFeedCopy().prompt ?? 'none'}</p>
+    }
+    render(
+      <IntlProvider locale="en" onError={() => {}}>
+        <FeedCopyContext.Provider value={{ prompt: { en: 'Saved prompt' } }}>
+          <PortalPreviewProvider enabled>
+            <Copy />
+          </PortalPreviewProvider>
+        </FeedCopyContext.Provider>
+      </IntlProvider>
+    )
+    expect(screen.getByTestId('copy').textContent).toBe('Saved prompt')
+    await postDesign({
+      type: 'quackback:preview-design',
+      design: { css: '', attributes: {}, fontIds: [], copy: { prompt: { en: 'Draft prompt' } } },
+    })
+    expect(screen.getByTestId('copy').textContent).toBe('Draft prompt')
+  })
+})

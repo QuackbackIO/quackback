@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { SettingRow } from '@/components/admin/settings/setting-row'
@@ -5,8 +6,10 @@ import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { SupportedLocale } from '@/lib/shared/i18n'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { DesignTiles } from './design-tiles'
+import { LanguagePicker } from './language-picker'
 import { HomeSection } from './home-section'
 import { MenuSection } from './menu-section'
 import {
@@ -23,9 +26,6 @@ import {
 type Update = (change: (draft: PortalDesign) => void) => void
 
 const capital = (value: string) => value[0].toUpperCase() + value.slice(1)
-
-/** The language the headline is written in here; other languages fall back to it. */
-const HEADLINE_LOCALE = 'en'
 
 /** With Home on, Home has a headline too, so the feed's says whose it is. */
 const HEADLINE_LABELS = {
@@ -51,6 +51,8 @@ export function SectionsPanel({
   onEditHome: () => void
 }) {
   const { layout } = design
+  // The language the headline is written in; each visitor sees theirs, else the closest.
+  const [headlineLocale, setHeadlineLocale] = useState<SupportedLocale>('en')
   return (
     <div className="space-y-8">
       <HomeSection design={design} update={update} gates={gates} onEdit={onEditHome} />
@@ -102,6 +104,13 @@ export function SectionsPanel({
             The band shows behind a headline. Add one below.
           </p>
         )}
+        <div className="flex justify-end">
+          <LanguagePicker
+            value={headlineLocale}
+            onChange={setHeadlineLocale}
+            label="Headline language"
+          />
+        </div>
         {(['title', 'subtitle'] as const).map((field) => (
           <div key={field} className="space-y-1.5">
             <label htmlFor={`design-headline-${field}`} className="text-[13px] font-medium">
@@ -109,14 +118,14 @@ export function SectionsPanel({
             </label>
             <Input
               id={`design-headline-${field}`}
-              value={design.pages.feedback.headline?.[field][HEADLINE_LOCALE] ?? ''}
+              value={design.pages.feedback.headline?.[field][headlineLocale] ?? ''}
               maxLength={280}
               onChange={(event) =>
                 update((draft) => {
                   const headline = draft.pages.feedback.headline ?? { title: {}, subtitle: {} }
                   const text = event.target.value
-                  if (text) headline[field][HEADLINE_LOCALE] = text
-                  else delete headline[field][HEADLINE_LOCALE]
+                  if (text) headline[field][headlineLocale] = text
+                  else delete headline[field][headlineLocale]
                   const empty =
                     Object.keys(headline.title).length + Object.keys(headline.subtitle).length === 0
                   draft.pages.feedback.headline = empty ? null : headline

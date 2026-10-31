@@ -44,7 +44,7 @@ describe('portalTheme', () => {
       fontSans: '"Fraunces", serif',
       fontIds: ['fraunces'],
       attributes: {},
-      feedback: { welcome: null, headline: null, defaultSort: 'trending' as const },
+      feedback: { welcome: null, headline: null, defaultSort: 'trending' as const, copy: {} },
       home: { headline: null, blocks: [] },
       nav: defaultDesign().nav,
       vocabulary: { post: 'idea' as const, board: 'board' as const },
@@ -70,7 +70,7 @@ describe('portalFontIds', () => {
       fontSans: '',
       fontIds: ['inter', 'fraunces'],
       attributes: {},
-      feedback: { welcome: null, headline: null, defaultSort: 'trending' as const },
+      feedback: { welcome: null, headline: null, defaultSort: 'trending' as const, copy: {} },
       home: { headline: null, blocks: [] },
       nav: defaultDesign().nav,
       vocabulary: { post: 'idea' as const, board: 'board' as const },
@@ -91,7 +91,7 @@ describe('portalThemeMode', () => {
         fontSans: '',
         fontIds: [],
         attributes: {},
-        feedback: { welcome: null, headline: null, defaultSort: 'trending' as const },
+        feedback: { welcome: null, headline: null, defaultSort: 'trending' as const, copy: {} },
 
         home: { headline: null, blocks: [] },
         nav: defaultDesign().nav,
@@ -117,7 +117,7 @@ describe('savedWelcomeCard', () => {
       fontSans: '',
       fontIds: [],
       attributes: {},
-      feedback: { welcome, headline: null, defaultSort: 'trending' },
+      feedback: { welcome, headline: null, defaultSort: 'trending', copy: {} },
     }) as never
 
   it('keeps the portal settings’ card on legacy', () => {
@@ -145,7 +145,7 @@ describe('portalDefaultSort', () => {
       fontSans: '',
       fontIds: [],
       attributes: {},
-      feedback: { welcome: null, headline: null, defaultSort: 'new' as const },
+      feedback: { welcome: null, headline: null, defaultSort: 'new' as const, copy: {} },
       home: { headline: null, blocks: [] },
       nav: defaultDesign().nav,
       vocabulary: { post: 'idea' as const, board: 'board' as const },

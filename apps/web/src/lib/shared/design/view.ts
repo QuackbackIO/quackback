@@ -34,6 +34,8 @@ export type PortalDesignView =
         headline: { title: LocalizedText; subtitle: LocalizedText } | null
         /** The feed's sort when the visitor has not picked one. */
         defaultSort: 'trending' | 'top' | 'new'
+        /** The workspace's own wording, by language. */
+        copy: PortalDesign['pages']['feedback']['copy']
       }
       /** Home's headline and blocks, shown at `/` while the menu has Home on. */
       home: PortalDesign['pages']['home']

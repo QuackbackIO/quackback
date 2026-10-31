@@ -44,6 +44,7 @@ interface PortalPreviewProps {
     home?: PortalDesign['pages']['home']
     nav?: PortalDesign['nav']
     vocabulary?: PortalDesign['vocabulary']
+    copy?: PortalDesign['pages']['feedback']['copy']
   } | null
   /** The page the frame shows: the root, Home or the feed at its own address. */
   page?: PreviewPage

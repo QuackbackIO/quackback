@@ -116,7 +116,7 @@
       "serverRequests": 5,
       "requests": 88,
       "jsRequests": 79,
-      "jsKB": 383.8,
+      "jsKB": 391.7,
       "htmlTransferKB": 1.1,
       "componentRenders": 348
     },
@@ -134,7 +134,7 @@
       "serverRequests": 1,
       "requests": 167,
       "jsRequests": 162,
-      "jsKB": 466.1,
+      "jsKB": 475.6,
       "htmlTransferKB": 38.1,
       "componentRenders": 487
     },

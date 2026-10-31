@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { useIntl } from 'react-intl'
+import { useFeedCopy } from '@/components/public/preview-draft-context'
 import { PencilIcon } from '@heroicons/react/24/solid'
 import type { FeedbackHeaderProps } from './feedback-header-animated'
 
@@ -25,6 +26,7 @@ interface FallbackProps {
 
 export function FeedbackHeaderFallback({ title, onTitleChange, onFocus }: FallbackProps = {}) {
   const intl = useIntl()
+  const copy = useFeedCopy()
   return (
     <div className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-3.5">
@@ -33,11 +35,14 @@ export function FeedbackHeaderFallback({ title, onTitleChange, onFocus }: Fallba
         </div>
         <input
           type="text"
-          placeholder={intl.formatMessage({
-            id: 'portal.feedback.header.titlePlaceholder',
-            defaultMessage:
-              "{postWord, select, post {What's on your mind?} feature_request {What should we build?} suggestion {What's your suggestion?} other {What's your idea?}}",
-          })}
+          placeholder={
+            copy.prompt ??
+            intl.formatMessage({
+              id: 'portal.feedback.header.titlePlaceholder',
+              defaultMessage:
+                "{postWord, select, post {What's on your mind?} feature_request {What should we build?} suggestion {What's your suggestion?} other {What's your idea?}}",
+            })
+          }
           readOnly={!onTitleChange}
           maxLength={TITLE_MAX_LENGTH}
           value={onTitleChange ? title : undefined}

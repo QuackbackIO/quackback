@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import { useIntl } from 'react-intl'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { PortalNavConfig, PortalWelcomeCard } from '@/lib/shared/types/settings'
 
@@ -111,6 +112,32 @@ export function usePreviewHome(): PortalDesign['pages']['home'] | undefined {
 /** A draft design's menu, or undefined (always, outside a design preview). */
 export function usePreviewDesignNav(): PortalDesign['nav'] | undefined {
   return useContext(PreviewPagesContext)?.nav ?? undefined
+}
+
+/** The workspace's own wording for the composer and the empty feed, by language. */
+export type FeedCopy = PortalDesign['pages']['feedback']['copy']
+
+/**
+ * The own wording in force: the portal layout's from the saved design, and
+ * the preview's from the draft below it. None outside a portal.
+ */
+export const FeedCopyContext = createContext<FeedCopy | undefined>(undefined)
+
+/**
+ * The own wording in the visitor's language. A language left blank has none,
+ * so its strings say the chosen word's translation, never another language.
+ */
+export function useFeedCopy(): { prompt?: string; submit?: string; emptyTitle?: string } {
+  const copy = useContext(FeedCopyContext)
+  const locale = useIntl().locale.toLowerCase()
+  return useMemo(
+    () => ({
+      prompt: copy?.prompt?.[locale] || undefined,
+      submit: copy?.submit?.[locale] || undefined,
+      emptyTitle: copy?.emptyTitle?.[locale] || undefined,
+    }),
+    [copy, locale]
+  )
 }
 
 export const PreviewAttributesContext = createContext<Record<string, string> | undefined>(undefined)

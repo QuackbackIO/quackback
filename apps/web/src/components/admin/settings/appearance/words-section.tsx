@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import type { SupportedLocale } from '@/lib/shared/i18n'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { DesignTiles } from './design-tiles'
+import { LanguagePicker, languageName } from './language-picker'
 import {
   BOARD_WORDS,
   oldWordUses,
@@ -92,6 +95,85 @@ export function WordsSection({ design, update }: { design: PortalDesign; update:
           </div>
         </div>
       )}
+      <OwnWording design={design} update={update} />
     </section>
+  )
+}
+
+type CopyField = 'prompt' | 'submit' | 'emptyTitle'
+
+const COPY_FIELDS: Array<{ field: CopyField; label: string; max: number }> = [
+  { field: 'prompt', label: 'Composer prompt', max: 60 },
+  { field: 'submit', label: 'Submit button', max: 24 },
+  { field: 'emptyTitle', label: 'Empty feed title', max: 60 },
+]
+
+/** What the portal says in English for each word, shown where no wording of its own is set. */
+const ENGLISH_COPY: Record<PostWord, Record<CopyField, string>> = {
+  idea: {
+    prompt: "What's your idea?",
+    submit: 'Submit',
+    emptyTitle: 'Got an idea? Be the first to share it',
+  },
+  post: {
+    prompt: "What's on your mind?",
+    submit: 'Submit',
+    emptyTitle: 'Got something to say? Be the first to post',
+  },
+  feature_request: {
+    prompt: 'What should we build?',
+    submit: 'Submit',
+    emptyTitle: 'Need a feature? Be the first to request it',
+  },
+  suggestion: {
+    prompt: "What's your suggestion?",
+    submit: 'Submit',
+    emptyTitle: 'Got a suggestion? Be the first to share it',
+  },
+}
+
+/**
+ * The composer's prompt, its button and the empty feed's title in the
+ * workspace's own words, per language. A language left blank says the
+ * chosen word's translation.
+ */
+function OwnWording({ design, update }: { design: PortalDesign; update: Update }) {
+  const [locale, setLocale] = useState<SupportedLocale>('en')
+  const copy = design.pages.feedback.copy
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <p className="text-[13px] font-medium">Own wording</p>
+        <div className="ms-auto">
+          <LanguagePicker value={locale} onChange={setLocale} label="Own wording language" />
+        </div>
+      </div>
+      {COPY_FIELDS.map(({ field, label, max }) => (
+        <div key={field} className="space-y-1.5">
+          <label htmlFor={`design-copy-${field}`} className="text-[13px]">
+            {label}
+          </label>
+          <Input
+            id={`design-copy-${field}`}
+            value={copy[field]?.[locale] ?? ''}
+            maxLength={max}
+            placeholder={
+              locale === 'en'
+                ? ENGLISH_COPY[design.vocabulary.post][field]
+                : `The ${languageName(locale)} translation`
+            }
+            onChange={(event) =>
+              update((draft) => {
+                const byLocale = { ...draft.pages.feedback.copy[field] }
+                if (event.target.value.trim()) byLocale[locale] = event.target.value
+                else delete byLocale[locale]
+                if (Object.keys(byLocale).length > 0) draft.pages.feedback.copy[field] = byLocale
+                else delete draft.pages.feedback.copy[field]
+              })
+            }
+          />
+        </div>
+      ))}
+    </div>
   )
 }

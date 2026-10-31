@@ -14,6 +14,7 @@ import { newBlock } from '@/lib/shared/design/home'
 vi.mock('@/components/admin/settings/branding/welcome-body-editor', () => ({
   WelcomeBodyEditor: () => <div data-testid="welcome-editor" />,
 }))
+vi.mock('@/components/ui/select', async () => import('@/test/radix-select'))
 vi.mock('@/lib/client/queries/admin', () => ({
   adminQueries: { roadmaps: () => ({ queryKey: ['roadmaps'], queryFn: async () => [] }) },
 }))
@@ -139,5 +140,17 @@ describe('Home in Sections', () => {
     renderSection(doc)
     expect(screen.getByRole('button', { name: 'Move Make a suggestion down' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Remove Top suggestions' })).toBeTruthy()
+  })
+
+  it('writes Home’s headline in the language picked, leaving the others', async () => {
+    const doc = withHome(newBlock('status'))
+    doc.pages.home.headline = { title: { en: 'Welcome' }, subtitle: {} }
+    const seen = renderSection(doc)
+    const select = screen.getByRole('combobox', { name: 'Headline language' }) as HTMLSelectElement
+    await act(async () => fireEvent.change(select, { target: { value: 'de' } }))
+    const title = screen.getByRole('textbox', { name: 'Home headline' }) as HTMLInputElement
+    expect(title.value).toBe('')
+    fireEvent.change(title, { target: { value: 'Willkommen' } })
+    expect(seen.design.pages.home.headline?.title).toEqual({ en: 'Welcome', de: 'Willkommen' })
   })
 })

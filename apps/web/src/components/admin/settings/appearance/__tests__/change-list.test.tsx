@@ -34,6 +34,9 @@ describe('changeLabel', () => {
     ['nav.home.label', 'Home tab name'],
     ['vocabulary.post', 'What people post'],
     ['vocabulary.board', 'What groups them'],
+    ['pages.feedback.copy.prompt.en', 'Composer prompt'],
+    ['pages.feedback.copy.submit.de', 'Submit button'],
+    ['pages.feedback.copy.emptyTitle', 'Empty feed title'],
   ])('%s is %s', (path, label) => {
     expect(changeLabel(path)).toBe(label)
   })
