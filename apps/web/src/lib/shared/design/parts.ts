@@ -112,6 +112,18 @@ export const PORTAL_PARTS = [
     files: ['components/public/post-card.tsx', 'components/public/vote-button.tsx'],
   },
   {
+    name: 'tag',
+    description:
+      "A post's or update's tag, tinted with its colour as status markers are, and plain when they are in the ink.",
+    states: [],
+    tokens: [],
+    files: [
+      'components/public/post-card.tsx',
+      'components/public/post-detail/metadata-sidebar.tsx',
+      'components/portal/changelog/changelog-entry-card.tsx',
+    ],
+  },
+  {
     name: 'search-field',
     description: 'Where a visitor searches the help centre, on its pages and on Home.',
     states: [],

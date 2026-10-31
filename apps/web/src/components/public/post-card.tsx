@@ -28,6 +28,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn } from '@/lib/shared/utils'
+import { TAG_TINT, useTagStyle } from './tag-tint'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import type { ChangelogId, PostId, PostStatusId, PrincipalId } from '@quackback/ids'
@@ -151,6 +152,7 @@ export function PostCard({
 }: PostCardProps): React.ReactElement {
   // Safe hook - returns null in admin context where AuthPopoverProvider isn't available
   const intl = useIntl()
+  const tagStyle = useTagStyle()
   const authPopover = useAuthPopoverSafe()
   // "Admin mode" here means the inbox list rendering: modal-style navigation
   // (onClick instead of a title link) plus the admin quick-actions overlay. It
@@ -499,7 +501,10 @@ export function PostCard({
     </Link>
   )
 
-  const tagClassName = 'inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium'
+  const tagClassName = cn(
+    'inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium',
+    TAG_TINT
+  )
 
   const cardContent = (
     <div className="flex items-start p-[var(--qb-card-padding,1rem)] gap-4">
@@ -549,12 +554,12 @@ export function PostCard({
         {tags.length > 0 && (
           <div className="flex items-center gap-1 mt-1.5">
             {tags.slice(0, 3).map((tag) => {
-              // The tag's colour tints the chip; its text stays in the ink, which reads on it.
-              const style = { backgroundColor: tag.color + '20', color: 'var(--foreground)' }
+              const style = tagStyle(tag.color)
               return onTagClick ? (
                 <button
                   key={tag.id}
                   type="button"
+                  data-qb-part="tag"
                   onClick={() => onTagClick(tag.id)}
                   className={cn(
                     tagClassName,
@@ -565,7 +570,7 @@ export function PostCard({
                   {tag.name}
                 </button>
               ) : (
-                <span key={tag.id} className={tagClassName} style={style}>
+                <span key={tag.id} data-qb-part="tag" className={tagClassName} style={style}>
                   {tag.name}
                 </span>
               )

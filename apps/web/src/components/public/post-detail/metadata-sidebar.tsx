@@ -37,6 +37,7 @@ import {
   type VotersQuerySource,
 } from '@/components/admin/feedback/voters-avatar-stack'
 import { cn, formatMonthYear } from '@/lib/shared/utils'
+import { TAG_EDGE, TAG_TINT, useTagStyle } from '@/components/public/tag-tint'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import type { OwnerRef } from '@/lib/server/functions/post-owner-context'
 import type { PostId, PostStatusId, PostTagId, BoardId, PrincipalId } from '@quackback/ids'
@@ -389,6 +390,7 @@ export function MetadataSidebar({
   onVotersInvalidate,
   manageActions,
 }: MetadataSidebarProps) {
+  const tagStyle = useTagStyle()
   const intl = useIntl()
   const [tagOpen, setTagOpen] = useState(false)
   const [boardOpen, setBoardOpen] = useState(false)
@@ -809,15 +811,14 @@ export function MetadataSidebar({
                   className={cn(
                     'group inline-flex items-center gap-0.5 ps-1.5 pe-1 py-0.5',
                     'rounded-full text-[11px] font-medium border',
+                    TAG_TINT,
+                    TAG_EDGE,
                     'hover:opacity-80',
                     'transition-all duration-150',
                     'disabled:opacity-50 disabled:cursor-not-allowed'
                   )}
-                  style={{
-                    backgroundColor: tag.color + '20',
-                    borderColor: tag.color + '40',
-                    color: 'var(--foreground)',
-                  }}
+                  data-qb-part="tag"
+                  style={tagStyle(tag.color)}
                 >
                   {tag.name}
                   <XMarkIcon className="h-2.5 w-2.5 opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -884,11 +885,12 @@ export function MetadataSidebar({
               {tags.map((tag) => (
                 <span
                   key={tag.id}
-                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
-                  style={{
-                    backgroundColor: tag.color + '20',
-                    color: 'var(--foreground)',
-                  }}
+                  data-qb-part="tag"
+                  className={cn(
+                    'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium',
+                    TAG_TINT
+                  )}
+                  style={tagStyle(tag.color)}
                 >
                   {tag.name}
                 </span>

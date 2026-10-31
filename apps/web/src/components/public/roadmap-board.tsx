@@ -157,7 +157,8 @@ export function RoadmapBoard({
             {columns.map((column, index) => (
               <div
                 key={column.id}
-                className="snap-center sm:snap-start flex flex-col animate-in fade-in duration-200 fill-mode-backwards"
+                // Columns share the width, never narrower than a card reads well.
+                className="snap-center sm:snap-start flex flex-1 basis-0 min-w-[min(300px,85vw)] flex-col animate-in fade-in duration-200 fill-mode-backwards"
                 style={{ animationDelay: `${index * 75}ms` }}
               >
                 <RoadmapColumn
