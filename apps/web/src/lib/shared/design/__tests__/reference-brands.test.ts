@@ -28,7 +28,9 @@ interface Fixture {
     logo: { display: string }
   }
   shape: { corners: string }
-  layout: Record<'header' | 'nav' | 'band' | 'cards' | 'density' | 'width' | 'filters', string>
+  layout: Record<'header' | 'nav' | 'band' | 'cards' | 'density' | 'width' | 'filters', string> & {
+    blend?: string
+  }
   pages: {
     home: {
       headline: Headline
@@ -83,6 +85,7 @@ function used(): Record<DesignOption, Set<string>> {
       if (headline?.accent) add('headlineAccent', headline.accent.style)
     for (const key of ['header', 'nav', 'band', 'cards', 'density', 'width', 'filters'] as const)
       add(key, doc.layout[key])
+    if (doc.layout.band === 'blend') add('blend', doc.layout.blend ?? 'linear')
     add('sort', doc.pages.feedback.defaultSort)
     for (const block of doc.pages.home.blocks) {
       add('blockType', block.type)

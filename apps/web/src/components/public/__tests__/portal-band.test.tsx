@@ -112,4 +112,12 @@ describe('PortalBand', () => {
     mount()
     expect(screen.getByRole('heading').innerHTML).toBe('Make it work')
   })
+
+  it('gives way to a plain band on phones where the design asks', () => {
+    root.portalDesign = view({ title: { en: 'Ideas' }, subtitle: {} }, 'blend')
+    mount()
+    const band = document.querySelector('[data-qb-part=band]')!
+    expect(band.className).toContain('[background:var(--qb-band-bg-narrow,var(--qb-band-bg))]')
+    expect(band.className).toContain('sm:[background:var(--qb-band-bg)]')
+  })
 })

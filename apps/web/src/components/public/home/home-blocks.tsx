@@ -195,7 +195,7 @@ function ComposerBlock({ block, index }: { block: HomeBlock; index: number }) {
           onChange={(event) => setTitle(event.target.value)}
           placeholder={copy.prompt ?? intl.formatMessage(homeMessages.composerPlaceholder)}
           aria-label={intl.formatMessage(homeMessages.composerLabel)}
-          className="min-w-0 flex-1 border-0 bg-transparent font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground/60"
+          className="min-w-0 flex-1 border-0 bg-transparent font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground"
         />
         <button
           type="submit"

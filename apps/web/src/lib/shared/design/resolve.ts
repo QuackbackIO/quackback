@@ -10,7 +10,7 @@ import { expandTheme } from '@/lib/shared/theme/expand'
 import { variableMap } from '@/lib/shared/theme/generator'
 import type { ThemeVariables } from '@/lib/shared/theme/types'
 import { contrastRatio, solveContrast } from './contrast'
-import { baseTokens, modeTokens, PORTAL_ALIASES, type TokenMap } from './components'
+import { bandError, baseTokens, modeTokens, PORTAL_ALIASES, type TokenMap } from './components'
 import { fontStack } from './fonts'
 import type { PortalDesign } from './schema'
 
@@ -129,6 +129,8 @@ export function resolveDesign(doc: PortalDesign): ResolvedDesign {
   const resolveMode = (mode: Mode) => {
     const vars = expandMode(doc, mode)
     solveMode(vars, mode, adjustments, errors)
+    const band = bandError(doc, vars, mode)
+    if (band) errors.push(band)
     return vars
   }
   const light = doc.mode === 'dark' ? null : resolveMode('light')

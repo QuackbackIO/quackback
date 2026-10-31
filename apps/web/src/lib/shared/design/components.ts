@@ -9,7 +9,7 @@
  */
 import type { ThemeVariables } from '@/lib/shared/theme/types'
 import { mixColor } from './color'
-import { solveContrast } from './contrast'
+import { contrastRatio, solveContrast } from './contrast'
 import { fontStack } from './fonts'
 import type { PortalDesign } from './schema'
 
@@ -101,7 +101,7 @@ export function modeTokens(doc: PortalDesign, vars: ThemeVariables, mode: Mode):
     '--qb-nav-active-ink': t.foreground,
     // The voted vote box: the solver keeps accent text readable on cards.
     '--qb-vote-active': t.accentInk,
-    ...bandTokens(doc.layout.band, t),
+    ...bandTokens(doc, t, mode),
   }
   // The underline under the current page comes from the data-qb-nav attribute.
   if (doc.layout.nav === 'underline') tokens['--qb-nav-active-bg'] = 'transparent'
@@ -116,64 +116,146 @@ export function modeTokens(doc: PortalDesign, vars: ThemeVariables, mode: Mode):
 /** Text readable on a background, moved in lightness only if it has to be. */
 const readableOn = (ink: string, background: string) => solveContrast(ink, [background], 4.5) ?? ink
 
+const NEAR_BLACK = 'oklch(0.145 0 0)'
+const NEAR_WHITE = 'oklch(0.985 0 0)'
+
+/**
+ * The first text that reads on every background given: the page's ink, then
+ * black or white, then the ink moved in lightness. Null when none can.
+ */
+function textOn(backgrounds: string[], t: Required<ThemeVariables>): string | null {
+  const reads = (text: string) => backgrounds.every((bg) => contrastRatio(text, bg) >= 4.5)
+  return (
+    [t.foreground, t.background, NEAR_BLACK, NEAR_WHITE].find(reads) ??
+    solveContrast(t.foreground, backgrounds, 4.5)
+  )
+}
+
+/** Why a mode's band cannot carry its headline, if it cannot. */
+export function bandError(doc: PortalDesign, vars: ThemeVariables, mode: Mode): string | null {
+  const t = vars as Required<ThemeVariables>
+  const surface = bandSurface(doc, t, supportColour(doc, mode))
+  return surface.behind.every((bg) => contrastRatio(surface.ink, bg) >= 4.5)
+    ? null
+    : `${mode}: no text reaches 4.5:1 across the band`
+}
+
 /** The brand colour's share of a tint band, and of the top of a fade. */
 export const BAND_TINT = 0.12
 export const BAND_FADE = 0.2
 
+/** The design's second brand colour in a mode: dark keeps light's unless it sets its own. */
+function supportColour(doc: PortalDesign, mode: Mode): string | undefined {
+  return mode === 'dark'
+    ? (doc.brand.dark?.support ?? doc.brand.light.support)
+    : doc.brand.light.support
+}
+
 /**
  * The band at the top of a page: plain, a tint of the brand colour, a fade
- * from a tint into the page, or the brand colour itself. Its text stays at
- * 4.5:1.
+ * from a tint into the page, the brand colour itself, the second brand
+ * colour, or the two blended. Its text stays at 4.5:1 wherever it sits.
  */
-function bandTokens(band: PortalDesign['layout']['band'], t: Required<ThemeVariables>): TokenMap {
-  const tokens = bandSurface(band, t)
-  // Where the headline sits: the band's colour, or the top of a fade.
-  const behind =
-    band === 'brand'
-      ? t.primary
-      : band === 'tint'
-        ? mixColor(t.primary, t.background, BAND_TINT)
-        : band === 'fade'
-          ? mixColor(t.primary, t.background, BAND_FADE)
-          : t.background
+function bandTokens(doc: PortalDesign, t: Required<ThemeVariables>, mode: Mode): TokenMap {
+  const support = supportColour(doc, mode)
+  const surface = bandSurface(doc, t, support)
   return {
-    ...tokens,
+    '--qb-band-bg': surface.background,
+    '--qb-band-ink': surface.ink,
+    '--qb-band-muted': surface.muted,
+    // A mesh gives way to the page on phones, where the words cross it.
+    ...(surface.narrow ? { '--qb-band-bg-narrow': surface.narrow } : {}),
     // A headline's accent phrase: the brand colour, moved until it reads at
-    // 3:1 as large text, or the band's ink where it cannot.
-    '--qb-band-accent': solveContrast(t.primary, [behind], 3) ?? tokens['--qb-band-ink']!,
-    '--qb-band-highlight': mixColor(t.primary, behind, 0.25),
+    // 3:1 as large text wherever the headline sits, or the band's ink.
+    '--qb-band-accent': solveContrast(t.primary, surface.behind, 3) ?? surface.ink,
+    '--qb-band-highlight': mixColor(
+      support ?? t.primary,
+      surface.behind[0]!,
+      support ? 0.35 : 0.25
+    ),
   }
 }
 
-function bandSurface(band: PortalDesign['layout']['band'], t: Required<ThemeVariables>): TokenMap {
-  switch (band) {
+interface BandSurface {
+  background: string
+  /** What the headline sits on. */
+  behind: string[]
+  ink: string
+  muted: string
+  narrow?: string
+}
+
+function bandSurface(
+  doc: PortalDesign,
+  t: Required<ThemeVariables>,
+  support: string | undefined
+): BandSurface {
+  switch (doc.layout.band) {
     case 'brand':
       return {
-        '--qb-band-bg': t.primary,
-        '--qb-band-ink': t.primaryForeground,
-        '--qb-band-muted': t.primaryForeground,
+        background: t.primary,
+        behind: [t.primary],
+        ink: t.primaryForeground,
+        muted: t.primaryForeground,
       }
+    case 'support': {
+      const fill = support ?? t.primary
+      const ink = support ? (textOn([fill], t) ?? NEAR_BLACK) : t.primaryForeground
+      return { background: fill, behind: [fill], ink, muted: ink }
+    }
+    case 'blend': {
+      const second = support ?? mixColor(t.primary, t.background, 0.5)
+      if (doc.layout.blend === 'mesh') {
+        const middle = mixColor(t.primary, second, 0.5)
+        return {
+          // Soft colour to the right; the page's own colour under the words.
+          background: [
+            `linear-gradient(90deg, ${t.background} 34%, transparent 62%)`,
+            `radial-gradient(circle at 72% 22%, ${t.primary} 0%, transparent 34%)`,
+            `radial-gradient(circle at 94% 34%, ${second} 0%, transparent 36%)`,
+            `radial-gradient(circle at 80% 88%, ${middle} 0%, transparent 38%)`,
+            t.background,
+          ].join(', '),
+          behind: [t.background],
+          ink: t.foreground,
+          muted: t.mutedForeground,
+          narrow: t.background,
+        }
+      }
+      const behind = [t.primary, mixColor(t.primary, second, 0.5)]
+      // With no text that reads across the line, the ink at its start stays and the design is refused.
+      const ink = textOn(behind, t) ?? textOn([t.primary], t) ?? NEAR_BLACK
+      return {
+        background: `linear-gradient(110deg, ${t.primary} 0%, ${second} 100%)`,
+        behind,
+        ink,
+        muted: ink,
+      }
+    }
     case 'tint': {
       const tint = mixColor(t.primary, t.background, BAND_TINT)
       return {
-        '--qb-band-bg': tint,
-        '--qb-band-ink': readableOn(t.foreground, tint),
-        '--qb-band-muted': readableOn(t.mutedForeground, tint),
+        background: tint,
+        behind: [tint],
+        ink: readableOn(t.foreground, tint),
+        muted: readableOn(t.mutedForeground, tint),
       }
     }
     case 'fade': {
       const top = mixColor(t.primary, t.background, BAND_FADE)
       return {
-        '--qb-band-bg': `linear-gradient(to bottom, ${top}, ${t.background})`,
-        '--qb-band-ink': readableOn(t.foreground, top),
-        '--qb-band-muted': readableOn(t.mutedForeground, top),
+        background: `linear-gradient(to bottom, ${top}, ${t.background})`,
+        behind: [top],
+        ink: readableOn(t.foreground, top),
+        muted: readableOn(t.mutedForeground, top),
       }
     }
     default:
       return {
-        '--qb-band-bg': 'transparent',
-        '--qb-band-ink': t.foreground,
-        '--qb-band-muted': t.mutedForeground,
+        background: 'transparent',
+        behind: [t.background],
+        ink: t.foreground,
+        muted: t.mutedForeground,
       }
   }
 }

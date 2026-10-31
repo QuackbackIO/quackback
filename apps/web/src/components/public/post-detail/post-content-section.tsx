@@ -199,7 +199,7 @@ export function PostContentSection({
               defaultMessage:
                 '{postWord, select, post {Post title} feature_request {Feature request title} suggestion {Suggestion title} other {Idea title}}',
             })}
-            className="w-full bg-transparent border-0 outline-none text-xl sm:text-2xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-4"
+            className="w-full bg-transparent border-0 outline-none text-xl sm:text-2xl font-semibold text-foreground placeholder:text-muted-foreground placeholder:font-normal caret-primary mb-4"
           />
 
           {/* Rich text editor — lazy-loaded so its chunk never lands in the
