@@ -43,7 +43,10 @@
     "favicon": {
       "key": "fixtures/plume/favicon.png"
     },
-    "shareImage": null
+    "shareImage": null,
+    "bandImage": {
+      "key": "portal-images/plume-desk.jpg"
+    }
   },
   "shape": {
     "corners": "rounded"
@@ -55,7 +58,8 @@
     "cards": "list",
     "density": "spacious",
     "width": "default",
-    "filters": "start"
+    "filters": "start",
+    "imagePlace": "cover"
   },
   "pages": {
     "home": {

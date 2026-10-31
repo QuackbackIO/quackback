@@ -12,7 +12,7 @@ import { rewritePartAliases } from './parts'
 import { designFontIds, fontStack, uploadedFontFaces } from './fonts'
 import { renderDesignCss, resolveDesign } from './resolve'
 import type { PortalDesign } from './schema'
-import type { DesignLogo, PortalDesignView } from './view'
+import type { BandImage, DesignLogo, PortalDesignView } from './view'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import type { TiptapContent } from '@/lib/shared/db-types'
 
@@ -41,6 +41,7 @@ export function designView(
     nav: doc.nav,
     vocabulary: doc.vocabulary,
     logo: designLogo(doc),
+    bandImage: bandImage(doc),
     statusColours:
       doc.layout.status === 'brand' && doc.brand.logoColours?.length ? doc.brand.logoColours : null,
   }
@@ -48,6 +49,11 @@ export function designView(
 
 /** Where the portal loads a stored brand file from: its own origin. */
 export const designAssetUrl = (key: string) => `/api/storage/${key}`
+
+function bandImage(doc: PortalDesign): BandImage | null {
+  const image = doc.brand.bandImage
+  return image ? { url: designAssetUrl(image.key), place: doc.layout.imagePlace ?? 'side' } : null
+}
 
 function designLogo(doc: PortalDesign): DesignLogo {
   const { display, name, wordmark } = doc.brand.logo

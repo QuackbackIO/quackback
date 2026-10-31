@@ -6,7 +6,7 @@
  * shared code into a chunk of its own.
  */
 
-import type { DesignLogo, PortalWords } from '@/lib/shared/design/view'
+import type { BandImage, DesignLogo, PortalWords } from '@/lib/shared/design/view'
 
 type TextByLocale = Record<string, string>
 
@@ -41,6 +41,17 @@ export interface DesignPreview {
   logo: DesignLogo | null
   /** The logo's colours status markers take, when the draft asks for them. */
   statusColours: string[] | null
+  bandImage: BandImage | null
+}
+
+const IMAGE_PLACES = new Set(['side', 'edge', 'cover', 'pattern'])
+
+function readBandImage(value: unknown): BandImage | null {
+  if (!value || typeof value !== 'object') return null
+  const { url, place } = value as Record<string, unknown>
+  return typeof url === 'string' && STORED_FILE.test(url) && IMAGE_PLACES.has(place as string)
+    ? { url, place: place as BandImage['place'] }
+    : null
 }
 
 /** A colour as a design stores it: hex, or oklch(). */
@@ -157,8 +168,19 @@ const DESIGN_VALUE = /^[a-z_]+$/
 /** The message's design, keeping only the structural attributes a design sets. */
 export function readDesignPreview(value: unknown): DesignPreview | null {
   if (!value || typeof value !== 'object') return null
-  const { css, attributes, fontIds, headline, home, nav, vocabulary, copy, logo, statusColours } =
-    value as Record<string, unknown>
+  const {
+    css,
+    attributes,
+    fontIds,
+    headline,
+    home,
+    nav,
+    vocabulary,
+    copy,
+    logo,
+    statusColours,
+    bandImage,
+  } = value as Record<string, unknown>
   if (typeof css !== 'string') return null
   const safe = Object.fromEntries(
     Object.entries((attributes as Record<string, unknown>) ?? {}).filter(
@@ -177,6 +199,7 @@ export function readDesignPreview(value: unknown): DesignPreview | null {
     copy: readCopy(copy),
     logo: readLogo(logo),
     statusColours: readStatusColours(statusColours),
+    bandImage: readBandImage(bandImage),
   }
 }
 

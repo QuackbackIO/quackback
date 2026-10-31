@@ -210,6 +210,8 @@ export const portalDesignV2 = z
             name: z.string().trim().max(60).optional(),
           })
           .strict(),
+        /** An image for the band, such as a photo or a pattern. */
+        bandImage: asset.optional(),
         /** The logo's own colours, for status markers in the brand's colours. */
         logoColours: z.array(color).max(6).optional(),
         favicon: asset.nullable(),
@@ -238,6 +240,8 @@ export const portalDesignV2 = z
         headerOnBand: z.boolean().optional(),
         /** Absent is coloured dots. */
         status: z.enum(DESIGN_OPTIONS.status).optional(),
+        /** Where the band's image sits; absent is beside the words. */
+        imagePlace: z.enum(DESIGN_OPTIONS.imagePlace).optional(),
         cards: z.enum(DESIGN_OPTIONS.cards),
         density: z.enum(DESIGN_OPTIONS.density),
         width: z.enum(DESIGN_OPTIONS.width),

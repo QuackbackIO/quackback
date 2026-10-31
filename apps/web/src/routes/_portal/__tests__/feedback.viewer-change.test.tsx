@@ -70,6 +70,7 @@ vi.mock('@/components/public/preview-draft-context', () => ({
   usePreviewWelcomeCard: () => null,
   usePreviewHeadline: () => undefined,
   usePreviewHome: () => undefined,
+  usePreviewBandImage: () => undefined,
 }))
 vi.mock('@/components/public/feedback/portal-welcome-card', () => ({
   PortalWelcomeCard: () => null,

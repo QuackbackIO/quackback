@@ -52,6 +52,13 @@ export const PORTAL_PARTS = [
     files: ['components/public/portal-band.tsx'],
   },
   {
+    name: 'band-image',
+    description: "The band's image, when it sits beside the words.",
+    states: [],
+    tokens: ['--qb-radius-panel'],
+    files: ['components/public/portal-band.tsx'],
+  },
+  {
     name: 'headline',
     description: "A page's headline, in the band.",
     states: [],

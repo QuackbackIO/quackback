@@ -151,6 +151,7 @@ export function useDesignDraft() {
       copy: view.feedback.copy,
       logo: view.logo,
       statusColours: view.statusColours,
+      bandImage: view.bandImage,
     }
   }, [design])
 

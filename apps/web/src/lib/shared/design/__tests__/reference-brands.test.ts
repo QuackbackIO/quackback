@@ -26,6 +26,7 @@ interface Fixture {
       labelCase?: string
     }
     logo: { display: string }
+    bandImage?: { key: string }
   }
   shape: { corners: string; buttons?: string }
   layout: Record<'header' | 'nav' | 'band' | 'cards' | 'density' | 'width' | 'filters', string> & {
@@ -33,6 +34,7 @@ interface Fixture {
     bandAlign?: string
     bandShape?: string
     status?: string
+    imagePlace?: string
   }
   pages: {
     home: {
@@ -94,6 +96,7 @@ function used(): Record<DesignOption, Set<string>> {
     add('bandShape', doc.layout.bandShape ?? 'full')
     add('buttons', doc.shape.buttons ?? 'match')
     add('status', doc.layout.status ?? 'colour')
+    if (doc.brand.bandImage) add('imagePlace', doc.layout.imagePlace ?? 'side')
     if (doc.pages.home.blocks.some((block) => block.type === 'composer'))
       add('composerPlace', doc.pages.home.composer ?? 'block')
     add('sort', doc.pages.feedback.defaultSort)

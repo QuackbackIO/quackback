@@ -41,7 +41,10 @@
     "favicon": {
       "key": "fixtures/ledger/favicon.png"
     },
-    "shareImage": null
+    "shareImage": null,
+    "bandImage": {
+      "key": "portal-images/ledger-skyline.png"
+    }
   },
   "shape": {
     "corners": "sharp"
@@ -53,7 +56,8 @@
     "cards": "bordered",
     "density": "comfortable",
     "width": "narrow",
-    "filters": "end"
+    "filters": "end",
+    "imagePlace": "edge"
   },
   "pages": {
     "home": {

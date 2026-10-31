@@ -29,6 +29,18 @@ describe('a draft design read from the preview message', () => {
     expect(message({ statusColours: ['red'] }).statusColours).toBeNull()
   })
 
+  it('keeps a band image only from storage, in a place it knows', () => {
+    expect(
+      message({ bandImage: { url: '/api/storage/portal-images/a.jpg', place: 'edge' } }).bandImage
+    ).toEqual({ url: '/api/storage/portal-images/a.jpg', place: 'edge' })
+    expect(
+      message({ bandImage: { url: 'https://x.example/a.jpg', place: 'edge' } }).bandImage
+    ).toBeNull()
+    expect(
+      message({ bandImage: { url: '/api/storage/a.jpg', place: 'float' } }).bandImage
+    ).toBeNull()
+  })
+
   it('keeps a headline’s accent only in a shape it knows', () => {
     const title = { en: 'Make it better' }
     expect(

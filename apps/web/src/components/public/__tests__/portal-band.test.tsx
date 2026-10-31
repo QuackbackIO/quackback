@@ -120,4 +120,38 @@ describe('PortalBand', () => {
     expect(band.className).toContain('[background:var(--qb-band-bg-narrow,var(--qb-band-bg))]')
     expect(band.className).toContain('sm:[background:var(--qb-band-bg)]')
   })
+
+  it('sets a side image beside the words', () => {
+    root.portalDesign = {
+      ...view({ title: { en: 'Ideas' }, subtitle: {} }),
+      bandImage: { url: '/api/storage/portal-images/room.jpg', place: 'side' },
+    }
+    mount()
+    const band = document.querySelector('[data-qb-part=band]')!
+    const image = band.querySelector('img[data-qb-part=band-image]')!
+    expect(image.getAttribute('src')).toBe('/api/storage/portal-images/room.jpg')
+    expect(band.hasAttribute('data-qb-band-image')).toBe(false)
+  })
+
+  it('puts a cover or pattern image behind the words, from storage only', () => {
+    root.portalDesign = {
+      ...view({ title: { en: 'Ideas' }, subtitle: {} }),
+      bandImage: { url: '/api/storage/portal-images/leaves.png', place: 'pattern' },
+    }
+    mount()
+    let band = document.querySelector('[data-qb-part=band]') as HTMLElement
+    expect(band.getAttribute('data-qb-band-image')).toBe('pattern')
+    expect(band.style.getPropertyValue('--qb-band-image')).toBe(
+      'url("/api/storage/portal-images/leaves.png")'
+    )
+    cleanup()
+    root.portalDesign = {
+      ...view({ title: { en: 'Ideas' }, subtitle: {} }),
+      bandImage: { url: 'https://example.com/x.png");}body{', place: 'cover' },
+    }
+    mount()
+    band = document.querySelector('[data-qb-part=band]') as HTMLElement
+    expect(band.hasAttribute('data-qb-band-image')).toBe(false)
+    expect(band.getAttribute('style')).toBeNull()
+  })
 })

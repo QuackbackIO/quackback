@@ -1,8 +1,8 @@
 import { useIntl } from 'react-intl'
 import { useRouteContext } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { cn } from '@/lib/shared/utils'
-import { usePreviewHeadline, usePreviewHome } from './preview-draft-context'
+import { usePreviewBandImage, usePreviewHeadline, usePreviewHome } from './preview-draft-context'
 
 /** Text in the visitor's language, else its base language, else English, else any. */
 export function textForLocale(
@@ -13,6 +13,20 @@ export function textForLocale(
   const base = locale.split('-')[0]
   return text[locale] || text[base] || text.en || Object.values(text).find(Boolean)
 }
+
+/** A band image comes from the workspace's own storage. */
+const STORED_FILE = /^\/api\/storage\/[\w./-]+$/
+
+/**
+ * The band's image behind its words: along the bottom (on wider screens),
+ * veiled by the band's colour so the words keep their contrast, or tiled
+ * under a lighter veil.
+ */
+const IMAGE_FILL = [
+  'sm:[&[data-qb-band-image=edge]]:[background:var(--qb-band-image)_center_bottom/100%_auto_no-repeat,var(--qb-band-bg)] sm:[&[data-qb-band-image=edge]]:pb-44',
+  '[&[data-qb-band-image=cover]]:[background:linear-gradient(var(--qb-band-scrim),var(--qb-band-scrim)),var(--qb-band-image)_center/cover_no-repeat,var(--qb-band-bg)]',
+  '[&[data-qb-band-image=pattern]]:[background:linear-gradient(var(--qb-band-scrim-soft),var(--qb-band-scrim-soft)),var(--qb-band-image)_0_0/280px_auto_repeat,var(--qb-band-bg)]',
+].join(' ')
 
 /** The band's colour: plain on phones where the design asks, as a mesh crosses the words there. */
 const BAND_FILL =
@@ -64,6 +78,7 @@ export function PortalBand({
   })
   const draftHeadline = usePreviewHeadline()
   const draftHome = usePreviewHome()
+  const draftImage = usePreviewBandImage()
   if (design?.engine !== 'v2') return null
   const headline =
     page === 'home'
@@ -75,13 +90,21 @@ export function PortalBand({
   const subtitle = textForLocale(headline?.subtitle, intl.locale)
   const phrase = textForLocale(headline?.accent?.text, intl.locale)
   if (!title && !subtitle && !children) return null
+  const shown = draftImage !== undefined ? draftImage : design.bandImage
+  const image = shown && STORED_FILE.test(shown.url) ? shown : null
+  const side = image?.place === 'side'
   return (
     <section
       data-qb-section="band"
       data-qb-part="band"
+      data-qb-band-image={image && !side ? image.place : undefined}
+      style={
+        image && !side ? ({ '--qb-band-image': `url("${image.url}")` } as CSSProperties) : undefined
+      }
       className={cn(
         'portal-band py-10 [[data-qb-band=none]_&]:py-0',
         BAND_FILL,
+        IMAGE_FILL,
         // Inset: the band's colour moves onto a rounded panel within the page.
         '[[data-qb-band-shape=inset]_&]:![background:transparent] [[data-qb-band-shape=inset]_&]:py-3'
       )}
@@ -91,7 +114,9 @@ export function PortalBand({
           'mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 pt-6 sm:px-6 [[data-qb-band=none]_&]:pb-0',
           '[[data-qb-band-align=centre]_&]:text-center',
           '[[data-qb-band-shape=inset]_&]:max-w-[calc(var(--qb-page-max,72rem)-2rem)] [[data-qb-band-shape=inset]_&]:rounded-[calc(var(--qb-radius-panel,0.75rem)*2.5)] [[data-qb-band-shape=inset]_&]:px-6 [[data-qb-band-shape=inset]_&]:py-10 sm:[[data-qb-band-shape=inset]_&]:px-12 sm:[[data-qb-band-shape=inset]_&]:py-14',
-          '[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg-narrow,var(--qb-band-bg))] sm:[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg)]'
+          '[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg-narrow,var(--qb-band-bg))] sm:[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg)]',
+          // A side image sits beside the words, and under them on phones.
+          side && 'md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)] md:items-center md:gap-10'
         )}
       >
         {/* Panel: the words sit on a block of the second colour, in its own text colours. */}
@@ -115,6 +140,14 @@ export function PortalBand({
             </div>
           )}
         </div>
+        {side && image && (
+          <img
+            src={image.url}
+            alt=""
+            data-qb-part="band-image"
+            className="mt-6 max-h-48 w-full rounded-[var(--qb-radius-panel,0.75rem)] object-cover md:mt-0 md:h-full md:max-h-[22rem]"
+          />
+        )}
       </div>
     </section>
   )
