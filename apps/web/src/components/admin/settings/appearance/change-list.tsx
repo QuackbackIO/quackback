@@ -1,5 +1,5 @@
 import type { DesignChange } from '@/lib/shared/design/diff'
-import { changeLabel } from '@/lib/shared/design/labels'
+import { changeLabel, isImageField } from '@/lib/shared/design/labels'
 import { BUNDLED_FONTS, type BundledFontId } from '@/lib/shared/design/fonts'
 
 export { changeLabel } from '@/lib/shared/design/labels'
@@ -24,6 +24,7 @@ export function ChangeValue({ value }: { value: unknown }) {
     )
   }
   if (typeof value === 'string') return <span>{VALUE_LABELS[value] ?? capital(value)}</span>
+  if (typeof value === 'boolean') return <span>{value ? 'On' : 'Off'}</span>
   return <span>{typeof value === 'object' ? 'Changed' : String(value)}</span>
 }
 
@@ -38,6 +39,10 @@ const VALUE_LABELS: Record<string, string> = {
 
 const capital = (value: string) => value[0].toUpperCase() + value.slice(1).replaceAll('_', ' ')
 
+/** An image reads as uploaded or not; its storage key means nothing to a person. */
+const shownValue = (path: string, value: unknown) =>
+  isImageField(path) ? (value ? 'Uploaded image' : 'None') : value
+
 /** Every change a draft makes, with its value now and in the draft. */
 export function ChangeList({ changes }: { changes: DesignChange[] }) {
   // A font change shows once, not once per field of the font.
@@ -50,11 +55,11 @@ export function ChangeList({ changes }: { changes: DesignChange[] }) {
       {shown.map((change) => (
         <li key={change.path} className="flex items-center gap-3 px-3 py-2 text-[13px]">
           <span className="w-36 shrink-0 font-medium">{changeLabel(change.path)}</span>
-          <ChangeValue value={change.before} />
+          <ChangeValue value={shownValue(change.path, change.before)} />
           <span aria-hidden="true" className="text-muted-foreground">
             →
           </span>
-          <ChangeValue value={change.after} />
+          <ChangeValue value={shownValue(change.path, change.after)} />
         </li>
       ))}
     </ul>

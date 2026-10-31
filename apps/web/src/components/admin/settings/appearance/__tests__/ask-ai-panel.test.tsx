@@ -91,6 +91,21 @@ describe('AskAiPanel', () => {
     expect(screen.getByText('Changes undone')).toBeTruthy()
   })
 
+  it('reads a switch as On and Off', () => {
+    mount({
+      turns: [
+        {
+          role: 'assistant',
+          text: 'The welcome message shows.',
+          changes: [{ path: 'pages.feedback.welcome.show', before: false, after: true }],
+        },
+      ],
+    })
+    expect(screen.getByText('Off')).toBeTruthy()
+    expect(screen.getByText('On')).toBeTruthy()
+    expect(screen.queryByText('false')).toBeNull()
+  })
+
   it('puts a picked look into the draft', () => {
     const design = defaultDesign()
     design.layout.band = 'brand'

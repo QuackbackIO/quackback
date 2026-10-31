@@ -53,11 +53,16 @@ describe('PortalBand', () => {
     expect(container.innerHTML).toBe('')
   })
 
-  it('adds nothing for a plain band with no headline, but draws a styled one', () => {
-    root.portalDesign = view(null)
-    expect(mount().container.innerHTML).toBe('')
-    cleanup()
-    root.portalDesign = view(null, 'brand')
+  it('draws no band without a headline, whatever its style', () => {
+    for (const band of ['none', 'brand', 'tint', 'fade']) {
+      root.portalDesign = view(null, band)
+      expect(mount().container.innerHTML, band).toBe('')
+      cleanup()
+      // Nor in the preview, so the preview shows what visitors will see.
+      expect(mount({ title: {}, subtitle: {} }).container.innerHTML, band).toBe('')
+      cleanup()
+    }
+    root.portalDesign = view({ title: { en: 'Ideas' }, subtitle: {} }, 'brand')
     expect(mount().container.querySelector('[data-qb-section="band"]')).toBeTruthy()
   })
 

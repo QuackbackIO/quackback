@@ -87,9 +87,14 @@ export function modeTokens(doc: PortalDesign, vars: ThemeVariables, mode: Mode):
 /** Text readable on a background, moved in lightness only if it has to be. */
 const readableOn = (ink: string, background: string) => solveContrast(ink, [background], 4.5) ?? ink
 
+/** The brand colour's share of a tint band, and of the top of a fade. */
+export const BAND_TINT = 0.12
+export const BAND_FADE = 0.2
+
 /**
- * The band at the top of a page: plain, a tint of the subtle accent, a fade
- * from it into the page, or the accent itself. Its text stays at 4.5:1.
+ * The band at the top of a page: plain, a tint of the brand colour, a fade
+ * from a tint into the page, or the brand colour itself. Its text stays at
+ * 4.5:1.
  */
 function bandTokens(band: PortalDesign['layout']['band'], t: Required<ThemeVariables>): TokenMap {
   switch (band) {
@@ -100,15 +105,21 @@ function bandTokens(band: PortalDesign['layout']['band'], t: Required<ThemeVaria
         '--qb-band-muted': t.primaryForeground,
       }
     case 'tint': {
-      const ink = readableOn(t.foreground, t.accent)
-      return { '--qb-band-bg': t.accent, '--qb-band-ink': ink, '--qb-band-muted': ink }
-    }
-    case 'fade':
+      const tint = mixColor(t.primary, t.background, BAND_TINT)
       return {
-        '--qb-band-bg': `linear-gradient(to bottom, ${t.accent}, ${t.background})`,
-        '--qb-band-ink': readableOn(t.foreground, t.accent),
-        '--qb-band-muted': readableOn(t.mutedForeground, t.accent),
+        '--qb-band-bg': tint,
+        '--qb-band-ink': readableOn(t.foreground, tint),
+        '--qb-band-muted': readableOn(t.mutedForeground, tint),
       }
+    }
+    case 'fade': {
+      const top = mixColor(t.primary, t.background, BAND_FADE)
+      return {
+        '--qb-band-bg': `linear-gradient(to bottom, ${top}, ${t.background})`,
+        '--qb-band-ink': readableOn(t.foreground, top),
+        '--qb-band-muted': readableOn(t.mutedForeground, top),
+      }
+    }
     default:
       return {
         '--qb-band-bg': 'transparent',

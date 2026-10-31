@@ -30,6 +30,9 @@ export type DesignAiTurn =
 
 type Report = { adjustments: DesignAdjustment[]; errors: string[] }
 
+/** What a request that failed on its way says; the draft is as it was. */
+const FAILED = 'Something went wrong, so nothing changed. Try again.'
+
 /**
  * The Appearance conversation. A request's changes are already in the draft
  * when the answer arrives; the conversation only reports them.
@@ -71,6 +74,8 @@ export function useDesignAi({
           readability: result.readability,
           ...(result.outOfScope ? { widen: text } : {}),
         })
+      } catch {
+        say({ role: 'assistant', text: FAILED })
       } finally {
         setBusy(false)
       }
@@ -89,6 +94,8 @@ export function useDesignAi({
       if (result.ok)
         say({ role: 'assistant', text: 'Here are three looks to start from.', looks: result.looks })
       else say({ role: 'assistant', text: result.message })
+    } catch {
+      say({ role: 'assistant', text: FAILED })
     } finally {
       setBusy(false)
     }

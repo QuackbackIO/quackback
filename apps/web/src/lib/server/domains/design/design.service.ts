@@ -137,17 +137,14 @@ export async function getPublishedDesign(): Promise<PortalDesign | null> {
 export async function saveDraft(input: unknown, author: DesignAuthor): Promise<void> {
   const document = validateDesign(input)
   await db.transaction(async (tx) => {
-    const row = await designRow(tx, true)
-    const now = new Date()
+    let row = await designRow(tx, true)
     if (!row) {
-      await tx.insert(portalDesigns).values({
-        draft: document,
-        draftBaseRevisionId: null,
-        draftUpdatedAt: now,
-        draftUpdatedByPrincipalId: author.principalId,
-      })
-      return
+      // Two first saves can meet here, such as a person's and Quackback AI's;
+      // the second waits for the first's row and then updates it.
+      await tx.insert(portalDesigns).values({}).onConflictDoNothing()
+      row = (await designRow(tx, true))!
     }
+    const now = new Date()
     await tx
       .update(portalDesigns)
       .set({

@@ -26,10 +26,30 @@ const LABELS: Record<string, string> = {
   'layout.width': 'Page width',
   'layout.filters': 'Filters side',
   'pages.feedback.defaultSort': 'Default sort',
+  'brand.logo.display': 'Logo display',
+}
+
+const IMAGES: Record<string, string> = {
+  'brand.logo.mark.light': 'Logo',
+  'brand.logo.mark.dark': 'Dark logo',
+  'brand.logo.wordmark.light': 'Wordmark',
+  'brand.logo.wordmark.dark': 'Dark wordmark',
+  'brand.favicon': 'Favicon',
+  'brand.shareImage': 'Share image',
+}
+
+const IMAGE_PATH =
+  /^(brand\.(?:logo\.(?:mark|wordmark)\.(?:light|dark)|favicon|shareImage))(?:\.|$)/
+
+/** Whether a path holds an uploaded image, whose value is a storage key no one should read. */
+export function isImageField(path: string): boolean {
+  return IMAGE_PATH.test(path)
 }
 
 /** A change's name as the Appearance controls call it. */
 export function changeLabel(path: string): string {
+  const image = path.match(IMAGE_PATH)
+  if (image) return IMAGES[image[1]]
   const colour = path.match(/^brand\.(light|dark)\.(\w+)$/)
   if (colour) {
     const name = COLOURS[colour[2]] ?? colour[2]

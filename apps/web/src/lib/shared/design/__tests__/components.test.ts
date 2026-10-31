@@ -6,7 +6,10 @@
  */
 import { describe, expect, it } from 'vitest'
 import { contrastRatio } from '../contrast'
-import { layoutAttributes, PORTAL_ALIASES } from '../components'
+import { BAND_FADE, BAND_TINT, layoutAttributes, PORTAL_ALIASES } from '../components'
+import { mixColor } from '../color'
+import { parseOklch } from '@/lib/shared/theme/expand'
+import { hexToOklch } from '@/lib/shared/theme/colors'
 import { resolveDesign } from '../resolve'
 import { defaultDesign, type PortalDesign } from '../schema'
 
@@ -99,15 +102,21 @@ describe('the top band', () => {
     }
   })
 
-  it('tints with the subtle accent and keeps both text colours readable on it', () => {
+  it('tints with the brand colour and keeps both text colours readable on it', () => {
     const doc = design((d) => {
       d.layout.band = 'tint'
-      d.brand.light.accent = '#f59e0b'
+      d.brand.light.accent = '#7a1f35'
     })
     const resolved = resolveDesign(doc)
     for (const mode of ['light', 'dark'] as const) {
       const bg = resolved.tokens[mode]['--qb-band-bg']
-      expect(bg, mode).toBe(resolved[mode]!.accent)
+      expect(bg, mode).toBe(
+        mixColor(resolved[mode]!.primary!, resolved[mode]!.background!, BAND_TINT)
+      )
+      // A tint of burgundy leans red, never the neutral grey of hover states.
+      const { c, h } = parseOklch(hexToOklch(bg))!
+      expect(c, mode).toBeGreaterThan(0.01)
+      expect(h < 40 || h > 330, mode).toBe(true)
       expect(
         contrastRatio(resolved.tokens[mode]['--qb-band-ink'], bg),
         mode
@@ -119,10 +128,11 @@ describe('the top band', () => {
     }
   })
 
-  it('fades from the subtle accent into the page', () => {
+  it('fades from a tint of the brand colour into the page', () => {
     const resolved = resolveDesign(design((d) => (d.layout.band = 'fade')))
+    const { primary, background } = resolved.light!
     expect(resolved.tokens.light['--qb-band-bg']).toBe(
-      `linear-gradient(to bottom, ${resolved.light!.accent}, ${resolved.light!.background})`
+      `linear-gradient(to bottom, ${mixColor(primary!, background!, BAND_FADE)}, ${background})`
     )
   })
 })

@@ -53,7 +53,10 @@ export function ReviewPublishDialog({
           <DialogDescription>Visitors see these changes once you publish.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <ChangeList changes={changes} />
+          {/* A long draft scrolls here, so Publish stays in view. */}
+          <div className="max-h-[50vh] overflow-y-auto">
+            <ChangeList changes={changes} />
+          </div>
           {report.adjustments.length > 0 && (
             <p className="text-[13px] text-muted-foreground">
               {report.adjustments.length === 1
