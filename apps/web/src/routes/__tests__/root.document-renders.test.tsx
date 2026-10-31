@@ -172,6 +172,8 @@ describe('the portal’s own theme', () => {
       themeStyles: '',
       customCss: '',
       fontSans: '',
+      fontIds: [],
+      attributes: { 'data-qb-nav': 'pills' },
     },
   })
 
@@ -191,10 +193,12 @@ describe('the portal’s own theme', () => {
     bootstrap('light', design('auto'))
     const router = await mount('/feedback')
     expect(document.documentElement.hasAttribute('data-portal-theme')).toBe(true)
+    expect(document.documentElement.getAttribute('data-qb-nav')).toBe('pills')
 
     await act(() => router.navigate({ to: '/admin/inbox' } as never))
     await screen.findByText('inbox page')
     expect(document.documentElement.hasAttribute('data-portal-theme')).toBe(false)
+    expect(document.documentElement.hasAttribute('data-qb-nav')).toBe(false)
   })
 
   it('leaves the attribute off while the portal uses today’s theme', async () => {

@@ -12,14 +12,16 @@ import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
 import { cn } from '@/lib/shared/utils'
 
+// The same vote box as the portal's other cards: the standard size, the voted
+// colour on the count, and a hover edge.
 const voteBoxCls =
-  'flex w-11 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border py-1.5'
+  'group/vote flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border py-2'
 
 /** Display-only vote tally — used in the editor preview (no voting). */
 function StaticVoteBox({ voteCount }: { voteCount: number }) {
   return (
     <div className={cn(voteBoxCls, 'border-border/50 bg-muted/40 text-muted-foreground')}>
-      <ChevronUpIcon className="h-3.5 w-3.5" />
+      <ChevronUpIcon className="h-4 w-4" />
       <span className="text-sm font-semibold tabular-nums text-foreground">{voteCount}</span>
     </div>
   )
@@ -57,15 +59,28 @@ function InteractiveVoteBox({
       aria-pressed={hasVoted}
       className={cn(
         voteBoxCls,
-        'transition-colors',
+        'transition-colors duration-200',
         hasVoted
           ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
-          : 'border-border/50 bg-muted/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground/80',
+          : 'border-border/50 bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground/80',
         isPending && 'cursor-wait opacity-70'
       )}
     >
-      <ChevronUpIcon className={cn('h-3.5 w-3.5', hasVoted && 'fill-post-card-voted')} />
-      <span className="text-sm font-semibold tabular-nums text-foreground">{vc}</span>
+      <ChevronUpIcon
+        className={cn(
+          'h-4 w-4 transition-transform duration-200',
+          hasVoted && 'fill-post-card-voted',
+          !isPending && 'group-hover/vote:-translate-y-0.5'
+        )}
+      />
+      <span
+        className={cn(
+          'text-sm font-semibold tabular-nums',
+          hasVoted ? 'text-post-card-voted' : 'text-foreground'
+        )}
+      >
+        {vc}
+      </span>
     </button>
   )
 }

@@ -291,7 +291,7 @@ export function PortalHeader({
     >
       {/* Row 1: Logo + Name + Auth */}
       <div>
-        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
+        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
           <div className="flex h-12 items-center justify-between">
             <Link to="/" className="portal-header__logo flex items-center gap-2">
               {orgLogo ? (
@@ -319,7 +319,7 @@ export function PortalHeader({
 
       {/* Row 2: Navigation */}
       <div className="mt-2 overflow-x-auto scrollbar-none">
-        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
+        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
           <Navigation
             navItems={navItems}
             helpHeaderLinks={settings?.helpCenterConfig?.headerLinks}
@@ -333,9 +333,9 @@ export function PortalHeader({
 
 const navItemClass = (isActive: boolean) =>
   cn(
-    'portal-nav__item px-3 py-2 text-sm font-medium transition-colors [border-radius:calc(var(--radius)*0.8)]',
+    'portal-nav__item px-3 py-2 text-sm font-medium transition-colors [border-radius:var(--qb-nav-radius,calc(var(--radius)*0.8))]',
     isActive
-      ? 'portal-nav__item--active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)]'
+      ? 'portal-nav__item--active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)] [[data-qb-nav=underline]_&]:rounded-none [[data-qb-nav=underline]_&]:shadow-[inset_0_-2px_0_var(--qb-accent)]'
       : 'text-[var(--nav-inactive-color)] hover:text-[var(--nav-active-foreground)] hover:bg-[var(--nav-active-background)]/50'
   )
 

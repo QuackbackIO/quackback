@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normaliseColor } from '../color'
+import { mixColor, normaliseColor } from '../color'
 
 describe('normaliseColor', () => {
   it.each([
@@ -26,5 +26,18 @@ describe('normaliseColor', () => {
     ['empty text', ''],
   ])('refuses %s', (_label, input) => {
     expect(normaliseColor(input)).toBeNull()
+  })
+})
+
+describe('mixColor', () => {
+  it('mixes in oklab and returns hex', () => {
+    // Today's light hairline is 60% of the border over white.
+    expect(mixColor('#d4d4d4', '#ffffff', 0.6)).toBe('#e5e5e5')
+    expect(mixColor('#262626', '#0a0a0a', 1)).toBe('#262626')
+    expect(mixColor('#262626', '#0a0a0a', 0)).toBe('#0a0a0a')
+  })
+
+  it('takes oklch as well as hex', () => {
+    expect(mixColor('oklch(0.922 0 0)', '#ffffff', 1)).toBe('#e5e5e5')
   })
 })

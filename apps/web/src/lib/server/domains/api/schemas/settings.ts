@@ -233,3 +233,128 @@ registerPath('/settings/receipts/{receiptId}/undo', {
     },
   },
 })
+
+// ── Portal design ─────────────────────────────────────────────────────────────
+
+const DesignStateSchema = z
+  .object({
+    design: z.record(z.string(), z.unknown()).meta({
+      description: 'The portal design document: brand, shape, layout, pages, menu and words.',
+    }),
+    source: z.enum(['draft', 'published', 'converted']).meta({
+      description:
+        'What is being edited: the draft, else the published design, else the branding settings converted.',
+    }),
+    published: z
+      .object({ revisionId: z.string(), number: z.number().int() })
+      .nullable()
+      .meta({ description: 'The version visitors see, or null before the first publish.' }),
+    report: z.object({
+      adjustments: z.array(z.record(z.string(), z.unknown())).meta({
+        description: 'Colours the contrast solver changed so every pair stays readable.',
+      }),
+      errors: z.array(z.string()).meta({ description: 'Pairs it could not fix.' }),
+    }),
+    revision: RevisionSchema,
+  })
+  .meta({ id: 'PortalDesignState' })
+
+const DesignVersionSchema = z
+  .object({
+    id: z.string(),
+    number: z.number().int(),
+    source: z.enum(['appearance', 'ai', 'api', 'mcp', 'import', 'conversion', 'restore']),
+    message: z.string().nullable(),
+    principalId: z.string().nullable(),
+    createdAt: z.string(),
+  })
+  .meta({ id: 'PortalDesignVersion' })
+
+registerPath('/settings/portal_design', {
+  get: {
+    tags: ['Settings'],
+    summary: 'Get the portal design',
+    description:
+      'Returns the design being edited (the draft, else the published design, else the branding settings converted), its contrast report and its revision, which is also the ETag. Requires the read:settings scope and the settings.branding permission.',
+    responses: {
+      200: {
+        description: 'The design',
+        headers: { ETag: { description: 'The revision, quoted', schema: { type: 'string' } } },
+        content: {
+          'application/json': {
+            schema: createItemResponseSchema(DesignStateSchema, 'Portal design'),
+          },
+        },
+      },
+      ...errorResponses(403),
+    },
+  },
+  patch: {
+    tags: ['Settings'],
+    summary: 'Change the portal design draft',
+    description:
+      'Applies a JSON merge patch to the design being edited and saves the result as the draft. Nothing goes live until a person publishes the draft in Settings › Portal. If-Match must carry the revision you read: 428 when missing, 412 when stale. A design that fails the schema answers 400 with INVALID_DESIGN, and one whose ink cannot be read answers 400 with UNREADABLE_DESIGN. Requires the write:settings scope and the settings.branding permission.',
+    parameters: [
+      {
+        name: 'If-Match',
+        in: 'header',
+        required: true,
+        schema: { type: 'string' },
+        description: 'The revision from the last read.',
+      },
+    ],
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: { type: 'object', description: 'A JSON merge patch (RFC 7386).' },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Saved as the draft',
+        headers: { ETag: { description: 'The new revision, quoted', schema: { type: 'string' } } },
+        content: {
+          'application/json': {
+            schema: createItemResponseSchema(DesignStateSchema, 'Portal design'),
+          },
+        },
+      },
+      ...errorResponses(400, 403, 412, 428),
+    },
+  },
+})
+
+registerPath('/settings/portal_design/draft', {
+  delete: {
+    tags: ['Settings'],
+    summary: 'Discard the portal design draft',
+    description:
+      'Discards the draft. The published design stays as it is. Requires the write:settings scope and the settings.branding permission.',
+    responses: {
+      204: { description: 'Discarded' },
+      ...errorResponses(403),
+    },
+  },
+})
+
+registerPath('/settings/portal_design/versions', {
+  get: {
+    tags: ['Settings'],
+    summary: 'List portal design versions',
+    description:
+      'Published versions of the portal design, newest first. A person restores one in Settings › Portal. Requires the read:settings scope and the settings.branding permission.',
+    responses: {
+      200: {
+        description: 'The versions',
+        content: {
+          'application/json': {
+            schema: createItemResponseSchema(z.array(DesignVersionSchema), 'Versions'),
+          },
+        },
+      },
+      ...errorResponses(403),
+    },
+  },
+})

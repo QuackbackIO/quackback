@@ -312,7 +312,9 @@ function RootDocument({
   // that one expected mismatch (one element, one level).
   // A portal page rendered by the design engine scopes its theme to this
   // attribute, so dialogs portaled to <body> carry it and the admin never does.
-  const portalThemeScope = isPortalRoute && settings?.portalDesign?.engine === 'v2' ? '' : undefined
+  const portalDesign = isPortalRoute ? settings?.portalDesign : undefined
+  const portalThemeScope = portalDesign?.engine === 'v2' ? '' : undefined
+  const portalThemeAttributes = portalDesign?.engine === 'v2' ? portalDesign.attributes : undefined
 
   return (
     <html
@@ -321,6 +323,7 @@ function RootDocument({
       className={themeClass}
       style={{ colorScheme }}
       data-portal-theme={portalThemeScope}
+      {...portalThemeAttributes}
       suppressHydrationWarning
     >
       <head>

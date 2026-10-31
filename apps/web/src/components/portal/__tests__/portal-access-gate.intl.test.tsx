@@ -39,8 +39,6 @@ function renderGate() {
       workspaceName="Acme Corp"
       logoUrl={null}
       authConfig={authConfig}
-      themeStyles=""
-      customCss=""
       userEmail={null}
     />
   )

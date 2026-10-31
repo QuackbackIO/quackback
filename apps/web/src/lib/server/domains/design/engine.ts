@@ -8,7 +8,8 @@
  * workspace on legacy, whatever the flag says.
  */
 import { convertLegacyBranding, type LegacyBranding } from '@/lib/shared/design/convert'
-import { fontStack } from '@/lib/shared/design/fonts'
+import { layoutAttributes } from '@/lib/shared/design/components'
+import { designFontIds, fontStack } from '@/lib/shared/design/fonts'
 import { renderDesignCss, resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { PortalDesignView } from '@/lib/shared/design/view'
@@ -21,6 +22,31 @@ export interface DesignSourceInput {
   flagOn: boolean
   published: { document: PortalDesign; number: number } | null
   legacy: LegacyBranding & { customCss: string }
+}
+
+/** The settings a workspace's branding is read from, as the converter takes them. */
+export interface LegacySettings {
+  brandingConfig: LegacyBranding['brandingConfig']
+  portalConfig?: LegacyBranding['portalConfig']
+  customCss?: string | null
+  logoKey?: string | null
+  headerLogoKey?: string | null
+  faviconKey?: string | null
+  headerDisplayMode?: string | null
+  headerDisplayName?: string | null
+}
+
+export function legacyBrandingOf(settings: LegacySettings): DesignSourceInput['legacy'] {
+  return {
+    brandingConfig: settings.brandingConfig,
+    portalConfig: settings.portalConfig,
+    logoKey: settings.logoKey,
+    headerLogoKey: settings.headerLogoKey,
+    faviconKey: settings.faviconKey,
+    headerDisplayMode: settings.headerDisplayMode,
+    headerDisplayName: settings.headerDisplayName,
+    customCss: settings.customCss ?? '',
+  }
 }
 
 /** Custom CSS without comments or whitespace: what a switch would have to carry over. */
@@ -50,5 +76,7 @@ export function portalDesignView(source: DesignSource): PortalDesignView {
     themeStyles: renderDesignCss(resolveDesign(doc)),
     customCss: doc.css ? `@layer tenant {\n${doc.css}\n}` : '',
     fontSans: fontStack(doc.brand.fonts.body),
+    fontIds: designFontIds(doc),
+    attributes: layoutAttributes(doc),
   }
 }

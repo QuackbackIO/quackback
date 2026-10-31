@@ -33,3 +33,16 @@ export function PortalDesignStyle({ themeStyles, customCss }: PortalDesignStyleP
     </>
   )
 }
+
+/**
+ * The same two style elements, for a route's `head()`: they land after the
+ * app stylesheet, so they still override it, and they parse before the body.
+ */
+export function portalDesignStyles({
+  themeStyles,
+  customCss,
+}: PortalDesignStyleProps): Array<{ children: string }> {
+  return [themeStyles, customCss]
+    .filter(Boolean)
+    .map((css) => ({ children: escapeInlineStyle(css) }))
+}

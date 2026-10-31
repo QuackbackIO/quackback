@@ -132,7 +132,7 @@ function StatusPage() {
   const historyItems = historyPages?.pages.flatMap((page) => page.items) ?? []
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 py-8 sm:px-6">
       <PortalPageHeader
         size="large"
         title={intl.formatMessage({ id: 'portal.status.title', defaultMessage: 'Status' })}
@@ -400,13 +400,13 @@ function StatusPageNotFound() {
   const signInCouldGrantAccess = useStatusSignInCouldGrantAccess()
   if (signInCouldGrantAccess) {
     return (
-      <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-16 text-center">
+      <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-16 text-center">
         <StatusSignInPrompt />
       </div>
     )
   }
   return (
-    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-16 text-center">
+    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-16 text-center">
       <h1 className="text-2xl font-bold mb-2">
         <FormattedMessage
           id="portal.status.notFound.title"

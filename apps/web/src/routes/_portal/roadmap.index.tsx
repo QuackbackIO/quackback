@@ -76,7 +76,7 @@ function RoadmapPage() {
     // internally instead of pushing the body taller. 7rem ≈ PortalHeader. On a
     // phone the title and toolbar leave too little of that height, so the
     // page grows and the columns keep a usable height instead of clipping.
-    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-8 min-h-[calc(100dvh-7rem)] sm:h-[calc(100dvh-7rem)] flex flex-col sm:min-h-0">
+    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-8 min-h-[calc(100dvh-7rem)] sm:h-[calc(100dvh-7rem)] flex flex-col sm:min-h-0">
       <div className="mb-6 animate-in fade-in duration-200 fill-mode-backwards">
         <h1 className="text-3xl font-bold mb-2">
           <FormattedMessage id="portal.roadmap.title" defaultMessage="Roadmap" />

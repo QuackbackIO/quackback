@@ -45,6 +45,7 @@ import { registerTicketTools } from './tickets'
 import { registerFileTools } from './files'
 import { registerWidgetTools } from './widget'
 import { registerSettingsTools } from './settings'
+import { registerPortalDesignTools } from './portal-design'
 import { registerNavigationTools } from './navigation'
 import { registerApprovalTools } from './approvals'
 
@@ -60,6 +61,7 @@ export function registerTools(server: McpServer, auth: McpAuthContext) {
   registerFileTools(server, auth)
   registerWidgetTools(server, auth)
   registerSettingsTools(server, auth)
+  registerPortalDesignTools(server, auth)
   registerNavigationTools(server, auth)
   registerApprovalTools(server, auth)
 }

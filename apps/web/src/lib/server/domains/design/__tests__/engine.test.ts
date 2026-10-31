@@ -94,6 +94,7 @@ describe('portalDesignView', () => {
     if (view.engine !== 'v2') throw new Error('expected v2')
     expect(view.themeStyles).toContain('[data-portal-theme] {')
     expect(view.customCss).toBe('@layer tenant {\n.qb-post-card { border-width: 2px }\n}')
+    expect(view.fontIds).toEqual(['inter'])
   })
 
   it('has no design CSS when the design has none', () => {
