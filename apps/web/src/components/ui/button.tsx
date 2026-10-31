@@ -8,7 +8,7 @@ import { cn } from '@/lib/shared/utils'
 
 const buttonVariants = cva(
   [
-    'inline-flex items-center justify-center gap-2 shrink-0 rounded-[var(--qb-radius-button,var(--radius-item))]',
+    'inline-flex items-center justify-center gap-2 shrink-0 rounded-item',
     'text-sm font-medium whitespace-nowrap',
     'cursor-pointer',
     'transition-all duration-200 ease-out',

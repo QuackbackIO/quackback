@@ -29,7 +29,8 @@ export const PORTAL_ALIASES: Record<string, `--qb-${string}`> = {
   '--nav-active-foreground': '--qb-nav-active-ink',
   '--nav-inactive-color': '--qb-nav-ink',
   '--post-card-voted-color': '--qb-vote-active',
-  '--radius-item': '--qb-radius-control',
+  // Buttons, badges and tabs: a button shape, when the design gives one, else the corners.
+  '--radius-item': '--qb-radius-button',
   '--radius-field': '--qb-radius-field',
   '--radius-panel': '--qb-radius-panel',
 }

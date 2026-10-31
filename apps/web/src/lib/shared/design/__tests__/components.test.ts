@@ -431,7 +431,7 @@ describe('PORTAL_ALIASES', () => {
   it('points the portal’s own variables at the tokens', () => {
     expect(PORTAL_ALIASES['--header-background']).toBe('--qb-header-bg')
     expect(PORTAL_ALIASES['--nav-inactive-color']).toBe('--qb-nav-ink')
-    expect(PORTAL_ALIASES['--radius-item']).toBe('--qb-radius-control')
+    expect(PORTAL_ALIASES['--radius-item']).toBe('--qb-radius-button')
     expect(PORTAL_ALIASES['--radius-panel']).toBe('--qb-radius-panel')
   })
 })
