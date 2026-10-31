@@ -32,7 +32,7 @@ export function fieldGuide(blockTypes: readonly HomeBlockType[], writesCss: bool
     'nav.items: the menu in order. Pages: {"type": feedback, roadmap, changelog, help, support or status, "shown": true or false, "label": optional}. Links: {"type":"link","id","label","url","newTab"}, only links the person gave. With Home off, show at least one page.',
     `vocabulary.post (what visitors post): ${DESIGN_OPTIONS.postWord.join(', ')}. vocabulary.board (what groups them): ${DESIGN_OPTIONS.boardWord.join(', ')}.`,
     writesCss &&
-      `css: the workspace's own CSS, styling the portal's parts by name, [data-qb-part="post-card"]. Parts: ${PORTAL_PARTS.map((part) => part.name).join(', ')}. Only for what no field above can do; no url() or @import.`,
+      `css: the workspace's own CSS, in a layer over the design, styling the portal's parts by name, [data-qb-part="post-card"], and their states, [data-qb-part="vote-button"][data-state="voted"]. Parts: ${PORTAL_PARTS.map((part) => part.name).join(', ')}. Use it for the details that make the brand recognisable and that no field above sets: how its buttons, cards, links and headings are drawn, such as borders, underlines, letter-spacing, uppercase labels or shadows. Keep it short, take colours from the brand, and never use url() or @import.`,
   ]
     .filter(Boolean)
     .join('\n')
