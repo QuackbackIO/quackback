@@ -28,6 +28,7 @@ import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
+import { useFeedCopy } from '@/components/public/preview-draft-context'
 import { homeMessages } from './home-messages'
 import { popularArticlesQuery } from './home-prefetch'
 
@@ -124,6 +125,7 @@ function WelcomeBlock({
  */
 function ComposerBlock({ block, index }: { block: HomeBlock; index: number }) {
   const intl = useIntl()
+  const copy = useFeedCopy()
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
   const open = () =>
@@ -151,7 +153,7 @@ function ComposerBlock({ block, index }: { block: HomeBlock; index: number }) {
           value={title}
           maxLength={200}
           onChange={(event) => setTitle(event.target.value)}
-          placeholder={intl.formatMessage(homeMessages.composerPlaceholder)}
+          placeholder={copy.prompt ?? intl.formatMessage(homeMessages.composerPlaceholder)}
           aria-label={intl.formatMessage(homeMessages.composerLabel)}
           className="min-w-0 flex-1 border-0 bg-transparent font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground/60"
         />
@@ -159,7 +161,7 @@ function ComposerBlock({ block, index }: { block: HomeBlock; index: number }) {
           type="submit"
           className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-[var(--qb-accent-text,var(--primary))] hover:bg-muted"
         >
-          {intl.formatMessage(homeMessages.composerContinue)}
+          {copy.submit ?? intl.formatMessage(homeMessages.composerContinue)}
         </button>
       </form>
     </BlockCard>

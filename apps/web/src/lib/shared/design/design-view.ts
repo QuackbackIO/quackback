@@ -32,6 +32,7 @@ export function designView(
       welcome: feedbackWelcome(doc),
       headline: doc.pages.feedback.headline,
       defaultSort: doc.pages.feedback.defaultSort,
+      copy: doc.pages.feedback.copy,
     },
     home: doc.pages.home,
     nav: doc.nav,

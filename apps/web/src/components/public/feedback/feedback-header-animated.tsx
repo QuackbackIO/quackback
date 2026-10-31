@@ -2,6 +2,7 @@ import type { BoardId } from '@quackback/ids'
 import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { useIntl, FormattedMessage } from 'react-intl'
+import { useFeedCopy } from '@/components/public/preview-draft-context'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -79,6 +80,7 @@ export function FeedbackHeaderAnimated({
   boardLocked = false,
 }: FeedbackHeaderProps) {
   const intl = useIntl()
+  const submitLabel = useFeedCopy().submit
   const router = useRouter()
   const queryClient = useQueryClient()
   const session = useSessionContext()
@@ -569,7 +571,12 @@ export function FeedbackHeaderAnimated({
                       defaultMessage="Submitting..."
                     />
                   ) : (
-                    <FormattedMessage id="portal.feedback.header.submit" defaultMessage="Submit" />
+                    (submitLabel ?? (
+                      <FormattedMessage
+                        id="portal.feedback.header.submit"
+                        defaultMessage="Submit"
+                      />
+                    ))
                   )}
                 </Button>
               </div>
@@ -602,17 +609,21 @@ function TitleInput({
   onExpand: () => void
 }) {
   const intl = useIntl()
+  const copy = useFeedCopy()
   const value = useStoreValue(title)
   return (
     <motion.input
       ref={inputRef}
       type="text"
       maxLength={TITLE_MAX_LENGTH}
-      placeholder={intl.formatMessage({
-        id: 'portal.feedback.header.titlePlaceholder',
-        defaultMessage:
-          "{postWord, select, post {What's on your mind?} feature_request {What should we build?} suggestion {What's your suggestion?} other {What's your idea?}}",
-      })}
+      placeholder={
+        copy.prompt ??
+        intl.formatMessage({
+          id: 'portal.feedback.header.titlePlaceholder',
+          defaultMessage:
+            "{postWord, select, post {What's on your mind?} feature_request {What should we build?} suggestion {What's your suggestion?} other {What's your idea?}}",
+        })
+      }
       value={value}
       aria-label={intl.formatMessage({
         id: 'portal.feedback.header.titleLabel',

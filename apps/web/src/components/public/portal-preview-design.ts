@@ -30,6 +30,20 @@ export interface DesignPreview {
   nav: Nav | null
   /** The words the draft's messages select on. */
   words: PortalWords | null
+  /** The draft's own wording, by language. */
+  copy: Partial<Record<'prompt' | 'submit' | 'emptyTitle', Record<string, string>>> | null
+}
+
+const COPY_FIELDS = ['prompt', 'submit', 'emptyTitle'] as const
+
+function readCopy(value: unknown): DesignPreview['copy'] {
+  if (!value || typeof value !== 'object') return null
+  const copy: NonNullable<DesignPreview['copy']> = {}
+  for (const field of COPY_FIELDS) {
+    const byLocale = (value as Record<string, unknown>)[field]
+    if (byLocale && typeof byLocale === 'object' && isTextByLocale(byLocale)) copy[field] = byLocale
+  }
+  return copy
 }
 
 /** The design's word choices (its options' postWord and boardWord). */
@@ -104,7 +118,7 @@ const DESIGN_VALUE = /^[a-z_]+$/
 /** The message's design, keeping only the structural attributes a design sets. */
 export function readDesignPreview(value: unknown): DesignPreview | null {
   if (!value || typeof value !== 'object') return null
-  const { css, attributes, fontIds, headline, home, nav, vocabulary } = value as Record<
+  const { css, attributes, fontIds, headline, home, nav, vocabulary, copy } = value as Record<
     string,
     unknown
   >
@@ -123,6 +137,7 @@ export function readDesignPreview(value: unknown): DesignPreview | null {
     home: readHome(home),
     nav: readNav(nav),
     words: readWords(vocabulary),
+    copy: readCopy(copy),
   }
 }
 

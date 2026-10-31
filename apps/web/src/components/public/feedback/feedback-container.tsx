@@ -48,6 +48,7 @@ import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { shownName } from '@/lib/shared/greeting-name'
 import { takeArrivedTitle, useFeedHandoff } from '@/components/public/feedback/feed-input-handoff'
+import { useFeedCopy } from '@/components/public/preview-draft-context'
 
 const EMPTY_VIEW_MESSAGES: Record<PublicFeedView, MessageDescriptor> = {
   mine: {
@@ -174,6 +175,7 @@ export function FeedbackContainer({
   postsFilters,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
+  const feedCopy = useFeedCopy()
   const router = useRouter()
   const session = useSessionContext()
   const { filters, setFilters, clearFilters, activeFilterCount } = usePublicFilters()
@@ -589,11 +591,12 @@ export function FeedbackContainer({
               ) : (
                 <div className="text-center py-10 px-4 space-y-3">
                   <p className="text-base font-medium text-foreground">
-                    {intl.formatMessage({
-                      id: 'portal.feedback.list.noPostsYetTitle',
-                      defaultMessage:
-                        '{postWord, select, post {Got something to say? Be the first to post} feature_request {Need a feature? Be the first to request it} suggestion {Got a suggestion? Be the first to share it} other {Got an idea? Be the first to share it}}',
-                    })}
+                    {feedCopy.emptyTitle ??
+                      intl.formatMessage({
+                        id: 'portal.feedback.list.noPostsYetTitle',
+                        defaultMessage:
+                          '{postWord, select, post {Got something to say? Be the first to post} feature_request {Need a feature? Be the first to request it} suggestion {Got a suggestion? Be the first to share it} other {Got an idea? Be the first to share it}}',
+                      })}
                   </p>
                   <p className="text-sm text-muted-foreground max-w-sm mx-auto">
                     {intl.formatMessage(

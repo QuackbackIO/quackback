@@ -36,6 +36,12 @@ const LABELS: Record<string, string> = {
   'pages.home.blocks': 'Home blocks',
 }
 
+const COPY_LABELS: Record<string, string> = {
+  prompt: 'Composer prompt',
+  submit: 'Submit button',
+  emptyTitle: 'Empty feed title',
+}
+
 const IMAGES: Record<string, string> = {
   'brand.logo.mark.light': 'Logo',
   'brand.logo.mark.dark': 'Dark logo',
@@ -62,6 +68,8 @@ export function changeLabel(path: string): string {
     const name = COLOURS[colour[2]] ?? colour[2]
     return colour[1] === 'dark' ? `Dark ${name.toLowerCase()}` : name
   }
+  const copy = path.match(/^pages\.feedback\.copy\.(prompt|submit|emptyTitle)/)
+  if (copy) return COPY_LABELS[copy[1]!]!
   if (path.startsWith('pages.feedback.welcome.body')) return 'Welcome message text'
   if (path === 'pages.feedback.welcome.show') return 'Welcome message'
   const headline = path.match(/^pages\.(feedback|home)\.headline(?:\.(title|subtitle))?/)

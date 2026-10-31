@@ -16,6 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { LanguagePicker } from './language-picker'
 import { SettingRow } from '@/components/admin/settings/setting-row'
 import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-body-editor'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -30,6 +31,7 @@ import { BLOCK_WIDTHS, DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PostWord } from './words'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { SupportedLocale } from '@/lib/shared/i18n'
 
 type Update = (change: (draft: PortalDesign) => void) => void
 
@@ -52,9 +54,6 @@ const PLUS =
   'M8 2.75a.75.75 0 0 1 .75.75v3.75h3.75a.75.75 0 0 1 0 1.5H8.75v3.75a.75.75 0 0 1-1.5 0V8.75H3.5a.75.75 0 0 1 0-1.5h3.75V3.5A.75.75 0 0 1 8 2.75Z'
 const CROSS =
   'M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 0 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06Z'
-
-/** The language the headline is written in here; other languages fall back to it. */
-const HEADLINE_LOCALE = 'en'
 
 /** Home holds at most this many blocks. */
 const MAX_BLOCKS = 12
@@ -122,6 +121,8 @@ export function HomeSection({
   onEdit: () => void
 }) {
   const home = design.pages.home
+  // The language the headline is written in; each visitor sees theirs, else the closest.
+  const [headlineLocale, setHeadlineLocale] = useState<SupportedLocale>('en')
   const on = design.nav.home.on
   const edit: Update = (change) => {
     update(change)
@@ -149,6 +150,13 @@ export function HomeSection({
       />
       {on && (
         <>
+          <div className="flex justify-end">
+            <LanguagePicker
+              value={headlineLocale}
+              onChange={setHeadlineLocale}
+              label="Headline language"
+            />
+          </div>
           {(['title', 'subtitle'] as const).map((field) => (
             <div key={field} className="space-y-1.5">
               <label htmlFor={`design-home-${field}`} className="text-[13px] font-medium">
@@ -156,14 +164,14 @@ export function HomeSection({
               </label>
               <Input
                 id={`design-home-${field}`}
-                value={home.headline?.[field][HEADLINE_LOCALE] ?? ''}
+                value={home.headline?.[field][headlineLocale] ?? ''}
                 maxLength={280}
                 onChange={(event) =>
                   edit((draft) => {
                     const headline = draft.pages.home.headline ?? { title: {}, subtitle: {} }
                     const text = event.target.value
-                    if (text) headline[field][HEADLINE_LOCALE] = text
-                    else delete headline[field][HEADLINE_LOCALE]
+                    if (text) headline[field][headlineLocale] = text
+                    else delete headline[field][headlineLocale]
                     const empty =
                       Object.keys(headline.title).length + Object.keys(headline.subtitle).length ===
                       0

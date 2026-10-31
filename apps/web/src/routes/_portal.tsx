@@ -10,6 +10,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
+import { FeedCopyContext } from '@/components/public/preview-draft-context'
 import { PortalPreviewProvider } from '@/components/public/portal-preview-listener'
 import { getMyPortalPermissionsFn } from '@/lib/server/functions/portal-permissions'
 import { PortalPermissionsProvider } from '@/lib/client/hooks/use-portal-permissions'
@@ -378,6 +379,13 @@ function PortalLayout() {
     permissionKeys,
   } = loaderData
   const words = usePublishedPortalWords()
+  const feedCopy = useRouteContext({
+    from: '__root__',
+    select: (context) =>
+      context.settings?.portalDesign?.engine === 'v2'
+        ? context.settings.portalDesign.feedback.copy
+        : undefined,
+  })
 
   return (
     <PortalIntlProvider locale={locale} messages={messages} words={words}>
@@ -391,26 +399,28 @@ function PortalLayout() {
           />
           {/* Draft bridge for the admin branding preview; renders children
               untouched (and provides no context) outside preview mode. */}
-          <PortalPreviewProvider enabled={preview === true}>
-            <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
-            <div data-portal="" className="min-h-screen bg-background flex flex-col">
-              <PortalHeader
-                orgName={workspaceName}
-                orgLogo={brandingData?.logoUrl ?? null}
-                userRole={userRole}
-                initialUserData={initialUserData}
-                // The toggle is inert under a forced theme, and the preview
-                // always forces one — hide it there.
-                showThemeToggle={themeMode === 'user' && !preview}
-              />
-              <main className="flex-1 w-full flex flex-col">
-                <FileViewerProvider onJumpToMessage={scrollToMessage}>
-                  <Outlet />
-                </FileViewerProvider>
-              </main>
-              <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
-            </div>
-          </PortalPreviewProvider>
+          <FeedCopyContext.Provider value={feedCopy}>
+            <PortalPreviewProvider enabled={preview === true}>
+              <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
+              <div data-portal="" className="min-h-screen bg-background flex flex-col">
+                <PortalHeader
+                  orgName={workspaceName}
+                  orgLogo={brandingData?.logoUrl ?? null}
+                  userRole={userRole}
+                  initialUserData={initialUserData}
+                  // The toggle is inert under a forced theme, and the preview
+                  // always forces one — hide it there.
+                  showThemeToggle={themeMode === 'user' && !preview}
+                />
+                <main className="flex-1 w-full flex flex-col">
+                  <FileViewerProvider onJumpToMessage={scrollToMessage}>
+                    <Outlet />
+                  </FileViewerProvider>
+                </main>
+                <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
+              </div>
+            </PortalPreviewProvider>
+          </FeedCopyContext.Provider>
         </AuthPopoverProvider>
       </PortalPermissionsProvider>
     </PortalIntlProvider>

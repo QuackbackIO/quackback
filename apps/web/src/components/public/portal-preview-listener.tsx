@@ -6,6 +6,8 @@ import {
   PreviewAttributesContext,
   PreviewHeadlineContext,
   PreviewPagesContext,
+  FeedCopyContext,
+  type FeedCopy,
   type PreviewDesignPages,
   type PortalPreviewDraft,
 } from './preview-draft-context'
@@ -147,11 +149,13 @@ export function PortalPreviewProvider({
       <PreviewHeadlineContext.Provider value={design ? design.headline : undefined}>
         <PreviewPagesContext.Provider value={pages}>
           <PreviewAttributesContext.Provider value={design?.attributes}>
-            {design?.words ? (
-              <PortalWordsIntl words={design.words}>{children}</PortalWordsIntl>
-            ) : (
-              children
-            )}
+            <DraftCopy copy={design?.copy}>
+              {design?.words ? (
+                <PortalWordsIntl words={design.words}>{children}</PortalWordsIntl>
+              ) : (
+                children
+              )}
+            </DraftCopy>
           </PreviewAttributesContext.Provider>
         </PreviewPagesContext.Provider>
       </PreviewHeadlineContext.Provider>
@@ -162,4 +166,10 @@ export function PortalPreviewProvider({
       ) : null}
     </PreviewDraftProvider>
   )
+}
+
+/** The draft's own wording in place of the saved design's, while previewing a design. */
+function DraftCopy({ copy, children }: { copy: FeedCopy | null | undefined; children: ReactNode }) {
+  if (!copy) return children
+  return <FeedCopyContext.Provider value={copy}>{children}</FeedCopyContext.Provider>
 }

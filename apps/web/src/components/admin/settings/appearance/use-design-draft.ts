@@ -148,6 +148,7 @@ export function useDesignDraft() {
       home: view.home,
       nav: view.nav,
       vocabulary: view.vocabulary,
+      copy: view.feedback.copy,
     }
   }, [design])
 
