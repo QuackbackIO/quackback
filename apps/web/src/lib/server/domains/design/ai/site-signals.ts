@@ -14,11 +14,16 @@ import { fetchFollowingRedirects } from '@/lib/server/content/unfurl'
 import { logger } from '@/lib/server/logger'
 import { isStandardWebsiteUrl, parseWebsiteInput } from '@/lib/shared/website-branding'
 import { isBlockPage, pageLinks, readSiteBrand, type SiteBrand } from './site-brand'
+import { findHeaderLogo, findShareImage, resolveSvgColours, type LogoCandidate } from './site-logo'
 
 const log = logger.child({ module: 'site-signals' })
 
 export interface SiteSignals extends SiteBrand {
   domain: string
+  /** Its header logo: inline, with the colours it takes from the page written in, or an address. */
+  logo: LogoCandidate | null
+  /** The image it gives link previews. */
+  shareImage: string | null
 }
 
 export type SiteRead =
@@ -122,13 +127,25 @@ export async function readSiteSignals(site: string): Promise<SiteRead> {
       manifest(links.manifest ? [links.manifest] : MANIFEST_PATHS.map((path) => origin + path)),
       stylesheets(links.stylesheets),
     ])
-    const brand = readSiteBrand({
-      html: found.html,
-      css: [links.inlineCss, ...css],
-      manifest: siteManifest,
-    })
-    log.info({ host, colour: brand.colour, stylesheets: css.length }, 'website read for its brand')
-    return { ok: true, signals: { domain: host, ...brand } }
+    const sheets = [links.inlineCss, ...css]
+    const brand = readSiteBrand({ html: found.html, css: sheets, manifest: siteManifest })
+    const header = findHeaderLogo(found.html, found.url)
+    const logo =
+      header && 'svg' in header
+        ? { svg: resolveSvgColours(header.svg, sheets, brand.colour ?? '#111111') }
+        : header
+    const shareImage = findShareImage(found.html, found.url)
+    log.info(
+      {
+        host,
+        colour: brand.colour,
+        stylesheets: css.length,
+        logo: !!logo,
+        shareImage: !!shareImage,
+      },
+      'website read for its brand'
+    )
+    return { ok: true, signals: { domain: host, ...brand, logo, shareImage } }
   }
   if (blocked) {
     // The page refused, but a manifest is a static file sites often serve to anyone.
@@ -136,7 +153,7 @@ export async function readSiteSignals(site: string): Promise<SiteRead> {
     const brand = siteManifest ? readSiteBrand({ html: '', css: [], manifest: siteManifest }) : null
     if (brand && (brand.colour || brand.title)) {
       log.info({ host }, 'website blocked its page; read its manifest')
-      return { ok: true, signals: { domain: host, ...brand } }
+      return { ok: true, signals: { domain: host, ...brand, logo: null, shareImage: null } }
     }
   }
   log.info({ host, blocked }, 'website could not be read for its brand')

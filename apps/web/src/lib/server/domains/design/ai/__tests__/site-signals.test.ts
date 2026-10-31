@@ -33,8 +33,9 @@ const HOME = `<!doctype html><html><head>
   <meta name="description" content="Tools for teams who ship.">
   <link rel="stylesheet" href="/assets/site.css">
   <link rel="manifest" href="/site.webmanifest">
+  <meta property="og:image" content="/og.jpg">
   <style>.btn-primary { background: #0f766e; }</style>
-</head><body>Hello</body></html>`
+</head><body><header><a class="site-logo" href="/"><svg viewBox="0 0 120 30"><path fill="var(--brand-primary)"/></svg></a></header></body></html>`
 
 const CSS = `:root { --brand-primary: #0f766e; --grey: #e5e7eb; }
 body { background: #fffdf8; font-family: "IBM Plex Sans", sans-serif; }
@@ -70,6 +71,9 @@ describe('readSiteSignals', () => {
         button: '#0f766e',
         bold: false,
         monochrome: false,
+        // The header logo with the colour its page gives it, and the link preview image.
+        logo: { svg: '<svg viewBox="0 0 120 30"><path fill="#0f766e"/></svg>' },
+        shareImage: 'https://example.com/og.jpg',
       },
     })
     expect(web.asked[0]!.agent).toMatch(/QuackbackBrandReader/)

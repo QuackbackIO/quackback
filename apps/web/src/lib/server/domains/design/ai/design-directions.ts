@@ -6,128 +6,22 @@
  * so the schema, the contrast solver and the workspace's pages decide what
  * reaches it.
  */
-import { z } from 'zod'
 import type { ContentPart } from '@tanstack/ai'
 import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { logger } from '@/lib/server/logger'
 import { applyDesignChanges, type UntrustedChanges } from '@/lib/shared/design/apply-changes'
-import { BLOCK_WIDTHS, BUNDLED_FONT_IDS, DESIGN_OPTIONS } from '@/lib/shared/design/options'
-import type { HomeBlockType } from '@/lib/shared/design/home'
 import { brandColour, colourVividness } from '@/lib/shared/design/palette'
 import { applyPreset, DESIGN_PRESETS } from '@/lib/shared/design/presets'
+import { directionsPrompt, directionsSchema, type Look } from './design-looks'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { designAiModel, isStructuredOutputError, paletteText } from './design-ai'
+import type { SiteAssets } from './site-assets'
 import type { SiteSignals } from './site-signals'
 
 const log = logger.child({ module: 'design-directions' })
 
-const PRESET_IDS = DESIGN_PRESETS.map((preset) => preset.id) as [string, ...string[]]
-const BLOCK_TYPES = Object.keys(BLOCK_WIDTHS) as [HomeBlockType, ...HomeBlockType[]]
-const WIDTHS = ['third', 'half', 'two_thirds', 'full'] as const
-const hex = z.string().max(32)
-
-const lookSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  preset: z.enum(PRESET_IDS),
-  mode: z.enum(DESIGN_OPTIONS.mode),
-  accent: hex,
-  background: hex,
-  ink: hex,
-  /** Cards, or "" to derive them from the background. */
-  surface: hex,
-  /** Dark mode's page and text, or "" to derive them. */
-  darkBackground: hex,
-  darkInk: hex,
-  headingFont: z.enum(BUNDLED_FONT_IDS),
-  bodyFont: z.enum(BUNDLED_FONT_IDS),
-  headingWeight: z.enum(['500', '600', '700', '800']),
-  corners: z.enum(DESIGN_OPTIONS.corners),
-  header: z.enum(['stacked', 'inline', 'centered']),
-  nav: z.enum(DESIGN_OPTIONS.nav),
-  band: z.enum(['none', 'tint', 'fade', 'brand']),
-  cards: z.enum(DESIGN_OPTIONS.cards),
-  density: z.enum(DESIGN_OPTIONS.density),
-  width: z.enum(DESIGN_OPTIONS.width),
-  headline: z.string(),
-  subtitle: z.string(),
-  postWord: z.enum(DESIGN_OPTIONS.postWord),
-  boardWord: z.enum(DESIGN_OPTIONS.boardWord),
-  prompt: z.string(),
-  submit: z.string(),
-  homeHeadline: z.string(),
-  homeSubtitle: z.string(),
-  homeBlocks: z.array(z.object({ type: z.enum(BLOCK_TYPES), width: z.enum(WIDTHS) })).max(8),
-})
-type Look = z.infer<typeof lookSchema>
-
-const directionsSchema = z.object({ looks: z.array(lookSchema).min(1).max(3) })
-
-/** An answer the tests keep valid against the design. */
-export const DIRECTIONS_EXAMPLE: Look = {
-  name: 'Chalk and orange',
-  description: 'Their burnt orange as a full band, a geometric face, pill menu and plain cards.',
-  preset: 'bold',
-  mode: 'light',
-  accent: '#d9480f',
-  background: '#f7f5f2',
-  ink: '#1c1b19',
-  surface: '',
-  darkBackground: '#161412',
-  darkInk: '#f3eee8',
-  headingFont: 'space-grotesk',
-  bodyFont: 'inter',
-  headingWeight: '700',
-  corners: 'subtle',
-  header: 'inline',
-  nav: 'pills',
-  band: 'brand',
-  cards: 'bordered',
-  density: 'comfortable',
-  width: 'default',
-  headline: 'What should we set next?',
-  subtitle: 'Suggest routes, classes and kit for the walls, and vote for the ones you want.',
-  postWord: 'suggestion',
-  boardWord: 'category',
-  prompt: 'Suggest a route, a class or some kit',
-  submit: 'Suggest it',
-  homeHeadline: 'Climb with us',
-  homeSubtitle: 'Suggest what we set next, see what is coming and find help.',
-  homeBlocks: [
-    { type: 'composer', width: 'two_thirds' },
-    { type: 'contact', width: 'third' },
-    { type: 'ideas', width: 'half' },
-    { type: 'updates', width: 'half' },
-    { type: 'roadmap', width: 'full' },
-    { type: 'help_topics', width: 'full' },
-  ],
-}
-
-/** The design system Quackback AI designs with: how a brand becomes each choice. */
-function directionsPrompt(blockTypes: readonly HomeBlockType[]): string {
-  return `You design a company's customer feedback portal from their brand: three complete looks, each a whole portal. The first, Faithful, is as close to their brand as the options allow; the second is quieter; the third is bolder. Make the three clearly different in layout, type and colour.
-
-How a brand becomes each choice:
-- The first look commits to their identity as they present it, even when it is loud: their colour as they use it, never a softened version of it.
-- accent: their brand colour, exactly as given or seen. It colours buttons, links and the band. A monochrome brand, whose buttons are black or near-black and which uses colour sparingly, keeps a near-black accent, white pages and no coloured band.
-- background and ink: pages stay quiet. Use their page colour when it is light and calm, or a near-white tinted toward the brand; ink is their text colour or a near-black. surface (cards) is "" unless their cards differ from the page.
-- mode: dark when their own site is dark (then background and ink are the dark page and its light text), light when their brand is clearly light, auto otherwise. darkBackground and darkInk are dark mode's page and text, tinted toward the brand, or "".
-- fonts: the closest bundled fonts to theirs. Serif display: fraunces, playfair, lora, merriweather. Geometric: space-grotesk, poppins, manrope, bricolage-grotesque, jakarta, dm-sans. Humanist or friendly: nunito, ibm-plex-sans, lato, open-sans. Neutral: inter, geist, roboto. Monospace for developer tools: jetbrains, fira-code. Body text is usually a plainer sans than the headings.
-- headingWeight: how heavy their headings are, 500 to 800.
-- corners: sharp for strict or editorial brands, subtle for most software, rounded for friendly ones, pill for playful ones.
-- header: stacked (logo above the menu), inline (one row, for software), centered (for consumer and editorial brands). nav: tabs, underline or pills.
-- band, behind the headlines: brand when they fill large areas with their colour, such as a hero; tint or fade for most; none for minimal and monochrome brands.
-- cards: bordered, raised, or list rows for minimal and developer brands. density: compact for technical audiences, comfortable mostly, spacious for calm brands. width: narrow for editorial, wide for dense tools, default otherwise.
-- words: postWord is what visitors post: feature_request for software and developer tools, suggestion for consumer, retail and hospitality, post for communities, idea otherwise. boardWord: category for consumer brands, board otherwise.
-- headline, subtitle (the feedback page) and homeHeadline, homeSubtitle (Home), prompt (the composer, 60 characters) and submit (its button, 24): in their voice, short, inviting, never generic, never naming a competitor.
-- homeBlocks: Home, in order, on a six-column grid; each type with its widths: ${BLOCK_TYPES.map((type) => `${type} (${BLOCK_WIDTHS[type].join(', ')})`).join('; ')}. This workspace can show: ${blockTypes.join(', ')}. Lead with the composer; use what they have. Blocks in a row share its height, so pair short blocks (composer, status, contact, help_search) with each other and lists (ideas, updates, roadmap, help_topics) with each other. A row's last block grows to fill it. No links block.
-
-Presets set the starting layout: ${DESIGN_PRESETS.map((preset) => `${preset.id} (${preset.description})`).join('; ')}.
-Colours are hex such as #0f766e.
-
-Example look: ${JSON.stringify(DIRECTIONS_EXAMPLE)}`
-}
+export { DIRECTIONS_EXAMPLE } from './design-looks'
 
 /** Above this, a page background reads as a colour and drowns the brand colour on it. */
 const MAX_PAGE_VIVIDNESS = 0.2
@@ -142,7 +36,10 @@ function fit(text: string, max: number): string {
 }
 
 /** A look as changes to its preset's design, in the order they build on each other. */
-function lookChanges(look: Look): Array<{ path: string; value: unknown }> {
+function lookChanges(
+  look: Look,
+  assets: SiteAssets | null
+): Array<{ path: string; value: unknown }> {
   const dark = look.mode === 'dark'
   const page = (light: string, path: string) =>
     light ? [{ path, value: light }] : ([] as Array<{ path: string; value: unknown }>)
@@ -173,16 +70,56 @@ function lookChanges(look: Look): Array<{ path: string; value: unknown }> {
     { path: 'layout.width', value: look.width },
     { path: 'pages.feedback.headline.title', value: fit(look.headline, 80) },
     { path: 'pages.feedback.headline.subtitle', value: fit(look.subtitle, 140) },
+    // The second colour and the blend's style first: a band is checked with what it blends.
+    ...page(look.support, 'brand.light.support'),
+    ...(look.band === 'blend' ? [{ path: 'layout.blend', value: look.blend }] : []),
     { path: 'layout.band', value: look.band },
+    { path: 'layout.bandAlign', value: look.bandAlign },
+    { path: 'layout.bandShape', value: look.bandShape },
+    { path: 'layout.headerOnBand', value: look.headerOnBand },
+    { path: 'brand.fonts.scale', value: look.scale },
+    { path: 'brand.fonts.tracking', value: look.tracking },
+    { path: 'brand.fonts.headlineCase', value: look.headlineCase },
+    { path: 'brand.fonts.labelCase', value: look.labelCase },
+    { path: 'shape.buttons', value: look.buttons },
+    // Brand status colours need the logo's colours, which only an imported wordmark gives.
+    {
+      path: 'layout.status',
+      value:
+        look.status === 'brand' && (assets?.wordmark?.colours.length ?? 0) < 2
+          ? 'colour'
+          : look.status,
+    },
+    ...(assets?.wordmark
+      ? [
+          { path: 'brand.logo.wordmark.light', value: { key: assets.wordmark.key } },
+          ...(assets.wordmark.colours.length > 1
+            ? [{ path: 'brand.logoColours', value: assets.wordmark.colours }]
+            : []),
+        ]
+      : []),
+    {
+      path: 'brand.logo.display',
+      value: look.logo === 'wordmark' && !assets?.wordmark ? 'mark_and_name' : look.logo,
+    },
+    ...(assets?.shareImage && look.shareImage !== 'none'
+      ? [
+          { path: 'brand.bandImage', value: { key: assets.shareImage.key } },
+          { path: 'layout.imagePlace', value: look.shareImage },
+        ]
+      : []),
     { path: 'vocabulary.post', value: look.postWord },
     { path: 'vocabulary.board', value: look.boardWord },
     ...page(fit(look.prompt, 60), 'pages.feedback.copy.prompt'),
     ...page(fit(look.submit, 24), 'pages.feedback.copy.submit'),
+    ...accentChanges(look, 'pages.feedback.headline', look.headline),
     ...(look.homeBlocks.length
       ? [
           { path: 'pages.home.blocks', value: look.homeBlocks },
           ...page(fit(look.homeHeadline, 80), 'pages.home.headline.title'),
           ...page(fit(look.homeSubtitle, 140), 'pages.home.headline.subtitle'),
+          ...accentChanges(look, 'pages.home.headline', look.homeHeadline),
+          { path: 'pages.home.composer', value: look.composer },
           { path: 'nav.home.on', value: true },
           { path: 'nav.home.tab', value: true },
         ]
@@ -190,16 +127,30 @@ function lookChanges(look: Look): Array<{ path: string; value: unknown }> {
   ]
 }
 
+/** A headline's accent phrase, where the headline holds it. */
+function accentChanges(look: Look, headline: string, title: string) {
+  const phrase = look.accentPhrase.trim()
+  return phrase && fit(title, 80).includes(phrase)
+    ? [{ path: `${headline}.accent`, value: { style: look.accentStyle, text: { en: phrase } } }]
+    : []
+}
+
 /** A look's design: its preset with every choice it makes that the design accepts. */
 export function lookDesign(
   base: PortalDesign,
   look: Look,
-  allows: Omit<UntrustedChanges, 'links'>
+  allows: Omit<UntrustedChanges, 'links'>,
+  assets: SiteAssets | null = null
 ) {
   const preset = DESIGN_PRESETS.find((candidate) => candidate.id === look.preset)!
-  return applyDesignChanges(applyPreset(base, preset), lookChanges(look), 'site', {
+  // The files stored for this start are the only new ones a look may place.
+  const files = new Set(
+    [assets?.wordmark?.key, assets?.shareImage?.key].filter((key): key is string => !!key)
+  )
+  return applyDesignChanges(applyPreset(base, preset), lookChanges(look, assets), 'site', {
     ...allows,
     links: new Set(),
+    files,
   })
 }
 
@@ -215,16 +166,28 @@ export type DirectionsResult =
   | { ok: true; looks: DesignLook[] }
   | { ok: false; code: 'AI_UNAVAILABLE' | 'AI_FAILED'; message: string }
 
+/** Image bytes as an image part. */
+function imagePart(base64: string, mimeType: string): ContentPart {
+  return { type: 'image', source: { type: 'data', value: base64, mimeType } }
+}
+
 /** A JPEG data URL as an image part. */
-function imagePart(dataUrl: string): ContentPart {
-  return {
-    type: 'image',
-    source: {
-      type: 'data',
-      value: dataUrl.replace(/^data:image\/jpeg;base64,/, ''),
-      mimeType: 'image/jpeg',
-    },
-  }
+const jpegPart = (dataUrl: string) =>
+  imagePart(dataUrl.replace(/^data:image\/jpeg;base64,/, ''), 'image/jpeg')
+
+/** What was imported from the website, as the model reads it. */
+function assetsBrief(assets: SiteAssets | null, imageFirst: boolean): string | null {
+  if (!assets) return null
+  return [
+    assets.wordmark && 'Their wordmark was found in their header and is ready to use.',
+    assets.wordmark &&
+      assets.wordmark.colours.length > 1 &&
+      `Their logo's colours: ${assets.wordmark.colours.join(', ')}.`,
+    assets.shareImage &&
+      `Their share image, the picture link previews show, is attached as the ${imageFirst ? 'second' : 'first'} image.`,
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 /** What the website says about its brand, as the model reads it. */
@@ -257,6 +220,8 @@ export async function designDirections(input: {
   palette?: string[] | null
   /** The logo or screenshot itself, as a JPEG data URL, for a model that reads images. */
   image?: string | null
+  /** What was imported from the website, stored and ready to place. */
+  assets?: SiteAssets | null
   allows: Omit<UntrustedChanges, 'links'>
 }): Promise<DirectionsResult> {
   const model = designAiModel()
@@ -275,34 +240,40 @@ export async function designDirections(input: {
     input.palette?.length &&
       `Colours from their logo or a screenshot: ${paletteText(input.palette)}${brandColour(input.palette) ? ' Use the brand colour as the accent in the first look, as it is.' : ''}`,
     input.image &&
-      'The image is their logo or a screenshot of their website. Read their brand from it: which colour leads, whether the type is serif, geometric, humanist or condensed, how heavy the headings are, how round the shapes are, and how light or dark the pages are.',
+      'The first image is their logo or a screenshot of their website. Read their brand from it: which colour leads and which comes second, whether the type is serif, geometric, humanist or condensed, how large and heavy the headlines are, whether headlines, menu or buttons are in capitals, how round the buttons and shapes are, how the hero is laid out, and how light or dark the pages are.',
+    assetsBrief(input.assets ?? null, !!input.image),
   ]
     .filter(Boolean)
     .join('\n')
   const text = brief || 'Suggest three looks for a software company.'
-  const ask = (withImage: boolean) =>
-    structuredChat({
+  const share = input.assets?.shareImage
+  const ask = (withImages: boolean) => {
+    const images = withImages
+      ? [
+          ...(input.image ? [jpegPart(input.image)] : []),
+          ...(share ? [imagePart(share.base64, share.mimeType)] : []),
+        ]
+      : []
+    return structuredChat({
       model,
       systemPrompts: [directionsPrompt(input.allows.blockTypes)],
       messages: [
         {
           role: 'user',
-          content:
-            withImage && input.image
-              ? [{ type: 'text', content: text }, imagePart(input.image)]
-              : text,
+          content: images.length ? [{ type: 'text', content: text }, ...images] : text,
         },
       ],
       schema: directionsSchema,
       // Three complete looks are long, and some models reason before they answer.
-      maxTokens: 8000,
+      maxTokens: 10000,
     })
+  }
   try {
     // A model that does not read images still has the colours, and a long
     // answer that does not fit the schema is asked for once more.
     const once = () =>
       ask(true).catch((err: unknown) => {
-        if (!input.image || isStructuredOutputError(err)) throw err
+        if ((!input.image && !share) || isStructuredOutputError(err)) throw err
         log.warn({ err }, 'design ai could not read the image; using its colours alone')
         return ask(false)
       })
@@ -314,7 +285,7 @@ export async function designDirections(input: {
     return {
       ok: true,
       looks: answer.looks.map((look) => {
-        const { design, refused } = lookDesign(input.design, look, input.allows)
+        const { design, refused } = lookDesign(input.design, look, input.allows, input.assets)
         if (refused.length) log.info({ look: look.name, refused }, 'design look left choices out')
         return {
           name: fit(look.name, 40),

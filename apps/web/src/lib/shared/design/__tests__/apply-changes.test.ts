@@ -165,8 +165,9 @@ describe('applyDesignChanges', () => {
     expect(scopeFields('header')).toEqual([
       'layout.header',
       'layout.nav',
+      'layout.headerOnBand',
       'nav',
-      'brand.logo.display',
+      'brand.logo',
     ])
     const home = applyDesignChanges(
       defaultDesign(),
@@ -213,6 +214,35 @@ describe('applyDesignChanges', () => {
     expect(result.refused).toEqual([])
     expect(result.design.pages.feedback.copy.prompt).toEqual({ en: 'Pitch an idea' })
     expect(result.design.brand.dark?.background).toBe('#101614')
+  })
+
+  it('places only files stored for the request, never one the model names', () => {
+    const untrusted = {
+      blockTypes: [],
+      links: new Set<string>(),
+      checkCss: () => null,
+      files: new Set(['header-logos/site-abc.svg']),
+    }
+    const placed = applyDesignChanges(
+      defaultDesign(),
+      [
+        { path: 'brand.logo.wordmark.light', value: { key: 'header-logos/site-abc.svg' } },
+        { path: 'brand.logo.display', value: 'wordmark' },
+      ],
+      'site',
+      untrusted
+    )
+    expect(placed.refused).toEqual([])
+    expect(placed.design.brand.logo.wordmark.light).toEqual({ key: 'header-logos/site-abc.svg' })
+    const named = applyDesignChanges(
+      defaultDesign(),
+      [{ path: 'brand.bandImage', value: { key: 'portal-images/other.jpg' } }],
+      'site',
+      untrusted
+    )
+    expect(named.refused).toEqual([
+      { path: 'brand.bandImage', reason: 'images and fonts are uploaded in Brand' },
+    ])
   })
 
   it('keeps the rest of a Home layout from the model when a block’s page is off', () => {
