@@ -37,7 +37,8 @@ afterAll(async () => {
 
 describe('CACHE_KEYS', () => {
   it('exports the expected cache key constants', () => {
-    expect(CACHE_KEYS.WORKSPACE_SETTINGS).toBe('settings:workspace')
+    // Each build keeps its own copy of the settings.
+    expect(CACHE_KEYS.WORKSPACE_SETTINGS).toMatch(/^settings:workspace:.+/)
     expect(CACHE_KEYS.INTEGRATION_MAPPINGS).toBe('hooks:integration-mappings')
     expect(CACHE_KEYS.ACTIVE_WEBHOOKS).toBe('hooks:webhooks-active:v2')
     expect(CACHE_KEYS.SLACK_CHANNELS).toBe('slack:channels')

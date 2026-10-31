@@ -82,6 +82,7 @@ const { requireSettings, requireSettingsCached, findSettingsCached } =
   await import('../settings.helpers')
 const { runWithLogContext } = await import('@/lib/server/log-context')
 const { forgetCachedKeys } = await import('@/lib/server/local-cache')
+const { CACHE_KEYS } = await import('@/lib/server/cache')
 
 // A finished setup, so a cached copy is trusted rather than re-read.
 const COMPLETE_SETUP = JSON.stringify({
@@ -116,7 +117,7 @@ function inRequest<T>(fn: () => Promise<T>): Promise<T> {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  forgetCachedKeys('settings:workspace')
+  forgetCachedKeys(CACHE_KEYS.WORKSPACE_SETTINGS)
   kvRows.clear()
   stored = row()
 })
