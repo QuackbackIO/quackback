@@ -49,6 +49,11 @@ describe('portalTheme', () => {
       home: { headline: null, blocks: [] },
       nav: defaultDesign().nav,
       vocabulary: { post: 'idea' as const, board: 'board' as const },
+      logo: {
+        display: 'mark_and_name' as const,
+        name: null,
+        wordmark: { light: null, dark: null },
+      },
     }
     expect(portalTheme({ brandingConfig, customCss: '.x {}', portalDesign })).toEqual({
       themeMode: 'user',
@@ -75,6 +80,11 @@ describe('portalFontIds', () => {
       home: { headline: null, blocks: [] },
       nav: defaultDesign().nav,
       vocabulary: { post: 'idea' as const, board: 'board' as const },
+      logo: {
+        display: 'mark_and_name' as const,
+        name: null,
+        wordmark: { light: null, dark: null },
+      },
     }
     expect(portalFontIds({ portalDesign })).toEqual(['inter', 'fraunces'])
   })
@@ -106,6 +116,11 @@ describe('portalFontLinks', () => {
       home: { headline: null, blocks: [] },
       nav: defaultDesign().nav,
       vocabulary: { post: 'idea' as const, board: 'board' as const },
+      logo: {
+        display: 'mark_and_name' as const,
+        name: null,
+        wordmark: { light: null, dark: null },
+      },
     }
     expect(portalFontLinks({ portalDesign })).toEqual([
       {
@@ -139,6 +154,11 @@ describe('portalThemeMode', () => {
         home: { headline: null, blocks: [] },
         nav: defaultDesign().nav,
         vocabulary: { post: 'idea' as const, board: 'board' as const },
+        logo: {
+          display: 'mark_and_name' as const,
+          name: null,
+          wordmark: { light: null, dark: null },
+        },
       },
     })
     expect(portalThemeMode(v2('auto'))).toBe('user')
@@ -192,6 +212,11 @@ describe('portalDefaultSort', () => {
       home: { headline: null, blocks: [] },
       nav: defaultDesign().nav,
       vocabulary: { post: 'idea' as const, board: 'board' as const },
+      logo: {
+        display: 'mark_and_name' as const,
+        name: null,
+        wordmark: { light: null, dark: null },
+      },
     }
     expect(portalDefaultSort({ portalDesign })).toBe('new')
   })

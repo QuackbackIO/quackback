@@ -199,6 +199,7 @@ function ComposerBlock({ block, index }: { block: HomeBlock; index: number }) {
         />
         <button
           type="submit"
+          data-qb-label=""
           className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-[var(--qb-accent-text,var(--primary))] hover:bg-muted"
         >
           {copy.submit ?? intl.formatMessage(homeMessages.composerContinue)}

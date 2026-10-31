@@ -541,6 +541,7 @@ export function FeedbackHeaderAnimated({
                   type="button"
                   variant="ghost"
                   size="sm"
+                  data-qb-label=""
                   onClick={handleCancel}
                   disabled={createPost.isPending}
                 >
@@ -548,6 +549,7 @@ export function FeedbackHeaderAnimated({
                 </Button>
                 <Button
                   size="sm"
+                  data-qb-label=""
                   onClick={handleSubmit}
                   disabled={createPost.isPending || !canSubmit}
                   title={

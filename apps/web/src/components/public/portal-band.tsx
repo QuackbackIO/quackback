@@ -1,5 +1,6 @@
 import { useIntl } from 'react-intl'
 import { useRouteContext } from '@tanstack/react-router'
+import type { ReactNode } from 'react'
 import { usePreviewHeadline, usePreviewHome } from './preview-draft-context'
 
 /** Text in the visitor's language, else its base language, else English, else any. */
@@ -10,6 +11,31 @@ export function textForLocale(
   if (!text) return undefined
   const base = locale.split('-')[0]
   return text[locale] || text[base] || text.en || Object.values(text).find(Boolean)
+}
+
+const ACCENT_CLASS = {
+  colour: 'text-[var(--qb-band-accent)]',
+  highlight:
+    'px-[0.08em] [box-decoration-break:clone] [background:linear-gradient(transparent_58%,var(--qb-band-highlight)_58%,var(--qb-band-highlight)_92%,transparent_92%)]',
+} as const
+
+/** The title with its accent phrase set apart, when the title holds it. */
+function accented(
+  title: string,
+  phrase: string | undefined,
+  style: keyof typeof ACCENT_CLASS | undefined
+): ReactNode {
+  const at = phrase && style ? title.indexOf(phrase) : -1
+  if (at < 0) return title
+  return (
+    <>
+      {title.slice(0, at)}
+      <span data-qb-accent={style} className={ACCENT_CLASS[style!]}>
+        {phrase}
+      </span>
+      {title.slice(at + phrase!.length)}
+    </>
+  )
 }
 
 /**
@@ -35,6 +61,7 @@ export function PortalBand({ page = 'feedback' }: { page?: 'feedback' | 'home' }
         : design.feedback.headline
   const title = textForLocale(headline?.title, intl.locale)
   const subtitle = textForLocale(headline?.subtitle, intl.locale)
+  const phrase = textForLocale(headline?.accent?.text, intl.locale)
   if (!title && !subtitle) return null
   return (
     <section
@@ -48,9 +75,9 @@ export function PortalBand({ page = 'feedback' }: { page?: 'feedback' | 'home' }
           {title && (
             <h1
               data-qb-part="headline"
-              className="text-2xl font-semibold text-[var(--qb-band-ink)] sm:text-3xl"
+              className="font-semibold text-[var(--qb-band-ink)] [font-size:var(--qb-headline-size)] [line-height:var(--qb-headline-leading)]"
             >
-              {title}
+              {accented(title, phrase, headline?.accent?.style)}
             </h1>
           )}
           {subtitle && (

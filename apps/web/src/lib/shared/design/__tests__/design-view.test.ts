@@ -34,4 +34,24 @@ describe('designView', () => {
       subtitle: {},
     })
   })
+
+  it('carries how the header shows the brand, with its wordmark files', () => {
+    const doc = defaultDesign()
+    doc.brand.logo = {
+      ...doc.brand.logo,
+      display: 'wordmark',
+      wordmark: { light: { key: 'logos/ink.svg' }, dark: null },
+    }
+    expect(designView(doc, 1).logo).toEqual({
+      display: 'wordmark',
+      name: null,
+      wordmark: { light: '/api/storage/logos/ink.svg', dark: null },
+    })
+  })
+
+  it('carries a name the header shows in place of the workspace’s', () => {
+    const doc = defaultDesign()
+    doc.brand.logo = { ...doc.brand.logo, display: 'name', name: 'Harbor & Pine' }
+    expect(designView(doc, 1).logo).toMatchObject({ display: 'name', name: 'Harbor & Pine' })
+  })
 })

@@ -124,7 +124,7 @@ describe('renderDesignCss', () => {
     expect(css).not.toContain('!important')
   })
 
-  it('sets the heading family, in a layer utilities can override, and the heading weight', () => {
+  it('sets the heading family, in a layer utilities can override, the heading weight and tracking, and headline and label case', () => {
     const doc = defaultDesign()
     doc.brand.fonts.heading = { kind: 'bundled', id: 'fraunces' }
     doc.brand.fonts.headingWeight = 700
@@ -136,7 +136,7 @@ describe('renderDesignCss', () => {
       '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
     )
     expect(css).toContain(
-      '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } }'
+      '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: var(--qb-heading-tracking); } [data-portal-theme] [data-qb-part=headline] { text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
     )
   })
 })

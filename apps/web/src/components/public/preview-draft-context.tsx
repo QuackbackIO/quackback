@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import { useIntl } from 'react-intl'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { DesignLogo } from '@/lib/shared/design/view'
 import type { PortalNavConfig, PortalWelcomeCard } from '@/lib/shared/types/settings'
 
 /**
@@ -84,10 +85,7 @@ export function usePreviewCss(): string | undefined {
 }
 
 /** A draft design's page headline: undefined outside a design preview, null when it has none. */
-export type PreviewHeadline = {
-  title: Record<string, string>
-  subtitle: Record<string, string>
-} | null
+export type PreviewHeadline = NonNullable<PortalDesign['pages']['feedback']['headline']> | null
 
 export const PreviewHeadlineContext = createContext<PreviewHeadline | undefined>(undefined)
 
@@ -138,6 +136,13 @@ export function useFeedCopy(): { prompt?: string; submit?: string; emptyTitle?: 
     }),
     [copy, locale]
   )
+}
+
+export const PreviewLogoContext = createContext<DesignLogo | undefined>(undefined)
+
+/** A draft design's logo, or undefined (always, outside a design preview). */
+export function usePreviewLogo(): DesignLogo | undefined {
+  return useContext(PreviewLogoContext)
 }
 
 export const PreviewAttributesContext = createContext<Record<string, string> | undefined>(undefined)

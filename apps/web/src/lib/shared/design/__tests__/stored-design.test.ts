@@ -35,7 +35,9 @@ describe('reading a stored design', () => {
   })
 
   it('reads an option value a newer build added as the default', () => {
-    const read = readStoredDesign(written({ 'layout.band': 'panel', 'brand.logo.display': 'name' }))
+    const read = readStoredDesign(
+      written({ 'layout.band': 'panel', 'brand.logo.display': 'banner' })
+    )
     expect(read?.design.layout.band).toBe(defaultDesign().layout.band)
     expect(read?.design.brand.logo.display).toBe(defaultDesign().brand.logo.display)
     expect(read?.design.brand.light.accent).toBe('#0f766e')
