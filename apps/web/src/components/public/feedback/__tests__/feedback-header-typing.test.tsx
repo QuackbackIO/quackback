@@ -16,6 +16,7 @@ import type { ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 
 type Doc = { json(): unknown; html(): string; markdown(): string }
 
@@ -119,20 +120,22 @@ function renderHeader(draft?: { title: string; key: number }) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <IntlProvider locale="en" messages={{}} onError={() => {}}>
-        <FeedbackHeaderAnimated
-          workspaceName="Acme"
-          boards={[BOARD]}
-          defaultBoardId={BOARD.id}
-          boardPermissions={{ [BOARD.id]: { canSubmit: true, canVote: true } }}
-          draft={draft}
-        />
+        <PortalWordsIntl>
+          <FeedbackHeaderAnimated
+            workspaceName="Acme"
+            boards={[BOARD]}
+            defaultBoardId={BOARD.id}
+            boardPermissions={{ [BOARD.id]: { canSubmit: true, canVote: true } }}
+            draft={draft}
+          />
+        </PortalWordsIntl>
       </IntlProvider>
     </QueryClientProvider>
   )
 }
 
 function typeTitle(value: string) {
-  fireEvent.change(screen.getByRole('textbox', { name: 'Feedback title' }), {
+  fireEvent.change(screen.getByRole('textbox', { name: 'Idea title' }), {
     target: { value },
   })
 }
@@ -185,7 +188,7 @@ describe('feedback header title', () => {
     try {
       renderHeader({ title: 'zapier', key: 1 })
       await screen.findByTestId('editor')
-      const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' })
+      const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Idea title' })
       expect(field.value).toBe('zapier')
       expect(document.activeElement).toBe(field)
       expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
@@ -200,7 +203,7 @@ describe('feedback header title', () => {
     try {
       renderHeader({ title: 'x'.repeat(250), key: 1 })
       await screen.findByTestId('editor')
-      const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' })
+      const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Idea title' })
       expect(field.value).toHaveLength(200)
     } finally {
       Element.prototype.scrollIntoView = scrollIntoView
@@ -218,7 +221,7 @@ describe('feedback header title', () => {
 
     expect(editor.renders).toBe(0)
     expect(boardPicker.renders).toBe(0)
-    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' }).value).toBe(
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Idea title' }).value).toBe(
       'Dark mode'
     )
   })
@@ -247,7 +250,7 @@ describe('feedback header title', () => {
     typeTitleByKey('ark mode', 'D')
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    const title = screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' })
+    const title = screen.getByRole<HTMLInputElement>('textbox', { name: 'Idea title' })
     expect(title.value).toBe('')
 
     typeTitleByKey('Light mode')
@@ -332,7 +335,7 @@ describe('feedback header post composer', () => {
   // The server refuses a longer title, and retrying cannot fix that.
   it('caps the title at the length the server accepts', () => {
     renderHeader()
-    expect(screen.getByLabelText('Feedback title')).toHaveAttribute('maxLength', '200')
+    expect(screen.getByLabelText('Idea title')).toHaveAttribute('maxLength', '200')
     const post = { boardId: BOARD.id, title: '', content: '' }
     expect(createPublicPostSchema.safeParse({ ...post, title: 'x'.repeat(200) }).success).toBe(true)
     expect(createPublicPostSchema.safeParse({ ...post, title: 'x'.repeat(201) }).success).toBe(
@@ -367,9 +370,7 @@ describe('feedback header post composer', () => {
     await screen.findByTestId('editor')
     fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
 
-    expect(
-      await screen.findByText('Could not submit your feedback. Please try again.')
-    ).toBeTruthy()
+    expect(await screen.findByText('Could not submit your idea. Please try again.')).toBeTruthy()
     expect(screen.queryByText(/invalid_type|expected object/)).toBeNull()
   })
 })

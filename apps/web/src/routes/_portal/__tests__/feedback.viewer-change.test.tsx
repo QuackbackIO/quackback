@@ -94,7 +94,7 @@ vi.mock('@/components/public/feedback/feedback-container', () => ({
     return (
       <div data-testid="feed" data-posts={posts.length}>
         <input
-          aria-label="Feedback title"
+          aria-label="Idea title"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
@@ -145,7 +145,7 @@ afterEach(() => {
 describe('portal feed when the viewer changes', () => {
   it('keeps the feed and the draft in it on screen while the new viewer feed loads', async () => {
     renderPortal()
-    const title = screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' })
+    const title = screen.getByRole<HTMLInputElement>('textbox', { name: 'Idea title' })
     fireEvent.change(title, { target: { value: 'Dark mode' } })
 
     // The visitor's first post mints an anonymous session.
@@ -153,7 +153,7 @@ describe('portal feed when the viewer changes', () => {
 
     expect(document.querySelector('.animate-pulse')).toBeNull()
     expect(isShown(screen.getByTestId('feed'))).toBe(true)
-    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' }).value).toBe(
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Idea title' }).value).toBe(
       'Dark mode'
     )
 
@@ -163,7 +163,7 @@ describe('portal feed when the viewer changes', () => {
 
     await waitFor(() => expect(screen.getByTestId('feed').dataset.posts).toBe('1'))
     expect(isShown(screen.getByTestId('feed'))).toBe(true)
-    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' }).value).toBe(
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Idea title' }).value).toBe(
       'Dark mode'
     )
   })

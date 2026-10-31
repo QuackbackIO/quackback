@@ -31,6 +31,8 @@ const LABELS: Record<string, string> = {
   'nav.home.tab': 'Home in the menu',
   'nav.home.label': 'Home tab name',
   'nav.items': 'Menu',
+  'vocabulary.post': 'What people post',
+  'vocabulary.board': 'What groups them',
   'pages.home.blocks': 'Home blocks',
 }
 

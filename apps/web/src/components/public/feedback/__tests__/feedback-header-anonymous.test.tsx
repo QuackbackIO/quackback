@@ -9,6 +9,7 @@ import type { ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 
 const { createPost, editor, similar, boardPicker, viewer } = vi.hoisted(() => ({
   createPost: vi.fn(),
@@ -100,17 +101,19 @@ function openComposer(user?: { name: string; email: string }) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <IntlProvider locale="en" messages={{}} onError={() => {}}>
-        <FeedbackHeaderAnimated
-          workspaceName="Acme"
-          boards={[BOARD]}
-          defaultBoardId={BOARD.id}
-          user={user ?? null}
-          boardPermissions={{ [BOARD.id]: { canSubmit: true, canVote: true } }}
-        />
+        <PortalWordsIntl>
+          <FeedbackHeaderAnimated
+            workspaceName="Acme"
+            boards={[BOARD]}
+            defaultBoardId={BOARD.id}
+            user={user ?? null}
+            boardPermissions={{ [BOARD.id]: { canSubmit: true, canVote: true } }}
+          />
+        </PortalWordsIntl>
       </IntlProvider>
     </QueryClientProvider>
   )
-  fireEvent.focus(screen.getByRole('textbox', { name: 'Feedback title' }))
+  fireEvent.focus(screen.getByRole('textbox', { name: 'Idea title' }))
 }
 
 afterEach(() => {

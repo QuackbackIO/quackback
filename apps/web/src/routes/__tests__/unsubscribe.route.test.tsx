@@ -11,6 +11,7 @@ const fns = vi.hoisted(() => ({
   preview: vi.fn(),
   process: vi.fn(),
   loaderData: null as unknown,
+  settings: null as unknown,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -23,6 +24,8 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
     <a href={to}>{children}</a>
   ),
+  useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
+    select({ settings: fns.settings }),
 }))
 vi.mock('@/lib/server/functions/subscriptions', () => ({
   previewUnsubscribeTokenFn: (...args: unknown[]) => fns.preview(...args),
@@ -41,6 +44,7 @@ const TOKEN = '6f1c1c47-3c0e-4d55-9a43-0d2a4f1c9b10'
 beforeEach(() => {
   fns.preview.mockReset()
   fns.process.mockReset()
+  fns.settings = null
 })
 afterEach(cleanup)
 
@@ -51,6 +55,22 @@ async function openPage(token: string | undefined) {
 }
 
 describe('/unsubscribe', () => {
+  it('names the post in the portal’s word', async () => {
+    fns.settings = {
+      portalDesign: { engine: 'v2', vocabulary: { post: 'suggestion', board: 'category' } },
+    }
+    fns.preview.mockResolvedValue({
+      status: 'confirm',
+      action: 'unsubscribe_post',
+      postTitle: 'Dark mode',
+    })
+
+    await openPage(TOKEN)
+
+    expect(screen.getByRole('heading', { name: 'Unsubscribe from this suggestion?' })).toBeTruthy()
+    expect(screen.getByText(/Suggestion:/)).toBeTruthy()
+  })
+
   it('opening the link reads the token and changes nothing', async () => {
     fns.preview.mockResolvedValue({ status: 'confirm', action: 'unsubscribe_onboarding' })
 

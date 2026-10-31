@@ -147,7 +147,7 @@ export function VoteButton({
               {
                 id: 'portal.postCard.vote.ariaVote',
                 defaultMessage:
-                  'Vote for this post ({count, plural, one {# vote} other {# votes}})',
+                  '{postWord, select, post {Vote for this post ({count, plural, one {# vote} other {# votes}})} feature_request {Vote for this feature request ({count, plural, one {# vote} other {# votes}})} suggestion {Vote for this suggestion ({count, plural, one {# vote} other {# votes}})} other {Vote for this idea ({count, plural, one {# vote} other {# votes}})}}',
               },
               { count: voteCount }
             )

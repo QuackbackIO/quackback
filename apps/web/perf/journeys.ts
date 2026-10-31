@@ -607,7 +607,7 @@ export const journeys: Journey[] = [
       await page.goto('/?sort=trending')
       await firstPortalPost(page).waitFor()
       const composer = page.locator('[contenteditable="true"]').first()
-      await clickUntil(page.getByRole('textbox', { name: 'Feedback title' }), composer)
+      await clickUntil(page.getByRole('textbox', { name: 'Idea title' }), composer)
       await page.keyboard.type('A keystroke budget')
       await composer.click()
     },
@@ -622,7 +622,7 @@ export const journeys: Journey[] = [
     setup: async (page) => {
       await page.goto('/widget')
       await page.getByRole('button', { name: 'Home', exact: true }).waitFor()
-      const title = page.getByRole('textbox', { name: 'Feedback title' })
+      const title = page.getByRole('textbox', { name: 'Idea title' })
       await clickUntil(page.getByRole('button', { name: 'Feedback', exact: true }), title)
       await title.click()
       await page.keyboard.type('A keystroke budget')
@@ -642,7 +642,7 @@ export const journeys: Journey[] = [
     setup: async (page) => {
       await page.goto('/?sort=trending')
       await firstPortalPost(page).waitFor()
-      const title = page.getByRole('textbox', { name: 'Feedback title' })
+      const title = page.getByRole('textbox', { name: 'Idea title' })
       await clickUntil(title, page.locator('[contenteditable="true"]').first())
       await title.click()
     },
@@ -657,7 +657,7 @@ export const journeys: Journey[] = [
     setup: async (page) => {
       await page.goto('/widget')
       await page.getByRole('button', { name: 'Home', exact: true }).waitFor()
-      const title = page.getByRole('textbox', { name: 'Feedback title' })
+      const title = page.getByRole('textbox', { name: 'Idea title' })
       await clickUntil(page.getByRole('button', { name: 'Feedback', exact: true }), title)
       // The composer opens on the first character.
       await title.click()

@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { IntlProvider, useIntl } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 
 /**
  * Adds Home's and the Launch plan page's strings, which their route loaders
@@ -23,7 +24,7 @@ export function LaunchMessages({
       messages={merged}
       onError={intl.onError}
     >
-      {children}
+      <PortalWordsIntl>{children}</PortalWordsIntl>
     </IntlProvider>
   )
 }

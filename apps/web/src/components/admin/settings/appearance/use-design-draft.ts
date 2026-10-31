@@ -147,6 +147,7 @@ export function useDesignDraft() {
       headline: view.feedback.headline,
       home: view.home,
       nav: view.nav,
+      vocabulary: view.vocabulary,
     }
   }, [design])
 

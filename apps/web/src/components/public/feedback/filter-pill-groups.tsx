@@ -42,7 +42,11 @@ export const PANEL_DATE_PRESETS = DATE_PRESETS.filter((p) => p.daysAgo > 0)
 export const PANEL_VOTE_THRESHOLDS = [10, 50, 100] as const
 
 const VIEW_LABELS = {
-  mine: { id: 'portal.feedback.panel.view.mine', defaultMessage: 'My ideas' },
+  mine: {
+    id: 'portal.feedback.panel.view.mine',
+    defaultMessage:
+      '{postWord, select, post {My posts} feature_request {My feature requests} suggestion {My suggestions} other {My ideas}}',
+  },
   voted: { id: 'portal.feedback.panel.view.voted', defaultMessage: 'Voted' },
   following: { id: 'portal.feedback.panel.view.following', defaultMessage: 'Following' },
 } as const

@@ -93,7 +93,8 @@ export function PortalModerationSection({
       toast.error(
         intl.formatMessage({
           id: 'portal.moderation.approve.error',
-          defaultMessage: 'Failed to approve post',
+          defaultMessage:
+            '{postWord, select, post {Failed to approve post} feature_request {Failed to approve feature request} suggestion {Failed to approve suggestion} other {Failed to approve idea}}',
         })
       )
     },
@@ -101,7 +102,8 @@ export function PortalModerationSection({
       toast.success(
         intl.formatMessage({
           id: 'portal.moderation.approve.success',
-          defaultMessage: 'Post approved',
+          defaultMessage:
+            '{postWord, select, post {Post approved} feature_request {Feature request approved} suggestion {Suggestion approved} other {Idea approved}}',
         })
       )
       // The approved post is now published — pull it into the live feed.
@@ -121,7 +123,8 @@ export function PortalModerationSection({
       toast.error(
         intl.formatMessage({
           id: 'portal.moderation.reject.error',
-          defaultMessage: 'Failed to reject post',
+          defaultMessage:
+            '{postWord, select, post {Failed to reject post} feature_request {Failed to reject feature request} suggestion {Failed to reject suggestion} other {Failed to reject idea}}',
         })
       )
     },
@@ -129,7 +132,8 @@ export function PortalModerationSection({
       toast.success(
         intl.formatMessage({
           id: 'portal.moderation.reject.success',
-          defaultMessage: 'Post rejected',
+          defaultMessage:
+            '{postWord, select, post {Post rejected} feature_request {Feature request rejected} suggestion {Suggestion rejected} other {Idea rejected}}',
         })
       )
       queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
@@ -165,7 +169,8 @@ export function PortalModerationSection({
       className="mt-5"
       aria-label={intl.formatMessage({
         id: 'portal.moderation.banner.regionLabel',
-        defaultMessage: 'Posts pending approval',
+        defaultMessage:
+          '{postWord, select, post {Posts pending approval} feature_request {Feature requests pending approval} suggestion {Suggestions pending approval} other {Ideas pending approval}}',
       })}
     >
       {/* Banner. The count is announced politely so a screen-reader user hears
@@ -178,7 +183,9 @@ export function PortalModerationSection({
         <span className="font-medium text-amber-800 dark:text-amber-200">
           <FormattedMessage
             id="portal.moderation.banner.count"
-            defaultMessage="{count, plural, one {# post is} other {# posts are}} waiting for approval"
+            defaultMessage={
+              '{postWord, select, post {{count, plural, one {# post is} other {# posts are}} waiting for approval} feature_request {{count, plural, one {# feature request is} other {# feature requests are}} waiting for approval} suggestion {{count, plural, one {# suggestion is} other {# suggestions are}} waiting for approval} other {{count, plural, one {# idea is} other {# ideas are}} waiting for approval}}'
+            }
             values={{ count }}
           />
         </span>
@@ -234,7 +241,9 @@ export function PortalModerationSection({
             <DialogTitle>
               <FormattedMessage
                 id="portal.moderation.reject.dialogTitle"
-                defaultMessage="Reject this post?"
+                defaultMessage={
+                  '{postWord, select, post {Reject this post?} feature_request {Reject this feature request?} suggestion {Reject this suggestion?} other {Reject this idea?}}'
+                }
               />
             </DialogTitle>
             <DialogDescription>
@@ -275,7 +284,9 @@ export function PortalModerationSection({
             <Button variant="destructive" onClick={confirmReject}>
               <FormattedMessage
                 id="portal.moderation.reject.confirm"
-                defaultMessage="Reject post"
+                defaultMessage={
+                  '{postWord, select, post {Reject post} feature_request {Reject feature request} suggestion {Reject suggestion} other {Reject idea}}'
+                }
               />
             </Button>
           </DialogFooter>
@@ -358,7 +369,9 @@ function PendingPostCard({
       <p className="mt-2.5 text-xs text-amber-700/80 dark:text-amber-500/70">
         <FormattedMessage
           id="portal.moderation.card.hiddenNote"
-          defaultMessage="Customers cannot see this post yet."
+          defaultMessage={
+            '{postWord, select, post {Customers cannot see this post yet.} feature_request {Customers cannot see this feature request yet.} suggestion {Customers cannot see this suggestion yet.} other {Customers cannot see this idea yet.}}'
+          }
         />
       </p>
     </div>

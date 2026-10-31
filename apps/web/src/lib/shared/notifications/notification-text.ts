@@ -85,7 +85,8 @@ export function notificationText(n: NotificationTextSource, intl: IntlShape): No
         title: intl.formatMessage(
           {
             id: 'portal.notifications.text.postMentioned',
-            defaultMessage: '{name} mentioned you in a post',
+            defaultMessage:
+              '{postWord, select, post {{name} mentioned you in a post} feature_request {{name} mentioned you in a feature request} suggestion {{name} mentioned you in a suggestion} other {{name} mentioned you in an idea}}',
           },
           { name }
         ),

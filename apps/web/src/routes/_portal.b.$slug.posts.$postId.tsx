@@ -242,7 +242,11 @@ function PostDetailPage() {
   if (!post || !board) {
     return (
       <div>
-        {intl.formatMessage({ id: 'portal.postDetail.notFound', defaultMessage: 'Post not found' })}
+        {intl.formatMessage({
+          id: 'portal.postDetail.notFound',
+          defaultMessage:
+            '{postWord, select, post {Post not found} feature_request {Feature request not found} suggestion {Suggestion not found} other {Idea not found}}',
+        })}
       </div>
     )
   }
@@ -402,7 +406,8 @@ function PostDetailPage() {
               post.isCommentsLocked
                 ? intl.formatMessage({
                     id: 'portal.postDetail.commentsLocked',
-                    defaultMessage: 'Comments are locked on this post',
+                    defaultMessage:
+                      '{postWord, select, post {Comments are locked on this post} feature_request {Comments are locked on this feature request} suggestion {Comments are locked on this suggestion} other {Comments are locked on this idea}}',
                   })
                 : undefined
             }

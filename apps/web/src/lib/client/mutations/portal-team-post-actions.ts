@@ -268,7 +268,8 @@ export function usePortalTeamPostActions({
           }),
           message: intl.formatMessage({
             id: 'portal.postDetail.team.boardUpdated',
-            defaultMessage: 'Board updated',
+            defaultMessage:
+              '{boardWord, select, category {Category updated} other {Board updated}}',
           }),
           perform: async () => {
             await changeBoard.mutateAsync({ postId, boardId })
@@ -392,7 +393,8 @@ export function usePortalTeamPostActions({
           toast.success(
             intl.formatMessage({
               id: 'portal.postDetail.team.postDeleted',
-              defaultMessage: 'Post deleted',
+              defaultMessage:
+                '{postWord, select, post {Post deleted} feature_request {Feature request deleted} suggestion {Suggestion deleted} other {Idea deleted}}',
             })
           )
           await navigate({ to: feedbackPath, search: { board: boardSlug } })
@@ -410,7 +412,8 @@ export function usePortalTeamPostActions({
           toast.success(
             intl.formatMessage({
               id: 'portal.postDetail.team.postRestored',
-              defaultMessage: 'Post restored',
+              defaultMessage:
+                '{postWord, select, post {Post restored} feature_request {Feature request restored} suggestion {Suggestion restored} other {Idea restored}}',
             })
           )
         } catch (err) {
@@ -434,7 +437,8 @@ export function usePortalTeamPostActions({
           toast.success(
             intl.formatMessage({
               id: 'portal.postDetail.team.postUpdated',
-              defaultMessage: 'Post updated',
+              defaultMessage:
+                '{postWord, select, post {Post updated} feature_request {Feature request updated} suggestion {Suggestion updated} other {Idea updated}}',
             })
           )
           onEditSaved?.()

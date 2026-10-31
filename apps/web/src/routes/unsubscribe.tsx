@@ -14,6 +14,7 @@ import { FormattedMessage, useIntl, type MessageDescriptor } from 'react-intl'
 import { CheckCircleIcon, XCircleIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
+import { usePublishedPortalWords } from '@/lib/client/hooks/use-root-context'
 import { loadUnsubscribeIntl } from '@/lib/server/functions/locale'
 import {
   previewUnsubscribeTokenFn,
@@ -59,8 +60,9 @@ async function lookUp(token: string | undefined): Promise<UnsubscribeView> {
 
 function UnsubscribeRoute() {
   const data = Route.useLoaderData()
+  const words = usePublishedPortalWords()
   return (
-    <PortalIntlProvider locale={data.locale} messages={data.messages}>
+    <PortalIntlProvider locale={data.locale} messages={data.messages} words={words}>
       <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
         <div className="w-full max-w-md space-y-6 text-center">
           {data.status === 'confirm' && data.token ? (
@@ -113,7 +115,9 @@ function ConfirmFlow({
           <p className="text-sm text-muted-foreground">
             <FormattedMessage
               id="unsubscribe.postLabel"
-              defaultMessage="Post: {title}"
+              defaultMessage={
+                '{postWord, select, post {Post: {title}} feature_request {Feature request: {title}} suggestion {Suggestion: {title}} other {Idea: {title}}}'
+              }
               values={{ title: <span className="font-medium">{preview.postTitle}</span> }}
             />
           </p>
@@ -172,7 +176,12 @@ function DoneView({ result }: { result: UnsubscribeResult }) {
               to="/b/$slug/posts/$postId"
               params={{ slug: result.boardSlug, postId: result.postId }}
             >
-              <FormattedMessage id="unsubscribe.viewPost" defaultMessage="View post" />
+              <FormattedMessage
+                id="unsubscribe.viewPost"
+                defaultMessage={
+                  '{postWord, select, post {View post} feature_request {View feature request} suggestion {View suggestion} other {View idea}}'
+                }
+              />
             </Link>
           </Button>
         ) : (
@@ -243,7 +252,8 @@ const ACTION_COPY: Record<string, ActionCopy> = {
   unsubscribe_post: {
     confirmTitle: {
       id: 'unsubscribe.post.confirmTitle',
-      defaultMessage: 'Unsubscribe from this post?',
+      defaultMessage:
+        '{postWord, select, post {Unsubscribe from this post?} feature_request {Unsubscribe from this feature request?} suggestion {Unsubscribe from this suggestion?} other {Unsubscribe from this idea?}}',
     },
     confirmBody: {
       id: 'unsubscribe.post.confirmBody',
@@ -252,11 +262,16 @@ const ACTION_COPY: Record<string, ActionCopy> = {
     button: UNSUBSCRIBE_BUTTON,
     doneBody: {
       id: 'unsubscribe.post.doneBody',
-      defaultMessage: 'You will not get more email updates about this post.',
+      defaultMessage:
+        '{postWord, select, post {You will not get more email updates about this post.} feature_request {You will not get more email updates about this feature request.} suggestion {You will not get more email updates about this suggestion.} other {You will not get more email updates about this idea.}}',
     },
   },
   mute_post: {
-    confirmTitle: { id: 'unsubscribe.mute.confirmTitle', defaultMessage: 'Mute this post?' },
+    confirmTitle: {
+      id: 'unsubscribe.mute.confirmTitle',
+      defaultMessage:
+        '{postWord, select, post {Mute this post?} feature_request {Mute this feature request?} suggestion {Mute this suggestion?} other {Mute this idea?}}',
+    },
     confirmBody: {
       id: 'unsubscribe.mute.confirmBody',
       defaultMessage: 'You will stop getting notifications about it.',
@@ -264,7 +279,8 @@ const ACTION_COPY: Record<string, ActionCopy> = {
     button: { id: 'unsubscribe.mute.button', defaultMessage: 'Mute' },
     doneBody: {
       id: 'unsubscribe.mute.doneBody',
-      defaultMessage: 'This post is muted. You can unmute it from the post.',
+      defaultMessage:
+        '{postWord, select, post {This post is muted. You can unmute it from the post.} feature_request {This feature request is muted. You can unmute it from the feature request.} suggestion {This suggestion is muted. You can unmute it from the suggestion.} other {This idea is muted. You can unmute it from the idea.}}',
     },
   },
   unsubscribe_all: {

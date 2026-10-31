@@ -30,7 +30,7 @@ export function PortalNoBoards({ orgName, items }: { orgName: string; items: Por
           {
             id: 'portal.feedback.empty.comingSoonDescription',
             defaultMessage:
-              '{orgName} is setting up their feedback portal. Check back soon to share your ideas and suggestions.',
+              '{postWord, select, post {{orgName} is setting up their feedback portal. Check back soon to share your posts.} feature_request {{orgName} is setting up their feedback portal. Check back soon to request features.} suggestion {{orgName} is setting up their feedback portal. Check back soon to share your suggestions.} other {{orgName} is setting up their feedback portal. Check back soon to share your ideas.}}',
           },
           { orgName }
         )}

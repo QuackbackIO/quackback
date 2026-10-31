@@ -80,7 +80,7 @@
       "serverRequests": 6,
       "requests": 43,
       "jsRequests": 37,
-      "jsKB": 67,
+      "jsKB": 68.8,
       "htmlTransferKB": 0,
       "componentRenders": 96
     },
@@ -89,7 +89,7 @@
       "serverRequests": 3,
       "requests": 135,
       "jsRequests": 130,
-      "jsKB": 459.1,
+      "jsKB": 459.6,
       "htmlTransferKB": 18,
       "componentRenders": 203
     },
@@ -98,7 +98,7 @@
       "serverRequests": 6,
       "requests": 43,
       "jsRequests": 37,
-      "jsKB": 67,
+      "jsKB": 68.8,
       "htmlTransferKB": 0,
       "componentRenders": 116
     },
@@ -170,7 +170,7 @@
       "serverRequests": 6,
       "requests": 43,
       "jsRequests": 37,
-      "jsKB": 67,
+      "jsKB": 68.8,
       "htmlTransferKB": 0,
       "componentRenders": 95
     },

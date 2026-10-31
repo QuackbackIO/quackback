@@ -1,6 +1,8 @@
 import { useEffect, type ComponentProps } from 'react'
 import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
+import { ADMIN_WORDS } from '@/lib/shared/design/view'
 import type { QueryClient } from '@tanstack/react-query'
 import { SearchPaletteProvider } from '@/components/admin/ask/search-palette'
 import { AdminWorkspaceFrame } from '@/components/admin/admin-workspace-frame'
@@ -280,20 +282,22 @@ function AdminLayout() {
 
   return (
     <IntlProvider locale={locale} defaultLocale={DEFAULT_LOCALE} messages={messages}>
-      <SearchPaletteProvider>
-        <AdminProductTourProvider>
-          <TooltipProvider delay={0}>
-            <AdminContent
-              initialUserData={initialUserData}
-              latestVersion={latestVersion}
-              updateBannerDismissedVersion={updateBannerDismissedVersion}
-              planNotice={planNotice}
-              inLaunchWindow={inLaunchWindow}
-              currentUser={currentUser}
-            />
-          </TooltipProvider>
-        </AdminProductTourProvider>
-      </SearchPaletteProvider>
+      <PortalWordsIntl words={ADMIN_WORDS}>
+        <SearchPaletteProvider>
+          <AdminProductTourProvider>
+            <TooltipProvider delay={0}>
+              <AdminContent
+                initialUserData={initialUserData}
+                latestVersion={latestVersion}
+                updateBannerDismissedVersion={updateBannerDismissedVersion}
+                planNotice={planNotice}
+                inLaunchWindow={inLaunchWindow}
+                currentUser={currentUser}
+              />
+            </TooltipProvider>
+          </AdminProductTourProvider>
+        </SearchPaletteProvider>
+      </PortalWordsIntl>
     </IntlProvider>
   )
 }

@@ -43,6 +43,7 @@ interface PortalPreviewProps {
     headline: { title: Record<string, string>; subtitle: Record<string, string> } | null
     home?: PortalDesign['pages']['home']
     nav?: PortalDesign['nav']
+    vocabulary?: PortalDesign['vocabulary']
   } | null
   /** The page the frame shows: the root, Home or the feed at its own address. */
   page?: PreviewPage

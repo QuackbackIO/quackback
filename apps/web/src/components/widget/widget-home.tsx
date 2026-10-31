@@ -26,11 +26,13 @@ function WidgetHomeFallback() {
                 readOnly
                 aria-label={intl.formatMessage({
                   id: 'widget.home.input.label',
-                  defaultMessage: 'Feedback title',
+                  defaultMessage:
+                    '{postWord, select, post {Post title} feature_request {Feature request title} suggestion {Suggestion title} other {Idea title}}',
                 })}
                 placeholder={intl.formatMessage({
                   id: 'widget.home.input.placeholder',
-                  defaultMessage: "What's your idea?",
+                  defaultMessage:
+                    "{postWord, select, post {What's on your mind?} feature_request {What should we build?} suggestion {What's your suggestion?} other {What's your idea?}}",
                 })}
                 className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50"
               />

@@ -295,7 +295,9 @@ export function WidgetShell({
             {activeTab === 'feedback' ? (
               <FormattedMessage
                 id="widget.shell.heading.feedback"
-                defaultMessage="Share your ideas"
+                defaultMessage={
+                  '{postWord, select, post {Share a post} feature_request {Request a feature} suggestion {Share your suggestions} other {Share your ideas}}'
+                }
               />
             ) : activeTab === 'messages' ? (
               <FormattedMessage id="widget.shell.heading.messages" defaultMessage="Messages" />

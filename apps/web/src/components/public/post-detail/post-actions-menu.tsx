@@ -47,7 +47,8 @@ export function PostActionsMenu({
           <span className="sr-only">
             {intl.formatMessage({
               id: 'portal.postDetail.postActions.ariaLabel',
-              defaultMessage: 'Post actions',
+              defaultMessage:
+                '{postWord, select, post {Post actions} feature_request {Feature request actions} suggestion {Suggestion actions} other {Idea actions}}',
             })}
           </span>
         </Button>
