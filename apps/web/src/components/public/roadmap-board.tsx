@@ -3,7 +3,6 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { MapIcon } from '@heroicons/react/24/solid'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   usePublicRoadmaps,
   useRoadmapDateBuckets,
@@ -109,12 +108,9 @@ export function RoadmapBoard({
             selectedId={effectiveSelectedId}
             onSelect={setSelectedRoadmap}
           />
+          {/* A line under the tabs, not a card of its own around a few words. */}
           {selectedRoadmap?.description && (
-            <Card className="border-none">
-              <CardContent className="py-3 px-4">
-                <p className="text-sm text-muted-foreground">{selectedRoadmap.description}</p>
-              </CardContent>
-            </Card>
+            <p className="px-1 text-sm text-muted-foreground">{selectedRoadmap.description}</p>
           )}
         </div>
       )}

@@ -104,6 +104,14 @@ export const PORTAL_PARTS = [
     files: ['components/public/post-card.tsx'],
   },
   {
+    name: 'post-band',
+    description:
+      'The strip of the band a post opens on, with the way back to its board, where page titles are on the band.',
+    states: [],
+    tokens: ['--qb-band-bg', '--qb-band-ink'],
+    files: ['routes/_portal.b.$slug.posts.$postId.tsx'],
+  },
+  {
     name: 'post-heading',
     description: "A post's title on its own page.",
     states: [],

@@ -87,6 +87,10 @@ describe('a page’s title', () => {
     expect(band.querySelector('[data-qb-accent=colour]')!.textContent).toBe('building')
     expect(band.textContent).toContain('Coming soon')
     expect(band.querySelector('button')!.textContent).toBe('Subscribe')
+    // Its buttons inherit the band's ink, so they read on it.
+    expect(band.querySelector('button')!.parentElement!.className).toContain(
+      'text-[var(--qb-band-ink)]'
+    )
   })
 
   it('keeps the band short: an image beside the words is Home’s, one behind them stays', async () => {

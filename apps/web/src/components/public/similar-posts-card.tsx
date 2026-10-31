@@ -1,4 +1,5 @@
 'use client'
+import { StatusColourDot } from '@/components/ui/status-badge'
 
 import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -88,10 +89,7 @@ export const SimilarPostsCard = memo(function SimilarPostsCard({
                   <div className="flex-1 min-w-0">
                     {post.status && (
                       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        <span
-                          className="size-1.5 rounded-full shrink-0"
-                          style={{ backgroundColor: post.status.color }}
-                        />
+                        <StatusColourDot colour={post.status.color} className="size-1.5" />
                         {post.status.name}
                       </span>
                     )}

@@ -1,6 +1,5 @@
-import type { CSSProperties } from 'react'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
-import { useStatusColour } from '@/components/ui/status-badge'
+import { StatusColourDot } from '@/components/ui/status-badge'
 import { useIntl } from 'react-intl'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { RoadmapCard } from './roadmap-card'
@@ -34,7 +33,6 @@ export function RoadmapColumn({
   filters,
 }: RoadmapColumnProps) {
   const intl = useIntl()
-  const statusColour = useStatusColour(color)
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } = usePublicRoadmapPosts(
     {
       roadmapId,
@@ -58,11 +56,7 @@ export function RoadmapColumn({
       <CardHeader className="pb-3 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span
-              data-qb-status-dot=""
-              className="h-3 w-3 rounded-full bg-[var(--qb-status)]"
-              style={{ '--qb-status': statusColour ?? undefined } as CSSProperties}
-            />
+            <StatusColourDot colour={color} className="size-3" />
             <CardTitle className="text-base">
               {icon && (
                 <span className="me-1.5" aria-hidden>

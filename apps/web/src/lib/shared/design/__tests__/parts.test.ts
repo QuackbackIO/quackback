@@ -43,7 +43,10 @@ describe('the portal’s parts', () => {
 
   it('marks no part the manifest does not list', () => {
     const marked = new Set<string>()
-    for (const file of sourceFiles(join(SRC, 'components'))) {
+    for (const file of [
+      ...sourceFiles(join(SRC, 'components')),
+      ...sourceFiles(join(SRC, 'routes')),
+    ]) {
       for (const [, name] of readFileSync(file, 'utf8').matchAll(/data-qb-part="([a-z-]+)"/g)) {
         marked.add(name!)
       }
