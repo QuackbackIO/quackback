@@ -36,7 +36,8 @@
         }
       },
       "display": "wordmark",
-      "name": "Ledger"
+      "name": "Ledger",
+      "tone": "dark"
     },
     "favicon": {
       "key": "fixtures/ledger/favicon.png"

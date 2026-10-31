@@ -122,6 +122,9 @@ function lookChanges(
     ...(assets?.wordmark
       ? [
           { path: 'brand.logo.wordmark.light', value: { key: assets.wordmark.key } },
+          ...(assets.wordmark.tone
+            ? [{ path: 'brand.logo.tone', value: assets.wordmark.tone }]
+            : []),
           ...(assets.wordmark.colours.length > 1
             ? [{ path: 'brand.logoColours', value: assets.wordmark.colours }]
             : []),

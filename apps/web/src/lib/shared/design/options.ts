@@ -15,6 +15,8 @@ export const DESIGN_OPTIONS = {
   fontKind: ['bundled', 'uploaded'],
   /** `name` sets the workspace name in the heading font, a wordmark without a file. */
   logoDisplay: ['mark_and_name', 'mark', 'wordmark', 'name'],
+  /** A wordmark file's ink, so it can turn light on a dark header and dark on a light one. */
+  logoTone: ['dark', 'light'],
   /** How large page headlines are. */
   typeScale: ['standard', 'large', 'display'],
   /** How closely headings are set. */

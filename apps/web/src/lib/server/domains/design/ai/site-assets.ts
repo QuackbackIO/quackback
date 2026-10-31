@@ -15,7 +15,7 @@ import { fetchFollowingRedirects } from '@/lib/server/content/unfurl'
 import { logger } from '@/lib/server/logger'
 import { isS3Usable, uploadObject } from '@/lib/server/storage/s3'
 import { isStandardWebsiteUrl } from '@/lib/shared/website-branding'
-import { imageSize, safeSvg, svgAspect, svgColours } from './site-logo'
+import { imageSize, safeSvg, svgAspect, svgColours, svgTone } from './site-logo'
 import type { SiteSignals } from './site-signals'
 
 const log = logger.child({ module: 'site-assets' })
@@ -29,8 +29,8 @@ const SHARE_MIN = { width: 600, height: 300 }
 const RASTER = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const
 
 export interface SiteAssets {
-  /** The stored wordmark, and its own colours for status markers. */
-  wordmark: { key: string; colours: string[] } | null
+  /** The stored wordmark, its own colours for status markers, and its ink when one colour. */
+  wordmark: { key: string; colours: string[]; tone?: 'dark' | 'light' } | null
   /** The stored share image, with its bytes for the model to look at. */
   shareImage: { key: string; mimeType: string; base64: string } | null
 }
@@ -94,7 +94,12 @@ async function importWordmark(signals: SiteSignals): Promise<SiteAssets['wordmar
     const safe = safeSvg(svg)
     if (!safe || (svgAspect(safe) ?? 0) < WORDMARK_ASPECT) return null
     const bytes = new TextEncoder().encode(safe)
-    return { key: await store('header-logos', bytes, 'image/svg+xml'), colours: svgColours(safe) }
+    const tone = svgTone(safe)
+    return {
+      key: await store('header-logos', bytes, 'image/svg+xml'),
+      colours: svgColours(safe),
+      ...(tone ? { tone } : {}),
+    }
   }
   const size = raster ? imageSize(raster.bytes) : null
   if (!raster || !size || size.width / size.height < WORDMARK_ASPECT) return null

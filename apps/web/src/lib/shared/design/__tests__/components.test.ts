@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { contrastRatio } from '../contrast'
 import { BAND_FADE, BAND_TINT, layoutAttributes, PORTAL_ALIASES } from '../components'
-import { mixColor } from '../color'
+import { mixColor, tintOf } from '../color'
 import { parseOklch } from '@/lib/shared/theme/expand'
 import { hexToOklch } from '@/lib/shared/theme/colors'
 import { resolveDesign } from '../resolve'
@@ -251,6 +251,28 @@ describe('a panel in the band', () => {
   })
 })
 
+describe('a one-colour wordmark', () => {
+  const filter = (change: (d: PortalDesign) => void, mode: 'light' | 'dark' = 'light') =>
+    resolveDesign(design(change)).tokens[mode]['--qb-wordmark-filter']
+
+  it('turns light where its dark ink would vanish: on a dark band, and in dark mode', () => {
+    const onBand = (d: PortalDesign) => {
+      d.brand.logo.tone = 'dark'
+      d.brand.light.accent = '#163300'
+      d.layout.band = 'brand'
+      d.layout.headerOnBand = true
+    }
+    expect(filter(onBand)).toBe('brightness(0) invert(1)')
+    expect(filter((d) => (d.brand.logo.tone = 'dark'))).toBe('none')
+    expect(filter((d) => (d.brand.logo.tone = 'dark'), 'dark')).toBe('brightness(0) invert(1)')
+  })
+
+  it('turns dark where light ink would vanish, and leaves an unknown or many-coloured one alone', () => {
+    expect(filter((d) => (d.brand.logo.tone = 'light'))).toBe('brightness(0)')
+    expect(filter(() => {})).toBe('none')
+  })
+})
+
 describe('a header on the band', () => {
   const onBand = (change: (d: PortalDesign) => void) =>
     resolveDesign(
@@ -323,7 +345,7 @@ describe('the top band', () => {
     for (const mode of ['light', 'dark'] as const) {
       const bg = resolved.tokens[mode]['--qb-band-bg']
       expect(bg, mode).toBe(
-        mixColor(resolved[mode]!.primary!, resolved[mode]!.background!, BAND_TINT)
+        tintOf(resolved[mode]!.primary!, resolved[mode]!.background!, BAND_TINT)
       )
       // A tint of burgundy leans red, never the neutral grey of hover states.
       const { c, h } = parseOklch(hexToOklch(bg))!
@@ -340,11 +362,26 @@ describe('the top band', () => {
     }
   })
 
+  it('keeps a deep brand colour’s hue over a warm page, rather than turning grey', () => {
+    const { tokens } = resolveDesign(
+      design((d) => {
+        d.mode = 'light'
+        d.layout.band = 'tint'
+        d.brand.light.accent = '#1f4d3a'
+        d.brand.light.background = '#f3ead8'
+      })
+    )
+    const { c, h } = parseOklch(hexToOklch(tokens.light['--qb-band-bg']!))!
+    expect(c).toBeGreaterThan(0.02)
+    expect(h).toBeGreaterThan(130)
+    expect(h).toBeLessThan(180)
+  })
+
   it('fades from a tint of the brand colour into the page', () => {
     const resolved = resolveDesign(design((d) => (d.layout.band = 'fade')))
     const { primary, background } = resolved.light!
     expect(resolved.tokens.light['--qb-band-bg']).toBe(
-      `linear-gradient(to bottom, ${mixColor(primary!, background!, BAND_FADE)}, ${background})`
+      `linear-gradient(to bottom, ${tintOf(primary!, background!, BAND_FADE)}, ${background})`
     )
   })
 })

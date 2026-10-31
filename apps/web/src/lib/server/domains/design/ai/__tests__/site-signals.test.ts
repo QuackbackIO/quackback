@@ -82,6 +82,7 @@ describe('readSiteSignals', () => {
         button: '#0f766e',
         bold: false,
         monochrome: false,
+        hero: null,
         // The header logo with the colour its page gives it, and the link preview image.
         logo: { svg: '<svg viewBox="0 0 120 30"><path fill="#0f766e"/></svg>' },
         shareImage: 'https://example.com/og.jpg',

@@ -8,7 +8,7 @@
  * workspace keeps its look.
  */
 import type { ThemeVariables } from '@/lib/shared/theme/types'
-import { mixColor } from './color'
+import { mixColor, tintOf } from './color'
 import { contrastRatio, solveContrast } from './contrast'
 import { fontStack } from './fonts'
 import type { PortalDesign } from './schema'
@@ -116,6 +116,10 @@ export function modeTokens(doc: PortalDesign, vars: ThemeVariables, mode: Mode):
     ...bandTokens(doc, t, mode),
     ...(headerOnBand(doc) ? headerBandTokens(doc, t, mode) : {}),
   }
+  tokens['--qb-wordmark-filter'] = wordmarkFilter(
+    doc.brand.logo.tone,
+    tokens['--qb-header-bg'] ?? t.background
+  )
   // The underline under the current page comes from the data-qb-nav attribute.
   if (doc.layout.nav === 'underline') tokens['--qb-nav-active-bg'] = 'transparent'
   if (doc.layout.nav === 'pills') {
@@ -153,9 +157,21 @@ export function bandError(doc: PortalDesign, vars: ThemeVariables, mode: Mode): 
     : `${mode}: no text reaches 4.5:1 across the band`
 }
 
-/** The brand colour's share of a tint band, and of the top of a fade. */
-export const BAND_TINT = 0.12
-export const BAND_FADE = 0.2
+/** How far a tint band, and the top of a fade, step from the page toward the middle. */
+export const BAND_TINT = 0.045
+export const BAND_FADE = 0.08
+
+/**
+ * A one-colour wordmark redrawn where its ink would vanish into the header:
+ * white on a dark header, black on a light one, and as it is otherwise.
+ */
+function wordmarkFilter(tone: PortalDesign['brand']['logo']['tone'], header: string): string {
+  if (!tone) return 'none'
+  const dark = contrastRatio(header, '#ffffff') > contrastRatio(header, '#000000')
+  if (tone === 'dark' && dark) return 'brightness(0) invert(1)'
+  if (tone === 'light' && !dark) return 'brightness(0)'
+  return 'none'
+}
 
 /** Whether the header takes the band's colour: asked for, and the band has one. */
 const headerOnBand = (doc: PortalDesign) =>
@@ -288,7 +304,7 @@ function bandSurface(
       }
     }
     case 'tint': {
-      const tint = mixColor(t.primary, t.background, BAND_TINT)
+      const tint = tintOf(t.primary, t.background, BAND_TINT)
       return {
         background: tint,
         behind: [tint],
@@ -297,7 +313,7 @@ function bandSurface(
       }
     }
     case 'fade': {
-      const top = mixColor(t.primary, t.background, BAND_FADE)
+      const top = tintOf(t.primary, t.background, BAND_FADE)
       return {
         background: `linear-gradient(to bottom, ${top}, ${t.background})`,
         behind: [top],

@@ -7,6 +7,7 @@ import {
   safeSvg,
   svgAspect,
   svgColours,
+  svgTone,
 } from '../site-logo'
 
 const BASE = 'https://www.example.com/'
@@ -132,5 +133,14 @@ describe('an image file’s size', () => {
     ])
     expect(imageSize(jpeg)).toEqual({ width: 1100, height: 630 })
     expect(imageSize(new Uint8Array([1, 2, 3]))).toBeNull()
+  })
+})
+
+describe('a logo’s ink', () => {
+  it('is dark or light when every colour is, and unknown when mixed', () => {
+    expect(svgTone('<svg><path fill="#163300"/><path fill="#000"/></svg>')).toBe('dark')
+    expect(svgTone('<svg><path fill="#ffffff"/></svg>')).toBe('light')
+    expect(svgTone('<svg><path fill="#ecb22e"/><path fill="#1d1c1d"/></svg>')).toBeNull()
+    expect(svgTone('<svg/>')).toBeNull()
   })
 })

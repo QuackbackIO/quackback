@@ -25,7 +25,7 @@ interface Fixture {
       headlineCase?: string
       labelCase?: string
     }
-    logo: { display: string }
+    logo: { display: string; tone?: string }
     bandImage?: { key: string }
   }
   shape: { corners: string; buttons?: string }
@@ -81,6 +81,7 @@ function used(): Record<DesignOption, Set<string>> {
     add('fontKind', doc.brand.fonts.heading.kind)
     add('fontKind', doc.brand.fonts.body.kind)
     add('logoDisplay', doc.brand.logo.display)
+    if (doc.brand.logo.tone) add('logoTone', doc.brand.logo.tone)
     // An absent type choice is today's type.
     const { scale, tracking, headlineCase, labelCase } = doc.brand.fonts
     add('typeScale', scale ?? 'standard')

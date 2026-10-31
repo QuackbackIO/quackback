@@ -333,7 +333,7 @@ export function PortalHeader({
           <img
             src={(wordmark?.light ?? wordmark?.dark)!}
             alt={brandName}
-            className={`h-8 w-auto max-w-[12rem] object-contain ${wordmark?.dark && wordmark.light ? 'dark:hidden' : ''}`}
+            className={`h-8 w-auto max-w-[12rem] object-contain [filter:var(--qb-wordmark-filter,none)] ${wordmark?.dark && wordmark.light ? 'dark:hidden' : ''}`}
           />
           {wordmark?.dark && wordmark.light ? (
             <img

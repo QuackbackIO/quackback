@@ -34,7 +34,8 @@
         "dark": null
       },
       "display": "name",
-      "name": "orbit"
+      "name": "orbit",
+      "tone": "light"
     },
     "favicon": {
       "key": "fixtures/orbit/favicon.png"

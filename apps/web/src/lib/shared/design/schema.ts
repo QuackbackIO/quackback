@@ -207,6 +207,8 @@ export const portalDesignV2 = z
             mark: z.object({ light: asset.nullable(), dark: asset.nullable() }).strict(),
             wordmark: z.object({ light: asset.nullable(), dark: asset.nullable() }).strict(),
             display: z.enum(DESIGN_OPTIONS.logoDisplay),
+            /** The wordmark's ink when it is one colour throughout. */
+            tone: z.enum(DESIGN_OPTIONS.logoTone).optional(),
             name: z.string().trim().max(60).optional(),
           })
           .strict(),
