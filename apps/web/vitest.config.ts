@@ -2,9 +2,10 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import { serverWorkers } from './src/lib/build/server-workers'
+import { fontManifest } from './src/lib/build/font-manifest'
 
 export default defineConfig({
-  plugins: [react(), serverWorkers()],
+  plugins: [react(), serverWorkers(), fontManifest(path.resolve(__dirname, 'src'))],
   test: {
     globals: true,
     environment: 'happy-dom',

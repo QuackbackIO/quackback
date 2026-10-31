@@ -9,6 +9,7 @@ import { readFileSync } from 'fs'
 import { CLIENT_PROTECTED_SPECIFIERS } from './src/lib/server/policy/client-import-protection'
 import { routeChunksImportTheirParent } from './src/lib/build/route-chunk-parents'
 import { serverWorkers } from './src/lib/build/server-workers'
+import { fontManifest } from './src/lib/build/font-manifest'
 
 /**
  * Replace the server-only structured logger with a no-op stub in the CLIENT
@@ -213,6 +214,8 @@ export default defineConfig(({ mode }) => {
     plugins: [
       // `?server-worker` imports: worker-thread scripts for server code.
       serverWorkers(),
+      // Each bundled font's files, for the portal's head during SSR.
+      fontManifest(path.resolve(__dirname, 'src')),
       letNitroServeStorageAssets(),
       keepSsrOnlyDepsOutOfClientOptimizer(),
       stubServerLoggerInClient(),
