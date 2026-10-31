@@ -43,12 +43,12 @@ export function RoadmapCard({
         <p className="text-sm font-medium text-foreground line-clamp-2">{title}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <Badge variant="secondary" className="text-[11px] inline-flex items-center gap-0.5">
-            <Squares2X2Icon className="h-3 w-3 text-muted-foreground/40" />
+            <Squares2X2Icon className="h-3 w-3 text-muted-foreground" />
             {board.name}
           </Badge>
           {etaLabel && (
             <Badge variant="secondary" className="text-[11px] inline-flex items-center gap-0.5">
-              <CalendarIcon className="h-3 w-3 text-muted-foreground/40" />
+              <CalendarIcon className="h-3 w-3 text-muted-foreground" />
               {etaLabel}
             </Badge>
           )}

@@ -326,8 +326,13 @@ export function PortalHeader({
       ? 'mark_and_name'
       : (designLogo?.display ?? 'mark_and_name')
 
+  // Beside the name, the mark is decoration; alone, it names the portal.
   const mark = orgLogo ? (
-    <img src={orgLogo} alt={orgName} className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]" />
+    <img
+      src={orgLogo}
+      alt={display === 'mark' ? orgName : ''}
+      className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
+    />
   ) : (
     <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
       {nameInitial(orgName)}
@@ -370,7 +375,7 @@ export function PortalHeader({
           {display === 'mark_and_name' ? (
             <span
               title={brandName}
-              className="portal-header__name font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--qb-name-ink,var(--header-foreground))] [letter-spacing:var(--qb-name-tracking,normal)] [text-transform:var(--qb-name-case,none)]"
+              className="portal-header__name font-semibold sr-only sm:not-sr-only sm:block max-w-[18ch] truncate text-[var(--qb-name-ink,var(--header-foreground))] [letter-spacing:var(--qb-name-tracking,normal)] [text-transform:var(--qb-name-case,none)]"
             >
               {twoTone(brandName, designLogo?.nameAccent)}
             </span>

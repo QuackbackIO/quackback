@@ -291,12 +291,10 @@ describe('the name as a wordmark, and the headline’s colour', () => {
   })
 
   it('colours the headline with the band’s accent, which reads on the band', () => {
-    expect(resolveDesign(design()).tokens.base['--qb-headline-colour']).toBe('var(--qb-band-ink)')
+    expect(layoutAttributes(design())['data-qb-headline']).toBe('ink')
     expect(
-      resolveDesign(design((d) => (d.brand.fonts.headlineColour = 'accent'))).tokens.base[
-        '--qb-headline-colour'
-      ]
-    ).toBe('var(--qb-band-accent)')
+      layoutAttributes(design((d) => (d.brand.fonts.headlineColour = 'accent')))['data-qb-headline']
+    ).toBe('accent')
   })
 })
 
@@ -552,6 +550,7 @@ describe('layoutAttributes', () => {
       'data-qb-band-shape': 'full',
       'data-qb-header-band': 'off',
       'data-qb-status': 'colour',
+      'data-qb-headline': 'ink',
       'data-qb-band-art': 'none',
       'data-qb-tint': 'neutral',
       'data-qb-cards': 'list',

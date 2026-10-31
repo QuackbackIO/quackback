@@ -70,7 +70,7 @@ export function SimilarPostsSection({
       )}
     >
       <div className="mb-1.5 flex items-center gap-1.5 px-1">
-        <LinkIcon className="h-3 w-3 text-muted-foreground/70" />
+        <LinkIcon className="h-3 w-3 text-muted-foreground" />
         <h3 className="text-xs font-medium text-muted-foreground">
           {intl.formatMessage({ id: 'portal.postDetail.related', defaultMessage: 'Related' })}
         </h3>
