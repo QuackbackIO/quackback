@@ -17,7 +17,11 @@
         "kind": "bundled",
         "id": "dm-sans"
       },
-      "headingWeight": 500
+      "headingWeight": 500,
+      "tracking": "normal",
+      "headlineCase": "sentence",
+      "labelCase": "sentence",
+      "scale": "standard"
     },
     "logo": {
       "mark": {

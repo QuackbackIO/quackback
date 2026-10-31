@@ -4,6 +4,7 @@ import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import {
   PreviewDraftProvider,
   PreviewAttributesContext,
+  PreviewLogoContext,
   PreviewHeadlineContext,
   PreviewPagesContext,
   FeedCopyContext,
@@ -149,13 +150,15 @@ export function PortalPreviewProvider({
       <PreviewHeadlineContext.Provider value={design ? design.headline : undefined}>
         <PreviewPagesContext.Provider value={pages}>
           <PreviewAttributesContext.Provider value={design?.attributes}>
-            <DraftCopy copy={design?.copy}>
-              {design?.words ? (
-                <PortalWordsIntl words={design.words}>{children}</PortalWordsIntl>
-              ) : (
-                children
-              )}
-            </DraftCopy>
+            <PreviewLogoContext.Provider value={design?.logo ?? undefined}>
+              <DraftCopy copy={design?.copy}>
+                {design?.words ? (
+                  <PortalWordsIntl words={design.words}>{children}</PortalWordsIntl>
+                ) : (
+                  children
+                )}
+              </DraftCopy>
+            </PreviewLogoContext.Provider>
           </PreviewAttributesContext.Provider>
         </PreviewPagesContext.Provider>
       </PreviewHeadlineContext.Provider>

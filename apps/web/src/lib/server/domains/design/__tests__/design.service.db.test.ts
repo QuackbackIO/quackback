@@ -174,7 +174,7 @@ describe('a design saved by a newer build', () => {
     const doc = structuredClone(stored) as ReturnType<typeof defaultDesign>
     return {
       ...doc,
-      brand: { ...doc.brand, logo: { ...doc.brand.logo, display: 'name', tagline: 'Hi' } },
+      brand: { ...doc.brand, logo: { ...doc.brand.logo, display: 'banner', tagline: 'Hi' } },
       layout: { ...doc.layout, bandShape: 'panel' },
     }
   }

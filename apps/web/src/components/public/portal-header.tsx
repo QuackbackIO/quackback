@@ -44,7 +44,7 @@ import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-import { usePreviewDesignAttributes } from './preview-draft-context'
+import { usePreviewDesignAttributes, usePreviewLogo } from './preview-draft-context'
 import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
 interface PortalHeaderProps {
@@ -263,6 +263,7 @@ export function PortalHeader({
           <Button
             variant={showSignup ? 'ghost' : 'default'}
             size="sm"
+            data-qb-label=""
             onClick={() =>
               soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'login' })
             }
@@ -272,6 +273,7 @@ export function PortalHeader({
           {showSignup && (
             <Button
               size="sm"
+              data-qb-label=""
               onClick={() =>
                 soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'signup' })
               }
@@ -292,29 +294,68 @@ export function PortalHeader({
     (savedDesign?.engine === 'v2' ? savedDesign.attributes['data-qb-header'] : undefined) ??
     'stacked'
 
+  // How the design shows the brand; in the admin preview, the draft's.
+  const previewLogo = usePreviewLogo()
+  const designLogo = previewLogo ?? (savedDesign?.engine === 'v2' ? savedDesign.logo : undefined)
+  const brandName = designLogo?.name || orgName
+  const wordmark = designLogo?.wordmark
+  // A wordmark without a file shows the mark and name, as before one is uploaded.
+  const display =
+    designLogo?.display === 'wordmark' && !wordmark?.light && !wordmark?.dark
+      ? 'mark_and_name'
+      : (designLogo?.display ?? 'mark_and_name')
+
+  const mark = orgLogo ? (
+    <img src={orgLogo} alt={orgName} className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]" />
+  ) : (
+    <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
+      {nameInitial(orgName)}
+    </div>
+  )
   const logo = (
     <Link
       to={PORTAL_LANDING}
       className="portal-header__logo flex items-center gap-2"
       data-qb-part="logo"
+      data-qb-logo={display}
     >
-      {orgLogo ? (
-        <img
-          src={orgLogo}
-          alt={orgName}
-          className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
-        />
+      {display === 'wordmark' ? (
+        <>
+          {/* The light file shows in dark mode too when there is no dark one. */}
+          <img
+            src={(wordmark?.light ?? wordmark?.dark)!}
+            alt={brandName}
+            className={`h-8 w-auto max-w-[12rem] object-contain ${wordmark?.dark && wordmark.light ? 'dark:hidden' : ''}`}
+          />
+          {wordmark?.dark && wordmark.light ? (
+            <img
+              src={wordmark.dark}
+              alt={brandName}
+              className="hidden h-8 w-auto max-w-[12rem] object-contain dark:block"
+            />
+          ) : null}
+        </>
+      ) : display === 'name' ? (
+        // The name as a wordmark: set in the heading font, and shown on phones too.
+        <span
+          title={brandName}
+          className="portal-header__name max-w-[18ch] truncate text-xl leading-none text-[var(--header-foreground)] [font-family:var(--qb-font-heading)] [font-weight:var(--qb-heading-weight)] [letter-spacing:var(--qb-heading-tracking)]"
+        >
+          {brandName}
+        </span>
       ) : (
-        <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
-          {nameInitial(orgName)}
-        </div>
+        <>
+          {mark}
+          {display === 'mark_and_name' ? (
+            <span
+              title={brandName}
+              className="portal-header__name font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--header-foreground)]"
+            >
+              {brandName}
+            </span>
+          ) : null}
+        </>
       )}
-      <span
-        title={orgName}
-        className="portal-header__name font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--header-foreground)]"
-      >
-        {orgName}
-      </span>
     </Link>
   )
   const navigation = (

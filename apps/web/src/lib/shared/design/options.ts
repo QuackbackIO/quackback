@@ -9,7 +9,16 @@ export const DESIGN_OPTIONS = {
   corners: ['sharp', 'subtle', 'rounded', 'pill'],
   headingWeight: [500, 600, 700, 800],
   fontKind: ['bundled', 'uploaded'],
-  logoDisplay: ['mark_and_name', 'mark', 'wordmark'],
+  /** `name` sets the workspace name in the heading font, a wordmark without a file. */
+  logoDisplay: ['mark_and_name', 'mark', 'wordmark', 'name'],
+  /** How large page headlines are. */
+  typeScale: ['standard', 'large', 'display'],
+  /** How closely headings are set. */
+  tracking: ['normal', 'tight'],
+  /** Headlines, or labels (the menu and buttons), in sentence or upper case. */
+  textCase: ['sentence', 'upper'],
+  /** How a headline marks out a phrase: in the accent colour, or highlighted. */
+  headlineAccent: ['colour', 'highlight'],
   header: ['stacked', 'inline', 'centered'],
   nav: ['tabs', 'underline', 'pills'],
   band: ['none', 'tint', 'fade', 'brand'],

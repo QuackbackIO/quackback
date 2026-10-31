@@ -55,6 +55,60 @@ describe('size tokens of the default design', () => {
   })
 })
 
+describe('a headline’s accent phrase', () => {
+  it('is the brand colour where it reads, and readable on a band of the brand colour', () => {
+    const plain = resolveDesign(design((d) => (d.brand.light.accent = '#0f766e'))).tokens.light
+    expect(plain['--qb-band-accent']).toBe('#0f766e')
+    const filled = resolveDesign(
+      design((d) => {
+        d.brand.light.accent = '#0f766e'
+        d.layout.band = 'brand'
+      })
+    ).tokens.light
+    const [accent, band] = [filled['--qb-band-accent']!, filled['--qb-band-bg']!]
+    expect(contrastRatio(accent, band)).toBeGreaterThanOrEqual(3)
+  })
+})
+
+describe('type style', () => {
+  it('keeps today’s headline size, tracking and case', () => {
+    const { tokens } = resolveDesign(design())
+    expect(tokens.base).toMatchObject({
+      '--qb-headline-size': 'clamp(1.5rem, 1.25rem + 1vw, 1.875rem)',
+      '--qb-heading-tracking': '-0.02em',
+      '--qb-headline-case': 'none',
+      '--qb-label-case': 'none',
+      '--qb-label-tracking': 'normal',
+    })
+  })
+
+  it('sets display headlines large, tight and upper case, and spaces upper-case labels', () => {
+    const { tokens } = resolveDesign(
+      design((d) => {
+        Object.assign(d.brand.fonts, {
+          scale: 'display',
+          tracking: 'tight',
+          headlineCase: 'upper',
+          labelCase: 'upper',
+        })
+      })
+    )
+    expect(tokens.base).toMatchObject({
+      '--qb-headline-size': 'clamp(2.25rem, 1.2rem + 4.6vw, 4.75rem)',
+      '--qb-headline-leading': '1.02',
+      '--qb-heading-tracking': '-0.035em',
+      '--qb-headline-case': 'uppercase',
+      '--qb-label-case': 'uppercase',
+      '--qb-label-tracking': '0.06em',
+    })
+  })
+
+  it('sizes large between the two', () => {
+    const { tokens } = resolveDesign(design((d) => (d.brand.fonts.scale = 'large')))
+    expect(tokens.base['--qb-headline-size']).toBe('clamp(2rem, 1.5rem + 2.2vw, 3rem)')
+  })
+})
+
 describe('shape and layout choices', () => {
   it('squares every corner for sharp', () => {
     const { tokens } = resolveDesign(design((d) => (d.shape.corners = 'sharp')))

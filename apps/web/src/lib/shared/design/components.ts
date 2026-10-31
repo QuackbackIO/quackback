@@ -49,6 +49,35 @@ const DENSITY: Record<PortalDesign['layout']['density'], [string, string, string
   spacious: ['1.25rem', '1rem', '1.0625rem'],
 }
 
+type Fonts = PortalDesign['brand']['fonts']
+
+/**
+ * Headline size and line height by scale. Each shrinks with the viewport, so a
+ * display headline still fits a phone.
+ */
+const HEADLINE: Record<NonNullable<Fonts['scale']>, [string, string]> = {
+  standard: ['clamp(1.5rem, 1.25rem + 1vw, 1.875rem)', '1.2'],
+  large: ['clamp(2rem, 1.5rem + 2.2vw, 3rem)', '1.1'],
+  display: ['clamp(2.25rem, 1.2rem + 4.6vw, 4.75rem)', '1.02'],
+}
+
+const CASE = { sentence: 'none', upper: 'uppercase' } as const
+
+/** Headline and label type: absent choices are today's. */
+function typeTokens(fonts: Fonts): TokenMap {
+  const [size, leading] = HEADLINE[fonts.scale ?? 'standard']
+  const labels = fonts.labelCase ?? 'sentence'
+  return {
+    '--qb-headline-size': size,
+    '--qb-headline-leading': leading,
+    '--qb-heading-tracking': fonts.tracking === 'tight' ? '-0.035em' : '-0.02em',
+    '--qb-headline-case': CASE[fonts.headlineCase ?? 'sentence'],
+    '--qb-label-case': CASE[labels],
+    // Upper-case labels read better spaced out.
+    '--qb-label-tracking': labels === 'upper' ? '0.06em' : 'normal',
+  }
+}
+
 const PAGE_MAX: Record<PortalDesign['layout']['width'], string> = {
   narrow: '56rem',
   default: '72rem',
@@ -97,6 +126,26 @@ export const BAND_FADE = 0.2
  * 4.5:1.
  */
 function bandTokens(band: PortalDesign['layout']['band'], t: Required<ThemeVariables>): TokenMap {
+  const tokens = bandSurface(band, t)
+  // Where the headline sits: the band's colour, or the top of a fade.
+  const behind =
+    band === 'brand'
+      ? t.primary
+      : band === 'tint'
+        ? mixColor(t.primary, t.background, BAND_TINT)
+        : band === 'fade'
+          ? mixColor(t.primary, t.background, BAND_FADE)
+          : t.background
+  return {
+    ...tokens,
+    // A headline's accent phrase: the brand colour, moved until it reads at
+    // 3:1 as large text, or the band's ink where it cannot.
+    '--qb-band-accent': solveContrast(t.primary, [behind], 3) ?? tokens['--qb-band-ink']!,
+    '--qb-band-highlight': mixColor(t.primary, behind, 0.25),
+  }
+}
+
+function bandSurface(band: PortalDesign['layout']['band'], t: Required<ThemeVariables>): TokenMap {
   switch (band) {
     case 'brand':
       return {
@@ -146,6 +195,7 @@ export function baseTokens(doc: PortalDesign): TokenMap {
     '--qb-font-body': fontStack(doc.brand.fonts.body),
     '--qb-font-heading': fontStack(doc.brand.fonts.heading),
     '--qb-heading-weight': String(doc.brand.fonts.headingWeight),
+    ...typeTokens(doc.brand.fonts),
   }
 }
 

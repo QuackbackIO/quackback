@@ -55,7 +55,14 @@ export const PORTAL_PARTS = [
     name: 'headline',
     description: "A page's headline, in the band.",
     states: [],
-    tokens: ['--qb-font-heading', '--qb-heading-weight', '--qb-band-ink'],
+    tokens: [
+      '--qb-font-heading',
+      '--qb-heading-weight',
+      '--qb-band-ink',
+      '--qb-headline-size',
+      '--qb-heading-tracking',
+      '--qb-band-accent',
+    ],
     files: ['components/public/portal-band.tsx'],
   },
   {

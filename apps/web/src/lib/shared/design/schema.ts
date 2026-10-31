@@ -92,7 +92,18 @@ const font = z.discriminatedUnion('kind', [
 
 const sort = z.enum(DESIGN_OPTIONS.sort)
 const width = z.enum(DESIGN_OPTIONS.blockWidth)
-const headline = z.object({ title: localized, subtitle: localized }).strict().nullable()
+const headline = z
+  .object({
+    title: localized,
+    subtitle: localized,
+    /** A phrase of the title, by locale, set apart in the accent colour or highlighted. */
+    accent: z
+      .object({ style: z.enum(DESIGN_OPTIONS.headlineAccent), text: localizedUpTo(60) })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .nullable()
 const link = z.object({ label, url: httpUrl }).strict()
 
 /** Home blocks. `roadmapId: null` is the first public roadmap; empty `categoryIds` the first public categories. */
@@ -182,6 +193,11 @@ export const portalDesignV2 = z
                 z.ZodLiteral<800>,
               ]
             ),
+            /** Absent fields read as standard, normal and sentence: today's type. */
+            scale: z.enum(DESIGN_OPTIONS.typeScale).optional(),
+            tracking: z.enum(DESIGN_OPTIONS.tracking).optional(),
+            headlineCase: z.enum(DESIGN_OPTIONS.textCase).optional(),
+            labelCase: z.enum(DESIGN_OPTIONS.textCase).optional(),
           })
           .strict(),
         logo: z

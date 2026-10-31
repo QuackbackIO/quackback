@@ -25,7 +25,10 @@
         "kind": "bundled",
         "id": "inter"
       },
-      "headingWeight": 700
+      "headingWeight": 700,
+      "scale": "display",
+      "tracking": "tight",
+      "headlineCase": "upper"
     },
     "logo": {
       "mark": {
@@ -75,6 +78,12 @@
         },
         "subtitle": {
           "en": "Ideas from players shape every update."
+        },
+        "accent": {
+          "style": "colour",
+          "text": {
+            "en": "next season"
+          }
         }
       },
       "welcome": {

@@ -81,4 +81,35 @@ describe('PortalBand', () => {
     mount(null)
     expect(screen.queryByRole('heading')).toBeNull()
   })
+
+  it('sets the accent phrase apart, in the visitor’s language', () => {
+    root.portalDesign = view({
+      title: { en: 'Charge anywhere. Shape what’s next.', de: 'Überall laden. Mitgestalten.' },
+      subtitle: {},
+      accent: { style: 'colour', text: { en: 'Shape what’s next.', de: 'Mitgestalten.' } },
+    })
+    mount()
+    const accent = screen.getByText('Mitgestalten.')
+    expect(accent.getAttribute('data-qb-accent')).toBe('colour')
+    expect(accent.className).toContain('var(--qb-band-accent)')
+    expect(screen.getByRole('heading').textContent).toBe('Überall laden. Mitgestalten.')
+  })
+
+  it('highlights a phrase, and leaves a title alone that does not hold it', () => {
+    root.portalDesign = view({
+      title: { en: 'Make it work harder' },
+      subtitle: {},
+      accent: { style: 'highlight', text: { en: 'harder' } },
+    })
+    mount()
+    expect(screen.getByText('harder').className).toContain('var(--qb-band-highlight)')
+    cleanup()
+    root.portalDesign = view({
+      title: { en: 'Make it work' },
+      subtitle: {},
+      accent: { style: 'highlight', text: { en: 'harder' } },
+    })
+    mount()
+    expect(screen.getByRole('heading').innerHTML).toBe('Make it work')
+  })
 })
