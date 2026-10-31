@@ -8,7 +8,8 @@
 import manifest from 'virtual:quackback-font-manifest'
 import type { FontLink } from '@/lib/shared/design/view'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import type { FontManifest } from '@/lib/build/font-manifest'
+
+type FontManifest = typeof manifest
 
 /** The family's Latin file at this weight, or at the nearest weight it has. */
 function nearest(latin: Record<string, string>, weight: number): string | undefined {
