@@ -50,9 +50,9 @@ import {
 } from '@/lib/shared/api-key-scopes'
 import { isTeamMember } from '@/lib/shared/roles'
 import { approvalPath, type ApprovalStatus } from '@/lib/shared/assistant/approvals'
-import { settingsProposalSchema } from '@/lib/shared/assistant/settings-proposals'
 import type { JsonValue } from '@/lib/shared/json'
-import { SETTINGS_PROPOSAL_TOOL, summarizeSettingsProposal } from './approval-policy'
+import { DESIGN_PUBLISH_TOOL, SETTINGS_PROPOSAL_TOOL } from './approval-policy'
+import { listedChanges } from './approval-content'
 import { WORKSPACE_THREAD_PREFIX } from './workspace-safety'
 import { approvalNotFound, approvalRiskOf, isDecidableApproval } from './approvals.service'
 import { approvalRequirements } from './approval-requirements'
@@ -130,12 +130,12 @@ const READ_CAP = 1000
 type RequestContent = Record<string, unknown>
 
 /**
- * A request's content, read only for a settings request, the one kind whose
- * changes a response lists. An assistant action's content never leaves the
- * database here.
+ * A request's content, read only for a settings request or a design publish,
+ * the kinds whose changes a response lists. An assistant action's content
+ * never leaves the database here.
  */
 const settingsContent =
-  sql<RequestContent | null>`CASE WHEN ${assistantPendingActions.toolName} = ${SETTINGS_PROPOSAL_TOOL} THEN ${assistantPendingActions.args} END`.mapWith(
+  sql<RequestContent | null>`CASE WHEN ${assistantPendingActions.toolName} IN (${SETTINGS_PROPOSAL_TOOL}, ${DESIGN_PUBLISH_TOOL}) THEN ${assistantPendingActions.args} END`.mapWith(
     assistantPendingActions.args
   )
 
@@ -247,19 +247,8 @@ const REQUESTED_BY: Record<ApprovalRequestChannel, string> = {
 async function describeRequest(
   row: FollowRow
 ): Promise<Pick<PublicApproval, 'title' | 'summary' | 'changes'>> {
-  if (row.toolName === SETTINGS_PROPOSAL_TOOL) {
-    const parsed = settingsProposalSchema.safeParse(row.args)
-    if (parsed.success)
-      return {
-        title: 'Settings change',
-        summary: summarizeSettingsProposal(parsed.data),
-        changes: parsed.data.changes.map((change) => ({
-          field: change.id,
-          from: change.before as JsonValue,
-          to: change.after as JsonValue,
-        })),
-      }
-  }
+  const listed = listedChanges(row)
+  if (listed) return listed
   const { getToolSpecByName } = await import('./assistant.toolspec')
   const where = row.conversationId ? ' in a conversation' : row.ticketId ? ' on a ticket' : ''
   return {

@@ -6,12 +6,16 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { PreconditionFailedError, ValidationError } from '@/lib/shared/errors'
 import type { PrincipalId } from '@quackback/ids'
 import { RETRIEVED_CONTENT_NOTE } from '@/lib/server/domains/assistant/injection-guard'
+import { approvalUrl } from '@/lib/server/domains/assistant/approvals.follow'
+import { requestDesignPublish } from '@/lib/server/domains/assistant/design-publish-request'
 import { patchDesignDraft, readDesignForEditing } from '@/lib/server/domains/design/design.actions'
 import { registerTool, jsonResult, READ_ONLY, WRITE } from './helpers'
+import { mcpApprovalRequester } from './settings'
 
 /**
- * The portal design over MCP: read it and edit its draft. Publishing stays
- * with a person in Settings › Portal, where the draft shows what is waiting.
+ * The portal design over MCP: read it, edit its draft, and ask a person to
+ * publish it. Publishing is always a person's decision: in Settings › Portal,
+ * or by approving a request.
  */
 export function registerPortalDesignTools(server: McpServer, auth: McpAuthContext) {
   registerTool<Record<string, never>>(server, auth, {
@@ -23,6 +27,7 @@ export function registerPortalDesignTools(server: McpServer, auth: McpAuthContex
     annotations: READ_ONLY,
     scope: 'read:settings',
     teamOnly: true,
+    feature: 'portalDesign',
     handler: async () => {
       await resolveMcpActor(auth, 'read:settings')
       return jsonResult({ ...(await readDesignForEditing()), note: RETRIEVED_CONTENT_NOTE })
@@ -43,6 +48,7 @@ Examples:
     annotations: WRITE,
     scope: 'write:settings',
     teamOnly: true,
+    feature: 'portalDesign',
     handler: async ({ patch, expected_revision }) => {
       const actor = await resolveMcpActor(auth, 'write:settings')
       const result = await patchDesignDraft(
@@ -59,6 +65,32 @@ Examples:
         throw new ValidationError(result.code, result.message)
       }
       return jsonResult({ ...(await readDesignForEditing()), note: RETRIEVED_CONTENT_NOTE })
+    },
+  })
+
+  registerTool<Record<string, never>>(server, auth, {
+    name: 'publish_portal_design',
+    permissions: () => [PERMISSIONS.SETTINGS_BRANDING],
+    description:
+      'Ask a person to publish the customer portal design draft. This tool never publishes: it files an approval listing the draft’s changes, and the draft goes live only when a person who may edit branding approves it at url. Follow it with get_approval. If the draft changes before then, the approval is refused; ask again. Asking again for the same draft returns the waiting request. Example: {}',
+    schema: {},
+    annotations: WRITE,
+    scope: 'write:settings',
+    teamOnly: true,
+    feature: 'portalDesign',
+    handler: async () => {
+      const actor = await resolveMcpActor(auth, 'write:settings')
+      const result = await requestDesignPublish(mcpApprovalRequester(auth, actor))
+      if (!result.ok) throw new ValidationError(result.code, result.message)
+      return jsonResult({
+        requested: true,
+        approvalId: result.request.id,
+        status: result.request.status === 'proposed' ? 'pending' : result.request.status,
+        url: approvalUrl(result.request.id),
+        summary: result.request.summary,
+        next: 'Nothing goes live until a person approves this in the app, at url. Check its progress with get_approval.',
+        note: RETRIEVED_CONTENT_NOTE,
+      })
     },
   })
 }

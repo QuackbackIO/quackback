@@ -39,6 +39,8 @@ import { ConflictError, ForbiddenError, NotFoundError } from '@/lib/shared/error
 import { digestOf } from '@/lib/server/utils/canonical-json'
 import { settingsProposalSchema } from '@/lib/shared/assistant/settings-proposals'
 import {
+  DESIGN_PUBLISH_PERMISSIONS,
+  DESIGN_PUBLISH_TOOL,
   SETTINGS_PROPOSAL_TOOL,
   settingsProposalPermissions,
   settingsProposalRisk,
@@ -193,6 +195,7 @@ export async function requiredApprovalPermissions(
     const parsed = settingsProposalSchema.safeParse(row.args)
     return parsed.success ? settingsProposalPermissions(parsed.data.changes) : null
   }
+  if (row.toolName === DESIGN_PUBLISH_TOOL) return DESIGN_PUBLISH_PERMISSIONS
   const { getToolSpecByName } = await import('./assistant.toolspec')
   const { toolPermissions } = await import('./tool-permissions')
   const workspace = !!row.workspaceThreadKey
@@ -425,6 +428,11 @@ export async function approveApproval(
       parsed.data.changes.map((change) => change.id),
       decision
     )
+  }
+
+  if (row.toolName === DESIGN_PUBLISH_TOOL) {
+    const { approveDesignPublish } = await import('./design-publish-request')
+    return approveDesignPublish(actor, id, decision)
   }
 
   if (!row.conversationId && !row.ticketId) throw approvalUnavailable()
