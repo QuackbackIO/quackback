@@ -10,17 +10,33 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
   getWorkspaceSettings: vi.fn(),
-  handlers: [] as Array<() => Promise<unknown>>,
+  getOptionalAuth: vi.fn(),
+  switchPreviewView: vi.fn(),
+  handlers: [] as Array<(input: { data: unknown }) => Promise<unknown>>,
+  validate: (data: unknown) => data,
 }))
 
 vi.mock('@tanstack/react-start', () => ({
   createServerOnlyFn: <T>(fn: T) => fn,
-  createServerFn: () => ({
-    handler(fn: () => Promise<unknown>) {
-      hoisted.handlers.push(fn)
-      return fn
-    },
-  }),
+  createServerFn: () => {
+    const builder = {
+      validator(validate: (data: unknown) => unknown) {
+        hoisted.validate = validate
+        return builder
+      },
+      handler(fn: (input: { data: unknown }) => Promise<unknown>) {
+        hoisted.handlers.push(fn)
+        return fn
+      },
+    }
+    return builder
+  },
+}))
+vi.mock('@/lib/server/functions/auth-helpers', () => ({
+  getOptionalAuth: hoisted.getOptionalAuth,
+}))
+vi.mock('@/lib/server/domains/design/switch', () => ({
+  switchPreviewView: hoisted.switchPreviewView,
 }))
 vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () => new Headers({ host: 'feedback.example' }),
@@ -97,10 +113,15 @@ function workspaceSettings(rawSetupState: string) {
   }
 }
 
-async function getBootstrapData() {
+async function getBootstrapData(input?: unknown) {
   if (hoisted.handlers.length === 0) await import('../bootstrap')
-  return (await hoisted.handlers[0]!()) as {
-    settings: { name: string; settings: object; statusConfig: object } | null
+  return (await hoisted.handlers[0]!({ data: hoisted.validate(input) })) as {
+    settings: {
+      name: string
+      settings: object
+      statusConfig: object
+      portalDesign?: { engine: string }
+    } | null
     onboarding: { complete: boolean; needsSetupWizard: boolean }
   }
 }
@@ -159,5 +180,55 @@ describe('getBootstrapData response', () => {
 
     expect(data.settings).toBeNull()
     expect(data.onboarding).toEqual({ complete: false, needsSetupWizard: false })
+  })
+})
+
+describe('the switch preview frame', () => {
+  const switched = { engine: 'v2', attributes: {} }
+  const editor = { scope: 'dashboard', permissions: ['settings.branding'] }
+
+  beforeEach(() => {
+    hoisted.getWorkspaceSettings.mockReset()
+    hoisted.getWorkspaceSettings.mockResolvedValue(workspaceSettings(setupState()))
+    hoisted.getOptionalAuth.mockReset()
+    hoisted.switchPreviewView.mockReset()
+    hoisted.switchPreviewView.mockResolvedValue(switched)
+  })
+
+  it('draws the portal switched for someone who can edit its branding', async () => {
+    hoisted.getOptionalAuth.mockResolvedValue(editor)
+    const data = await getBootstrapData({ designPreview: 'switch' })
+    expect(data.settings?.portalDesign).toEqual(switched)
+    expect(data.settings?.settings).toEqual({})
+  })
+
+  it('draws it as it is for anyone else, or for an unknown request', async () => {
+    hoisted.getOptionalAuth.mockResolvedValue(null)
+    expect(
+      (await getBootstrapData({ designPreview: 'switch' })).settings?.portalDesign
+    ).toBeUndefined()
+    hoisted.getOptionalAuth.mockResolvedValue({ ...editor, permissions: ['posts.read'] })
+    expect(
+      (await getBootstrapData({ designPreview: 'switch' })).settings?.portalDesign
+    ).toBeUndefined()
+    hoisted.getOptionalAuth.mockResolvedValue({ ...editor, scope: 'widget' })
+    expect(
+      (await getBootstrapData({ designPreview: 'switch' })).settings?.portalDesign
+    ).toBeUndefined()
+
+    hoisted.getOptionalAuth.mockResolvedValue(editor)
+    expect(
+      (await getBootstrapData({ designPreview: 'other' })).settings?.portalDesign
+    ).toBeUndefined()
+    expect((await getBootstrapData()).settings?.portalDesign).toBeUndefined()
+    expect(hoisted.switchPreviewView).toHaveBeenCalledTimes(0)
+  })
+
+  it('draws it as it is when there is nothing to switch', async () => {
+    hoisted.getOptionalAuth.mockResolvedValue(editor)
+    hoisted.switchPreviewView.mockResolvedValue(null)
+    expect(
+      (await getBootstrapData({ designPreview: 'switch' })).settings?.portalDesign
+    ).toBeUndefined()
   })
 })

@@ -63,9 +63,14 @@ import type {
 } from '@/lib/shared/types/settings'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { readBatch } from '@/lib/client/queries/read-batch'
-import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import {
+  useFeatureFlag,
+  useSessionContext,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
 import { AppearanceView } from '@/components/admin/settings/appearance/appearance-view'
+import { DesignSwitchCard } from '@/components/admin/settings/appearance/design-switch-card'
 
 export const Route = createFileRoute('/admin/settings/portal')({
   head: adminPageHead('Portal settings'),
@@ -83,8 +88,9 @@ export const Route = createFileRoute('/admin/settings/portal')({
       ensure(settingsQueries.customCss()),
       ensure(settingsQueries.portalConfig()),
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
-      // A workspace on the design engine opens on Appearance. Loaded here,
-      // not imported above: a loader's imports ship in the entry chunk.
+      // A workspace on the design engine opens on Appearance; one still on
+      // the old theme with the engine on may be offered the switch. Loaded
+      // here, not imported above: a loader's imports ship in the entry chunk.
       context.settings?.portalDesign?.engine === 'v2'
         ? import('@/lib/client/queries/portal-design').then(({ portalDesignQueries }) =>
             Promise.all([
@@ -92,7 +98,11 @@ export const Route = createFileRoute('/admin/settings/portal')({
               ensure(portalDesignQueries.aiStatus()),
             ])
           )
-        : undefined,
+        : context.settings?.featureFlags?.portalDesignV2
+          ? import('@/lib/client/queries/portal-design').then(({ portalDesignQueries }) =>
+              ensure(portalDesignQueries.switch())
+            )
+          : undefined,
     ])
   },
   component: PortalSettingsPage,
@@ -138,6 +148,7 @@ function PortalPage() {
   const [, startTransition] = useTransition()
   // Display-only: the name is edited on Workspace > General.
   const workspaceName = settings?.name || ''
+  const designEngineOn = useFeatureFlag('portalDesignV2')
 
   const { data: brandingConfig = {} } = useSuspenseQuery(settingsQueries.branding())
   const { data: logoData } = useSuspenseQuery(settingsQueries.logo())
@@ -285,6 +296,14 @@ function PortalPage() {
 
   return (
     <SettingsPage page="/admin/settings/portal" width="wide">
+      {designEngineOn && (
+        <div className="mb-6">
+          <DesignSwitchCard
+            workspaceName={workspaceName}
+            faviconUrl={settings?.faviconData?.url ?? logoData?.url ?? null}
+          />
+        </div>
+      )}
       {/* Controls left, live portal preview right (sticky). */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] gap-6 items-start">
         <div className="space-y-4 min-w-0">

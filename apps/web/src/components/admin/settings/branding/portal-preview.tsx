@@ -48,6 +48,8 @@ interface PortalPreviewProps {
   } | null
   /** The page the frame shows: the root, Home or the feed at its own address. */
   page?: PreviewPage
+  /** Draw the portal as it would be after switching to the design. */
+  switched?: boolean
 }
 
 export type PreviewPage = 'root' | 'home' | 'feedback'
@@ -90,6 +92,7 @@ export function PortalPreview({
   scaleToDesktop = false,
   sort = 'trending',
   page = 'root',
+  switched = false,
 }: PortalPreviewProps) {
   const frameBox = useRef<HTMLDivElement>(null)
   const [boxWidth, setBoxWidth] = useState(0)
@@ -189,7 +192,7 @@ export function PortalPreview({
         <iframe
           key={refreshKey}
           ref={iframeRef}
-          src={portalPreviewSrc(theme, sort, page)}
+          src={`${portalPreviewSrc(theme, sort, page)}${switched ? '&design=switch' : ''}`}
           title="Portal preview"
           className="w-full border-0 bg-background"
           style={

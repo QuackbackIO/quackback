@@ -24,6 +24,8 @@ const REFUSAL_STATUS: Record<DesignRefusalCode, number> = {
   REVISION_NOT_FOUND: 404,
   INVALID_CSS: 400,
   TIER_LIMIT_EXCEEDED: 403,
+  NOT_SWITCHABLE: 409,
+  NOT_SWITCHED: 409,
 }
 
 /** The key needs the settings scope and its owner the branding permission. */

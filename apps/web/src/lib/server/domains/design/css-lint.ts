@@ -45,6 +45,7 @@ const INTERNAL_CLASSES: Record<string, string> = {
   'portal-nav__item': '[data-qb-part="nav-item"]',
   'portal-nav__item--active': '[data-qb-part="nav-item"][data-state="active"]',
   'portal-band': '[data-qb-part="band"]',
+  'post-card': '[data-qb-part="post-card"]',
   'post-card__vote--voted': '[data-qb-part="vote-button"][data-state="voted"]',
 }
 
@@ -91,6 +92,8 @@ export function lintDesignCss(css: string): CssLintReport {
           message: '@import is not allowed: put the CSS here instead.',
           line: lineOf(node),
         })
+        // Its url() is the same refusal.
+        return csstree.walk.skip
       }
       if (node.type === 'Url' && !OWN_STORAGE.test(node.value.trim())) {
         errors.push({

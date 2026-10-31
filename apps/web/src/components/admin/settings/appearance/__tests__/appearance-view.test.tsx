@@ -56,6 +56,12 @@ vi.mock('@/lib/server/functions/portal-design', () => ({
     return { ok: true, revisionId: 'portal_design_revision_1', number: 1 }
   },
   restorePortalDesignVersionFn: async () => ({ ok: true }),
+  getPortalDesignSwitchFn: async () => ({
+    available: false,
+    canSwitchBack: false,
+    report: { errors: [], warnings: [], carried: [] },
+  }),
+  switchBackPortalDesignFn: async () => ({ ok: true }),
 }))
 
 vi.mock('@/lib/client/analytics', () => ({
