@@ -30,6 +30,8 @@ export interface SiteBrand {
   button: string | null
   /** It fills large areas, such as a hero, with its brand colour. */
   bold: boolean
+  /** Its buttons are black or near-black: a monochrome brand that uses colour sparingly. */
+  monochrome: boolean
 }
 
 /** Pages that answer a visit with a block rather than the site. */
@@ -111,7 +113,31 @@ const GENERIC_FONTS =
   /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-\w+|-apple-system|blinkmacsystemfont|segoe ui|helvetica( neue)?|arial|roboto|noto \w+|apple color emoji|segoe ui (emoji|symbol)|inherit|initial|unset|var\(.*|font awesome.*|fontawesome|material (icons|symbols).*|icons?|emoji)$/i
 
 /** Weighs each colour by where the CSS uses it, and finds the page background and fonts. */
+/** The CSS with its dark-mode blocks taken out: the brand is read from the page as it first loads. */
+function withoutDarkMode(css: string): string {
+  let out = ''
+  let at = 0
+  const dark = /@media[^{]*prefers-color-scheme\s*:\s*dark[^{]*\{/gi
+  for (let match = dark.exec(css); match; match = dark.exec(css)) {
+    out += css.slice(at, match.index)
+    let depth = 1
+    let i = match.index + match[0].length
+    while (i < css.length && depth > 0) {
+      if (css[i] === '{') depth++
+      else if (css[i] === '}') depth--
+      i++
+    }
+    at = i
+    dark.lastIndex = i
+  }
+  return out + css.slice(at)
+}
+
+/** A rule for a dark theme, such as `.dark body` or `[data-theme=dark]`. */
+const DARK_THEME = /(^|[\s.[#:-])(dark|night)([\s\]"'=_-]|$)/
+
 function readCss(css: string, weigh: (colour: string, weight: number) => void) {
+  css = withoutDarkMode(css)
   let background: string | null = null
   const buttons = new Map<string, number>()
   const fields = new Set<string>()
@@ -123,6 +149,7 @@ function readCss(css: string, weigh: (colour: string, weight: number) => void) {
   const count = (map: Map<string, number>, font: string) => map.set(font, (map.get(font) ?? 0) + 1)
   for (const [, selector, body] of css.matchAll(/([^{}@;]+)\{([^{}]*)\}/g)) {
     const sel = selector!.trim().toLowerCase()
+    if (DARK_THEME.test(sel)) continue
     // Focus rings and messages about state are not the brand.
     if (/:focus|:invalid|\b(error|danger|warning|success|alert|toast|valid)\b/.test(sel)) continue
     const onButton = /\b(btn|button|cta|primary)\b/.test(sel)
@@ -234,6 +261,8 @@ export function readSiteBrand(input: {
     .filter(([colour]) => isBrandColour(colour))
     .sort((a, b) => b[1] - a[1])
     .map(([colour]) => colour)
+  // A colourful button fill is the brand's own call to action, so it leads.
+  if (css.button && isBrandColour(css.button)) vivid.unshift(css.button)
   const palette: string[] = []
   for (const colour of vivid) {
     if (palette.length === 5) break
@@ -258,5 +287,6 @@ export function readSiteBrand(input: {
     dark,
     button: css.button,
     bold: !!palette[0] && css.fields.some((field) => distance(field, palette[0]!) < 48),
+    monochrome: !!css.button && !isBrandColour(css.button) && luminance(css.button) < 0.2,
   }
 }

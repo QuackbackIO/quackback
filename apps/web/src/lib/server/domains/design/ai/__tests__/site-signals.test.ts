@@ -69,6 +69,7 @@ describe('readSiteSignals', () => {
         dark: false,
         button: '#0f766e',
         bold: false,
+        monochrome: false,
       },
     })
     expect(web.asked[0]!.agent).toMatch(/QuackbackBrandReader/)

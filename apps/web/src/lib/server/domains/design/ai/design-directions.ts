@@ -231,6 +231,8 @@ function siteBrief(site: SiteSignals): string {
     (site.fonts.heading || site.fonts.body) &&
       `It sets headings in ${site.fonts.heading ?? site.fonts.body} and text in ${site.fonts.body ?? site.fonts.heading}.`,
     site.button && `Its buttons are filled ${site.button}.`,
+    site.monochrome &&
+      'It is a monochrome brand: black buttons and little colour. Keep the first look monochrome: a near-black accent, white pages and no coloured band.',
     site.bold && 'It fills large areas, such as its hero, with its brand colour.',
   ]
     .filter(Boolean)

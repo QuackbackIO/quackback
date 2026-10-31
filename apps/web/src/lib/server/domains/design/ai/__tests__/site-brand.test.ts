@@ -56,7 +56,40 @@ describe('how the site uses its colours', () => {
     })
     expect(brand.button).toBe('#000000')
     expect(brand.colour).toBe('#0077d4')
-    expect(brand.bold).toBe(false)
+    expect(brand).toMatchObject({ bold: false, monochrome: true })
+  })
+
+  it('leads with a colourful button fill, the brand’s own call to action', () => {
+    const brand = readSiteBrand({
+      html: '',
+      css: [
+        ':root { --accent-warm: #f5a623; --accent-gold: #f5a623 } .btn { background: #0075de }',
+      ],
+      manifest: null,
+    })
+    expect(brand).toMatchObject({ colour: '#0075de', monochrome: false })
+  })
+
+  it('reads the page as it first loads, not its dark mode', () => {
+    const brand = readSiteBrand({
+      html: '',
+      css: [
+        'body { background: #ffffff }',
+        '@media (prefers-color-scheme: dark) { body { background: #000000 } .a { color: #fff } }',
+        '[data-theme="dark"] body, .dark body { background: #111111 }',
+      ],
+      manifest: null,
+    })
+    expect(brand).toMatchObject({ background: '#ffffff', dark: false })
+    const darkFirst = readSiteBrand({
+      html: '',
+      css: [
+        '@media (prefers-color-scheme: dark) { html { background: #000 } }',
+        'html { background: #fafafa }',
+      ],
+      manifest: null,
+    })
+    expect(darkFirst.background).toBe('#fafafa')
   })
 
   it('knows a brand colour that fills a hero', () => {
