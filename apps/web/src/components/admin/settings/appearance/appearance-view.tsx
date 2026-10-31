@@ -1,16 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import { ClientOnly } from '@tanstack/react-router'
+import { ClientOnly, useRouteContext } from '@tanstack/react-router'
 import { ComputerDesktopIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { PortalPreview } from '@/components/admin/settings/branding/portal-preview'
+import {
+  PortalPreview,
+  type PreviewPage,
+} from '@/components/admin/settings/branding/portal-preview'
 import { track } from '@/lib/client/analytics'
 import { useUploadWorkspaceLogo } from '@/lib/client/mutations/settings'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import { DESIGN_AI_SCOPES, type DesignAiScope } from '@/lib/shared/design/apply-changes'
+import { portalPageGates } from '@/lib/shared/design/paths'
 import { cn } from '@/lib/shared/utils'
 import { AskAiPanel } from './ask-ai-panel'
 import { BrandPanel } from './brand-panel'
@@ -48,6 +52,13 @@ export function AppearanceView({
   const [history, setHistory] = useState(false)
   const [tab, setTab] = useState(available ? 'ask' : 'brand')
   const [scope, setScope] = useState<DesignAiScope>('site')
+  const workspace = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const gates = useMemo(() => portalPageGates(workspace, true), [workspace])
+  // With Home on, the preview shows Home or the feed at its own address.
+  const [page, setPage] = useState<'home' | 'feedback'>('home')
+  const previewPage: PreviewPage = draft.design.nav.home.on ? page : 'feedback'
+  const pageShown = useRef(previewPage)
+  pageShown.current = previewPage
   // A section clicked in the preview opens its controls and scopes the composer to it.
   useEffect(() => {
     function onMessage(event: MessageEvent) {
@@ -58,7 +69,10 @@ export function AppearanceView({
       setTab('sections')
       if ((DESIGN_AI_SCOPES as readonly string[]).includes(message.section))
         setScope(message.section as DesignAiScope)
-      const id = `design-section-${message.section}`
+      // On Home the band carries Home's own headline.
+      const section =
+        message.section === 'band' && pageShown.current === 'home' ? 'home' : message.section
+      const id = `design-section-${section}`
       requestAnimationFrame(() =>
         document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       )
@@ -134,7 +148,12 @@ export function AppearanceView({
             <BrandPanel design={draft.design} update={draft.update} logoUrl={logoUrl} />
           </TabsContent>
           <TabsContent value="sections" className="pt-4">
-            <SectionsPanel design={draft.design} update={draft.update} />
+            <SectionsPanel
+              design={draft.design}
+              update={draft.update}
+              gates={gates}
+              onEditHome={() => setPage('home')}
+            />
           </TabsContent>
         </Tabs>
         {available && (
@@ -158,6 +177,22 @@ export function AppearanceView({
       <div className="min-w-0 self-start xl:sticky xl:top-6">
         <div className="mb-3 flex items-center gap-1.5">
           <span className="text-sm font-medium">Preview</span>
+          {draft.design.nav.home.on && (
+            <div className="ms-2 flex items-center gap-1.5" role="group" aria-label="Page">
+              {(['home', 'feedback'] as const).map((shown) => (
+                <Button
+                  key={shown}
+                  variant="outline"
+                  size="sm"
+                  aria-pressed={page === shown}
+                  className={cn(page === shown && 'bg-muted')}
+                  onClick={() => setPage(shown)}
+                >
+                  {shown === 'home' ? 'Home' : 'Feedback'}
+                </Button>
+              ))}
+            </div>
+          )}
           <div className="ms-auto flex items-center gap-1.5">
             {(['light', 'dark'] as const).map((mode) => (
               <Button
@@ -197,6 +232,7 @@ export function AppearanceView({
             design={draft.preview}
             scaleToDesktop
             sort={draft.design.pages.feedback.defaultSort}
+            page={previewPage}
             viewport={viewport}
             workspaceName={workspaceName}
             faviconUrl={faviconUrl}

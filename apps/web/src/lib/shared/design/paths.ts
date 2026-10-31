@@ -64,9 +64,17 @@ const PAGE_PATHS: Record<PortalPageType, string> = {
 
 export type PortalLanding = { kind: 'home' } | { kind: 'feed' } | { kind: 'redirect'; to: string }
 
-/** What `/` shows. */
-export function portalLanding(settings: PortalPathSettings, gates: PortalPageGates): PortalLanding {
+/**
+ * What `/` shows. The Appearance preview asks for Home with `page=home`, to
+ * show a draft's Home whatever the saved design leads with.
+ */
+export function portalLanding(
+  settings: PortalPathSettings,
+  gates: PortalPageGates,
+  search: Record<string, unknown> = {}
+): PortalLanding {
   if (settings.engine !== 'v2') return { kind: 'feed' }
+  if (previewsHome(search)) return { kind: 'home' }
   if (settings.nav.home.on) return { kind: 'home' }
   const first = settings.nav.items.find(
     (item): item is Extract<typeof item, { shown: boolean }> =>
@@ -74,6 +82,12 @@ export function portalLanding(settings: PortalPathSettings, gates: PortalPageGat
   )
   if (!first || first.type === 'feedback') return { kind: 'feed' }
   return { kind: 'redirect', to: PAGE_PATHS[first.type] }
+}
+
+/** Whether a search is the Appearance preview's, asking for Home. */
+export function previewsHome(search: Record<string, unknown>): boolean {
+  const preview = search.preview === true || search.preview === 1 || search.preview === '1'
+  return preview && search.page === 'home'
 }
 
 /** The feed's address: `/` while it is the landing page, else `/feedback`. */

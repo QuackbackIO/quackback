@@ -8,14 +8,16 @@ import { describe, expect, it } from 'vitest'
 import { defaultParseSearch } from '@tanstack/react-router'
 import { Route as PortalLayout } from '@/routes/_portal'
 import { Route as PortalHome } from '@/routes/_portal/index'
+import { Route as PortalFeed } from '@/routes/_portal/feedback'
 import { portalPreviewSrc } from '../portal-preview'
 
 type Validate = (search: Record<string, unknown>) => Record<string, unknown>
 
 const layoutSearch = (PortalLayout.options as unknown as { validateSearch: Validate })
   .validateSearch
-const homeSearch = (PortalHome.options as unknown as { validateSearch: { parse: Validate } })
-  .validateSearch
+const routeSearch = (route: unknown) =>
+  (route as { options: { validateSearch: { parse: Validate } } }).options.validateSearch
+const homeSearch = routeSearch(PortalHome)
 
 describe('portalPreviewSrc', () => {
   it.each(['light', 'dark'] as const)('is the canonical portal home address (%s)', (theme) => {
@@ -30,5 +32,21 @@ describe('portalPreviewSrc', () => {
     )
     expect(canonical).toEqual(search)
     expect(search).toMatchObject({ theme, preview: true })
+  })
+
+  it.each([
+    ['home', '/', PortalHome],
+    ['feedback', '/feedback', PortalFeed],
+  ] as const)('frames %s at its canonical address', (page, path, route) => {
+    const src = portalPreviewSrc('light', 'top', page)
+    expect(src.startsWith(`${path}?`)).toBe(true)
+    const search = defaultParseSearch(src.slice(path.length))
+    const canonical = Object.fromEntries(
+      Object.entries({ ...layoutSearch(search), ...routeSearch(route).parse(search) }).filter(
+        ([, value]) => value !== undefined
+      )
+    )
+    expect(canonical).toEqual(search)
+    expect(search).toMatchObject(page === 'home' ? { page: 'home' } : { sort: 'top' })
   })
 })

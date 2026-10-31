@@ -12,7 +12,7 @@ vi.mock('@tanstack/react-router', () => ({
   useSearch: () => routerSearch,
 }))
 
-vi.mock('@/lib/client/hooks/use-portal-paths', () => ({
+vi.mock('@/components/public/use-portal-paths', () => ({
   useFeedbackPath: () => feedbackPath,
 }))
 

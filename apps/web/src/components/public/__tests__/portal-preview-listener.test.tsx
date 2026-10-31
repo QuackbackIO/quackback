@@ -10,7 +10,9 @@ import { act, cleanup, render, screen } from '@testing-library/react'
 import { PortalPreviewProvider } from '../portal-preview-listener'
 import {
   usePreviewCss,
+  usePreviewDesignNav,
   usePreviewDraft,
+  usePreviewHome,
   usePreviewNav,
   usePreviewWelcomeCard,
 } from '../preview-draft-context'
@@ -32,6 +34,18 @@ function CssReader() {
 }
 function DraftReader() {
   return <p data-testid="draft">{usePreviewDraft() ? 'draft' : 'none'}</p>
+}
+function PagesReader() {
+  const home = usePreviewHome()
+  const designNav = usePreviewDesignNav()
+  return (
+    <p data-testid="pages">
+      {JSON.stringify({
+        blocks: home?.blocks.map((block) => block.type) ?? null,
+        nav: designNav ?? null,
+      })}
+    </p>
+  )
 }
 
 function post(data: unknown) {
@@ -62,6 +76,7 @@ beforeEach(() => {
       <WelcomeCardReader />
       <CssReader />
       <DraftReader />
+      <PagesReader />
     </PortalPreviewProvider>
   )
 })
@@ -146,6 +161,39 @@ describe('a design draft in the preview', () => {
     await postDesign({ type: 'quackback:preview-design', design: null })
     expect(document.querySelector('style[data-preview-design]')).toBeNull()
     expect(document.documentElement.getAttribute('data-qb-nav')).toBe('tabs')
+  })
+
+  it('hands the page the draft’s Home and menu, dropping what it cannot read', async () => {
+    const pages = () => JSON.parse(screen.getByTestId('pages').textContent ?? '{}')
+    expect(pages()).toEqual({ blocks: null, nav: null })
+    await postDesign({
+      type: 'quackback:preview-design',
+      design: {
+        css: '',
+        attributes: {},
+        fontIds: [],
+        headline: null,
+        home: {
+          headline: null,
+          blocks: [
+            { type: 'status', width: 'third' },
+            { type: 'script', width: 'full' },
+            { type: 'links' },
+          ],
+        },
+        nav: { home: { on: true, tab: false }, items: [{ type: 'feedback', shown: true }, 'x'] },
+      },
+    })
+    expect(pages()).toEqual({
+      blocks: ['status'],
+      nav: { home: { on: true, tab: false }, items: [{ type: 'feedback', shown: true }] },
+    })
+    // A menu without Home's switches is no menu.
+    await postDesign({
+      type: 'quackback:preview-design',
+      design: { css: '', attributes: {}, fontIds: [], nav: { home: {}, items: [] } },
+    })
+    expect(pages()).toEqual({ blocks: null, nav: null })
   })
 
   it('ignores attributes outside the design’s own', async () => {

@@ -9,12 +9,69 @@
 /** A page headline by locale; the same shape the preview context carries. */
 type Headline = { title: Record<string, string>; subtitle: Record<string, string> } | null
 
+/** A draft's Home: its headline and blocks, as the design stores them. */
+type Home = { headline: Headline; blocks: Array<Record<string, unknown>> }
+
+/** A draft's menu, as the design stores it. */
+type Nav = {
+  home: { on: boolean; tab: boolean; label?: string }
+  items: Array<Record<string, unknown>>
+}
+
 /** A draft portal design, resolved by the admin with the code the server uses. */
 export interface DesignPreview {
   css: string
   attributes: Record<string, string>
   fontIds: string[]
   headline: Headline
+  home: Home | null
+  nav: Nav | null
+}
+
+const BLOCK_TYPES = new Set([
+  'welcome',
+  'composer',
+  'ideas',
+  'roadmap',
+  'updates',
+  'help_search',
+  'help_topics',
+  'status',
+  'contact',
+  'links',
+])
+
+function readHome(value: unknown): Home | null {
+  if (!value || typeof value !== 'object') return null
+  const { headline, blocks } = value as Record<string, unknown>
+  if (!Array.isArray(blocks)) return null
+  return {
+    headline: readHeadline(headline),
+    blocks: blocks.filter(
+      (block): block is Record<string, unknown> =>
+        !!block &&
+        typeof block === 'object' &&
+        BLOCK_TYPES.has((block as Record<string, unknown>).type as string) &&
+        typeof (block as Record<string, unknown>).width === 'string'
+    ),
+  }
+}
+
+function readNav(value: unknown): Nav | null {
+  if (!value || typeof value !== 'object') return null
+  const { home, items } = value as Record<string, unknown>
+  if (!home || typeof home !== 'object' || !Array.isArray(items)) return null
+  const { on, tab, label } = home as Record<string, unknown>
+  if (typeof on !== 'boolean' || typeof tab !== 'boolean') return null
+  return {
+    home: { on, tab, ...(typeof label === 'string' ? { label } : {}) },
+    items: items.filter(
+      (item): item is Record<string, unknown> =>
+        !!item &&
+        typeof item === 'object' &&
+        typeof (item as Record<string, unknown>).type === 'string'
+    ),
+  }
 }
 
 const isTextByLocale = (value: unknown): value is Record<string, string> =>
@@ -32,7 +89,7 @@ const DESIGN_VALUE = /^[a-z_]+$/
 /** The message's design, keeping only the structural attributes a design sets. */
 export function readDesignPreview(value: unknown): DesignPreview | null {
   if (!value || typeof value !== 'object') return null
-  const { css, attributes, fontIds, headline } = value as Record<string, unknown>
+  const { css, attributes, fontIds, headline, home, nav } = value as Record<string, unknown>
   if (typeof css !== 'string') return null
   const safe = Object.fromEntries(
     Object.entries((attributes as Record<string, unknown>) ?? {}).filter(
@@ -40,7 +97,14 @@ export function readDesignPreview(value: unknown): DesignPreview | null {
     )
   ) as Record<string, string>
   const fonts = Array.isArray(fontIds) ? fontIds.filter((id) => typeof id === 'string') : []
-  return { css, attributes: safe, fontIds: fonts, headline: readHeadline(headline) }
+  return {
+    css,
+    attributes: safe,
+    fontIds: fonts,
+    headline: readHeadline(headline),
+    home: readHome(home),
+    nav: readNav(nav),
+  }
 }
 
 /** Sets the attributes on <html> and returns what puts each one's saved value back. */
@@ -72,7 +136,10 @@ export function startSectionPicking(): () => void {
     const section = target.closest('[data-qb-section]')?.getAttribute('data-qb-section')
     if (!section) return
     event.preventDefault()
-    window.parent.postMessage({ type: 'quackback:preview-section', section }, window.location.origin)
+    window.parent.postMessage(
+      { type: 'quackback:preview-section', section },
+      window.location.origin
+    )
   }
   document.addEventListener('click', onClick, true)
   return () => document.removeEventListener('click', onClick, true)

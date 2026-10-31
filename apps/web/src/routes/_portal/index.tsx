@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { portalLanding } from '@/lib/shared/design/paths'
+import { z } from 'zod'
+import { portalLanding, previewsHome } from '@/lib/shared/design/paths'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import {
@@ -27,18 +28,20 @@ const FeedComponent = FeedbackRoute.options.component as NonNullable<
  * the menu shows: the feed itself when that is Feedback, else a redirect.
  */
 export const Route = createFileRoute('/_portal/')({
-  validateSearch: feedSearchSchema,
+  // `page=home` is the Appearance preview asking for Home.
+  validateSearch: feedSearchSchema.extend({ page: z.literal('home').optional().catch(undefined) }),
   // The landing only chooses what to show, so it stays in the route module:
   // the page then loads one chunk, the feed's or Home's, as it did before.
   codeSplitGroupings: [['errorComponent'], ['notFoundComponent']],
   loader: async ({ context, location }) => {
     if (!context.settings) throw redirect({ to: '/onboarding' })
     const { settings, gates } = portalPathsOf(context)
-    const landing = portalLanding(settings, gates)
+    const previewing = previewsHome(location.search)
+    const landing = portalLanding(settings, gates, location.search)
     // The menu can change, so the first page is not a permanent address.
     if (landing.kind === 'redirect') throw redirect({ href: landing.to, statusCode: 302 })
     if (landing.kind === 'home') {
-      if (hasFeedSearch(location.search))
+      if (!previewing && hasFeedSearch(location.search))
         throw redirect({ to: '/feedback', search: location.search, statusCode: 301 })
       const design = context.settings.portalDesign
       const [home, showPoweredBy] = await Promise.all([importHome(), getShowPoweredByFn()])
@@ -46,7 +49,8 @@ export const Route = createFileRoute('/_portal/')({
         context.queryClient,
         design?.engine === 'v2' ? design.home.blocks : [],
         gates,
-        context.acceptLanguageLocale ?? DEFAULT_LOCALE
+        context.acceptLanguageLocale ?? DEFAULT_LOCALE,
+        previewing
       )
       return {
         landing: 'home' as const,

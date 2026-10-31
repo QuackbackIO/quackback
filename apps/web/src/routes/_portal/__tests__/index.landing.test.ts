@@ -11,6 +11,7 @@ const hoisted = vi.hoisted(() => ({
   feeds: [] as string[],
   prefetched: 0,
   preloaded: 0,
+  everyArea: [] as boolean[],
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -19,8 +20,9 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 vi.mock('@/lib/server/functions/powered-by', () => ({ getShowPoweredByFn: async () => false }))
 vi.mock('@/components/public/home/portal-home', () => ({
-  loadHome: async () => {
+  loadHome: async (...args: unknown[]) => {
     hoisted.prefetched++
+    hoisted.everyArea.push(args[4] === true)
     return {}
   },
 }))
@@ -88,6 +90,7 @@ beforeEach(() => {
   hoisted.feeds = []
   hoisted.prefetched = 0
   hoisted.preloaded = 0
+  hoisted.everyArea = []
 })
 
 describe('the portal root', () => {
@@ -122,6 +125,38 @@ describe('the portal root', () => {
       ]
     })
     await expect(load(settings)).rejects.toEqual({ redirect: { href: '/hc', statusCode: 302 } })
+  })
+
+  it('shows Home to the Appearance preview whatever the saved design leads with', async () => {
+    const help = v2((doc) => {
+      doc.nav.items = [
+        { type: 'help', shown: true },
+        { type: 'feedback', shown: true },
+      ]
+    })
+    for (const settings of [v2(), help]) {
+      expect(await load(settings, { preview: true, page: 'home' })).toMatchObject({
+        landing: 'home',
+      })
+    }
+    // The draft's blocks arrive after the page loads, so every block's strings come with it.
+    expect(hoisted.everyArea).toEqual([true, true])
+    // A feed search in the preview stays on Home.
+    expect(
+      await load(
+        v2((doc) => (doc.nav.home.on = true)),
+        { preview: '1', page: 'home', board: 'bugs' }
+      )
+    ).toMatchObject({ landing: 'home' })
+  })
+
+  it('asks for Home only from a design preview', async () => {
+    expect(await load(v2(), { page: 'home' })).toMatchObject({ landing: 'feed' })
+    expect(await load({ name: 'Acme' }, { preview: true, page: 'home' })).toMatchObject({
+      landing: 'feed',
+    })
+    expect(await load(v2((doc) => (doc.nav.home.on = true)))).toMatchObject({ landing: 'home' })
+    expect(hoisted.everyArea).toEqual([false])
   })
 
   it('sends a workspace that is not set up to onboarding', async () => {

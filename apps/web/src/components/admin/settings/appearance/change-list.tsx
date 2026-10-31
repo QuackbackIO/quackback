@@ -39,9 +39,20 @@ const VALUE_LABELS: Record<string, string> = {
 
 const capital = (value: string) => value[0].toUpperCase() + value.slice(1).replaceAll('_', ' ')
 
-/** An image reads as uploaded or not; its storage key means nothing to a person. */
-const shownValue = (path: string, value: unknown) =>
-  isImageField(path) ? (value ? 'Uploaded image' : 'None') : value
+/**
+ * An image reads as uploaded or not, its storage key meaning nothing to a
+ * person; an empty headline as none; Home's blocks as how many there are.
+ */
+function shownValue(path: string, value: unknown) {
+  if (isImageField(path)) return value ? 'Uploaded image' : 'None'
+  // Text left empty is none, not chosen for the person.
+  if (/^pages\.\w+\.headline/.test(path) && value == null) return 'None'
+  if (path === 'pages.home.blocks' && Array.isArray(value))
+    return value.length === 0
+      ? 'No blocks'
+      : `${value.length} block${value.length === 1 ? '' : 's'}`
+  return value
+}
 
 /** Every change a draft makes, with its value now and in the draft. */
 export function ChangeList({ changes }: { changes: DesignChange[] }) {
