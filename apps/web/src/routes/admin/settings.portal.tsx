@@ -43,10 +43,7 @@ import {
   PortalNavEditor,
   isValidNavLinkUrl,
 } from '@/components/admin/settings/branding/portal-nav-editor'
-import {
-  seedNavEditorItems,
-  type PortalBuiltInNavType,
-} from '@/components/public/portal-header-nav'
+import { seedNavEditorItems } from '@/components/public/portal-header-nav'
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
 import { loadBrandingFont } from '@/lib/shared/theme'
 import {
@@ -66,9 +63,8 @@ import {
   isPlanRefusal,
   type UpgradeDescription,
 } from '@/lib/shared/describe-upgrade'
-import { DEFAULT_PORTAL_CONFIG, isProductEnabled } from '@/lib/shared/types/settings'
-import { isStatusPagePublished } from '@/lib/shared/status-settings'
-import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
+import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
+import { portalPageGates } from '@/lib/shared/design/paths'
 import type {
   PortalConfig,
   PortalNavItemConfig,
@@ -316,21 +312,10 @@ function PortalPage({
   // Built-in tabs that are currently unavailable (product or tab off) keep
   // their rows in the editor but render inert. Mirrors portal-header.
   const gatedTypes = useMemo(() => {
-    const flags = settings?.featureFlags
-    const statusAudience = settings?.statusConfig?.audience ?? 'public'
-    const statusLoggedIn = !!session?.user && session.user.principalType !== 'anonymous'
-    const gates: Record<PortalBuiltInNavType, boolean> = {
-      feedback: isProductEnabled(flags, 'feedback'),
-      roadmap: isProductEnabled(flags, 'feedback'),
-      changelog: isProductEnabled(flags, 'changelog'),
-      help: isProductEnabled(flags, 'helpCenter'),
-      support: isPortalSupportSurfaceEnabled(flags, settings?.portalConfig),
-      status:
-        isStatusPagePublished(flags, settings?.statusConfig) &&
-        (statusAudience === 'public' || statusLoggedIn),
-    }
+    const signedIn = !!session?.user && session.user.principalType !== 'anonymous'
+    const gates = portalPageGates(settings, signedIn)
     return new Set(
-      (Object.keys(gates) as PortalBuiltInNavType[]).filter((type) => !gates[type])
+      (Object.keys(gates) as Array<keyof typeof gates>).filter((type) => !gates[type])
     ) as ReadonlySet<string>
   }, [settings, session])
 

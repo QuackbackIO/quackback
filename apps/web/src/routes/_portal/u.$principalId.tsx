@@ -14,6 +14,7 @@ import {
   getProfileTeamContextFn,
   type PublicProfileActivityItemView,
 } from '@/lib/server/functions/public-profile'
+import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
 export const Route = createFileRoute('/_portal/u/$principalId')({
   loader: async ({ params, context }) => {
@@ -55,7 +56,7 @@ function ProfileNotFound() {
       <p className="text-lg font-medium">
         <FormattedMessage id="portal.profile.notFound" defaultMessage="Profile not found" />
       </p>
-      <Link to="/" className="mt-4 inline-block text-sm text-primary hover:underline">
+      <Link to={PORTAL_LANDING} className="mt-4 inline-block text-sm text-primary hover:underline">
         <FormattedMessage id="portal.profile.backHome" defaultMessage="Back to feedback" />
       </Link>
     </div>

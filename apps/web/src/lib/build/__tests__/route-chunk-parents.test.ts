@@ -11,7 +11,11 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { existsSync } from 'fs'
 import path from 'path'
-import { readRouteParents, routeChunksImportTheirParent } from '../route-chunk-parents'
+import {
+  readRouteParents,
+  routeChunksImportTheirParent,
+  type RouteChunkLinks,
+} from '../route-chunk-parents'
 
 const SRC = path.resolve(__dirname, '../../..')
 const TREE = path.join(SRC, 'routeTree.gen.ts')
@@ -40,8 +44,8 @@ describe.skipIf(!haveTree)('readRouteParents', () => {
 
 type Handler = (this: unknown, code: string, id: string) => Promise<{ code: string } | null>
 
-function transform(withComponent: string[], environment = 'client') {
-  const plugin = routeChunksImportTheirParent(TREE)
+function transform(withComponent: string[], environment = 'client', links: RouteChunkLinks = {}) {
+  const plugin = routeChunksImportTheirParent(TREE, links)
   const handler = (plugin.transform as { handler: Handler }).handler
   const load = vi.fn(async ({ id }: { id: string }) => ({
     exports: withComponent.some((file) => id === `${file}?tsr-split=component`) ? ['component'] : [],
@@ -75,6 +79,42 @@ describe.skipIf(!haveTree)('routeChunksImportTheirParent', () => {
     expect(result?.code).not.toContain('admin/feedback.tsx?')
     // No ancestor with a component: nothing to link to.
     expect(await transform([])(page)).toBeNull()
+  })
+
+  it('links a lazy module as its route’s own split would be, to the parent’s component', async () => {
+    const home = path.join(SRC, 'components/public/home/portal-home.tsx')
+    const landing = route('_portal/index.tsx')
+    // The landing's component is not split, but its split still resolves. A
+    // link to it would make Home's chunk one of the landing's own.
+    const result = await transform([landing, route('_portal.tsx')], 'client', {
+      lazyChildren: { [home]: landing },
+    })(home)
+    expect(result?.code).toContain(`from ${JSON.stringify(`${route('_portal.tsx')}?tsr-split=component`)}`)
+    expect(result?.code).not.toContain('_portal/index.tsx?')
+    // Any other plain module is left alone.
+    expect(await transform([route('_portal.tsx')])(home)).toBeNull()
+  })
+
+  it('links a shared component’s split to the other route’s, so both routes preload it', async () => {
+    const feed = `${route('_portal/feedback.tsx')}?tsr-split=component`
+    const landing = route('_portal/index.tsx')
+    const shared = { sharedComponents: { [route('_portal/feedback.tsx')]: landing } }
+    const result = await transform([route('_portal.tsx'), landing], 'client', shared)(feed)
+    expect(result?.code).toContain(
+      `export { component as __sharedRouteComponent } from ${JSON.stringify(`${landing}?tsr-split=component`)}`
+    )
+    expect(result?.code).toContain('__parentRouteComponent')
+    // Only the component's split, and only to a component that resolves.
+    expect(
+      (
+        await transform([route('_portal.tsx'), landing], 'client', shared)(
+          `${route('_portal/feedback.tsx')}?tsr-split=errorComponent`
+        )
+      )?.code
+    ).not.toContain('__sharedRouteComponent')
+    expect(
+      (await transform([route('_portal.tsx')], 'client', shared)(feed))?.code
+    ).not.toContain('__sharedRouteComponent')
   })
 
   it('leaves a route under the root, a split loader and the server build alone', async () => {

@@ -30,7 +30,10 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
   },
   helpCenter: {
     users: /^(components\/help-center\/|routes\/_portal\/hc\/)/,
-    importers: /^(components\/help-center\/|routes\/_portal\/hc(\.tsx$|\/))/,
+    // Home's help blocks show the help center's search and topics; the Home
+    // route loads the area's strings when it has them.
+    importers:
+      /^(components\/help-center\/|routes\/_portal\/hc(\.tsx$|\/)|components\/public\/home\/)/,
   },
   twoFactor: {
     users: /^components\/auth\/two-factor-(challenge-step|enroll-steps)\.tsx$/,

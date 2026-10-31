@@ -15,6 +15,7 @@ import {
   isPortalSupportSurfaceEnabled,
 } from '@/lib/shared/support-surfaces'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
 export const Route = createFileRoute('/_portal/support/')({
   component: SupportListPage,
@@ -88,7 +89,7 @@ function SupportListPage() {
   })
 
   if (!surfaceEnabled) {
-    return <Navigate to="/" />
+    return <Navigate to={PORTAL_LANDING} />
   }
 
   const conversations = data?.conversations ?? []

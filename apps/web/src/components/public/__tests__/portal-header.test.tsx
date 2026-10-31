@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { defaultDesign } from '@/lib/shared/design/schema'
 import { useState, type ReactNode } from 'react'
 import { act, render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
@@ -375,7 +376,11 @@ describe('PortalHeader — design layouts', () => {
       </IntlProvider>
     )
   }
-  const design = (header: string) => ({ engine: 'v2', attributes: { 'data-qb-header': header } })
+  const design = (header: string) => ({
+    engine: 'v2',
+    attributes: { 'data-qb-header': header },
+    nav: defaultDesign().nav,
+  })
 
   it('keeps two rows on the legacy theme and for a stacked design', () => {
     for (const portalDesign of [undefined, design('stacked')]) {

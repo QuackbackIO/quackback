@@ -117,7 +117,15 @@ const homeBlock = z
       .strict(),
     z.object({ type: z.literal('status'), width }).strict(),
     z.object({ type: z.literal('contact'), width }).strict(),
-    z.object({ type: z.literal('links'), width, links: z.array(link).min(1).max(6) }).strict(),
+    z
+      .object({
+        type: z.literal('links'),
+        width,
+        /** Its heading; without one it reads "Links". */
+        title: label.optional(),
+        links: z.array(link).min(1).max(6),
+      })
+      .strict(),
   ])
   .superRefine((block, ctx) => {
     if (!BLOCK_WIDTHS[block.type].includes(block.width))

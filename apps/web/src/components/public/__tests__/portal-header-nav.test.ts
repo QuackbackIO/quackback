@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  designNavConfig,
   isTabActive,
   resolvePortalNavItems,
   seedNavEditorItems,
@@ -7,6 +8,7 @@ import {
   type PortalNavItem,
 } from '../portal-header-nav'
 import type { PortalNavConfig } from '@/lib/shared/types/settings'
+import { defaultDesign } from '@/lib/shared/design/schema'
 
 function gates(overrides: Partial<PortalNavGates> = {}): PortalNavGates {
   return {
@@ -224,17 +226,70 @@ describe('seedNavEditorItems', () => {
   })
 })
 
+describe('the design engine’s menu', () => {
+  it('can hide Feedback, which the saved navigation cannot', () => {
+    const nav = defaultDesign().nav
+    nav.items[0] = { type: 'feedback', shown: false }
+    const config = designNavConfig(nav)
+    expect(paths(resolvePortalNavItems(gates(), config, { feedbackHideable: true }))).toEqual([
+      '/roadmap',
+      '/changelog',
+    ])
+    expect(paths(resolvePortalNavItems(gates(), config))).toContain('/')
+  })
+
+  it('leads with a Home tab and points Feedback at its own path', () => {
+    const items = resolvePortalNavItems(gates(), designNavConfig(defaultDesign().nav), {
+      feedbackTo: '/feedback',
+      homeTab: { label: 'Start' },
+    })
+    expect(paths(items).slice(0, 3)).toEqual(['/', '/feedback', '/roadmap'])
+    expect(items[0]).toMatchObject({ type: 'home', label: 'Start' })
+  })
+
+  it('carries custom links in their place', () => {
+    const nav = defaultDesign().nav
+    nav.items.splice(1, 0, {
+      type: 'link',
+      id: 'docs',
+      label: 'Docs',
+      url: 'https://example.com/docs',
+      newTab: true,
+    })
+    expect(paths(resolvePortalNavItems(gates(), designNavConfig(nav))).slice(0, 3)).toEqual([
+      '/',
+      'https://example.com/docs',
+      '/roadmap',
+    ])
+  })
+})
+
 describe('isTabActive', () => {
+  const feedback = { type: 'feedback' as const, to: '/' }
+  const roadmap = { type: 'roadmap' as const, to: '/roadmap' }
+  const help = { type: 'help' as const, to: '/hc' }
+
   it('keeps Feedback lit on the feed and on a post', () => {
-    expect(isTabActive('/', '/')).toBe(true)
-    expect(isTabActive('/', '/b/feature-requests/posts/post_01abc')).toBe(true)
-    expect(isTabActive('/roadmap', '/b/feature-requests/posts/post_01abc')).toBe(false)
+    expect(isTabActive(feedback, '/')).toBe(true)
+    expect(isTabActive(feedback, '/b/feature-requests/posts/post_01abc')).toBe(true)
+    expect(isTabActive(roadmap, '/b/feature-requests/posts/post_01abc')).toBe(false)
   })
 
   it('lights only the tab for the page', () => {
-    expect(isTabActive('/', '/roadmap')).toBe(false)
-    expect(isTabActive('/roadmap', '/roadmap')).toBe(true)
-    expect(isTabActive('/hc', '/hc/getting-started')).toBe(true)
-    expect(isTabActive('/hc', '/hcx')).toBe(false)
+    expect(isTabActive(feedback, '/roadmap')).toBe(false)
+    expect(isTabActive(roadmap, '/roadmap')).toBe(true)
+    expect(isTabActive(help, '/hc/getting-started')).toBe(true)
+    expect(isTabActive(help, '/hcx')).toBe(false)
+  })
+
+  it('lights Home at the root and Feedback at /feedback once Home leads', () => {
+    const home = { type: 'home' as const, to: '/' }
+    const feed = { type: 'feedback' as const, to: '/feedback' }
+    expect(isTabActive(home, '/')).toBe(true)
+    expect(isTabActive(feed, '/')).toBe(false)
+    expect(isTabActive(home, '/feedback')).toBe(false)
+    expect(isTabActive(feed, '/feedback')).toBe(true)
+    expect(isTabActive(home, '/b/bugs/posts/post_1')).toBe(false)
+    expect(isTabActive(feed, '/b/bugs/posts/post_1')).toBe(true)
   })
 })

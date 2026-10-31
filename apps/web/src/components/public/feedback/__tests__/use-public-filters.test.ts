@@ -5,14 +5,15 @@ import { renderHook, act } from '@testing-library/react'
 const navigateMock = vi.fn()
 let routerSearch: Record<string, unknown> = {}
 
+let feedbackPath = '/'
+
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigateMock,
+  useSearch: () => routerSearch,
 }))
 
-vi.mock('@/routes/_portal/index', () => ({
-  Route: {
-    useSearch: () => routerSearch,
-  },
+vi.mock('@/lib/client/hooks/use-portal-paths', () => ({
+  useFeedbackPath: () => feedbackPath,
 }))
 
 import { usePublicFilters } from '../use-public-filters'
@@ -21,6 +22,22 @@ describe('usePublicFilters', () => {
   beforeEach(() => {
     navigateMock.mockReset()
     routerSearch = {}
+    feedbackPath = '/'
+  })
+
+  it('keeps the feed at its own address when Home leads', () => {
+    feedbackPath = '/feedback'
+    const { result, rerender } = renderHook(() => usePublicFilters())
+    act(() => result.current.setFilters({ board: 'bugs' }))
+    expect(navigateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: '/feedback',
+        search: expect.objectContaining({ board: 'bugs' }),
+      })
+    )
+    // The navigation lands, which settles the filters it set.
+    routerSearch = { board: 'bugs' }
+    rerender()
   })
 
   it('counts each new filter type once in activeFilterCount', () => {

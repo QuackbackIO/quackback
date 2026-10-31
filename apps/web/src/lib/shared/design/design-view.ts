@@ -33,6 +33,9 @@ export function designView(
       headline: doc.pages.feedback.headline,
       defaultSort: doc.pages.feedback.defaultSort,
     },
+    home: doc.pages.home,
+    nav: doc.nav,
+    vocabulary: doc.vocabulary,
   }
 }
 

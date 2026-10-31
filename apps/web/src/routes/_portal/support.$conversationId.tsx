@@ -21,6 +21,7 @@ import {
 } from '@/lib/client/queries/portal-support'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
 export const Route = createFileRoute('/_portal/support/$conversationId')({
   component: SupportThreadPage,
@@ -83,7 +84,7 @@ function SupportThreadPage() {
   )
 
   if (!supportEnabled) {
-    return <Navigate to="/" />
+    return <Navigate to={PORTAL_LANDING} />
   }
 
   return (
