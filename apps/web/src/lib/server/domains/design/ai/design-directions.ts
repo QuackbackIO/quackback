@@ -115,6 +115,7 @@ function lookChanges(
     { path: 'brand.fonts.headlineCase', value: look.headlineCase },
     { path: 'brand.fonts.labelCase', value: look.labelCase },
     { path: 'shape.buttons', value: look.buttons },
+    { path: 'shape.fill', value: look.fill },
     { path: 'shape.action', value: look.action },
     { path: 'layout.tint', value: look.tint },
     { path: 'layout.bandArt', value: look.bandArt },

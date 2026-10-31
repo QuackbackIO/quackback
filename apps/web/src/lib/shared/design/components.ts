@@ -122,6 +122,9 @@ export function modeTokens(doc: PortalDesign, vars: ThemeVariables, mode: Mode):
     '--qb-nav-active-ink': t.foreground,
     // The voted vote box: the solver keeps accent text readable on cards.
     '--qb-vote-active': t.accentInk,
+    // A primary button in the text colour carries the page's colour as its label.
+    '--qb-fill-bg': t.foreground,
+    '--qb-fill-ink': t.background,
     // A plain page title's accent phrase, read at 3:1 as large text on the page.
     '--qb-page-accent': solveContrast(t.primary, [t.background], 3) ?? t.foreground,
     '--qb-page-highlight': mixColor(t.primary, t.background, 0.25),
@@ -488,6 +491,7 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
     'data-qb-tint':
       doc.layout.tint === 'support' && doc.brand.light.support ? 'support' : 'neutral',
     'data-qb-cards': cards,
+    'data-qb-fill': doc.shape.fill ?? 'accent',
     'data-qb-filters': filters,
   }
 }

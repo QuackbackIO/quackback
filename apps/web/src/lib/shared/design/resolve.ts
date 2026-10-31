@@ -240,6 +240,10 @@ export function renderDesignCss(resolved: ResolvedDesign): string {
   parts.push(
     '@layer design { [data-qb-cards=raised][data-portal-theme] [data-qb-surface=card] { border-color: transparent; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); } [data-qb-cards=list][data-portal-theme] [data-qb-surface=card] { border-radius: 0; border-inline-width: 0; border-top-width: 0; background: transparent; box-shadow: none; } [data-qb-cards=filled][data-portal-theme] [data-qb-surface=card] { border-color: transparent; box-shadow: none; border-radius: calc(var(--qb-radius-panel, 0.75rem) * 1.6); } }'
   )
+  // Primary buttons in the text colour, when the design asks.
+  parts.push(
+    '@layer design { [data-qb-fill=ink][data-portal-theme] [data-slot=button][data-variant=default] { background-color: var(--qb-fill-bg); color: var(--qb-fill-ink); } [data-qb-fill=ink][data-portal-theme] [data-slot=button][data-variant=default]:hover { background-color: color-mix(in oklch, var(--qb-fill-bg) 85%, var(--qb-fill-ink)); } }'
+  )
   // Vote boxes tinted with the second colour, when the design asks.
   parts.push(
     '@layer design { [data-qb-tint=support][data-portal-theme] [data-qb-part=vote-button]:not([data-state=voted]) { background: var(--qb-support-tint); border-color: var(--qb-support-edge); } }'

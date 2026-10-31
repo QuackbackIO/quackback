@@ -235,6 +235,8 @@ export const portalDesignV2 = z
         buttons: z.enum(DESIGN_OPTIONS.buttons).optional(),
         /** The band's call to action in the brand colour or the second; absent is the brand colour. */
         action: z.enum(DESIGN_OPTIONS.action).optional(),
+        /** Primary buttons in the brand colour or the text colour; absent is the brand colour. */
+        fill: z.enum(DESIGN_OPTIONS.fill).optional(),
       })
       .strict(),
     layout: z

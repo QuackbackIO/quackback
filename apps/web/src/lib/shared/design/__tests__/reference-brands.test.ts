@@ -29,7 +29,7 @@ interface Fixture {
     logo: { display: string; tone?: string; nameColour?: string; nameCase?: string }
     bandImage?: { key: string }
   }
-  shape: { corners: string; buttons?: string; action?: string }
+  shape: { corners: string; buttons?: string; action?: string; fill?: string }
   layout: Record<'header' | 'nav' | 'band' | 'cards' | 'density' | 'width' | 'filters', string> & {
     blend?: string
     bandAlign?: string
@@ -113,6 +113,7 @@ function used(): Record<DesignOption, Set<string>> {
     add('bandShape', doc.layout.bandShape ?? 'full')
     add('buttons', doc.shape.buttons ?? 'match')
     add('action', doc.shape.action ?? 'accent')
+    add('fill', doc.shape.fill ?? 'accent')
     add('tint', doc.layout.tint ?? 'neutral')
     add('bandArt', doc.layout.bandArt ?? 'none')
     if (doc.brand.bandImage) add('imageFocus', doc.layout.imageFocus ?? 'centre')

@@ -55,6 +55,8 @@ export const DESIGN_OPTIONS = {
   tint: ['neutral', 'support'],
   /** The colour of the band's call to action. */
   action: ['accent', 'support'],
+  /** What fills a primary button: the brand colour, or the text colour, as many brands' black buttons are. */
+  fill: ['accent', 'ink'],
   density: ['compact', 'comfortable', 'spacious'],
   width: ['narrow', 'default', 'wide'],
   /** Which side of the feed the filters sit on, `end` being the reading end. */

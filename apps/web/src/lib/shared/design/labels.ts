@@ -20,6 +20,7 @@ const LABELS: Record<string, string> = {
   'brand.fonts.headingWeight': 'Heading weight',
   'shape.corners': 'Corners',
   'shape.buttons': 'Buttons',
+  'shape.fill': 'Button colour',
   'brand.light.support': 'Second colour',
   'brand.dark.support': 'Dark second colour',
   'brand.fonts.scale': 'Headline size',

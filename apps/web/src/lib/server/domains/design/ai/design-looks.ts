@@ -50,6 +50,7 @@ export const lookSchema = z.object({
   accentPhrase: z.string(),
   accentStyle: z.enum(DESIGN_OPTIONS.headlineAccent),
   buttons: z.enum(DESIGN_OPTIONS.buttons),
+  fill: z.enum(DESIGN_OPTIONS.fill),
   status: z.enum(DESIGN_OPTIONS.status),
   logo: z.enum(DESIGN_OPTIONS.logoDisplay),
   composer: z.enum(DESIGN_OPTIONS.composerPlace),
@@ -113,6 +114,7 @@ export const DIRECTIONS_EXAMPLE: Look = {
   accentPhrase: '',
   accentStyle: 'colour',
   buttons: 'match',
+  fill: 'accent',
   status: 'colour',
   logo: 'name',
   composer: 'band',
@@ -162,7 +164,7 @@ How a brand becomes each choice:
 - headingWeight: how heavy their headings are, 500 to 800.
 - scale: display for loud, poster-like heroes with very large headlines; large for confident ones; standard for quiet, text-led brands. tracking: tight for large modern headlines, normal otherwise. headlineCase: upper only when their headlines are set in capitals. labelCase: upper when their menu and buttons are in capitals.
 - accentPhrase: a short phrase copied exactly from your headline to set apart, when their site colours or highlights part of a headline; the whole headline when their headlines are set in their brand colour; "" otherwise. accentStyle: colour on dark or bold bands, highlight on light, editorial ones.
-- buttons: their buttons' shape: square, rounded, pill, or match to follow the corners.
+- buttons: their buttons' shape: square, rounded, pill, or match to follow the corners. fill: ink when their main buttons are black or in their text colour while their brand colour is kept for the logo and links, accent otherwise.
 - status: ink for monochrome and minimal brands, pill for soft and friendly ones, brand when their logo has several colours (only when the brief lists them), colour otherwise.
 - corners: sharp for strict or editorial brands, subtle for most software, rounded for friendly ones, pill for playful ones.
 - header: stacked (logo above the menu), inline (one row, for software), centered (for consumer and editorial brands). nav: tabs, underline or pills.

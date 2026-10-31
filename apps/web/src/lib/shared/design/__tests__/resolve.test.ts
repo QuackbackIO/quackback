@@ -113,6 +113,14 @@ describe('the headline font in the design CSS', () => {
   })
 })
 
+describe('the button fill in the design CSS', () => {
+  it('fills primary buttons with the text colour when the design asks', () => {
+    expect(renderDesignCss(resolveDesign(defaultDesign()))).toContain(
+      '[data-qb-fill=ink][data-portal-theme] [data-slot=button][data-variant=default] { background-color: var(--qb-fill-bg); color: var(--qb-fill-ink); }'
+    )
+  })
+})
+
 describe('card styles in the design CSS', () => {
   it('gives every card surface the design’s card style', () => {
     const css = renderDesignCss(resolveDesign(defaultDesign()))

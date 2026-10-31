@@ -555,6 +555,7 @@ describe('layoutAttributes', () => {
       'data-qb-band-art': 'none',
       'data-qb-tint': 'neutral',
       'data-qb-cards': 'list',
+      'data-qb-fill': 'accent',
       'data-qb-filters': 'start',
     })
   })
