@@ -41,7 +41,7 @@ export const isStructuredOutputError = (err: unknown) =>
 /** The model Appearance uses, or null when no AI is set up for this workspace. */
 export function designAiModel(): string | null {
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl)) return null
-  return getChatModel('assistant')
+  return getChatModel('design')
 }
 
 /** A value from the model: JSON as asked, or the bare text it sometimes sends instead. */

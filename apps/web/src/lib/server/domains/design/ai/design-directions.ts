@@ -12,6 +12,8 @@ import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce
 import { logger } from '@/lib/server/logger'
 import { applyDesignChanges, type UntrustedChanges } from '@/lib/shared/design/apply-changes'
 import { brandColour, colourVividness } from '@/lib/shared/design/palette'
+import { parseOklch } from '@/lib/shared/theme/expand'
+import { hexToOklch } from '@/lib/shared/theme/colors'
 import { applyPreset, DESIGN_PRESETS } from '@/lib/shared/design/presets'
 import { directionsPrompt, directionsSchema, type Look } from './design-looks'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -27,6 +29,33 @@ export { DIRECTIONS_EXAMPLE } from './design-looks'
 const MAX_PAGE_VIVIDNESS = 0.2
 const quietPage = (background: string) =>
   !/^#[0-9a-f]{6}$/i.test(background) || colourVividness(background) <= MAX_PAGE_VIVIDNESS
+
+const oklchOf = (colour: string) =>
+  /^#[0-9a-f]{6}$/i.test(colour) ? parseOklch(hexToOklch(colour)) : null
+
+/**
+ * The faithful look's accent: the site's or image's own colour of the same
+ * hue when the model kept that hue but moved its lightness, as a model does
+ * to make text read on it, which the portal does for itself. A different hue
+ * is the model's reading of the brand and stays.
+ */
+export function faithfulAccent(
+  accent: string,
+  input: { site?: SiteSignals | null; palette?: string[] | null }
+): string {
+  const chosen = oklchOf(accent)
+  if (!chosen || chosen.c < 0.04) return accent
+  const theirs = [...(input.site?.palette ?? []), ...(input.palette ?? [])]
+  let nearest: { colour: string; gap: number } | null = null
+  for (const colour of theirs) {
+    const own = oklchOf(colour)
+    if (!own || own.c < 0.04) continue
+    const turn = Math.abs(own.h - chosen.h) % 360
+    const gap = Math.min(turn, 360 - turn)
+    if (gap <= 25 && (!nearest || gap < nearest.gap)) nearest = { colour, gap }
+  }
+  return nearest?.colour ?? accent
+}
 
 /** Text cut at a word boundary to fit a field; a long answer is trimmed rather than refused. */
 function fit(text: string, max: number): string {
@@ -296,7 +325,10 @@ export async function designDirections(input: {
     })
     return {
       ok: true,
-      looks: answer.looks.map((look) => {
+      looks: answer.looks.map((answered, index) => {
+        // The first look is the faithful one: it keeps their exact brand colour.
+        const look =
+          index === 0 ? { ...answered, accent: faithfulAccent(answered.accent, input) } : answered
         const { design, refused } = lookDesign(input.design, look, input.allows, input.assets)
         if (refused.length) log.info({ look: look.name, refused }, 'design look left choices out')
         return {
