@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { DesignSwitch } from '@/lib/server/domains/design/switch'
 
 const server = vi.hoisted(() => ({
   invalidations: 0,
@@ -53,7 +54,7 @@ const REPORT = {
   carried: [{ message: '--primary on :root becomes the accent.' }],
 }
 
-function withClient(ui: ReactNode, state: unknown) {
+function withClient(ui: ReactNode, state: DesignSwitch) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
   client.setQueryData(portalDesignQueries.switch().queryKey, state)
   client.setQueryData(portalDesignQueries.versions().queryKey, [])
