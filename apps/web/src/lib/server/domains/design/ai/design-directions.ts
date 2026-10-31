@@ -20,6 +20,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { designAiModel, isStructuredOutputError, paletteText } from './design-ai'
 import type { SiteAssets } from './site-assets'
 import type { SiteSignals } from './site-signals'
+import { BUNDLED_FONT_IDS } from '@/lib/shared/design/options'
 import {
   fontBrief,
   measuredBand,
@@ -66,6 +67,8 @@ export function faithfulAccent(
 }
 
 /** Text cut at a word boundary to fit a field; a long answer is trimmed rather than refused. */
+const bundled = (face: string) => (BUNDLED_FONT_IDS as readonly string[]).includes(face)
+
 function fit(text: string, max: number): string {
   if (text.length <= max) return text
   const cut = text.slice(0, max)
@@ -96,9 +99,12 @@ function lookChanges(
           ...page(look.darkBackground, 'brand.dark.background'),
           ...page(look.darkInk, 'brand.dark.ink'),
         ]),
-    { path: 'brand.fonts.heading', value: look.headingFont },
-    { path: 'brand.fonts.body', value: look.bodyFont },
-    ...(look.displayFont && look.displayFont !== look.headingFont
+    // A face the model names that is not bundled is left out: the preset's stays.
+    ...(bundled(look.headingFont)
+      ? [{ path: 'brand.fonts.heading', value: look.headingFont }]
+      : []),
+    ...(bundled(look.bodyFont) ? [{ path: 'brand.fonts.body', value: look.bodyFont }] : []),
+    ...(bundled(look.displayFont) && look.displayFont !== look.headingFont
       ? [{ path: 'brand.fonts.display', value: look.displayFont }]
       : []),
     { path: 'brand.fonts.headingWeight', value: Number(look.headingWeight) },
@@ -166,9 +172,9 @@ function lookChanges(
     ...page(fit(look.prompt, 60), 'pages.feedback.copy.prompt'),
     ...page(fit(look.submit, 24), 'pages.feedback.copy.submit'),
     ...accentChanges(look, 'pages.feedback.headline', look.headline),
-    ...(['roadmap', 'changelog', 'help', 'support'] as const).flatMap((p) => [
-      ...page(fit(look.pageWords[p].title, 80), `pages.titles.${p}.title`),
-      ...page(fit(look.pageWords[p].subtitle, 140), `pages.titles.${p}.subtitle`),
+    ...(['roadmap', 'changelog', 'help', 'support'] as const).flatMap((p, i) => [
+      ...page(fit(look.pageWords[i * 2] ?? '', 80), `pages.titles.${p}.title`),
+      ...page(fit(look.pageWords[i * 2 + 1] ?? '', 140), `pages.titles.${p}.subtitle`),
     ]),
     ...(look.homeBlocks.length
       ? [
