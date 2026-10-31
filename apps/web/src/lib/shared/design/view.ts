@@ -5,6 +5,7 @@
 import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
 import type { ThemeConfig, ThemeMode } from '@/lib/shared/theme/types'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import type { PortalDesign } from './schema'
 
 /** Text a visitor reads, by locale. */
 export type LocalizedText = Record<string, string>
@@ -34,6 +35,12 @@ export type PortalDesignView =
         /** The feed's sort when the visitor has not picked one. */
         defaultSort: 'trending' | 'top' | 'new'
       }
+      /** Home's headline and blocks, shown at `/` while the menu has Home on. */
+      home: PortalDesign['pages']['home']
+      /** The menu: Home's row, then the pages and links in order. */
+      nav: PortalDesign['nav']
+      /** The words visitors see for what they post and what groups it. */
+      vocabulary: PortalDesign['vocabulary']
     }
 
 /** The settings a portal page reads its theme from. */

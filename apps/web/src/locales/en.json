@@ -2229,5 +2229,22 @@
   "portal.feedback.list.noSearchResults": "No ideas match “{query}”.",
   "portal.feedback.list.postSearchAsIdea": "Post it as a new idea",
   "portal.feedback.list.searchWidenedMost": "No idea has all your words. Showing ideas with most of them.",
-  "portal.feedback.list.searchWidenedSimilar": "No exact matches. Showing ideas with a similar spelling."
+  "portal.feedback.list.searchWidenedSimilar": "No exact matches. Showing ideas with a similar spelling.",
+  "portal.header.nav.home": "Home",
+  "portal.home.ideas.title": "Top ideas",
+  "portal.home.ideas.all": "See all ideas",
+  "portal.home.ideas.empty": "No ideas yet. Be the first.",
+  "portal.home.roadmap.all": "See the roadmap",
+  "portal.home.roadmap.columnEmpty": "Nothing here yet",
+  "portal.home.updates.title": "Latest updates",
+  "portal.home.updates.all": "See all updates",
+  "portal.home.helpSearch.title": "How can we help?",
+  "portal.home.helpTopics.title": "Help topics",
+  "portal.home.help.all": "Visit the help center",
+  "portal.home.status.title": "Status",
+  "portal.home.status.all": "View status",
+  "portal.home.contact.title": "Talk to us",
+  "portal.home.contact.body": "Ask a question or tell us about a problem, and we will get back to you.",
+  "portal.home.contact.start": "Start a conversation",
+  "portal.home.links.title": "Links"
 }

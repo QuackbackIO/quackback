@@ -2229,5 +2229,22 @@
   "portal.feedback.list.noSearchResults": "ไม่มีไอเดียที่ตรงกับ “{query}”",
   "portal.feedback.list.postSearchAsIdea": "โพสต์เป็นไอเดียใหม่",
   "portal.feedback.list.searchWidenedMost": "ไม่มีไอเดียที่มีคำของคุณครบทุกคำ กำลังแสดงไอเดียที่มีคำส่วนใหญ่",
-  "portal.feedback.list.searchWidenedSimilar": "ไม่พบผลลัพธ์ที่ตรงกันทุกประการ กำลังแสดงไอเดียที่สะกดคล้ายกัน"
+  "portal.feedback.list.searchWidenedSimilar": "ไม่พบผลลัพธ์ที่ตรงกันทุกประการ กำลังแสดงไอเดียที่สะกดคล้ายกัน",
+  "portal.header.nav.home": "หน้าแรก",
+  "portal.home.ideas.title": "ไอเดียยอดนิยม",
+  "portal.home.ideas.all": "ดูไอเดียทั้งหมด",
+  "portal.home.ideas.empty": "ยังไม่มีไอเดีย มาเป็นคนแรกกัน",
+  "portal.home.roadmap.all": "ดูโรดแมป",
+  "portal.home.roadmap.columnEmpty": "ยังไม่มีรายการ",
+  "portal.home.updates.title": "อัปเดตล่าสุด",
+  "portal.home.updates.all": "ดูอัปเดตทั้งหมด",
+  "portal.home.helpSearch.title": "มีอะไรให้เราช่วยไหม",
+  "portal.home.helpTopics.title": "หัวข้อความช่วยเหลือ",
+  "portal.home.help.all": "ไปที่ศูนย์ช่วยเหลือ",
+  "portal.home.status.title": "สถานะ",
+  "portal.home.status.all": "ดูสถานะ",
+  "portal.home.contact.title": "คุยกับเรา",
+  "portal.home.contact.body": "ถามคำถามหรือแจ้งปัญหา แล้วเราจะติดต่อกลับ",
+  "portal.home.contact.start": "เริ่มการสนทนา",
+  "portal.home.links.title": "ลิงก์"
 }

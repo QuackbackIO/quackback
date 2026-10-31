@@ -6,6 +6,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { useFeedbackPath } from '@/lib/client/hooks/use-portal-paths'
 import type { PostId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
 import { userEditPostFn, userDeletePostFn } from '@/lib/server/functions/public-posts'
@@ -44,6 +45,7 @@ export function usePostActions({
 }: UsePostActionsOptions) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const feedbackPath = useFeedbackPath()
 
   const editMutation = useMutation({
     mutationFn: (input: EditPostInput) =>
@@ -70,7 +72,7 @@ export function usePostActions({
       // Invalidate post lists
       queryClient.invalidateQueries({ queryKey: ['portal', 'posts'] })
       // Navigate back to board
-      navigate({ to: '/', search: { board: boardSlug } })
+      navigate({ to: feedbackPath, search: { board: boardSlug } })
       onDeleteSuccess?.()
     },
   })

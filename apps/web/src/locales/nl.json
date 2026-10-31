@@ -2229,5 +2229,22 @@
   "portal.feedback.list.noSearchResults": "Geen ideeën gevonden voor “{query}”.",
   "portal.feedback.list.postSearchAsIdea": "Plaats het als nieuw idee",
   "portal.feedback.list.searchWidenedMost": "Geen idee bevat al je woorden. Ideeën met de meeste ervan worden getoond.",
-  "portal.feedback.list.searchWidenedSimilar": "Geen exacte resultaten. Ideeën met een vergelijkbare spelling worden getoond."
+  "portal.feedback.list.searchWidenedSimilar": "Geen exacte resultaten. Ideeën met een vergelijkbare spelling worden getoond.",
+  "portal.header.nav.home": "Home",
+  "portal.home.ideas.title": "Populairste ideeën",
+  "portal.home.ideas.all": "Alle ideeën bekijken",
+  "portal.home.ideas.empty": "Nog geen ideeën. Wees de eerste.",
+  "portal.home.roadmap.all": "Roadmap bekijken",
+  "portal.home.roadmap.columnEmpty": "Nog niets hier",
+  "portal.home.updates.title": "Laatste updates",
+  "portal.home.updates.all": "Alle updates bekijken",
+  "portal.home.helpSearch.title": "Hoe kunnen we helpen?",
+  "portal.home.helpTopics.title": "Helponderwerpen",
+  "portal.home.help.all": "Naar het helpcentrum",
+  "portal.home.status.title": "Status",
+  "portal.home.status.all": "Status bekijken",
+  "portal.home.contact.title": "Neem contact op",
+  "portal.home.contact.body": "Stel een vraag of meld een probleem, dan nemen we contact met je op.",
+  "portal.home.contact.start": "Gesprek starten",
+  "portal.home.links.title": "Links"
 }

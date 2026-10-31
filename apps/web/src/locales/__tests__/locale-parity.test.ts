@@ -51,6 +51,7 @@ const SAME_AS_ENGLISH_EVERYWHERE = [
 ]
 const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
   de: [
+    'Links',
     'Chat',
     '(optional)',
     'Optional',
@@ -190,6 +191,7 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
   ar: [],
   ru: [],
   'pt-br': [
+    'Links',
     'Chat',
     'Admin',
     'Avatar',
@@ -222,6 +224,7 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
   'zh-cn': [],
   'zh-tw': [],
   nl: [
+    'Links',
     'Chat',
     'Accent',
     'Account',

@@ -14,6 +14,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { useFeedbackPath } from '@/lib/client/hooks/use-portal-paths'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import type { BoardId, PostId, PostStatusId, PostTagId, PrincipalId } from '@quackback/ids'
@@ -56,6 +57,7 @@ export function usePortalTeamPostActions({
 }: UsePortalTeamPostActionsOptions) {
   const intl = useIntl()
   const navigate = useNavigate()
+  const feedbackPath = useFeedbackPath()
   const queryClient = useQueryClient()
   const { can } = usePortalPermissions()
 
@@ -387,7 +389,7 @@ export function usePortalTeamPostActions({
               defaultMessage: 'Post deleted',
             })
           )
-          await navigate({ to: '/', search: { board: boardSlug } })
+          await navigate({ to: feedbackPath, search: { board: boardSlug } })
         } catch (err) {
           toast.error(err instanceof Error ? err.message : genericErrorMessage())
         }

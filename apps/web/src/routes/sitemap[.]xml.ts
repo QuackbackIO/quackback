@@ -56,24 +56,28 @@ async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
     { db, changelogEntries, and, desc, eq, sql },
     { publicChangelogConditions },
     { toIsoDateOnly },
-    { getFeatureFlags },
+    { getFeatureFlags, getWorkspaceSettings },
+    { portalPageGates, portalSitemapPaths },
   ] = await Promise.all([
     import('@/lib/server/db'),
     import('@/lib/server/domains/changelog/changelog.public'),
     import('@/lib/shared/utils/date'),
     import('@/lib/server/domains/settings/settings.service'),
+    import('@/lib/shared/design/paths'),
   ])
 
   const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
 
   const urls: SitemapUrl[] = []
-  const flags = await getFeatureFlags()
+  const [flags, settings] = await Promise.all([getFeatureFlags(), getWorkspaceSettings()])
 
-  // Static pages
-  if (flags.feedback) {
-    urls.push({ loc: baseUrl })
-    urls.push({ loc: `${baseUrl}/roadmap` })
-  }
+  // The root and the feed at its one address: Home, or the feed, or both.
+  const design = settings?.portalDesign
+  for (const path of portalSitemapPaths(
+    design?.engine === 'v2' ? { engine: 'v2', nav: design.nav } : { engine: 'legacy' },
+    portalPageGates(settings, false)
+  ))
+    urls.push({ loc: path === '/' ? baseUrl : `${baseUrl}${path}` })
   if (flags.changelog) urls.push({ loc: `${baseUrl}/changelog` })
 
   const entries = flags.changelog

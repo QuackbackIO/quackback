@@ -45,6 +45,7 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { usePreviewDesignAttributes } from './preview-draft-context'
+import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
 interface PortalHeaderProps {
   orgName: string
@@ -182,7 +183,7 @@ export function PortalHeader({
     queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
     removeViewerScopedPortalQueries(queryClient)
     router.invalidate() // Refetch session
-    router.navigate({ to: '/' })
+    router.navigate({ to: PORTAL_LANDING })
   }
 
   // Auth/admin buttons. Plain elements rather than a component declared in
@@ -292,7 +293,7 @@ export function PortalHeader({
     'stacked'
 
   const logo = (
-    <Link to="/" className="portal-header__logo flex items-center gap-2">
+    <Link to={PORTAL_LANDING} className="portal-header__logo flex items-center gap-2">
       {orgLogo ? (
         <img
           src={orgLogo}
@@ -462,7 +463,7 @@ type BuiltInNavItem = Extract<PortalNavItem, { kind: 'builtin' }>
 const NavTab = memo(
   function NavTab({ item, unread }: { item: BuiltInNavItem; unread: number }) {
     const intl = useIntl()
-    const isActive = useRouterState({ select: (s) => isTabActive(item.to, s.location.pathname) })
+    const isActive = useRouterState({ select: (s) => isTabActive(item, s.location.pathname) })
     return (
       <Link to={item.to} className={navItemClass(isActive)}>
         {item.label ??

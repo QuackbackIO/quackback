@@ -2229,5 +2229,22 @@
   "portal.feedback.list.noSearchResults": "Немає ідей за запитом «{query}».",
   "portal.feedback.list.postSearchAsIdea": "Опублікувати як нову ідею",
   "portal.feedback.list.searchWidenedMost": "Жодна ідея не містить усіх ваших слів. Показано ідеї з більшістю з них.",
-  "portal.feedback.list.searchWidenedSimilar": "Точних збігів немає. Показано ідеї зі схожим написанням."
+  "portal.feedback.list.searchWidenedSimilar": "Точних збігів немає. Показано ідеї зі схожим написанням.",
+  "portal.header.nav.home": "Головна",
+  "portal.home.ideas.title": "Популярні ідеї",
+  "portal.home.ideas.all": "Усі ідеї",
+  "portal.home.ideas.empty": "Ідей поки немає. Станьте першим.",
+  "portal.home.roadmap.all": "Переглянути план розвитку",
+  "portal.home.roadmap.columnEmpty": "Поки нічого немає",
+  "portal.home.updates.title": "Останні оновлення",
+  "portal.home.updates.all": "Усі оновлення",
+  "portal.home.helpSearch.title": "Чим ми можемо допомогти?",
+  "portal.home.helpTopics.title": "Розділи довідки",
+  "portal.home.help.all": "Перейти до довідкового центру",
+  "portal.home.status.title": "Статус",
+  "portal.home.status.all": "Переглянути статус",
+  "portal.home.contact.title": "Зв’яжіться з нами",
+  "portal.home.contact.body": "Поставте запитання або опишіть проблему, і ми відповімо.",
+  "portal.home.contact.start": "Почати розмову",
+  "portal.home.links.title": "Посилання"
 }

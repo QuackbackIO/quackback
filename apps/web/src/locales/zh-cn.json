@@ -2229,5 +2229,22 @@
   "portal.feedback.list.noSearchResults": "没有与“{query}”匹配的想法。",
   "portal.feedback.list.postSearchAsIdea": "作为新想法发布",
   "portal.feedback.list.searchWidenedMost": "没有想法包含你的所有词语。显示包含其中大部分词语的想法。",
-  "portal.feedback.list.searchWidenedSimilar": "没有完全匹配的结果。显示拼写相近的想法。"
+  "portal.feedback.list.searchWidenedSimilar": "没有完全匹配的结果。显示拼写相近的想法。",
+  "portal.header.nav.home": "首页",
+  "portal.home.ideas.title": "热门想法",
+  "portal.home.ideas.all": "查看全部想法",
+  "portal.home.ideas.empty": "还没有想法，来做第一个吧。",
+  "portal.home.roadmap.all": "查看路线图",
+  "portal.home.roadmap.columnEmpty": "暂无内容",
+  "portal.home.updates.title": "最新动态",
+  "portal.home.updates.all": "查看全部动态",
+  "portal.home.helpSearch.title": "需要什么帮助？",
+  "portal.home.helpTopics.title": "帮助主题",
+  "portal.home.help.all": "前往帮助中心",
+  "portal.home.status.title": "状态",
+  "portal.home.status.all": "查看状态",
+  "portal.home.contact.title": "联系我们",
+  "portal.home.contact.body": "提出问题或告诉我们遇到的困难，我们会尽快回复。",
+  "portal.home.contact.start": "发起对话",
+  "portal.home.links.title": "链接"
 }

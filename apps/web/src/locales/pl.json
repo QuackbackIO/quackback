@@ -2229,5 +2229,22 @@
   "portal.feedback.list.noSearchResults": "Brak pomysłów pasujących do „{query}”.",
   "portal.feedback.list.postSearchAsIdea": "Opublikuj jako nowy pomysł",
   "portal.feedback.list.searchWidenedMost": "Żaden pomysł nie zawiera wszystkich słów. Pokazujemy pomysły z większością z nich.",
-  "portal.feedback.list.searchWidenedSimilar": "Brak dokładnych wyników. Pokazujemy pomysły o podobnej pisowni."
+  "portal.feedback.list.searchWidenedSimilar": "Brak dokładnych wyników. Pokazujemy pomysły o podobnej pisowni.",
+  "portal.header.nav.home": "Strona główna",
+  "portal.home.ideas.title": "Najpopularniejsze pomysły",
+  "portal.home.ideas.all": "Zobacz wszystkie pomysły",
+  "portal.home.ideas.empty": "Nie ma jeszcze pomysłów. Bądź pierwszy.",
+  "portal.home.roadmap.all": "Zobacz plan rozwoju",
+  "portal.home.roadmap.columnEmpty": "Na razie nic tu nie ma",
+  "portal.home.updates.title": "Najnowsze aktualizacje",
+  "portal.home.updates.all": "Zobacz wszystkie aktualizacje",
+  "portal.home.helpSearch.title": "Jak możemy pomóc?",
+  "portal.home.helpTopics.title": "Tematy pomocy",
+  "portal.home.help.all": "Przejdź do centrum pomocy",
+  "portal.home.status.title": "Status",
+  "portal.home.status.all": "Zobacz status",
+  "portal.home.contact.title": "Porozmawiaj z nami",
+  "portal.home.contact.body": "Zadaj pytanie lub opisz problem, a odezwiemy się.",
+  "portal.home.contact.start": "Rozpocznij rozmowę",
+  "portal.home.links.title": "Linki"
 }

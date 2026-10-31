@@ -2229,5 +2229,22 @@
   "portal.feedback.list.noSearchResults": "Нет идей по запросу «{query}».",
   "portal.feedback.list.postSearchAsIdea": "Опубликовать как новую идею",
   "portal.feedback.list.searchWidenedMost": "Ни одна идея не содержит все ваши слова. Показаны идеи с большинством из них.",
-  "portal.feedback.list.searchWidenedSimilar": "Точных совпадений нет. Показаны идеи с похожим написанием."
+  "portal.feedback.list.searchWidenedSimilar": "Точных совпадений нет. Показаны идеи с похожим написанием.",
+  "portal.header.nav.home": "Главная",
+  "portal.home.ideas.title": "Популярные идеи",
+  "portal.home.ideas.all": "Все идеи",
+  "portal.home.ideas.empty": "Идей пока нет. Станьте первым.",
+  "portal.home.roadmap.all": "Посмотреть план развития",
+  "portal.home.roadmap.columnEmpty": "Пока ничего нет",
+  "portal.home.updates.title": "Последние обновления",
+  "portal.home.updates.all": "Все обновления",
+  "portal.home.helpSearch.title": "Чем мы можем помочь?",
+  "portal.home.helpTopics.title": "Разделы справки",
+  "portal.home.help.all": "Перейти в справочный центр",
+  "portal.home.status.title": "Статус",
+  "portal.home.status.all": "Посмотреть статус",
+  "portal.home.contact.title": "Свяжитесь с нами",
+  "portal.home.contact.body": "Задайте вопрос или опишите проблему, и мы ответим.",
+  "portal.home.contact.start": "Начать разговор",
+  "portal.home.links.title": "Ссылки"
 }

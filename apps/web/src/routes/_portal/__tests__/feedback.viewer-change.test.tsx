@@ -58,6 +58,8 @@ vi.mock('@tanstack/react-router', () => ({
     }),
   notFound: () => new Error('not found'),
   redirect: () => new Error('redirect'),
+  useLoaderData: () => ({ workspaceName: 'Acme', baseUrl: '', showPoweredBy: false }),
+  useSearch: () => ({ sort: 'trending' }),
   useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
     const context = useSyncExternalStore(rootContext.subscribe, rootContext.get)
     return opts?.select ? opts.select(context as never) : context
@@ -100,7 +102,7 @@ vi.mock('@/components/public/feedback/feedback-container', () => ({
   },
 }))
 
-import { Route } from '../index'
+import { Route } from '../feedback'
 
 const Page = (Route as unknown as { component: React.ComponentType }).component
 

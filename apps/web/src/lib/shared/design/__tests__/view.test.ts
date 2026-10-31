@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { generateWorkspaceThemeCSS } from '@/lib/shared/theme'
+import { defaultDesign } from '../schema'
 import {
   portalDefaultSort,
   portalFontIds,
@@ -44,6 +45,9 @@ describe('portalTheme', () => {
       fontIds: ['fraunces'],
       attributes: {},
       feedback: { welcome: null, headline: null, defaultSort: 'trending' as const },
+      home: { headline: null, blocks: [] },
+      nav: defaultDesign().nav,
+      vocabulary: { post: 'idea' as const, board: 'board' as const },
     }
     expect(portalTheme({ brandingConfig, customCss: '.x {}', portalDesign })).toEqual({
       themeMode: 'user',
@@ -67,6 +71,9 @@ describe('portalFontIds', () => {
       fontIds: ['inter', 'fraunces'],
       attributes: {},
       feedback: { welcome: null, headline: null, defaultSort: 'trending' as const },
+      home: { headline: null, blocks: [] },
+      nav: defaultDesign().nav,
+      vocabulary: { post: 'idea' as const, board: 'board' as const },
     }
     expect(portalFontIds({ portalDesign })).toEqual(['inter', 'fraunces'])
   })
@@ -85,6 +92,10 @@ describe('portalThemeMode', () => {
         fontIds: [],
         attributes: {},
         feedback: { welcome: null, headline: null, defaultSort: 'trending' as const },
+
+        home: { headline: null, blocks: [] },
+        nav: defaultDesign().nav,
+        vocabulary: { post: 'idea' as const, board: 'board' as const },
       },
     })
     expect(portalThemeMode(v2('auto'))).toBe('user')
@@ -135,6 +146,9 @@ describe('portalDefaultSort', () => {
       fontIds: [],
       attributes: {},
       feedback: { welcome: null, headline: null, defaultSort: 'new' as const },
+      home: { headline: null, blocks: [] },
+      nav: defaultDesign().nav,
+      vocabulary: { post: 'idea' as const, board: 'board' as const },
     }
     expect(portalDefaultSort({ portalDesign })).toBe('new')
   })

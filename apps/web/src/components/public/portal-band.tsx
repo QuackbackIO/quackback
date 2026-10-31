@@ -13,12 +13,12 @@ export function textForLocale(
 }
 
 /**
- * The band at the top of the feedback page, behind its headline. Its look
+ * The band at the top of the feedback page or Home, behind its headline. Its look
  * comes from the design's band tokens and data-qb-band. With no headline
  * there is no band, in the preview too, so a style never shows as an empty
  * block. Only the design engine draws it.
  */
-export function PortalBand() {
+export function PortalBand({ page = 'feedback' }: { page?: 'feedback' | 'home' }) {
   const intl = useIntl()
   const design = useRouteContext({
     from: '__root__',
@@ -26,7 +26,12 @@ export function PortalBand() {
   })
   const draftHeadline = usePreviewHeadline()
   if (design?.engine !== 'v2') return null
-  const headline = draftHeadline !== undefined ? draftHeadline : design.feedback.headline
+  const headline =
+    page === 'home'
+      ? design.home.headline
+      : draftHeadline !== undefined
+        ? draftHeadline
+        : design.feedback.headline
   const title = textForLocale(headline?.title, intl.locale)
   const subtitle = textForLocale(headline?.subtitle, intl.locale)
   if (!title && !subtitle) return null
