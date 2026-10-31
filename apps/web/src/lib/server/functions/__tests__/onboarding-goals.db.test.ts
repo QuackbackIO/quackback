@@ -53,6 +53,7 @@ vi.mock('@/lib/server/domains/settings/settings.helpers', async (original) => ({
 }))
 
 import { saveWorkspaceAndGoalFn, ensureOnboardingHomeReadyFn } from '../onboarding'
+const { getPublishedDesign } = await import('@/lib/server/domains/design/design.service')
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -381,6 +382,39 @@ describe('wizard goals read and write', () => {
     await ensureOnboardingHomeReadyFn()
     const row = await testDb.query.settings.findFirst()
     expect(getSetupState(row!.setupState)!.ownerPrincipalId).toBe(owner!.id)
+  })
+
+  it('starts a new workspace’s portal on Home, laid out from its goals', async () => {
+    await saveWorkspaceAndGoalFn({
+      data: { workspaceName: 'Acme', goals: ['product_feedback', 'help_center'] },
+    })
+    const design = await getPublishedDesign()
+    expect(design?.nav.home.on).toBe(true)
+    const blocks = design!.pages.home.blocks.map((block) => block.type)
+    expect(blocks).toEqual(expect.arrayContaining(['composer', 'ideas', 'updates', 'help_topics']))
+    expect(blocks).not.toContain('status')
+    // Saving the goals again keeps the design it has.
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['status_page'] } })
+    expect((await getPublishedDesign())?.pages.home.blocks.map((block) => block.type)).toEqual(
+      blocks
+    )
+  })
+
+  it('gives no design to an established workspace, or one with the design engine off', async () => {
+    // An established workspace that turned the design engine on in Labs.
+    const yearAgo = new Date(Date.now() - 365 * 86_400_000)
+    await testDb
+      .insert(settings)
+      .values(operatorRow(yearAgo, JSON.stringify({ portalDesignV2: true })))
+    await ensureOnboardingHomeReadyFn()
+    expect(await getPublishedDesign()).toBeNull()
+
+    await testDb.delete(settings)
+    await testDb
+      .insert(settings)
+      .values(operatorRow(new Date(), JSON.stringify({ portalDesignV2: false })))
+    await ensureOnboardingHomeReadyFn()
+    expect(await getPublishedDesign()).toBeNull()
   })
 
   it('turns Copilot on Home on for a new workspace an operator provisioned', async () => {

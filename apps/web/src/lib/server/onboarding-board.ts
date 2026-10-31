@@ -150,6 +150,12 @@ export async function applyOnboardingGoals(
       changesStoredJson((stored[key] as string | null | undefined) ?? null, next)
     )
   }
+  // A new workspace's portal starts on Home, laid out from the pages its
+  // goals turned on; an established workspace keeps its root as it is.
+  if (isNew) {
+    const { seedStartingDesign } = await import('@/lib/server/domains/design/starting-design')
+    if (await seedStartingDesign(tx, row.id)) modulesChanged = true
+  }
   await prepareOnboardingBoard(tx, { ...state, goals })
   await seedGoalPages(tx, row.name, goals)
   return { modulesChanged }

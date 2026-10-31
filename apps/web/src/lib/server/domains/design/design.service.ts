@@ -170,7 +170,7 @@ async function publishDocument(
   tx: Transaction,
   designId: PortalDesignId,
   document: PortalDesign,
-  author: DesignAuthor,
+  author: Pick<DesignAuthor, 'principalId'> | null,
   source: PortalDesignSource,
   message: string | null
 ) {
@@ -183,7 +183,14 @@ async function publishDocument(
   const number = (latest?.number ?? 0) + 1
   const [created] = await tx
     .insert(portalDesignRevisions)
-    .values({ designId, number, document, source, principalId: author.principalId, message })
+    .values({
+      designId,
+      number,
+      document,
+      source,
+      principalId: author?.principalId ?? null,
+      message,
+    })
     .returning({ id: portalDesignRevisions.id })
   await tx
     .update(portalDesigns)
@@ -259,6 +266,22 @@ export async function publishDraftInTransaction(
     metadata: { principalId: input.principalId, revisionId: published.revisionId },
   })
   return published
+}
+
+/**
+ * Publishes the design a new workspace starts with as its first version, from
+ * setup rather than a person. A workspace with a design keeps it; the result
+ * says whether this one was published.
+ */
+export async function publishStartingDesign(
+  tx: Transaction,
+  document: PortalDesign
+): Promise<boolean> {
+  await tx.insert(portalDesigns).values({}).onConflictDoNothing()
+  const row = (await designRow(tx, true))!
+  if (row.publishedRevisionId || row.draft) return false
+  await publishDocument(tx, row.id, validateDesign(document), null, 'conversion', null)
+  return true
 }
 
 /** Publishes an old revision's document as the next revision. A draft in progress is kept. */

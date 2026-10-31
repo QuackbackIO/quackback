@@ -21,6 +21,7 @@ import {
   getPublishedDesign,
   listRevisions,
   publishDraft,
+  publishStartingDesign,
   restoreRevision,
   REVISIONS_KEPT,
   saveDraft,
@@ -38,16 +39,14 @@ async function admin() {
   const userId = createId('user') as UserId
   const id = createId('principal') as PrincipalId
   await testDb.insert(user).values({ id: userId, name: 'Admin', email: `${userId}@example.com` })
-  await testDb
-    .insert(principal)
-    .values({
-      id,
-      userId,
-      role: 'admin',
-      type: 'user',
-      displayName: 'Admin',
-      createdAt: new Date(),
-    })
+  await testDb.insert(principal).values({
+    id,
+    userId,
+    role: 'admin',
+    type: 'user',
+    displayName: 'Admin',
+    createdAt: new Date(),
+  })
   return {
     principalId: id,
     actor: { userId, email: `${userId}@example.com`, role: 'admin', type: 'user' as const },
@@ -59,6 +58,28 @@ const withAccent = (accent: string) => {
   doc.brand.light.accent = accent
   return doc
 }
+
+describe('a new workspace’s starting design', () => {
+  it('publishes it as the first version, with no author', async () => {
+    const doc = withAccent('#0F766E')
+    doc.nav.home.on = true
+    expect(await testDb.transaction((tx) => publishStartingDesign(tx, doc))).toBe(true)
+    const state = await getDesignState()
+    expect(state?.published?.number).toBe(1)
+    expect(state?.published?.document.nav.home.on).toBe(true)
+    const [row] = await testDb.select().from(portalDesignRevisions)
+    expect(row).toMatchObject({ source: 'conversion', principalId: null })
+  })
+
+  it('leaves a workspace that already has a design alone', async () => {
+    const who = await admin()
+    await saveDraft(withAccent('#0F766E'), who)
+    await publishDraft({ ...who, source: 'appearance' })
+    expect(await testDb.transaction((tx) => publishStartingDesign(tx, defaultDesign()))).toBe(false)
+    expect((await getPublishedDesign())?.brand.light.accent).toBe('#0f766e')
+    expect(await listRevisions()).toHaveLength(1)
+  })
+})
 
 describe('drafts', () => {
   it('saves a validated draft and leaves the published design alone', async () => {

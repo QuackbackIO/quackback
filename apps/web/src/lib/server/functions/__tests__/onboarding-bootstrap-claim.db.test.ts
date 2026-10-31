@@ -68,7 +68,8 @@ vi.mock('@/lib/server/domains/principals/principal.factory', () => ({
   ensurePrincipalForUser: hoisted.ensurePrincipalForUser,
   setPrincipalRole: hoisted.setPrincipalRole,
 }))
-vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
+vi.mock('@/lib/server/domains/settings/settings.helpers', async (original) => ({
+  ...(await original<typeof import('@/lib/server/domains/settings/settings.helpers')>()),
   invalidateSettingsCache: hoisted.invalidateSettingsCache,
 }))
 
