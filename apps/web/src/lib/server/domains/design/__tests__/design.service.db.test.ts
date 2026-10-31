@@ -7,7 +7,14 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { auditLog, eq, portalDesignRevisions, principal, user } from '@/lib/server/db'
+import {
+  auditLog,
+  eq,
+  portalDesignRevisions,
+  portalDesigns,
+  principal,
+  user,
+} from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
@@ -158,6 +165,39 @@ describe('publishing', () => {
       .from(auditLog)
       .where(eq(auditLog.actorUserId, who.actor.userId))
     expect(rows.map((r) => r.eventType).sort()).toEqual(['design.published', 'design.restored'])
+  })
+})
+
+describe('a design saved by a newer build', () => {
+  // What a newer build might write: a field this build lacks and an option it does not offer.
+  const newer = (stored: unknown) => {
+    const doc = structuredClone(stored) as ReturnType<typeof defaultDesign>
+    return {
+      ...doc,
+      brand: { ...doc.brand, logo: { ...doc.brand.logo, display: 'name', tagline: 'Hi' } },
+      layout: { ...doc.layout, bandShape: 'panel' },
+    }
+  }
+
+  it('still renders its brand after a rollback', async () => {
+    const who = await admin()
+    await saveDraft(withAccent('#0F766E'), who)
+    const first = await publishDraft({ ...who, source: 'appearance' })
+    const [row] = await testDb
+      .select({ document: portalDesignRevisions.document })
+      .from(portalDesignRevisions)
+      .where(eq(portalDesignRevisions.id, first.revisionId))
+    await testDb
+      .update(portalDesignRevisions)
+      .set({ document: newer(row!.document) })
+      .where(eq(portalDesignRevisions.id, first.revisionId))
+    await testDb.update(portalDesigns).set({ draft: newer(withAccent('#7a1f35')) })
+
+    expect((await getPublishedDesign())?.brand.light.accent).toBe('#0f766e')
+    const state = await getDesignState()
+    expect(state?.published?.document.brand.logo.display).toBe('mark_and_name')
+    expect(state?.draft?.brand.light.accent).toBe('#7a1f35')
+    expect((await restoreRevision(first.revisionId, who)).number).toBe(2)
   })
 })
 
