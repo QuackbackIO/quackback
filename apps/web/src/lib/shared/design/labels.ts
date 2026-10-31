@@ -18,6 +18,23 @@ const LABELS: Record<string, string> = {
   'brand.fonts.body': 'Body font',
   'brand.fonts.headingWeight': 'Heading weight',
   'shape.corners': 'Corners',
+  'shape.buttons': 'Buttons',
+  'brand.light.support': 'Second colour',
+  'brand.dark.support': 'Dark second colour',
+  'brand.fonts.scale': 'Headline size',
+  'brand.fonts.tracking': 'Headline spacing',
+  'brand.fonts.headlineCase': 'Headline capitals',
+  'brand.fonts.labelCase': 'Menu and button capitals',
+  'brand.logoColours': 'Logo colours',
+  'layout.blend': 'Blend',
+  'layout.bandAlign': 'Band words',
+  'layout.bandShape': 'Band shape',
+  'layout.headerOnBand': 'Header on the band',
+  'layout.imagePlace': 'Band image placement',
+  'layout.status': 'Status markers',
+  'pages.home.composer': 'Home composer',
+  'pages.feedback.headline.accent': 'Headline phrase',
+  'pages.home.headline.accent': 'Home headline phrase',
   'layout.header': 'Header',
   'layout.nav': 'Menu style',
   'layout.band': 'Top band',
@@ -59,10 +76,11 @@ const IMAGES: Record<string, string> = {
   'brand.logo.wordmark.dark': 'Dark wordmark',
   'brand.favicon': 'Favicon',
   'brand.shareImage': 'Share image',
+  'brand.bandImage': 'Band image',
 }
 
 const IMAGE_PATH =
-  /^(brand\.(?:logo\.(?:mark|wordmark)\.(?:light|dark)|favicon|shareImage))(?:\.|$)/
+  /^(brand\.(?:logo\.(?:mark|wordmark)\.(?:light|dark)|favicon|shareImage|bandImage))(?:\.|$)/
 
 /** Whether a path holds an uploaded image, whose value is a storage key no one should read. */
 export function isImageField(path: string): boolean {

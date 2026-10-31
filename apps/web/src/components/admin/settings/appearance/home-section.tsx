@@ -17,6 +17,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { LanguagePicker } from './language-picker'
+import { DesignTiles } from './design-tiles'
+import { ComposerPlaceDrawing } from './drawings'
 import { SettingRow } from '@/components/admin/settings/setting-row'
 import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-body-editor'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -181,6 +183,35 @@ export function HomeSection({
               />
             </div>
           ))}
+          {home.blocks.some((block) => block.type === 'composer') && (
+            <DesignTiles
+              name="design-composer-place"
+              label="Composer"
+              value={home.composer ?? 'block'}
+              columns={2}
+              onChange={(place) =>
+                edit((draft) => {
+                  draft.pages.home.composer = place
+                  // In the band, a contact block takes its own row rather than a half-empty one.
+                  if (place === 'band')
+                    for (const block of draft.pages.home.blocks)
+                      if (block.type === 'contact') block.width = 'full'
+                })
+              }
+              options={[
+                {
+                  value: 'band',
+                  label: 'In the band',
+                  drawing: <ComposerPlaceDrawing place="band" />,
+                },
+                {
+                  value: 'block',
+                  label: 'On the grid',
+                  drawing: <ComposerPlaceDrawing place="block" />,
+                },
+              ]}
+            />
+          )}
           <ol className="space-y-2" aria-label="Home blocks">
             {home.blocks.map((block, index) => (
               <BlockRow
