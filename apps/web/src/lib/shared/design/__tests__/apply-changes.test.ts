@@ -200,4 +200,39 @@ describe('applyDesignChanges', () => {
     )
     expect(undone.design).toEqual(defaultDesign())
   })
+
+  it('writes own wording and dark colours that are not there yet', () => {
+    const result = applyDesignChanges(
+      defaultDesign(),
+      [
+        { path: 'pages.feedback.copy.prompt', value: 'Pitch an idea' },
+        { path: 'brand.dark.background', value: '#101614' },
+      ],
+      'site'
+    )
+    expect(result.refused).toEqual([])
+    expect(result.design.pages.feedback.copy.prompt).toEqual({ en: 'Pitch an idea' })
+    expect(result.design.brand.dark?.background).toBe('#101614')
+  })
+
+  it('keeps the rest of a Home layout from the model when a block’s page is off', () => {
+    const result = applyDesignChanges(
+      defaultDesign(),
+      [
+        {
+          path: 'pages.home.blocks',
+          value: [
+            { type: 'composer', width: 'two_thirds' },
+            { type: 'status', width: 'third' },
+          ],
+        },
+      ],
+      'site',
+      { blockTypes: ['composer'], links: new Set(), checkCss: () => null }
+    )
+    expect(result.design.pages.home.blocks.map((block) => block.type)).toEqual(['composer'])
+    expect(result.refused).toEqual([
+      { path: 'pages.home.blocks', reason: 'the status block needs its page on' },
+    ])
+  })
 })

@@ -138,13 +138,19 @@ function read(doc: unknown, path: string): unknown {
     )
 }
 
-/** Writes a value at a path whose parent exists; undefined removes the field. */
+/**
+ * Writes a value at a path; undefined removes the field. A missing part of
+ * the path is made as an object, such as the dark colours before any is
+ * set, and the schema decides whether it belongs.
+ */
 function writeAt(root: unknown, keys: string[], value: unknown): boolean {
   const last = keys[keys.length - 1]!
-  let parent = root
+  let parent = root as Record<string, unknown>
   for (const key of keys.slice(0, -1)) {
-    parent = (parent as Record<string, unknown> | null)?.[key]
-    if (parent === null || typeof parent !== 'object') return false
+    if (parent[key] === undefined && !Array.isArray(parent)) parent[key] = {}
+    const next = parent[key]
+    if (next === null || typeof next !== 'object') return false
+    parent = next as Record<string, unknown>
   }
   if (Array.isArray(parent)) {
     const index = Number(last)
@@ -184,8 +190,15 @@ function shaped(doc: PortalDesign, path: string, value: unknown): unknown {
     return typeof value === 'string' ? (normaliseColor(value) ?? value) : value
   }
   if (typeof value === 'string' && isRichText(current)) return textDoc(value)
-  if (typeof value === 'string' && isLocalized(current)) {
-    const localized = { ...(current as Record<string, string>) }
+  const translated =
+    /^pages\.(feedback\.copy\.(prompt|submit|emptyTitle)|(home|feedback)\.headline\.(title|subtitle))$/.test(
+      path
+    )
+  if (
+    typeof value === 'string' &&
+    (isLocalized(current) || (translated && current === undefined))
+  ) {
+    const localized = { ...((current ?? {}) as Record<string, string>) }
     if (value.trim()) localized[ENGLISH] = value.trim()
     else delete localized[ENGLISH]
     return Object.keys(localized).length || !path.startsWith('pages.feedback.copy.')
@@ -281,10 +294,28 @@ export function applyDesignChanges(
   const applied: AppliedDesignChange[] = []
   const outOfScope: string[] = []
   const refused: Array<{ path: string; reason: string }> = []
-  for (const { path, value } of changes) {
+  for (const change of changes) {
+    const { path } = change
+    let { value } = change
     if (!inScope(path, scope)) {
       outOfScope.push(path)
       continue
+    }
+    // Home blocks for pages that are off are left out; the rest of the layout stands.
+    if (untrusted && path === 'pages.home.blocks' && Array.isArray(value)) {
+      const had = new Set(design.pages.home.blocks.map((block) => block.type))
+      const off = value.filter(
+        (block) =>
+          isRecord(block) &&
+          !had.has(block.type as HomeBlockType) &&
+          !untrusted.blockTypes.includes(block.type as HomeBlockType)
+      )
+      for (const block of off)
+        refused.push({
+          path,
+          reason: `the ${String(block.type).replace('_', ' ')} block needs its page on`,
+        })
+      value = value.filter((block) => !off.includes(block))
     }
     // An optional field is cleared by leaving it out; a nullable one takes null.
     const attempts = value === null ? [null, undefined] : [value]
