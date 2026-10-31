@@ -29,6 +29,8 @@ const LABELS: Record<string, string> = {
   'brand.logo.display': 'Logo display',
   'nav.home.on': 'Home page',
   'nav.home.tab': 'Home in the menu',
+  'nav.home.label': 'Home tab name',
+  'nav.items': 'Menu',
   'pages.home.blocks': 'Home blocks',
 }
 

@@ -60,6 +60,8 @@ interface PortalNavEditorProps {
   /** Built-in types whose product is currently disabled (rows render inert). */
   gatedTypes: ReadonlySet<string>
   onReset: () => void
+  /** Whether Feedback can be hidden too, as it can on the design engine. */
+  feedbackHideable?: boolean
 }
 
 /**
@@ -72,6 +74,7 @@ export const PortalNavEditor = memo(function PortalNavEditor({
   onChange,
   gatedTypes,
   onReset,
+  feedbackHideable = false,
 }: PortalNavEditorProps) {
   const dndId = useId()
   const sensors = useSensors(
@@ -118,6 +121,7 @@ export const PortalNavEditor = memo(function PortalNavEditor({
                 key={item.id}
                 item={item}
                 gated={item.type !== 'link' && gatedTypes.has(item.type)}
+                alwaysOn={item.type === 'feedback' && !feedbackHideable}
                 onPatch={(patch) => updateItem(item.id, patch)}
                 onRemove={() => removeItem(item.id)}
               />
@@ -141,11 +145,14 @@ export const PortalNavEditor = memo(function PortalNavEditor({
 function NavRow({
   item,
   gated,
+  alwaysOn,
   onPatch,
   onRemove,
 }: {
   item: PortalNavItemConfig
   gated: boolean
+  /** Shown whatever the setting, so it offers no switch. */
+  alwaysOn: boolean
   onPatch: (patch: Partial<PortalNavItemConfig>) => void
   onRemove: () => void
 }) {
@@ -245,7 +252,7 @@ function NavRow({
         </Button>
       )}
 
-      {item.type === 'feedback' ? (
+      {alwaysOn ? (
         <Badge variant="secondary">Always on</Badge>
       ) : (
         <Switch

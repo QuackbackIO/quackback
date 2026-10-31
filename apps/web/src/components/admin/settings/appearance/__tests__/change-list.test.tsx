@@ -30,6 +30,8 @@ describe('changeLabel', () => {
     ['pages.home.headline', 'Home headline'],
     ['pages.home.headline.subtitle.fr', 'Home subtitle'],
     ['pages.home.blocks', 'Home blocks'],
+    ['nav.items', 'Menu'],
+    ['nav.home.label', 'Home tab name'],
   ])('%s is %s', (path, label) => {
     expect(changeLabel(path)).toBe(label)
   })
@@ -53,6 +55,29 @@ describe('ChangeList', () => {
     )
     expect(container.textContent).toContain('No blocks')
     expect(container.textContent).toContain('2 blocks')
+    expect(container.textContent).not.toContain('Changed')
+  })
+
+  it('counts what the menu shows', () => {
+    const { container } = render(
+      <ChangeList
+        changes={[
+          {
+            path: 'nav.items',
+            before: [
+              { type: 'feedback', shown: true },
+              { type: 'roadmap', shown: true },
+            ],
+            after: [
+              { type: 'feedback', shown: true },
+              { type: 'roadmap', shown: false },
+              { type: 'link', id: 'x', label: 'Docs', url: 'https://example.com', newTab: true },
+            ],
+          },
+        ]}
+      />
+    )
+    expect(container.textContent).toContain('2 shown')
     expect(container.textContent).not.toContain('Changed')
   })
 

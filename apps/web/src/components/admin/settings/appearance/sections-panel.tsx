@@ -8,6 +8,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { DesignTiles } from './design-tiles'
 import { HomeSection } from './home-section'
+import { MenuSection } from './menu-section'
 import {
   BandDrawing,
   CardsDrawing,
@@ -79,6 +80,8 @@ export function SectionsPanel({
           }))}
         />
       </section>
+
+      <MenuSection design={design} update={update} gates={gates} />
 
       <section id="design-section-band" className="scroll-mt-4 space-y-4">
         <h3 className="text-sm font-semibold">Top band</h3>
