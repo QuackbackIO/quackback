@@ -47,7 +47,8 @@ vi.mock('@tanstack/react-start', () => ({
 
 const hoisted = vi.hoisted(() => ({ getSession: vi.fn() }))
 vi.mock('@/lib/server/auth/session', () => ({ getSession: hoisted.getSession }))
-vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
+vi.mock('@/lib/server/domains/settings/settings.helpers', async (original) => ({
+  ...(await original<typeof import('@/lib/server/domains/settings/settings.helpers')>()),
   invalidateSettingsCache: vi.fn(),
 }))
 
