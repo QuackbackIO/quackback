@@ -21,6 +21,13 @@ describe('the bundled face closest to a brand’s', () => {
     expect(nearestBundledFont('Tiempos Headline')).toBe('source-serif')
   })
 
+  it('reads a stack in order, as a browser does', () => {
+    expect(
+      nearestBundledFont('Salesforce-Avant-Garde, "Helvetica Neue", Helvetica, sans-serif')
+    ).toBe('outfit')
+    expect(nearestBundledFont('Acme Sans, Fraunces, serif')).toBe('fraunces')
+  })
+
   it('leaves a face it does not know to be chosen', () => {
     expect(nearestBundledFont('Acme House Sans')).toBeNull()
     expect(nearestBundledFont(null)).toBeNull()

@@ -47,15 +47,28 @@ const simplify = (name: string) =>
     .replace(/\s+/g, ' ')
     .trim()
 
-/** The bundled face a family is, or the one closest to it, or null. */
-export function nearestBundledFont(family: string | null | undefined): BundledFontId | null {
-  if (!family) return null
+/** One family's bundled face, or the one closest to it, or null. */
+function nearestOne(family: string): BundledFontId | null {
   const name = simplify(family)
   const bare = name.replace(/[^a-z0-9]/g, '')
+  if (!bare) return null
   for (const [id, font] of Object.entries(BUNDLED_FONTS) as Array<
     [BundledFontId, { label: string }]
   >) {
     if (font.label.toLowerCase().replace(/[^a-z0-9]/g, '') === bare) return id
   }
   return NEAREST.find(([pattern]) => pattern.test(name))?.[1] ?? null
+}
+
+/**
+ * The bundled face a family is, or the one closest to it, or null. Given a
+ * stack, the first family it knows wins, as a browser reads one.
+ */
+export function nearestBundledFont(family: string | null | undefined): BundledFontId | null {
+  if (!family) return null
+  for (const one of family.split(',')) {
+    const found = nearestOne(one)
+    if (found) return found
+  }
+  return null
 }
