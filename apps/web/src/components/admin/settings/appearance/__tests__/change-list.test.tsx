@@ -63,6 +63,16 @@ describe('ChangeList', () => {
     expect(container.textContent).not.toContain('Changed')
   })
 
+  it('counts the custom CSS in lines rather than showing it', () => {
+    const { container } = render(
+      <ChangeList changes={[{ path: 'css', before: undefined, after: 'a { b: c }\nd { e: f }' }]} />
+    )
+    expect(container.textContent).toContain('Custom CSS')
+    expect(container.textContent).toContain('None')
+    expect(container.textContent).toContain('2 lines')
+    expect(container.textContent).not.toContain('a { b: c }')
+  })
+
   it('counts what the menu shows', () => {
     const { container } = render(
       <ChangeList

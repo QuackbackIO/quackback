@@ -153,6 +153,7 @@ export function AppearanceView({
               update={draft.update}
               gates={gates}
               onEditHome={() => setPage('home')}
+              cssWarnings={draft.report.css}
             />
           </TabsContent>
         </Tabs>

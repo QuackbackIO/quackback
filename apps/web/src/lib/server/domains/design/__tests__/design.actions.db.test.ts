@@ -25,6 +25,20 @@ vi.mock('@/lib/server/local-cache', async (original) => ({
   localCacheSet: () => undefined,
 }))
 
+const plan = vi.hoisted(() => ({ customCss: true }))
+vi.mock('@/lib/server/domains/settings/tier-enforce', async () => {
+  const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
+  return {
+    assertTierFeature: async (feature: string, friendly: string) => {
+      if (feature === 'customCss' && !plan.customCss)
+        throw new TierLimitError({
+          limit: 'features.customCss',
+          message: `${friendly} is not available on your plan. Upgrade to enable it.`,
+        })
+    },
+  }
+})
+
 const actions = await import('../design.actions')
 const { defaultDesign } = await import('@/lib/shared/design/schema')
 
@@ -86,6 +100,55 @@ describe('readDesignForEditing', () => {
     const drafted = await actions.readDesignForEditing()
     expect(drafted.live.brand.light.accent).toBe('#0f766e')
     expect(drafted.design.brand.light.accent).not.toBe('#0f766e')
+  })
+})
+
+describe('the workspace’s own CSS', () => {
+  beforeEach(() => {
+    plan.customCss = true
+  })
+
+  it('refuses CSS that reaches past styling, saying where', async () => {
+    const who = await author()
+    const doc = defaultDesign()
+    doc.css = 'body {\n  background: url(https://example.com/x.png);\n}'
+    const result = await actions.saveDesignDraft(doc, who)
+    expect(result).toMatchObject({ ok: false, code: 'INVALID_CSS' })
+    expect(!result.ok && result.message).toMatch(/^Line 2: url\(https:\/\/example\.com/)
+  })
+
+  it('saves CSS with warnings in the report', async () => {
+    const who = await author()
+    const doc = defaultDesign()
+    doc.css = '.portal-nav__item { font-weight: 700; }'
+    const result = await actions.saveDesignDraft(doc, who)
+    expect(result.ok && result.report.css).toEqual([
+      expect.objectContaining({
+        fix: expect.objectContaining({ replace: '[data-qb-part="nav-item"]' }),
+      }),
+    ])
+  })
+
+  it('asks the plan for new CSS, but keeps CSS already published and lets it go', async () => {
+    const who = await author()
+    const styled = defaultDesign()
+    styled.css = '[data-qb-part="post-card"] { border-width: 2px; }'
+    await actions.saveDesignDraft(styled, who)
+    await actions.publishDesign({ ...who, source: 'appearance' })
+
+    plan.customCss = false
+    const accent = structuredClone(styled)
+    accent.brand.light.accent = '#0f766e'
+    expect(await actions.saveDesignDraft(accent, who)).toMatchObject({ ok: true })
+    const changed = structuredClone(styled)
+    changed.css = '[data-qb-part="post-card"] { border-width: 3px; }'
+    expect(await actions.saveDesignDraft(changed, who)).toMatchObject({
+      ok: false,
+      code: 'TIER_LIMIT_EXCEEDED',
+    })
+    const removed = structuredClone(styled)
+    delete removed.css
+    expect(await actions.saveDesignDraft(removed, who)).toMatchObject({ ok: true })
   })
 })
 

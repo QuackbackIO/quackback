@@ -22,6 +22,7 @@ import { recordAuditEventInTransaction, type AuditActor } from '@/lib/server/aud
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { resolveDesign } from '@/lib/shared/design/resolve'
+import { lintDesignCss } from './css-lint'
 import { portalDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { logger } from '@/lib/server/logger'
 import { digestOf } from '@/lib/server/utils/canonical-json'
@@ -56,7 +57,35 @@ export function validateDesign(input: unknown): PortalDesign {
   }
   const { errors } = resolveDesign(parsed.data)
   if (errors.length > 0) throw new ValidationError('UNREADABLE_DESIGN', errors.join('; '))
+  if (parsed.data.css) {
+    const lint = lintDesignCss(parsed.data.css)
+    if (lint.errors.length > 0) {
+      throw new ValidationError(
+        'INVALID_CSS',
+        lint.errors.map((e) => (e.line ? `Line ${e.line}: ${e.message}` : e.message)).join(' ')
+      )
+    }
+  }
   return parsed.data
+}
+
+/**
+ * Custom CSS is a plan feature. CSS the published design already has stays,
+ * and removing it is always allowed, so a workspace whose plan dropped the
+ * feature can still save everything else.
+ */
+async function assertCssAllowed(
+  executor: typeof db | Transaction,
+  document: PortalDesign,
+  publishedRevisionId: PortalDesignRevisionId | null
+): Promise<void> {
+  const css = document.css?.trim() ?? ''
+  if (!css) return
+  const published = await revision(executor, publishedRevisionId)
+  const live = published ? portalDesign.parse(published.document).css?.trim() : undefined
+  if (css === live) return
+  const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+  await assertTierFeature('customCss', 'Custom CSS')
 }
 
 /** The workspace's default site, the only one until sites ship. */
@@ -144,6 +173,7 @@ export async function saveDraft(input: unknown, author: DesignAuthor): Promise<v
       await tx.insert(portalDesigns).values({}).onConflictDoNothing()
       row = (await designRow(tx, true))!
     }
+    await assertCssAllowed(tx, document, row.publishedRevisionId)
     const now = new Date()
     await tx
       .update(portalDesigns)

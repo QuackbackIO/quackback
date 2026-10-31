@@ -132,9 +132,12 @@ export function isPartName(name: string): boolean {
  * The CSS with each renamed part's old name replaced, so a workspace's CSS
  * keeps working across a rename. Running it twice changes nothing more.
  */
-export function rewritePartAliases(css: string): string {
+export function rewritePartAliases(
+  css: string,
+  aliases: Readonly<Record<string, string>> = PART_ALIASES
+): string {
   let next = css
-  for (const [from, to] of Object.entries(PART_ALIASES)) {
+  for (const [from, to] of Object.entries(aliases)) {
     next = next.replace(new RegExp(`(data-qb-part=["']?)${from}(["']?\\])`, 'g'), `$1${to}$2`)
   }
   return next
