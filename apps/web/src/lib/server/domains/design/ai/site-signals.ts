@@ -161,7 +161,7 @@ export async function readSiteSignals(site: string): Promise<SiteRead> {
       },
       'website read for its brand'
     )
-    const measured = measureSite(found.html, sheets)
+    const measured = measureSite(found.html, sheets, brand.button)
     return { ok: true, signals: { domain: host, ...brand, logo, shareImage, measured } }
   }
   if (blocked) {

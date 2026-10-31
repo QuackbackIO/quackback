@@ -119,7 +119,16 @@ function cascade(rules: Rule[], el: Element): Map<string, string> {
       a.rule.order - b.rule.order
   )
   const out = new Map<string, string>()
-  for (const { rule } of hits) for (const [k, v] of rule.decls) out.set(k, v)
+  for (const { spec, rule } of hits)
+    for (const [k, v] of rule.decls) {
+      // A size set only by a bare tag in em is a reset's default (h1 { font-size: 2em }),
+      // not the brand's: it says nothing about the headline the page shows.
+      if (k === 'font-size' && spec[0] === 0 && spec[1] === 0 && /^[\d.]+em$/.test(v.trim())) {
+        out.delete(k)
+        continue
+      }
+      out.set(k, v)
+    }
   return out
 }
 
@@ -292,6 +301,13 @@ function elements(html: string): Array<Element & { attrs: string }> {
   return out
 }
 
+/** An element the page keeps out of sight: hidden, for screen readers only, or a notice over it. */
+const isHidden = (el: Element & { attrs: string }) =>
+  /(^|\s)hidden(\s|=|$)|aria-hidden\s*=\s*["']true/i.test(el.attrs) ||
+  [...el.classes].some((c) =>
+    /(sr-only|visually-hidden|screen-reader|cookie|consent|modal|dialog)/i.test(c)
+  )
+
 const isButtonish = (el: Element & { attrs: string }) =>
   (el.tag === 'a' || el.tag === 'button') &&
   ([...el.classes].some((c) => /(^|[-_])(btn|button|cta)([-_]|$)/i.test(c)) ||
@@ -299,17 +315,40 @@ const isButtonish = (el: Element & { attrs: string }) =>
   ![...el.classes].some((c) => /(close|icon|menu|toggle|skip|cookie|link)/i.test(c))
 
 /** A page's type and shapes, as far as its HTML and CSS say. */
-export function measureSite(html: string, css: string[]): BrandMeasurements {
+/**
+ * A page's type and shapes, as far as its HTML and CSS say. The headline is
+ * the largest h1 in sight, and the main button the one filled with the site's
+ * own button colour when one is known.
+ */
+export function measureSite(
+  html: string,
+  css: string[],
+  brandButton: string | null = null
+): BrandMeasurements {
   const rules = parseRules(css.join('\n'))
   const props = customProperties(rules)
   // A shorthand sets its longhands where its own rule does not, so the cascade weighs them by rule.
   for (const rule of rules) rule.decls = expandFont(rule.decls, props)
-  const els = elements(html)
+  const els = elements(html).filter((el) => !isHidden(el))
   const styleOf = (el: Element | undefined) => (el ? cascade(rules, el) : null)
   const first = (pick: (el: Element & { attrs: string }) => boolean) => els.find(pick)
-  const h1 = styleOf(first((el) => el.tag === 'h1'))
-  const h2 = styleOf(first((el) => el.tag === 'h2'))
-  const button = styleOf(first(isButtonish))
+  // Of the page's headlines, the largest: a site may mark a small label up as an h1 too.
+  const largest = (tag: string) =>
+    els
+      .filter((el) => el.tag === tag)
+      .slice(0, 12)
+      .map((el) => cascade(rules, el))
+      .map((decls) => ({ decls, size: typeOf(decls, props)?.size ?? 0 }))
+      .sort((a, b) => b.size - a.size)[0]
+  const h1 = largest('h1')?.decls ?? null
+  const h2 = styleOf(first((el) => el.tag === 'h2' && !!typeOf(cascade(rules, el), props)))
+  const buttons = els.filter(isButtonish).slice(0, 20)
+  const filled = (el: Element) => boxOf(cascade(rules, el), props)?.fill
+  const button = styleOf(
+    (brandButton && buttons.find((el) => filled(el) === brandButton)) ||
+      buttons.find((el) => !!filled(el)) ||
+      buttons[0]
+  )
   const card = styleOf(first((el) => [...el.classes].some((c) => /(^|[-_])card([-_]|$)/i.test(c))))
   const field = styleOf(
     first(

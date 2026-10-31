@@ -45,6 +45,22 @@ const oklchOf = (colour: string) =>
  * to make text read on it, which the portal does for itself. A different hue
  * is the model's reading of the brand and stays.
  */
+/**
+ * The faithful look's buttons as the site's own main button: a coloured one
+ * is the brand colour, and a black or near-black one fills buttons with the
+ * text colour. A pale or grey fill says nothing about the brand.
+ */
+export function measuredButton(site: SiteSignals | null | undefined): {
+  accent?: string
+  fill?: 'ink'
+} {
+  const fill = site?.measured?.button?.fill
+  const colour = fill ? oklchOf(fill) : null
+  if (!fill || !colour) return {}
+  if (colour.c >= 0.04) return { accent: fill }
+  return colour.l < 0.3 ? { fill: 'ink' } : {}
+}
+
 export function faithfulAccent(
   accent: string,
   input: { site?: SiteSignals | null; palette?: string[] | null }
@@ -414,7 +430,8 @@ export async function designDirections(input: {
           index === 0
             ? {
                 ...answered,
-                accent: faithfulAccent(answered.accent, input),
+                accent: measuredButton(input.site).accent ?? faithfulAccent(answered.accent, input),
+                ...(measuredButton(input.site).fill && { fill: 'ink' as const }),
                 support: answered.support && faithfulAccent(answered.support, input),
               }
             : answered

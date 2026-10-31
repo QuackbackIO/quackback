@@ -63,4 +63,24 @@ describe('measuring a brand from its page', () => {
     expect(m.button).toBeNull()
     expect(m.card).toBeNull()
   })
+
+  it('takes the largest headline in sight, past a reset’s default and a hidden one', () => {
+    const page = `<h1 class="sr-only">Skip</h1><h1 class="label overflow-hidden">Pricing</h1>
+      <h1 class="hero">Money without borders</h1>`
+    const m = measureSite(page, [
+      `h1 { font-size: 2em } .sr-only { font-size: 120px } .label { font-size: 14px } .hero { font-size: 104px }`,
+    ])
+    expect(m.headline?.size).toBe(104)
+    // A page whose only headline size is the reset's says nothing about its headline.
+    expect(measureSite('<h1>Hi</h1>', ['h1 { font-size: 2em }']).headline).toBeNull()
+  })
+
+  it('takes the button filled with the site’s own button colour', () => {
+    const page = `<a class="btn btn-secondary">Log in</a><a class="btn btn-primary">Send money</a>`
+    const css = [
+      `.btn-secondary { background: #37517e } .btn-primary { background: #163300; border-radius: 999px }`,
+    ]
+    expect(measureSite(page, css, '#163300').button).toEqual({ radius: 999, fill: '#163300' })
+    expect(measureSite(page, css).button?.fill).toBe('#37517e')
+  })
 })

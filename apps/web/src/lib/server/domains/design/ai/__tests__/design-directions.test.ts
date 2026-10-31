@@ -8,7 +8,7 @@ import { defaultDesign } from '@/lib/shared/design/schema'
 
 vi.mock('@/lib/server/config', () => ({ config: {} }))
 
-const { DIRECTIONS_EXAMPLE, faithfulAccent, lookDesign, withMeasuredTune } =
+const { DIRECTIONS_EXAMPLE, faithfulAccent, lookDesign, measuredButton, withMeasuredTune } =
   await import('../design-directions')
 
 const every = [
@@ -310,5 +310,19 @@ describe('the faithful look’s measured type and shapes', () => {
       )
     ).toBe(design)
     expect(withMeasuredTune(design, null, allows)).toBe(design)
+  })
+})
+
+describe('the faithful look’s buttons, as the site’s own', () => {
+  const site = (fill: string) => ({ measured: { button: { fill } } }) as never
+  it('take a coloured main button as the brand colour', () => {
+    expect(measuredButton(site('#0075de'))).toEqual({ accent: '#0075de' })
+    expect(measuredButton(site('#163300'))).toEqual({ accent: '#163300' })
+  })
+
+  it('fill with the text colour where the site’s are black, and ignore a pale one', () => {
+    expect(measuredButton(site('#111111'))).toEqual({ fill: 'ink' })
+    expect(measuredButton(site('#f5f5f5'))).toEqual({})
+    expect(measuredButton(null)).toEqual({})
   })
 })
