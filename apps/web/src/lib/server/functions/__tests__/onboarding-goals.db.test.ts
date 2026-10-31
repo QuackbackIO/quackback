@@ -99,6 +99,7 @@ describe('wizard goals read and write', () => {
       supportTickets: true,
       helpCenter: true,
       copilotHome: true,
+      portalDesignV2: true,
     })
     expect(await testDb.query.boards.findMany()).toHaveLength(0)
     // Turning Support on through the one flag write also opens the portal surface.
