@@ -28,7 +28,12 @@ interface PortalPreviewProps {
   /** Browser-tab icon slot — the workspace logo (the portal's favicon). */
   faviconUrl?: string | null
   /** A draft portal design, resolved: applied in the frame in place of the saved one. */
-  design?: { css: string; attributes: Record<string, string>; fontIds: string[] } | null
+  design?: {
+    css: string
+    attributes: Record<string, string>
+    fontIds: string[]
+    headline: { title: Record<string, string>; subtitle: Record<string, string> } | null
+  } | null
 }
 
 /**

@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
+import type { TiptapContent } from '@/lib/shared/db-types'
 import { ClientOnly } from '@tanstack/react-router'
 import { ComputerDesktopIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -11,9 +13,6 @@ import { HistoryDialog } from './history-dialog'
 import { ReviewPublishDialog } from './review-publish-dialog'
 import { SectionsPanel } from './sections-panel'
 import { useDesignDraft } from './use-design-draft'
-
-/** The design draft travels on its own channel; the structural one stays empty. */
-const NO_STRUCTURAL_DRAFT = {}
 
 /**
  * Appearance: the panel on the left edits the design draft, which saves as it
@@ -34,6 +33,19 @@ export function AppearanceView({
   const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop')
   const [reviewing, setReviewing] = useState(false)
   const [history, setHistory] = useState(false)
+  // The welcome message reaches the preview on the structural channel, which
+  // the feedback page already reads; an empty body hides it.
+  const { show, body } = draft.design.pages.feedback.welcome
+  const structural = useMemo(
+    () => ({
+      welcomeCard: {
+        body: (show && !isEmptyTiptapDoc(body as TiptapContent)
+          ? body
+          : { type: 'doc', content: [] }) as TiptapContent,
+      },
+    }),
+    [show, body]
+  )
 
   return (
     <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)]">
@@ -99,8 +111,8 @@ export function AppearanceView({
             refreshKey={String(draft.published?.number ?? 0)}
             draftCss=""
             cssDirty={false}
-            draft={NO_STRUCTURAL_DRAFT}
-            draftDirty={false}
+            draft={structural}
+            draftDirty
             design={draft.preview}
             viewport={viewport}
             workspaceName={workspaceName}

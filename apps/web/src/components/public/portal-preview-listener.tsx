@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { extractCssVariables, loadBrandingFont, normalizeFontSans } from '@/lib/shared/theme'
-import { PreviewDraftProvider, type PortalPreviewDraft } from './preview-draft-context'
+import {
+  PreviewDraftProvider,
+  PreviewHeadlineContext,
+  type PortalPreviewDraft,
+} from './preview-draft-context'
 
 type StructuralDraft = Omit<PortalPreviewDraft, 'css'>
 
@@ -118,7 +122,9 @@ export function PortalPreviewProvider({
 
   return (
     <PreviewDraftProvider draft={draft} css={css}>
-      {children}
+      <PreviewHeadlineContext.Provider value={design ? design.headline : undefined}>
+        {children}
+      </PreviewHeadlineContext.Provider>
       {stylesheet ? <style data-preview-override="">{stylesheet}</style> : null}
       {design?.css ? <style data-preview-design="">{design.css}</style> : null}
     </PreviewDraftProvider>

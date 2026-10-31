@@ -15,7 +15,9 @@ import { BUNDLED_FONTS, type BundledFontId } from '@/lib/shared/design/fonts'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { oklchToHex } from '@/lib/shared/theme/colors'
+import { applyPreset } from '@/lib/shared/design/presets'
 import { DesignTiles } from './design-tiles'
+import { PresetGallery } from './preset-gallery'
 import { CornersDrawing, ModeDrawing } from './drawings'
 
 type Palette = PortalDesign['brand']['light']
@@ -154,6 +156,9 @@ export function BrandPanel({ design, update }: { design: PortalDesign; update: U
 
   return (
     <div className="space-y-6">
+      <PresetGallery
+        onApply={(preset) => update((draft) => Object.assign(draft, applyPreset(draft, preset)))}
+      />
       <DesignTiles
         name="design-mode"
         label="Mode"

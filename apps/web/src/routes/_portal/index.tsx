@@ -1,10 +1,11 @@
-import { Suspense, useDeferredValue, useState } from 'react'
+import { Suspense, useDeferredValue, useMemo, useState } from 'react'
 import { createFileRoute, notFound, redirect, useRouteContext } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { ViewerPortalNoBoards } from '@/components/public/portal-no-boards'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
+import { PortalBand } from '@/components/public/portal-band'
 import { PortalFeedSkeleton } from '@/components/public/feedback/portal-feed-skeleton'
 import { PortalPoweredBy } from '@/components/public/feedback/portal-powered-by'
 import {
@@ -13,7 +14,11 @@ import {
 } from '@/components/public/feedback/feed-input-handoff'
 import { usePreviewWelcomeCard } from '@/components/public/preview-draft-context'
 import { portalQueries, useSeedPortalStatusesCache } from '@/lib/client/queries/portal'
-import { isProductEnabled } from '@/lib/shared/types/settings'
+import {
+  isProductEnabled,
+  type PortalWelcomeCard as PortalWelcomeCardData,
+} from '@/lib/shared/types/settings'
+import { savedWelcomeCard } from '@/lib/shared/design/view'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
@@ -146,24 +151,27 @@ function PublicPortalPage() {
   // Input typed while the feed loads is carried only within this visit's feed.
   const [feedHandoff] = useState(createFeedHandoff)
   return (
-    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-6">
-      {/* Hero renders immediately (context-only, no feed dependency). */}
-      <PortalHero />
-      {/* Only the feed region suspends on the streamed portalData query. */}
-      <FeedHandoffContext.Provider value={feedHandoff}>
-        <Suspense
-          fallback={
-            <PortalFeedSkeleton
-              poweredBy={
-                showPoweredBy ? <PortalPoweredBy workspaceSlug={settings?.slug ?? ''} /> : null
-              }
-            />
-          }
-        >
-          <PortalFeed />
-        </Suspense>
-      </FeedHandoffContext.Provider>
-    </div>
+    <>
+      <PortalBand />
+      <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-6">
+        {/* Hero renders immediately (context-only, no feed dependency). */}
+        <PortalHero />
+        {/* Only the feed region suspends on the streamed portalData query. */}
+        <FeedHandoffContext.Provider value={feedHandoff}>
+          <Suspense
+            fallback={
+              <PortalFeedSkeleton
+                poweredBy={
+                  showPoweredBy ? <PortalPoweredBy workspaceSlug={settings?.slug ?? ''} /> : null
+                }
+              />
+            }
+          >
+            <PortalFeed />
+          </Suspense>
+        </FeedHandoffContext.Provider>
+      </div>
+    </>
   )
 }
 
@@ -174,11 +182,24 @@ function PublicPortalPage() {
  */
 function PortalHero() {
   const draftWelcomeCard = usePreviewWelcomeCard()
-  const savedWelcomeCard = useRouteContext({
+  const legacyWelcomeCard = useRouteContext({
     from: '__root__',
     select: (context) => context.settings?.publicPortalConfig?.welcomeCard,
   })
-  return <PortalWelcomeCard welcomeCard={draftWelcomeCard ?? savedWelcomeCard} />
+  // On the design engine the welcome message is part of the design.
+  const design = useRouteContext({
+    from: '__root__',
+    select: (context) => context.settings?.portalDesign,
+  })
+  const savedCard = useMemo(
+    () => savedWelcomeCard(design, legacyWelcomeCard),
+    [design, legacyWelcomeCard]
+  )
+  return (
+    <PortalWelcomeCard
+      welcomeCard={(draftWelcomeCard ?? savedCard) as PortalWelcomeCardData | undefined}
+    />
+  )
 }
 
 /**

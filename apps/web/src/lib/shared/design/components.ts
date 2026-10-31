@@ -9,6 +9,7 @@
  */
 import type { ThemeVariables } from '@/lib/shared/theme/types'
 import { mixColor } from './color'
+import { solveContrast } from './contrast'
 import { fontStack } from './fonts'
 import type { PortalDesign } from './schema'
 
@@ -71,6 +72,7 @@ export function modeTokens(doc: PortalDesign, vars: ThemeVariables, mode: Mode):
     '--qb-nav-active-ink': t.foreground,
     // The voted vote box: the solver keeps accent text readable on cards.
     '--qb-vote-active': t.accentInk,
+    ...bandTokens(doc.layout.band, t),
   }
   // The underline under the current page comes from the data-qb-nav attribute.
   if (doc.layout.nav === 'underline') tokens['--qb-nav-active-bg'] = 'transparent'
@@ -80,6 +82,40 @@ export function modeTokens(doc: PortalDesign, vars: ThemeVariables, mode: Mode):
     tokens['--qb-nav-active-ink'] = t.accentInk
   }
   return tokens
+}
+
+/** Text readable on a background, moved in lightness only if it has to be. */
+const readableOn = (ink: string, background: string) => solveContrast(ink, [background], 4.5) ?? ink
+
+/**
+ * The band at the top of a page: plain, a tint of the subtle accent, a fade
+ * from it into the page, or the accent itself. Its text stays at 4.5:1.
+ */
+function bandTokens(band: PortalDesign['layout']['band'], t: Required<ThemeVariables>): TokenMap {
+  switch (band) {
+    case 'brand':
+      return {
+        '--qb-band-bg': t.primary,
+        '--qb-band-ink': t.primaryForeground,
+        '--qb-band-muted': t.primaryForeground,
+      }
+    case 'tint': {
+      const ink = readableOn(t.foreground, t.accent)
+      return { '--qb-band-bg': t.accent, '--qb-band-ink': ink, '--qb-band-muted': ink }
+    }
+    case 'fade':
+      return {
+        '--qb-band-bg': `linear-gradient(to bottom, ${t.accent}, ${t.background})`,
+        '--qb-band-ink': readableOn(t.foreground, t.accent),
+        '--qb-band-muted': readableOn(t.mutedForeground, t.accent),
+      }
+    default:
+      return {
+        '--qb-band-bg': 'transparent',
+        '--qb-band-ink': t.foreground,
+        '--qb-band-muted': t.mutedForeground,
+      }
+  }
 }
 
 /** Size tokens, the same in both modes. */

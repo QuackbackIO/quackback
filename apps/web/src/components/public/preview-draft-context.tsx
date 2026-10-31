@@ -80,3 +80,16 @@ export function usePreviewWelcomeCard(): PortalWelcomeCard | undefined {
 export function usePreviewCss(): string | undefined {
   return useContext(PreviewCssContext)
 }
+
+/** A draft design's page headline: undefined outside a design preview, null when it has none. */
+export type PreviewHeadline = {
+  title: Record<string, string>
+  subtitle: Record<string, string>
+} | null
+
+export const PreviewHeadlineContext = createContext<PreviewHeadline | undefined>(undefined)
+
+/** The draft design's feedback page headline, or undefined (always, outside a design preview). */
+export function usePreviewHeadline(): PreviewHeadline | undefined {
+  return useContext(PreviewHeadlineContext)
+}

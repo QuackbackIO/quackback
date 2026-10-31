@@ -6,11 +6,10 @@
  * pair the portal paints to its target and records each change, which is the
  * full list of ways a converted portal can look different.
  */
-import { expandTheme, formatOklch, parseOklch } from '@/lib/shared/theme/expand'
-import { hexToOklch } from '@/lib/shared/theme/colors'
+import { expandTheme } from '@/lib/shared/theme/expand'
 import { variableMap } from '@/lib/shared/theme/generator'
 import type { ThemeVariables } from '@/lib/shared/theme/types'
-import { contrastRatio } from './contrast'
+import { contrastRatio, solveContrast } from './contrast'
 import { baseTokens, modeTokens, PORTAL_ALIASES, type TokenMap } from './components'
 import { fontStack } from './fonts'
 import type { PortalDesign } from './schema'
@@ -47,33 +46,6 @@ const CORNER_RADIUS: Record<PortalDesign['shape']['corners'], string> = {
 
 const NEAR_BLACK = 'oklch(0.145 0 0)'
 const NEAR_WHITE = 'oklch(0.985 0 0)'
-const STEP = 0.005
-
-function toOklch(color: string): { l: number; c: number; h: number } {
-  const parsed = parseOklch(color.startsWith('#') ? hexToOklch(color) : color)
-  if (!parsed) throw new Error(`Cannot adjust "${color}"`)
-  return parsed
-}
-
-const lowest = (color: string, backgrounds: string[]) =>
-  Math.min(...backgrounds.map((bg) => contrastRatio(color, bg)))
-
-/**
- * The colour nearest to `color` in lightness that reaches `target` against
- * every background, keeping its chroma and hue. Null when none does.
- */
-export function solveContrast(color: string, backgrounds: string[], target: number): string | null {
-  if (lowest(color, backgrounds) >= target) return color
-  const { l, c, h } = toOklch(color)
-  // Darker against light backgrounds, lighter against dark ones.
-  const direction =
-    contrastRatio(backgrounds[0], '#000000') > contrastRatio(backgrounds[0], '#ffffff') ? -1 : 1
-  for (let next = l + direction * STEP; next >= 0 && next <= 1; next += direction * STEP) {
-    const candidate = formatOklch(next, c, h)
-    if (lowest(candidate, backgrounds) >= target) return candidate
-  }
-  return null
-}
 
 /** Today's tokens for one mode of a design, before any solving. */
 function expandMode(doc: PortalDesign, mode: Mode): ThemeVariables {

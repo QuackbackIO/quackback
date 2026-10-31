@@ -70,6 +70,19 @@ describe('AppearanceView', () => {
     expect(screen.getByRole('status').textContent).toContain('Draft · 1 change, not live')
   })
 
+  it('applies a preset’s whole look to the draft', async () => {
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Start from a preset' }))
+    fireEvent.click(await screen.findByRole('button', { name: /Editorial/ }))
+    expect(screen.getByRole('status').textContent).toMatch(/Draft · \d+ changes, not live/)
+    fireEvent.click(screen.getByRole('tab', { name: 'Sections' }))
+    expect(await screen.findByRole('radio', { name: 'List' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    )
+    expect(screen.getByRole('radio', { name: 'Narrow' })).toHaveAttribute('aria-checked', 'true')
+  })
+
   it('lists the change in Review and publish, then publishes it with its note', async () => {
     mount()
     fireEvent.click(screen.getByRole('tab', { name: 'Sections' }))

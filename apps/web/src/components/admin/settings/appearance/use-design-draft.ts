@@ -117,6 +117,7 @@ export function useDesignDraft() {
       css: `${view.themeStyles}\n${view.customCss}`,
       attributes: view.attributes,
       fontIds: view.fontIds,
+      headline: view.feedback.headline,
     }
   }, [design])
 
