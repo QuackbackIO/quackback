@@ -69,6 +69,21 @@ export function useDesignDraft() {
     [save]
   )
 
+  /** Saves a change still waiting on its pause. */
+  const flush = useCallback(async () => {
+    if (!timer.current) return
+    clearTimeout(timer.current)
+    timer.current = null
+    await save(latest.current)
+  }, [save])
+
+  /** Takes a design the server already saved as the draft, such as Quackback AI's. */
+  const adopt = useCallback((next: PortalDesign, nextReport?: typeof report) => {
+    latest.current = next
+    setDesign(next)
+    if (nextReport) setReport(nextReport)
+  }, [])
+
   /** Reloads the editor and the root settings after the live design moved. */
   const refresh = useCallback(async () => {
     const fresh = await queryClient.fetchQuery({ ...portalDesignQueries.editor(), staleTime: 0 })
@@ -88,16 +103,13 @@ export function useDesignDraft() {
 
   const publish = useCallback(
     async (message?: string): Promise<Outcome> => {
-      if (timer.current) {
-        clearTimeout(timer.current)
-        await save(latest.current)
-      }
+      await flush()
       const result = await publishPortalDesignFn({ data: { message } })
       if (!result.ok) return { ok: false, message: result.message }
       await refresh()
       return { ok: true }
     },
-    [refresh, save]
+    [refresh, flush]
   )
 
   const restore = useCallback(
@@ -126,6 +138,8 @@ export function useDesignDraft() {
     live: data.live,
     published: data.published,
     update,
+    flush,
+    adopt,
     changes,
     report,
     refusal,
