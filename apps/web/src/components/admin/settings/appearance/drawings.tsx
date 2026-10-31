@@ -128,6 +128,31 @@ export function BandDrawing({ band }: { band: Layout['band'] }) {
   )
 }
 
+/** Bars for a feed's order: rising for trending, falling for top, a dot on the newest. */
+export function SortDrawing({ sort }: { sort: 'trending' | 'top' | 'new' }) {
+  const heights = sort === 'top' ? ['h-5', 'h-3.5', 'h-2'] : ['h-2', 'h-3.5', 'h-5']
+  if (sort === 'new')
+    return (
+      <span className="flex w-12 flex-col gap-1">
+        {[0, 1, 2].map((row) => (
+          <span key={row} className="flex items-center gap-1">
+            <span
+              className={cn('size-1.5 rounded-full', row === 0 ? 'bg-primary' : 'bg-transparent')}
+            />
+            <span className="h-1.5 flex-1 rounded-sm bg-foreground/30" />
+          </span>
+        ))}
+      </span>
+    )
+  return (
+    <span className="flex items-end gap-1">
+      {heights.map((height, index) => (
+        <span key={index} className={cn('w-2 rounded-sm bg-foreground/35', height)} />
+      ))}
+    </span>
+  )
+}
+
 export function FiltersDrawing({ filters }: { filters: Layout['filters'] }) {
   return (
     <span className={cn('flex w-14 gap-1', filters === 'start' && 'flex-row-reverse')}>

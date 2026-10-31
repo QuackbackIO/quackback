@@ -365,7 +365,7 @@ export function PortalHeader({
   // Two-row layout: Logo + Auth on top, Navigation below
   return (
     // A banner landmark, so the logo and account controls sit in one.
-    <header ref={headerRef} className={headerClassName}>
+    <header ref={headerRef} className={headerClassName} data-qb-section="header">
       {/* Row 1: Logo + Name + Auth */}
       <div>
         <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">

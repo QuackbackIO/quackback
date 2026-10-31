@@ -4,7 +4,13 @@
  */
 import { describe, expect, it } from 'vitest'
 import { generateWorkspaceThemeCSS } from '@/lib/shared/theme'
-import { portalFontIds, portalTheme, portalThemeMode, savedWelcomeCard } from '../view'
+import {
+  portalDefaultSort,
+  portalFontIds,
+  portalTheme,
+  portalThemeMode,
+  savedWelcomeCard,
+} from '../view'
 
 const brandingConfig = {
   themeMode: 'dark' as const,
@@ -37,7 +43,7 @@ describe('portalTheme', () => {
       fontSans: '"Fraunces", serif',
       fontIds: ['fraunces'],
       attributes: {},
-      feedback: { welcome: null, headline: null },
+      feedback: { welcome: null, headline: null, defaultSort: 'trending' as const },
     }
     expect(portalTheme({ brandingConfig, customCss: '.x {}', portalDesign })).toEqual({
       themeMode: 'user',
@@ -60,7 +66,7 @@ describe('portalFontIds', () => {
       fontSans: '',
       fontIds: ['inter', 'fraunces'],
       attributes: {},
-      feedback: { welcome: null, headline: null },
+      feedback: { welcome: null, headline: null, defaultSort: 'trending' as const },
     }
     expect(portalFontIds({ portalDesign })).toEqual(['inter', 'fraunces'])
   })
@@ -78,7 +84,7 @@ describe('portalThemeMode', () => {
         fontSans: '',
         fontIds: [],
         attributes: {},
-        feedback: { welcome: null, headline: null },
+        feedback: { welcome: null, headline: null, defaultSort: 'trending' as const },
       },
     })
     expect(portalThemeMode(v2('auto'))).toBe('user')
@@ -100,7 +106,7 @@ describe('savedWelcomeCard', () => {
       fontSans: '',
       fontIds: [],
       attributes: {},
-      feedback: { welcome, headline: null },
+      feedback: { welcome, headline: null, defaultSort: 'trending' },
     }) as never
 
   it('keeps the portal settings’ card on legacy', () => {
@@ -112,5 +118,24 @@ describe('savedWelcomeCard', () => {
     const body = { type: 'doc', content: [{ type: 'paragraph' }] }
     expect(savedWelcomeCard(v2(body), legacy)).toEqual({ body })
     expect(savedWelcomeCard(v2(null), legacy)).toBeUndefined()
+  })
+})
+
+describe('portalDefaultSort', () => {
+  it('is trending on legacy and the design’s choice on v2', () => {
+    expect(portalDefaultSort(undefined)).toBe('trending')
+    expect(portalDefaultSort({ portalDesign: { engine: 'legacy' } })).toBe('trending')
+    const portalDesign = {
+      engine: 'v2' as const,
+      mode: 'auto' as const,
+      revision: 1,
+      themeStyles: '',
+      customCss: '',
+      fontSans: '',
+      fontIds: [],
+      attributes: {},
+      feedback: { welcome: null, headline: null, defaultSort: 'new' as const },
+    }
+    expect(portalDefaultSort({ portalDesign })).toBe('new')
   })
 })

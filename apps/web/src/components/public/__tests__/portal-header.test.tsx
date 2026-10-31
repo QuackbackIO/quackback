@@ -380,7 +380,9 @@ describe('PortalHeader — design layouts', () => {
   it('keeps two rows on the legacy theme and for a stacked design', () => {
     for (const portalDesign of [undefined, design('stacked')]) {
       const { container, unmount } = mountWith(portalDesign)
-      expect(container.querySelector('header')?.hasAttribute('data-qb-section')).toBe(false)
+      const header = container.querySelector('header')!
+      expect(header.querySelector('.md\\:block nav')).toBeNull()
+      expect(header.querySelector('.justify-center nav')).toBeNull()
       unmount()
     }
   })

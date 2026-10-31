@@ -123,6 +123,7 @@ function PortalSettingsPage() {
     <DesignedPortalPage
       workspaceName={settings.name}
       faviconUrl={settings.faviconData?.url ?? settings.brandingData?.logoUrl ?? null}
+      logoUrl={settings.brandingData?.logoUrl ?? null}
     />
   )
 }
@@ -130,9 +131,11 @@ function PortalSettingsPage() {
 function DesignedPortalPage({
   workspaceName,
   faviconUrl,
+  logoUrl,
 }: {
   workspaceName: string
   faviconUrl: string | null
+  logoUrl: string | null
 }) {
   const { tab } = Route.useSearch()
   const tabs = <PortalTabs current={tab ?? 'appearance'} />
@@ -140,7 +143,7 @@ function DesignedPortalPage({
   return (
     <SettingsPage page="/admin/settings/portal" width="wide">
       {tabs}
-      <AppearanceView workspaceName={workspaceName} faviconUrl={faviconUrl} />
+      <AppearanceView workspaceName={workspaceName} faviconUrl={faviconUrl} logoUrl={logoUrl} />
     </SettingsPage>
   )
 }

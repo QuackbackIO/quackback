@@ -159,3 +159,46 @@ describe('a design draft in the preview', () => {
     expect(document.documentElement.hasAttribute('data-qb-band')).toBe(false)
   })
 })
+
+describe('picking a section in a design preview', () => {
+  const sent: unknown[] = []
+  const designMessage = {
+    type: 'quackback:preview-design',
+    design: { css: '', attributes: {}, fontIds: [], headline: null },
+  }
+
+  beforeEach(() => {
+    sent.length = 0
+    vi.spyOn(window.parent, 'postMessage').mockImplementation((message: unknown) => {
+      sent.push(message)
+    })
+  })
+
+  function section(name: string, inner = '<p>text</p>') {
+    const element = document.createElement('div')
+    element.setAttribute('data-qb-section', name)
+    element.innerHTML = inner
+    document.body.appendChild(element)
+    return element
+  }
+
+  it('reports the section clicked, but not a click on a link in it', async () => {
+    await postDesign(designMessage)
+    const band = section('band', '<p>Headline</p><a href="/x">Link</a>')
+    band.querySelector('p')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    band.querySelector('a')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(
+      sent.filter((m) => (m as { type: string }).type === 'quackback:preview-section')
+    ).toEqual([{ type: 'quackback:preview-section', section: 'band' }])
+    band.remove()
+  })
+
+  it('stays out of the way until a design is previewed', () => {
+    const band = section('band')
+    band.querySelector('p')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(
+      sent.filter((m) => (m as { type: string }).type === 'quackback:preview-section')
+    ).toEqual([])
+    band.remove()
+  })
+})

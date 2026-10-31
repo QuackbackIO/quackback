@@ -18,7 +18,7 @@ import {
   isProductEnabled,
   type PortalWelcomeCard as PortalWelcomeCardData,
 } from '@/lib/shared/types/settings'
-import { savedWelcomeCard } from '@/lib/shared/design/view'
+import { portalDefaultSort, savedWelcomeCard } from '@/lib/shared/design/view'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
@@ -48,11 +48,15 @@ const searchSchema = z.object({
 })
 
 /** Build the portalData query params from the current search + session. */
-function portalDataParams(searchParams: z.infer<typeof searchSchema>, userId: string | undefined) {
+function portalDataParams(
+  searchParams: z.infer<typeof searchSchema>,
+  userId: string | undefined,
+  defaultSort: 'trending' | 'top' | 'new'
+) {
   return {
     boardSlug: searchParams.board,
     search: searchParams.search,
-    sort: searchParams.sort ?? ('trending' as const),
+    sort: searchParams.sort ?? defaultSort,
     statusSlugs: searchParams.status?.length ? searchParams.status : undefined,
     tagIds: searchParams.tagIds?.length ? searchParams.tagIds : undefined,
     userId,
@@ -108,7 +112,9 @@ export const Route = createFileRoute('/_portal/')({
     // prefetchQuery never rejects (it swallows the queryFn error into the
     // cache), so no rejection handler is needed here.
     void queryClient.prefetchQuery(
-      portalQueries.portalData(portalDataParams(searchParams, session?.user?.id))
+      portalQueries.portalData(
+        portalDataParams(searchParams, session?.user?.id, portalDefaultSort(org))
+      )
     )
 
     const showPoweredBy = await getShowPoweredByFn()
@@ -161,6 +167,7 @@ function PublicPortalPage() {
           <Suspense
             fallback={
               <PortalFeedSkeleton
+                defaultSort={portalDefaultSort(settings)}
                 poweredBy={
                   showPoweredBy ? <PortalPoweredBy workspaceSlug={settings?.slug ?? ''} /> : null
                 }
@@ -220,7 +227,8 @@ function PortalFeed() {
 
   const currentBoard = liveSearch.board
   const currentSearch = liveSearch.search
-  const currentSort = liveSearch.sort ?? 'trending'
+  const defaultSort = portalDefaultSort(settings)
+  const currentSort = liveSearch.sort ?? defaultSort
 
   // A visitor's first post or vote mints an anonymous session mid-action,
   // which changes the viewer and so the feed's key. Deferring the viewer
@@ -234,12 +242,12 @@ function PortalFeed() {
   const deferredViewerId = useDeferredValue(liveViewerId)
   const previousFeedCached =
     queryClient.getQueryData(
-      portalQueries.portalData(portalDataParams(search, deferredViewerId)).queryKey
+      portalQueries.portalData(portalDataParams(search, deferredViewerId, defaultSort)).queryKey
     ) !== undefined
   const viewerId =
     deferredViewerId !== liveViewerId && !previousFeedCached ? liveViewerId : deferredViewerId
   const { data: portalData } = useSuspenseQuery(
-    portalQueries.portalData(portalDataParams(search, viewerId))
+    portalQueries.portalData(portalDataParams(search, viewerId, defaultSort))
   )
 
   // Seeds the shared statuses cache from this response so a post-detail
@@ -272,6 +280,7 @@ function PortalFeed() {
       currentBoard={currentBoard}
       currentSearch={currentSearch}
       currentSort={currentSort}
+      defaultSort={defaultSort}
       defaultBoardId={portalData.boards[0]?.id}
       boardPermissions={portalData.boardPermissions}
       facets={portalData.facets}

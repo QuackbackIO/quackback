@@ -87,6 +87,8 @@ interface FeedbackContainerProps {
   currentBoard?: string
   currentSearch?: string
   currentSort?: PublicPostSort
+  /** The sort when the visitor has not picked one, which clearing a search returns to. */
+  defaultSort?: 'trending' | 'top' | 'new'
   defaultBoardId?: string
   /** User info if authenticated */
   user?: { name: string | null; email: string } | null
@@ -157,6 +159,7 @@ export function FeedbackContainer({
   currentBoard,
   currentSearch,
   currentSort = 'trending',
+  defaultSort = 'trending',
   defaultBoardId,
   user,
   boardPermissions,
@@ -356,7 +359,7 @@ export function FeedbackContainer({
   function handleSearchChange(search: string): void {
     setFilters({
       search: search || undefined,
-      sort: sortForSearch(activeSort, activeSearch, search, 'trending'),
+      sort: sortForSearch(activeSort, activeSearch, search, defaultSort),
     })
   }
 
@@ -460,7 +463,7 @@ export function FeedbackContainer({
   }
 
   return (
-    <div>
+    <div data-qb-section="feed">
       <div className="flex gap-6 lg:gap-8 [[data-qb-filters=start]_&]:flex-row-reverse">
         <div className="flex-1 min-w-0">
           <FeedbackHeader

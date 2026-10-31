@@ -109,11 +109,18 @@ export function PortalPreviewProvider({
   }, [active])
 
   const stylesheet = useMemo(() => (css ? previewStylesheet(css) : ''), [css])
-  // Sets the draft's attributes on <html> and puts the saved ones back when it changes.
+  // While a draft is previewed: its attributes on <html> (the saved ones come
+  // back when it changes), and a click on a section tells Appearance which.
   useEffect(() => {
-    if (!design || !designChannel.current) return
-    return designChannel.current.applyDesignAttributes(design.attributes)
-  }, [design])
+    const channel = designChannel.current
+    if (!design || !channel) return
+    const restore = channel.applyDesignAttributes(design.attributes)
+    const stopPicking = active ? channel.startSectionPicking() : () => {}
+    return () => {
+      restore()
+      stopPicking()
+    }
+  }, [design, active])
   const fontIds = design?.fontIds.join(' ') ?? ''
   useEffect(() => {
     for (const id of fontIds.split(' ').filter(Boolean)) loadBrandingFont(id).catch(() => {})
@@ -130,6 +137,9 @@ export function PortalPreviewProvider({
       </PreviewHeadlineContext.Provider>
       {stylesheet ? <style data-preview-override="">{stylesheet}</style> : null}
       {design?.css ? <style data-preview-design="">{design.css}</style> : null}
+      {design && designChannel.current ? (
+        <style data-preview-sections="">{designChannel.current.SECTION_OUTLINE_CSS}</style>
+      ) : null}
     </PreviewDraftProvider>
   )
 }

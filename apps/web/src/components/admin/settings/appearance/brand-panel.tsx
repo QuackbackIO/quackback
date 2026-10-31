@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { normaliseColor } from '@/lib/shared/design/color'
 import { BUNDLED_FONTS, type BundledFontId } from '@/lib/shared/design/fonts'
@@ -145,8 +146,17 @@ function FontSelect({
   )
 }
 
-/** The Brand tab: mode, colours, fonts and corners. */
-export function BrandPanel({ design, update }: { design: PortalDesign; update: Update }) {
+/** The Brand tab: the logo, mode, colours, fonts and corners. */
+export function BrandPanel({
+  design,
+  update,
+  logoUrl = null,
+}: {
+  design: PortalDesign
+  update: Update
+  /** The workspace logo, which Settings › General owns for the portal, the admin and email. */
+  logoUrl?: string | null
+}) {
   const [moreColours, setMoreColours] = useState(false)
   const { light, dark, fonts } = design.brand
   const headingFont = fonts.heading.kind === 'bundled' ? fonts.heading.id : fonts.heading.fallback
@@ -159,6 +169,21 @@ export function BrandPanel({ design, update }: { design: PortalDesign; update: U
       <PresetGallery
         onApply={(preset) => update((draft) => Object.assign(draft, applyPreset(draft, preset)))}
       />
+      <div className="flex items-center gap-3">
+        <span className="w-32 shrink-0 text-[13px] font-medium">Logo</span>
+        {logoUrl ? (
+          <img
+            src={logoUrl}
+            alt=""
+            className="size-8 rounded-md border border-border object-contain"
+          />
+        ) : (
+          <span className="text-[13px] text-muted-foreground">None</span>
+        )}
+        <Button variant="ghost" size="sm" className="ms-auto" asChild>
+          <Link to="/admin/settings/general">Change in General</Link>
+        </Button>
+      </div>
       <DesignTiles
         name="design-mode"
         label="Mode"

@@ -13,6 +13,7 @@ import {
   DensityDrawing,
   FiltersDrawing,
   NavDrawing,
+  SortDrawing,
   WidthDrawing,
 } from './drawings'
 
@@ -31,7 +32,7 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
   const { layout } = design
   return (
     <div className="space-y-8">
-      <section className="space-y-4">
+      <section id="design-section-header" className="scroll-mt-4 space-y-4">
         <h3 className="text-sm font-semibold">Header</h3>
         <DesignTiles
           name="design-header"
@@ -57,7 +58,7 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
         />
       </section>
 
-      <section className="space-y-4">
+      <section id="design-section-band" className="scroll-mt-4 space-y-4">
         <h3 className="text-sm font-semibold">Top band</h3>
         <DesignTiles
           name="design-band"
@@ -96,7 +97,7 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
         ))}
       </section>
 
-      <section className="space-y-3">
+      <section id="design-section-welcome" className="scroll-mt-4 space-y-3">
         <SettingRow
           label="Welcome message"
           htmlFor="design-welcome"
@@ -118,7 +119,7 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
         )}
       </section>
 
-      <section className="space-y-4">
+      <section id="design-section-feed" className="scroll-mt-4 space-y-4">
         <h3 className="text-sm font-semibold">Feed</h3>
         <DesignTiles
           name="design-cards"
@@ -130,6 +131,29 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
             label: capital(cards),
             drawing: <CardsDrawing cards={cards} />,
           }))}
+        />
+        <DesignTiles
+          name="design-sort"
+          label="Default sort"
+          value={design.pages.feedback.defaultSort}
+          onChange={(sort) => update((draft) => void (draft.pages.feedback.defaultSort = sort))}
+          options={[
+            {
+              value: 'trending',
+              label: 'Trending',
+              drawing: <SortDrawing sort="trending" />,
+            },
+            {
+              value: 'top',
+              label: 'Top',
+              drawing: <SortDrawing sort="top" />,
+            },
+            {
+              value: 'new',
+              label: 'New',
+              drawing: <SortDrawing sort="new" />,
+            },
+          ]}
         />
         <DesignTiles
           name="design-density"
@@ -144,7 +168,7 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
         />
       </section>
 
-      <section className="space-y-4">
+      <section id="design-section-filters" className="scroll-mt-4 space-y-4">
         <h3 className="text-sm font-semibold">Filters</h3>
         <DesignTiles
           name="design-filters"
@@ -159,7 +183,7 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
         />
       </section>
 
-      <section className="space-y-4">
+      <section id="design-section-site" className="scroll-mt-4 space-y-4">
         <h3 className="text-sm font-semibold">Whole site</h3>
         <DesignTiles
           name="design-width"

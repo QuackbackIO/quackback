@@ -31,6 +31,7 @@ export function designView(
     feedback: {
       welcome: feedbackWelcome(doc),
       headline: doc.pages.feedback.headline,
+      defaultSort: doc.pages.feedback.defaultSort,
     },
   }
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { ClientOnly } from '@tanstack/react-router'
@@ -22,9 +22,11 @@ import { useDesignDraft } from './use-design-draft'
 export function AppearanceView({
   workspaceName,
   faviconUrl,
+  logoUrl = null,
 }: {
   workspaceName: string
   faviconUrl: string | null
+  logoUrl?: string | null
 }) {
   const draft = useDesignDraft()
   const [theme, setTheme] = useState<'light' | 'dark'>(
@@ -33,6 +35,23 @@ export function AppearanceView({
   const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop')
   const [reviewing, setReviewing] = useState(false)
   const [history, setHistory] = useState(false)
+  const [tab, setTab] = useState('brand')
+  // A section clicked in the preview opens its controls.
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return
+      const message = event.data as { type?: string; section?: unknown } | null
+      if (message?.type !== 'quackback:preview-section' || typeof message.section !== 'string')
+        return
+      setTab('sections')
+      const id = `design-section-${message.section}`
+      requestAnimationFrame(() =>
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      )
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
   // The welcome message reaches the preview on the structural channel, which
   // the feedback page already reads; an empty body hides it.
   const { show, body } = draft.design.pages.feedback.welcome
@@ -50,7 +69,7 @@ export function AppearanceView({
   return (
     <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)]">
       <div className="min-w-0 space-y-4">
-        <Tabs defaultValue="brand">
+        <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
           <div className="flex items-center gap-2">
             <TabsList>
               <TabsTrigger value="brand">Brand</TabsTrigger>
@@ -61,7 +80,7 @@ export function AppearanceView({
             </Button>
           </div>
           <TabsContent value="brand" className="pt-4">
-            <BrandPanel design={draft.design} update={draft.update} />
+            <BrandPanel design={draft.design} update={draft.update} logoUrl={logoUrl} />
           </TabsContent>
           <TabsContent value="sections" className="pt-4">
             <SectionsPanel design={draft.design} update={draft.update} />
@@ -115,6 +134,7 @@ export function AppearanceView({
             draftDirty
             design={draft.preview}
             scaleToDesktop
+            sort={draft.design.pages.feedback.defaultSort}
             viewport={viewport}
             workspaceName={workspaceName}
             faviconUrl={faviconUrl}

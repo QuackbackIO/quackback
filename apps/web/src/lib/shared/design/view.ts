@@ -31,6 +31,8 @@ export type PortalDesignView =
         /** The welcome message, or null when it is off or empty. */
         welcome: TiptapContent | null
         headline: { title: LocalizedText; subtitle: LocalizedText } | null
+        /** The feed's sort when the visitor has not picked one. */
+        defaultSort: 'trending' | 'top' | 'new'
       }
     }
 
@@ -65,6 +67,14 @@ export function savedWelcomeCard<T extends { body: unknown }>(
 ): { body: TiptapContent } | T | undefined {
   if (design?.engine !== 'v2') return legacy
   return design.feedback.welcome ? { body: design.feedback.welcome } : undefined
+}
+
+/** The feed's sort when the visitor has not picked one: the design's, else trending. */
+export function portalDefaultSort(
+  settings: { portalDesign?: PortalDesignView } | null | undefined
+): 'trending' | 'top' | 'new' {
+  const view = settings?.portalDesign
+  return view?.engine === 'v2' ? view.feedback.defaultSort : 'trending'
 }
 
 /** The bundled families a v2 design loads; legacy finds its one family from its CSS. */
