@@ -67,6 +67,8 @@ describe('readSiteSignals', () => {
         background: '#fffdf8',
         fonts: { heading: 'Fraunces', body: 'IBM Plex Sans' },
         dark: false,
+        button: '#0f766e',
+        bold: false,
       },
     })
     expect(web.asked[0]!.agent).toMatch(/QuackbackBrandReader/)

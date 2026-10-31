@@ -268,6 +268,7 @@ describe('designDirections', () => {
           name: 'Calm',
           description: 'Soft.',
           preset: 'calm',
+          band: 'tint',
           accent: '#0f766e',
           background: '#f8fafc',
           ink: '#0f172a',

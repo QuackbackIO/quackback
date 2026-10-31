@@ -26,6 +26,10 @@ export interface SiteBrand {
   fonts: { heading: string | null; body: string | null }
   /** The page is dark. */
   dark: boolean
+  /** The colour its buttons are filled with, neutrals included: black buttons mark a monochrome brand. */
+  button: string | null
+  /** It fills large areas, such as a hero, with its brand colour. */
+  bold: boolean
 }
 
 /** Pages that answer a visit with a block rather than the site. */
@@ -109,6 +113,8 @@ const GENERIC_FONTS =
 /** Weighs each colour by where the CSS uses it, and finds the page background and fonts. */
 function readCss(css: string, weigh: (colour: string, weight: number) => void) {
   let background: string | null = null
+  const buttons = new Map<string, number>()
+  const fields = new Set<string>()
   const fonts = {
     heading: new Map<string, number>(),
     body: new Map<string, number>(),
@@ -147,6 +153,11 @@ function readCss(css: string, weigh: (colour: string, weight: number) => void) {
         const colour = hex(raw)
         if (!colour) continue
         if (onPage && /^background(-color)?$/.test(prop)) background ??= colour
+        if (/^background/.test(prop)) {
+          if (onButton) buttons.set(colour, (buttons.get(colour) ?? 0) + 1)
+          if (/\b(hero|banner|jumbotron|masthead|splash|promo|band|section)\b/.test(sel))
+            fields.add(colour)
+        }
         if (/outline|shadow|caret|selection/.test(prop)) continue
         if (
           prop.startsWith('--') &&
@@ -168,7 +179,13 @@ function readCss(css: string, weigh: (colour: string, weight: number) => void) {
     }
   }
   const top = (map: Map<string, number>) => [...map].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
-  return { background, heading: top(fonts.heading), body: top(fonts.body) ?? top(fonts.any) }
+  return {
+    background,
+    heading: top(fonts.heading),
+    body: top(fonts.body) ?? top(fonts.any),
+    button: top(buttons),
+    fields: [...fields],
+  }
 }
 
 const distance = (a: string, b: string) => {
@@ -239,5 +256,7 @@ export function readSiteBrand(input: {
     background,
     fonts: { heading: css.heading, body: css.body },
     dark,
+    button: css.button,
+    bold: !!palette[0] && css.fields.some((field) => distance(field, palette[0]!) < 48),
   }
 }

@@ -31,19 +31,21 @@ describe('lookDesign', () => {
     expect(design).toMatchObject({
       mode: 'light',
       brand: {
-        light: { accent: '#1f4d3a', background: '#f6efe2', ink: '#22201c', surface: '#fffaf0' },
+        light: { accent: '#d9480f', background: '#f7f5f2', ink: '#1c1b19' },
         fonts: {
-          heading: { kind: 'bundled', id: 'fraunces' },
-          body: { kind: 'bundled', id: 'ibm-plex-sans' },
+          heading: { kind: 'bundled', id: 'space-grotesk' },
+          body: { kind: 'bundled', id: 'inter' },
           headingWeight: 700,
         },
       },
-      layout: { band: 'tint', cards: 'raised', nav: 'underline' },
+      layout: { band: 'brand', cards: 'bordered', nav: 'pills', header: 'inline' },
       vocabulary: { post: 'suggestion', board: 'category' },
       nav: { home: { on: true, tab: true } },
     })
-    expect(design.pages.feedback.copy.prompt).toEqual({ en: 'What would make your coffee better?' })
-    expect(design.pages.home.headline?.title).toEqual({ en: 'Brewed with you' })
+    expect(design.pages.feedback.copy.prompt).toEqual({
+      en: 'Suggest a route, a class or some kit',
+    })
+    expect(design.pages.home.headline?.title).toEqual({ en: 'Climb with us' })
     expect(design.pages.home.blocks.map((block) => block.type)).toEqual([
       'composer',
       'contact',

@@ -99,7 +99,11 @@ export function useDesignAi({
         data: kind === 'website' ? { site: value } : { words: value },
       })
       if (result.ok)
-        say({ role: 'assistant', text: 'Here are three looks to start from.', looks: result.looks })
+        say({
+          role: 'assistant',
+          text: `${'logoAdopted' in result && result.logoAdopted ? 'Their logo is now your logo. ' : ''}Here are three looks to start from.`,
+          looks: result.looks,
+        })
       else say({ role: 'assistant', text: result.message })
     } catch {
       say({ role: 'assistant', text: FAILED })

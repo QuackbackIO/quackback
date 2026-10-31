@@ -13,6 +13,9 @@ const hoisted = vi.hoisted(() => ({
   saved: [] as Array<{ design: unknown; author: unknown }>,
   answer: null as unknown,
   site: null as unknown,
+  logoKey: null as string | null,
+  branding: null as null | { domain: string; logoKey: string; quality: 'good' | 'weak' },
+  savedLogos: [] as string[],
   directionsInput: null as unknown,
 }))
 
@@ -54,7 +57,20 @@ vi.mock('@/lib/server/domains/design/ai/site-signals', () => ({
 }))
 // What the workspace allows Quackback AI to bring in.
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getWorkspaceSettings: async () => ({ featureFlags: { feedback: true } }),
+  getWorkspaceSettings: async () => ({
+    name: 'Example',
+    featureFlags: { feedback: true },
+    settings: { logoKey: hoisted.logoKey },
+  }),
+}))
+vi.mock('@/lib/server/content/website-branding', () => ({
+  fetchWebsiteBranding: async () => hoisted.branding,
+}))
+vi.mock('@/lib/server/domains/settings/settings.media', () => ({
+  saveLogoKey: async (key: string) => {
+    hoisted.savedLogos.push(key)
+    return { success: true, key }
+  },
 }))
 vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({ assertTierFeature: async () => {} }))
 vi.mock('@/lib/server/config', () => ({ config: { portalDesignAiCss: false } }))
@@ -66,7 +82,13 @@ beforeEach(() => {
   hoisted.saved = []
   hoisted.directionsInput = null
   requireAuth.mockReset()
-  requireAuth.mockResolvedValue({ principal: { id: 'principal_1' } })
+  requireAuth.mockResolvedValue({
+    principal: { id: 'principal_1' },
+    permissions: ['settings.branding', 'settings.manage'],
+  })
+  hoisted.logoKey = null
+  hoisted.branding = null
+  hoisted.savedLogos = []
 })
 
 describe('portal design AI functions', () => {
@@ -134,5 +156,38 @@ describe('portal design AI functions', () => {
     hoisted.site = { ok: true, signals: { domain: 'example.com', title: 'Example' } }
     await directionsFn({ data: { site: 'example.com' } })
     expect(hoisted.directionsInput).toMatchObject({ site: { domain: 'example.com' }, words: null })
+  })
+
+  it('takes the website’s logo when the workspace has none, for someone who may change settings', async () => {
+    hoisted.site = { ok: true, signals: { domain: 'example.com', title: 'Example' } }
+    hoisted.branding = { domain: 'example.com', logoKey: 'logos/site.png', quality: 'good' }
+    expect(await directionsFn({ data: { site: 'example.com' } })).toMatchObject({
+      ok: true,
+      logoAdopted: true,
+    })
+    expect(hoisted.savedLogos).toEqual(['logos/site.png'])
+
+    hoisted.savedLogos = []
+    hoisted.logoKey = 'logos/ours.png'
+    expect(await directionsFn({ data: { site: 'example.com' } })).toMatchObject({
+      logoAdopted: false,
+    })
+    hoisted.logoKey = null
+    requireAuth.mockResolvedValue({
+      principal: { id: 'principal_1' },
+      permissions: ['settings.branding'],
+    })
+    expect(await directionsFn({ data: { site: 'example.com' } })).toMatchObject({
+      logoAdopted: false,
+    })
+    requireAuth.mockResolvedValue({
+      principal: { id: 'principal_1' },
+      permissions: ['settings.branding', 'settings.manage'],
+    })
+    hoisted.branding = { domain: 'example.com', logoKey: 'logos/favicon.ico', quality: 'weak' }
+    expect(await directionsFn({ data: { site: 'example.com' } })).toMatchObject({
+      logoAdopted: false,
+    })
+    expect(hoisted.savedLogos).toEqual([])
   })
 })

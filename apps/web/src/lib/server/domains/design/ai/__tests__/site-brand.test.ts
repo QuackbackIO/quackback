@@ -47,6 +47,28 @@ describe('readSiteBrand', () => {
   })
 })
 
+describe('how the site uses its colours', () => {
+  it('knows black buttons, which mark a monochrome brand', () => {
+    const brand = readSiteBrand({
+      html: '',
+      css: ['.button-primary { background-color: #000; color: #fff } a { color: #0077d4 }'],
+      manifest: null,
+    })
+    expect(brand.button).toBe('#000000')
+    expect(brand.colour).toBe('#0077d4')
+    expect(brand.bold).toBe(false)
+  })
+
+  it('knows a brand colour that fills a hero', () => {
+    const brand = readSiteBrand({
+      html: '',
+      css: [':root { --brand-primary: #9fe870 } .hero-section { background: #9fe870 }'],
+      manifest: null,
+    })
+    expect(brand).toMatchObject({ colour: '#9fe870', bold: true })
+  })
+})
+
 describe('colours that are not the brand', () => {
   it('leaves out focus rings, shadows and colours for errors and success, and puts buttons over links', () => {
     const brand = readSiteBrand({

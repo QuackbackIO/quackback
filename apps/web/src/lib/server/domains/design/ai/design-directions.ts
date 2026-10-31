@@ -66,34 +66,34 @@ const directionsSchema = z.object({ looks: z.array(lookSchema).min(1).max(3) })
 
 /** An answer the tests keep valid against the design. */
 export const DIRECTIONS_EXAMPLE: Look = {
-  name: 'Harbour green',
-  description: 'Their pine green and cream, serif headings, a tinted band and raised cards.',
-  preset: 'editorial',
+  name: 'Chalk and orange',
+  description: 'Their burnt orange as a full band, a geometric face, pill menu and plain cards.',
+  preset: 'bold',
   mode: 'light',
-  accent: '#1f4d3a',
-  background: '#f6efe2',
-  ink: '#22201c',
-  surface: '#fffaf0',
-  darkBackground: '#121a16',
-  darkInk: '#efe9dc',
-  headingFont: 'fraunces',
-  bodyFont: 'ibm-plex-sans',
+  accent: '#d9480f',
+  background: '#f7f5f2',
+  ink: '#1c1b19',
+  surface: '',
+  darkBackground: '#161412',
+  darkInk: '#f3eee8',
+  headingFont: 'space-grotesk',
+  bodyFont: 'inter',
   headingWeight: '700',
-  corners: 'rounded',
-  header: 'stacked',
-  nav: 'underline',
-  band: 'tint',
-  cards: 'raised',
+  corners: 'subtle',
+  header: 'inline',
+  nav: 'pills',
+  band: 'brand',
+  cards: 'bordered',
   density: 'comfortable',
   width: 'default',
-  headline: 'What should we roast next?',
-  subtitle: 'Share an idea for our coffee, cafés or subscriptions, and vote for your favourites.',
+  headline: 'What should we set next?',
+  subtitle: 'Suggest routes, classes and kit for the walls, and vote for the ones you want.',
   postWord: 'suggestion',
   boardWord: 'category',
-  prompt: 'What would make your coffee better?',
-  submit: 'Share it',
-  homeHeadline: 'Brewed with you',
-  homeSubtitle: 'Suggest what we roast next, see what is coming and find help.',
+  prompt: 'Suggest a route, a class or some kit',
+  submit: 'Suggest it',
+  homeHeadline: 'Climb with us',
+  homeSubtitle: 'Suggest what we set next, see what is coming and find help.',
   homeBlocks: [
     { type: 'composer', width: 'two_thirds' },
     { type: 'contact', width: 'third' },
@@ -109,14 +109,15 @@ function directionsPrompt(blockTypes: readonly HomeBlockType[]): string {
   return `You design a company's customer feedback portal from their brand: three complete looks, each a whole portal. The first, Faithful, is as close to their brand as the options allow; the second is quieter; the third is bolder. Make the three clearly different in layout, type and colour.
 
 How a brand becomes each choice:
-- accent: their brand colour, exactly as given or seen. It colours buttons, links and the band.
+- The first look commits to their identity as they present it, even when it is loud: their colour as they use it, never a softened version of it.
+- accent: their brand colour, exactly as given or seen. It colours buttons, links and the band. A monochrome brand, whose buttons are black or near-black and which uses colour sparingly, keeps a near-black accent, white pages and no coloured band.
 - background and ink: pages stay quiet. Use their page colour when it is light and calm, or a near-white tinted toward the brand; ink is their text colour or a near-black. surface (cards) is "" unless their cards differ from the page.
 - mode: dark when their own site is dark (then background and ink are the dark page and its light text), light when their brand is clearly light, auto otherwise. darkBackground and darkInk are dark mode's page and text, tinted toward the brand, or "".
 - fonts: the closest bundled fonts to theirs. Serif display: fraunces, playfair, lora, merriweather. Geometric: space-grotesk, poppins, manrope, bricolage-grotesque, jakarta, dm-sans. Humanist or friendly: nunito, ibm-plex-sans, lato, open-sans. Neutral: inter, geist, roboto. Monospace for developer tools: jetbrains, fira-code. Body text is usually a plainer sans than the headings.
 - headingWeight: how heavy their headings are, 500 to 800.
 - corners: sharp for strict or editorial brands, subtle for most software, rounded for friendly ones, pill for playful ones.
 - header: stacked (logo above the menu), inline (one row, for software), centered (for consumer and editorial brands). nav: tabs, underline or pills.
-- band, behind the headlines: brand when their colour is bold and they like it loud; tint or fade for most; none for minimal brands.
+- band, behind the headlines: brand when they fill large areas with their colour, such as a hero; tint or fade for most; none for minimal and monochrome brands.
 - cards: bordered, raised, or list rows for minimal and developer brands. density: compact for technical audiences, comfortable mostly, spacious for calm brands. width: narrow for editorial, wide for dense tools, default otherwise.
 - words: postWord is what visitors post: feature_request for software and developer tools, suggestion for consumer, retail and hospitality, post for communities, idea otherwise. boardWord: category for consumer brands, board otherwise.
 - headline, subtitle (the feedback page) and homeHeadline, homeSubtitle (Home), prompt (the composer, 60 characters) and submit (its button, 24): in their voice, short, inviting, never generic, never naming a competitor.
@@ -229,6 +230,8 @@ function siteBrief(site: SiteSignals): string {
     site.background && `Its pages are ${site.dark ? 'dark' : 'light'}, on ${site.background}.`,
     (site.fonts.heading || site.fonts.body) &&
       `It sets headings in ${site.fonts.heading ?? site.fonts.body} and text in ${site.fonts.body ?? site.fonts.heading}.`,
+    site.button && `Its buttons are filled ${site.button}.`,
+    site.bold && 'It fills large areas, such as its hero, with its brand colour.',
   ]
     .filter(Boolean)
     .join(' ')

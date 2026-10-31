@@ -8,6 +8,9 @@ import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { DESIGN_AI_SCOPES } from '@/lib/shared/design/apply-changes'
 import { requireAuth } from './auth-helpers'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ module: 'portal-design-ai-fn' })
 
 const hexColour = z.string().regex(/^#[0-9a-f]{6}$/i)
 
@@ -85,6 +88,26 @@ export const askPortalDesignAiFn = createServerFn({ method: 'POST' })
     return { ...result, report: saved.report }
   })
 
+/**
+ * A website's logo becomes the workspace's when it has none yet and the person
+ * may change the workspace's settings, where the logo lives. Only a logo the
+ * lookup is sure of is taken. Whether it was taken.
+ */
+async function adoptSiteLogo(site: string, mayManageSettings: boolean): Promise<boolean> {
+  if (!mayManageSettings) return false
+  const [{ getWorkspaceSettings }, { fetchWebsiteBranding }, { saveLogoKey }] = await Promise.all([
+    import('@/lib/server/domains/settings/settings.service'),
+    import('@/lib/server/content/website-branding'),
+    import('@/lib/server/domains/settings/settings.media'),
+  ])
+  if ((await getWorkspaceSettings())?.settings?.logoKey) return false
+  const branding = await fetchWebsiteBranding(site)
+  if (!branding || branding.quality !== 'good') return false
+  await saveLogoKey(branding.logoKey)
+  log.info({ domain: branding.domain }, 'website logo adopted as the workspace logo')
+  return true
+}
+
 export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
   .validator(
     z
@@ -105,13 +128,18 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
       )
   )
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
     const [{ designDirections }, { readSiteSignals }, actions] = await Promise.all([
       import('@/lib/server/domains/design/ai/design-ai'),
       import('@/lib/server/domains/design/ai/site-signals'),
       import('@/lib/server/domains/design/design.actions'),
     ])
-    const read = data.site ? await readSiteSignals(data.site) : null
+    const [read, logoAdopted] = data.site
+      ? await Promise.all([
+          readSiteSignals(data.site),
+          adoptSiteLogo(data.site, auth.permissions.includes(PERMISSIONS.SETTINGS_MANAGE)),
+        ])
+      : [null, false]
     const site = read?.ok ? read.signals : null
     if (read && !read.ok && !data.words && !data.palette) {
       return {
@@ -127,7 +155,7 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
       actions.readDesignForEditing(),
       designAllowances(),
     ])
-    return designDirections({
+    const result = await designDirections({
       design: current.design,
       name: allows.name,
       site,
@@ -136,4 +164,5 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
       image: data.image ?? null,
       allows,
     })
+    return result.ok ? { ...result, logoAdopted } : result
   })
