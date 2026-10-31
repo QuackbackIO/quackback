@@ -82,6 +82,8 @@ export function tuneTokens(tune: Tune | undefined): TokenMap {
     out['--qb-headline-size'] = fluid(headline.size, 28)
     // The other pages' titles sit a step below, as they do on the tiles' scale.
     out['--qb-page-title-size'] = fluid(Math.max(headline.size * 0.62, heading?.size ?? 0, 24), 24)
+    // Its line grows with it: 17px under a 48px headline, 22px under a 100px one.
+    out['--qb-subtitle-size'] = fluid(Math.min(22, Math.max(16, 12 + headline.size * 0.1)), 16)
   }
   if (headline?.weight) out['--qb-headline-weight'] = String(headline.weight)
   if (headline?.tracking !== undefined) out['--qb-headline-tracking'] = `${headline.tracking}em`

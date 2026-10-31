@@ -25,6 +25,7 @@ import {
   type BrandMeasurements,
   type MeasuredType,
 } from '@/lib/shared/design/measured-tune'
+import { nearestBundledFont } from '@/lib/shared/design/font-match'
 
 const log = logger.child({ module: 'design-directions' })
 
@@ -203,8 +204,9 @@ function accentChanges(look: Look, headline: string, title: string) {
 
 /**
  * The faithful look with the brand's own type and shapes, exactly as its page
- * sets them, where they could be read. The other looks are directions of
- * their own and keep their tiles' steps.
+ * sets them, where they could be read: its faces as the bundled faces closest
+ * to them, and its sizes, weights, corners and colours as exact values. The
+ * other looks are directions of their own and keep their tiles' steps.
  */
 export function withMeasuredTune(
   design: PortalDesign,
@@ -212,8 +214,15 @@ export function withMeasuredTune(
   allows: Omit<UntrustedChanges, 'links'>
 ): PortalDesign {
   const tune = site?.measured ? tuneFromMeasurements(site.measured) : {}
-  if (!Object.keys(tune).length) return design
-  return applyDesignChanges(design, [{ path: 'tune', value: tune }], 'site', {
+  const heading = nearestBundledFont(site?.fonts.heading)
+  const body = nearestBundledFont(site?.fonts.body)
+  const changes = [
+    ...(heading ? [{ path: 'brand.fonts.heading', value: heading }] : []),
+    ...(body ? [{ path: 'brand.fonts.body', value: body }] : []),
+    ...(Object.keys(tune).length ? [{ path: 'tune', value: tune }] : []),
+  ]
+  if (!changes.length) return design
+  return applyDesignChanges(design, changes, 'site', {
     ...allows,
     links: new Set(),
     files: new Set(),
@@ -278,6 +287,14 @@ function assetsBrief(assets: SiteAssets | null, imageFirst: boolean): string | n
 const typeText = (t: MeasuredType | null | undefined) =>
   t?.size ? `${Math.round(t.size)}px${t.weight ? ` at weight ${t.weight}` : ''}` : null
 
+/** The bundled faces closest to the site's own, for the looks to start from. */
+function fontBrief(fonts: SiteSignals['fonts']): string | null {
+  const heading = nearestBundledFont(fonts.heading)
+  const body = nearestBundledFont(fonts.body)
+  if (!heading && !body) return null
+  return `The closest bundled faces: ${[heading && `headings ${heading}`, body && `text ${body}`].filter(Boolean).join(', ')}.`
+}
+
 /** What was measured on the page, so the looks' steps start near it. */
 function measuredBrief(m: BrandMeasurements | null): string | null {
   if (!m) return null
@@ -302,6 +319,7 @@ function siteBrief(site: SiteSignals): string {
     site.background && `Its pages are ${site.dark ? 'dark' : 'light'}, on ${site.background}.`,
     (site.fonts.heading || site.fonts.body) &&
       `It sets headings in ${site.fonts.heading ?? site.fonts.body} and text in ${site.fonts.body ?? site.fonts.heading}.`,
+    fontBrief(site.fonts),
     site.button && `Its buttons are filled ${site.button}.`,
     site.monochrome &&
       'It is a monochrome brand: black buttons and little colour. Keep the first look monochrome: a near-black accent, white pages and no coloured band.',

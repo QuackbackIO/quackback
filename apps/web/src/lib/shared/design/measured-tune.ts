@@ -67,9 +67,14 @@ export function tuneFromMeasurements(m: BrandMeasurements): Tune {
   const tune: Tune = {}
   const headline = type(m.headline, [24, 120])
   if (headline) tune.headline = headline
-  // A site's section headings are often heroes of their own; in a portal they
-  // title a card, so they are held to what a card can carry.
-  const heading = type(m.heading, [16, 36])
+  // A site's section headings introduce a screen; in a portal they title a
+  // card over 14-16px content. They keep the brand's face, weight and colour,
+  // and take a card title's size: 18px, and a little more the larger the brand
+  // sets them, never past 24px. Tight tracking eases at that size.
+  const heading = type(m.heading, [16, 200])
+  if (heading?.size) heading.size = Math.round(within(18 + (heading.size - 18) * 0.2, 18, 24))
+  if (heading?.tracking !== undefined) heading.tracking = Math.max(heading.tracking, -0.01)
+  if (heading?.leading) heading.leading = within(heading.leading, 1.15, 1.6)
   if (heading) tune.heading = heading
   const label = type(m.label, [12, 18])
   if (label) {

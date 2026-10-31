@@ -169,7 +169,7 @@ export function PortalBand({
             </h1>
           )}
           {subtitle && (
-            <p className="mt-2 max-w-2xl text-base text-[var(--qb-band-muted)] [[data-qb-band-align=centre]_&]:mx-auto">
+            <p className="mt-2 max-w-2xl text-[length:var(--qb-subtitle-size,1rem)] leading-snug text-[var(--qb-band-muted)] [[data-qb-band-align=centre]_&]:mx-auto">
               {subtitle}
             </p>
           )}

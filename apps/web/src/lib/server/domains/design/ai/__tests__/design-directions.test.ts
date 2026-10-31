@@ -284,6 +284,7 @@ describe('the faithful look’s accent', () => {
 describe('the faithful look’s measured type and shapes', () => {
   it('takes the brand’s own values, exactly as its page sets them', () => {
     const site = {
+      fonts: { heading: 'sohne-var', body: 'Acme Text' },
       measured: {
         headline: { size: 48, weight: 300, tracking: -0.02, leading: 1.15 },
         button: { radius: 4, height: 40 },
@@ -294,11 +295,20 @@ describe('the faithful look’s measured type and shapes', () => {
       headline: { size: 48, weight: 300, tracking: -0.02, leading: 1.15 },
       button: { radius: 4, height: 40 },
     })
+    // Its faces as the closest bundled ones; one it does not know is left to the look.
+    expect(design.brand.fonts.heading).toEqual({ kind: 'bundled', id: 'inter-tight' })
+    expect(design.brand.fonts.body).toEqual(defaultDesign().brand.fonts.body)
   })
 
   it('leaves the design alone when nothing was measured', () => {
     const design = defaultDesign()
-    expect(withMeasuredTune(design, { measured: null } as never, allows)).toBe(design)
+    expect(
+      withMeasuredTune(
+        design,
+        { measured: null, fonts: { heading: null, body: null } } as never,
+        allows
+      )
+    ).toBe(design)
     expect(withMeasuredTune(design, null, allows)).toBe(design)
   })
 })

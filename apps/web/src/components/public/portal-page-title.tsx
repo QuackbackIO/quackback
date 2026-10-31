@@ -74,7 +74,11 @@ export function PortalPageTitle({
           >
             {accented(shown, phrase, headline?.accent?.style)}
           </h1>
-          {line && <p className="mt-2 max-w-2xl text-muted-foreground">{line}</p>}
+          {line && (
+            <p className="mt-2 max-w-2xl text-[length:var(--qb-subtitle-size,1rem)] leading-snug text-muted-foreground">
+              {line}
+            </p>
+          )}
         </div>
         {action}
       </div>

@@ -23,6 +23,11 @@ describe('exact values', () => {
     expect(tokens['--qb-headline-weight']).toBe('300')
     expect(tokens['--qb-headline-tracking']).toBe('-0.02em')
     expect(tokens['--qb-headline-leading']).toBe('1.15')
+    // Its line grows with it, so a big headline's line never reads as a caption.
+    expect(tokens['--qb-subtitle-size']).toBe('clamp(16px, 1.167vw, 16.8px)')
+    expect(tuneTokens({ headline: { size: 104 } })['--qb-subtitle-size']).toBe(
+      'clamp(16px, 1.528vw, 22px)'
+    )
     // The other pages' titles sit a step below the headline.
     expect(tokens['--qb-page-title-size']).toBe('clamp(24px, 2.067vw, 29.76px)')
   })
