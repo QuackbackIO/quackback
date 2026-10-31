@@ -8,9 +8,10 @@
  */
 import { eq, isNull, sql, type SQL } from 'drizzle-orm'
 import { tickets, teamMembers } from '@/lib/server/db'
+import type { TeamId } from '@quackback/ids'
 import { can } from './authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import type { Actor } from './types'
+import { allowDecision, denyDecision, type Actor, type Decision } from './types'
 
 /**
  * Scalar subquery of the team ids an actor belongs to, over `team_members`.
@@ -62,4 +63,36 @@ export function ticketFilter(actor: Actor): SQL {
   const assignedToMyTeam = sql`${tickets.assigneeTeamId} IN (${teamsForActor(principalId)})`
 
   return sql`(${notDeleted} AND (${assignedToMe} OR ${assignedToMyTeam}))`
+}
+
+/** The ticket fields `canViewTicket` reads. */
+export interface TicketVisibilityFacts {
+  assigneePrincipalId: string | null
+  assigneeTeamId: string | null
+  deletedAt: Date | null
+}
+
+/**
+ * Single-ticket form of `ticketFilter`, in memory, for deciding whether
+ * SOMEONE ELSE can see a ticket without a query per person: the watcher picker
+ * and the watcher fan-out ask it for every teammate at once. Same branches in
+ * the same order; `actorTeamIds` stands in for the `team_members` subquery the
+ * SQL form runs. tickets.test.ts holds the two forms to the same answers.
+ */
+export function canViewTicket(
+  actor: Actor,
+  ticket: TicketVisibilityFacts,
+  actorTeamIds: ReadonlySet<TeamId | string>
+): Decision {
+  if (ticket.deletedAt) return denyDecision('ticket is deleted')
+  if (actor.principalType === 'service') return allowDecision()
+  if (can(actor, PERMISSIONS.TICKET_VIEW_ALL)) return allowDecision()
+  if (!can(actor, PERMISSIONS.TICKET_VIEW) || actor.principalId === null) {
+    return denyDecision('no ticket view permission')
+  }
+  if (ticket.assigneePrincipalId === actor.principalId) return allowDecision()
+  if (ticket.assigneeTeamId !== null && actorTeamIds.has(ticket.assigneeTeamId)) {
+    return allowDecision()
+  }
+  return denyDecision('ticket is assigned to someone else')
 }

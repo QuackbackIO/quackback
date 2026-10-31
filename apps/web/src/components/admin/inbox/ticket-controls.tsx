@@ -5,6 +5,7 @@
  * AssigneeMenuItems, the team roster) so tickets and conversations feel the same.
  */
 import { useState } from 'react'
+import { useIntl, type IntlShape } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import {
   ChevronDownIcon,
@@ -24,6 +25,8 @@ import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
 import { PriorityDot, PriorityMenuItems } from '@/components/admin/conversation/priority-control'
 import { AssigneeMenuItems } from '@/components/admin/conversation/assignee-control'
 import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
+import { useHasPermission } from '@/lib/client/use-permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { inboxTeamsQueryOptions } from '@/lib/client/queries/inbox-teams'
 import { ticketQueries } from '@/lib/client/queries/inbox'
 import {
@@ -241,15 +244,34 @@ export function TicketPriorityControl({
 // Watchers (support platform ticket-watchers): the caller's own watch/mute
 // state, plus a lighter version of the post voters stack — an overlapping
 // avatar stack capped at 5 that opens a Popover (not a modal) listing every
-// watcher, with a per-row remove and a compact add-watcher select scoped to
-// the same teammate roster the assignee control reads.
+// watcher. With ticket.assign the popover also manages them: a per-row remove
+// and a compact add-watcher select over the teammates, where a teammate the
+// ticket is hidden from is listed but unavailable (they could not open it).
 // ---------------------------------------------------------------------------
 
-const REASON_LABEL: Record<TicketWatcher['reason'], string> = {
-  requester: 'Requester',
-  assignee: 'Assignee',
-  replier: 'Replied',
-  manual: 'Added',
+function reasonLabel(intl: IntlShape, reason: TicketWatcher['reason']): string {
+  switch (reason) {
+    case 'requester':
+      return intl.formatMessage({
+        id: 'admin.ticketWatchers.reason.requester',
+        defaultMessage: 'Requester',
+      })
+    case 'assignee':
+      return intl.formatMessage({
+        id: 'admin.ticketWatchers.reason.assignee',
+        defaultMessage: 'Assignee',
+      })
+    case 'replier':
+      return intl.formatMessage({
+        id: 'admin.ticketWatchers.reason.replier',
+        defaultMessage: 'Replied',
+      })
+    default:
+      return intl.formatMessage({
+        id: 'admin.ticketWatchers.reason.manual',
+        defaultMessage: 'Added',
+      })
+  }
 }
 
 function isMuted(mutedUntil: Date | string | null | undefined): boolean {
@@ -258,8 +280,12 @@ function isMuted(mutedUntil: Date | string | null | undefined): boolean {
 }
 
 /** The caller's own watch/mute control, plus the watcher avatar stack. Renders
- *  in the ticket Properties section (inbox-detail-panel.tsx), ticket items only. */
+ *  in the ticket Properties section and on a conversation's linked ticket card
+ *  (inbox-detail-panel.tsx). Managing other watchers needs ticket.assign; the
+ *  server fns enforce it regardless. */
 export function TicketWatchControl({ ticketId }: { ticketId: TicketId }) {
+  const intl = useIntl()
+  const canManage = useHasPermission(PERMISSIONS.TICKET_ASSIGN)
   const { data: status } = useQuery(ticketQueries.watchStatus(ticketId))
   const { data: watchers } = useQuery(ticketQueries.watchers(ticketId))
   const watch = useWatchTicket()
@@ -271,7 +297,11 @@ export function TicketWatchControl({ ticketId }: { ticketId: TicketId }) {
   const muted = isMuted(status?.mutedUntil)
   const pending = watch.isPending || unwatch.isPending || mute.isPending || unmute.isPending
 
-  const label = muted ? 'Muted' : watching ? 'Watching' : 'Watch'
+  const label = muted
+    ? intl.formatMessage({ id: 'admin.ticketWatchers.muted', defaultMessage: 'Muted' })
+    : watching
+      ? intl.formatMessage({ id: 'admin.ticketWatchers.watching', defaultMessage: 'Watching' })
+      : intl.formatMessage({ id: 'admin.ticketWatchers.watch', defaultMessage: 'Watch' })
   const TriggerIcon = muted ? BellSlashIcon : BellIcon
 
   return (
@@ -288,10 +318,22 @@ export function TicketWatchControl({ ticketId }: { ticketId: TicketId }) {
           {!watching && (
             <DropdownMenuItem
               onClick={() =>
-                watch.mutate({ ticketId }, { onError: () => toast.error('Failed to watch ticket') })
+                watch.mutate(
+                  { ticketId },
+                  {
+                    onError: () =>
+                      toast.error(
+                        intl.formatMessage({
+                          id: 'admin.ticketWatchers.watchFailed',
+                          defaultMessage: 'Could not watch this ticket',
+                        })
+                      ),
+                  }
+                )
               }
             >
-              <BellIcon className="size-4" /> Watch
+              <BellIcon className="size-4" />{' '}
+              {intl.formatMessage({ id: 'admin.ticketWatchers.watch', defaultMessage: 'Watch' })}
             </DropdownMenuItem>
           )}
           {watching && (
@@ -299,11 +341,23 @@ export function TicketWatchControl({ ticketId }: { ticketId: TicketId }) {
               onClick={() =>
                 unwatch.mutate(
                   { ticketId },
-                  { onError: () => toast.error('Failed to unwatch ticket') }
+                  {
+                    onError: () =>
+                      toast.error(
+                        intl.formatMessage({
+                          id: 'admin.ticketWatchers.unwatchFailed',
+                          defaultMessage: 'Could not stop watching this ticket',
+                        })
+                      ),
+                  }
                 )
               }
             >
-              <BellSlashIcon className="size-4" /> Unwatch
+              <BellSlashIcon className="size-4" />{' '}
+              {intl.formatMessage({
+                id: 'admin.ticketWatchers.unwatch',
+                defaultMessage: 'Unwatch',
+              })}
             </DropdownMenuItem>
           )}
           {watching && !muted && (
@@ -311,11 +365,23 @@ export function TicketWatchControl({ ticketId }: { ticketId: TicketId }) {
               onClick={() =>
                 mute.mutate(
                   { ticketId, days: 7 },
-                  { onError: () => toast.error('Failed to mute ticket') }
+                  {
+                    onError: () =>
+                      toast.error(
+                        intl.formatMessage({
+                          id: 'admin.ticketWatchers.muteFailed',
+                          defaultMessage: 'Could not mute this ticket',
+                        })
+                      ),
+                  }
                 )
               }
             >
-              <BellSlashIcon className="size-4" /> Mute for a week
+              <BellSlashIcon className="size-4" />{' '}
+              {intl.formatMessage({
+                id: 'admin.ticketWatchers.muteWeek',
+                defaultMessage: 'Mute for a week',
+              })}
             </DropdownMenuItem>
           )}
           {muted && (
@@ -323,16 +389,25 @@ export function TicketWatchControl({ ticketId }: { ticketId: TicketId }) {
               onClick={() =>
                 unmute.mutate(
                   { ticketId },
-                  { onError: () => toast.error('Failed to unmute ticket') }
+                  {
+                    onError: () =>
+                      toast.error(
+                        intl.formatMessage({
+                          id: 'admin.ticketWatchers.unmuteFailed',
+                          defaultMessage: 'Could not unmute this ticket',
+                        })
+                      ),
+                  }
                 )
               }
             >
-              <BellIcon className="size-4" /> Unmute
+              <BellIcon className="size-4" />{' '}
+              {intl.formatMessage({ id: 'admin.ticketWatchers.unmute', defaultMessage: 'Unmute' })}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      <WatcherAvatarStack ticketId={ticketId} watchers={watchers} />
+      <WatcherAvatarStack ticketId={ticketId} watchers={watchers} canManage={canManage} />
     </div>
   )
 }
@@ -340,13 +415,18 @@ export function TicketWatchControl({ ticketId }: { ticketId: TicketId }) {
 function WatcherAvatarStack({
   ticketId,
   watchers,
+  canManage,
 }: {
   ticketId: TicketId
   watchers: TicketWatcher[] | undefined
+  canManage: boolean
 }) {
+  const intl = useIntl()
   const [open, setOpen] = useState(false)
   const displayed = watchers?.slice(0, 5) ?? []
   const remaining = Math.max(0, (watchers?.length ?? 0) - 5)
+  // Nothing to show and nothing the caller may do: no empty "Add" affordance.
+  if (displayed.length === 0 && !canManage) return null
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -355,7 +435,17 @@ function WatcherAvatarStack({
           <button
             type="button"
             className="flex items-center -space-x-2 transition-opacity hover:opacity-80"
-            aria-label="Manage watchers"
+            aria-label={
+              canManage
+                ? intl.formatMessage({
+                    id: 'admin.ticketWatchers.manage',
+                    defaultMessage: 'Manage watchers',
+                  })
+                : intl.formatMessage({
+                    id: 'admin.ticketWatchers.view',
+                    defaultMessage: 'See watchers',
+                  })
+            }
           >
             {displayed.map((w, i) => (
               <Avatar
@@ -381,12 +471,17 @@ function WatcherAvatarStack({
             className="inline-flex items-center gap-1 text-[13px] text-muted-foreground/60 transition-colors hover:text-muted-foreground"
           >
             <PlusIcon className="size-3" />
-            <span>Add watcher</span>
+            <span>
+              {intl.formatMessage({
+                id: 'admin.ticketWatchers.add',
+                defaultMessage: 'Add watcher',
+              })}
+            </span>
           </button>
         )}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-0" sideOffset={4}>
-        <WatcherManagePanel ticketId={ticketId} watchers={watchers ?? []} />
+        <WatcherManagePanel ticketId={ticketId} watchers={watchers ?? []} canManage={canManage} />
       </PopoverContent>
     </Popover>
   )
@@ -395,22 +490,34 @@ function WatcherAvatarStack({
 function WatcherManagePanel({
   ticketId,
   watchers,
+  canManage,
 }: {
   ticketId: TicketId
   watchers: TicketWatcher[]
+  canManage: boolean
 }) {
-  const { data: members } = useTeamMembers()
+  const intl = useIntl()
+  const { data: teammates } = useQuery({
+    ...ticketQueries.watcherCandidates(ticketId),
+    enabled: canManage,
+  })
   const addWatcher = useAdminAddTicketWatcher()
   const removeWatcher = useAdminRemoveTicketWatcher()
 
   const watcherIds = new Set(watchers.map((w) => w.principalId))
-  const candidates = (members ?? []).filter((m) => !watcherIds.has(m.id))
+  const candidates = (teammates ?? []).filter((m) => !watcherIds.has(m.principalId))
+  const addable = candidates.some((m) => m.canView)
 
   return (
     <div>
       <div className="max-h-56 overflow-y-auto p-2" onWheel={(e) => e.stopPropagation()}>
         {watchers.length === 0 ? (
-          <p className="py-3 text-center text-xs text-muted-foreground/60">No watchers yet</p>
+          <p className="py-3 text-center text-xs text-muted-foreground/60">
+            {intl.formatMessage({
+              id: 'admin.ticketWatchers.empty',
+              defaultMessage: 'No watchers yet',
+            })}
+          </p>
         ) : (
           <div className="space-y-2">
             {watchers.map((w) => (
@@ -422,64 +529,116 @@ function WatcherManagePanel({
                 />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-foreground">
-                    {w.displayName ?? 'Unnamed'}
+                    {w.displayName ??
+                      intl.formatMessage({
+                        id: 'admin.ticketWatchers.unnamed',
+                        defaultMessage: 'Unnamed',
+                      })}
                   </p>
                 </div>
                 {isMuted(w.mutedUntil) && (
                   <BellSlashIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
                 )}
                 <Badge size="sm" variant="subtle">
-                  {REASON_LABEL[w.reason]}
+                  {reasonLabel(intl, w.reason)}
                 </Badge>
-                <button
-                  type="button"
-                  onClick={() =>
-                    removeWatcher.mutate(
-                      { ticketId, principalId: w.principalId },
-                      { onError: () => toast.error('Failed to remove watcher') }
-                    )
-                  }
-                  disabled={
-                    removeWatcher.isPending &&
-                    removeWatcher.variables?.principalId === w.principalId
-                  }
-                  className="hidden size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover:flex"
-                  aria-label="Remove watcher"
-                >
-                  <XMarkIcon className="size-3.5" />
-                </button>
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      removeWatcher.mutate(
+                        { ticketId, principalId: w.principalId },
+                        {
+                          onError: () =>
+                            toast.error(
+                              intl.formatMessage({
+                                id: 'admin.ticketWatchers.removeFailed',
+                                defaultMessage: 'Could not remove this watcher',
+                              })
+                            ),
+                        }
+                      )
+                    }
+                    disabled={
+                      removeWatcher.isPending &&
+                      removeWatcher.variables?.principalId === w.principalId
+                    }
+                    className="hidden size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover:flex"
+                    aria-label={intl.formatMessage({
+                      id: 'admin.ticketWatchers.remove',
+                      defaultMessage: 'Remove watcher',
+                    })}
+                  >
+                    <XMarkIcon className="size-3.5" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
-      <div className="border-t border-border/30 p-2">
-        <Select
-          value=""
-          disabled={addWatcher.isPending || candidates.length === 0}
-          onValueChange={(principalId) =>
-            addWatcher.mutate(
-              { ticketId, principalId: principalId as PrincipalId },
-              { onError: () => toast.error('Failed to add watcher') }
-            )
-          }
-        >
-          <SelectTrigger size="sm" className="w-full">
-            <PlusIcon className="size-3.5 shrink-0" />
-            <SelectValue
-              placeholder={candidates.length === 0 ? 'No more teammates' : 'Add watcher…'}
-            />
-          </SelectTrigger>
-          <SelectContent className="max-h-56">
-            {candidates.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                <Avatar src={m.image} name={m.name ?? m.email} className="size-5 text-xs" />
-                <span className="truncate">{m.name ?? m.email ?? 'Unnamed'}</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {canManage && (
+        <div className="border-t border-border/30 p-2">
+          <Select
+            value=""
+            disabled={addWatcher.isPending || !addable}
+            onValueChange={(principalId) =>
+              addWatcher.mutate(
+                { ticketId, principalId: principalId as PrincipalId },
+                {
+                  onError: () =>
+                    toast.error(
+                      intl.formatMessage({
+                        id: 'admin.ticketWatchers.addFailed',
+                        defaultMessage: 'Could not add this watcher',
+                      })
+                    ),
+                }
+              )
+            }
+          >
+            <SelectTrigger size="sm" className="w-full">
+              <PlusIcon className="size-3.5 shrink-0" />
+              <SelectValue
+                placeholder={
+                  addable
+                    ? intl.formatMessage({
+                        id: 'admin.ticketWatchers.addPlaceholder',
+                        defaultMessage: 'Add a teammate',
+                      })
+                    : intl.formatMessage({
+                        id: 'admin.ticketWatchers.noneLeft',
+                        defaultMessage: 'No more teammates',
+                      })
+                }
+              />
+            </SelectTrigger>
+            <SelectContent className="max-h-56">
+              {candidates.map((m) => (
+                <SelectItem key={m.principalId} value={m.principalId} disabled={!m.canView}>
+                  <Avatar src={m.avatarUrl} name={m.name ?? m.email} className="size-5 text-xs" />
+                  <span className="truncate">
+                    {m.name ??
+                      m.email ??
+                      intl.formatMessage({
+                        id: 'admin.ticketWatchers.unnamed',
+                        defaultMessage: 'Unnamed',
+                      })}
+                  </span>
+                  {!m.canView && (
+                    <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
+                      {intl.formatMessage({
+                        id: 'admin.ticketWatchers.cannotSee',
+                        defaultMessage: "Can't see this ticket",
+                      })}
+                    </span>
+                  )}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
     </div>
   )
 }

@@ -18,6 +18,10 @@ vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
   sendTicketMessage: (...a: unknown[]) => mockSendMessage(...a),
   addTicketNote: (...a: unknown[]) => mockAddNote(...a),
 }))
+const mockSetDueAt = vi.fn()
+vi.mock('@/lib/server/domains/tickets/ticket-due.service', () => ({
+  setTicketDueAt: (...a: unknown[]) => mockSetDueAt(...a),
+}))
 const mockLink = vi.fn()
 const mockUnlink = vi.fn()
 const mockListLinked = vi.fn()
@@ -25,6 +29,19 @@ vi.mock('@/lib/server/domains/tickets/ticket-links.service', () => ({
   linkTicketToTracker: (...a: unknown[]) => mockLink(...a),
   unlinkTicketFromTracker: (...a: unknown[]) => mockUnlink(...a),
   listLinkedTicketIds: (...a: unknown[]) => mockListLinked(...a),
+}))
+
+const mockListWatchers = vi.fn()
+const mockWatchSelf = vi.fn()
+const mockUnwatchSelf = vi.fn()
+const mockAddWatcher = vi.fn()
+const mockRemoveWatcher = vi.fn()
+vi.mock('@/lib/server/domains/tickets/ticket-watchers.service', () => ({
+  listWatchersOfTicket: (...a: unknown[]) => mockListWatchers(...a),
+  watchTicketForSelf: (...a: unknown[]) => mockWatchSelf(...a),
+  unwatchTicketForSelf: (...a: unknown[]) => mockUnwatchSelf(...a),
+  addTicketWatcher: (...a: unknown[]) => mockAddWatcher(...a),
+  removeTicketWatcher: (...a: unknown[]) => mockRemoveWatcher(...a),
 }))
 
 import { registerTicketTools } from '../tickets'
@@ -84,12 +101,18 @@ describe('ticket MCP tools', () => {
     const handlers = collect(teamAuth)
     expect([...handlers.keys()].sort()).toEqual([
       'add_ticket_note',
+      'add_ticket_watcher',
       'create_ticket',
       'get_ticket',
       'link_ticket',
+      'list_ticket_watchers',
       'list_tickets',
+      'remove_ticket_watcher',
       'reply_to_ticket',
+      'set_ticket_due_date',
       'unlink_ticket',
+      'unwatch_ticket',
+      'watch_ticket',
     ])
   })
 
@@ -119,8 +142,20 @@ describe('ticket MCP tools', () => {
       requesterPrincipalId: 'principal_r',
       assigneePrincipalId: 'principal_a',
       assigneeTeamId: null,
+      dueAt: null,
       updatedAt: '2026-07-04T00:00:00.000Z',
     })
+  })
+
+  it('list_tickets passes the due filter and the due sort, and returns dueAt', async () => {
+    mockListTickets.mockResolvedValue({
+      tickets: [{ ...ticketDTO, dueAt: '2026-11-03T17:00:00.000Z' }],
+      hasMore: false,
+    })
+    const out = await collect(teamAuth).get('list_tickets')!({ due: 'overdue', sort: 'due' })
+    const [filter] = mockListTickets.mock.calls[0]
+    expect(filter).toMatchObject({ due: 'overdue', sort: 'due', limit: 20 })
+    expect(parse(out).tickets[0].dueAt).toBe('2026-11-03T17:00:00.000Z')
   })
 
   it('list_tickets passes the registry ticketTypeId filter and maps the type ref (Phase 4)', async () => {
@@ -283,6 +318,25 @@ describe('ticket MCP tools', () => {
     expect(input.descriptionJson).toBeUndefined()
   })
 
+  it('create_ticket passes dueAt to the service as a Date and returns it', async () => {
+    mockCreateTicket.mockResolvedValue({ ...ticketDTO, dueAt: '2026-11-03T17:00:00.000Z' })
+    const out = await collect(teamAuth).get('create_ticket')!({
+      type: 'customer',
+      title: 'Refund not received',
+      dueAt: '2026-11-03T18:00:00+01:00',
+    })
+    const [input] = mockCreateTicket.mock.calls[0]
+    expect(input.dueAt).toBeInstanceOf(Date)
+    expect(input.dueAt.toISOString()).toBe('2026-11-03T17:00:00.000Z')
+    expect(parse(out).dueAt).toBe('2026-11-03T17:00:00.000Z')
+  })
+
+  it('create_ticket leaves dueAt unset when none is given', async () => {
+    mockCreateTicket.mockResolvedValue(ticketDTO)
+    await collect(teamAuth).get('create_ticket')!({ title: 'Refund not received' })
+    expect(mockCreateTicket.mock.calls[0][0].dueAt).toBeUndefined()
+  })
+
   it('create_ticket passes a registry ticketTypeId through (Phase 4; category derived)', async () => {
     mockCreateTicket.mockResolvedValue(ticketDTO)
     await collect(teamAuth).get('create_ticket')!({
@@ -435,6 +489,44 @@ describe('ticket MCP tools', () => {
     expect(parse(out).linkedTicketIds).toEqual([])
   })
 
+  it('set_ticket_due_date sets the date as a Date with the caller as actor', async () => {
+    mockSetDueAt.mockResolvedValue({ ...ticketDTO, dueAt: '2026-11-03T17:00:00.000Z' })
+    const out = await collect(teamAuth).get('set_ticket_due_date')!({
+      ticketId: 'ticket_1',
+      dueAt: '2026-11-03T17:00:00Z',
+    })
+    const [id, dueAt, actor] = mockSetDueAt.mock.calls[0]
+    expect(id).toBe('ticket_1')
+    expect(dueAt).toBeInstanceOf(Date)
+    expect(dueAt.toISOString()).toBe('2026-11-03T17:00:00.000Z')
+    expect(actor.principalId).toBe('principal_key')
+    expect(parse(out)).toEqual({
+      id: 'ticket_1',
+      reference: '#42',
+      dueAt: '2026-11-03T17:00:00.000Z',
+    })
+  })
+
+  it('set_ticket_due_date clears the date with null', async () => {
+    mockSetDueAt.mockResolvedValue(ticketDTO)
+    const out = await collect(teamAuth).get('set_ticket_due_date')!({
+      ticketId: 'ticket_1',
+      dueAt: null,
+    })
+    expect(mockSetDueAt.mock.calls[0][1]).toBeNull()
+    expect(parse(out).dueAt).toBeNull()
+  })
+
+  it('set_ticket_due_date requires the write:chat scope', async () => {
+    const readOnly = { ...teamAuth, scopes: ['read:chat'] } as unknown as McpAuthContext
+    const out = await collect(readOnly).get('set_ticket_due_date')!({
+      ticketId: 'ticket_1',
+      dueAt: null,
+    })
+    expect(out.isError).toBe(true)
+    expect(mockSetDueAt).not.toHaveBeenCalled()
+  })
+
   it('write tools require the write:chat scope, not just read:chat', async () => {
     const readOnly = { ...teamAuth, scopes: ['read:chat'] } as unknown as McpAuthContext
     const out = await collect(readOnly).get('reply_to_ticket')!({
@@ -450,5 +542,122 @@ describe('ticket MCP tools', () => {
     const out = await collect(noScope).get('list_tickets')!({})
     expect(out.isError).toBe(true)
     expect(mockListTickets).not.toHaveBeenCalled()
+  })
+
+  describe('watchers', () => {
+    const watchers = [
+      {
+        principalId: 'principal_r',
+        reason: 'requester',
+        mutedUntil: null,
+        displayName: 'Ada',
+        avatarUrl: null,
+        role: 'user',
+        isTeamMember: false,
+      },
+      {
+        principalId: 'principal_key',
+        reason: 'manual',
+        mutedUntil: new Date('2026-07-11T00:00:00.000Z'),
+        displayName: 'Agent',
+        avatarUrl: null,
+        role: 'admin',
+        isTeamMember: true,
+      },
+    ]
+    beforeEach(() => mockListWatchers.mockResolvedValue(watchers))
+
+    it('list_ticket_watchers returns who watches, why and until when, no emails', async () => {
+      const out = await collect(teamAuth).get('list_ticket_watchers')!({ ticketId: 'ticket_1' })
+      expect(mockListWatchers).toHaveBeenCalledWith(
+        'ticket_1',
+        expect.objectContaining({ principalId: 'principal_key' })
+      )
+      const body = parse(out)
+      // The requester chose their own name, so it is marked as outside text.
+      expect(JSON.stringify(body)).toContain('watchers[0].displayName')
+      expect(body).toMatchObject({
+        ticketId: 'ticket_1',
+        watchers: [
+          {
+            principalId: 'principal_r',
+            displayName: 'Ada',
+            isTeamMember: false,
+            reason: 'requester',
+            mutedUntil: null,
+          },
+          {
+            principalId: 'principal_key',
+            displayName: 'Agent',
+            isTeamMember: true,
+            reason: 'manual',
+            mutedUntil: '2026-07-11T00:00:00.000Z',
+          },
+        ],
+      })
+    })
+
+    it('watch_ticket and unwatch_ticket act for the signed-in person', async () => {
+      mockWatchSelf.mockResolvedValue({ added: true })
+      mockUnwatchSelf.mockResolvedValue({ removed: true })
+      const handlers = collect(teamAuth)
+      await handlers.get('watch_ticket')!({ ticketId: 'ticket_1' })
+      await handlers.get('unwatch_ticket')!({ ticketId: 'ticket_1' })
+      expect(mockWatchSelf).toHaveBeenCalledWith(
+        'ticket_1',
+        expect.objectContaining({ principalId: 'principal_key', principalType: 'user' })
+      )
+      expect(mockUnwatchSelf).toHaveBeenCalledTimes(1)
+    })
+
+    it('refuses a self watch from an API key, which has no watch of its own', async () => {
+      const keyAuth = { ...teamAuth, userId: undefined } as unknown as McpAuthContext
+      const handlers = collect(keyAuth)
+      expect((await handlers.get('watch_ticket')!({ ticketId: 'ticket_1' })).isError).toBe(true)
+      expect((await handlers.get('list_tickets')!({ watching: true })).isError).toBe(true)
+      expect(mockWatchSelf).not.toHaveBeenCalled()
+      expect(mockListTickets).not.toHaveBeenCalled()
+    })
+
+    it('add_ticket_watcher and remove_ticket_watcher pass the teammate and the caller', async () => {
+      mockAddWatcher.mockResolvedValue({ added: true })
+      mockRemoveWatcher.mockResolvedValue({ removed: true })
+      const handlers = collect(teamAuth)
+      await handlers.get('add_ticket_watcher')!({
+        ticketId: 'ticket_1',
+        principalId: 'principal_m',
+      })
+      await handlers.get('remove_ticket_watcher')!({
+        ticketId: 'ticket_1',
+        principalId: 'principal_m',
+      })
+      expect(mockAddWatcher).toHaveBeenCalledWith(
+        'ticket_1',
+        'principal_m',
+        expect.objectContaining({ principalId: 'principal_key' })
+      )
+      expect(mockRemoveWatcher).toHaveBeenCalledWith('ticket_1', 'principal_m', expect.anything())
+    })
+
+    it('surfaces a refused add as a tool error', async () => {
+      const { ValidationError } = await import('@/lib/shared/errors')
+      mockAddWatcher.mockRejectedValue(
+        new ValidationError('WATCHER_CANNOT_SEE_TICKET', 'This teammate cannot see this ticket')
+      )
+      const out = await collect(teamAuth).get('add_ticket_watcher')!({
+        ticketId: 'ticket_1',
+        principalId: 'principal_m',
+      })
+      expect(out.isError).toBe(true)
+      expect((out.content[0] as { text: string }).text).toContain('WATCHER_CANNOT_SEE_TICKET')
+    })
+
+    it('list_tickets narrows to the caller when watching', async () => {
+      mockListTickets.mockResolvedValue({ tickets: [], hasMore: false })
+      await collect(teamAuth).get('list_tickets')!({ watching: true })
+      expect(mockListTickets.mock.calls[0][0]).toMatchObject({
+        watcherPrincipalId: 'principal_key',
+      })
+    })
   })
 })

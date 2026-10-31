@@ -88,10 +88,16 @@ describe('event catalogue coverage', () => {
     'csat_comment_added',
     'voted',
     'external_status_changed',
+    'subscriber_added',
+    'subscriber_removed',
     'customer_unresponsive',
     'teammate_unresponsive',
     'approaching_breach',
     'breached',
+    // ticket due dates: the date moved, is close, or has passed
+    'due_changed',
+    'due_soon',
+    'overdue',
     // approvals: a person is asked, decides, and the change is applied
     'requested',
     'decided',
