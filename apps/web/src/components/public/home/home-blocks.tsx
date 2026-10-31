@@ -4,12 +4,19 @@
  * has nothing to show. Every block is a `home-block` part and a section the
  * Appearance preview can select.
  */
-import { createContext, Suspense, useContext, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  Suspense,
+  useContext,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useQuery, useSuspenseInfiniteQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { RichTextContent } from '@/components/ui/rich-text-content'
-import { StatusBadge } from '@/components/ui/status-badge'
+import { StatusBadge, useStatusColour } from '@/components/ui/status-badge'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
 import { HelpCenterCompactSearch } from '@/components/help-center/help-center-search'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -88,6 +95,19 @@ export function HomeSpans({
 
 const useSpan = (block: HomeBlock, index: number) =>
   useContext(SpansContext).get(index) ?? WIDTH_CLASS[block.width]
+
+/** A roadmap column's status colour, as the design shows status colours. */
+function StatusDot({ colour }: { colour: string | null | undefined }) {
+  const shown = useStatusColour(colour)
+  return (
+    <span
+      aria-hidden="true"
+      data-qb-status-dot=""
+      className="size-2 rounded-full bg-[var(--qb-status)]"
+      style={shown ? ({ '--qb-status': shown } as CSSProperties) : undefined}
+    />
+  )
+}
 
 function BlockCard({
   block,
@@ -196,7 +216,7 @@ export function HomeComposer({ inBand = false }: { inBand?: boolean }) {
       data-qb-part="composer"
       action={HOME_FEED_PATH}
       className={cn(
-        'flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5 shadow-sm',
+        'flex items-center gap-3 rounded-[var(--qb-radius-composer,0.5rem)] border border-border bg-card px-4 py-3.5 shadow-sm',
         inBand && 'flex-wrap py-3 shadow-lg sm:flex-nowrap'
       )}
       onSubmit={(event) => {
@@ -227,7 +247,7 @@ export function HomeComposer({ inBand = false }: { inBand?: boolean }) {
         className={cn(
           'shrink-0 text-sm font-medium',
           inBand
-            ? 'basis-full rounded-[var(--qb-radius-control,999px)] bg-primary px-4 py-2 font-semibold text-primary-foreground hover:bg-primary/90 sm:basis-auto'
+            ? 'basis-full rounded-[var(--qb-radius-button,999px)] bg-primary px-4 py-2 font-semibold text-primary-foreground hover:bg-primary/90 sm:basis-auto'
             : 'rounded-full px-3 py-1.5 text-[var(--qb-accent-text,var(--primary))] hover:bg-muted'
         )}
       >
@@ -348,11 +368,7 @@ function RoadmapBlock({
         {columns.map((column) => (
           <div key={column.id} className="min-w-0 space-y-2">
             <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-              <span
-                aria-hidden="true"
-                className="size-2 rounded-full"
-                style={{ backgroundColor: column.color }}
-              />
+              <StatusDot colour={column.color} />
               {column.name}
             </h3>
             <RoadmapColumnPosts roadmapId={roadmap.id} statusId={column.statusId ?? undefined} />

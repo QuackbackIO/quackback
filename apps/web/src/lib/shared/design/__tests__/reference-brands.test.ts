@@ -27,11 +27,12 @@ interface Fixture {
     }
     logo: { display: string }
   }
-  shape: { corners: string }
+  shape: { corners: string; buttons?: string }
   layout: Record<'header' | 'nav' | 'band' | 'cards' | 'density' | 'width' | 'filters', string> & {
     blend?: string
     bandAlign?: string
     bandShape?: string
+    status?: string
   }
   pages: {
     home: {
@@ -91,6 +92,8 @@ function used(): Record<DesignOption, Set<string>> {
     if (doc.layout.band === 'blend') add('blend', doc.layout.blend ?? 'linear')
     add('bandAlign', doc.layout.bandAlign ?? (doc.layout.header === 'centered' ? 'centre' : 'left'))
     add('bandShape', doc.layout.bandShape ?? 'full')
+    add('buttons', doc.shape.buttons ?? 'match')
+    add('status', doc.layout.status ?? 'colour')
     if (doc.pages.home.blocks.some((block) => block.type === 'composer'))
       add('composerPlace', doc.pages.home.composer ?? 'block')
     add('sort', doc.pages.feedback.defaultSort)

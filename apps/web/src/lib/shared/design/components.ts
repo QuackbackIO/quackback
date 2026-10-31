@@ -29,7 +29,8 @@ export const PORTAL_ALIASES: Record<string, `--qb-${string}`> = {
   '--nav-active-foreground': '--qb-nav-active-ink',
   '--nav-inactive-color': '--qb-nav-ink',
   '--post-card-voted-color': '--qb-vote-active',
-  '--radius-item': '--qb-radius-control',
+  // Buttons, badges and tabs: a button shape, when the design gives one, else the corners.
+  '--radius-item': '--qb-radius-button',
   '--radius-field': '--qb-radius-field',
   '--radius-panel': '--qb-radius-panel',
 }
@@ -40,6 +41,16 @@ const RADII: Record<PortalDesign['shape']['corners'], [string, string, string]> 
   subtle: ['0.25rem', '0.25rem', '0.375rem'],
   rounded: ['999px', '0.5rem', '0.75rem'],
   pill: ['999px', '0.75rem', '1.25rem'],
+}
+
+/** Buttons, and the composer that carries one, by button shape. */
+const BUTTON_RADII: Record<
+  Exclude<NonNullable<PortalDesign['shape']['buttons']>, 'match'>,
+  [string, string]
+> = {
+  square: ['0rem', '0rem'],
+  rounded: ['0.5rem', '0.75rem'],
+  pill: ['999px', '1.75rem'],
 }
 
 /** Card padding, the gap between cards and the post title size. */
@@ -303,11 +314,15 @@ function bandSurface(
 /** Size tokens, the same in both modes. */
 export function baseTokens(doc: PortalDesign): TokenMap {
   const [control, field, panel] = RADII[doc.shape.corners]
+  const buttons = doc.shape.buttons ?? 'match'
+  const [button, composer] = buttons === 'match' ? [control, field] : BUTTON_RADII[buttons]
   const [padding, gap, title] = DENSITY[doc.layout.density]
   return {
     '--qb-radius-control': control,
     '--qb-radius-field': field,
     '--qb-radius-panel': panel,
+    '--qb-radius-button': button,
+    '--qb-radius-composer': composer,
     '--qb-nav-radius': doc.layout.nav === 'pills' ? '999px' : 'calc(var(--radius) * 0.8)',
     '--qb-card-padding': padding,
     // List cards run together, divided by their rules.
@@ -331,6 +346,7 @@ export function layoutAttributes(doc: PortalDesign): Record<`data-qb-${string}`,
     'data-qb-band-align': doc.layout.bandAlign ?? (header === 'centered' ? 'centre' : 'left'),
     'data-qb-band-shape': doc.layout.bandShape ?? 'full',
     'data-qb-header-band': headerOnBand(doc) ? 'on' : 'off',
+    'data-qb-status': doc.layout.status ?? 'colour',
     'data-qb-cards': cards,
     'data-qb-filters': filters,
   }

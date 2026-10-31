@@ -38,7 +38,8 @@
     "favicon": {
       "key": "fixtures/juniper/favicon.png"
     },
-    "shareImage": null
+    "shareImage": null,
+    "logoColours": ["#2f5d3a", "#c58b2b", "#7aa36f"]
   },
   "shape": {
     "corners": "pill"
@@ -51,7 +52,8 @@
     "density": "spacious",
     "width": "default",
     "filters": "end",
-    "headerOnBand": true
+    "headerOnBand": true,
+    "status": "brand"
   },
   "pages": {
     "home": {

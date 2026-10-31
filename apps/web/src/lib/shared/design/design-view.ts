@@ -41,6 +41,8 @@ export function designView(
     nav: doc.nav,
     vocabulary: doc.vocabulary,
     logo: designLogo(doc),
+    statusColours:
+      doc.layout.status === 'brand' && doc.brand.logoColours?.length ? doc.brand.logoColours : null,
   }
 }
 

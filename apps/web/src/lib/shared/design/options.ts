@@ -7,6 +7,10 @@ export const DESIGN_OPTIONS = {
   /** `auto` follows the visitor's device. */
   mode: ['light', 'dark', 'auto'],
   corners: ['sharp', 'subtle', 'rounded', 'pill'],
+  /** Buttons' own shape; `match` follows the corners. */
+  buttons: ['match', 'square', 'rounded', 'pill'],
+  /** Status markers: coloured dots, dots in the ink, tinted tags, or the logo's colours. */
+  status: ['colour', 'ink', 'pill', 'brand'],
   headingWeight: [500, 600, 700, 800],
   fontKind: ['bundled', 'uploaded'],
   /** `name` sets the workspace name in the heading font, a wordmark without a file. */

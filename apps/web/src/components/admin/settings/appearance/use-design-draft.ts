@@ -150,6 +150,7 @@ export function useDesignDraft() {
       vocabulary: view.vocabulary,
       copy: view.feedback.copy,
       logo: view.logo,
+      statusColours: view.statusColours,
     }
   }, [design])
 

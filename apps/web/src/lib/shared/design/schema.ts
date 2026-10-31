@@ -210,11 +210,19 @@ export const portalDesignV2 = z
             name: z.string().trim().max(60).optional(),
           })
           .strict(),
+        /** The logo's own colours, for status markers in the brand's colours. */
+        logoColours: z.array(color).max(6).optional(),
         favicon: asset.nullable(),
         shareImage: asset.nullable(),
       })
       .strict(),
-    shape: z.object({ corners: z.enum(DESIGN_OPTIONS.corners) }).strict(),
+    shape: z
+      .object({
+        corners: z.enum(DESIGN_OPTIONS.corners),
+        /** Absent follows the corners. */
+        buttons: z.enum(DESIGN_OPTIONS.buttons).optional(),
+      })
+      .strict(),
     layout: z
       .object({
         header: z.enum(DESIGN_OPTIONS.header),
@@ -228,6 +236,8 @@ export const portalDesignV2 = z
         bandShape: z.enum(DESIGN_OPTIONS.bandShape).optional(),
         /** The header in the band's colour, so the two read as one. */
         headerOnBand: z.boolean().optional(),
+        /** Absent is coloured dots. */
+        status: z.enum(DESIGN_OPTIONS.status).optional(),
         cards: z.enum(DESIGN_OPTIONS.cards),
         density: z.enum(DESIGN_OPTIONS.density),
         width: z.enum(DESIGN_OPTIONS.width),

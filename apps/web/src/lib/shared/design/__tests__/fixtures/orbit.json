@@ -48,7 +48,8 @@
     }
   },
   "shape": {
-    "corners": "rounded"
+    "corners": "rounded",
+    "buttons": "pill"
   },
   "layout": {
     "header": "inline",
@@ -57,7 +58,8 @@
     "cards": "raised",
     "density": "comfortable",
     "width": "wide",
-    "filters": "end"
+    "filters": "end",
+    "status": "pill"
   },
   "pages": {
     "home": {

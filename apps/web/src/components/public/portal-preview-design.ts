@@ -39,6 +39,17 @@ export interface DesignPreview {
   /** The draft's own wording, by language. */
   copy: Partial<Record<'prompt' | 'submit' | 'emptyTitle', Record<string, string>>> | null
   logo: DesignLogo | null
+  /** The logo's colours status markers take, when the draft asks for them. */
+  statusColours: string[] | null
+}
+
+/** A colour as a design stores it: hex, or oklch(). */
+const STORED_COLOUR = /^(#[\da-f]{6}|oklch\([\d.\s%]+\))$/i
+
+function readStatusColours(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null
+  const colours = value.filter((c): c is string => typeof c === 'string' && STORED_COLOUR.test(c))
+  return colours.length > 0 ? colours.slice(0, 6) : null
 }
 
 const LOGO_DISPLAYS = new Set(['mark_and_name', 'mark', 'wordmark', 'name'])
@@ -146,10 +157,8 @@ const DESIGN_VALUE = /^[a-z_]+$/
 /** The message's design, keeping only the structural attributes a design sets. */
 export function readDesignPreview(value: unknown): DesignPreview | null {
   if (!value || typeof value !== 'object') return null
-  const { css, attributes, fontIds, headline, home, nav, vocabulary, copy, logo } = value as Record<
-    string,
-    unknown
-  >
+  const { css, attributes, fontIds, headline, home, nav, vocabulary, copy, logo, statusColours } =
+    value as Record<string, unknown>
   if (typeof css !== 'string') return null
   const safe = Object.fromEntries(
     Object.entries((attributes as Record<string, unknown>) ?? {}).filter(
@@ -167,6 +176,7 @@ export function readDesignPreview(value: unknown): DesignPreview | null {
     words: readWords(vocabulary),
     copy: readCopy(copy),
     logo: readLogo(logo),
+    statusColours: readStatusColours(statusColours),
   }
 }
 

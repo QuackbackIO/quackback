@@ -42,7 +42,8 @@
     "shareImage": null
   },
   "shape": {
-    "corners": "rounded"
+    "corners": "rounded",
+    "buttons": "rounded"
   },
   "layout": {
     "header": "stacked",
