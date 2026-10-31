@@ -28,7 +28,10 @@ export function FeedbackHeaderFallback({ title, onTitleChange, onFocus }: Fallba
   const intl = useIntl()
   const copy = useFeedCopy()
   return (
-    <div className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden">
+    <div
+      data-qb-part="composer"
+      className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden"
+    >
       <div className="flex items-center gap-3 px-4 py-3.5">
         <div className="flex-shrink-0 w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
           <PencilIcon className="w-4 h-4 text-primary" />

@@ -8,7 +8,7 @@
   "journeys": {
     "doc:portal-home": {
       "dbQueries": 7,
-      "htmlKB": 121.7
+      "htmlKB": 129.4
     },
     "doc:portal-roadmap": {
       "dbQueries": 4,
@@ -32,7 +32,7 @@
     },
     "doc:portal-home+session": {
       "dbQueries": 14,
-      "htmlKB": 142.5
+      "htmlKB": 150.7
     },
     "doc:portal-changelog+session": {
       "dbQueries": 5,

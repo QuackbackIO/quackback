@@ -236,6 +236,8 @@ export function PostCard({
     <button
       type="button"
       data-testid="vote-button"
+      data-qb-part="vote-button"
+      data-state={currentHasVoted ? 'voted' : undefined}
       title={voteNoAccessMsg}
       aria-disabled={voteNoAccess || undefined}
       aria-label={
@@ -527,6 +529,7 @@ export function PostCard({
         )}
         {/* Title */}
         <h3
+          data-qb-part="post-title"
           className={cn(
             'font-semibold [font-size:var(--qb-title-size,1rem)] leading-normal line-clamp-1',
             isDone ? 'text-foreground/75' : 'text-foreground'
@@ -614,6 +617,8 @@ export function PostCard({
       onMouseLeave={onMouseLeave}
       data-post-id={id}
       data-done={isDone || undefined}
+      data-qb-part="post-card"
+      data-state={isDone ? 'done' : undefined}
     >
       {cardContent}
     </div>

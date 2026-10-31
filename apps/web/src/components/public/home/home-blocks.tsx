@@ -133,6 +133,7 @@ function ComposerBlock({ block, index }: { block: HomeBlock; index: number }) {
   return (
     <BlockCard block={block} index={index} bare>
       <form
+        data-qb-part="composer"
         action={HOME_FEED_PATH}
         className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5 shadow-sm"
         onSubmit={(event) => {
@@ -196,7 +197,10 @@ function IdeasBlock({
             const status = statuses?.find((candidate) => candidate.id === post.statusId)
             return (
               <li key={post.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                <span className="flex w-11 shrink-0 flex-col items-center justify-center rounded-md border py-1 text-sm font-semibold tabular-nums">
+                <span
+                  data-qb-part="vote-button"
+                  className="flex w-11 shrink-0 flex-col items-center justify-center rounded-md border py-1 text-sm font-semibold tabular-nums"
+                >
                   {post.voteCount}
                 </span>
                 <span className="min-w-0">

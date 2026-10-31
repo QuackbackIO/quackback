@@ -121,6 +121,7 @@ export function VoteButton({
     return (
       <div
         data-testid="vote-button"
+        data-qb-part="vote-button"
         aria-label={`${displayCount} votes`}
         className={sharedClassName}
       >
@@ -134,6 +135,8 @@ export function VoteButton({
     <button
       type="button"
       data-testid="vote-button"
+      data-qb-part="vote-button"
+      data-state={hasVoted ? 'voted' : undefined}
       aria-label={
         hasVoted
           ? intl.formatMessage(

@@ -17,6 +17,7 @@ export function StatusBadge({ name, color, className }: StatusBadgeProps): React
 
   return (
     <span
+      data-qb-part="status-badge"
       className={cn(
         'inline-flex items-center gap-1.5 text-xs font-medium text-foreground',
         !color && 'text-muted-foreground',
