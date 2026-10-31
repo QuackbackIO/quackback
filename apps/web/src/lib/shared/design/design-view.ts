@@ -8,6 +8,7 @@
  * ships only where a design is resolved.
  */
 import { layoutAttributes } from './components'
+import { rewritePartAliases } from './parts'
 import { designFontIds, fontStack } from './fonts'
 import { renderDesignCss, resolveDesign } from './resolve'
 import type { PortalDesign } from './schema'
@@ -24,7 +25,7 @@ export function designView(
     mode: doc.mode,
     revision,
     themeStyles: renderDesignCss(resolveDesign(doc)),
-    customCss: doc.css ? `@layer tenant {\n${doc.css}\n}` : '',
+    customCss: doc.css ? `@layer tenant {\n${rewritePartAliases(doc.css)}\n}` : '',
     fontSans: fontStack(doc.brand.fonts.body),
     fontIds: designFontIds(doc),
     attributes: layoutAttributes(doc),

@@ -22,6 +22,7 @@ import {
   type DesignAuthor,
 } from './design.service'
 import { legacyBrandingOf } from './engine'
+import { lintDesignCss, type CssIssue } from './css-lint'
 
 const REFUSAL_CODES = [
   'INVALID_DESIGN',
@@ -31,14 +32,17 @@ const REFUSAL_CODES = [
   'REVISION_NOT_FOUND',
   'REVISION_MISMATCH',
   'DRAFT_CHANGED',
+  'INVALID_CSS',
+  'TIER_LIMIT_EXCEEDED',
 ] as const
 export type DesignRefusalCode = (typeof REFUSAL_CODES)[number]
 export type DesignRefusal = { ok: false; code: DesignRefusalCode; message: string }
 
-/** What the contrast solver changed and what it could not fix. */
+/** What the contrast solver changed and what it could not fix, and what the CSS check warns about. */
 export interface DesignReport {
   adjustments: DesignAdjustment[]
   errors: string[]
+  css: CssIssue[]
 }
 
 export interface DesignEditorState {
@@ -55,7 +59,7 @@ export interface DesignEditorState {
 
 function reportOf(doc: PortalDesign): DesignReport {
   const { adjustments, errors } = resolveDesign(doc)
-  return { adjustments, errors }
+  return { adjustments, errors, css: doc.css ? lintDesignCss(doc.css).warnings : [] }
 }
 
 /** Runs a write, turning a refusal a person can act on into a value. */

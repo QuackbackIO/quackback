@@ -29,7 +29,11 @@ export type DesignAiTurn =
       widen?: string
     }
 
-type Report = { adjustments: DesignAdjustment[]; errors: string[] }
+type Report = {
+  adjustments: DesignAdjustment[]
+  errors: string[]
+  css: Array<{ message: string; line?: number; fix?: { find: string; replace: string } }>
+}
 
 /** What a request that failed on its way says; the draft is as it was. */
 const FAILED = 'Something went wrong, so nothing changed. Try again.'

@@ -12,6 +12,7 @@ import { DesignTiles } from './design-tiles'
 import { LanguagePicker } from './language-picker'
 import { HomeSection } from './home-section'
 import { MenuSection } from './menu-section'
+import { CssSection, type CssWarning } from './css-section'
 import {
   BandDrawing,
   CardsDrawing,
@@ -42,6 +43,7 @@ export function SectionsPanel({
   update,
   gates,
   onEditHome,
+  cssWarnings,
 }: {
   design: PortalDesign
   update: Update
@@ -49,6 +51,8 @@ export function SectionsPanel({
   gates: PortalPageGates
   /** Called when Home changes, so the preview can show it. */
   onEditHome: () => void
+  /** What the CSS check warns about in the draft's CSS. */
+  cssWarnings: readonly CssWarning[]
 }) {
   const { layout } = design
   // The language the headline is written in; each visitor sees theirs, else the closest.
@@ -236,6 +240,8 @@ export function SectionsPanel({
           }))}
         />
       </section>
+
+      <CssSection design={design} update={update} warnings={cssWarnings} />
     </div>
   )
 }

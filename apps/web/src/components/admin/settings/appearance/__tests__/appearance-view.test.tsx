@@ -46,7 +46,10 @@ vi.mock('@/components/admin/settings/branding/portal-preview', () => ({
 vi.mock('@/lib/server/functions/portal-design', () => ({
   getPortalDesignFn: async () => editorState(),
   listPortalDesignVersionsFn: async () => [],
-  savePortalDesignDraftFn: async () => ({ ok: true, report: { adjustments: [], errors: [] } }),
+  savePortalDesignDraftFn: async () => ({
+    ok: true,
+    report: { adjustments: [], errors: [], css: [] },
+  }),
   discardPortalDesignDraftFn: async () => ({ ok: true }),
   publishPortalDesignFn: async ({ data }: { data: unknown }) => {
     server.published.push(data)
@@ -88,7 +91,7 @@ vi.mock('@/lib/server/functions/portal-design-ai', () => ({
       applied: [{ path: 'layout.density', before: 'comfortable', after: 'compact' }],
       skipped: 0,
       readability: [],
-      report: { adjustments: [], errors: [] },
+      report: { adjustments: [], errors: [], css: [] },
     }
   },
 }))
@@ -113,7 +116,7 @@ function editorState() {
     live: defaultDesign(),
     source: 'converted' as const,
     published: null,
-    report: { adjustments: [], errors: [] },
+    report: { adjustments: [], errors: [], css: [] },
     revision: 'rev1',
   }
 }

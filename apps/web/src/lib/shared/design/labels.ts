@@ -33,6 +33,7 @@ const LABELS: Record<string, string> = {
   'nav.items': 'Menu',
   'vocabulary.post': 'What people post',
   'vocabulary.board': 'What groups them',
+  css: 'Custom CSS',
   'pages.home.blocks': 'Home blocks',
 }
 
