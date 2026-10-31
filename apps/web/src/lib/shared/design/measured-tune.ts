@@ -28,6 +28,8 @@ export interface MeasuredBox {
   ink?: string
   weight?: number
   upper?: boolean
+  /** It is the page's main call to action, read from its words and place. */
+  action?: boolean
 }
 
 export interface BrandMeasurements {

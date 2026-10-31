@@ -133,11 +133,32 @@ function cascade(rules: Rule[], el: Element): Map<string, string> {
 }
 
 /** The page's custom properties, from its root rules. */
-function customProperties(rules: Rule[]): Map<string, string> {
+/**
+ * The page's custom properties: its root rules', then those of the theme
+ * classes it puts on <html> or <body>, which many sites keep their brand
+ * colours under.
+ */
+function customProperties(rules: Rule[], html: string): Map<string, string> {
+  const themes = new Set(
+    [...html.matchAll(/<(?:html|body)\b[^>]*\bclass\s*=\s*["']([^"']*)["']/gi)].flatMap((m) =>
+      m[1]!.split(/\s+/).filter(Boolean)
+    )
+  )
+  const theme = (selector: string) => {
+    const m = /^(?:html|body|:root)?((?:\.[\w-]+)+)$/i.exec(selector)
+    return (
+      !!m &&
+      m[1]!
+        .split('.')
+        .filter(Boolean)
+        .every((name) => themes.has(name))
+    )
+  }
   const props = new Map<string, string>()
-  for (const rule of rules)
-    if (rule.selectors.some((s) => /^(:root|html|body)$/i.test(s)))
-      for (const [k, v] of rule.decls) if (k.startsWith('--')) props.set(k, v)
+  for (const scoped of [false, true])
+    for (const rule of rules)
+      if (rule.selectors.some((s) => (scoped ? theme(s) : /^(:root|html|body)$/i.test(s))))
+        for (const [k, v] of rule.decls) if (k.startsWith('--')) props.set(k, v)
   return props
 }
 
@@ -308,13 +329,70 @@ const isHidden = (el: Element & { attrs: string }) =>
     /(sr-only|visually-hidden|screen-reader|cookie|consent|modal|dialog)/i.test(c)
   )
 
+/** What a page asks its visitors to do first: the words of a main call to action. */
+const CALL_TO_ACTION =
+  /^(get( \w+)?( started| free| the app| a demo| \w+ free)?|start\b|sign ?up|try\b|join\b|buy\b|shop\b|book\b|send\b|download\b|request\b|contact sales|create\b|open (an )?account|subscribe\b|learn more)/i
+/** Consent and cookie notices, whose buttons are not the brand's. */
+const NOTICE =
+  /(accept|reject|decline|cookie|consent|preferences|customi[sz]e|agree|allow all|got it)/i
+/** Signing in is offered beside the call to action, seldom as it. */
+const SIGN_IN = /^(log ?in|sign ?in|my account)$/i
+
+interface Candidate extends Element {
+  text: string
+  /** How far into the page it sits, 0 at the top. */
+  at: number
+  buttonish: boolean
+}
+
+/** The page's links and buttons with their words and place, notices left out. */
+function candidates(html: string): Candidate[] {
+  const body = html.replace(/<(script|style|svg|noscript|template)[\s\S]*?<\/\1>/gi, '')
+  const out: Candidate[] = []
+  for (const m of body.matchAll(/<(a|button)\b([^>]*)>([\s\S]{0,400}?)<\/\1>/gi)) {
+    const attrs = m[2] ?? ''
+    const text = (m[3] ?? '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (!text || text.length > 40 || NOTICE.test(text)) continue
+    const classes = new Set(
+      (/\bclass\s*=\s*["']([^"']*)/i.exec(attrs)?.[1] ?? '').split(/\s+/).filter(Boolean)
+    )
+    if ([...classes].some((c) => /(cookie|consent|notice|banner-close)/i.test(c))) continue
+    const el = {
+      tag: m[1]!.toLowerCase(),
+      id: /\bid\s*=\s*["']([^"']+)/i.exec(attrs)?.[1] ?? null,
+      classes,
+      attrs,
+    }
+    out.push({
+      ...el,
+      text,
+      at: (m.index ?? 0) / Math.max(1, body.length),
+      buttonish: isButtonish(el),
+    })
+    if (out.length > 300) break
+  }
+  return out
+}
+
+/** How likely a candidate is the page's main call to action. */
+function intent(c: Candidate): number {
+  return (
+    (CALL_TO_ACTION.test(c.text) ? 3 : 0) +
+    (c.buttonish ? 1 : 0) +
+    (c.at < 0.35 ? 2 : c.at < 0.6 ? 1 : 0) -
+    (SIGN_IN.test(c.text) ? 3 : 0)
+  )
+}
+
 const isButtonish = (el: Element & { attrs: string }) =>
   (el.tag === 'a' || el.tag === 'button') &&
   ([...el.classes].some((c) => /(^|[-_])(btn|button|cta)([-_]|$)/i.test(c)) ||
     /role\s*=\s*["']button/i.test(el.attrs)) &&
   ![...el.classes].some((c) => /(close|icon|menu|toggle|skip|cookie|link)/i.test(c))
 
-/** A page's type and shapes, as far as its HTML and CSS say. */
 /**
  * A page's type and shapes, as far as its HTML and CSS say. The headline is
  * the largest h1 in sight, and the main button the one filled with the site's
@@ -326,7 +404,7 @@ export function measureSite(
   brandButton: string | null = null
 ): BrandMeasurements {
   const rules = parseRules(css.join('\n'))
-  const props = customProperties(rules)
+  const props = customProperties(rules, html)
   // A shorthand sets its longhands where its own rule does not, so the cascade weighs them by rule.
   for (const rule of rules) rule.decls = expandFont(rule.decls, props)
   const els = elements(html).filter((el) => !isHidden(el))
@@ -342,13 +420,25 @@ export function measureSite(
       .sort((a, b) => b.size - a.size)[0]
   const h1 = largest('h1')?.decls ?? null
   const h2 = styleOf(first((el) => el.tag === 'h2' && !!typeOf(cascade(rules, el), props)))
-  const buttons = els.filter(isButtonish).slice(0, 20)
+  // The main button is the call to action the page leads with: its words, its
+  // place near the top and its styling, among those whose fill can be read. A
+  // known button colour from the site's CSS breaks a tie.
   const filled = (el: Element) => boxOf(cascade(rules, el), props)?.fill
+  // A call to action in words near the top is evidence enough to lead with.
+  const ranked = candidates(html)
+    .map((c) => ({ c, fill: filled(c), score: intent(c) }))
+    .filter((x) => !!x.fill && x.score >= 4)
+    .sort(
+      (a, b) => b.score - a.score || Number(b.fill === brandButton) - Number(a.fill === brandButton)
+    )
+  const buttons = els.filter(isButtonish).slice(0, 20)
   const button = styleOf(
-    (brandButton && buttons.find((el) => filled(el) === brandButton)) ||
-      buttons.find((el) => !!filled(el)) ||
+    ranked[0]?.c ??
+      (brandButton && buttons.find((el) => filled(el) === brandButton)) ??
+      buttons.find((el) => !!filled(el)) ??
       buttons[0]
   )
+  const action = !!ranked[0]
   const card = styleOf(first((el) => [...el.classes].some((c) => /(^|[-_])card([-_]|$)/i.test(c))))
   const field = styleOf(
     first(
@@ -358,7 +448,12 @@ export function measureSite(
   return {
     headline: h1 && typeOf(h1, props),
     heading: h2 && typeOf(h2, props),
-    button: button && boxOf(button, props),
+    button:
+      button &&
+      (() => {
+        const box = boxOf(button, props)
+        return box && action ? { ...box, action: true } : box
+      })(),
     card: card && boxOf(card, props),
     field: field && boxOf(field, props),
   }

@@ -40,7 +40,13 @@ describe('measuring a brand from its page', () => {
        .btn--primary { background: rgb(22, 51, 0); color: #9fe870; font-weight: 600; text-transform: uppercase }`,
     ])
     expect(m.headline).toEqual({ size: 64, colour: '#163300' })
-    expect(m.button).toEqual({ fill: '#163300', ink: '#9fe870', weight: 600, upper: true })
+    expect(m.button).toEqual({
+      fill: '#163300',
+      ink: '#9fe870',
+      weight: 600,
+      upper: true,
+      action: true,
+    })
   })
 
   it('reads a wide, light screen: small-screen and dark rules are left out', () => {
@@ -80,7 +86,38 @@ describe('measuring a brand from its page', () => {
     const css = [
       `.btn-secondary { background: #37517e } .btn-primary { background: #163300; border-radius: 999px }`,
     ]
-    expect(measureSite(page, css, '#163300').button).toEqual({ radius: 999, fill: '#163300' })
-    expect(measureSite(page, css).button?.fill).toBe('#37517e')
+    expect(measureSite(page, css, '#163300').button).toEqual({
+      radius: 999,
+      fill: '#163300',
+      action: true,
+    })
+    // Its words make it the call to action without the colour, ahead of signing in.
+    expect(measureSite(page, css).button?.fill).toBe('#163300')
+  })
+
+  it('takes the call to action the page leads with, past sign-in links and cookie notices', () => {
+    const page = `<header><a class="btn nav-login">Log in</a><a class="btn btn-get">Get started</a></header>
+      <button class="btn cookie-accept">Accept all</button>
+      ${'<p>Copy</p>'.repeat(40)}
+      <a class="btn btn-old">Get started</a>`
+    const m = measureSite(page, [
+      `.nav-login { background: #e5e5e5 } .btn-get { background: #533afd; border-radius: 4px }
+       .cookie-accept { background: #091723 } .btn-old { background: #0081ba }`,
+    ])
+    expect(m.button).toEqual({ radius: 4, fill: '#533afd', action: true })
+  })
+
+  it('reads colours a site keeps under a theme class on its body', () => {
+    const page = `<body class="theme-personal"><a class="cta">Send money</a></body>`
+    const m = measureSite(page, [
+      `:root { --accent: #0081ba } .theme-personal { --accent: #9fe870 } .cta { background: var(--accent) }`,
+    ])
+    expect(m.button?.fill).toBe('#9fe870')
+  })
+
+  it('does not call a link a call to action without the words or the place for it', () => {
+    const page = `${'<p>Copy</p>'.repeat(40)}<a class="btn footer">Careers</a>`
+    const m = measureSite(page, [`.footer { background: #333333 }`])
+    expect(m.button?.action).toBeUndefined()
   })
 })

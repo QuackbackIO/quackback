@@ -14,7 +14,8 @@ import { fetchFollowingRedirects } from '@/lib/server/content/unfurl'
 import { logger } from '@/lib/server/logger'
 import { isStandardWebsiteUrl, parseWebsiteInput } from '@/lib/shared/website-branding'
 import { isBlockPage, pageLinks, readSiteBrand, type SiteBrand } from './site-brand'
-import { colourVividness } from '@/lib/shared/design/palette'
+import { colourVividness, isBrandColour } from '@/lib/shared/design/palette'
+import { confirmedBy } from './faithful-look'
 import { findHeaderLogo, findShareImage, resolveSvgColours, type LogoCandidate } from './site-logo'
 import { measureSite } from './site-measure'
 import type { BrandMeasurements } from '@/lib/shared/design/measured-tune'
@@ -31,6 +32,23 @@ function logoColour(brand: SiteBrand): string {
 }
 
 const log = logger.child({ module: 'site-signals' })
+
+/**
+ * The brand led by what the page asks visitors to do: a coloured fill on its
+ * main call to action is the brand colour, ahead of the colours its CSS uses
+ * most, which can be illustrations or a bundle's leftovers. It leads only when
+ * the CSS bears it out, as one of the site's leading colours or its buttons':
+ * a page themed as it runs can leave its stylesheet's default theme, which no
+ * reader of the CSS alone can tell from the brand.
+ */
+function ledByAction(brand: SiteBrand, measured: BrandMeasurements): SiteBrand {
+  const fill = measured.button?.action ? measured.button.fill : undefined
+  if (!fill || !isBrandColour(fill)) return brand
+  const near = confirmedBy([...brand.palette.slice(0, 3), ...(brand.button ? [brand.button] : [])])
+  if (!near(fill)) return brand
+  const palette = [fill, ...brand.palette.filter((colour) => colour !== fill)].slice(0, 5)
+  return { ...brand, colour: fill, palette, button: fill }
+}
 
 export interface SiteSignals extends SiteBrand {
   domain: string
@@ -163,7 +181,10 @@ export async function readSiteSignals(site: string): Promise<SiteRead> {
       'website read for its brand'
     )
     const measured = measureSite(found.html, sheets, brand.button)
-    return { ok: true, signals: { domain: host, ...brand, logo, shareImage, measured } }
+    return {
+      ok: true,
+      signals: { domain: host, ...ledByAction(brand, measured), logo, shareImage, measured },
+    }
   }
   if (blocked) {
     // The page refused, but a manifest is a static file sites often serve to anyone.
