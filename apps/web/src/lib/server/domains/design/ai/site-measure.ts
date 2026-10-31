@@ -3,7 +3,8 @@
  * browser: the headline, a section heading, the main button, a card and a
  * field are found in the HTML, and the rules whose selectors match them are
  * applied in cascade order, utility classes included. Sizes resolve rem,
- * clamp(), min(), max(), vw at a wide screen and the page's custom properties.
+ * clamp(), min(), max(), viewport units at a wide screen and custom properties,
+ * which inherit down the page's elements as a browser's do.
  * Rules for small screens and dark themes are left out. What cannot be read is
  * left unmeasured rather than guessed.
  */
@@ -12,153 +13,21 @@ import type {
   MeasuredBox,
   MeasuredType,
 } from '@/lib/shared/design/measured-tune'
+import { cascade, indexRules, inlineStyle, parseRules, type RuleIndex } from './css-cascade'
+import { pageTree, type PageNode } from './page-tree'
 import { hex } from './site-brand'
-
-interface Rule {
-  selectors: string[]
-  decls: Map<string, string>
-  order: number
-}
 
 const ROOT_PX = 16
 const VIEWPORT = 1440
+const VIEWPORT_HEIGHT = 900
+const INHERITED = ['color', 'font-weight', 'letter-spacing', 'text-transform'] as const
 
-/** Rules at the top level and in queries that hold on a wide, light screen. */
-function parseRules(css: string): Rule[] {
-  const rules: Rule[] = []
-  let order = 0
-  const walk = (text: string, skip: boolean) => {
-    let i = 0
-    while (i < text.length) {
-      const open = text.indexOf('{', i)
-      if (open < 0) break
-      const prelude = text
-        .slice(i, open)
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .trim()
-      // Find the matching close brace.
-      let depth = 1
-      let j = open + 1
-      while (j < text.length && depth > 0) {
-        if (text[j] === '{') depth++
-        else if (text[j] === '}') depth--
-        j++
-      }
-      const body = text.slice(open + 1, j - 1)
-      if (prelude.startsWith('@')) {
-        const at = prelude.toLowerCase()
-        const narrow =
-          /max-width|prefers-color-scheme:\s*dark|print|hover:\s*none|pointer:\s*coarse/.test(at)
-        if (/^@(media|supports|layer|container)/.test(at)) walk(body, skip || narrow)
-      } else if (!skip && prelude) {
-        const decls = new Map<string, string>()
-        for (const part of body.split(';')) {
-          const colon = part.indexOf(':')
-          if (colon < 0) continue
-          decls.set(
-            part.slice(0, colon).trim().toLowerCase(),
-            part
-              .slice(colon + 1)
-              .replace(/!important/i, '')
-              .trim()
-          )
-        }
-        rules.push({ selectors: prelude.split(',').map((s) => s.trim()), decls, order: order++ })
-      }
-      i = j
-    }
-  }
-  walk(css, false)
-  return rules
-}
-
-interface Element {
-  tag: string
-  id: string | null
-  classes: Set<string>
-}
-
-const DYNAMIC =
-  /:(hover|focus|active|visited|focus-visible|focus-within|disabled|checked|before|after|placeholder|not|has|is|where|nth|first|last|only|empty|target|selection)/
-
-/** The specificity of a selector's last compound when it matches, or null. */
-function matches(selector: string, el: Element): [number, number, number] | null {
-  // States, attribute scopes such as a theme, and dark themes are not the page as it first shows.
-  if (DYNAMIC.test(selector) || selector.includes('[') || /\.(dark|theme-dark)\b/i.test(selector))
-    return null
-  const last = selector
-    .split(/\s*[\s>+~]\s*/)
-    .filter(Boolean)
-    .pop()
-  if (!last || last.includes('*')) return null
-  const tag = /^[a-z][a-z0-9-]*/i.exec(last)?.[0]?.toLowerCase()
-  if (tag && tag !== el.tag) return null
-  const ids = [...last.matchAll(/#([\w-]+)/g)].map((m) => m[1])
-  if (ids.some((id) => id !== el.id)) return null
-  const classes = [...last.matchAll(/\.((?:\\.|[\w-])+)/g)].map((m) =>
-    m[1]!.replace(/\\(.)/g, '$1')
-  )
-  if (classes.some((c) => !el.classes.has(c))) return null
-  if (!tag && !ids.length && !classes.length) return null
-  return [ids.length, classes.length, tag ? 1 : 0]
-}
-
-/** The declarations that win for an element, by specificity then source order. */
-function cascade(rules: Rule[], el: Element): Map<string, string> {
-  const hits: Array<{ spec: [number, number, number]; rule: Rule }> = []
-  for (const rule of rules)
-    for (const selector of rule.selectors) {
-      const spec = matches(selector, el)
-      if (spec) hits.push({ spec, rule })
-    }
-  hits.sort(
-    (a, b) =>
-      a.spec[0] - b.spec[0] ||
-      a.spec[1] - b.spec[1] ||
-      a.spec[2] - b.spec[2] ||
-      a.rule.order - b.rule.order
-  )
-  const out = new Map<string, string>()
-  for (const { spec, rule } of hits)
-    for (const [k, v] of rule.decls) {
-      // A size set only by a bare tag in em is a reset's default (h1 { font-size: 2em }),
-      // not the brand's: it says nothing about the headline the page shows.
-      if (k === 'font-size' && spec[0] === 0 && spec[1] === 0 && /^[\d.]+em$/.test(v.trim())) {
-        out.delete(k)
-        continue
-      }
-      out.set(k, v)
-    }
-  return out
-}
-
-/** The page's custom properties, from its root rules. */
-/**
- * The page's custom properties: its root rules', then those of the theme
- * classes it puts on <html> or <body>, which many sites keep their brand
- * colours under.
- */
-function customProperties(rules: Rule[], html: string): Map<string, string> {
-  const themes = new Set(
-    [...html.matchAll(/<(?:html|body)\b[^>]*\bclass\s*=\s*["']([^"']*)["']/gi)].flatMap((m) =>
-      m[1]!.split(/\s+/).filter(Boolean)
-    )
-  )
-  const theme = (selector: string) => {
-    const m = /^(?:html|body|:root)?((?:\.[\w-]+)+)$/i.exec(selector)
-    return (
-      !!m &&
-      m[1]!
-        .split('.')
-        .filter(Boolean)
-        .every((name) => themes.has(name))
-    )
-  }
+/** The page's custom properties at its root. Elements below inherit and override them. */
+function rootProperties(rules: ReturnType<typeof parseRules>): Map<string, string> {
   const props = new Map<string, string>()
-  for (const scoped of [false, true])
-    for (const rule of rules)
-      if (rule.selectors.some((s) => (scoped ? theme(s) : /^(:root|html|body)$/i.test(s))))
-        for (const [k, v] of rule.decls) if (k.startsWith('--')) props.set(k, v)
+  for (const rule of rules)
+    if (rule.selectors.some((s) => /^(:root|html|body)$/i.test(s)))
+      for (const [k, v] of rule.decls) if (k.startsWith('--')) props.set(k, v)
   return props
 }
 
@@ -194,7 +63,7 @@ function length(raw: string | undefined, props: Map<string, string>, em = ROOT_P
     }
     return total
   }
-  const unit = /^(-?[\d.]+)(px|rem|em|vw|%)?$/i.exec(value)
+  const unit = /^(-?[\d.]+)(px|rem|em|vw|[sld]?vh|vmin|vmax|%)?$/i.exec(value)
   if (!unit) return null
   const n = parseFloat(unit[1]!)
   switch ((unit[2] ?? '').toLowerCase()) {
@@ -206,6 +75,15 @@ function length(raw: string | undefined, props: Map<string, string>, em = ROOT_P
       return n * em
     case 'vw':
       return (n * VIEWPORT) / 100
+    case 'vh':
+    case 'svh':
+    case 'lvh':
+    case 'dvh':
+      return (n * VIEWPORT_HEIGHT) / 100
+    case 'vmin':
+      return (n * Math.min(VIEWPORT, VIEWPORT_HEIGHT)) / 100
+    case 'vmax':
+      return (n * Math.max(VIEWPORT, VIEWPORT_HEIGHT)) / 100
     case '':
       return n === 0 ? 0 : null
     default:
@@ -303,31 +181,13 @@ function boxOf(decls: Map<string, string>, props: Map<string, string>): Measured
   return Object.keys(out).length ? out : null
 }
 
-/** The opening tags in a page, as elements. */
-function elements(html: string): Array<Element & { attrs: string }> {
-  const out: Array<Element & { attrs: string }> = []
-  const body = html.replace(/<(script|style|svg|noscript|template)[\s\S]*?<\/\1>/gi, '')
-  for (const m of body.matchAll(/<([a-z][a-z0-9]*)\b([^>]*)>/gi)) {
-    const attrs = m[2] ?? ''
-    out.push({
-      tag: m[1]!.toLowerCase(),
-      id: /\bid\s*=\s*["']([^"']+)/i.exec(attrs)?.[1] ?? null,
-      classes: new Set(
-        (/\bclass\s*=\s*["']([^"']*)/i.exec(attrs)?.[1] ?? '').split(/\s+/).filter(Boolean)
-      ),
-      attrs,
-    })
-    if (out.length > 4000) break
-  }
-  return out
-}
-
 /** An element the page keeps out of sight: hidden, for screen readers only, or a notice over it. */
-const isHidden = (el: Element & { attrs: string }) =>
-  /(^|\s)hidden(\s|=|$)|aria-hidden\s*=\s*["']true/i.test(el.attrs) ||
+const hiddenItself = (el: PageNode) =>
+  /(^|\s)hidden(\s|=|$)|aria-hidden\s*=\s*["']true|display\s*:\s*none/i.test(el.attrs) ||
   [...el.classes].some((c) =>
-    /(sr-only|visually-hidden|screen-reader|cookie|consent|modal|dialog)/i.test(c)
-  )
+    /(sr-only|visually-hidden|screen-reader|cookie|consent|modal|dialog|onetrust)/i.test(c)
+  ) ||
+  /\bid\s*=\s*["'][^"']*(cookie|consent|onetrust)/i.test(el.attrs)
 
 /** What a page asks its visitors to do first: the words of a main call to action. */
 const CALL_TO_ACTION =
@@ -338,42 +198,22 @@ const NOTICE =
 /** Signing in is offered beside the call to action, seldom as it. */
 const SIGN_IN = /^(log ?in|sign ?in|my account)$/i
 
-interface Candidate extends Element {
+interface Candidate {
+  index: number
   text: string
   /** How far into the page it sits, 0 at the top. */
   at: number
   buttonish: boolean
 }
 
-/** The page's links and buttons with their words and place, notices left out. */
-function candidates(html: string): Candidate[] {
-  const body = html.replace(/<(script|style|svg|noscript|template)[\s\S]*?<\/\1>/gi, '')
+/** The page's visible links and buttons with their words and place, notices left out. */
+function candidates(nodes: PageNode[], hidden: (index: number) => boolean): Candidate[] {
   const out: Candidate[] = []
-  for (const m of body.matchAll(/<(a|button)\b([^>]*)>([\s\S]{0,400}?)<\/\1>/gi)) {
-    const attrs = m[2] ?? ''
-    const text = (m[3] ?? '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-    if (!text || text.length > 40 || NOTICE.test(text)) continue
-    const classes = new Set(
-      (/\bclass\s*=\s*["']([^"']*)/i.exec(attrs)?.[1] ?? '').split(/\s+/).filter(Boolean)
-    )
-    if ([...classes].some((c) => /(cookie|consent|notice|banner-close)/i.test(c))) continue
-    const el = {
-      tag: m[1]!.toLowerCase(),
-      id: /\bid\s*=\s*["']([^"']+)/i.exec(attrs)?.[1] ?? null,
-      classes,
-      attrs,
-    }
-    out.push({
-      ...el,
-      text,
-      at: (m.index ?? 0) / Math.max(1, body.length),
-      buttonish: isButtonish(el),
-    })
-    if (out.length > 300) break
-  }
+  nodes.forEach((node, index) => {
+    const text = node.text
+    if (!text || text.length > 40 || NOTICE.test(text) || hidden(index) || out.length > 300) return
+    out.push({ index, text, at: node.at, buttonish: isButtonish(node) })
+  })
   return out
 }
 
@@ -387,7 +227,7 @@ function intent(c: Candidate): number {
   )
 }
 
-const isButtonish = (el: Element & { attrs: string }) =>
+const isButtonish = (el: PageNode) =>
   (el.tag === 'a' || el.tag === 'button') &&
   ([...el.classes].some((c) => /(^|[-_])(btn|button|cta)([-_]|$)/i.test(c)) ||
     /role\s*=\s*["']button/i.test(el.attrs)) &&
@@ -404,57 +244,82 @@ export function measureSite(
   brandButton: string | null = null
 ): BrandMeasurements {
   const rules = parseRules(css.join('\n'))
-  const props = customProperties(rules, html)
+  const root = rootProperties(rules)
   // A shorthand sets its longhands where its own rule does not, so the cascade weighs them by rule.
-  for (const rule of rules) rule.decls = expandFont(rule.decls, props)
-  const els = elements(html).filter((el) => !isHidden(el))
-  const styleOf = (el: Element | undefined) => (el ? cascade(rules, el) : null)
-  const first = (pick: (el: Element & { attrs: string }) => boolean) => els.find(pick)
+  for (const rule of rules) rule.decls = expandFont(rule.decls, root)
+  const index: RuleIndex = indexRules(rules)
+  const nodes = pageTree(html)
+  const declsAt = memo((i) => cascade(index, nodes[i]!, inlineStyle(nodes[i]!.attrs)))
+  // Custom properties inherit: each element's are its parent's, with its own over them.
+  // Sites keep a theme's colours on a wrapper as often as on the root.
+  const propsAt: (i: number) => Map<string, string> = memo((i) => {
+    const parent = nodes[i]!.parent < 0 ? root : propsAt(nodes[i]!.parent)
+    const own = [...declsAt(i)].filter(([k]) => k.startsWith('--'))
+    return own.length ? new Map([...parent, ...own]) : parent
+  })
+  const hidden: (i: number) => boolean = memo(
+    (i) => hiddenItself(nodes[i]!) || (nodes[i]!.parent >= 0 && hidden(nodes[i]!.parent))
+  )
+  // Colour and the type's weight, tracking and case inherit as their values where set.
+  const styleAt: (i: number) => Map<string, string> = memo((i) => {
+    const own = declsAt(i)
+    const parent = nodes[i]!.parent
+    if (parent < 0) return own
+    const above = styleAt(parent)
+    const out = new Map(own)
+    for (const key of INHERITED)
+      if (!out.has(key) && above.has(key))
+        out.set(key, resolveVars(above.get(key)!, propsAt(parent)))
+    return out
+  })
+  const typeAt = (i: number) => typeOf(styleAt(i), propsAt(i))
+  const boxAt = (i: number) => boxOf(styleAt(i), propsAt(i))
+  const visible = nodes.map((_, i) => i).filter((i) => !hidden(i))
+  const first = (pick: (el: PageNode, i: number) => boolean) =>
+    visible.find((i) => pick(nodes[i]!, i))
   // Of the page's headlines, the largest: a site may mark a small label up as an h1 too.
-  const largest = (tag: string) =>
-    els
-      .filter((el) => el.tag === tag)
-      .slice(0, 12)
-      .map((el) => cascade(rules, el))
-      .map((decls) => ({ decls, size: typeOf(decls, props)?.size ?? 0 }))
-      .sort((a, b) => b.size - a.size)[0]
-  const h1 = largest('h1')?.decls ?? null
-  const h2 = styleOf(first((el) => el.tag === 'h2' && !!typeOf(cascade(rules, el), props)))
+  const h1 = visible
+    .filter((i) => nodes[i]!.tag === 'h1')
+    .slice(0, 12)
+    .map((i) => typeAt(i))
+    .sort((a, b) => (b?.size ?? 0) - (a?.size ?? 0))[0]
+  const h2 = first((el, i) => el.tag === 'h2' && !!typeAt(i))
   // The main button is the call to action the page leads with: its words, its
   // place near the top and its styling, among those whose fill can be read. A
-  // known button colour from the site's CSS breaks a tie.
-  const filled = (el: Element) => boxOf(cascade(rules, el), props)?.fill
-  // A call to action in words near the top is evidence enough to lead with.
-  const ranked = candidates(html)
-    .map((c) => ({ c, fill: filled(c), score: intent(c) }))
+  // known button colour from the site's CSS breaks a tie. A call to action in
+  // words near the top is evidence enough to lead with.
+  const filled = (i: number) => boxAt(i)?.fill
+  const ranked = candidates(nodes, hidden)
+    .map((c) => ({ c, fill: filled(c.index), score: intent(c) }))
     .filter((x) => !!x.fill && x.score >= 4)
     .sort(
       (a, b) => b.score - a.score || Number(b.fill === brandButton) - Number(a.fill === brandButton)
     )
-  const buttons = els.filter(isButtonish).slice(0, 20)
-  const button = styleOf(
-    ranked[0]?.c ??
-      (brandButton && buttons.find((el) => filled(el) === brandButton)) ??
-      buttons.find((el) => !!filled(el)) ??
-      buttons[0]
+  const buttons = visible.filter((i) => isButtonish(nodes[i]!)).slice(0, 20)
+  const button =
+    ranked[0]?.c.index ??
+    (brandButton && buttons.find((i) => filled(i) === brandButton)) ??
+    buttons.find((i) => !!filled(i)) ??
+    buttons[0]
+  const card = first((el) => [...el.classes].some((c) => /(^|[-_])card([-_]|$)/i.test(c)))
+  const field = first(
+    (el) => el.tag === 'input' && !/type\s*=\s*["'](hidden|checkbox|radio|submit)/i.test(el.attrs)
   )
-  const action = !!ranked[0]
-  const card = styleOf(first((el) => [...el.classes].some((c) => /(^|[-_])card([-_]|$)/i.test(c))))
-  const field = styleOf(
-    first(
-      (el) => el.tag === 'input' && !/type\s*=\s*["'](hidden|checkbox|radio|submit)/i.test(el.attrs)
-    )
-  )
+  const box = button === undefined ? null : boxAt(button)
   return {
-    headline: h1 && typeOf(h1, props),
-    heading: h2 && typeOf(h2, props),
-    button:
-      button &&
-      (() => {
-        const box = boxOf(button, props)
-        return box && action ? { ...box, action: true } : box
-      })(),
-    card: card && boxOf(card, props),
-    field: field && boxOf(field, props),
+    headline: h1 ?? null,
+    heading: h2 === undefined ? null : typeAt(h2),
+    button: box && ranked[0] ? { ...box, action: true } : box,
+    card: card === undefined ? null : boxAt(card),
+    field: field === undefined ? null : boxAt(field),
+  }
+}
+
+/** A function of an element's index, worked out once per element. */
+function memo<T>(work: (i: number) => T): (i: number) => T {
+  const done = new Map<number, T>()
+  return (i) => {
+    if (!done.has(i)) done.set(i, work(i))
+    return done.get(i)!
   }
 }

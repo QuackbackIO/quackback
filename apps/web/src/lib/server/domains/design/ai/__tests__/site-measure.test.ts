@@ -120,4 +120,63 @@ describe('measuring a brand from its page', () => {
     const m = measureSite(page, [`.footer { background: #333333 }`])
     expect(m.button?.action).toBeUndefined()
   })
+
+  it('inherits colours from a theme a wrapper sets, past the stylesheet default', () => {
+    const page = `<body><div class="theme-bright"><nav><a class="cta">Send money</a></nav></div></body>`
+    const m = measureSite(page, [
+      `:root { --accent: #0081ba } .theme-bright { --accent: #9fe870 } .cta { background: var(--accent) }`,
+    ])
+    expect(m.button?.fill).toBe('#9fe870')
+  })
+
+  it('reads a token a palette class on an ancestor chooses', () => {
+    const page = `<main class="tokens palette-blue"><section><a class="button primary">Get it free</a></section></main>`
+    const m = measureSite(page, [
+      `.tokens { --blue-600: #0075de; --button-bg: var(--grey-900) }
+       .palette-blue { --button-bg: var(--blue-600) }
+       :root { --grey-900: #191918 }
+       .primary { background-color: var(--button-bg) }`,
+    ])
+    expect(m.button?.fill).toBe('#0075de')
+  })
+
+  it('reads a fill set in a style attribute', () => {
+    const page = `<a class="btn" style="background-color: #ff4f40">Get started</a>`
+    expect(measureSite(page, [`.btn { background: #333333 }`]).button?.fill).toBe('#ff4f40')
+  })
+
+  it('passes over buttons inside a consent banner, whatever their words', () => {
+    const page = `<div id="cookie-banner"><a class="btn">Get started</a></div>
+      <header><a class="btn brand">Sign up</a></header>`
+    const m = measureSite(page, [`.btn { background: #091723 } .brand { background: #533afd }`])
+    expect(m.button?.fill).toBe('#533afd')
+  })
+
+  it('sizes a headline set in viewport height at a standard screen', () => {
+    const page = `<h1 class="hero">Payments</h1>`
+    const css = [`h1.hero { --flex: 6lvh; font-size: max(min(var(--flex), 64px), 32px) }`]
+    expect(measureSite(page, css).headline?.size).toBe(54)
+  })
+
+  it('inherits a colour and weight from above, as the page shows them', () => {
+    const page = `<section class="hero"><h1 class="title">Payments</h1><a class="btn">Get started</a></section>`
+    const css = [
+      `.hero { --ink: #061b31; color: var(--ink); font-weight: 300 }
+       .title { font-size: 48px } .btn { background: #533afd }
+       .inner { --ink: #ff0000 }`,
+    ]
+    const m = measureSite(page, css)
+    expect(m.headline).toMatchObject({ size: 48, weight: 300, colour: '#061b31' })
+    expect(m.button?.ink).toBe('#061b31')
+  })
+
+  it('leaves out repaints for one browser engine or a wide-gamut screen', () => {
+    const page = `<h1 class="title">Payments</h1>`
+    const css = [
+      `.title { font-size: 48px; color: #061b31 }
+       @supports (-webkit-touch-callout: none) { .title { color: #c8c33b } }
+       @media (color-gamut: p3) { .title { color: #ddd600 } }`,
+    ]
+    expect(measureSite(page, css).headline?.colour).toBe('#061b31')
+  })
 })

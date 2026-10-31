@@ -69,7 +69,9 @@ const AGENT = 'Mozilla/5.0 (compatible; QuackbackBrandReader/1.0; +https://quack
 const PAGE_BYTES = 3 * 1024 * 1024
 // A site that bundles its styles into one sheet can ship it at a few megabytes.
 const CSS_BYTES = 4 * 1024 * 1024
-const MAX_STYLESHEETS = 4
+/** Sites that split their styles into many small sheets are read whole, within a budget. */
+const MAX_STYLESHEETS = 16
+const CSS_BUDGET = 8 * 1024 * 1024
 const MANIFEST_PATHS = ['/manifest.json', '/site.webmanifest', '/manifest.webmanifest']
 
 async function get(url: string, accept: string, maxBytes: number, timeoutMs: number) {
@@ -143,7 +145,14 @@ async function stylesheets(urls: string[]): Promise<string[]> {
       return response && response.status < 400 ? await response.text().catch(() => '') : ''
     })
   )
-  return texts.filter(Boolean)
+  const kept: string[] = []
+  let total = 0
+  for (const text of texts.filter(Boolean)) {
+    if (total + text.length > CSS_BUDGET) break
+    kept.push(text)
+    total += text.length
+  }
+  return kept
 }
 
 export async function readSiteSignals(site: string): Promise<SiteRead> {
