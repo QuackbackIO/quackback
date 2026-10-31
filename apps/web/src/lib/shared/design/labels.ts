@@ -16,6 +16,7 @@ const LABELS: Record<string, string> = {
   mode: 'Mode',
   'brand.fonts.heading': 'Heading font',
   'brand.fonts.body': 'Body font',
+  'brand.fonts.display': 'Headline font',
   'brand.fonts.headingWeight': 'Heading weight',
   'shape.corners': 'Corners',
   'shape.buttons': 'Buttons',

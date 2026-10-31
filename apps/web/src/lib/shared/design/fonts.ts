@@ -32,8 +32,9 @@ export function uploadedFontFile(
 /** The `@font-face` rules for a design's uploaded families, one per file. */
 export function uploadedFontFaces(doc: PortalDesign): string {
   const rules = new Set<string>()
-  for (const font of [doc.brand.fonts.body, doc.brand.fonts.heading]) {
-    if (font.kind !== 'uploaded') continue
+  const { body, heading, display } = doc.brand.fonts
+  for (const font of [body, heading, display]) {
+    if (font?.kind !== 'uploaded') continue
     for (const file of font.files) {
       rules.add(
         `@font-face { font-family: "${font.family}"; src: url("${uploadedFontUrl(file.key)}") format("woff2"); font-weight: ${file.weight}; font-style: ${file.style}; font-display: swap; }`
@@ -247,7 +248,7 @@ export function fontStack(font: DesignFont): string {
 
 /** The bundled families a design's pages load: body first, then headings. */
 export function designFontIds(doc: PortalDesign): BundledFontId[] {
-  const { body, heading } = doc.brand.fonts
+  const { body, heading, display } = doc.brand.fonts
   const id = (font: DesignFont) => (font.kind === 'bundled' ? font.id : font.fallback)
-  return [...new Set([id(body), id(heading)])]
+  return [...new Set([id(body), id(heading), ...(display ? [id(display)] : [])])]
 }

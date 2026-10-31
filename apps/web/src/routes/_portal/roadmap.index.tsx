@@ -83,10 +83,10 @@ function RoadmapPage() {
   return (
     <>
       {designTitles && <PortalPageTitle page="roadmap" title={title} subtitle={description} />}
-      // From sm up, cap at viewport height so a column with many cards scrolls // internally
-      instead of pushing the body taller. 7rem ≈ PortalHeader. On a // phone the title and toolbar
-      leave too little of that height, so the // page grows and the columns keep a usable height
-      instead of clipping.
+      {/* From sm up, cap at viewport height so a column with many cards scrolls
+          internally instead of pushing the body taller. 7rem ≈ PortalHeader. On a
+          phone the title and toolbar leave too little of that height, so the
+          page grows and the columns keep a usable height instead of clipping. */}
       <div
         className={cn(
           'mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 min-h-[calc(100dvh-7rem)] sm:h-[calc(100dvh-7rem)] flex flex-col sm:min-h-0',

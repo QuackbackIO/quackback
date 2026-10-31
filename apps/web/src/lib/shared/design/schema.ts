@@ -187,6 +187,8 @@ export const portalDesignV2 = z
           .object({
             heading: font,
             body: font,
+            /** The page headlines' own face, such as a poster face; absent is the heading font. */
+            display: font.optional(),
             headingWeight: z.union(
               DESIGN_OPTIONS.headingWeight.map((w) => z.literal(w)) as [
                 z.ZodLiteral<500>,

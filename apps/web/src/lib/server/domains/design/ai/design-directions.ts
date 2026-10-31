@@ -90,6 +90,9 @@ function lookChanges(
         ]),
     { path: 'brand.fonts.heading', value: look.headingFont },
     { path: 'brand.fonts.body', value: look.bodyFont },
+    ...(look.displayFont && look.displayFont !== look.headingFont
+      ? [{ path: 'brand.fonts.display', value: look.displayFont }]
+      : []),
     { path: 'brand.fonts.headingWeight', value: Number(look.headingWeight) },
     { path: 'shape.corners', value: look.corners },
     { path: 'layout.header', value: look.header },

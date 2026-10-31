@@ -27,6 +27,8 @@ export const lookSchema = z.object({
   darkBackground: hex,
   darkInk: hex,
   headingFont: z.enum(BUNDLED_FONT_IDS),
+  /** The headlines' own face, or "" for the heading font. */
+  displayFont: z.enum(['', ...BUNDLED_FONT_IDS]),
   bodyFont: z.enum(BUNDLED_FONT_IDS),
   headingWeight: z.enum(['500', '600', '700', '800']),
   corners: z.enum(DESIGN_OPTIONS.corners),
@@ -91,6 +93,7 @@ export const DIRECTIONS_EXAMPLE: Look = {
   darkBackground: '#161412',
   darkInk: '#f3eee8',
   headingFont: 'space-grotesk',
+  displayFont: '',
   bodyFont: 'inter',
   headingWeight: '700',
   corners: 'subtle',
@@ -155,6 +158,7 @@ How a brand becomes each choice:
 - mode: dark when their own site is dark (then background and ink are the dark page and its light text), light when their brand is clearly light, auto otherwise. darkBackground and darkInk are dark mode's page and text, tinted toward the brand, or "".
 - support: their second signature colour when they pair two (a bright one with a deep one, or two that share the stage), else "". Never a grey.
 - fonts: the closest bundled fonts to theirs. Serif display: fraunces, playfair, lora, merriweather, source-serif. Geometric: space-grotesk, poppins, manrope, bricolage-grotesque, jakarta, dm-sans, sora, outfit. Grotesque and neo-grotesque: inter-tight, instrument-sans, work-sans, libre-franklin, figtree. Condensed, for heavy poster headlines: barlow-condensed, oswald. Humanist or friendly: nunito, ibm-plex-sans, lato, open-sans, noto-sans, rubik, karla. Neutral: inter, geist, roboto. Monospace for developer tools: jetbrains, fira-code. Body text is usually a plainer sans than the headings.
+- displayFont: their hero headlines' face when it differs from their other headings, such as a condensed poster face over a plain grotesque, else "". Keep headingFont for the section headings, which are small.
 - headingWeight: how heavy their headings are, 500 to 800.
 - scale: display for loud, poster-like heroes with very large headlines; large for confident ones; standard for quiet, text-led brands. tracking: tight for large modern headlines, normal otherwise. headlineCase: upper only when their headlines are set in capitals. labelCase: upper when their menu and buttons are in capitals.
 - accentPhrase: a short phrase copied exactly from your headline to set apart, when their site colours or highlights part of a headline; the whole headline when their headlines are set in their brand colour; "" otherwise. accentStyle: colour on dark or bold bands, highlight on light, editorial ones.

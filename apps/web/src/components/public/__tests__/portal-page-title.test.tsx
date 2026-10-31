@@ -43,10 +43,15 @@ async function mount(portalDesign: unknown) {
   return view.container
 }
 
-const v2 = (attributes: Record<string, string>, titles: Record<string, unknown> = {}) => ({
+const v2 = (
+  attributes: Record<string, string>,
+  titles: Record<string, unknown> = {},
+  bandImage: unknown = null
+) => ({
   engine: 'v2',
   attributes,
   titles,
+  bandImage,
   feedback: { headline: null },
   home: { headline: null, blocks: [] },
 })
@@ -82,6 +87,20 @@ describe('a page’s title', () => {
     expect(band.querySelector('[data-qb-accent=colour]')!.textContent).toBe('building')
     expect(band.textContent).toContain('Coming soon')
     expect(band.querySelector('button')!.textContent).toBe('Subscribe')
+  })
+
+  it('keeps the band short: an image beside the words is Home’s, one behind them stays', async () => {
+    const beside = await mount(
+      v2({ 'data-qb-page-titles': 'band' }, {}, { url: '/api/storage/a.jpg', place: 'side' })
+    )
+    expect(beside.querySelector('[data-qb-part=band-image]')).toBeNull()
+    cleanup()
+    const behind = await mount(
+      v2({ 'data-qb-page-titles': 'band' }, {}, { url: '/api/storage/a.jpg', place: 'cover' })
+    )
+    expect(behind.querySelector('[data-qb-part=band]')!.getAttribute('data-qb-band-image')).toBe(
+      'cover'
+    )
   })
 
   it('is left to the page outside the design engine', async () => {

@@ -101,6 +101,18 @@ describe('the second colour’s tint in the design CSS', () => {
   })
 })
 
+describe('the headline font in the design CSS', () => {
+  it('sets page headlines in their own face, which is the heading font unless the design gives one', () => {
+    const doc = defaultDesign()
+    expect(renderDesignCss(resolveDesign(doc))).toContain(
+      '[data-portal-theme] [data-qb-part=headline] { font-family: var(--qb-font-display);'
+    )
+    expect(renderDesignCss(resolveDesign(doc))).toMatch(/--qb-font-display: [^;]*Inter/)
+    doc.brand.fonts.display = { kind: 'bundled', id: 'oswald' }
+    expect(renderDesignCss(resolveDesign(doc))).toMatch(/--qb-font-display: [^;]*Oswald/)
+  })
+})
+
 describe('card styles in the design CSS', () => {
   it('gives every card surface the design’s card style', () => {
     const css = renderDesignCss(resolveDesign(defaultDesign()))
@@ -174,7 +186,7 @@ describe('renderDesignCss', () => {
       '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
     )
     expect(css).toContain(
-      '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } [data-portal-theme] [data-qb-part=headline] { letter-spacing: var(--qb-headline-tracking); text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
+      '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } [data-portal-theme] [data-qb-part=headline] { font-family: var(--qb-font-display); letter-spacing: var(--qb-headline-tracking); text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
     )
   })
 })

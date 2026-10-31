@@ -114,7 +114,14 @@ export function PortalBand({
   const phrase = textForLocale(headline?.accent?.text, intl.locale)
   if (!title && !subtitle && !children) return null
   const shown = draftImage !== undefined ? draftImage : design.bandImage
-  const image = shown && STORED_FILE.test(shown.url) ? shown : null
+  // A title keeps its band short: an image behind the words stays, one beside
+  // or under them is Home's and the feed's.
+  const image =
+    shown &&
+    STORED_FILE.test(shown.url) &&
+    !(titled && (shown.place === 'side' || shown.place === 'edge'))
+      ? shown
+      : null
   const side = image?.place === 'side'
   return (
     <section
@@ -129,6 +136,7 @@ export function PortalBand({
         BAND_FILL,
         ART_FILL,
         IMAGE_FILL,
+        titled && 'py-6 [[data-qb-band-art=edge]_&]:pb-20',
         // Inset: the band's colour moves onto a rounded panel within the page.
         '[[data-qb-band-shape=inset]_&]:![background:transparent] [[data-qb-band-shape=inset]_&]:py-3'
       )}
@@ -139,6 +147,7 @@ export function PortalBand({
           '[[data-qb-band-align=centre]_&]:text-center',
           '[[data-qb-band-shape=inset]_&]:max-w-[calc(var(--qb-page-max,72rem)-2rem)] [[data-qb-band-shape=inset]_&]:rounded-[calc(var(--qb-radius-panel,0.75rem)*2.5)] [[data-qb-band-shape=inset]_&]:px-6 [[data-qb-band-shape=inset]_&]:py-10 sm:[[data-qb-band-shape=inset]_&]:px-12 sm:[[data-qb-band-shape=inset]_&]:py-14',
           '[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg-narrow,var(--qb-band-bg))] sm:[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg)]',
+          titled && 'sm:[[data-qb-band-shape=inset]_&]:py-10',
           // A side image sits beside the words, and under them on phones.
           side &&
             'md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,var(--qb-image-column,0.85fr))] md:items-center md:gap-10'

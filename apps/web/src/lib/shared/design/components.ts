@@ -454,6 +454,7 @@ export function baseTokens(doc: PortalDesign): TokenMap {
     '--qb-image-column': (doc.layout.imageFocus ?? 'centre') === 'centre' ? '0.85fr' : '0.55fr',
     '--qb-font-body': fontStack(doc.brand.fonts.body),
     '--qb-font-heading': fontStack(doc.brand.fonts.heading),
+    '--qb-font-display': fontStack(doc.brand.fonts.display ?? doc.brand.fonts.heading),
     '--qb-heading-weight': String(doc.brand.fonts.headingWeight),
     ...typeTokens(doc.brand.fonts),
   }

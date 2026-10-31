@@ -46,7 +46,12 @@ export function PortalPageTitle({
       <PortalBand page={page} words={{ title, subtitle }}>
         {children || action ? (
           <div className="space-y-4">
-            {action && <div className="flex flex-wrap gap-2">{action}</div>}
+            {/* The page's own buttons take the band's colours, so they read on it. */}
+            {action && (
+              <div className="flex flex-wrap gap-2 [--foreground:var(--qb-band-ink)] [--muted-foreground:var(--qb-band-muted)] [--border:color-mix(in_oklch,var(--qb-band-ink)_35%,transparent)] [--background:transparent] [--accent:color-mix(in_oklch,var(--qb-band-ink)_12%,transparent)] [--accent-foreground:var(--qb-band-ink)]">
+                {action}
+              </div>
+            )}
             {children}
           </div>
         ) : null}

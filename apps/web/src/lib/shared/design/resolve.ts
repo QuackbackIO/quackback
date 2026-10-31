@@ -232,7 +232,7 @@ export function renderDesignCss(resolved: ResolvedDesign): string {
     '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
   )
   parts.push(
-    '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } [data-portal-theme] [data-qb-part=headline] { letter-spacing: var(--qb-headline-tracking); text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
+    '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } [data-portal-theme] [data-qb-part=headline] { font-family: var(--qb-font-display); letter-spacing: var(--qb-headline-tracking); text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
   )
   // Every card in the portal takes the design's card style: raised cards float
   // without an edge, list cards are rows divided by rules, filled cards are
