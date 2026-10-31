@@ -123,7 +123,8 @@ export function PortalBand({
           '[[data-qb-band-shape=inset]_&]:max-w-[calc(var(--qb-page-max,72rem)-2rem)] [[data-qb-band-shape=inset]_&]:rounded-[calc(var(--qb-radius-panel,0.75rem)*2.5)] [[data-qb-band-shape=inset]_&]:px-6 [[data-qb-band-shape=inset]_&]:py-10 sm:[[data-qb-band-shape=inset]_&]:px-12 sm:[[data-qb-band-shape=inset]_&]:py-14',
           '[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg-narrow,var(--qb-band-bg))] sm:[[data-qb-band-shape=inset]_&]:[background:var(--qb-band-bg)]',
           // A side image sits beside the words, and under them on phones.
-          side && 'md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)] md:items-center md:gap-10'
+          side &&
+            'md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,var(--qb-image-column,0.85fr))] md:items-center md:gap-10'
         )}
       >
         {/* Panel: the words sit on a block of the second colour, in its own text colours. */}
@@ -152,7 +153,7 @@ export function PortalBand({
             src={image.url}
             alt=""
             data-qb-part="band-image"
-            className="mt-6 max-h-48 w-full rounded-[var(--qb-radius-panel,0.75rem)] object-cover [object-position:var(--qb-image-focus,center)] md:mt-0 md:h-full md:max-h-[22rem]"
+            className="mt-6 max-h-48 w-full rounded-[var(--qb-radius-panel,0.75rem)] object-cover [object-position:var(--qb-image-focus,center)] md:mt-0 md:h-auto md:max-h-[26rem] md:[aspect-ratio:var(--qb-image-aspect,4/3)]"
           />
         )}
       </div>

@@ -491,6 +491,21 @@ describe('a logo or a screenshot', () => {
     })
   })
 
+  it('tells the model when the workspace has a logo mark', async () => {
+    model.answer = { looks: [look] }
+    await designDirections({
+      allows: ALLOWS,
+      design: defaultDesign(),
+      name: 'Northwind Bikes',
+      hasMark: true,
+      site: null,
+      words: 'Scandinavian bikes',
+    })
+    expect(model.calls[0]!.messages[0]!.content).toContain(
+      'They have a logo mark, a square icon the header can show beside their name.'
+    )
+  })
+
   it('leaves a model that does not take images with the colours', async () => {
     model.answer = { looks: [look] }
     model.refusesImages = true

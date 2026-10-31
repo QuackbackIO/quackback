@@ -138,4 +138,13 @@ describe('the header logo a design chooses', () => {
     expect(name.querySelector('span')!.className).toContain('var(--qb-name-accent)')
     expect(name.className).toContain('[text-transform:var(--qb-name-case,none)]')
   })
+
+  it('styles the name beside the mark as it styles a name wordmark', async () => {
+    const logo = await mount(
+      design({ display: 'mark_and_name', name: 'Voltline', nameAccent: 'line' })
+    )
+    const name = logo.querySelector('.portal-header__name')!
+    expect(name.querySelector('span')!.textContent).toBe('line')
+    expect(name.className).toContain('[text-transform:var(--qb-name-case,none)]')
+  })
 })

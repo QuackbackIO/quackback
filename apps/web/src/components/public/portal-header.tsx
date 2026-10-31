@@ -370,9 +370,9 @@ export function PortalHeader({
           {display === 'mark_and_name' ? (
             <span
               title={brandName}
-              className="portal-header__name font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--header-foreground)]"
+              className="portal-header__name font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--qb-name-ink,var(--header-foreground))] [letter-spacing:var(--qb-name-tracking,normal)] [text-transform:var(--qb-name-case,none)]"
             >
-              {brandName}
+              {twoTone(brandName, designLogo?.nameAccent)}
             </span>
           ) : null}
         </>
