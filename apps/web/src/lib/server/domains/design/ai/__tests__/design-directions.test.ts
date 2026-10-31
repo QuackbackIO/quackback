@@ -8,8 +8,8 @@ import { defaultDesign } from '@/lib/shared/design/schema'
 
 vi.mock('@/lib/server/config', () => ({ config: {} }))
 
-const { DIRECTIONS_EXAMPLE, faithfulAccent, lookDesign, measuredButton, withMeasuredTune } =
-  await import('../design-directions')
+const { DIRECTIONS_EXAMPLE, faithfulAccent, lookDesign } = await import('../design-directions')
+const { measuredBand, measuredButton, withMeasuredTune } = await import('../faithful-look')
 
 const every = [
   'welcome',
@@ -324,5 +324,20 @@ describe('the faithful look’s buttons, as the site’s own', () => {
     expect(measuredButton(site('#111111'))).toEqual({ fill: 'ink' })
     expect(measuredButton(site('#f5f5f5'))).toEqual({})
     expect(measuredButton(null)).toEqual({})
+  })
+})
+
+describe('the faithful look’s band, as the site’s hero', () => {
+  it('fills with the hero’s colour as the second when it differs from the brand colour', () => {
+    expect(measuredBand({ hero: '#9fe870' } as never, '#163300')).toEqual({
+      band: 'support',
+      support: '#9fe870',
+    })
+  })
+
+  it('fills with the brand colour when the hero is that colour, and leaves a grey hero alone', () => {
+    expect(measuredBand({ hero: '#0058a3' } as never, '#0058a3')).toEqual({ band: 'brand' })
+    expect(measuredBand({ hero: '#f5f5f5' } as never, '#0058a3')).toEqual({})
+    expect(measuredBand(null, '#0058a3')).toEqual({})
   })
 })

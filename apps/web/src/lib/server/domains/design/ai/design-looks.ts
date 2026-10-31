@@ -75,6 +75,13 @@ export const lookSchema = z.object({
   submit: z.string(),
   homeHeadline: z.string(),
   homeSubtitle: z.string(),
+  /** The other pages' titles and lines, in their voice. */
+  pageWords: z.object({
+    roadmap: z.object({ title: z.string(), subtitle: z.string() }),
+    changelog: z.object({ title: z.string(), subtitle: z.string() }),
+    help: z.object({ title: z.string(), subtitle: z.string() }),
+    support: z.object({ title: z.string(), subtitle: z.string() }),
+  }),
   homeBlocks: z.array(z.object({ type: z.enum(BLOCK_TYPES), width: z.enum(WIDTHS) })).max(8),
 })
 export type Look = z.infer<typeof lookSchema>
@@ -138,6 +145,12 @@ export const DIRECTIONS_EXAMPLE: Look = {
   submit: 'Suggest it',
   homeHeadline: 'Climb with us',
   homeSubtitle: 'Suggest what we set next, see what is coming and find help.',
+  pageWords: {
+    roadmap: { title: 'On the wall next', subtitle: 'Routes and features we are setting now.' },
+    changelog: { title: 'Fresh chalk', subtitle: 'Everything new at the gym and in the app.' },
+    help: { title: 'How can we help?', subtitle: 'Memberships, classes and your account.' },
+    support: { title: 'Talk to the desk', subtitle: 'Your conversations with our team.' },
+  },
   homeBlocks: [
     { type: 'composer', width: 'full' },
     { type: 'contact', width: 'full' },
@@ -181,6 +194,7 @@ How a brand becomes each choice:
 - cards: bordered, raised, or list rows for minimal and developer brands. density: compact for technical audiences, comfortable mostly, spacious for calm brands. width: narrow for editorial, wide for dense tools, default otherwise.
 - words: postWord is what visitors post: feature_request for software and developer tools, suggestion for consumer, retail and hospitality, post for communities, idea otherwise. boardWord: category for consumer brands, board otherwise.
 - headline, subtitle (the feedback page) and homeHeadline, homeSubtitle (Home), prompt (the composer, 60 characters) and submit (its button, 24): in their voice, short, inviting, never generic, never naming a competitor.
+- pageWords: the roadmap's, changelog's, help centre's and support's titles and one-line subtitles, in the same voice: never just the page's name, such as "Roadmap", unless their own site titles it so.
 - homeBlocks: Home, in order, on a six-column grid; each type with its widths: ${BLOCK_TYPES.map((type) => `${type} (${BLOCK_WIDTHS[type].join(', ')})`).join('; ')}. This workspace can show: ${blockTypes.join(', ')}. Lead with the composer; use what they have. Blocks in a row share its height, so pair short blocks (composer, status, contact, help_search) with each other and lists (ideas, updates, roadmap, help_topics) with each other. A row's last block grows to fill it. No links block.
 
 Presets set the starting layout: ${DESIGN_PRESETS.map((preset) => `${preset.id} (${preset.description})`).join('; ')}.

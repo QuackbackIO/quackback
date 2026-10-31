@@ -21,11 +21,12 @@ import { designAiModel, isStructuredOutputError, paletteText } from './design-ai
 import type { SiteAssets } from './site-assets'
 import type { SiteSignals } from './site-signals'
 import {
-  tuneFromMeasurements,
-  type BrandMeasurements,
-  type MeasuredType,
-} from '@/lib/shared/design/measured-tune'
-import { nearestBundledFont } from '@/lib/shared/design/font-match'
+  fontBrief,
+  measuredBand,
+  measuredBrief,
+  measuredButton,
+  withMeasuredTune,
+} from './faithful-look'
 
 const log = logger.child({ module: 'design-directions' })
 
@@ -45,21 +46,6 @@ const oklchOf = (colour: string) =>
  * to make text read on it, which the portal does for itself. A different hue
  * is the model's reading of the brand and stays.
  */
-/**
- * The faithful look's buttons as the site's own main button: a coloured one
- * is the brand colour, and a black or near-black one fills buttons with the
- * text colour. A pale or grey fill says nothing about the brand.
- */
-export function measuredButton(site: SiteSignals | null | undefined): {
-  accent?: string
-  fill?: 'ink'
-} {
-  const fill = site?.measured?.button?.fill
-  const colour = fill ? oklchOf(fill) : null
-  if (!fill || !colour) return {}
-  if (colour.c >= 0.04) return { accent: fill }
-  return colour.l < 0.3 ? { fill: 'ink' } : {}
-}
 
 export function faithfulAccent(
   accent: string,
@@ -180,6 +166,10 @@ function lookChanges(
     ...page(fit(look.prompt, 60), 'pages.feedback.copy.prompt'),
     ...page(fit(look.submit, 24), 'pages.feedback.copy.submit'),
     ...accentChanges(look, 'pages.feedback.headline', look.headline),
+    ...(['roadmap', 'changelog', 'help', 'support'] as const).flatMap((p) => [
+      ...page(fit(look.pageWords[p].title, 80), `pages.titles.${p}.title`),
+      ...page(fit(look.pageWords[p].subtitle, 140), `pages.titles.${p}.subtitle`),
+    ]),
     ...(look.homeBlocks.length
       ? [
           { path: 'pages.home.blocks', value: homeBlocks(look) },
@@ -216,33 +206,6 @@ function accentChanges(look: Look, headline: string, title: string) {
   return phrase && fit(title, 80).includes(phrase)
     ? [{ path: `${headline}.accent`, value: { style: look.accentStyle, text: { en: phrase } } }]
     : []
-}
-
-/**
- * The faithful look with the brand's own type and shapes, exactly as its page
- * sets them, where they could be read: its faces as the bundled faces closest
- * to them, and its sizes, weights, corners and colours as exact values. The
- * other looks are directions of their own and keep their tiles' steps.
- */
-export function withMeasuredTune(
-  design: PortalDesign,
-  site: SiteSignals | null | undefined,
-  allows: Omit<UntrustedChanges, 'links'>
-): PortalDesign {
-  const tune = site?.measured ? tuneFromMeasurements(site.measured) : {}
-  const heading = nearestBundledFont(site?.fonts.heading)
-  const body = nearestBundledFont(site?.fonts.body)
-  const changes = [
-    ...(heading ? [{ path: 'brand.fonts.heading', value: heading }] : []),
-    ...(body ? [{ path: 'brand.fonts.body', value: body }] : []),
-    ...(Object.keys(tune).length ? [{ path: 'tune', value: tune }] : []),
-  ]
-  if (!changes.length) return design
-  return applyDesignChanges(design, changes, 'site', {
-    ...allows,
-    links: new Set(),
-    files: new Set(),
-  }).design
 }
 
 /** A look's design: its preset with every choice it makes that the design accepts. */
@@ -298,31 +261,6 @@ function assetsBrief(assets: SiteAssets | null, imageFirst: boolean): string | n
   ]
     .filter(Boolean)
     .join(' ')
-}
-
-const typeText = (t: MeasuredType | null | undefined) =>
-  t?.size ? `${Math.round(t.size)}px${t.weight ? ` at weight ${t.weight}` : ''}` : null
-
-/** The bundled faces closest to the site's own, for the looks to start from. */
-function fontBrief(fonts: SiteSignals['fonts']): string | null {
-  const heading = nearestBundledFont(fonts.heading)
-  const body = nearestBundledFont(fonts.body)
-  if (!heading && !body) return null
-  return `The closest bundled faces: ${[heading && `headings ${heading}`, body && `text ${body}`].filter(Boolean).join(', ')}.`
-}
-
-/** What was measured on the page, so the looks' steps start near it. */
-function measuredBrief(m: BrandMeasurements | null): string | null {
-  if (!m) return null
-  const button = m.button?.radius ?? null
-  const card = m.card?.radius ?? null
-  const parts = [
-    typeText(m.headline) && `headlines ${typeText(m.headline)}`,
-    typeText(m.heading) && `section headings ${typeText(m.heading)}`,
-    button !== null && `buttons with ${button >= 999 ? 'pill' : `${Math.round(button)}px`} corners`,
-    card !== null && `cards with ${Math.round(card)}px corners`,
-  ].filter(Boolean)
-  return parts.length ? `Measured on its page: ${parts.join(', ')}.` : null
 }
 
 /** What the website says about its brand, as the model reads it. */
@@ -432,6 +370,10 @@ export async function designDirections(input: {
                 ...answered,
                 accent: measuredButton(input.site).accent ?? faithfulAccent(answered.accent, input),
                 ...(measuredButton(input.site).fill && { fill: 'ink' as const }),
+                ...measuredBand(
+                  input.site,
+                  measuredButton(input.site).accent ?? faithfulAccent(answered.accent, input)
+                ),
                 support: answered.support && faithfulAccent(answered.support, input),
               }
             : answered

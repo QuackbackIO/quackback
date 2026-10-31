@@ -205,7 +205,7 @@ function shaped(doc: PortalDesign, path: string, value: unknown): unknown {
   }
   if (typeof value === 'string' && isRichText(current)) return textDoc(value)
   const translated =
-    /^pages\.(feedback\.copy\.(prompt|submit|emptyTitle)|(home|feedback)\.headline\.(title|subtitle))$/.test(
+    /^pages\.(feedback\.copy\.(prompt|submit|emptyTitle)|(home|feedback)\.headline\.(title|subtitle)|titles\.(roadmap|changelog|help|support)\.(title|subtitle))$/.test(
       path
     )
   if (
@@ -235,7 +235,20 @@ function write(doc: PortalDesign, path: string, value: unknown): PortalDesign | 
   const page = /^pages\.(home|feedback)\.headline\./.exec(path)?.[1] as
     'home' | 'feedback' | undefined
   if (page && !next.pages[page].headline) next.pages[page].headline = { title: {}, subtitle: {} }
+  // So can a page's own title.
+  const titled = /^pages\.titles\.(roadmap|changelog|help|support)\./.exec(path)?.[1] as
+    'roadmap' | 'changelog' | 'help' | 'support' | undefined
+  if (titled) {
+    next.pages.titles ??= {}
+    next.pages.titles[titled] ??= { title: {}, subtitle: {} }
+  }
   if (!writeAt(next, keys, shaped(next, path, value))) return 'there is no such field'
+  if (titled && next.pages.titles) {
+    const words = next.pages.titles[titled]
+    if (words && !Object.keys(words.title).length && !Object.keys(words.subtitle).length)
+      delete next.pages.titles[titled]
+    if (!Object.keys(next.pages.titles).length) delete next.pages.titles
+  }
   if (page) {
     const line = next.pages[page].headline
     if (line && !Object.keys(line.title).length && !Object.keys(line.subtitle).length)

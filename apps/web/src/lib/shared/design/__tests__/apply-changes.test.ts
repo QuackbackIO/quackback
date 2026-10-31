@@ -34,6 +34,23 @@ describe('applyDesignChanges', () => {
     expect(result.applied[0]).toMatchObject({ before: 'oklch(0.886 0.176 86)', after: '#0f766e' })
   })
 
+  it('words a page’s title a line at a time, and gives it back its usual title when emptied', () => {
+    const set = applyDesignChanges(
+      defaultDesign(),
+      [{ path: 'pages.titles.roadmap.title', value: 'On the wall next' }],
+      'site'
+    )
+    expect(set.design.pages.titles).toEqual({
+      roadmap: { title: { en: 'On the wall next' }, subtitle: {} },
+    })
+    const cleared = applyDesignChanges(
+      set.design,
+      [{ path: 'pages.titles.roadmap.title', value: '' }],
+      'site'
+    )
+    expect(cleared.design.pages.titles).toBeUndefined()
+  })
+
   it('sets the headlines’ own face by name, and gives them back the heading font with null', () => {
     const set = applyDesignChanges(
       defaultDesign(),
