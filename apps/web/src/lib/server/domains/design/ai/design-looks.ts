@@ -88,8 +88,6 @@ export const lookSchema = z.object({
 })
 export type Look = z.infer<typeof lookSchema>
 
-export const directionsSchema = z.object({ looks: z.array(lookSchema).min(1).max(3) })
-
 /** An answer the tests keep valid against the design. */
 export const DIRECTIONS_EXAMPLE: Look = {
   name: 'Chalk and orange',

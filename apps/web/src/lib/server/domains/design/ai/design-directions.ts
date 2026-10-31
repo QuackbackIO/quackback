@@ -7,7 +7,6 @@
  * reaches it.
  */
 import type { ContentPart } from '@tanstack/ai'
-import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { logger } from '@/lib/server/logger'
 import { applyDesignChanges, type UntrustedChanges } from '@/lib/shared/design/apply-changes'
@@ -15,10 +14,11 @@ import { brandColour, colourVividness } from '@/lib/shared/design/palette'
 import { parseOklch } from '@/lib/shared/theme/expand'
 import { hexToOklch } from '@/lib/shared/theme/colors'
 import { applyPreset, DESIGN_PRESETS } from '@/lib/shared/design/presets'
-import { directionsPrompt, directionsSchema, type Look } from './design-looks'
+import { directionsPrompt, type Look } from './design-looks'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { designAiModel, isStructuredOutputError, paletteText } from './design-ai'
 import { readHero, withHero } from './hero-read'
+import { writeLooks } from './look-calls'
 import type { SiteAssets } from './site-assets'
 import type { SiteSignals } from './site-signals'
 import { BUNDLED_FONT_IDS } from '@/lib/shared/design/options'
@@ -335,41 +335,25 @@ export async function designDirections(input: {
   const share = input.assets?.shareImage
   // The hero, read on its own from a screenshot while the looks are written.
   const heroRead = input.image ? readHero(model, input.image) : Promise.resolve(null)
-  const ask = (withImages: boolean) => {
+  const content = (withImages: boolean) => {
     const images = withImages
       ? [
           ...(input.image ? [jpegPart(input.image)] : []),
           ...(share ? [imagePart(share.base64, share.mimeType)] : []),
         ]
       : []
-    return structuredChat({
-      model,
-      systemPrompts: [directionsPrompt(input.allows.blockTypes)],
-      messages: [
-        {
-          role: 'user',
-          content: images.length ? [{ type: 'text', content: text }, ...images] : text,
-        },
-      ],
-      schema: directionsSchema,
-      // Three complete looks are long, and some models reason before they answer.
-      maxTokens: 10000,
-    })
+    return images.length ? [{ type: 'text' as const, content: text }, ...images] : text
   }
+  const systemPrompt = directionsPrompt(input.allows.blockTypes)
   try {
-    // A model that does not read images still has the colours, and a long
-    // answer that does not fit the schema is asked for once more.
-    const once = () =>
-      ask(true).catch((err: unknown) => {
+    // A model that does not read images still has the colours.
+    const written = await writeLooks({ model, systemPrompt, content: content(true) }).catch(
+      (err: unknown) => {
         if ((!input.image && !share) || isStructuredOutputError(err)) throw err
         log.warn({ err }, 'design ai could not read the image; using its colours alone')
-        return ask(false)
-      })
-    const answer = await once().catch((err: unknown) => {
-      if (!isStructuredOutputError(err)) throw err
-      log.warn({ err }, 'design ai looks did not fit the schema; asking again')
-      return once()
-    })
+        return writeLooks({ model, systemPrompt, content: content(false) })
+      }
+    )
     const hero = await heroRead
     // A measured colour overrides the model only where what was seen bears it out.
     // Either source will do: a brand colour used only on small buttons is hardly in
@@ -381,7 +365,8 @@ export async function designDirections(input: {
     ])
     return {
       ok: true,
-      looks: answer.looks.map((answered, index) => {
+      looks: written.flatMap((answered, index) => {
+        if (!answered) return []
         // The first look is the faithful one: it keeps their exact brand colour.
         const look =
           index === 0

@@ -43,8 +43,14 @@ vi.mock('@/lib/server/domains/ai/structured-chat', () => ({
     if (model.refusesImages && Array.isArray(input.messages[0]?.content))
       throw new Error('this model does not take images')
     const answer = model.answer as { looks?: Array<Record<string, unknown>> } | null
-    if (answer?.looks)
-      return { looks: answer.looks.map((look) => ({ ...model.fullLook, homeBlocks: [], ...look })) }
+    if (answer?.looks) {
+      // One look to a call: the role names which.
+      const role = input.systemPrompts[1] ?? ''
+      const index = /second/.test(role) ? 1 : /third/.test(role) ? 2 : 0
+      const look = answer.looks[index]
+      if (!look) throw new Error('no look for this role')
+      return { look: { ...model.fullLook, ...look } }
+    }
     return model.answer
   },
 }))
@@ -555,30 +561,29 @@ describe('a logo or a screenshot', () => {
       image: 'data:image/jpeg;base64,AAAA',
     })
     expect(result.ok).toBe(true)
-    // The looks are asked for twice; the hero is read on its own alongside.
-    const looks = model.calls.filter(
-      (call) => !call.systemPrompts[0]!.startsWith('You read one thing')
+    // The faithful look is asked for with the picture, then with its colours alone.
+    const faithful = model.calls.filter((call) =>
+      call.systemPrompts[1]?.startsWith('Write the first')
     )
-    expect(looks).toHaveLength(2)
-    expect(looks[1]!.messages[0]!.content).toContain('#1f4d3a')
+    expect(faithful).toHaveLength(2)
+    expect(faithful[1]!.messages[0]!.content).toContain('#1f4d3a')
   })
 
-  it('asks again once when the looks do not fit the schema', async () => {
+  it('asks for a look once more when it does not fit the schema, and fails when none do', async () => {
     model.answer = { looks: [look] }
     model.misfits = 1
-    const result = await designDirections({
-      allows: ALLOWS,
-      design: defaultDesign(),
-      site: null,
-      words: 'calm',
-    })
-    expect(result.ok).toBe(true)
-    expect(model.calls).toHaveLength(2)
-    model.misfits = 2
+    const first = (call: { systemPrompts: string[] }) =>
+      call.systemPrompts[1]?.startsWith('Write the first')
+    expect(
+      await designDirections({ allows: ALLOWS, design: defaultDesign(), site: null, words: 'calm' })
+    ).toMatchObject({ ok: true })
+    expect(model.calls.filter(first).length).toBeLessThanOrEqual(2)
+    model.misfits = 100
     model.calls = []
     expect(
       await designDirections({ allows: ALLOWS, design: defaultDesign(), site: null, words: 'calm' })
     ).toMatchObject({ ok: false, code: 'AI_FAILED' })
-    expect(model.calls).toHaveLength(2)
+    // Each look is asked for twice before it is given up.
+    expect(model.calls.filter(first)).toHaveLength(2)
   })
 })
