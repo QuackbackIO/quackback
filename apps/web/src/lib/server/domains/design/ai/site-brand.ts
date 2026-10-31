@@ -48,15 +48,20 @@ export function isBlockPage(html: string): boolean {
   )
 }
 
+const ENTITIES: Record<string, string> = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>' }
+
 const decode = (text: string) =>
+  // One pass, so an entity a decoded one spells out is never decoded again.
   text
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#x([\da-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
+    .replace(/&(?:(amp|quot|apos|lt|gt)|#39|#x([\da-f]+)|#(\d+));/gi, (match, name, hex, dec) =>
+      name
+        ? ENTITIES[name.toLowerCase()]!
+        : hex
+          ? String.fromCodePoint(parseInt(hex, 16))
+          : dec
+            ? String.fromCodePoint(Number(dec))
+            : "'"
+    )
     .replace(/\s+/g, ' ')
     .trim()
 

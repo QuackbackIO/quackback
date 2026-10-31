@@ -30,7 +30,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
 import { useFeedCopy } from '@/components/public/preview-draft-context'
 import { homeMessages } from './home-messages'
-import { filledSpans } from '@/lib/shared/design/home'
+import { filledSpans } from '@/lib/shared/design/home-spans'
 import { popularArticlesQuery } from './home-prefetch'
 
 export type HomeBlock = PortalDesign['pages']['home']['blocks'][number]

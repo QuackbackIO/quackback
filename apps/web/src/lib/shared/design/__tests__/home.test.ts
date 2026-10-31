@@ -4,7 +4,8 @@
  * is off. Every block it makes is valid at its width.
  */
 import { describe, expect, it } from 'vitest'
-import { filledSpans, newBlock, starterHomeBlocks } from '../home'
+import { newBlock, starterHomeBlocks } from '../home'
+import { filledSpans } from '../home-spans'
 import { portalDesign, defaultDesign } from '../schema'
 import { DESIGN_OPTIONS } from '../options'
 

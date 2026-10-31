@@ -142,4 +142,13 @@ describe('pageLinks', () => {
       inlineCss: 'a{color:red}',
     })
   })
+
+  it('decodes a page’s entities once, so an escaped one stays escaped', () => {
+    const brand = readSiteBrand({
+      html: '<title>Tools &amp;lt;b&amp;gt; &amp; more &#8212; &#x2014;</title>',
+      css: [],
+      manifest: null,
+    })
+    expect(brand.title).toBe('Tools &lt;b&gt; & more \u2014 \u2014')
+  })
 })
