@@ -110,7 +110,11 @@ vi.mock('@/components/shared/user-stats', () => ({
 }))
 
 import { PortalHeader } from '../portal-header'
-import { PreviewDraftProvider, type PortalPreviewDraft } from '../preview-draft-context'
+import {
+  PreviewAttributesContext,
+  PreviewDraftProvider,
+  type PortalPreviewDraft,
+} from '../preview-draft-context'
 import { VIEWER_SCOPED_PORTAL_QUERY_KEYS } from '@/lib/client/queries/portal'
 import { DEFAULT_FEATURE_FLAGS, getProductFlagUpdate } from '@/lib/shared/types/settings'
 
@@ -353,5 +357,46 @@ describe('PortalHeader — first paint', () => {
       </IntlProvider>
     )
     expect(html).toContain('Toggle theme')
+  })
+})
+
+describe('PortalHeader — design layouts', () => {
+  const mountWith = (portalDesign: unknown, attributes?: Record<string, string>) => {
+    mockGetRouteContext.mockReturnValue({
+      session: null,
+      settings: { name: 'Acme', portalDesign },
+      registeredAuthProviders: [],
+    })
+    return render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PreviewAttributesContext.Provider value={attributes}>
+          <PortalHeader orgName="Acme" userRole={null} showThemeToggle={false} />
+        </PreviewAttributesContext.Provider>
+      </IntlProvider>
+    )
+  }
+  const design = (header: string) => ({ engine: 'v2', attributes: { 'data-qb-header': header } })
+
+  it('keeps two rows on the legacy theme and for a stacked design', () => {
+    for (const portalDesign of [undefined, design('stacked')]) {
+      const { container, unmount } = mountWith(portalDesign)
+      expect(container.querySelector('header')?.hasAttribute('data-qb-section')).toBe(false)
+      unmount()
+    }
+  })
+
+  it('puts the menu beside the logo for inline, with the two-row menu below md', () => {
+    const { container } = mountWith(design('inline'))
+    const header = container.querySelector('header')!
+    expect(header.getAttribute('data-qb-section')).toBe('header')
+    const rowMenu = header.querySelector('.md\\:block nav')
+    const narrowMenu = header.querySelector('.md\\:hidden nav')
+    expect(rowMenu).toBeTruthy()
+    expect(narrowMenu).toBeTruthy()
+  })
+
+  it('follows the draft layout in the preview over the saved one', () => {
+    const { container } = mountWith(design('stacked'), { 'data-qb-header': 'centered' })
+    expect(container.querySelector('header .justify-center nav')).toBeTruthy()
   })
 })

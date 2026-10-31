@@ -9,6 +9,7 @@ import { DesignTiles } from './design-tiles'
 import {
   BandDrawing,
   CardsDrawing,
+  HeaderDrawing,
   DensityDrawing,
   FiltersDrawing,
   NavDrawing,
@@ -32,6 +33,17 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
     <div className="space-y-8">
       <section className="space-y-4">
         <h3 className="text-sm font-semibold">Header</h3>
+        <DesignTiles
+          name="design-header"
+          label="Layout"
+          value={layout.header}
+          onChange={(header) => update((draft) => void (draft.layout.header = header))}
+          options={DESIGN_OPTIONS.header.map((header) => ({
+            value: header,
+            label: header === 'centered' ? 'Centred' : capital(header),
+            drawing: <HeaderDrawing header={header} />,
+          }))}
+        />
         <DesignTiles
           name="design-nav"
           label="Menu style"

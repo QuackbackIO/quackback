@@ -64,6 +64,7 @@ const VALUE_LABELS: Record<string, string> = {
   end: 'Right',
   start: 'Left',
   auto: 'Visitor chooses',
+  centered: 'Centred',
   mark_and_name: 'Logo and name',
 }
 

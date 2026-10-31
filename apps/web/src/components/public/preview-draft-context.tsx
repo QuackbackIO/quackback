@@ -93,3 +93,10 @@ export const PreviewHeadlineContext = createContext<PreviewHeadline | undefined>
 export function usePreviewHeadline(): PreviewHeadline | undefined {
   return useContext(PreviewHeadlineContext)
 }
+
+export const PreviewAttributesContext = createContext<Record<string, string> | undefined>(undefined)
+
+/** A draft design's structural attributes, or undefined (always, outside a design preview). */
+export function usePreviewDesignAttributes(): Record<string, string> | undefined {
+  return useContext(PreviewAttributesContext)
+}

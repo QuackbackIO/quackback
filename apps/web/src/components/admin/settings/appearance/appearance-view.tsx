@@ -114,6 +114,7 @@ export function AppearanceView({
             draft={structural}
             draftDirty
             design={draft.preview}
+            scaleToDesktop
             viewport={viewport}
             workspaceName={workspaceName}
             faviconUrl={faviconUrl}

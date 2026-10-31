@@ -1,5 +1,5 @@
 import { nameInitial } from '@/lib/shared/utils/initial'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/shared/utils'
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
 
@@ -27,6 +27,11 @@ interface PortalPreviewProps {
   workspaceName: string
   /** Browser-tab icon slot — the workspace logo (the portal's favicon). */
   faviconUrl?: string | null
+  /**
+   * Lay the desktop preview out at desktop width and scale it to fit, so
+   * desktop layouts (an inline header, the filter panel) show as visitors see them.
+   */
+  scaleToDesktop?: boolean
   /** A draft portal design, resolved: applied in the frame in place of the saved one. */
   design?: {
     css: string
@@ -35,6 +40,9 @@ interface PortalPreviewProps {
     headline: { title: Record<string, string>; subtitle: Record<string, string> } | null
   } | null
 }
+
+/** The width a desktop visitor's browser lays the portal out at. */
+const DESKTOP_WIDTH = 1280
 
 /**
  * The framed portal home, spelled the way the portal canonicalizes it (the
@@ -63,7 +71,22 @@ export function PortalPreview({
   workspaceName,
   faviconUrl,
   design = null,
+  scaleToDesktop = false,
 }: PortalPreviewProps) {
+  const frameBox = useRef<HTMLDivElement>(null)
+  const [boxWidth, setBoxWidth] = useState(0)
+  useEffect(() => {
+    const box = frameBox.current
+    if (!box || !scaleToDesktop) return
+    const observer = new ResizeObserver(([entry]) => setBoxWidth(entry.contentRect.width))
+    observer.observe(box)
+    return () => observer.disconnect()
+  }, [scaleToDesktop])
+  const frameHeight = viewport === 'mobile' ? 640 : 720
+  const scale =
+    scaleToDesktop && viewport === 'desktop' && boxWidth > 0
+      ? Math.min(1, boxWidth / DESKTOP_WIDTH)
+      : 1
   const iframeRef = useRef<HTMLIFrameElement>(null)
   // What the current frame document holds on each channel: no stylesheet and
   // no structural draft while it shows the saved config. Every message
@@ -144,16 +167,25 @@ export function PortalPreview({
         </div>
       </div>
 
-      <iframe
-        key={refreshKey}
-        ref={iframeRef}
-        src={portalPreviewSrc(theme)}
-        title="Portal preview"
-        className={cn(
-          'w-full border-0 bg-background',
-          viewport === 'mobile' ? 'h-[640px]' : 'h-[720px]'
-        )}
-      />
+      <div ref={frameBox} className="overflow-hidden" style={{ height: frameHeight }}>
+        <iframe
+          key={refreshKey}
+          ref={iframeRef}
+          src={portalPreviewSrc(theme)}
+          title="Portal preview"
+          className="w-full border-0 bg-background"
+          style={
+            scale < 1
+              ? {
+                  width: DESKTOP_WIDTH,
+                  height: frameHeight / scale,
+                  transform: `scale(${scale})`,
+                  transformOrigin: 'top left',
+                }
+              : { height: frameHeight }
+          }
+        />
+      </div>
     </div>
   )
 }

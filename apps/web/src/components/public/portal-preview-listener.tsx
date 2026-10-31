@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { extractCssVariables, loadBrandingFont, normalizeFontSans } from '@/lib/shared/theme'
 import {
   PreviewDraftProvider,
+  PreviewAttributesContext,
   PreviewHeadlineContext,
   type PortalPreviewDraft,
 } from './preview-draft-context'
@@ -123,7 +124,9 @@ export function PortalPreviewProvider({
   return (
     <PreviewDraftProvider draft={draft} css={css}>
       <PreviewHeadlineContext.Provider value={design ? design.headline : undefined}>
-        {children}
+        <PreviewAttributesContext.Provider value={design?.attributes}>
+          {children}
+        </PreviewAttributesContext.Provider>
       </PreviewHeadlineContext.Provider>
       {stylesheet ? <style data-preview-override="">{stylesheet}</style> : null}
       {design?.css ? <style data-preview-design="">{design.css}</style> : null}
