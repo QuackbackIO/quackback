@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod'
+import { DEFAULT_AUTH_COOKIE_PREFIX } from '@/lib/shared/auth-cookies'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 
@@ -173,6 +174,12 @@ const configSchema = z
       .optional(),
 
     // Auth
+    authCookiePrefix: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[A-Za-z0-9_.-]+$/)
+      .default(DEFAULT_AUTH_COOKIE_PREFIX),
     secretKey: z.string().min(32, 'SECRET_KEY must be at least 32 characters'),
     // Rotation grace for OAuth refresh tokens (seconds). 0 disables healing
     // and restores strict single-use rotation. See auth/refresh-grace.ts.
@@ -386,6 +393,7 @@ function buildConfigFromEnv(): unknown {
     fleetRootKey: env('QUACKBACK_FLEET_ROOT_KEY'),
 
     // Auth
+    authCookiePrefix: env('AUTH_COOKIE_PREFIX'),
     secretKey: process.env.SECRET_KEY,
     oauthRefreshGraceSeconds: env('OAUTH_REFRESH_GRACE_SECONDS'),
 
@@ -589,6 +597,9 @@ export const config = {
   },
   get dbIdleTimeout() {
     return loadConfig().dbIdleTimeout
+  },
+  get authCookiePrefix() {
+    return loadConfig().authCookiePrefix
   },
   get secretKey() {
     return loadConfig().secretKey

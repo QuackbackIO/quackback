@@ -15,7 +15,8 @@ export const Route = createFileRoute('/api/v1/openapi/json')({
         // Import all schema registrations
         await import('@/lib/server/domains/api/schemas')
 
-        const spec = generateOpenAPISpec()
+        const { config } = await import('@/lib/server/config')
+        const spec = generateOpenAPISpec(config.authCookiePrefix)
 
         return Response.json(spec, {
           headers: {

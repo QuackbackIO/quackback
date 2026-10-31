@@ -58,6 +58,7 @@
  * quiet one costs nothing.
  */
 import { config } from '@/lib/server/config'
+import { hasSessionCookie } from '@/lib/shared/auth-cookies'
 import { logger } from '@/lib/server/logger'
 import { getControlSql } from './registry'
 
@@ -94,9 +95,6 @@ export function isPastDormancyThreshold(
   return now - ms > thresholdHours * 3_600_000
 }
 
-/** Same marker `auth-helpers.ts` `hasAuthCredentials` uses; matched by substring. */
-const SESSION_COOKIE_MARKER = 'better-auth.session_token'
-
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 /**
@@ -110,7 +108,7 @@ export function isActivitySignal(request: {
   headers: { get(name: string): string | null }
 }): boolean {
   if (!READ_METHODS.has(request.method.toUpperCase())) return true
-  if ((request.headers.get('cookie') ?? '').includes(SESSION_COOKIE_MARKER)) return true
+  if (hasSessionCookie(request.headers.get('cookie'), config.authCookiePrefix)) return true
   return (request.headers.get('authorization') ?? '').startsWith('Bearer ')
 }
 

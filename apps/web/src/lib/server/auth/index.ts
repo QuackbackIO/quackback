@@ -567,6 +567,7 @@ async function createAuth() {
     },
 
     advanced: {
+      cookiePrefix: config.authCookiePrefix,
       // The client address comes from the app's own trusted resolution, never
       // from a header the client can write. See `./client-ip`.
       ipAddress: betterAuthIpAddressOptions,
