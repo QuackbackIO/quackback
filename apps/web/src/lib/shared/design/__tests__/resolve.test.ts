@@ -93,6 +93,21 @@ describe('resolveDesign', () => {
   })
 })
 
+describe('status styles in the design CSS', () => {
+  it('draws status dots in the ink, or statuses as tags tinted with their colour', () => {
+    const css = renderDesignCss(resolveDesign(defaultDesign()))
+    expect(css).toContain(
+      '[data-qb-status=ink][data-portal-theme] [data-qb-status-dot] { background: var(--qb-ink); }'
+    )
+    expect(css).toContain(
+      'background: color-mix(in oklch, var(--qb-status, var(--qb-muted)) 18%, var(--qb-surface));'
+    )
+    expect(css).toContain(
+      '[data-qb-status=pill][data-portal-theme] [data-qb-part=status-badge] > [data-qb-status-dot] { display: none; }'
+    )
+  })
+})
+
 describe('renderDesignCss', () => {
   it('scopes tokens to the portal and adds the dark block for auto', () => {
     const css = renderDesignCss(resolveDesign(withAccent('#0f766e')))

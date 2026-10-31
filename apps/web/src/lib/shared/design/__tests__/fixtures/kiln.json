@@ -56,7 +56,8 @@
     }
   },
   "shape": {
-    "corners": "subtle"
+    "corners": "subtle",
+    "buttons": "square"
   },
   "layout": {
     "header": "centered",
@@ -66,7 +67,8 @@
     "density": "compact",
     "width": "default",
     "filters": "end",
-    "bandShape": "inset"
+    "bandShape": "inset",
+    "status": "ink"
   },
   "pages": {
     "home": {

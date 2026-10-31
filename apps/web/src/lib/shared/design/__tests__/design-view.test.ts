@@ -49,6 +49,16 @@ describe('designView', () => {
     })
   })
 
+  it('carries the logo’s colours for status markers only when the design asks for them', () => {
+    const doc = defaultDesign()
+    doc.brand.logoColours = ['#ecb22e', '#36c5f0']
+    expect(designView(doc, 1).statusColours).toBeNull()
+    doc.layout.status = 'brand'
+    expect(designView(doc, 1).statusColours).toEqual(['#ecb22e', '#36c5f0'])
+    doc.brand.logoColours = []
+    expect(designView(doc, 1).statusColours).toBeNull()
+  })
+
   it('carries a name the header shows in place of the workspace’s', () => {
     const doc = defaultDesign()
     doc.brand.logo = { ...doc.brand.logo, display: 'name', name: 'Harbor & Pine' }

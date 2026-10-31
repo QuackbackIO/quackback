@@ -134,6 +134,33 @@ describe('shape and layout choices', () => {
   })
 })
 
+describe('buttons’ own shape', () => {
+  it('follows the corners until it is set', () => {
+    const { base } = resolveDesign(design((d) => (d.shape.corners = 'subtle'))).tokens
+    expect(base['--qb-radius-button']).toBe(base['--qb-radius-control'])
+    expect(base['--qb-radius-composer']).toBe(base['--qb-radius-field'])
+  })
+
+  it('squares or rounds buttons, and the composer with them, whatever the corners', () => {
+    const square = resolveDesign(
+      design((d) => {
+        d.shape.corners = 'rounded'
+        d.shape.buttons = 'square'
+      })
+    ).tokens.base
+    expect([square['--qb-radius-button'], square['--qb-radius-composer']]).toEqual(['0rem', '0rem'])
+    expect(square['--qb-radius-panel']).toBe('0.75rem')
+    const pill = resolveDesign(design((d) => (d.shape.buttons = 'pill'))).tokens.base
+    expect([pill['--qb-radius-button'], pill['--qb-radius-composer']]).toEqual(['999px', '1.75rem'])
+  })
+
+  it('names the status style', () => {
+    expect(layoutAttributes(design((d) => (d.layout.status = 'pill')))['data-qb-status']).toBe(
+      'pill'
+    )
+  })
+})
+
 describe('a second brand colour', () => {
   const withSupport = (band: PortalDesign['layout']['band'], change?: (d: PortalDesign) => void) =>
     resolveDesign(
@@ -371,6 +398,7 @@ describe('layoutAttributes', () => {
       'data-qb-band-align': 'left',
       'data-qb-band-shape': 'full',
       'data-qb-header-band': 'off',
+      'data-qb-status': 'colour',
       'data-qb-cards': 'list',
       'data-qb-filters': 'start',
     })

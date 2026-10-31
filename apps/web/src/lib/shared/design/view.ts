@@ -52,6 +52,8 @@ export type PortalDesignView =
       vocabulary: PortalDesign['vocabulary']
       /** How the header shows the brand. */
       logo: DesignLogo
+      /** The logo's colours that status markers take, when the design asks for them. */
+      statusColours: string[] | null
     }
 
 /**
