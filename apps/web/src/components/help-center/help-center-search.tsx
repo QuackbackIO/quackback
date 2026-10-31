@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useIntl } from 'react-intl'
 import { MagnifyingGlassIcon, ArrowRightIcon } from '@heroicons/react/24/outline'
-import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/shared/utils'
 import { contentPreview } from '@/lib/shared/utils/string'
 import {
   AskAiAnswerPanel,
@@ -26,9 +26,15 @@ interface HelpCenterHeroSearchProps {
    *  widget passes its own UI locale here; portal /hc routes pass the
    *  route's locale param. */
   locale?: string
+  /** `block` sits in a card, as on Home: shorter, and flat on it. */
+  size?: 'hero' | 'block'
 }
 
-export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCenterHeroSearchProps) {
+export function HelpCenterHeroSearch({
+  askAiEnabled = false,
+  locale,
+  size = 'hero',
+}: HelpCenterHeroSearchProps) {
   const intl = useIntl()
   const [query, setQuery] = useState('')
   const [showResults, setShowResults] = useState(false)
@@ -123,8 +129,18 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
 
   return (
     <div ref={containerRef} role="search" className="relative w-full">
-      <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted pl-5 pr-2 shadow-lg transition-[color,box-shadow] focus-within:border-ring focus-within:ring-4 focus-within:ring-ring/20">
-        <MagnifyingGlassIcon className="h-5 w-5 shrink-0 text-muted-foreground" />
+      {/* The field takes the design's composer corners, as the other places to type do. */}
+      <div
+        data-qb-part="search-field"
+        className={cn(
+          'flex items-center gap-3 rounded-[var(--qb-radius-composer,1rem)] border border-border bg-muted pr-2 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-4 focus-within:ring-ring/20',
+          size === 'hero' ? 'pl-5 shadow-lg' : 'bg-background pl-3.5'
+        )}
+      >
+        <MagnifyingGlassIcon
+          className="h-5 w-5 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
         <input
           id="hc-search"
           type="search"
@@ -138,7 +154,10 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
             if (results.length > 0 || (hasAskRow && !answerOpen)) setShowResults(true)
           }}
           autoComplete="off"
-          className="min-w-0 flex-1 bg-transparent py-4 text-base text-foreground outline-none placeholder:text-muted-foreground"
+          className={cn(
+            'min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground',
+            size === 'hero' ? 'py-4 text-base' : 'py-2.5 text-sm'
+          )}
         />
         {isSearching && (
           <div className="shrink-0 pr-1">
@@ -208,18 +227,5 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
         </div>
       )}
     </div>
-  )
-}
-
-// ============================================================================
-// Compact Search (header button placeholder)
-// ============================================================================
-
-export function HelpCenterCompactSearch() {
-  return (
-    <Button variant="outline" size="sm" className="gap-2 text-muted-foreground" disabled>
-      <MagnifyingGlassIcon className="h-4 w-4" />
-      <span className="hidden sm:inline">Search...</span>
-    </Button>
   )
 }

@@ -34,6 +34,8 @@ import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { shownName } from '@/lib/shared/greeting-name'
 import { TITLE_MAX_LENGTH } from './feedback-header'
+import { homeMessages } from '@/components/public/home/home-messages'
+import { cn } from '@/lib/shared/utils'
 
 interface BoardOption {
   id: string
@@ -65,6 +67,12 @@ export interface FeedbackHeaderProps {
    * nothing. A new `key` opens it again with the same title.
    */
   draft?: { title: string; key: number }
+  /**
+   * Where it sits: atop the feed, or on Home, on the grid or in the band.
+   * On Home it keeps the brand's composer shape and carries its own button
+   * until it opens.
+   */
+  place?: 'feed' | 'home' | 'band'
 }
 
 /** The server's limits for a new post's title and details (createPublicPostSchema). */
@@ -78,6 +86,7 @@ export function FeedbackHeaderAnimated({
   onPostCreated,
   draft,
   boardLocked = false,
+  place = 'feed',
 }: FeedbackHeaderProps) {
   const intl = useIntl()
   const submitLabel = useFeedCopy().submit
@@ -118,6 +127,10 @@ export function FeedbackHeaderAnimated({
 
   // Board selection - only default if on a specific board page
   const [selectedBoardId, setSelectedBoardId] = useState(defaultBoardId || '')
+  // A default that arrives after the first render is taken while none is chosen.
+  useEffect(() => {
+    if (defaultBoardId) setSelectedBoardId((chosen) => chosen || defaultBoardId)
+  }, [defaultBoardId])
 
   // Sync selectedBoardId when defaultBoardId prop changes
   useEffect(() => {
@@ -315,13 +328,27 @@ export function FeedbackHeaderAnimated({
     <motion.div
       data-qb-part="composer"
       data-state={expanded ? 'open' : undefined}
-      className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden"
+      className={cn(
+        'bg-card border border-border overflow-hidden',
+        place === 'feed'
+          ? 'rounded-lg mb-5 shadow-sm'
+          : // The brand's composer shape, eased to a card's corners once it opens.
+            'rounded-[var(--qb-radius-composer,0.5rem)] data-[state=open]:rounded-[min(var(--qb-radius-composer,0.5rem),1.25rem)]',
+        place === 'home' && 'shadow-sm',
+        // In the band it follows the cards: raised casts a shadow, the rest sit flat.
+        place === 'band' &&
+          '[[data-qb-cards=raised]_&]:shadow-lg [[data-qb-cards=filled]_&]:border-transparent'
+      )}
       initial={false}
-      animate={{
-        boxShadow: expanded
-          ? '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
-          : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-      }}
+      animate={
+        place === 'feed'
+          ? {
+              boxShadow: expanded
+                ? '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
+                : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+            }
+          : undefined
+      }
       transition={{ duration: 0.2 }}
       onKeyDown={handleKeyDown}
       // The editor renders once the header expands; hovering warms its chunk.
@@ -353,7 +380,12 @@ export function FeedbackHeaderAnimated({
       </AnimatePresence>
 
       {/* Icon + Title Row - Always visible */}
-      <div className="flex items-center gap-3 px-4 py-3.5">
+      <div
+        className={cn(
+          'flex items-center gap-3 px-4 py-3.5',
+          place === 'band' && !expanded && 'flex-wrap py-3 sm:flex-nowrap'
+        )}
+      >
         {/* Icon - fades out when expanded */}
         <AnimatePresence>
           {!expanded && (
@@ -376,6 +408,21 @@ export function FeedbackHeaderAnimated({
           expanded={expanded}
           onExpand={() => setExpanded(true)}
         />
+        {place !== 'feed' && !expanded && (
+          <button
+            type="button"
+            data-qb-label=""
+            onClick={() => setExpanded(true)}
+            className={cn(
+              'shrink-0 text-sm font-medium',
+              place === 'band'
+                ? 'basis-full rounded-[var(--qb-radius-button,999px)] bg-[var(--qb-action-bg,var(--primary))] px-4 py-2 font-semibold text-[var(--qb-action-ink,var(--primary-foreground))] hover:opacity-90 sm:basis-auto'
+                : 'rounded-full px-3 py-1.5 text-[var(--qb-accent-text,var(--primary))] hover:bg-muted'
+            )}
+          >
+            {submitLabel ?? intl.formatMessage(homeMessages.composerContinue)}
+          </button>
+        )}
       </div>
 
       {/* Expandable content */}

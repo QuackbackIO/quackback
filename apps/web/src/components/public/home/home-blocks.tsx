@@ -4,21 +4,16 @@
  * has nothing to show. Every block is a `home-block` part and a section the
  * Appearance preview can select.
  */
-import {
-  createContext,
-  Suspense,
-  useContext,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from 'react'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { createContext, Suspense, useContext, type CSSProperties, type ReactNode } from 'react'
+import { Link, useNavigate, useRouteContext } from '@tanstack/react-router'
 import { useQuery, useSuspenseInfiniteQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { RichTextContent } from '@/components/ui/rich-text-content'
 import { StatusBadge, useStatusColour } from '@/components/ui/status-badge'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
-import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
+import { AuthVoteButton } from '@/components/public/auth-vote-button'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 import { COMPONENT_STATUS_STYLE, HERO_HEADLINE } from '@/components/portal/status/status-colors'
@@ -34,8 +29,9 @@ import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { PostId } from '@quackback/ids'
 import { cn } from '@/lib/shared/utils'
-import { useFeedCopy } from '@/components/public/preview-draft-context'
+import { FeedbackHeaderAnimated } from '@/components/public/feedback/feedback-header-animated'
 import { homeMessages } from './home-messages'
 import { filledSpans } from '@/lib/shared/design/home-spans'
 import { popularArticlesQuery } from './home-prefetch'
@@ -202,61 +198,44 @@ function ComposerBlock({ block, index }: { block: HomeBlock; index: number }) {
 }
 
 /**
- * Home's composer, on the grid or in the band. In the band its button is
- * filled, and on phones it takes a line of its own below the field.
+ * Home's composer: the feed's own, in the brand's composer shape. It opens in
+ * place to post an idea, and takes the visitor to it once posted. In the band
+ * its button is filled, and on phones it takes a line of its own.
  */
 export function HomeComposer({ inBand = false }: { inBand?: boolean }) {
-  const intl = useIntl()
-  const copy = useFeedCopy()
   const navigate = useNavigate()
-  const [title, setTitle] = useState('')
-  const open = () =>
-    void navigate({ to: HOME_FEED_PATH, state: { composeTitle: title.trim() } as never })
+  const { data: boards } = useQuery(portalQueries.boards())
+  const { data: capabilities } = useQuery(portalQueries.boardCapabilities())
+  // Ideas go to the first board the visitor can post on, which they can change.
+  const permissions = capabilities?.permissions
+  const firstBoard =
+    (boards ?? []).find((board) => permissions?.[board.id]?.canSubmit) ?? boards?.[0]
   return (
-    <form
-      data-qb-part="composer"
-      action={HOME_FEED_PATH}
-      className={cn(
-        'flex items-center gap-3 rounded-[var(--qb-radius-composer,0.5rem)] border border-border bg-card px-4 py-3.5 shadow-sm',
-        // In the band it follows the cards: raised casts a shadow, the rest sit flat.
-        inBand &&
-          'flex-wrap py-3 shadow-none sm:flex-nowrap [[data-qb-cards=raised]_&]:shadow-lg [[data-qb-cards=filled]_&]:border-transparent'
-      )}
-      onSubmit={(event) => {
-        event.preventDefault()
-        open()
-      }}
-    >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
-          <path
-            d="M11.1 2.3a1.6 1.6 0 0 1 2.3 2.3L5.6 12.4 2.5 13.5l1.1-3.1z"
-            fill="currentColor"
-          />
-        </svg>
-      </span>
-      <input
-        type="text"
-        value={title}
-        maxLength={200}
-        onChange={(event) => setTitle(event.target.value)}
-        placeholder={copy.prompt ?? intl.formatMessage(homeMessages.composerPlaceholder)}
-        aria-label={intl.formatMessage(homeMessages.composerLabel)}
-        className="min-w-0 flex-1 border-0 bg-transparent font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground"
-      />
-      <button
-        type="submit"
-        data-qb-label=""
-        className={cn(
-          'shrink-0 text-sm font-medium',
-          inBand
-            ? 'basis-full rounded-[var(--qb-radius-button,999px)] bg-[var(--qb-action-bg,var(--primary))] px-4 py-2 font-semibold text-[var(--qb-action-ink,var(--primary-foreground))] hover:opacity-90 sm:basis-auto'
-            : 'rounded-full px-3 py-1.5 text-[var(--qb-accent-text,var(--primary))] hover:bg-muted'
-        )}
-      >
-        {copy.submit ?? intl.formatMessage(homeMessages.composerContinue)}
-      </button>
-    </form>
+    <FeedbackHeaderAnimated
+      workspaceName=""
+      defaultBoardId={firstBoard?.id}
+      boards={boards ?? []}
+      boardPermissions={permissions}
+      place={inBand ? 'band' : 'home'}
+      onPostCreated={(postId, slug) =>
+        void navigate({ to: '/b/$slug/posts/$postId', params: { slug, postId } })
+      }
+    />
+  )
+}
+
+/** An idea's vote, by the rules the feed votes by: the board's, and the viewer's. */
+function IdeaVote({ post }: { post: { id: PostId; voteCount: number; board?: { id: string } } }) {
+  const session = useSessionContext()
+  const { data } = useQuery(portalQueries.boardCapabilities())
+  const isAuthenticated = !!session?.user && session.user.principalType !== 'anonymous'
+  return (
+    <AuthVoteButton
+      postId={post.id}
+      voteCount={post.voteCount}
+      canVote={!!post.board && !!data?.permissions[post.board.id]?.canVote}
+      isAuthenticated={isAuthenticated}
+    />
   )
 }
 
@@ -288,12 +267,7 @@ function IdeasBlock({
             const status = statuses?.find((candidate) => candidate.id === post.statusId)
             return (
               <li key={post.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                <span
-                  data-qb-part="vote-button"
-                  className="flex w-11 shrink-0 flex-col items-center justify-center rounded-md border py-1 text-sm font-semibold tabular-nums"
-                >
-                  {post.voteCount}
-                </span>
+                <IdeaVote post={post} />
                 <span className="min-w-0">
                   {status && (
                     <StatusBadge name={status.name} color={status.color} className="mb-0.5" />
@@ -425,6 +399,10 @@ function UpdatesBlock({
 function HelpSearchBlock({ block, index }: { block: HomeBlock; index: number }) {
   const intl = useIntl()
   const { data: articles } = useSuspenseQuery(popularArticlesQuery())
+  const askAiEnabled = useRouteContext({
+    from: '__root__',
+    select: (context) => !!context.settings?.featureFlags?.helpCenter,
+  })
   return (
     <BlockCard
       block={block}
@@ -432,14 +410,7 @@ function HelpSearchBlock({ block, index }: { block: HomeBlock; index: number }) 
       title={intl.formatMessage(homeMessages.helpSearchTitle)}
       action={{ label: intl.formatMessage(homeMessages.helpAll), to: '/hc' }}
     >
-      {/* A way into the help centre's search, shaped like the field it opens on. */}
-      <Link
-        to="/hc"
-        className="flex items-center gap-2 rounded-[var(--qb-radius-field,0.5rem)] border border-border bg-background px-3 py-2 text-sm text-muted-foreground hover:border-foreground/30"
-      >
-        <MagnifyingGlassIcon className="size-4 shrink-0" aria-hidden="true" />
-        {intl.formatMessage(homeMessages.helpSearchField)}
-      </Link>
+      <HelpCenterHeroSearch askAiEnabled={askAiEnabled} size="block" />
       {articles.length > 0 && (
         <ul className="divide-y divide-border/60">
           {articles.map((article) => (
