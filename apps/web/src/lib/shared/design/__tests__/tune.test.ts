@@ -57,7 +57,7 @@ describe('exact values', () => {
     doc.tune = { card: { radius: 6, border: 0, shadow: 'none' } }
     const css = renderDesignCss(resolveDesign(doc))
     const rule =
-      '[data-qb-cards][data-portal-theme] [data-qb-surface=card] { border-radius: var(--qb-radius-card); border-width: 0px; box-shadow: none; }'
+      '[data-qb-cards][data-portal-theme] [data-qb-surface=card] { border-radius: var(--qb-radius-card); border-width: 0px; }'
     expect(css).toContain(rule)
     expect(css.indexOf(rule)).toBeGreaterThan(
       css.indexOf('[data-qb-cards=raised][data-portal-theme]')
@@ -87,6 +87,16 @@ describe('exact colours', () => {
       '[data-portal-theme]:not(.dark) [data-qb-part=headline] { color: #163300; }'
     )
     expect(css).toContain('[data-qb-part=section-heading] { color: #163300; }')
+  })
+
+  it('leave out a section heading colour that would not read at body size', () => {
+    // 4.2:1 is large text's, not a phone's 16px heading's.
+    expect(
+      tuneColourCss(
+        { heading: { colour: '#b4642b' } },
+        { background: '#fffaf1', band: null, mixed: false }
+      )
+    ).toBe('')
   })
 
   it('leave out a colour that would not read on the page or the band', () => {

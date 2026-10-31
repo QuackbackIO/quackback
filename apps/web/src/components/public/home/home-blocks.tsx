@@ -296,7 +296,7 @@ function RoadmapColumnPosts({
           <Link
             to="/b/$slug/posts/$postId"
             params={{ slug: post.board?.slug ?? '', postId: post.id }}
-            className="line-clamp-2 text-sm text-foreground hover:underline"
+            className="line-clamp-2 py-0.5 text-sm text-foreground hover:underline"
           >
             {post.title}
           </Link>

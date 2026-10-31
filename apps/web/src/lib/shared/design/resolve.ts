@@ -255,7 +255,7 @@ export function renderDesignCss(resolved: ResolvedDesign): string {
   // utilities, as the app's own unlayered heading rule is elsewhere, and
   // before the workspace's CSS, which may set them for a part.
   parts.push(
-    '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
+    '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } [data-portal-theme] :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; } }'
   )
   parts.push(
     '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } [data-portal-theme] [data-qb-part=headline] { font-family: var(--qb-font-display); font-weight: var(--qb-headline-weight); letter-spacing: var(--qb-headline-tracking); text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
@@ -264,7 +264,7 @@ export function renderDesignCss(resolved: ResolvedDesign): string {
   // without an edge, list cards are rows divided by rules, filled cards are
   // their own colour with larger corners. Bordered cards are as drawn.
   parts.push(
-    '@layer design { [data-qb-cards=raised][data-portal-theme] [data-qb-surface=card] { border-color: transparent; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); } [data-qb-cards=list][data-portal-theme] [data-qb-surface=card] { border-radius: 0; border-inline-width: 0; border-top-width: 0; background: transparent; box-shadow: none; } [data-qb-cards=filled][data-portal-theme] [data-qb-surface=card] { border-color: transparent; box-shadow: none; border-radius: calc(var(--qb-radius-panel, 0.75rem) * 1.6); } }'
+    '@layer design { [data-qb-cards=raised][data-portal-theme] [data-qb-surface=card] { border-color: transparent; } [data-qb-cards=raised][data-portal-theme] [data-qb-surface=card]:not(:focus-visible) { box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); } [data-qb-cards=list][data-portal-theme] [data-qb-surface=card] { border-radius: 0; border-inline-width: 0; border-top-width: 0; background: transparent; } [data-qb-cards=filled][data-portal-theme] [data-qb-surface=card] { border-color: transparent; border-radius: calc(var(--qb-radius-panel, 0.75rem) * 1.6); } [data-qb-cards=list][data-portal-theme] [data-qb-surface=card]:not(:focus-visible), [data-qb-cards=filled][data-portal-theme] [data-qb-surface=card]:not(:focus-visible) { box-shadow: none; } }'
   )
   // Primary buttons in the text colour, when the design asks.
   parts.push(

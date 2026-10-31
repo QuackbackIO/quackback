@@ -141,8 +141,12 @@ export function tuneCss(tune: Tune | undefined): string {
     const parts = [
       card.radius !== undefined && 'border-radius: var(--qb-radius-card)',
       card.border !== undefined && `border-width: ${px(card.border)}`,
-      card.shadow && `box-shadow: ${SHADOW[card.shadow]}`,
     ].filter(Boolean)
+    // A card's shadow gives way to a focus ring, which is drawn as one.
+    if (card.shadow)
+      rules.push(
+        `[data-qb-cards][data-portal-theme] [data-qb-surface=card]:not(:focus-visible) { box-shadow: ${SHADOW[card.shadow]}; }`
+      )
     if (parts.length)
       // After the card styles, at their weight, so a tune wins.
       rules.push(
@@ -167,7 +171,7 @@ const reads = (colour: string, on: Array<string | null>, min: number) =>
 /**
  * The rules a tune's colours and button type need, in light mode. A colour
  * that would not read where it sits is left out: a headline at 3:1 on the
- * page and the band, a section heading at 3:1 on the page and on a card, and
+ * page and the band, a section heading at 4.5:1 on the page and on a card, and
  * a button's label at 4.5:1 on its fill, else the fill's best label.
  */
 export function tuneColourCss(tune: Tune | undefined, surface: TuneSurface | null): string {
@@ -178,7 +182,8 @@ export function tuneColourCss(tune: Tune | undefined, surface: TuneSurface | nul
   if (headline && !surface.mixed && reads(headline, [surface.background, surface.band], 3))
     rules.push(`${light} [data-qb-part=headline] { color: ${headline}; }`)
   const heading = tune.heading?.colour
-  if (heading && reads(heading, [surface.background, '#ffffff'], 3))
+  // A section heading shrinks to body size on a phone, so it reads as body text does.
+  if (heading && reads(heading, [surface.background, '#ffffff'], 4.5))
     rules.push(`${light} [data-qb-part=section-heading] { color: ${heading}; }`)
   const button = tune.button
   if (button?.fill || button?.weight || button?.case) {

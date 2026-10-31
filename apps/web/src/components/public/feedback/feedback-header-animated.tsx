@@ -329,7 +329,8 @@ export function FeedbackHeaderAnimated({
       data-qb-part="composer"
       data-state={expanded ? 'open' : undefined}
       className={cn(
-        'bg-card border border-border overflow-hidden',
+        // Typing in it shows as a ring on the whole composer, the way a field's focus does.
+        'bg-card border border-border overflow-hidden focus-within:border-ring focus-within:ring-1 focus-within:ring-ring',
         place === 'feed'
           ? 'rounded-lg mb-5 shadow-sm'
           : // The brand's composer shape, eased to a card's corners once it opens.
@@ -573,7 +574,7 @@ export function FeedbackHeaderAnimated({
                 <button
                   type="button"
                   onClick={() => openAuthPopover({ mode: 'login' })}
-                  className="text-xs text-primary hover:underline font-medium"
+                  className="relative rounded-sm text-xs text-primary hover:underline font-medium after:absolute after:-inset-y-1 after:inset-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <FormattedMessage
                     id="portal.feedback.header.signInToPost"

@@ -101,6 +101,14 @@ describe('the second colour’s tint in the design CSS', () => {
   })
 })
 
+describe('focus in the design CSS', () => {
+  it('rings anything focused by keyboard in the focus colour, unless it draws its own', () => {
+    expect(renderDesignCss(resolveDesign(defaultDesign()))).toContain(
+      '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } [data-portal-theme] :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; } }'
+    )
+  })
+})
+
 describe('the headline font in the design CSS', () => {
   it('sets page headlines in their own face, which is the heading font unless the design gives one', () => {
     const doc = defaultDesign()
@@ -125,13 +133,17 @@ describe('card styles in the design CSS', () => {
   it('gives every card surface the design’s card style', () => {
     const css = renderDesignCss(resolveDesign(defaultDesign()))
     expect(css).toContain(
-      '[data-qb-cards=raised][data-portal-theme] [data-qb-surface=card] { border-color: transparent;'
+      '[data-qb-cards=raised][data-portal-theme] [data-qb-surface=card]:not(:focus-visible) { box-shadow:'
     )
     expect(css).toContain(
-      '[data-qb-cards=list][data-portal-theme] [data-qb-surface=card] { border-radius: 0; border-inline-width: 0; border-top-width: 0; background: transparent; box-shadow: none; }'
+      '[data-qb-cards=list][data-portal-theme] [data-qb-surface=card] { border-radius: 0; border-inline-width: 0; border-top-width: 0; background: transparent; }'
     )
     expect(css).toContain(
-      '[data-qb-cards=filled][data-portal-theme] [data-qb-surface=card] { border-color: transparent; box-shadow: none; border-radius: calc(var(--qb-radius-panel, 0.75rem) * 1.6); }'
+      '[data-qb-cards=filled][data-portal-theme] [data-qb-surface=card] { border-color: transparent; border-radius: calc(var(--qb-radius-panel, 0.75rem) * 1.6); }'
+    )
+    // A card's shadow gives way to a focus ring, which is drawn as one.
+    expect(css).toContain(
+      '[data-qb-cards=filled][data-portal-theme] [data-qb-surface=card]:not(:focus-visible) { box-shadow: none; }'
     )
   })
 })
@@ -191,7 +203,7 @@ describe('renderDesignCss', () => {
     expect(resolved.tokens.base['--qb-heading-weight']).toBe('700')
     const css = renderDesignCss(resolved)
     expect(css).toContain(
-      '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
+      '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } [data-portal-theme] :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; } }'
     )
     expect(css).toContain(
       '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } [data-portal-theme] [data-qb-part=headline] { font-family: var(--qb-font-display); font-weight: var(--qb-headline-weight); letter-spacing: var(--qb-headline-tracking); text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
