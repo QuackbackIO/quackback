@@ -11,6 +11,7 @@
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { safeFetch } from '@/lib/server/content/ssrf-guard'
+import { paletteFromPixels } from '@/lib/shared/design/palette'
 import { startGuardProxy } from './guard-proxy'
 import { declineConsent, hideOverlays, measurePage, type PageMeasure } from './page-scripts'
 import { READER_TOKEN, robotsAllows } from './robots'
@@ -34,6 +35,8 @@ export type PageRead =
       measure: PageMeasure
       /** The first screen, as a JPEG data URL. */
       screenshot: string | null
+      /** The screenshot's main colours by pixel, as for an uploaded screenshot. */
+      shotPalette: string[]
       refused: string[]
     }
   | { ok: false; reason: 'robots' | 'unreachable' | 'blocked' }
@@ -60,6 +63,37 @@ async function robotsLet(url: URL): Promise<boolean> {
 }
 
 const run = <T>(script: () => T) => `(${script.toString()})()`
+
+/** Pixels read along the screenshot's longer side, as an uploaded screenshot's are. */
+const SAMPLE_SIZE = 128
+
+/** Runs in a blank page: an image's pixels, downscaled, for its palette. */
+function samplePixels(source: string, size: number): Promise<{ data: number[] } | null> {
+  return new Promise((resolve) => {
+    const image = new Image()
+    image.onload = () => {
+      const scale = Math.min(1, size / Math.max(image.naturalWidth, image.naturalHeight, 1))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+      const context = canvas.getContext('2d')
+      if (!context) return resolve(null)
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      resolve({ data: [...context.getImageData(0, 0, canvas.width, canvas.height).data] })
+    }
+    image.onerror = () => resolve(null)
+    image.src = source
+  })
+}
+
+/** The screenshot's palette, decoded in a blank page so the site's own rules do not apply. */
+async function shotPalette(view: Bun.WebView, screenshot: string): Promise<string[]> {
+  await view.navigate('about:blank').catch(() => null)
+  const pixels = (await view
+    .evaluate(`(${samplePixels.toString()})(${JSON.stringify(screenshot)}, ${SAMPLE_SIZE})`)
+    .catch(() => null)) as { data: number[] } | null
+  return pixels ? paletteFromPixels(Uint8ClampedArray.from(pixels.data), 6) : []
+}
 
 /**
  * The consent rules, run in the page as it loads: they recognise common
@@ -160,11 +194,14 @@ export async function readPage(address: string, browser?: string): Promise<PageR
         clip: { x: 0, y: 0, width: WIDTH, height, scale: SHOT_WIDTH / WIDTH },
       })
       .catch(() => null)) as { data?: string } | null
+    const screenshot = shot?.data ? `data:image/jpeg;base64,${shot.data}` : null
+    const finalUrl = view.url || url.toString()
     return {
       ok: true,
-      url: view.url || url.toString(),
+      url: finalUrl,
       measure,
-      screenshot: shot?.data ? `data:image/jpeg;base64,${shot.data}` : null,
+      screenshot,
+      shotPalette: screenshot ? await shotPalette(view, screenshot) : [],
       refused: [...proxy.refused],
     }
   } finally {

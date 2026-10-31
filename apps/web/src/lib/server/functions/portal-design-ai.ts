@@ -185,7 +185,8 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
       site,
       words: data.words ?? null,
       // The rendered first screen stands in for a screenshot when none is given.
-      palette: data.palette ?? (data.image ? null : (rendered?.brand.palette ?? null)),
+      palette:
+        data.palette ?? (data.image || !rendered ? null : render.lookPalette(site, rendered)),
       image: data.image ?? rendered?.screenshot ?? null,
       assets,
       allows,

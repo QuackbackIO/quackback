@@ -8,7 +8,8 @@ const settings = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/server/config', () => ({ config: settings }))
 
-const { fromPage, renderSite, renderedSignals, withRendered } = await import('../site-render')
+const { fromPage, lookPalette, renderSite, renderedSignals, withRendered } =
+  await import('../site-render')
 
 const page: PageMeasure = {
   title: 'Brand',
@@ -96,6 +97,53 @@ describe('fromPage', () => {
     expect(rendered.brand.fonts.heading).toBe('"Display Sans", Inter, sans-serif')
     // A dimming layer is not a colour the page is painted in.
     expect(rendered.brand.palette).toEqual(['#9fe870', '#ffffff'])
+  })
+})
+
+describe('fromPage, where the page names no brand colour', () => {
+  // A page with no call to action and a promotion's panel covering much of it.
+  const promo: PageMeasure = {
+    ...page,
+    button: null,
+    action: false,
+    hero: null,
+    palette: [
+      { colour: 'rgb(255, 255, 255)', share: 0.5 },
+      { colour: 'rgb(255, 219, 0)', share: 0.4 },
+    ],
+  }
+
+  it('leaves the brand colour to the site, keeping a painted panel in the palette', () => {
+    const rendered = fromPage(promo)
+    expect(rendered.brand.colour).toBeUndefined()
+    expect(rendered.brand.palette).toContain('#ffdb00')
+    const merged = withRendered(
+      { ...staticSite, colour: '#0058a3', palette: ['#0058a3', '#ffdb00'] },
+      { ...rendered, screenshot: null }
+    )
+    expect(merged.colour).toBe('#0058a3')
+    expect(merged.palette.slice(0, 2)).toEqual(['#0058a3', '#ffdb00'])
+  })
+
+  it('gives the screenshot palette, imagery and all, when the screenshot was read', () => {
+    const rendered = fromPage(page, ['#ffffff', '#ff7a59', '#b07cff'])
+    // The main call to action leads; the screenshot's colours follow in its order.
+    expect(rendered.brand.palette).toEqual(['#9fe870', '#ffffff', '#ff7a59', '#b07cff'])
+  })
+})
+
+describe('lookPalette', () => {
+  it('leads with the site brand colour before the screen, whose first colour can be a photo', () => {
+    const rendered = {
+      ...fromPage({ ...page, button: null, action: false, hero: null }, ['#7c322c', '#ffdb00']),
+      screenshot: null,
+    }
+    expect(lookPalette({ ...staticSite, colour: '#0058a3' }, rendered)).toEqual([
+      '#0058a3',
+      '#7c322c',
+      '#ffdb00',
+    ])
+    expect(lookPalette(null, rendered)).toEqual(['#7c322c', '#ffdb00'])
   })
 })
 

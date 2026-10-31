@@ -30,7 +30,11 @@ export interface RenderedSite {
   brand: Pick<SiteSignals, 'background' | 'dark' | 'button' | 'monochrome'> &
     Partial<Pick<SiteSignals, 'colour' | 'hero' | 'bold'>> & {
       fonts: { heading: string | null; body: string | null }
-      /** Its colours by painted area with its main button's first, neutrals included. */
+      /**
+       * The first screen's main colours, as an uploaded screenshot's: by pixel
+       * where the screenshot could be read, else by painted area, the main
+       * button's first. Imagery and gradients are in the first, not the second.
+       */
       palette: string[]
     }
   /** The first screen, as a JPEG data URL. */
@@ -83,18 +87,24 @@ function boxOf(b: PageBox | null, action = false): MeasuredBox | null {
 }
 
 /** A rendered page's measurements and brand, in the terms the design steps read. */
-export function fromPage(page: PageMeasure): Omit<RenderedSite, 'screenshot'> {
+export function fromPage(
+  page: PageMeasure,
+  shotPalette: string[] = []
+): Omit<RenderedSite, 'screenshot'> {
   const background = fill(page.page) ?? '#ffffff'
   const button = page.button ? fill(page.button.fill) : null
   const hero = page.hero ? fill(page.hero) : null
-  const painted = page.palette.flatMap(({ colour }) => fill(colour) ?? [])
-  const vivid = [button, hero, ...painted].filter(
-    (c, i, all): c is string => !!c && isBrandColour(c) && all.indexOf(c) === i
+  const brandHero = hero && hero !== background ? hero : null
+  // The brand colour, only where the page says so: its main call to action's
+  // fill, else a hero it fills edge to edge. A colour that merely covers an
+  // area, such as a promotion's panel, is in the palette and no more.
+  const strong = [page.action ? button : null, brandHero].find(
+    (c): c is string => !!c && isBrandColour(c)
   )
-  const palette = [button, ...painted].filter(
+  const painted = page.palette.flatMap(({ colour }) => fill(colour) ?? [])
+  const palette = (shotPalette.length ? [strong, ...shotPalette] : [button, ...painted]).filter(
     (c, i, all): c is string => !!c && all.indexOf(c) === i
   )
-  const brandHero = hero && hero !== background ? hero : null
   return {
     title: page.title || null,
     measured: {
@@ -109,7 +119,7 @@ export function fromPage(page: PageMeasure): Omit<RenderedSite, 'screenshot'> {
       dark: contrastRatio('#ffffff', background) > contrastRatio('#000000', background),
       button,
       monochrome: !!button && !isBrandColour(button) && contrastRatio('#ffffff', button) > 7,
-      ...(vivid[0] && { colour: vivid[0] }),
+      ...(strong && { colour: strong }),
       ...(brandHero && { hero: brandHero, bold: isBrandColour(brandHero) }),
       fonts: { heading: stack(page.headline?.family), body: stack(page.body?.family) },
       palette: palette.slice(0, 6),
@@ -120,7 +130,12 @@ export function fromPage(page: PageMeasure): Omit<RenderedSite, 'screenshot'> {
 /** The site's signals with what the render shows leading what its CSS suggests. */
 export function withRendered(site: SiteSignals, rendered: RenderedSite): SiteSignals {
   const { brand } = rendered
+  // The site's own colours keep their order behind the colour the render is sure of.
   const vivid = brand.palette.filter(isBrandColour)
+  const colour = brand.colour ?? site.colour ?? vivid[0] ?? null
+  const palette = [colour, ...site.palette, ...vivid].filter(
+    (c, i, all): c is string => !!c && all.indexOf(c) === i
+  )
   return {
     ...site,
     title: site.title ?? rendered.title,
@@ -128,16 +143,27 @@ export function withRendered(site: SiteSignals, rendered: RenderedSite): SiteSig
     dark: brand.dark,
     button: brand.button ?? site.button,
     monochrome: brand.button ? brand.monochrome : site.monochrome,
-    colour: brand.colour ?? site.colour,
+    colour,
     hero: brand.hero ?? site.hero,
     bold: brand.bold ?? site.bold,
     fonts: {
       heading: brand.fonts.heading ?? site.fonts.heading,
       body: brand.fonts.body ?? site.fonts.body,
     },
-    palette: [...vivid, ...site.palette.filter((c) => !vivid.includes(c))].slice(0, 5),
+    palette: palette.slice(0, 5),
     measured: { ...site.measured, ...withoutEmpty(rendered.measured) },
   }
+}
+
+/**
+ * The colours the looks start from when the rendered screen stands in for a
+ * screenshot: the site's brand colour first, then the screen's. A screen's
+ * own leading colour can be a photo's.
+ */
+export function lookPalette(site: SiteSignals | null, rendered: RenderedSite): string[] {
+  return [site?.colour, ...rendered.brand.palette]
+    .filter((c, i, all): c is string => !!c && all.indexOf(c) === i)
+    .slice(0, 6)
 }
 
 /** Signals from the render alone, when the page's HTML could not be read. */
@@ -197,7 +223,7 @@ export async function renderSite(site: string, budgetMs = BUDGET_MS): Promise<Re
       log.info({ reason: read?.reason ?? 'unreadable' }, 'website reader could not read the site')
       return null
     }
-    return { ...fromPage(read.measure), screenshot: read.screenshot }
+    return { ...fromPage(read.measure, read.shotPalette ?? []), screenshot: read.screenshot }
   }
   return null
 }
