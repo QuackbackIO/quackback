@@ -20,7 +20,8 @@ import type { SiteSignals } from './site-signals'
 
 const log = logger.child({ module: 'site-render' })
 
-const BUDGET_MS = 25_000
+// A heavy site can take half a minute to render; a design starts once, so it waits.
+const BUDGET_MS = 40_000
 /** A reader that sleeps between reads can refuse the first request while it wakes. */
 const WAKE_MS = 1_500
 
