@@ -44,6 +44,7 @@ function ConversationListSkeleton() {
       {Array.from({ length: 6 }).map((_, i) => (
         <li
           key={i}
+          data-qb-surface="card"
           className="flex w-full items-center gap-3 rounded-lg border border-border/60 bg-card px-4 py-3"
         >
           <span className="min-w-0 flex-1 space-y-1.5">
@@ -177,6 +178,7 @@ function SupportListPage() {
                 <Link
                   to="/support/$conversationId"
                   params={{ conversationId: c.id }}
+                  data-qb-surface="card"
                   className="flex w-full items-center gap-3 rounded-lg border border-border/60 bg-card px-4 py-3 transition-colors hover:bg-muted/40"
                 >
                   <span className="min-w-0 flex-1">

@@ -53,6 +53,7 @@ export function MetadataSidebarSkeleton({
       )}
     >
       <div
+        {...(isCard ? { 'data-qb-surface': 'card' } : {})}
         className={cn(
           isCard
             ? 'mt-6 me-4 ms-1 rounded-xl border border-border/20 bg-card shadow-sm p-4 space-y-5'
@@ -476,6 +477,7 @@ export function MetadataSidebar({
       style={{ animationDelay: '100ms' }}
     >
       <div
+        {...(isCard ? { 'data-qb-surface': 'card' } : {})}
         className={cn(
           'p-4 space-y-5',
           isCard && 'mt-6 me-4 ms-1 rounded-xl border border-border/20 bg-card shadow-sm'

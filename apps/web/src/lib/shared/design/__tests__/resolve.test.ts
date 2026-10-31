@@ -101,6 +101,21 @@ describe('the second colour’s tint in the design CSS', () => {
   })
 })
 
+describe('card styles in the design CSS', () => {
+  it('gives every card surface the design’s card style', () => {
+    const css = renderDesignCss(resolveDesign(defaultDesign()))
+    expect(css).toContain(
+      '[data-qb-cards=raised][data-portal-theme] [data-qb-surface=card] { border-color: transparent;'
+    )
+    expect(css).toContain(
+      '[data-qb-cards=list][data-portal-theme] [data-qb-surface=card] { border-radius: 0; border-inline-width: 0; border-top-width: 0; background: transparent; box-shadow: none; }'
+    )
+    expect(css).toContain(
+      '[data-qb-cards=filled][data-portal-theme] [data-qb-surface=card] { border-color: transparent; box-shadow: none; border-radius: calc(var(--qb-radius-panel, 0.75rem) * 1.6); }'
+    )
+  })
+})
+
 describe('status styles in the design CSS', () => {
   it('draws status dots in the ink, or statuses as tags tinted with their colour', () => {
     const css = renderDesignCss(resolveDesign(defaultDesign()))

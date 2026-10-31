@@ -209,7 +209,10 @@ function StatusPage() {
               defaultMessage="Scheduled maintenance"
             />
           </h2>
-          <div className="overflow-hidden rounded-lg border border-border/50 bg-card shadow-xs">
+          <div
+            data-qb-surface="card"
+            className="overflow-hidden rounded-lg border border-border/50 bg-card shadow-xs"
+          >
             <div className="divide-y divide-border/40">
               {snapshot.upcomingMaintenance.map((incident) => {
                 const style = LIFECYCLE_STYLE[incident.status]

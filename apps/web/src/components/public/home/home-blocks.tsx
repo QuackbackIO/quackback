@@ -12,8 +12,7 @@ import { RichTextContent } from '@/components/ui/rich-text-content'
 import { StatusBadge, useStatusColour } from '@/components/ui/status-badge'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
 import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
-import { AuthVoteButton } from '@/components/public/auth-vote-button'
-import { useSessionContext } from '@/lib/client/hooks/use-root-context'
+import { PortalVote } from '@/components/public/portal-vote'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 import { COMPONENT_STATUS_STYLE, HERO_HEADLINE } from '@/components/portal/status/status-colors'
@@ -29,7 +28,6 @@ import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import type { PostId } from '@quackback/ids'
 import { cn } from '@/lib/shared/utils'
 import { FeedbackHeaderAnimated } from '@/components/public/feedback/feedback-header-animated'
 import { homeMessages } from './home-messages'
@@ -130,14 +128,11 @@ function BlockCard({
       data-qb-section={`block-${index}`}
       data-qb-part="home-block"
       data-qb-block={block.type}
+      data-qb-surface={bare ? undefined : 'card'}
       className={cn(
         'col-span-1 flex min-w-0 flex-col gap-3',
-        !bare && [
+        !bare &&
           'rounded-lg border border-border/40 bg-card p-[var(--qb-card-padding,1rem)] shadow-sm',
-          '[[data-qb-cards=raised]_&]:border-transparent [[data-qb-cards=raised]_&]:shadow-md',
-          '[[data-qb-cards=list]_&]:rounded-none [[data-qb-cards=list]_&]:border-x-0 [[data-qb-cards=list]_&]:border-t-0 [[data-qb-cards=list]_&]:bg-transparent [[data-qb-cards=list]_&]:shadow-none',
-          '[[data-qb-cards=filled]_&]:border-transparent [[data-qb-cards=filled]_&]:shadow-none [[data-qb-cards=filled]_&]:rounded-[calc(var(--qb-radius-panel,0.75rem)*1.6)]',
-        ],
         row && 'md:flex-row md:items-center md:gap-6 md:[&>p]:flex-1',
         span
       )}
@@ -224,21 +219,6 @@ export function HomeComposer({ inBand = false }: { inBand?: boolean }) {
   )
 }
 
-/** An idea's vote, by the rules the feed votes by: the board's, and the viewer's. */
-function IdeaVote({ post }: { post: { id: PostId; voteCount: number; board?: { id: string } } }) {
-  const session = useSessionContext()
-  const { data } = useQuery(portalQueries.boardCapabilities())
-  const isAuthenticated = !!session?.user && session.user.principalType !== 'anonymous'
-  return (
-    <AuthVoteButton
-      postId={post.id}
-      voteCount={post.voteCount}
-      canVote={!!post.board && !!data?.permissions[post.board.id]?.canVote}
-      isAuthenticated={isAuthenticated}
-    />
-  )
-}
-
 function IdeasBlock({
   block,
   index,
@@ -267,7 +247,7 @@ function IdeasBlock({
             const status = statuses?.find((candidate) => candidate.id === post.statusId)
             return (
               <li key={post.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                <IdeaVote post={post} />
+                <PortalVote post={post} />
                 <span className="min-w-0">
                   {status && (
                     <StatusBadge name={status.name} color={status.color} className="mb-0.5" />

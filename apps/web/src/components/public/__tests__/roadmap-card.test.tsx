@@ -22,6 +22,14 @@ vi.mock('@tanstack/react-router', () => ({
   }) => <a {...(rest as React.HTMLAttributes<HTMLAnchorElement>)}>{children}</a>,
 }))
 
+vi.mock('@/components/public/portal-vote', () => ({
+  PortalVote: ({ post }: { post: { id: string; board: { id: string } | null } }) => (
+    <button type="button" data-board={post.board?.id}>
+      vote
+    </button>
+  ),
+}))
+
 import { RoadmapCard } from '../roadmap-card'
 
 afterEach(cleanup)
@@ -54,5 +62,22 @@ describe('RoadmapCard', () => {
     )
 
     expect(screen.queryByTestId('roadmap-card-comment-count')).not.toBeInTheDocument()
+  })
+
+  it('votes beside the title’s link, not inside it, on the board the post is on', () => {
+    render(
+      <RoadmapCard
+        id="post_3"
+        title="Exports"
+        voteCount={5}
+        commentCount={0}
+        board={{ id: 'board_1', slug: 'general', name: 'General' }}
+        voting
+      />
+    )
+    const vote = screen.getByRole('button', { name: 'vote' })
+    expect(vote.getAttribute('data-board')).toBe('board_1')
+    expect(vote.closest('a')).toBeNull()
+    expect(screen.getByText('Exports').closest('a')).not.toBeNull()
   })
 })

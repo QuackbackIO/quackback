@@ -83,11 +83,10 @@ export const PORTAL_PARTS = [
     name: 'composer',
     description: 'Where a visitor starts a new post. Open while they write.',
     states: ['open'],
-    tokens: ['--qb-radius-panel'],
+    tokens: ['--qb-radius-panel', '--qb-radius-composer'],
     files: [
       'components/public/feedback/feedback-header-animated.tsx',
       'components/public/feedback/feedback-header.tsx',
-      'components/public/home/home-blocks.tsx',
     ],
   },
   {
@@ -110,11 +109,14 @@ export const PORTAL_PARTS = [
       'The vote box at the start of a card, and on a post. Voted once the visitor votes.',
     states: ['voted'],
     tokens: ['--qb-vote-active', '--qb-radius-control'],
-    files: [
-      'components/public/post-card.tsx',
-      'components/public/vote-button.tsx',
-      'components/public/home/home-blocks.tsx',
-    ],
+    files: ['components/public/post-card.tsx', 'components/public/vote-button.tsx'],
+  },
+  {
+    name: 'search-field',
+    description: 'Where a visitor searches the help centre, on its pages and on Home.',
+    states: [],
+    tokens: ['--qb-radius-composer'],
+    files: ['components/help-center/help-center-search.tsx'],
   },
   {
     name: 'status-badge',
