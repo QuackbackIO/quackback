@@ -287,7 +287,8 @@ export async function designDirections(input: {
         },
       ],
       schema: directionsSchema,
-      maxTokens: 4000,
+      // Three complete looks are long, and some models reason before they answer.
+      maxTokens: 8000,
     })
   try {
     // A model that does not read images still has the colours, and a long
