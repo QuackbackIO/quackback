@@ -33,10 +33,20 @@ import {
 } from '@/lib/shared/notifications/notification-text'
 import { notificationTextParams } from '@/lib/shared/notifications/text-params'
 import { notificationHook } from '../handlers/notification'
+import { withPortalWords } from '@/lib/client/hooks/use-intl-setup'
+import { ADMIN_WORDS } from '@/lib/shared/design/view'
 import type { EventData } from '../types'
 
-const english = createIntl({ locale: 'en', defaultLocale: 'en', messages: en })
-const polish = createIntl({ locale: 'pl', defaultLocale: 'en', messages: pl })
+// Rows are stored in the admin's words (a post, a board); the portal's bell
+// words them again in the portal's own, so a portal reader sees its word.
+const english = withPortalWords(
+  createIntl({ locale: 'en', defaultLocale: 'en', messages: en }),
+  ADMIN_WORDS
+)
+const polish = withPortalWords(
+  createIntl({ locale: 'pl', defaultLocale: 'en', messages: pl }),
+  ADMIN_WORDS
+)
 
 // Fields every test event shares; the handler words these rows from `config`.
 const base = {
