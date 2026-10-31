@@ -147,6 +147,7 @@ function SupportListPage() {
           >
             <EmptyState
               icon={ChatBubbleLeftRightIcon}
+              heading="h2"
               title={intl.formatMessage({
                 id: 'portal.support.signIn.title',
                 defaultMessage: 'Sign in to view your conversations',
@@ -169,6 +170,7 @@ function SupportListPage() {
         ) : conversations.length === 0 ? (
           <EmptyState
             icon={ChatBubbleLeftRightIcon}
+            heading="h2"
             title={intl.formatMessage({
               id: 'portal.support.empty.title',
               defaultMessage: 'No conversations yet',

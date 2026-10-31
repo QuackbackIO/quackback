@@ -8,6 +8,8 @@ interface EmptyStateProps {
   action?: React.ReactNode
   /** `compact` is for empty lists inside cards. */
   size?: 'default' | 'compact'
+  /** Its title's level: one below the heading of what it sits in. */
+  heading?: 'h2' | 'h3'
   className?: string
 }
 
@@ -17,6 +19,7 @@ export function EmptyState({
   description,
   action,
   size = 'default',
+  heading: Heading = 'h3',
   className,
 }: EmptyStateProps) {
   const compact = size === 'compact'
@@ -36,9 +39,9 @@ export function EmptyState({
       >
         <Icon className={cn('text-muted-foreground', compact ? 'size-5' : 'h-6 w-6')} />
       </div>
-      <h3 className={compact ? 'text-[15px] font-semibold' : 'text-lg font-medium mb-1'}>
+      <Heading className={compact ? 'text-[15px] font-semibold' : 'text-lg font-medium mb-1'}>
         {title}
-      </h3>
+      </Heading>
       {description && (
         <p
           className={cn(

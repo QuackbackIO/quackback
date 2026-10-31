@@ -55,7 +55,7 @@ export function FilterPill({
         />
       )}
       <span className="min-w-0 truncate">{children}</span>
-      {count && <span className="shrink-0 font-normal tabular-nums opacity-70">{count}</span>}
+      {count && <span className="shrink-0 font-normal tabular-nums">{count}</span>}
     </button>
   )
 }
