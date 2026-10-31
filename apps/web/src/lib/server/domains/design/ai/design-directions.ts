@@ -18,6 +18,7 @@ import { applyPreset, DESIGN_PRESETS } from '@/lib/shared/design/presets'
 import { directionsPrompt, directionsSchema, type Look } from './design-looks'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { designAiModel, isStructuredOutputError, paletteText } from './design-ai'
+import { readHero, withHero } from './hero-read'
 import type { SiteAssets } from './site-assets'
 import type { SiteSignals } from './site-signals'
 import { BUNDLED_FONT_IDS } from '@/lib/shared/design/options'
@@ -332,6 +333,8 @@ export async function designDirections(input: {
     .join('\n')
   const text = brief || 'Suggest three looks for a software company.'
   const share = input.assets?.shareImage
+  // The hero, read on its own from a screenshot while the looks are written.
+  const heroRead = input.image ? readHero(model, input.image) : Promise.resolve(null)
   const ask = (withImages: boolean) => {
     const images = withImages
       ? [
@@ -367,6 +370,7 @@ export async function designDirections(input: {
       log.warn({ err }, 'design ai looks did not fit the schema; asking again')
       return once()
     })
+    const hero = await heroRead
     // A measured colour overrides the model only where what was seen bears it out.
     const confirm = confirmedBy(
       input.palette?.length ? input.palette : (input.site?.palette.slice(0, 3) ?? [])
@@ -377,20 +381,26 @@ export async function designDirections(input: {
         // The first look is the faithful one: it keeps their exact brand colour.
         const look =
           index === 0
-            ? {
-                ...answered,
-                accent:
-                  measuredButton(input.site, confirm).accent ??
-                  faithfulAccent(answered.accent, input),
-                ...(measuredButton(input.site, confirm).fill && { fill: 'ink' as const }),
-                ...measuredBand(
-                  input.site,
-                  measuredButton(input.site, confirm).accent ??
+            ? withHero(
+                {
+                  ...answered,
+                  accent:
+                    measuredButton(input.site, confirm).accent ??
                     faithfulAccent(answered.accent, input),
-                  confirm
-                ),
-                support: answered.support && faithfulAccent(answered.support, input),
-              }
+                  ...(measuredButton(input.site, confirm).fill && { fill: 'ink' as const }),
+                  support: answered.support && faithfulAccent(answered.support, input),
+                  // After the model's second colour, so the site's hero can replace it.
+                  ...measuredBand(
+                    input.site,
+                    measuredButton(input.site, confirm).accent ??
+                      faithfulAccent(answered.accent, input),
+                    confirm
+                  ),
+                },
+                // What the screenshot's hero shows comes last: it is what was seen.
+                hero,
+                confirm
+              )
             : answered
         const { design: looked, refused } = lookDesign(
           input.design,

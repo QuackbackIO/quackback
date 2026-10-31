@@ -555,8 +555,12 @@ describe('a logo or a screenshot', () => {
       image: 'data:image/jpeg;base64,AAAA',
     })
     expect(result.ok).toBe(true)
-    expect(model.calls).toHaveLength(2)
-    expect(model.calls[1]!.messages[0]!.content).toContain('#1f4d3a')
+    // The looks are asked for twice; the hero is read on its own alongside.
+    const looks = model.calls.filter(
+      (call) => !call.systemPrompts[0]!.startsWith('You read one thing')
+    )
+    expect(looks).toHaveLength(2)
+    expect(looks[1]!.messages[0]!.content).toContain('#1f4d3a')
   })
 
   it('asks again once when the looks do not fit the schema', async () => {
