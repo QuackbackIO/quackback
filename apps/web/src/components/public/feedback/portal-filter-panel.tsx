@@ -35,8 +35,16 @@ const BOARDS_SHOWN = 6
 const TAGS_SHOWN = 8
 
 export const VIEW_LABELS: Record<'all' | PublicFeedView, MessageDescriptor> = {
-  all: { id: 'portal.feedback.panel.view.all', defaultMessage: 'All ideas' },
-  mine: { id: 'portal.feedback.panel.view.mine', defaultMessage: 'My ideas' },
+  all: {
+    id: 'portal.feedback.panel.view.all',
+    defaultMessage:
+      '{postWord, select, post {All posts} feature_request {All feature requests} suggestion {All suggestions} other {All ideas}}',
+  },
+  mine: {
+    id: 'portal.feedback.panel.view.mine',
+    defaultMessage:
+      '{postWord, select, post {My posts} feature_request {My feature requests} suggestion {My suggestions} other {My ideas}}',
+  },
   voted: { id: 'portal.feedback.panel.view.voted', defaultMessage: 'Voted' },
   following: { id: 'portal.feedback.panel.view.following', defaultMessage: 'Following' },
 }
@@ -132,7 +140,10 @@ export function PortalFilterPanel({
   const boardSection = boards.length > 1 && (
     <PanelSection
       key="boards"
-      title={intl.formatMessage({ id: 'portal.feedback.sidebar.boards', defaultMessage: 'Boards' })}
+      title={intl.formatMessage({
+        id: 'portal.feedback.sidebar.boards',
+        defaultMessage: '{boardWord, select, category {Categories} other {Boards}}',
+      })}
     >
       <div className="space-y-1">
         <button
@@ -144,7 +155,7 @@ export function PortalFilterPanel({
           <span className="truncate">
             {intl.formatMessage({
               id: 'portal.feedback.panel.allBoards',
-              defaultMessage: 'All boards',
+              defaultMessage: '{boardWord, select, category {All categories} other {All boards}}',
             })}
           </span>
         </button>

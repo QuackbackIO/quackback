@@ -16,6 +16,7 @@ import type { ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import type { WidgetHomeProps } from '../widget-home-animated'
 
 type Doc = { json(): unknown; html(): string; markdown(): string }
@@ -103,22 +104,24 @@ function renderHome(props: Partial<WidgetHomeProps> = {}) {
   return render(
     <QueryClientProvider client={qc}>
       <IntlProvider locale="en">
-        <WidgetHomeAnimated
-          initialPosts={[]}
-          statuses={[]}
-          boards={[ideas]}
-          boardPermissions={{ [ideas.id]: { canSubmit: true, canVote: true } }}
-          defaultBoard="feature-requests-1"
-          confirmedBoardSlugs={['feature-requests-1']}
-          {...props}
-        />
+        <PortalWordsIntl>
+          <WidgetHomeAnimated
+            initialPosts={[]}
+            statuses={[]}
+            boards={[ideas]}
+            boardPermissions={{ [ideas.id]: { canSubmit: true, canVote: true } }}
+            defaultBoard="feature-requests-1"
+            confirmedBoardSlugs={['feature-requests-1']}
+            {...props}
+          />
+        </PortalWordsIntl>
       </IntlProvider>
     </QueryClientProvider>
   )
 }
 
 function typeTitle(value: string) {
-  fireEvent.change(screen.getByRole('textbox', { name: 'Feedback title' }), {
+  fireEvent.change(screen.getByRole('textbox', { name: 'Idea title' }), {
     target: { value },
   })
 }
@@ -190,7 +193,7 @@ describe('widget home title', () => {
     typeTitleByKey('ark mode', 'D')
 
     expect(editor.renders).toBe(0)
-    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' }).value).toBe(
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Idea title' }).value).toBe(
       'Dark mode'
     )
   })

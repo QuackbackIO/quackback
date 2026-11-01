@@ -1,5 +1,7 @@
+import { useMemo } from 'react'
 import { useRouteContext } from '@tanstack/react-router'
 import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
+import { portalWords, type PortalWords } from '@/lib/shared/design/view'
 
 /**
  * Named reads of the route context. Every navigation hands the tree a new
@@ -11,6 +13,15 @@ import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/share
 
 export function useWorkspaceSettings() {
   return useRouteContext({ from: '__root__', select: (context) => context.settings })
+}
+
+/** The published design's words, as the portal's messages select on them. */
+export function usePublishedPortalWords(): PortalWords {
+  const design = useRouteContext({
+    from: '__root__',
+    select: (context) => context.settings?.portalDesign,
+  })
+  return useMemo(() => portalWords(design), [design])
 }
 
 export function useSessionContext() {

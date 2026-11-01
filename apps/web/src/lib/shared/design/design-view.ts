@@ -8,7 +8,8 @@
  * ships only where a design is resolved.
  */
 import { layoutAttributes } from './components'
-import { designFontIds, fontStack } from './fonts'
+import { rewritePartAliases } from './parts'
+import { designFontIds, fontStack, uploadedFontFaces } from './fonts'
 import { renderDesignCss, resolveDesign } from './resolve'
 import type { PortalDesign } from './schema'
 import type { PortalDesignView } from './view'
@@ -23,8 +24,10 @@ export function designView(
     engine: 'v2',
     mode: doc.mode,
     revision,
-    themeStyles: renderDesignCss(resolveDesign(doc)),
-    customCss: doc.css ? `@layer tenant {\n${doc.css}\n}` : '',
+    themeStyles: [uploadedFontFaces(doc), renderDesignCss(resolveDesign(doc))]
+      .filter(Boolean)
+      .join(' '),
+    customCss: doc.css ? `@layer tenant {\n${rewritePartAliases(doc.css)}\n}` : '',
     fontSans: fontStack(doc.brand.fonts.body),
     fontIds: designFontIds(doc),
     attributes: layoutAttributes(doc),
@@ -32,7 +35,11 @@ export function designView(
       welcome: feedbackWelcome(doc),
       headline: doc.pages.feedback.headline,
       defaultSort: doc.pages.feedback.defaultSort,
+      copy: doc.pages.feedback.copy,
     },
+    home: doc.pages.home,
+    nav: doc.nav,
+    vocabulary: doc.vocabulary,
   }
 }
 

@@ -296,7 +296,12 @@ describe('test feedback stays inside its customer session and team workspace', (
         reason: 'manual',
       }))
     )
-    const context = { workspaceName: 'Acme', portalBaseUrl: 'http://localhost:3100', logoUrl: null }
+    const context = {
+      workspaceName: 'Acme',
+      portalBaseUrl: 'http://localhost:3100',
+      logoUrl: null,
+      postWord: 'idea' as const,
+    }
     const status = (postId: PostId): PostStatusChangedEvent => ({
       id: createId('event'),
       type: 'post.status_changed',
@@ -334,7 +339,12 @@ describe('test feedback stays inside its customer session and team workspace', (
     const userId = createId('user')
     await testDb.insert(user).values({ id: userId, name: 'Acme', email: 'you@example.com' })
     await testDb.update(principal).set({ userId }).where(eq(principal.id, visitor.principalId!))
-    const context = { workspaceName: 'Acme', portalBaseUrl: 'http://localhost:3100', logoUrl: null }
+    const context = {
+      workspaceName: 'Acme',
+      portalBaseUrl: 'http://localhost:3100',
+      logoUrl: null,
+      postWord: 'idea' as const,
+    }
     const mention = (postId: PostId): PostMentionedEvent => ({
       id: createId('event'),
       type: 'post.mentioned',

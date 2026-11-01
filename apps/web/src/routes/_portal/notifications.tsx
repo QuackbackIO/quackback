@@ -103,7 +103,9 @@ function NotificationsPage() {
               <p className="text-sm text-muted-foreground mt-0.5">
                 <FormattedMessage
                   id="portal.notifications.subtitle"
-                  defaultMessage="Updates on posts you've subscribed to"
+                  defaultMessage={
+                    "{postWord, select, post {Updates on posts you've subscribed to} feature_request {Updates on feature requests you've subscribed to} suggestion {Updates on suggestions you've subscribed to} other {Updates on ideas you've subscribed to}}"
+                  }
                 />
               </p>
             </div>
@@ -331,7 +333,7 @@ function NotificationsPage() {
             description={intl.formatMessage({
               id: 'portal.notifications.empty.description',
               defaultMessage:
-                "Vote or comment on posts to subscribe. You'll get notified when there are status changes or new activity.",
+                "{postWord, select, post {Vote or comment on posts to subscribe. You'll get notified when there are status changes or new activity.} feature_request {Vote or comment on feature requests to subscribe. You'll get notified when there are status changes or new activity.} suggestion {Vote or comment on suggestions to subscribe. You'll get notified when there are status changes or new activity.} other {Vote or comment on ideas to subscribe. You'll get notified when there are status changes or new activity.}}",
             })}
             className="py-20 px-6"
           />

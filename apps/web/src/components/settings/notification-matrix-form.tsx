@@ -56,7 +56,8 @@ export const TYPE_LABELS: Partial<
     },
     description: {
       id: 'portal.settings.notifications.type.statusChanged.description',
-      defaultMessage: 'A post you follow changes status',
+      defaultMessage:
+        '{postWord, select, post {A post you follow changes status} feature_request {A feature request you follow changes status} suggestion {A suggestion you follow changes status} other {An idea you follow changes status}}',
     },
   },
   comment_created: {
@@ -66,17 +67,20 @@ export const TYPE_LABELS: Partial<
     },
     description: {
       id: 'portal.settings.notifications.type.newComment.description',
-      defaultMessage: 'Someone comments on a post you follow',
+      defaultMessage:
+        '{postWord, select, post {Someone comments on a post you follow} feature_request {Someone comments on a feature request you follow} suggestion {Someone comments on a suggestion you follow} other {Someone comments on an idea you follow}}',
     },
   },
   post_mentioned: {
     label: {
       id: 'portal.settings.notifications.type.postMention.label',
-      defaultMessage: 'Mentioned in a post',
+      defaultMessage:
+        '{postWord, select, post {Mentioned in a post} feature_request {Mentioned in a feature request} suggestion {Mentioned in a suggestion} other {Mentioned in an idea}}',
     },
     description: {
       id: 'portal.settings.notifications.type.postMention.description',
-      defaultMessage: 'Someone @-mentions you in a post',
+      defaultMessage:
+        '{postWord, select, post {Someone @-mentions you in a post} feature_request {Someone @-mentions you in a feature request} suggestion {Someone @-mentions you in a suggestion} other {Someone @-mentions you in an idea}}',
     },
   },
   comment_mentioned: {

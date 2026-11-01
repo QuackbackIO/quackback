@@ -110,6 +110,7 @@ const context: HookContext = {
   workspaceName: 'Seg Target Test',
   portalBaseUrl: 'https://portal.example.com',
   logoUrl: null,
+  postWord: 'idea' as const,
 }
 
 function publishEvent(changelogId: string): EventData {

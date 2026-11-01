@@ -14,6 +14,8 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { savedFeedbackPath } from '@/lib/shared/design/saved-feedback-path'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import type { BoardId, PostId, PostStatusId, PostTagId, PrincipalId } from '@quackback/ids'
@@ -56,6 +58,12 @@ export function usePortalTeamPostActions({
 }: UsePortalTeamPostActionsOptions) {
   const intl = useIntl()
   const navigate = useNavigate()
+  const settings = useWorkspaceSettings()
+  const session = useSessionContext()
+  const feedbackPath = savedFeedbackPath(
+    settings,
+    !!session?.user && session.user.principalType !== 'anonymous'
+  )
   const queryClient = useQueryClient()
   const { can } = usePortalPermissions()
 
@@ -260,7 +268,8 @@ export function usePortalTeamPostActions({
           }),
           message: intl.formatMessage({
             id: 'portal.postDetail.team.boardUpdated',
-            defaultMessage: 'Board updated',
+            defaultMessage:
+              '{boardWord, select, category {Category updated} other {Board updated}}',
           }),
           perform: async () => {
             await changeBoard.mutateAsync({ postId, boardId })
@@ -384,10 +393,11 @@ export function usePortalTeamPostActions({
           toast.success(
             intl.formatMessage({
               id: 'portal.postDetail.team.postDeleted',
-              defaultMessage: 'Post deleted',
+              defaultMessage:
+                '{postWord, select, post {Post deleted} feature_request {Feature request deleted} suggestion {Suggestion deleted} other {Idea deleted}}',
             })
           )
-          await navigate({ to: '/', search: { board: boardSlug } })
+          await navigate({ to: feedbackPath, search: { board: boardSlug } })
         } catch (err) {
           toast.error(err instanceof Error ? err.message : genericErrorMessage())
         }
@@ -402,7 +412,8 @@ export function usePortalTeamPostActions({
           toast.success(
             intl.formatMessage({
               id: 'portal.postDetail.team.postRestored',
-              defaultMessage: 'Post restored',
+              defaultMessage:
+                '{postWord, select, post {Post restored} feature_request {Feature request restored} suggestion {Suggestion restored} other {Idea restored}}',
             })
           )
         } catch (err) {
@@ -426,7 +437,8 @@ export function usePortalTeamPostActions({
           toast.success(
             intl.formatMessage({
               id: 'portal.postDetail.team.postUpdated',
-              defaultMessage: 'Post updated',
+              defaultMessage:
+                '{postWord, select, post {Post updated} feature_request {Feature request updated} suggestion {Suggestion updated} other {Idea updated}}',
             })
           )
           onEditSaved?.()

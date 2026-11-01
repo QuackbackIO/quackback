@@ -27,6 +27,20 @@ const LABELS: Record<string, string> = {
   'layout.filters': 'Filters side',
   'pages.feedback.defaultSort': 'Default sort',
   'brand.logo.display': 'Logo display',
+  'nav.home.on': 'Home page',
+  'nav.home.tab': 'Home in the menu',
+  'nav.home.label': 'Home tab name',
+  'nav.items': 'Menu',
+  'vocabulary.post': 'What people post',
+  'vocabulary.board': 'What groups them',
+  css: 'Custom CSS',
+  'pages.home.blocks': 'Home blocks',
+}
+
+const COPY_LABELS: Record<string, string> = {
+  prompt: 'Composer prompt',
+  submit: 'Submit button',
+  emptyTitle: 'Empty feed title',
 }
 
 const IMAGES: Record<string, string> = {
@@ -55,10 +69,15 @@ export function changeLabel(path: string): string {
     const name = COLOURS[colour[2]] ?? colour[2]
     return colour[1] === 'dark' ? `Dark ${name.toLowerCase()}` : name
   }
+  const copy = path.match(/^pages\.feedback\.copy\.(prompt|submit|emptyTitle)/)
+  if (copy) return COPY_LABELS[copy[1]!]!
   if (path.startsWith('pages.feedback.welcome.body')) return 'Welcome message text'
   if (path === 'pages.feedback.welcome.show') return 'Welcome message'
-  const headline = path.match(/^pages\.feedback\.headline(?:\.(title|subtitle))?/)
-  if (headline) return headline[1] === 'subtitle' ? 'Subtitle' : 'Headline'
+  const headline = path.match(/^pages\.(feedback|home)\.headline(?:\.(title|subtitle))?/)
+  if (headline) {
+    const name = headline[2] === 'subtitle' ? 'Subtitle' : 'Headline'
+    return headline[1] === 'home' ? `Home ${name.toLowerCase()}` : name
+  }
   const font = path.match(/^(brand\.fonts\.(?:heading|body))\./)
   return LABELS[font ? font[1] : path] ?? path
 }

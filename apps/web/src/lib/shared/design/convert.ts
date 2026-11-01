@@ -75,9 +75,11 @@ function palette(vars: ThemeVariables | undefined, base: typeof DEFAULT_LIGHT_BA
   return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined)) as Palette
 }
 
+const RADIUS = /^(\d+(?:\.\d+)?)(rem|px|em)?$/
+
 function corners(radius: unknown): PortalDesign['shape']['corners'] {
   if (typeof radius !== 'string') return 'rounded'
-  const match = /^(\d+(?:\.\d+)?)(rem|px|em)?$/.exec(radius.trim())
+  const match = RADIUS.exec(radius.trim())
   if (!match) return 'rounded'
   const rem = match[2] === 'px' ? Number(match[1]) / 16 : Number(match[1])
   if (rem === 0) return 'sharp'
@@ -96,11 +98,43 @@ export function leadingFamily(stack: string): string {
 }
 
 /** The bundled font a saved stack leads with; presets wrote stacks that differ after the first family. */
+function bundledFont(fontSans: string) {
+  const family = leadingFamily(normalizeFontSans(fontSans))
+  return BUNDLED_FONT_IDS.find((font) => leadingFamily(bundledFontStack(font)) === family)
+}
+
 function bodyFont(fontSans: unknown): PortalDesign['brand']['fonts']['body'] {
   if (typeof fontSans !== 'string') return { kind: 'bundled', id: 'inter' }
-  const family = leadingFamily(normalizeFontSans(fontSans))
-  const id = BUNDLED_FONT_IDS.find((font) => leadingFamily(bundledFontStack(font)) === family)
-  return { kind: 'bundled', id: id ?? 'inter' }
+  return { kind: 'bundled', id: bundledFont(fontSans) ?? 'inter' }
+}
+
+/** The theme variables the converter reads, each with the design field it becomes. */
+export const CARRIED_THEME_VARIABLES = {
+  primary: 'accent',
+  background: 'background',
+  foreground: 'text colour',
+  card: 'surface',
+  muted: 'raised surface',
+  mutedForeground: 'muted text colour',
+  border: 'border colour',
+  radius: 'corners',
+  fontSans: 'font',
+} as const satisfies Partial<Record<keyof ThemeVariables, string>>
+
+/**
+ * Whether the converter carries this value of a theme variable into a design.
+ * Corners and the font come from the light theme only.
+ */
+export function carriesThemeVariable(
+  name: keyof ThemeVariables,
+  value: string,
+  mode: 'light' | 'dark'
+): boolean {
+  if (name === 'radius' || name === 'fontSans') {
+    if (mode === 'dark') return false
+    return name === 'radius' ? RADIUS.test(value.trim()) : bundledFont(value) !== undefined
+  }
+  return name in CARRIED_THEME_VARIABLES && color(value) !== undefined
 }
 
 const DISPLAY: Record<string, PortalDesign['brand']['logo']['display']> = {

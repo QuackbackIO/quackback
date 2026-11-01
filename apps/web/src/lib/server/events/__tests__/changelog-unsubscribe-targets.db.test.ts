@@ -121,6 +121,7 @@ async function emailedAddresses(changelogId: ChangelogId): Promise<string[]> {
     workspaceName: 'Acme',
     portalBaseUrl: 'https://acme.test',
     logoUrl: null,
+    postWord: 'idea' as const,
   })
   return targets.filter((t) => t.type === 'email').map((t) => (t.target as { email: string }).email)
 }

@@ -206,6 +206,28 @@ describe('emailHook', () => {
         logoUrl: 'https://example.com/logo.png',
       })
     })
+    it('names what the visitor posted in the portal’s word', async () => {
+      mockStatusChangeEmail.mockResolvedValue({ sent: true })
+      mockNewCommentEmail.mockResolvedValue({ sent: true })
+      const config = { ...baseConfig, postWord: 'suggestion' as const }
+      await emailHook.run(statusChangedEvent, baseTarget, {
+        ...config,
+        previousStatus: 'open',
+        newStatus: 'planned',
+      })
+      await emailHook.run(commentCreatedEvent, baseTarget, {
+        ...config,
+        commenterName: 'Commenter',
+        commentPreview: 'Hello',
+      })
+      expect(mockStatusChangeEmail).toHaveBeenLastCalledWith(
+        expect.objectContaining({ postWord: 'suggestion' })
+      )
+      expect(mockNewCommentEmail).toHaveBeenLastCalledWith(
+        expect.objectContaining({ postWord: 'suggestion' })
+      )
+    })
+
     it('sends changelog published email with the full rendered body and returns success', async () => {
       mockChangelogPublishedEmail.mockResolvedValue({ sent: true })
       const changelogPublishedEvent = {

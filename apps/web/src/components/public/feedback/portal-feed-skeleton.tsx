@@ -88,7 +88,10 @@ function PanelSkeleton({ layout }: { layout: 'sidebar' | 'sheet' }) {
   const boards = (
     <PanelSection
       key="boards"
-      title={intl.formatMessage({ id: 'portal.feedback.sidebar.boards', defaultMessage: 'Boards' })}
+      title={intl.formatMessage({
+        id: 'portal.feedback.sidebar.boards',
+        defaultMessage: '{boardWord, select, category {Categories} other {Boards}}',
+      })}
     >
       <div className="space-y-1">
         <button
@@ -100,7 +103,7 @@ function PanelSkeleton({ layout }: { layout: 'sidebar' | 'sheet' }) {
           <span className="truncate">
             {intl.formatMessage({
               id: 'portal.feedback.panel.allBoards',
-              defaultMessage: 'All boards',
+              defaultMessage: '{boardWord, select, category {All categories} other {All boards}}',
             })}
           </span>
         </button>

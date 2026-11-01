@@ -63,6 +63,9 @@ import { NoteMentionEmail } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { FeedbackLinkedEmail } from './templates/feedback-linked'
+import { postNoun, type PostWord } from './post-word'
+
+export type { PostWord } from './post-word'
 import { PasswordResetEmail } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 import { NewSignInEmail } from './templates/new-sign-in'
@@ -947,6 +950,13 @@ interface SendStatusChangeParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** What visitors call what they post; idea when not given. */
+  postWord?: PostWord
+}
+
+/** The status email's subject, in the portal's word. */
+export function statusChangeSubject(newStatus: string, postWord?: PostWord): string {
+  return `Your ${postNoun(postWord)} is now ${newStatus.replace(/_/g, ' ')}!`
 }
 
 export async function sendStatusChangeEmail(params: SendStatusChangeParams): Promise<EmailResult> {
@@ -960,13 +970,12 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    postWord,
   } = params
-
-  const formattedNewStatus = newStatus.replace(/_/g, ' ')
 
   return sendEmail({
     to,
-    subject: `Your feedback is now ${formattedNewStatus}!`,
+    subject: statusChangeSubject(newStatus, postWord),
     react: StatusChangeEmail({
       postTitle,
       postUrl,
@@ -976,6 +985,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
       unsubscribeUrl,
       preferencesUrl,
       logoUrl,
+      postWord,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'StatusChangeEmail',
@@ -998,6 +1008,8 @@ interface SendNewCommentParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** What visitors call what they post; idea when not given. */
+  postWord?: PostWord
 }
 
 export async function sendNewCommentEmail(params: SendNewCommentParams): Promise<EmailResult> {
@@ -1012,6 +1024,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    postWord,
   } = params
 
   return sendEmail({
@@ -1027,6 +1040,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
       unsubscribeUrl,
       preferencesUrl,
       logoUrl,
+      postWord,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'NewCommentEmail',
@@ -1439,6 +1453,8 @@ export interface SendPostMentionEmailArgs {
   unsubscribeUrl?: string
   preferencesUrl?: string
   logoUrl?: string
+  /** What visitors call what they post; idea when not given. */
+  postWord?: PostWord
 }
 
 export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Promise<EmailResult> {
@@ -1452,6 +1468,7 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
     unsubscribeUrl,
     preferencesUrl,
     logoUrl,
+    postWord,
   } = args
 
   const displayName = mentionerName || 'Anonymous user'
@@ -1469,6 +1486,7 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
       unsubscribeUrl,
       preferencesUrl,
       logoUrl,
+      postWord,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'PostMentionEmail',
@@ -1607,6 +1625,8 @@ interface SendFeedbackLinkedParams {
   preferencesUrl?: string
   attributedByName?: string
   logoUrl?: string
+  /** What visitors call what they post; idea when not given. */
+  postWord?: PostWord
 }
 
 export async function sendFeedbackLinkedEmail(
@@ -1622,6 +1642,7 @@ export async function sendFeedbackLinkedEmail(
     preferencesUrl,
     attributedByName,
     logoUrl,
+    postWord,
   } = params
 
   return sendEmail({
@@ -1636,6 +1657,7 @@ export async function sendFeedbackLinkedEmail(
       preferencesUrl,
       attributedByName,
       logoUrl,
+      postWord,
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'FeedbackLinkedEmail',

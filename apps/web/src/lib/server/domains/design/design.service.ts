@@ -22,6 +22,7 @@ import { recordAuditEventInTransaction, type AuditActor } from '@/lib/server/aud
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { resolveDesign } from '@/lib/shared/design/resolve'
+import { lintDesignCss } from './css-lint'
 import { portalDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { logger } from '@/lib/server/logger'
 import { digestOf } from '@/lib/server/utils/canonical-json'
@@ -56,7 +57,35 @@ export function validateDesign(input: unknown): PortalDesign {
   }
   const { errors } = resolveDesign(parsed.data)
   if (errors.length > 0) throw new ValidationError('UNREADABLE_DESIGN', errors.join('; '))
+  if (parsed.data.css) {
+    const lint = lintDesignCss(parsed.data.css)
+    if (lint.errors.length > 0) {
+      throw new ValidationError(
+        'INVALID_CSS',
+        lint.errors.map((e) => (e.line ? `Line ${e.line}: ${e.message}` : e.message)).join(' ')
+      )
+    }
+  }
   return parsed.data
+}
+
+/**
+ * Custom CSS is a plan feature. CSS the published design already has stays,
+ * and removing it is always allowed, so a workspace whose plan dropped the
+ * feature can still save everything else.
+ */
+async function assertCssAllowed(
+  executor: typeof db | Transaction,
+  document: PortalDesign,
+  publishedRevisionId: PortalDesignRevisionId | null
+): Promise<void> {
+  const css = document.css?.trim() ?? ''
+  if (!css) return
+  const published = await revision(executor, publishedRevisionId)
+  const live = published ? portalDesign.parse(published.document).css?.trim() : undefined
+  if (css === live) return
+  const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+  await assertTierFeature('customCss', 'Custom CSS')
 }
 
 /** The workspace's default site, the only one until sites ship. */
@@ -144,6 +173,7 @@ export async function saveDraft(input: unknown, author: DesignAuthor): Promise<v
       await tx.insert(portalDesigns).values({}).onConflictDoNothing()
       row = (await designRow(tx, true))!
     }
+    await assertCssAllowed(tx, document, row.publishedRevisionId)
     const now = new Date()
     await tx
       .update(portalDesigns)
@@ -170,7 +200,7 @@ async function publishDocument(
   tx: Transaction,
   designId: PortalDesignId,
   document: PortalDesign,
-  author: DesignAuthor,
+  author: Pick<DesignAuthor, 'principalId'> | null,
   source: PortalDesignSource,
   message: string | null
 ) {
@@ -183,7 +213,14 @@ async function publishDocument(
   const number = (latest?.number ?? 0) + 1
   const [created] = await tx
     .insert(portalDesignRevisions)
-    .values({ designId, number, document, source, principalId: author.principalId, message })
+    .values({
+      designId,
+      number,
+      document,
+      source,
+      principalId: author?.principalId ?? null,
+      message,
+    })
     .returning({ id: portalDesignRevisions.id })
   await tx
     .update(portalDesigns)
@@ -259,6 +296,89 @@ export async function publishDraftInTransaction(
     metadata: { principalId: input.principalId, revisionId: published.revisionId },
   })
   return published
+}
+
+/**
+ * Publishes the design a new workspace starts with as its first version, from
+ * setup rather than a person. A workspace with a design keeps it; the result
+ * says whether this one was published.
+ */
+export async function publishStartingDesign(
+  tx: Transaction,
+  document: PortalDesign
+): Promise<boolean> {
+  await tx.insert(portalDesigns).values({}).onConflictDoNothing()
+  const row = (await designRow(tx, true))!
+  if (row.publishedRevisionId || row.draft) return false
+  await publishDocument(tx, row.id, validateDesign(document), null, 'conversion', null)
+  return true
+}
+
+/**
+ * Publishes a workspace's design for the first time, from its own theme and
+ * CSS, at a person's request. Refused once a design is published.
+ */
+export async function publishSwitchedDesign(
+  document: PortalDesign,
+  author: DesignAuthor
+): Promise<{ revisionId: PortalDesignRevisionId; number: number }> {
+  const valid = validateDesign(document)
+  const result = await db.transaction(async (tx) => {
+    await tx.insert(portalDesigns).values({}).onConflictDoNothing()
+    const row = (await designRow(tx, true))!
+    if (row.publishedRevisionId) {
+      throw new ConflictError('DESIGN_CHANGED', 'This portal already uses the design system.')
+    }
+    const published = await publishDocument(
+      tx,
+      row.id,
+      valid,
+      author,
+      'conversion',
+      'Switched from custom CSS'
+    )
+    await recordAuditEventInTransaction(tx, {
+      event: 'design.switched',
+      actor: author.actor,
+      headers: author.headers,
+      target: { type: 'portal_design', id: row.id },
+      after: { revision: published.number },
+      metadata: { principalId: author.principalId, revisionId: published.revisionId },
+    })
+    return published
+  })
+  await invalidateSettingsCache()
+  return result
+}
+
+/**
+ * Takes the published design off the portal, so the old theme shows again.
+ * Its versions and any draft stay, ready to publish again.
+ */
+export async function unpublishDesign(author: DesignAuthor): Promise<void> {
+  await db.transaction(async (tx) => {
+    const row = await designRow(tx, true)
+    if (!row?.publishedRevisionId) {
+      throw new ConflictError(
+        'NOT_SWITCHED',
+        'This portal has no published design to switch back from.'
+      )
+    }
+    const published = await revision(tx, row.publishedRevisionId)
+    await tx
+      .update(portalDesigns)
+      .set({ publishedRevisionId: null, updatedAt: new Date() })
+      .where(eq(portalDesigns.id, row.id))
+    await recordAuditEventInTransaction(tx, {
+      event: 'design.switched_back',
+      actor: author.actor,
+      headers: author.headers,
+      target: { type: 'portal_design', id: row.id },
+      before: { revision: published?.number ?? null },
+      metadata: { principalId: author.principalId },
+    })
+  })
+  await invalidateSettingsCache()
 }
 
 /** Publishes an old revision's document as the next revision. A draft in progress is kept. */

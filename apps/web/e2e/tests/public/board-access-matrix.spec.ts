@@ -299,7 +299,7 @@ async function submitFeedback(page: Page, boardSlug: string, title: string) {
   const submit = page.getByRole('button', { name: /^submit/i }).first()
   await expect(submit).toBeEnabled()
   await submit.click()
-  await expect(page.getByText('Feedback submitted')).toBeVisible({ timeout: 10000 })
+  await expect(page.getByText('Idea submitted')).toBeVisible({ timeout: 10000 })
 }
 
 /** Does the board's filtered feed (newest-first) surface a post with this title? */

@@ -49,6 +49,21 @@ export function createFeedHandoff(): FeedHandoff {
   }
 }
 
+/** Arrivals whose title a feed has opened, so a feed that mounts again leaves it. */
+const openedArrivals = new WeakSet<object>()
+
+/**
+ * The title Home's Share an idea sends in the history state of its navigation
+ * to the feed, the first time a feed asks for that arrival.
+ */
+export function takeArrivedTitle(state: unknown): string | undefined {
+  if (!state || typeof state !== 'object' || openedArrivals.has(state)) return undefined
+  const title = (state as { composeTitle?: unknown }).composeTitle
+  if (typeof title !== 'string') return undefined
+  openedArrivals.add(state)
+  return title
+}
+
 export const FeedHandoffContext = createContext<FeedHandoff | null>(null)
 
 /** This feed's handoff; null outside a portal feed, where nothing is carried. */

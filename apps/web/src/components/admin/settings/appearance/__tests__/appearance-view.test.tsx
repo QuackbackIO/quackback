@@ -27,10 +27,18 @@ vi.mock('@tanstack/react-router', () => ({
   }),
   ClientOnly: ({ children }: { children: ReactNode }) => <>{children}</>,
   Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
+  useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
+    select({ settings: { featureFlags: { feedback: true, changelog: true } } }),
+}))
+vi.mock('@/components/admin/settings/branding/welcome-body-editor', () => ({
+  WelcomeBodyEditor: () => null,
+}))
+vi.mock('@/lib/client/queries/admin', () => ({
+  adminQueries: { roadmaps: () => ({ queryKey: ['roadmaps'], queryFn: async () => [] }) },
 }))
 vi.mock('@/components/admin/settings/branding/portal-preview', () => ({
-  PortalPreview: ({ design }: { design: { css: string } }) => (
-    <div data-testid="preview">
+  PortalPreview: ({ design, page }: { design: { css: string }; page: string }) => (
+    <div data-testid="preview" data-page={page}>
       {design.css.includes('--qb-card-padding: 0.75rem') ? 'compact' : 'comfortable'}
     </div>
   ),
@@ -38,13 +46,22 @@ vi.mock('@/components/admin/settings/branding/portal-preview', () => ({
 vi.mock('@/lib/server/functions/portal-design', () => ({
   getPortalDesignFn: async () => editorState(),
   listPortalDesignVersionsFn: async () => [],
-  savePortalDesignDraftFn: async () => ({ ok: true, report: { adjustments: [], errors: [] } }),
+  savePortalDesignDraftFn: async () => ({
+    ok: true,
+    report: { adjustments: [], errors: [], css: [] },
+  }),
   discardPortalDesignDraftFn: async () => ({ ok: true }),
   publishPortalDesignFn: async ({ data }: { data: unknown }) => {
     server.published.push(data)
     return { ok: true, revisionId: 'portal_design_revision_1', number: 1 }
   },
   restorePortalDesignVersionFn: async () => ({ ok: true }),
+  getPortalDesignSwitchFn: async () => ({
+    available: false,
+    canSwitchBack: false,
+    report: { errors: [], warnings: [], carried: [] },
+  }),
+  switchBackPortalDesignFn: async () => ({ ok: true }),
 }))
 
 vi.mock('@/lib/client/analytics', () => ({
@@ -80,7 +97,7 @@ vi.mock('@/lib/server/functions/portal-design-ai', () => ({
       applied: [{ path: 'layout.density', before: 'comfortable', after: 'compact' }],
       skipped: 0,
       readability: [],
-      report: { adjustments: [], errors: [] },
+      report: { adjustments: [], errors: [], css: [] },
     }
   },
 }))
@@ -105,7 +122,7 @@ function editorState() {
     live: defaultDesign(),
     source: 'converted' as const,
     published: null,
-    report: { adjustments: [], errors: [] },
+    report: { adjustments: [], errors: [], css: [] },
     revision: 'rev1',
   }
 }
@@ -132,15 +149,46 @@ afterEach(() => {
 })
 
 const selectedTab = () => screen.getByRole('tab', { selected: true }).textContent
+// The menu's drag and drop keeps a status region of its own.
+const draftBar = () =>
+  screen
+    .getAllByRole('status')
+    .map((region) => region.textContent ?? '')
+    .find((text) => text.startsWith('Draft'))
 
 describe('AppearanceView', () => {
+  it('previews Home once it is on, with the feed a click away', async () => {
+    mount()
+    const preview = () => screen.getByTestId('preview').dataset.page
+    expect(preview()).toBe('feedback')
+    expect(screen.queryByRole('group', { name: 'Page' })).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Sections' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Home page' }))
+    expect(preview()).toBe('home')
+    // The starting layout holds the pages this workspace has.
+    expect(screen.getByRole('list', { name: 'Home blocks' }).textContent).toContain(
+      'Latest updates'
+    )
+    expect(screen.getByRole('list', { name: 'Home blocks' }).textContent).not.toContain('Status')
+    fireEvent.click(screen.getByRole('button', { name: 'Feedback' }))
+    expect(preview()).toBe('feedback')
+    // Changing Home shows Home again.
+    expect(screen.getByRole('textbox', { name: 'Feedback headline' })).toBeTruthy()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Home headline' }), {
+      target: { value: 'Welcome to Acme' },
+    })
+    expect(preview()).toBe('home')
+    fireEvent.click(screen.getByRole('switch', { name: 'Home page' }))
+    expect(preview()).toBe('feedback')
+  })
+
   it('shows a change in the preview and the draft bar at once', async () => {
     mount()
     expect(screen.queryByText(/not live/)).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: 'Sections' }))
     fireEvent.click(await screen.findByRole('radio', { name: 'Compact' }))
     expect(screen.getByTestId('preview').textContent).toBe('compact')
-    expect(screen.getByRole('status').textContent).toContain('Draft · 1 change, not live')
+    expect(draftBar()).toContain('Draft · 1 change, not live')
   })
 
   it('opens Sections when a section is picked in the preview', async () => {
@@ -170,7 +218,7 @@ describe('AppearanceView', () => {
     mount()
     fireEvent.click(screen.getByRole('button', { name: 'Start from a preset' }))
     fireEvent.click(await screen.findByRole('button', { name: /Editorial/ }))
-    expect(screen.getByRole('status').textContent).toMatch(/Draft · \d+ changes, not live/)
+    expect(draftBar()).toMatch(/Draft · \d+ changes, not live/)
     fireEvent.click(screen.getByRole('tab', { name: 'Sections' }))
     expect(await screen.findByRole('radio', { name: 'List' })).toHaveAttribute(
       'aria-checked',
@@ -210,7 +258,7 @@ describe('AppearanceView', () => {
     expect(selectedTab()).toBe('Ask AI')
     expect(await screen.findByText('Changes applied to your draft')).toBeTruthy()
     expect(screen.getByTestId('preview').textContent).toBe('compact')
-    expect(screen.getByRole('status').textContent).toContain('Draft · 1 change, not live')
+    expect(draftBar()).toContain('Draft · 1 change, not live')
 
     fireEvent.click(screen.getByRole('button', { name: 'Review and publish' }))
     const dialog = await screen.findByRole('dialog')

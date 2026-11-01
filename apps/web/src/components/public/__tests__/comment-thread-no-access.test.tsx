@@ -8,6 +8,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import type { ReplyPolicy } from '@/lib/shared/db-types'
 import type { PostId } from '@quackback/ids'
 
@@ -33,21 +34,23 @@ import { CommentThread } from '../comment-thread'
 afterEach(cleanup)
 
 const POST_ID = 'post_01h00000000000000000000000' as PostId
-const AUTHOR_ONLY = 'Only the post author and team members can reply on this board'
+const AUTHOR_ONLY = 'Only the author and team members can reply on this board'
 const NO_ACCESS = "You don't have access to comment on this board"
 
 function renderDenied(replyPolicy?: ReplyPolicy) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <IntlProvider locale="en" messages={{}} onError={() => {}}>
-        <CommentThread
-          postId={POST_ID}
-          comments={[]}
-          allowCommenting={false}
-          noAccess
-          replyPolicy={replyPolicy}
-          user={{ name: 'Viewer', email: 'viewer@example.com' }}
-        />
+        <PortalWordsIntl>
+          <CommentThread
+            postId={POST_ID}
+            comments={[]}
+            allowCommenting={false}
+            noAccess
+            replyPolicy={replyPolicy}
+            user={{ name: 'Viewer', email: 'viewer@example.com' }}
+          />
+        </PortalWordsIntl>
       </IntlProvider>
     </QueryClientProvider>
   )

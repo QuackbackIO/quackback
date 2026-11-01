@@ -64,6 +64,7 @@ const { verifyHelpCenterDomain } = await import('../help-center-domain.service')
 const { getHelpCenterConfig } = await import('@/lib/server/domains/settings/settings.service')
 const { runWithLogContext } = await import('@/lib/server/log-context')
 const { forgetCachedKeys } = await import('@/lib/server/local-cache')
+const { CACHE_KEYS } = await import('@/lib/server/cache')
 
 const COMPLETE_SETUP = JSON.stringify({
   version: 2,
@@ -100,7 +101,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async () => new Response('ok'))
   )
-  forgetCachedKeys('settings:workspace')
+  forgetCachedKeys(CACHE_KEYS.WORKSPACE_SETTINGS)
   kvRows.clear()
   resolvedHosts.length = 0
 })

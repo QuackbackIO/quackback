@@ -145,7 +145,9 @@ export function WidgetOverview({
               card.subtitle ?? (
                 <FormattedMessage
                   id="widget.launcher.action.feedback.sub"
-                  defaultMessage="Share an idea or vote on others"
+                  defaultMessage={
+                    '{postWord, select, post {Write a post or vote on others} feature_request {Request a feature or vote on others} suggestion {Make a suggestion or vote on others} other {Share an idea or vote on others}}'
+                  }
                 />
               )
             }

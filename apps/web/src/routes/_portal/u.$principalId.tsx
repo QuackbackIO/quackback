@@ -14,6 +14,7 @@ import {
   getProfileTeamContextFn,
   type PublicProfileActivityItemView,
 } from '@/lib/server/functions/public-profile'
+import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
 export const Route = createFileRoute('/_portal/u/$principalId')({
   loader: async ({ params, context }) => {
@@ -55,7 +56,7 @@ function ProfileNotFound() {
       <p className="text-lg font-medium">
         <FormattedMessage id="portal.profile.notFound" defaultMessage="Profile not found" />
       </p>
-      <Link to="/" className="mt-4 inline-block text-sm text-primary hover:underline">
+      <Link to={PORTAL_LANDING} className="mt-4 inline-block text-sm text-primary hover:underline">
         <FormattedMessage id="portal.profile.backHome" defaultMessage="Back to feedback" />
       </Link>
     </div>
@@ -127,7 +128,8 @@ function PublicProfilePage() {
               value={profile.postCount}
               label={intl.formatMessage({
                 id: 'portal.profile.stats.posts',
-                defaultMessage: 'Posts',
+                defaultMessage:
+                  '{postWord, select, post {Posts} feature_request {Feature requests} suggestion {Suggestions} other {Ideas}}',
               })}
             />
             <ProfileStat
@@ -216,7 +218,12 @@ function PublicProfilePage() {
       <Tabs defaultValue="posts" className="animate-in fade-in duration-300 fill-mode-backwards">
         <TabsList>
           <TabsTrigger value="posts">
-            <FormattedMessage id="portal.profile.tabs.posts" defaultMessage="Posts" />
+            <FormattedMessage
+              id="portal.profile.tabs.posts"
+              defaultMessage={
+                '{postWord, select, post {Posts} feature_request {Feature requests} suggestion {Suggestions} other {Ideas}}'
+              }
+            />
           </TabsTrigger>
           <TabsTrigger value="comments">
             <FormattedMessage id="portal.profile.tabs.comments" defaultMessage="Comments" />
@@ -235,7 +242,8 @@ function PublicProfilePage() {
             })}
             emptyMessage={intl.formatMessage({
               id: 'portal.profile.empty.posts',
-              defaultMessage: 'No posts yet',
+              defaultMessage:
+                '{postWord, select, post {No posts yet} feature_request {No feature requests yet} suggestion {No suggestions yet} other {No ideas yet}}',
             })}
           />
         </TabsContent>

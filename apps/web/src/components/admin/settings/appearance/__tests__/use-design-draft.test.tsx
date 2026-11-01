@@ -23,7 +23,7 @@ vi.mock('@/lib/server/functions/portal-design', () => ({
   savePortalDesignDraftFn: async ({ data }: { data: { design: unknown } }) => {
     server.saves.push(data.design)
     if (server.hold) await server.hold
-    return { ok: true, report: { adjustments: [], errors: [] } }
+    return { ok: true, report: { adjustments: [], errors: [], css: [] } }
   },
   discardPortalDesignDraftFn: async () => ({ ok: true }),
   publishPortalDesignFn: async () => server.publishResult,
@@ -39,7 +39,7 @@ function editorState() {
     live: defaultDesign(),
     source: 'converted' as const,
     published: null,
-    report: { adjustments: [], errors: [] },
+    report: { adjustments: [], errors: [], css: [] },
     revision: 'rev1',
   }
 }

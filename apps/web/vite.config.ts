@@ -9,6 +9,7 @@ import { readFileSync } from 'fs'
 import { CLIENT_PROTECTED_SPECIFIERS } from './src/lib/server/policy/client-import-protection'
 import { routeChunksImportTheirParent } from './src/lib/build/route-chunk-parents'
 import { serverWorkers } from './src/lib/build/server-workers'
+import { fontManifest } from './src/lib/build/font-manifest'
 
 /**
  * Replace the server-only structured logger with a no-op stub in the CLIENT
@@ -213,6 +214,8 @@ export default defineConfig(({ mode }) => {
     plugins: [
       // `?server-worker` imports: worker-thread scripts for server code.
       serverWorkers(),
+      // Each bundled font's files, for the portal's head during SSR.
+      fontManifest(path.resolve(__dirname, 'src')),
       letNitroServeStorageAssets(),
       keepSsrOnlyDepsOutOfClientOptimizer(),
       stubServerLoggerInClient(),
@@ -247,7 +250,24 @@ export default defineConfig(({ mode }) => {
       viteReact(),
       // A route's chunks import the chunk of the route they render under, so
       // what a layout shares with its pages stays in the layout's chunk.
-      routeChunksImportTheirParent(path.resolve(__dirname, 'src/routeTree.gen.ts')),
+      routeChunksImportTheirParent(path.resolve(__dirname, 'src/routeTree.gen.ts'), {
+        // Home is loaded by the portal root itself, so its chunk shares the
+        // portal layout's modules the way the root's own split would.
+        lazyChildren: {
+          [path.resolve(__dirname, 'src/components/public/home/portal-home.tsx')]: path.resolve(
+            __dirname,
+            'src/routes/_portal/index.tsx'
+          ),
+        },
+        // The root renders the feed while it is the landing page, so the
+        // feed's chunk is preloaded there as well as at /feedback.
+        sharedComponents: {
+          [path.resolve(__dirname, 'src/routes/_portal/feedback.tsx')]: path.resolve(
+            __dirname,
+            'src/routes/_portal/index.tsx'
+          ),
+        },
+      }),
     ].filter(Boolean) as PluginOption[],
   }
 })

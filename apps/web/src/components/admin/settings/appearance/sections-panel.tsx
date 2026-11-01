@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { SettingRow } from '@/components/admin/settings/setting-row'
@@ -5,7 +6,13 @@ import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { SupportedLocale } from '@/lib/shared/i18n'
+import type { PortalPageGates } from '@/lib/shared/design/paths'
 import { DesignTiles } from './design-tiles'
+import { LanguagePicker } from './language-picker'
+import { HomeSection } from './home-section'
+import { MenuSection } from './menu-section'
+import { CssSection, type CssWarning } from './css-section'
 import {
   BandDrawing,
   CardsDrawing,
@@ -21,17 +28,39 @@ type Update = (change: (draft: PortalDesign) => void) => void
 
 const capital = (value: string) => value[0].toUpperCase() + value.slice(1)
 
-/** The language the headline is written in here; other languages fall back to it. */
-const HEADLINE_LOCALE = 'en'
+/** With Home on, Home has a headline too, so the feed's says whose it is. */
+const HEADLINE_LABELS = {
+  title: { alone: 'Headline', withHome: 'Feedback headline' },
+  subtitle: { alone: 'Subtitle', withHome: 'Feedback subtitle' },
+}
 
 /**
  * The Sections tab: the choices each part of the portal offers. Core parts
  * are restyled here, never hidden.
  */
-export function SectionsPanel({ design, update }: { design: PortalDesign; update: Update }) {
+export function SectionsPanel({
+  design,
+  update,
+  gates,
+  onEditHome,
+  cssWarnings,
+}: {
+  design: PortalDesign
+  update: Update
+  /** Which pages the workspace has, for Home's starting layout and its hints. */
+  gates: PortalPageGates
+  /** Called when Home changes, so the preview can show it. */
+  onEditHome: () => void
+  /** What the CSS check warns about in the draft's CSS. */
+  cssWarnings: readonly CssWarning[]
+}) {
   const { layout } = design
+  // The language the headline is written in; each visitor sees theirs, else the closest.
+  const [headlineLocale, setHeadlineLocale] = useState<SupportedLocale>('en')
   return (
     <div className="space-y-8">
+      <HomeSection design={design} update={update} gates={gates} onEdit={onEditHome} />
+
       <section id="design-section-header" className="scroll-mt-4 space-y-4">
         <h3 className="text-sm font-semibold">Header</h3>
         <DesignTiles
@@ -58,6 +87,8 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
         />
       </section>
 
+      <MenuSection design={design} update={update} gates={gates} />
+
       <section id="design-section-band" className="scroll-mt-4 space-y-4">
         <h3 className="text-sm font-semibold">Top band</h3>
         <DesignTiles
@@ -77,21 +108,28 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
             The band shows behind a headline. Add one below.
           </p>
         )}
+        <div className="flex justify-end">
+          <LanguagePicker
+            value={headlineLocale}
+            onChange={setHeadlineLocale}
+            label="Headline language"
+          />
+        </div>
         {(['title', 'subtitle'] as const).map((field) => (
           <div key={field} className="space-y-1.5">
             <label htmlFor={`design-headline-${field}`} className="text-[13px] font-medium">
-              {field === 'title' ? 'Headline' : 'Subtitle'}
+              {HEADLINE_LABELS[field][design.nav.home.on ? 'withHome' : 'alone']}
             </label>
             <Input
               id={`design-headline-${field}`}
-              value={design.pages.feedback.headline?.[field][HEADLINE_LOCALE] ?? ''}
+              value={design.pages.feedback.headline?.[field][headlineLocale] ?? ''}
               maxLength={280}
               onChange={(event) =>
                 update((draft) => {
                   const headline = draft.pages.feedback.headline ?? { title: {}, subtitle: {} }
                   const text = event.target.value
-                  if (text) headline[field][HEADLINE_LOCALE] = text
-                  else delete headline[field][HEADLINE_LOCALE]
+                  if (text) headline[field][headlineLocale] = text
+                  else delete headline[field][headlineLocale]
                   const empty =
                     Object.keys(headline.title).length + Object.keys(headline.subtitle).length === 0
                   draft.pages.feedback.headline = empty ? null : headline
@@ -202,6 +240,8 @@ export function SectionsPanel({ design, update }: { design: PortalDesign; update
           }))}
         />
       </section>
+
+      <CssSection design={design} update={update} warnings={cssWarnings} />
     </div>
   )
 }

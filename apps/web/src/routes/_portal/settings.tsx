@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import { SettingsNav } from '@/components/settings/settings-nav'
 import { AreaMessages } from '@/components/shared/area-messages'
 import { DEFAULT_LOCALE, seedAreaMessages } from '@/lib/shared/i18n'
+import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
 /**
  * Settings layout for authenticated users.
@@ -12,7 +13,7 @@ export const Route = createFileRoute('/_portal/settings')({
   beforeLoad: ({ context }) => {
     // Require authentication for settings pages
     if (!context.session?.user) {
-      throw redirect({ to: '/' })
+      throw redirect({ to: PORTAL_LANDING })
     }
   },
   // Settings strings stay out of the catalog every other page seeds; these

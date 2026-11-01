@@ -130,7 +130,8 @@ export function ManagePostActions({
         <span className="sr-only">
           {intl.formatMessage({
             id: 'portal.postDetail.metadata.managePost',
-            defaultMessage: 'Manage post',
+            defaultMessage:
+              '{postWord, select, post {Manage post} feature_request {Manage feature request} suggestion {Manage suggestion} other {Manage idea}}',
           })}
         </span>
       )}
@@ -248,7 +249,8 @@ export function ManagePostActions({
               <TooltipContent side="bottom">
                 {intl.formatMessage({
                   id: 'portal.postDetail.metadata.restorePost',
-                  defaultMessage: 'Restore post',
+                  defaultMessage:
+                    '{postWord, select, post {Restore post} feature_request {Restore feature request} suggestion {Restore suggestion} other {Restore idea}}',
                 })}
               </TooltipContent>
             </Tooltip>
@@ -266,7 +268,8 @@ export function ManagePostActions({
               <TooltipContent side="bottom">
                 {intl.formatMessage({
                   id: 'portal.postDetail.metadata.deletePost',
-                  defaultMessage: 'Delete post',
+                  defaultMessage:
+                    '{postWord, select, post {Delete post} feature_request {Delete feature request} suggestion {Delete suggestion} other {Delete idea}}',
                 })}
               </TooltipContent>
             </Tooltip>
@@ -640,7 +643,10 @@ export function MetadataSidebar({
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <FolderIcon className="h-4 w-4" />
             <span>
-              <FormattedMessage id="portal.postDetail.metadata.board" defaultMessage="Board" />
+              <FormattedMessage
+                id="portal.postDetail.metadata.board"
+                defaultMessage={'{boardWord, select, category {Category} other {Board}}'}
+              />
             </span>
           </div>
           {onBoardChange && allBoards && allBoards.length > 0 ? (
@@ -977,7 +983,9 @@ export function MetadataSidebar({
             <p className="text-xs text-muted-foreground/70 mt-2">
               <FormattedMessage
                 id="portal.postDetail.metadata.subscribeHint"
-                defaultMessage="Get notified when there are updates to this post"
+                defaultMessage={
+                  '{postWord, select, post {Get notified when there are updates to this post} feature_request {Get notified when there are updates to this feature request} suggestion {Get notified when there are updates to this suggestion} other {Get notified when there are updates to this idea}}'
+                }
               />
             </p>
           </div>

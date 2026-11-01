@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import { FeedbackToolbar } from '../feedback-toolbar'
 import { createFeedHandoff, FeedHandoffContext, type FeedHandoff } from '../feed-input-handoff'
 
@@ -9,12 +10,14 @@ function renderToolbar(props: { currentSearch?: string; onSearchChange?: (s: str
   const onSearchChange = props.onSearchChange ?? vi.fn()
   const ui = (currentSearch: string | undefined) => (
     <IntlProvider locale="en">
-      <FeedbackToolbar
-        currentSort="trending"
-        onSortChange={vi.fn()}
-        currentSearch={currentSearch}
-        onSearchChange={onSearchChange}
-      />
+      <PortalWordsIntl>
+        <FeedbackToolbar
+          currentSort="trending"
+          onSortChange={vi.fn()}
+          currentSearch={currentSearch}
+          onSearchChange={onSearchChange}
+        />
+      </PortalWordsIntl>
     </IntlProvider>
   )
   const { rerender } = render(ui(props.currentSearch))
@@ -50,14 +53,16 @@ describe('FeedbackToolbar search', () => {
       onSearchChange: (s: string) => void
     ) => (
       <IntlProvider locale="en">
-        <FeedHandoffContext.Provider value={handoff}>
-          <FeedbackToolbar
-            currentSort="trending"
-            onSortChange={vi.fn()}
-            onSearchChange={onSearchChange}
-            handOffSearch={handOffSearch}
-          />
-        </FeedHandoffContext.Provider>
+        <PortalWordsIntl>
+          <FeedHandoffContext.Provider value={handoff}>
+            <FeedbackToolbar
+              currentSort="trending"
+              onSortChange={vi.fn()}
+              onSearchChange={onSearchChange}
+              handOffSearch={handOffSearch}
+            />
+          </FeedHandoffContext.Provider>
+        </PortalWordsIntl>
       </IntlProvider>
     )
     function typeWhileLoading(handoff: FeedHandoff): ReturnType<typeof vi.fn> {
@@ -141,12 +146,14 @@ describe('FeedbackToolbar sort', () => {
     const onSortChange = vi.fn()
     render(
       <IntlProvider locale="en">
-        <FeedbackToolbar
-          currentSort={currentSort}
-          onSortChange={onSortChange}
-          currentSearch={currentSearch}
-          onSearchChange={vi.fn()}
-        />
+        <PortalWordsIntl>
+          <FeedbackToolbar
+            currentSort={currentSort}
+            onSortChange={onSortChange}
+            currentSearch={currentSearch}
+            onSearchChange={vi.fn()}
+          />
+        </PortalWordsIntl>
       </IntlProvider>
     )
     return { onSortChange }

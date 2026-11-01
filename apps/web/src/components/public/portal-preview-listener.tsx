@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { extractCssVariables, loadBrandingFont, normalizeFontSans } from '@/lib/shared/theme'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import {
   PreviewDraftProvider,
   PreviewAttributesContext,
   PreviewHeadlineContext,
+  PreviewPagesContext,
+  FeedCopyContext,
+  type FeedCopy,
+  type PreviewDesignPages,
   type PortalPreviewDraft,
 } from './preview-draft-context'
 
@@ -121,6 +126,17 @@ export function PortalPreviewProvider({
       stopPicking()
     }
   }, [design, active])
+  // The channel checks their shape; the admin drafted them through the schema.
+  const pages = useMemo<PreviewDesignPages | undefined>(
+    () =>
+      design
+        ? {
+            home: design.home as PreviewDesignPages['home'],
+            nav: design.nav as PreviewDesignPages['nav'],
+          }
+        : undefined,
+    [design]
+  )
   const fontIds = design?.fontIds.join(' ') ?? ''
   useEffect(() => {
     for (const id of fontIds.split(' ').filter(Boolean)) loadBrandingFont(id).catch(() => {})
@@ -131,9 +147,17 @@ export function PortalPreviewProvider({
   return (
     <PreviewDraftProvider draft={draft} css={css}>
       <PreviewHeadlineContext.Provider value={design ? design.headline : undefined}>
-        <PreviewAttributesContext.Provider value={design?.attributes}>
-          {children}
-        </PreviewAttributesContext.Provider>
+        <PreviewPagesContext.Provider value={pages}>
+          <PreviewAttributesContext.Provider value={design?.attributes}>
+            <DraftCopy copy={design?.copy}>
+              {design?.words ? (
+                <PortalWordsIntl words={design.words}>{children}</PortalWordsIntl>
+              ) : (
+                children
+              )}
+            </DraftCopy>
+          </PreviewAttributesContext.Provider>
+        </PreviewPagesContext.Provider>
       </PreviewHeadlineContext.Provider>
       {stylesheet ? <style data-preview-override="">{stylesheet}</style> : null}
       {design?.css ? <style data-preview-design="">{design.css}</style> : null}
@@ -142,4 +166,10 @@ export function PortalPreviewProvider({
       ) : null}
     </PreviewDraftProvider>
   )
+}
+
+/** The draft's own wording in place of the saved design's, while previewing a design. */
+function DraftCopy({ copy, children }: { copy: FeedCopy | null | undefined; children: ReactNode }) {
+  if (!copy) return children
+  return <FeedCopyContext.Provider value={copy}>{children}</FeedCopyContext.Provider>
 }

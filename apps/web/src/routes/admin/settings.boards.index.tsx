@@ -13,6 +13,8 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { usePublishedPortalWords } from '@/lib/client/hooks/use-root-context'
+import { visitorWordsHint } from '@/components/admin/settings/boards/visitor-words'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -44,10 +46,14 @@ export const Route = createFileRoute('/admin/settings/boards/')({
 
 function BoardsSettingsPage() {
   const { data: boards } = useSuspenseQuery(adminQueries.boardsWithCounts())
+  const hint = visitorWordsHint(usePublishedPortalWords())
 
   return (
     <SettingsPage
       page="/admin/settings/boards"
+      badge={
+        hint ? <span className="text-xs font-normal text-muted-foreground">{hint}</span> : undefined
+      }
       actions={boards.length > 0 ? <CreateBoardDialog /> : undefined}
     >
       <SettingsCard flush>

@@ -121,6 +121,7 @@ export function VoteButton({
     return (
       <div
         data-testid="vote-button"
+        data-qb-part="vote-button"
         aria-label={`${displayCount} votes`}
         className={sharedClassName}
       >
@@ -134,6 +135,8 @@ export function VoteButton({
     <button
       type="button"
       data-testid="vote-button"
+      data-qb-part="vote-button"
+      data-state={hasVoted ? 'voted' : undefined}
       aria-label={
         hasVoted
           ? intl.formatMessage(
@@ -147,7 +150,7 @@ export function VoteButton({
               {
                 id: 'portal.postCard.vote.ariaVote',
                 defaultMessage:
-                  'Vote for this post ({count, plural, one {# vote} other {# votes}})',
+                  '{postWord, select, post {Vote for this post ({count, plural, one {# vote} other {# votes}})} feature_request {Vote for this feature request ({count, plural, one {# vote} other {# votes}})} suggestion {Vote for this suggestion ({count, plural, one {# vote} other {# votes}})} other {Vote for this idea ({count, plural, one {# vote} other {# votes}})}}',
               },
               { count: voteCount }
             )

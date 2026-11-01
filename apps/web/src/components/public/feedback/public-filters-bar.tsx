@@ -342,7 +342,8 @@ function buildActiveChips(args: {
     const viewLabels = {
       mine: intl.formatMessage({
         id: 'portal.feedback.panel.view.mine',
-        defaultMessage: 'My ideas',
+        defaultMessage:
+          '{postWord, select, post {My posts} feature_request {My feature requests} suggestion {My suggestions} other {My ideas}}',
       }),
       voted: intl.formatMessage({
         id: 'portal.feedback.panel.view.voted',
@@ -377,7 +378,7 @@ function buildActiveChips(args: {
         type: 'board',
         label: intl.formatMessage({
           id: 'portal.feedback.filter.chip.board',
-          defaultMessage: 'Board:',
+          defaultMessage: '{boardWord, select, category {Category:} other {Board:}}',
         }),
         value: board.name,
         valueId: board.slug,

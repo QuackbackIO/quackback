@@ -1,6 +1,7 @@
 import { Button, Column, Heading, Row, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
 import { typography, button, colors } from './shared-styles'
+import { capitalPostNoun, postNoun, type PostWord } from '../post-word'
 
 export interface PostMentionEmailProps {
   mentionerName: string
@@ -12,6 +13,8 @@ export interface PostMentionEmailProps {
   unsubscribeUrl?: string
   preferencesUrl?: string
   logoUrl?: string
+  /** What visitors call what they post; idea when not given. */
+  postWord?: PostWord
 }
 
 export function PostMentionEmail({
@@ -23,6 +26,7 @@ export function PostMentionEmail({
   unsubscribeUrl,
   preferencesUrl,
   logoUrl,
+  postWord,
 }: PostMentionEmailProps) {
   const displayName = mentionerName || 'Anonymous user'
   const hasExcerpt = excerpt.length > 0
@@ -56,7 +60,7 @@ export function PostMentionEmail({
             color: colors.textMuted,
           }}
         >
-          Feedback
+          {capitalPostNoun(postWord)}
         </Text>
         <Text style={{ ...typography.text, marginTop: '0', marginBottom: '0', fontWeight: '600' }}>
           {postTitle}
@@ -85,7 +89,7 @@ export function PostMentionEmail({
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
         <Button style={button.primary} href={postUrl}>
-          View Feedback
+          View {postNoun(postWord)}
         </Button>
       </Section>
 

@@ -54,7 +54,8 @@ export function PostingToBoard({
             <SelectValue
               placeholder={intl.formatMessage({
                 id: 'portal.feedback.header.selectBoard',
-                defaultMessage: 'Select a board',
+                defaultMessage:
+                  '{boardWord, select, category {Select a category} other {Select a board}}',
               })}
             />
           </SelectTrigger>

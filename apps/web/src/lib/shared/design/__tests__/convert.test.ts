@@ -3,7 +3,12 @@ import { expandTheme } from '@/lib/shared/theme/expand'
 import { normalizeFontSans } from '@/lib/shared/theme/generator'
 import { themePresets } from '@/lib/shared/theme/presets'
 import type { ThemeConfig, ThemeVariables } from '@/lib/shared/theme/types'
-import { convertLegacyBranding, CONVERSION_DELTA_TOKENS, leadingFamily } from '../convert'
+import {
+  carriesThemeVariable,
+  convertLegacyBranding,
+  CONVERSION_DELTA_TOKENS,
+  leadingFamily,
+} from '../convert'
 import { normaliseColor } from '../color'
 import { oklchToHex } from '@/lib/shared/theme/colors'
 import { resolveDesign } from '../resolve'
@@ -174,5 +179,33 @@ describe('convertLegacyBranding', () => {
       { type: 'link', id: 'abc', label: 'Docs', url: 'https://docs.example.com', newTab: false },
     ])
     expect(portalDesign.safeParse(doc).success).toBe(true)
+  })
+})
+
+describe('carriesThemeVariable', () => {
+  it('answers as the conversion does', () => {
+    const accent = (value: string) =>
+      convertLegacyBranding({ brandingConfig: { light: { primary: value } } }).brand.light.accent
+    expect(carriesThemeVariable('primary', '#0f766e', 'light')).toBe(true)
+    expect(accent('#0f766e')).toBe('#0f766e')
+    expect(carriesThemeVariable('primary', 'var(--brand)', 'light')).toBe(false)
+    expect(accent('var(--brand)')).toBe(accent('nonsense'))
+
+    expect(carriesThemeVariable('radius', '0px', 'light')).toBe(true)
+    expect(
+      convertLegacyBranding({ brandingConfig: { light: { radius: '0px' } } }).shape.corners
+    ).toBe('sharp')
+    expect(carriesThemeVariable('radius', 'calc(1rem / 2)', 'light')).toBe(false)
+    expect(carriesThemeVariable('radius', '0px', 'dark')).toBe(false)
+
+    expect(carriesThemeVariable('fontSans', '"Fraunces", serif', 'light')).toBe(true)
+    expect(
+      convertLegacyBranding({ brandingConfig: { light: { fontSans: '"Fraunces", serif' } } }).brand
+        .fonts.body
+    ).toEqual({ kind: 'bundled', id: 'fraunces' })
+    expect(carriesThemeVariable('fontSans', '"Comic Sans MS", cursive', 'light')).toBe(false)
+    expect(carriesThemeVariable('fontSans', '"Fraunces", serif', 'dark')).toBe(false)
+
+    expect(carriesThemeVariable('ring', '#0f766e', 'light')).toBe(false)
   })
 })

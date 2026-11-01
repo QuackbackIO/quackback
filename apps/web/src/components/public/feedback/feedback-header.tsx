@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { useIntl } from 'react-intl'
+import { useFeedCopy } from '@/components/public/preview-draft-context'
 import { PencilIcon } from '@heroicons/react/24/solid'
 import type { FeedbackHeaderProps } from './feedback-header-animated'
 
@@ -25,18 +26,26 @@ interface FallbackProps {
 
 export function FeedbackHeaderFallback({ title, onTitleChange, onFocus }: FallbackProps = {}) {
   const intl = useIntl()
+  const copy = useFeedCopy()
   return (
-    <div className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden">
+    <div
+      data-qb-part="composer"
+      className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden"
+    >
       <div className="flex items-center gap-3 px-4 py-3.5">
         <div className="flex-shrink-0 w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
           <PencilIcon className="w-4 h-4 text-primary" />
         </div>
         <input
           type="text"
-          placeholder={intl.formatMessage({
-            id: 'portal.feedback.header.titlePlaceholder',
-            defaultMessage: "What's your idea?",
-          })}
+          placeholder={
+            copy.prompt ??
+            intl.formatMessage({
+              id: 'portal.feedback.header.titlePlaceholder',
+              defaultMessage:
+                "{postWord, select, post {What's on your mind?} feature_request {What should we build?} suggestion {What's your suggestion?} other {What's your idea?}}",
+            })
+          }
           readOnly={!onTitleChange}
           maxLength={TITLE_MAX_LENGTH}
           value={onTitleChange ? title : undefined}
@@ -44,7 +53,8 @@ export function FeedbackHeaderFallback({ title, onTitleChange, onFocus }: Fallba
           onFocus={onFocus}
           aria-label={intl.formatMessage({
             id: 'portal.feedback.header.titleLabel',
-            defaultMessage: 'Feedback title',
+            defaultMessage:
+              '{postWord, select, post {Post title} feature_request {Feature request title} suggestion {Suggestion title} other {Idea title}}',
           })}
           className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal"
         />

@@ -9,6 +9,7 @@ import type { ReactNode } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import type { WidgetHomeProps } from '../widget-home-animated'
 
 const { createPost, auth } = vi.hoisted(() => ({
@@ -100,7 +101,9 @@ function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return (
     <QueryClientProvider client={qc}>
-      <IntlProvider locale="en">{children}</IntlProvider>
+      <IntlProvider locale="en">
+        <PortalWordsIntl>{children}</PortalWordsIntl>
+      </IntlProvider>
     </QueryClientProvider>
   )
 }
@@ -121,7 +124,7 @@ function renderHome(props: Partial<WidgetHomeProps> = {}) {
 }
 
 function typeTitle(value: string) {
-  fireEvent.change(screen.getByRole('textbox', { name: 'Feedback title' }), {
+  fireEvent.change(screen.getByRole('textbox', { name: 'Idea title' }), {
     target: { value },
   })
 }

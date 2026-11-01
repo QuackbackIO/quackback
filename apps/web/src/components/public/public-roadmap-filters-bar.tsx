@@ -156,7 +156,7 @@ function AddFilterButton({
         key: 'board',
         label: intl.formatMessage({
           id: 'portal.roadmap.filter.category.board',
-          defaultMessage: 'Board',
+          defaultMessage: '{boardWord, select, category {Category} other {Board}}',
         }),
         icon: Squares2X2Icon,
       },
@@ -362,7 +362,7 @@ function buildActiveChips(args: {
         type: 'board',
         label: intl.formatMessage({
           id: 'portal.roadmap.filter.chip.board',
-          defaultMessage: 'Board:',
+          defaultMessage: '{boardWord, select, category {Category:} other {Board:}}',
         }),
         value: board.name,
         valueId: id,

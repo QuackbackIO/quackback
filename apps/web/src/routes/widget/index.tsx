@@ -1200,7 +1200,9 @@ function SuccessView({
           <p className="text-[11px] text-muted-foreground">
             <FormattedMessage
               id="widget.success.subtitle"
-              defaultMessage="Your idea has been submitted."
+              defaultMessage={
+                '{postWord, select, post {Your post has been submitted.} feature_request {Your feature request has been submitted.} suggestion {Your suggestion has been submitted.} other {Your idea has been submitted.}}'
+              }
             />
           </p>
         </div>
@@ -1221,7 +1223,8 @@ function SuccessView({
                   ? undefined
                   : intl.formatMessage({
                       id: 'widget.vote.noAccess',
-                      defaultMessage: "You don't have access to vote on this board",
+                      defaultMessage:
+                        "{boardWord, select, category {You don't have access to vote in this category} other {You don't have access to vote on this board}}",
                     })
               }
             />
@@ -1255,7 +1258,12 @@ function SuccessView({
           className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-foreground bg-muted/30 hover:bg-muted/50 rounded-lg border border-border/50 transition-colors"
         >
           <ArrowLeftIcon className="w-3.5 h-3.5 rtl:rotate-180" />
-          <FormattedMessage id="widget.success.backToIdeas" defaultMessage="Back to ideas" />
+          <FormattedMessage
+            id="widget.success.backToIdeas"
+            defaultMessage={
+              '{postWord, select, post {Back to posts} feature_request {Back to feature requests} suggestion {Back to suggestions} other {Back to ideas}}'
+            }
+          />
         </button>
       </div>
     </div>

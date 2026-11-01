@@ -3,7 +3,8 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { portalFontIds, portalTheme } from '@/lib/shared/design/view'
-import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { usePublishedPortalWords, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import { resolveLocale, loadWidgetMessages } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { FileViewerProvider } from '@/components/shared/files/file-viewer-context'
@@ -168,6 +169,7 @@ function WidgetLayout() {
   // load the chosen family on demand instead of shipping every self-hosted
   // family's @font-face rules to every embedded widget.
   useBrandingFont(customCss, configFontSans, portalFontIds(useWorkspaceSettings()))
+  const words = usePublishedPortalWords()
 
   return (
     <WidgetAuthProvider
@@ -187,9 +189,11 @@ function WidgetLayout() {
           `,
         }}
       />
-      <FileViewerProvider compact>
-        <Outlet />
-      </FileViewerProvider>
+      <PortalWordsIntl words={words}>
+        <FileViewerProvider compact>
+          <Outlet />
+        </FileViewerProvider>
+      </PortalWordsIntl>
     </WidgetAuthProvider>
   )
 }

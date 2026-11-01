@@ -1,5 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
+import { RawIntlProvider, useIntl, type IntlShape } from 'react-intl'
 import { DEFAULT_LOCALE, loadMessages, type SupportedLocale } from '@/lib/shared/i18n'
+import { DEFAULT_PORTAL_WORDS, type PortalWords } from '@/lib/shared/design/view'
 
 /**
  * Shared hook that loads the message catalog for a locale (used by
@@ -46,4 +57,33 @@ export function useIntlSetup(
   }, [locale])
 
   return messages
+}
+
+/** The portal's words for the messages below: its design's, a draft's in the preview, else the defaults. */
+const PortalWordsContext = createContext<PortalWords>(DEFAULT_PORTAL_WORDS)
+
+/** The words the messages here select on. */
+export function usePortalWords(): PortalWords {
+  return useContext(PortalWordsContext)
+}
+
+/** An intl that passes `words` into every message, a call's own values first. */
+export function withPortalWords(intl: IntlShape, words: PortalWords): IntlShape {
+  const formatMessage = ((descriptor, values, options) =>
+    intl.formatMessage(descriptor, { ...words, ...values }, options)) as IntlShape['formatMessage']
+  return { ...intl, formatMessage, $t: formatMessage }
+}
+
+/**
+ * Passes the portal's words into every message below: `words` when given, else
+ * those of the tree above. Messages that name a post or a board select on them,
+ * so each provider that makes an intl of its own renders this inside it.
+ */
+export function PortalWordsIntl({ words, children }: { words?: PortalWords; children: ReactNode }) {
+  const intl = useIntl()
+  const inherited = useContext(PortalWordsContext)
+  const chosen = words ?? inherited
+  const value = useMemo(() => withPortalWords(intl, chosen), [intl, chosen])
+  const tree = createElement(RawIntlProvider, { value }, children)
+  return words ? createElement(PortalWordsContext.Provider, { value: words }, tree) : tree
 }

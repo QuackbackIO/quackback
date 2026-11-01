@@ -128,3 +128,45 @@ describe('PUT /api/storage/* (proxy upload)', () => {
     )
   })
 })
+
+describe('PUT /api/storage/* for a portal font', () => {
+  const FONT_KEY = 'fonts/2026/10/abc123-brand-bold.woff2'
+  const FONT = 'font/woff2'
+  const woff2 = (size = 64) => {
+    const bytes = new Uint8Array(size)
+    bytes.set([0x77, 0x4f, 0x46, 0x32])
+    return bytes
+  }
+
+  it('stores a woff2 under fonts/', async () => {
+    const res = await handleProxyUpload({
+      request: makeRequest({ key: FONT_KEY, ct: FONT, body: woff2() }),
+    })
+    expect(res.status).toBe(200)
+    expect(mockUploadObject).toHaveBeenCalledWith(FONT_KEY, expect.anything(), FONT)
+  })
+
+  it('refuses a file that is not woff2 whatever its name says', async () => {
+    const res = await handleProxyUpload({
+      request: makeRequest({ key: FONT_KEY, ct: FONT, body: PNG_BYTES }),
+    })
+    expect(res.status).toBe(400)
+    expect(mockUploadObject).not.toHaveBeenCalled()
+  })
+
+  it('refuses a font anywhere but fonts/', async () => {
+    const res = await handleProxyUpload({
+      request: makeRequest({ key: 'logos/2026/10/abc123-x.woff2', ct: FONT, body: woff2() }),
+    })
+    expect(res.status).toBe(400)
+    expect(mockUploadObject).not.toHaveBeenCalled()
+  })
+
+  it('refuses a font over 400 KB', async () => {
+    const res = await handleProxyUpload({
+      request: makeRequest({ key: FONT_KEY, ct: FONT, body: woff2(400 * 1024 + 1) }),
+    })
+    expect(res.status).toBe(413)
+    expect(mockUploadObject).not.toHaveBeenCalled()
+  })
+})

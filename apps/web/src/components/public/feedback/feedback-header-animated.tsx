@@ -2,6 +2,7 @@ import type { BoardId } from '@quackback/ids'
 import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { useIntl, FormattedMessage } from 'react-intl'
+import { useFeedCopy } from '@/components/public/preview-draft-context'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -79,6 +80,7 @@ export function FeedbackHeaderAnimated({
   boardLocked = false,
 }: FeedbackHeaderProps) {
   const intl = useIntl()
+  const submitLabel = useFeedCopy().submit
   const router = useRouter()
   const queryClient = useQueryClient()
   const session = useSessionContext()
@@ -180,7 +182,8 @@ export function FeedbackHeaderAnimated({
       setError(
         intl.formatMessage({
           id: 'portal.feedback.header.errorSelectBoard',
-          defaultMessage: 'Please select a board',
+          defaultMessage:
+            '{boardWord, select, category {Please select a category} other {Please select a board}}',
         })
       )
       return
@@ -201,11 +204,13 @@ export function FeedbackHeaderAnimated({
         noAccess
           ? intl.formatMessage({
               id: 'portal.feedback.header.errorNoAccess',
-              defaultMessage: "You don't have access to post on this board",
+              defaultMessage:
+                "{boardWord, select, category {You don't have access to post in this category} other {You don't have access to post on this board}}",
             })
           : intl.formatMessage({
               id: 'portal.feedback.header.errorSignIn',
-              defaultMessage: 'Please sign in to submit feedback',
+              defaultMessage:
+                '{postWord, select, post {Please sign in to post} feature_request {Please sign in to request a feature} suggestion {Please sign in to make a suggestion} other {Please sign in to share your idea}}',
             })
       )
       return
@@ -265,7 +270,8 @@ export function FeedbackHeaderAnimated({
       toast.success(
         intl.formatMessage({
           id: 'portal.feedback.header.toastSubmitted',
-          defaultMessage: 'Feedback submitted',
+          defaultMessage:
+            '{postWord, select, post {Post submitted} feature_request {Feature request submitted} suggestion {Suggestion submitted} other {Idea submitted}}',
         }),
         {
           action: {
@@ -283,7 +289,8 @@ export function FeedbackHeaderAnimated({
       setError(
         intl.formatMessage({
           id: 'portal.feedback.header.errorSubmit',
-          defaultMessage: 'Could not submit your feedback. Please try again.',
+          defaultMessage:
+            '{postWord, select, post {Could not submit your post. Please try again.} feature_request {Could not submit your feature request. Please try again.} suggestion {Could not submit your suggestion. Please try again.} other {Could not submit your idea. Please try again.}}',
         })
       )
     }
@@ -306,6 +313,8 @@ export function FeedbackHeaderAnimated({
 
   return (
     <motion.div
+      data-qb-part="composer"
+      data-state={expanded ? 'open' : undefined}
       className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden"
       initial={false}
       animate={{
@@ -456,7 +465,9 @@ export function FeedbackHeaderAnimated({
                 <p className="text-xs text-muted-foreground">
                   <FormattedMessage
                     id="portal.feedback.header.noAccess"
-                    defaultMessage="You don't have access to post on this board"
+                    defaultMessage={
+                      "{boardWord, select, category {You don't have access to post in this category} other {You don't have access to post on this board}}"
+                    }
                   />
                 </p>
               ) : isAnonymousSession && canPostAnonymously ? (
@@ -519,7 +530,9 @@ export function FeedbackHeaderAnimated({
                 >
                   <FormattedMessage
                     id="portal.feedback.header.signInToPost"
-                    defaultMessage="Sign in to post"
+                    defaultMessage={
+                      '{postWord, select, post {Sign in to post} feature_request {Sign in to request a feature} suggestion {Sign in to make a suggestion} other {Sign in to share an idea}}'
+                    }
                   />
                 </button>
               )}
@@ -542,11 +555,13 @@ export function FeedbackHeaderAnimated({
                       ? noAccess
                         ? intl.formatMessage({
                             id: 'portal.feedback.header.submitTooltipNoAccess',
-                            defaultMessage: "You don't have access to post on this board",
+                            defaultMessage:
+                              "{boardWord, select, category {You don't have access to post in this category} other {You don't have access to post on this board}}",
                           })
                         : intl.formatMessage({
                             id: 'portal.feedback.header.submitTooltipSignIn',
-                            defaultMessage: 'Please sign in to submit feedback',
+                            defaultMessage:
+                              '{postWord, select, post {Please sign in to post} feature_request {Please sign in to request a feature} suggestion {Please sign in to make a suggestion} other {Please sign in to share your idea}}',
                           })
                       : undefined
                   }
@@ -558,7 +573,12 @@ export function FeedbackHeaderAnimated({
                       defaultMessage="Submitting..."
                     />
                   ) : (
-                    <FormattedMessage id="portal.feedback.header.submit" defaultMessage="Submit" />
+                    (submitLabel ?? (
+                      <FormattedMessage
+                        id="portal.feedback.header.submit"
+                        defaultMessage="Submit"
+                      />
+                    ))
                   )}
                 </Button>
               </div>
@@ -591,20 +611,26 @@ function TitleInput({
   onExpand: () => void
 }) {
   const intl = useIntl()
+  const copy = useFeedCopy()
   const value = useStoreValue(title)
   return (
     <motion.input
       ref={inputRef}
       type="text"
       maxLength={TITLE_MAX_LENGTH}
-      placeholder={intl.formatMessage({
-        id: 'portal.feedback.header.titlePlaceholder',
-        defaultMessage: "What's your idea?",
-      })}
+      placeholder={
+        copy.prompt ??
+        intl.formatMessage({
+          id: 'portal.feedback.header.titlePlaceholder',
+          defaultMessage:
+            "{postWord, select, post {What's on your mind?} feature_request {What should we build?} suggestion {What's your suggestion?} other {What's your idea?}}",
+        })
+      }
       value={value}
       aria-label={intl.formatMessage({
         id: 'portal.feedback.header.titleLabel',
-        defaultMessage: 'Feedback title',
+        defaultMessage:
+          '{postWord, select, post {Post title} feature_request {Feature request title} suggestion {Suggestion title} other {Idea title}}',
       })}
       onChange={(e) => {
         title.set(e.target.value)

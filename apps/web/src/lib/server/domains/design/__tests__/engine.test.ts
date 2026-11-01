@@ -3,8 +3,14 @@
  * the flag is on; then a published design wins, and a workspace with no
  * custom CSS is converted on read. The override forces legacy everywhere.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { defaultDesign } from '@/lib/shared/design/schema'
+vi.mock('virtual:quackback-font-manifest', () => ({
+  default: {
+    lora: { css: '/assets/lora.css', latin: { '500': '/assets/lora-latin-500.woff2' } },
+  },
+}))
+
 import { advancedCssRemainder, portalDesignView, resolveDesignSource } from '../engine'
 
 const teal = () => {
@@ -95,6 +101,17 @@ describe('portalDesignView', () => {
     expect(view.themeStyles).toContain('[data-portal-theme] {')
     expect(view.customCss).toBe('@layer tenant {\n.qb-post-card { border-width: 2px }\n}')
     expect(view.fontIds).toEqual(['inter'])
+  })
+
+  it('carries the links for its fonts’ files, which only the server knows', () => {
+    const doc = teal()
+    doc.brand.fonts.heading = { kind: 'bundled', id: 'lora' }
+    doc.brand.fonts.headingWeight = 500
+    const view = portalDesignView({ engine: 'v2', doc, revision: null })
+    expect(view.engine === 'v2' && view.fontLinks).toEqual([
+      expect.objectContaining({ rel: 'preload', href: '/assets/lora-latin-500.woff2' }),
+      { rel: 'stylesheet', href: '/assets/lora.css' },
+    ])
   })
 
   it('has no design CSS when the design has none', () => {

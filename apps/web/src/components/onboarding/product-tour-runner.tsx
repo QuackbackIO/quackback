@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom'
 import { useRouter } from '@tanstack/react-router'
 import { FormattedMessage, IntlProvider, useIntl } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { getTourContextFn, markTourSeenFn } from '@/lib/server/functions/onboarding-progress'
@@ -465,7 +466,7 @@ export function ProductTourRunner({
       messages={overlayMessages}
       onError={intl.onError}
     >
-      {overlay}
+      <PortalWordsIntl>{overlay}</PortalWordsIntl>
     </IntlProvider>
   )
 }

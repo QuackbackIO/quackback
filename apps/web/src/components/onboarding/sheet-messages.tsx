@@ -1,5 +1,6 @@
 import { use, useMemo, type ReactNode } from 'react'
 import { IntlProvider, useIntl } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import {
   DEFAULT_LOCALE,
   isSheetMessage,
@@ -42,7 +43,7 @@ function LoadedSheetMessages({ children }: { children: ReactNode }) {
       messages={messages}
       onError={intl.onError}
     >
-      {children}
+      <PortalWordsIntl>{children}</PortalWordsIntl>
     </IntlProvider>
   )
 }

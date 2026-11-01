@@ -20,7 +20,14 @@ import path from 'path'
 import type { Plugin } from 'vite'
 
 const SPLIT = /[?&]tsr-split=/
+
+/** A pattern matching exactly one module id. */
+const exactly = (file: string) => new RegExp(`^${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
 const LOADER = /[?&]tsr-split=[^&]*loader/
+const COMPONENT = /[?&]tsr-split=component(&|$)/
+
+/** The specifier of a route file's component split. */
+const componentOf = (routeFile: string) => JSON.stringify(`${routeFile}?tsr-split=component`)
 
 /**
  * Route files and the route file each renders under, read from the generated
@@ -50,12 +57,32 @@ export function readRouteParents(routeTreeFile: string): Map<string, string | nu
   return parents
 }
 
+/** Modules and route components the route tree alone does not place. */
+export interface RouteChunkLinks {
+  /**
+   * Modules a route loads lazily itself, by file, with that route's file.
+   * Each is linked as that route's own split would be: to its parent's
+   * component.
+   */
+  lazyChildren?: Record<string, string>
+  /**
+   * Route files whose component another route also renders, with that
+   * route's file. The component's split re-exports the other route's
+   * component split too. The server preloads a route's chunks, the chunks
+   * holding any split of its file, so this one is preloaded for both.
+   */
+  sharedComponents?: Record<string, string>
+}
+
 /**
  * The plugin. `routeTreeFile` is read on the first split it sees, after the
  * router plugin has generated it. A parent without a component of its own is
  * skipped for the nearest ancestor that has one.
  */
-export function routeChunksImportTheirParent(routeTreeFile: string): Plugin {
+export function routeChunksImportTheirParent(
+  routeTreeFile: string,
+  { lazyChildren = {}, sharedComponents = {} }: RouteChunkLinks = {}
+): Plugin {
   let parents: Map<string, string | null> | undefined
   const exportsComponent = new Map<string, Promise<boolean>>()
   return {
@@ -63,30 +90,34 @@ export function routeChunksImportTheirParent(routeTreeFile: string): Plugin {
     apply: 'build',
     enforce: 'post',
     transform: {
-      filter: { id: SPLIT },
+      filter: { id: [SPLIT, ...Object.keys(lazyChildren).map(exactly)] },
       async handler(code, id) {
+        const file = id.split('?')[0]!
+        const lazyRoute = SPLIT.test(id) ? undefined : lazyChildren[id]
         // A loader waits on nothing but its own code.
-        if (this.environment?.name !== 'client' || !SPLIT.test(id) || LOADER.test(id)) return null
+        if (this.environment?.name !== 'client' || (!SPLIT.test(id) && !lazyRoute) || LOADER.test(id))
+          return null
         parents ??= readRouteParents(routeTreeFile)
-        const hasComponent = (file: string) => {
-          let known = exportsComponent.get(file)
+        const hasComponent = (routeFile: string) => {
+          let known = exportsComponent.get(routeFile)
           if (!known) {
-            known = this.load({ id: `${file}?tsr-split=component` }).then(
+            known = this.load({ id: `${routeFile}?tsr-split=component` }).then(
               (info) => info.exports?.includes('component') ?? false,
               () => false
             )
-            exportsComponent.set(file, known)
+            exportsComponent.set(routeFile, known)
           }
           return known
         }
-        let parent = parents.get(id.split('?')[0]!) ?? null
+        const links: string[] = []
+        let parent = parents.get(lazyRoute ?? file) ?? null
         while (parent && !(await hasComponent(parent))) parent = parents.get(parent) ?? null
-        if (!parent) return null
-        const specifier = JSON.stringify(`${parent}?tsr-split=component`)
-        return {
-          code: `${code}\nexport { component as __parentRouteComponent } from ${specifier}\n`,
-          map: null,
-        }
+        if (parent) links.push(`export { component as __parentRouteComponent } from ${componentOf(parent)}`)
+        const sharedWith = COMPONENT.test(id) ? sharedComponents[file] : undefined
+        if (sharedWith && (await hasComponent(sharedWith)))
+          links.push(`export { component as __sharedRouteComponent } from ${componentOf(sharedWith)}`)
+        if (links.length === 0) return null
+        return { code: `${code}\n${links.join('\n')}\n`, map: null }
       },
     },
   }

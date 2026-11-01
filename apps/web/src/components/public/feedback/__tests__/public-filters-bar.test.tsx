@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, fireEvent } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PublicFiltersBar, PublicMoreFilters } from '../public-filters-bar'
 import { PortalPermissionsProvider } from '@/lib/client/hooks/use-portal-permissions'
@@ -42,7 +43,7 @@ function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       <IntlProvider locale="en" defaultLocale="en">
-        {children}
+        <PortalWordsIntl>{children}</PortalWordsIntl>
       </IntlProvider>
     </QueryClientProvider>
   )
@@ -201,7 +202,9 @@ describe('PublicMoreFilters', () => {
       <QueryClientProvider client={client}>
         <PortalPermissionsProvider permissionKeys={team ? [PERMISSIONS.POST_VIEW_PRIVATE] : []}>
           <IntlProvider locale="en" defaultLocale="en">
-            <PublicMoreFilters filters={filters} setFilters={setFilters} />
+            <PortalWordsIntl>
+              <PublicMoreFilters filters={filters} setFilters={setFilters} />
+            </PortalWordsIntl>
           </IntlProvider>
         </PortalPermissionsProvider>
       </QueryClientProvider>

@@ -7,10 +7,15 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
+import { FormattedMessage, IntlProvider, useIntl } from 'react-intl'
 import { PortalPreviewProvider } from '../portal-preview-listener'
+import { usePortalWords } from '@/lib/client/hooks/use-intl-setup'
+import { FeedCopyContext, useFeedCopy } from '../preview-draft-context'
 import {
   usePreviewCss,
+  usePreviewDesignNav,
   usePreviewDraft,
+  usePreviewHome,
   usePreviewNav,
   usePreviewWelcomeCard,
 } from '../preview-draft-context'
@@ -32,6 +37,18 @@ function CssReader() {
 }
 function DraftReader() {
   return <p data-testid="draft">{usePreviewDraft() ? 'draft' : 'none'}</p>
+}
+function PagesReader() {
+  const home = usePreviewHome()
+  const designNav = usePreviewDesignNav()
+  return (
+    <p data-testid="pages">
+      {JSON.stringify({
+        blocks: home?.blocks.map((block) => block.type) ?? null,
+        nav: designNav ?? null,
+      })}
+    </p>
+  )
 }
 
 function post(data: unknown) {
@@ -62,6 +79,7 @@ beforeEach(() => {
       <WelcomeCardReader />
       <CssReader />
       <DraftReader />
+      <PagesReader />
     </PortalPreviewProvider>
   )
 })
@@ -148,6 +166,39 @@ describe('a design draft in the preview', () => {
     expect(document.documentElement.getAttribute('data-qb-nav')).toBe('tabs')
   })
 
+  it('hands the page the draft’s Home and menu, dropping what it cannot read', async () => {
+    const pages = () => JSON.parse(screen.getByTestId('pages').textContent ?? '{}')
+    expect(pages()).toEqual({ blocks: null, nav: null })
+    await postDesign({
+      type: 'quackback:preview-design',
+      design: {
+        css: '',
+        attributes: {},
+        fontIds: [],
+        headline: null,
+        home: {
+          headline: null,
+          blocks: [
+            { type: 'status', width: 'third' },
+            { type: 'script', width: 'full' },
+            { type: 'links' },
+          ],
+        },
+        nav: { home: { on: true, tab: false }, items: [{ type: 'feedback', shown: true }, 'x'] },
+      },
+    })
+    expect(pages()).toEqual({
+      blocks: ['status'],
+      nav: { home: { on: true, tab: false }, items: [{ type: 'feedback', shown: true }] },
+    })
+    // A menu without Home's switches is no menu.
+    await postDesign({
+      type: 'quackback:preview-design',
+      design: { css: '', attributes: {}, fontIds: [], nav: { home: {}, items: [] } },
+    })
+    expect(pages()).toEqual({ blocks: null, nav: null })
+  })
+
   it('ignores attributes outside the design’s own', async () => {
     await postDesign({
       type: 'quackback:preview-design',
@@ -200,5 +251,75 @@ describe('picking a section in a design preview', () => {
       sent.filter((m) => (m as { type: string }).type === 'quackback:preview-section')
     ).toEqual([])
     band.remove()
+  })
+})
+
+describe('a design draft’s words in the preview', () => {
+  it('reach the page’s messages before they are published', async () => {
+    cleanup()
+    render(
+      <IntlProvider locale="en" onError={() => {}}>
+        <PortalPreviewProvider enabled>
+          <p data-testid="composer">
+            <FormattedMessage
+              id="test.composer"
+              defaultMessage="{postWord, select, idea {What's your idea?} suggestion {What's your suggestion?} other {What's your idea?}}"
+              values={{ postWord: 'idea' }}
+            />
+          </p>
+          <WordReader />
+        </PortalPreviewProvider>
+      </IntlProvider>
+    )
+    await postDesign({
+      type: 'quackback:preview-design',
+      design: {
+        css: '',
+        attributes: {},
+        fontIds: [],
+        vocabulary: { post: 'suggestion', board: 'category' },
+      },
+    })
+    expect(screen.getByTestId('words').textContent).toBe('suggestion category')
+    expect(screen.getByTestId('formatted').textContent).toBe('suggestion category')
+    // A message's own value still wins over the draft's.
+    expect(screen.getByTestId('composer').textContent).toBe("What's your idea?")
+  })
+})
+
+function WordReader() {
+  const { postWord, boardWord } = usePortalWords()
+  const intl = useIntl()
+  return (
+    <>
+      <p data-testid="words">{`${postWord} ${boardWord}`}</p>
+      <p data-testid="formatted">
+        {intl.formatMessage({ id: 'x', defaultMessage: '{postWord} {boardWord}' })}
+      </p>
+    </>
+  )
+}
+
+describe('a design draft’s own wording in the preview', () => {
+  it('replaces the saved wording before it is published', async () => {
+    cleanup()
+    function Copy() {
+      return <p data-testid="copy">{useFeedCopy().prompt ?? 'none'}</p>
+    }
+    render(
+      <IntlProvider locale="en" onError={() => {}}>
+        <FeedCopyContext.Provider value={{ prompt: { en: 'Saved prompt' } }}>
+          <PortalPreviewProvider enabled>
+            <Copy />
+          </PortalPreviewProvider>
+        </FeedCopyContext.Provider>
+      </IntlProvider>
+    )
+    expect(screen.getByTestId('copy').textContent).toBe('Saved prompt')
+    await postDesign({
+      type: 'quackback:preview-design',
+      design: { css: '', attributes: {}, fontIds: [], copy: { prompt: { en: 'Draft prompt' } } },
+    })
+    expect(screen.getByTestId('copy').textContent).toBe('Draft prompt')
   })
 })

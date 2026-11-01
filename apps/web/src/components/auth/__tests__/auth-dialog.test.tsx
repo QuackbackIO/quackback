@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 
 // signOut is what the abandon path must call when closing mid-2FA.
 const mockSignOut = vi.fn()
@@ -72,14 +73,16 @@ function renderDialog(opts?: {
 }) {
   return render(
     <IntlProvider locale="en">
-      <AuthPopoverProvider>
-        <Opener
-          mode={opts?.mode ?? 'login'}
-          callbackUrl={opts?.callbackUrl}
-          description={opts?.description}
-        />
-        <AuthDialog authConfig={opts?.authConfig} workspaceName={opts?.workspaceName} />
-      </AuthPopoverProvider>
+      <PortalWordsIntl>
+        <AuthPopoverProvider>
+          <Opener
+            mode={opts?.mode ?? 'login'}
+            callbackUrl={opts?.callbackUrl}
+            description={opts?.description}
+          />
+          <AuthDialog authConfig={opts?.authConfig} workspaceName={opts?.workspaceName} />
+        </AuthPopoverProvider>
+      </PortalWordsIntl>
     </IntlProvider>
   )
 }
@@ -172,7 +175,7 @@ describe('AuthDialog: team sign-in', () => {
     renderDialog({ callbackUrl: '/b/roadmap', workspaceName: 'Acme' })
     await screen.findByText('FORM_BODY')
 
-    expect(screen.getByText('Sign in to vote and comment on feedback.')).toBeTruthy()
+    expect(screen.getByText('Sign in to vote and comment on ideas.')).toBeTruthy()
     expect(screen.queryByText(/Acme admin/)).toBeNull()
   })
 })
@@ -220,17 +223,19 @@ describe('AuthDialog: why the visitor is signing in', () => {
     }
     render(
       <IntlProvider locale="en">
-        <AuthPopoverProvider>
-          <Reopen />
-          <AuthDialog />
-        </AuthPopoverProvider>
+        <PortalWordsIntl>
+          <AuthPopoverProvider>
+            <Reopen />
+            <AuthDialog />
+          </AuthPopoverProvider>
+        </PortalWordsIntl>
       </IntlProvider>
     )
     fireEvent.click(screen.getByText('open-with-reason'))
     expect(await screen.findByText('Sign in to get status updates.')).toBeTruthy()
     fireEvent.click(screen.getByText('close-it'))
     fireEvent.click(screen.getByText('open-plain'))
-    expect(await screen.findByText('Sign in to vote and comment on feedback.')).toBeTruthy()
+    expect(await screen.findByText('Sign in to vote and comment on ideas.')).toBeTruthy()
   })
 })
 

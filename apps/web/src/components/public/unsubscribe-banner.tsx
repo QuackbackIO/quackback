@@ -33,7 +33,9 @@ export function UnsubscribeBanner({ postId }: UnsubscribeBannerProps) {
         <p className="text-sm text-foreground">
           <FormattedMessage
             id="portal.unsubscribeBanner.message"
-            defaultMessage="You've been unsubscribed from this post. Use the bell icon to resubscribe."
+            defaultMessage={
+              "{postWord, select, post {You've been unsubscribed from this post. Use the bell icon to resubscribe.} feature_request {You've been unsubscribed from this feature request. Use the bell icon to resubscribe.} suggestion {You've been unsubscribed from this suggestion. Use the bell icon to resubscribe.} other {You've been unsubscribed from this idea. Use the bell icon to resubscribe.}}"
+            }
           />
         </p>
       </div>

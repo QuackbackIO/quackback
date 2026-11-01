@@ -50,6 +50,8 @@ export type AuditEventType =
   | 'branding.theme.changed'
   | 'design.published'
   | 'design.restored'
+  | 'design.switched'
+  | 'design.switched_back'
   | 'branding.css.changed'
   | 'branding.website.applied'
   | 'branding.website.undone'

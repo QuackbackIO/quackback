@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
 import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 import { PortalFilterPanel } from '../portal-filter-panel'
@@ -37,16 +38,18 @@ function renderPanel(props: Partial<React.ComponentProps<typeof PortalFilterPane
   const setFilters = vi.fn()
   render(
     <IntlProvider locale="en">
-      <PortalFilterPanel
-        filters={{ sort: 'trending' } as PublicFeedbackFilters}
-        setFilters={setFilters}
-        boards={boards}
-        statuses={statuses}
-        tags={tags}
-        counts={counts}
-        showViews
-        {...props}
-      />
+      <PortalWordsIntl>
+        <PortalFilterPanel
+          filters={{ sort: 'trending' } as PublicFeedbackFilters}
+          setFilters={setFilters}
+          boards={boards}
+          statuses={statuses}
+          tags={tags}
+          counts={counts}
+          showViews
+          {...props}
+        />
+      </PortalWordsIntl>
     </IntlProvider>
   )
   return { setFilters }

@@ -25,6 +25,7 @@ import {
   statusIncidentDate,
 } from '@/components/portal/status'
 import type { StatusUptimeDay } from '@/components/portal/status'
+import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
 export const Route = createFileRoute('/_portal/status/')({
   loader: async ({ context }) => {
@@ -419,7 +420,7 @@ function StatusPageNotFound() {
           defaultMessage="This status page isn't published, or you don't have access to view it."
         />
       </p>
-      <Link to="/" className="text-sm font-medium text-primary hover:underline">
+      <Link to={PORTAL_LANDING} className="text-sm font-medium text-primary hover:underline">
         <FormattedMessage id="portal.status.notFound.backLink" defaultMessage="Go home" />
       </Link>
     </div>

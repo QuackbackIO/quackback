@@ -303,12 +303,14 @@ function TitleInput({
       type="text"
       placeholder={intl.formatMessage({
         id: 'widget.home.input.placeholder',
-        defaultMessage: "What's your idea?",
+        defaultMessage:
+          "{postWord, select, post {What's on your mind?} feature_request {What should we build?} suggestion {What's your suggestion?} other {What's your idea?}}",
       })}
       value={value}
       aria-label={intl.formatMessage({
         id: 'widget.home.input.label',
-        defaultMessage: 'Feedback title',
+        defaultMessage:
+          '{postWord, select, post {Post title} feature_request {Feature request title} suggestion {Suggestion title} other {Idea title}}',
       })}
       onChange={(e) => {
         title.set(e.target.value)
@@ -413,7 +415,12 @@ function SimilarIdeas({
           <div className="px-3 pb-2">
             <p className="text-[11px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
               <LightBulbIcon className="w-3 h-3" />
-              <FormattedMessage id="widget.home.similar.heading" defaultMessage="Similar ideas" />
+              <FormattedMessage
+                id="widget.home.similar.heading"
+                defaultMessage={
+                  '{postWord, select, post {Similar posts} feature_request {Similar feature requests} suggestion {Similar suggestions} other {Similar ideas}}'
+                }
+              />
             </p>
             <div className="space-y-0.5">
               {similarPostResults.posts.slice(0, 3).map((post) => (
@@ -702,7 +709,8 @@ export function WidgetHomeAnimated({
   const voteNoAccessReason = isIdentified
     ? intl.formatMessage({
         id: 'widget.vote.noAccess',
-        defaultMessage: "You don't have access to vote on this board",
+        defaultMessage:
+          "{boardWord, select, category {You don't have access to vote in this category} other {You don't have access to vote on this board}}",
       })
     : undefined
 
@@ -759,7 +767,8 @@ export function WidgetHomeAnimated({
         setError(
           intl.formatMessage({
             id: 'widget.home.form.noAccess',
-            defaultMessage: "You don't have access to post on this board",
+            defaultMessage:
+              "{boardWord, select, category {You don't have access to post in this category} other {You don't have access to post on this board}}",
           })
         )
         setIsSubmitting(false)
@@ -881,7 +890,8 @@ export function WidgetHomeAnimated({
                         <SelectValue
                           placeholder={intl.formatMessage({
                             id: 'widget.home.posting.selectBoard',
-                            defaultMessage: 'Select a board',
+                            defaultMessage:
+                              '{boardWord, select, category {Select a category} other {Select a board}}',
                           })}
                         />
                       </SelectTrigger>
@@ -1003,14 +1013,18 @@ export function WidgetHomeAnimated({
                         {submitNoAccess ? (
                           <FormattedMessage
                             id="widget.home.posting.noAccess"
-                            defaultMessage="You don't have access to post on this board"
+                            defaultMessage={
+                              "{boardWord, select, category {You don't have access to post in this category} other {You don't have access to post on this board}}"
+                            }
                           />
                         ) : boards.length > 0 && !selectedBoardId ? (
                           // Submit is disabled until a board is picked; say so
                           // rather than leaving a dead button unexplained.
                           <FormattedMessage
                             id="widget.home.posting.chooseBoard"
-                            defaultMessage="Choose a board to post"
+                            defaultMessage={
+                              '{boardWord, select, category {Choose a category to post in} other {Choose a board to post}}'
+                            }
                           />
                         ) : user ? (
                           <FormattedMessage
@@ -1027,7 +1041,9 @@ export function WidgetHomeAnimated({
                         ) : signInRequired ? (
                           <FormattedMessage
                             id="widget.home.posting.signInRequired"
-                            defaultMessage="Sign in to post on this board"
+                            defaultMessage={
+                              '{boardWord, select, category {Sign in to post in this category} other {Sign in to post on this board}}'
+                            }
                           />
                         ) : (
                           <FormattedMessage
@@ -1092,11 +1108,13 @@ export function WidgetHomeAnimated({
                     }}
                     placeholder={intl.formatMessage({
                       id: 'widget.home.popular.search.placeholder',
-                      defaultMessage: 'Search ideas...',
+                      defaultMessage:
+                        '{postWord, select, post {Search posts...} feature_request {Search feature requests...} suggestion {Search suggestions...} other {Search ideas...}}',
                     })}
                     aria-label={intl.formatMessage({
                       id: 'widget.home.popular.search.label',
-                      defaultMessage: 'Search popular ideas',
+                      defaultMessage:
+                        '{postWord, select, post {Search popular posts} feature_request {Search popular feature requests} suggestion {Search popular suggestions} other {Search popular ideas}}',
                     })}
                     className="flex-1 min-w-0 h-5 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none"
                   />
@@ -1117,7 +1135,9 @@ export function WidgetHomeAnimated({
                   <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
                     <FormattedMessage
                       id="widget.home.popular.heading"
-                      defaultMessage="Popular ideas"
+                      defaultMessage={
+                        '{postWord, select, post {Popular posts} feature_request {Popular feature requests} suggestion {Popular suggestions} other {Popular ideas}}'
+                      }
                     />
                   </p>
                   <button
@@ -1126,7 +1146,8 @@ export function WidgetHomeAnimated({
                     className="flex size-6 items-center justify-center rounded-md text-muted-foreground/70 hover:bg-muted/50 hover:text-foreground transition-colors"
                     aria-label={intl.formatMessage({
                       id: 'widget.home.popular.search.aria',
-                      defaultMessage: 'Search ideas',
+                      defaultMessage:
+                        '{postWord, select, post {Search posts} feature_request {Search feature requests} suggestion {Search suggestions} other {Search ideas}}',
                     })}
                   >
                     <MagnifyingGlassIcon className="w-3.5 h-3.5" />
@@ -1213,7 +1234,9 @@ export function WidgetHomeAnimated({
                     <p className="text-sm font-medium text-muted-foreground/70">
                       <FormattedMessage
                         id="widget.home.popular.search.noResults"
-                        defaultMessage="No ideas found"
+                        defaultMessage={
+                          '{postWord, select, post {No posts found} feature_request {No feature requests found} suggestion {No suggestions found} other {No ideas found}}'
+                        }
                       />
                     </p>
                     <p className="text-xs text-muted-foreground/50 mt-0.5">
@@ -1264,12 +1287,16 @@ export function WidgetHomeAnimated({
                       {activeBoardSlug ? (
                         <FormattedMessage
                           id="widget.home.popular.emptyBoard"
-                          defaultMessage="No ideas in this board yet"
+                          defaultMessage={
+                            '{postWord, select, post {{boardWord, select, category {No posts in this category yet} other {No posts on this board yet}}} feature_request {{boardWord, select, category {No feature requests in this category yet} other {No feature requests on this board yet}}} suggestion {{boardWord, select, category {No suggestions in this category yet} other {No suggestions on this board yet}}} other {{boardWord, select, category {No ideas in this category yet} other {No ideas on this board yet}}}}'
+                          }
                         />
                       ) : (
                         <FormattedMessage
                           id="widget.home.popular.empty"
-                          defaultMessage="No ideas yet"
+                          defaultMessage={
+                            '{postWord, select, post {No posts yet} feature_request {No feature requests yet} suggestion {No suggestions yet} other {No ideas yet}}'
+                          }
                         />
                       )}
                     </p>

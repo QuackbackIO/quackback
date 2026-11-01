@@ -14,7 +14,7 @@
         "family": "Unbounded",
         "files": [
           {
-            "key": "fixtures/kiln/unbounded-700.woff2",
+            "key": "fonts/kiln/unbounded-700.woff2",
             "weight": 700,
             "style": "normal"
           }

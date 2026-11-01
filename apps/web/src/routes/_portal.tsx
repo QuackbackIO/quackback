@@ -10,6 +10,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
+import { FeedCopyContext } from '@/components/public/preview-draft-context'
 import { PortalPreviewProvider } from '@/components/public/portal-preview-listener'
 import { getMyPortalPermissionsFn } from '@/lib/server/functions/portal-permissions'
 import { PortalPermissionsProvider } from '@/lib/client/hooks/use-portal-permissions'
@@ -21,8 +22,8 @@ import { AuthDialog } from '@/components/auth/auth-dialog'
 import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
 import { buildPortalAuthDialogConfig } from '@/components/auth/portal-auth-dialog-config'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
-import { portalFontIds, portalTheme } from '@/lib/shared/design/view'
-import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { portalFontIds, portalFontLinks, portalTheme } from '@/lib/shared/design/view'
+import { usePublishedPortalWords, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -68,6 +69,7 @@ export const Route = createFileRoute('/_portal')({
     error?: string
     theme?: 'light' | 'dark'
     preview?: boolean
+    design?: 'switch'
   } => ({
     auth:
       search.auth === 'signin' || search.auth === 'signup' ? (search.auth as string) : undefined,
@@ -78,9 +80,12 @@ export const Route = createFileRoute('/_portal')({
     // postMessage draft bridge. Both retained across in-app navigation below.
     theme: search.theme === 'light' || search.theme === 'dark' ? search.theme : undefined,
     preview: search.preview === true || search.preview === 1 || search.preview === '1' || undefined,
+    // The switch preview: the portal drawn as it would be on the design
+    // (see __root.tsx), kept as the frame navigates.
+    design: search.design === 'switch' ? 'switch' : undefined,
   }),
   search: {
-    middlewares: [retainSearchParams(['theme', 'preview'])],
+    middlewares: [retainSearchParams(['theme', 'preview', 'design'])],
   },
   loaderDeps: ({ search }) => ({
     auth: search.auth,
@@ -276,10 +281,11 @@ export const Route = createFileRoute('/_portal')({
     }
   },
   head: ({ loaderData, matches }) => {
-    // The theme and custom CSS, from the settings the root already carries.
-    const styles = portalDesignStyles(
-      portalTheme((matches[0]?.context as { settings?: WorkspaceSettings | null })?.settings)
-    )
+    // The theme and custom CSS, from the settings the root already carries,
+    // and the design's font files so text draws in its face from first paint.
+    const settings = (matches[0]?.context as { settings?: WorkspaceSettings | null })?.settings
+    const styles = portalDesignStyles(portalTheme(settings))
+    const fontLinks = portalFontLinks(settings)
 
     // Access gate: a valid 200 sign-in page, but keep it out of search indexes.
     if (loaderData?.gate) {
@@ -288,7 +294,7 @@ export const Route = createFileRoute('/_portal')({
           { title: `Sign in · ${loaderData.gate.workspaceName}` },
           { name: 'robots', content: 'noindex, nofollow' },
         ],
-        links: [{ rel: 'icon', href: loaderData.gate.logoUrl || '/logo.png' }],
+        links: [{ rel: 'icon', href: loaderData.gate.logoUrl || '/logo.png' }, ...fontLinks],
         styles,
       }
     }
@@ -314,7 +320,7 @@ export const Route = createFileRoute('/_portal')({
     ]
     return {
       meta,
-      links: [{ rel: 'icon', href: faviconUrl }],
+      links: [{ rel: 'icon', href: faviconUrl }, ...fontLinks],
       styles,
     }
   },
@@ -377,9 +383,17 @@ function PortalLayout() {
     prompt,
     permissionKeys,
   } = loaderData
+  const words = usePublishedPortalWords()
+  const feedCopy = useRouteContext({
+    from: '__root__',
+    select: (context) =>
+      context.settings?.portalDesign?.engine === 'v2'
+        ? context.settings.portalDesign.feedback.copy
+        : undefined,
+  })
 
   return (
-    <PortalIntlProvider locale={locale} messages={messages}>
+    <PortalIntlProvider locale={locale} messages={messages} words={words}>
       <PortalPermissionsProvider permissionKeys={permissionKeys}>
         <AuthPopoverProvider>
           <PortalAuthAutoOpen
@@ -390,26 +404,28 @@ function PortalLayout() {
           />
           {/* Draft bridge for the admin branding preview; renders children
               untouched (and provides no context) outside preview mode. */}
-          <PortalPreviewProvider enabled={preview === true}>
-            <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
-            <div data-portal="" className="min-h-screen bg-background flex flex-col">
-              <PortalHeader
-                orgName={workspaceName}
-                orgLogo={brandingData?.logoUrl ?? null}
-                userRole={userRole}
-                initialUserData={initialUserData}
-                // The toggle is inert under a forced theme, and the preview
-                // always forces one — hide it there.
-                showThemeToggle={themeMode === 'user' && !preview}
-              />
-              <main className="flex-1 w-full flex flex-col">
-                <FileViewerProvider onJumpToMessage={scrollToMessage}>
-                  <Outlet />
-                </FileViewerProvider>
-              </main>
-              <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
-            </div>
-          </PortalPreviewProvider>
+          <FeedCopyContext.Provider value={feedCopy}>
+            <PortalPreviewProvider enabled={preview === true}>
+              <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
+              <div data-portal="" className="min-h-screen bg-background flex flex-col">
+                <PortalHeader
+                  orgName={workspaceName}
+                  orgLogo={brandingData?.logoUrl ?? null}
+                  userRole={userRole}
+                  initialUserData={initialUserData}
+                  // The toggle is inert under a forced theme, and the preview
+                  // always forces one — hide it there.
+                  showThemeToggle={themeMode === 'user' && !preview}
+                />
+                <main className="flex-1 w-full flex flex-col">
+                  <FileViewerProvider onJumpToMessage={scrollToMessage}>
+                    <Outlet />
+                  </FileViewerProvider>
+                </main>
+                <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
+              </div>
+            </PortalPreviewProvider>
+          </FeedCopyContext.Provider>
         </AuthPopoverProvider>
       </PortalPermissionsProvider>
     </PortalIntlProvider>

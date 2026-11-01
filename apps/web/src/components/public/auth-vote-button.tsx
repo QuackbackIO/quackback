@@ -52,7 +52,8 @@ export function AuthVoteButton({
     denied && isAuthenticated
       ? intl.formatMessage({
           id: 'portal.vote.noAccess',
-          defaultMessage: "You don't have access to vote on this board",
+          defaultMessage:
+            "{boardWord, select, category {You don't have access to vote in this category} other {You don't have access to vote on this board}}",
         })
       : undefined
 

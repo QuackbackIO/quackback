@@ -1,5 +1,7 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
+import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
+import { ADMIN_WORDS } from '@/lib/shared/design/view'
 import { DEFAULT_LOCALE, loadOnboardingMessages } from '@/lib/shared/i18n'
 import { onIntlError } from '@/lib/client/intl-error'
 
@@ -44,7 +46,9 @@ function OnboardingRoot() {
       defaultLocale={DEFAULT_LOCALE}
       onError={onIntlError}
     >
-      <Outlet />
+      <PortalWordsIntl words={ADMIN_WORDS}>
+        <Outlet />
+      </PortalWordsIntl>
     </IntlProvider>
   )
 }

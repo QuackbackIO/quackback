@@ -260,11 +260,13 @@ export function CommentThread({
             {replyPolicy === 'author-only'
               ? intl.formatMessage({
                   id: 'portal.commentThread.authorOnlyReplies',
-                  defaultMessage: 'Only the post author and team members can reply on this board',
+                  defaultMessage:
+                    '{boardWord, select, category {Only the author and team members can reply in this category} other {Only the author and team members can reply on this board}}',
                 })
               : intl.formatMessage({
                   id: 'portal.commentThread.noAccess',
-                  defaultMessage: "You don't have access to comment on this board",
+                  defaultMessage:
+                    "{boardWord, select, category {You don't have access to comment in this category} other {You don't have access to comment on this board}}",
                 })}
           </p>
         </div>

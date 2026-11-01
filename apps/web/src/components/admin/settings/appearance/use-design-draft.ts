@@ -145,6 +145,10 @@ export function useDesignDraft() {
       attributes: view.attributes,
       fontIds: view.fontIds,
       headline: view.feedback.headline,
+      home: view.home,
+      nav: view.nav,
+      vocabulary: view.vocabulary,
+      copy: view.feedback.copy,
     }
   }, [design])
 

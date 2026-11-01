@@ -85,7 +85,11 @@ export function FeedbackSidebar({ children, footer }: FeedbackSidebarProps) {
   }, [])
 
   return (
-    <aside data-qb-section="filters" className="hidden w-72 shrink-0 lg:block xl:w-80">
+    <aside
+      data-qb-section="filters"
+      data-qb-part="filter-panel"
+      className="hidden w-72 shrink-0 lg:block xl:w-80"
+    >
       <div
         ref={columnRef}
         className="sticky top-[calc(var(--portal-header-height,0px)+1.5rem)] flex max-h-[calc(100vh-3rem)] flex-col gap-3"
