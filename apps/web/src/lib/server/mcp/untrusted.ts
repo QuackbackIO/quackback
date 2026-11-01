@@ -309,6 +309,10 @@ export const UNTRUSTED_TOOL_FIELDS = {
   get_settings: NONE,
   propose_settings_change: NONE,
   update_settings: NONE,
+  // Design text is written by teammates with the branding permission.
+  get_portal_design: NONE,
+  update_portal_design_draft: NONE,
+  publish_portal_design: NONE,
   navigate_workspace: NONE,
   // A client name is chosen by the client that filed the request.
   get_approval: ['clientName'],

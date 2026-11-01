@@ -36,13 +36,9 @@ import { ticketFilter } from '@/lib/server/policy/tickets'
 import { can } from '@/lib/server/policy/authorize'
 import { isTeamActor, type Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import type { JsonValue } from '@/lib/shared/json'
-import {
-  settingsProposalSchema,
-  type MessengerEffect,
-} from '@/lib/shared/assistant/settings-proposals'
 import { logger } from '@/lib/server/logger'
 import { SETTINGS_PROPOSAL_TOOL } from './approval-policy'
+import { approvalDiffOf, type ApprovalDiff } from './approval-content'
 import { approvalRequirements } from './approval-requirements'
 import {
   approvalNotFound,
@@ -57,24 +53,7 @@ type PendingActionRow = typeof assistantPendingActions.$inferSelect
 
 const log = logger.child({ component: 'approvals-queue' })
 
-/** What changes, as the person deciding reads it. */
-export type ApprovalDiff =
-  | {
-      kind: 'settings'
-      changes: Array<{
-        id: string
-        area: string
-        path: string[]
-        before: JsonValue
-        after: JsonValue
-        /** An image the value stands for, such as a logo. */
-        beforePreview?: string | null
-        afterPreview?: string | null
-        /** What else the change turns on or off. */
-        effects?: MessengerEffect[]
-      }>
-    }
-  | { kind: 'action'; args: JsonValue }
+export type { ApprovalDiff } from './approval-content'
 
 /** One request, as the queue and its reads show it. */
 export interface ApprovalView {
@@ -125,27 +104,6 @@ const MAX_LIMIT = 100
 const SCAN_LIMIT = 200
 /** How many waiting requests Home shows. */
 const SUMMARY_LATEST = 3
-
-function diffOf(row: PendingActionRow): ApprovalDiff {
-  if (row.toolName === SETTINGS_PROPOSAL_TOOL) {
-    const parsed = settingsProposalSchema.safeParse(row.args)
-    if (parsed.success)
-      return {
-        kind: 'settings',
-        changes: parsed.data.changes.map((change) => ({
-          id: change.id,
-          area: change.area,
-          path: change.path,
-          before: change.before as JsonValue,
-          after: change.after as JsonValue,
-          ...(change.beforePreview !== undefined ? { beforePreview: change.beforePreview } : {}),
-          ...(change.afterPreview !== undefined ? { afterPreview: change.afterPreview } : {}),
-          ...(change.effects ? { effects: change.effects } : {}),
-        })),
-      }
-  }
-  return { kind: 'action', args: row.args as JsonValue }
-}
 
 function parentOf(row: PendingActionRow): ApprovalView['parent'] {
   if (row.conversationId) return { kind: 'conversation', id: row.conversationId }
@@ -230,7 +188,7 @@ function toView(
     decidedVia: row.decidedVia,
     decisionReason: row.decisionReason,
     ...undoStateOf(row),
-    diff: diffOf(row),
+    diff: approvalDiffOf(row),
   }
 }
 

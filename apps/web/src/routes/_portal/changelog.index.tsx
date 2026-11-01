@@ -45,7 +45,7 @@ function ChangelogPage() {
   const isIdentified = !!session?.user && session.user.principalType !== 'anonymous'
 
   return (
-    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-8">
+    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-8">
       <PortalPageHeader
         size="large"
         title={intl.formatMessage({ id: 'portal.changelog.title', defaultMessage: 'Changelog' })}

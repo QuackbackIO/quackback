@@ -1379,6 +1379,8 @@
   "automation.knowledge.copilotHome": "L’accueil les utilise aussi, avec les connecteurs de Copilot.",
   "settings.labs.copilotHome.label": "Copilot sur l’accueil",
   "settings.labs.copilotHome.description": "Posez des questions et proposez des modifications depuis l’accueil.",
+  "settings.labs.portalDesignV2.label": "Nouveau design du portail",
+  "settings.labs.portalDesignV2.description": "Personnalisez le portail depuis Apparence, avec brouillons et versions.",
   "ask.destination.home": "Accueil",
   "ask.destination.feedback": "Feedback",
   "ask.destination.roadmap": "Feuille de route",

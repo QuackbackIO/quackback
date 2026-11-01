@@ -9,6 +9,7 @@ const AREA_QUERY_KEYS: Record<SettingsArea, readonly (readonly string[])[]> = {
     ['settings', 'branding'],
     ['settings', 'logo'],
     ['settings', 'headerLogo'],
+    ['settings', 'portal-design'],
   ],
   portal: [['settings', 'publicPortalConfig']],
   messenger: [

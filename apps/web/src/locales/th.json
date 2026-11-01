@@ -1673,6 +1673,8 @@
   "automation.knowledge.copilotHome": "หน้าหลักก็ใช้แหล่งเหล่านี้ด้วย ผ่านตัวเชื่อมต่อของ Copilot",
   "settings.labs.copilotHome.label": "Copilot ในหน้าหลัก",
   "settings.labs.copilotHome.description": "ถามคำถามและเสนอการเปลี่ยนแปลงจากหน้าหลัก",
+  "settings.labs.portalDesignV2.label": "การออกแบบพอร์ทัลแบบใหม่",
+  "settings.labs.portalDesignV2.description": "ปรับแต่งพอร์ทัลจากหน้ารูปลักษณ์ พร้อมฉบับร่างและเวอร์ชัน",
   "ask.destination.home": "หน้าหลัก",
   "ask.destination.feedback": "ความคิดเห็น",
   "ask.destination.roadmap": "แผนพัฒนา",

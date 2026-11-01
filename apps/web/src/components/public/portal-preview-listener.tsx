@@ -1,8 +1,16 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { extractCssVariables, normalizeFontSans } from '@/lib/shared/theme'
-import { PreviewDraftProvider, type PortalPreviewDraft } from './preview-draft-context'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { extractCssVariables, loadBrandingFont, normalizeFontSans } from '@/lib/shared/theme'
+import {
+  PreviewDraftProvider,
+  PreviewAttributesContext,
+  PreviewHeadlineContext,
+  type PortalPreviewDraft,
+} from './preview-draft-context'
 
 type StructuralDraft = Omit<PortalPreviewDraft, 'css'>
+
+type DesignChannel = typeof import('./portal-preview-design')
+type DesignPreview = import('./portal-preview-design').DesignPreview
 
 const sameContent = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b)
 
@@ -69,6 +77,8 @@ export function PortalPreviewProvider({
 }) {
   const [css, setCss] = useState('')
   const [draft, setDraft] = useState<StructuralDraft | null>(null)
+  const [design, setDesign] = useState<DesignPreview | null>(null)
+  const designChannel = useRef<DesignChannel | null>(null)
 
   // Only a framed, explicitly preview-flagged document listens.
   const active = enabled && typeof window !== 'undefined' && window.self !== window.top
@@ -77,8 +87,15 @@ export function PortalPreviewProvider({
     if (!active) return
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return
-      const msg = event.data as { type?: string; css?: unknown; draft?: unknown } | null | undefined
-      if (msg?.type === 'quackback:preview-css' && typeof msg.css === 'string') {
+      const msg = event.data as
+        { type?: string; css?: unknown; draft?: unknown; design?: unknown } | null | undefined
+      if (msg?.type === 'quackback:preview-design') {
+        const value = msg.design
+        void import('./portal-preview-design').then((channel) => {
+          designChannel.current = channel
+          setDesign(channel.readDesignPreview(value))
+        })
+      } else if (msg?.type === 'quackback:preview-css' && typeof msg.css === 'string') {
         setCss(msg.css)
       } else if (msg?.type === 'quackback:preview-draft' && msg.draft) {
         const incoming = msg.draft as StructuralDraft
@@ -92,13 +109,37 @@ export function PortalPreviewProvider({
   }, [active])
 
   const stylesheet = useMemo(() => (css ? previewStylesheet(css) : ''), [css])
+  // While a draft is previewed: its attributes on <html> (the saved ones come
+  // back when it changes), and a click on a section tells Appearance which.
+  useEffect(() => {
+    const channel = designChannel.current
+    if (!design || !channel) return
+    const restore = channel.applyDesignAttributes(design.attributes)
+    const stopPicking = active ? channel.startSectionPicking() : () => {}
+    return () => {
+      restore()
+      stopPicking()
+    }
+  }, [design, active])
+  const fontIds = design?.fontIds.join(' ') ?? ''
+  useEffect(() => {
+    for (const id of fontIds.split(' ').filter(Boolean)) loadBrandingFont(id).catch(() => {})
+  }, [fontIds])
 
   if (!enabled) return <>{children}</>
 
   return (
     <PreviewDraftProvider draft={draft} css={css}>
-      {children}
+      <PreviewHeadlineContext.Provider value={design ? design.headline : undefined}>
+        <PreviewAttributesContext.Provider value={design?.attributes}>
+          {children}
+        </PreviewAttributesContext.Provider>
+      </PreviewHeadlineContext.Provider>
       {stylesheet ? <style data-preview-override="">{stylesheet}</style> : null}
+      {design?.css ? <style data-preview-design="">{design.css}</style> : null}
+      {design && designChannel.current ? (
+        <style data-preview-sections="">{designChannel.current.SECTION_OUTLINE_CSS}</style>
+      ) : null}
     </PreviewDraftProvider>
   )
 }

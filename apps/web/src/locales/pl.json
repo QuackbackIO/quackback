@@ -1379,6 +1379,8 @@
   "automation.knowledge.copilotHome": "Strona główna też z nich korzysta, razem z konektorami Copilota.",
   "settings.labs.copilotHome.label": "Copilot na stronie głównej",
   "settings.labs.copilotHome.description": "Zadawaj pytania i proponuj zmiany ze strony głównej.",
+  "settings.labs.portalDesignV2.label": "Nowy wygląd portalu",
+  "settings.labs.portalDesignV2.description": "Dostosuj portal w sekcji Wygląd, z wersjami roboczymi i historią zmian.",
   "ask.destination.home": "Start",
   "ask.destination.feedback": "Pomysły",
   "ask.destination.roadmap": "Plan rozwoju",

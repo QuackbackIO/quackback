@@ -38,6 +38,14 @@ function readableValue(value: unknown): string | null {
 
 function useChangeRows(diff: ApprovalDiff): ChangeRow[] {
   const intl = useIntl()
+  if (diff.kind === 'design') {
+    return diff.changes.map((change) => ({
+      key: change.path,
+      field: change.label,
+      from: <SettingsValue value={change.before} />,
+      to: <SettingsValue value={change.after} />,
+    }))
+  }
   if (diff.kind === 'settings') {
     // A request across areas names each change's area: "Messenger: Enabled".
     const acrossAreas = new Set(diff.changes.map((change) => change.area)).size > 1

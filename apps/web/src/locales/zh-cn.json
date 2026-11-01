@@ -1379,6 +1379,8 @@
   "automation.knowledge.copilotHome": "首页也会使用这些来源，以及 Copilot 的连接器。",
   "settings.labs.copilotHome.label": "首页 Copilot",
   "settings.labs.copilotHome.description": "在首页提问并提出更改建议。",
+  "settings.labs.portalDesignV2.label": "新版门户设计",
+  "settings.labs.portalDesignV2.description": "在“外观”中设计门户，支持草稿和版本。",
   "ask.destination.home": "主页",
   "ask.destination.feedback": "反馈",
   "ask.destination.roadmap": "路线图",

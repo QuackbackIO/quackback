@@ -3,6 +3,7 @@ import type { Role } from '@/lib/shared/roles'
 import { sessionRole, toSessionScope } from '@/lib/shared/roles'
 import {
   colorSchemeHintHeaders,
+  getPortalThemeCookie,
   getThemeCookie,
   parsePrefersColorScheme,
   type Theme,
@@ -41,6 +42,8 @@ export interface BootstrapData {
   onboarding: { complete: boolean; needsSetupWizard: boolean }
   userRole: Role | null
   themeCookie: Theme
+  /** The portal visitor's light or dark choice; see getPortalThemeCookie. */
+  portalThemeCookie: Theme
   /** OS color-scheme preference from the `Sec-CH-Prefers-Color-Scheme` client
    *  hint, used by the root document to resolve a `system` theme during SSR.
    *  null when the browser didn't send the hint (e.g. Firefox/Safari, or a
@@ -253,6 +256,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
 
   const headers = getRequestHeaders()
   const themeCookie = getThemeCookie(headers.get('cookie') ?? null)
+  const portalThemeCookie = getPortalThemeCookie(headers.get('cookie') ?? null)
   const updateBannerDismissedVersion = getUpdateBannerDismissedVersionCookie(
     headers.get('cookie') ?? null
   )
@@ -298,6 +302,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     },
     userRole,
     themeCookie,
+    portalThemeCookie,
     prefersColorScheme,
     managedFieldPaths: settings?.managedFieldPaths ?? [],
     registeredAuthProviders,

@@ -19,41 +19,73 @@ export const Route = createFileRoute('/admin/settings/labs')({
   component: LabsSettingsPage,
 })
 
-function LabsSettingsPage() {
-  const intl = useIntl()
+type LabsFlag = 'copilotHome' | 'portalDesignV2'
+
+/** One Labs switch. Home and the portal read the flag from the root route context. */
+function LabsSwitch({
+  flag,
+  label,
+  description,
+}: {
+  flag: LabsFlag
+  label: string
+  description: string
+}) {
   const router = useRouter()
   const flags = useFeatureFlags()
-  const [copilotHome, setCopilotHome] = useState(flags?.copilotHome === true)
+  const [on, setOn] = useState(flags?.[flag] === true)
   const toggle = useMutation({
     meta: AUTOSAVE,
-    mutationFn: (next: boolean) => updateFeatureFlagsFn({ data: { copilotHome: next } }),
-    onMutate: (next) => setCopilotHome(next),
-    // Home reads the flag from the root route context.
+    mutationFn: (next: boolean) => updateFeatureFlagsFn({ data: { [flag]: next } }),
+    onMutate: (next) => setOn(next),
     onSuccess: () => void router.invalidate(),
-    onError: (_error, next) => setCopilotHome(!next),
+    onError: (_error, next) => setOn(!next),
   })
+  const id = `labs-${flag}`
+  return (
+    <SettingRow
+      label={label}
+      htmlFor={id}
+      description={description}
+      control={
+        <Switch
+          id={id}
+          checked={on}
+          disabled={toggle.isPending}
+          onCheckedChange={(next) => toggle.mutate(next)}
+        />
+      }
+    />
+  )
+}
+
+function LabsSettingsPage() {
+  const intl = useIntl()
   return (
     <SettingsPage page="/admin/settings/labs">
       <SettingsCard>
         <SettingRows>
-          <SettingRow
+          <LabsSwitch
+            flag="copilotHome"
             label={intl.formatMessage({
               id: 'settings.labs.copilotHome.label',
               defaultMessage: 'Copilot on Home',
             })}
-            htmlFor="labs-copilot-home"
             description={intl.formatMessage({
               id: 'settings.labs.copilotHome.description',
               defaultMessage: 'Ask questions and propose changes from Home.',
             })}
-            control={
-              <Switch
-                id="labs-copilot-home"
-                checked={copilotHome}
-                disabled={toggle.isPending}
-                onCheckedChange={(next) => toggle.mutate(next)}
-              />
-            }
+          />
+          <LabsSwitch
+            flag="portalDesignV2"
+            label={intl.formatMessage({
+              id: 'settings.labs.portalDesignV2.label',
+              defaultMessage: 'New portal design',
+            })}
+            description={intl.formatMessage({
+              id: 'settings.labs.portalDesignV2.description',
+              defaultMessage: 'Brand the portal from Appearance, with drafts and versions.',
+            })}
           />
         </SettingRows>
       </SettingsCard>

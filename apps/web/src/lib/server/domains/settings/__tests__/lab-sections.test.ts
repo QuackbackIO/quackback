@@ -23,10 +23,15 @@ describe('feature flag settings layout', () => {
     )
   })
 
-  it('keeps Copilot on Home off for existing workspaces and on for new ones', () => {
+  it('keeps Copilot on Home and the design engine off for existing workspaces and on for new ones', () => {
+    expect(DEFAULT_FEATURE_FLAGS.portalDesignV2).toBe(false)
     expect(DEFAULT_FEATURE_FLAGS.copilotHome).toBe(false)
     expect(resolveFeatureFlags(JSON.stringify({ supportInbox: true })).copilotHome).toBe(false)
-    expect(NEW_WORKSPACE_FEATURE_FLAGS).toEqual({ ...DEFAULT_FEATURE_FLAGS, copilotHome: true })
+    expect(NEW_WORKSPACE_FEATURE_FLAGS).toEqual({
+      ...DEFAULT_FEATURE_FLAGS,
+      copilotHome: true,
+      portalDesignV2: true,
+    })
     expect(enableFlagsForUseCase(DEFAULT_FEATURE_FLAGS, 'customer_support').copilotHome).toBe(false)
   })
 

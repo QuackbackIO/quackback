@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { unbrandedTheme } from '@/lib/shared/theme/expand'
 import { brandingPatchSchema, updateThemeSchema } from '../settings'
 
 /**
  * Branding configs the settings page has always been able to save. The page
- * stores whatever its theme editor produces, so its validator stays as wide as
- * before; only model-proposed patches are held to the strict schema.
+ * stores whatever its theme editor produces, so its validator accepts any
+ * value that cannot escape its CSS declaration; only model-proposed patches
+ * are held to the strict schema.
  */
 const PAGE_SAVED_CONFIGS: Array<[string, Record<string, unknown>]> = [
   ['a named color', { light: { primary: 'white' } }],
@@ -24,6 +26,34 @@ describe('updateThemeSchema (settings page save)', () => {
 
   it('still requires an object', () => {
     expect(() => updateThemeSchema.parse({ brandingConfig: 'white' })).toThrow()
+  })
+
+  it('accepts a cleared token', () => {
+    const brandingConfig = { light: { primary: null } }
+    expect(updateThemeSchema.parse({ brandingConfig }).brandingConfig).toEqual(brandingConfig)
+  })
+
+  it('accepts the config the editor saves', () => {
+    // The shape saveTheme builds: every minimal variable, plus font and radius.
+    const brandingConfig = {
+      themeMode: 'user',
+      light: { ...unbrandedTheme('light'), radius: '0.5rem' },
+      dark: { ...unbrandedTheme('dark'), radius: '0.5rem' },
+    }
+    expect(updateThemeSchema.parse({ brandingConfig }).brandingConfig).toEqual(brandingConfig)
+  })
+
+  it.each([
+    ['a colour that ends its declaration', { light: { primary: 'red; } body { display: none' } }],
+    ['a closing brace', { dark: { accent: 'red}' } }],
+    ['markup in a font stack', { light: { fontSans: 'Inter</style><script>x</script>' } }],
+    ['a resource load in a radius', { light: { radius: 'url(https://example.com/x.png)' } }],
+    ['a token in an unknown key', { light: { legacyToken: 'red;}' } }],
+    ['a non-string token', { light: { primary: { r: 255 } } }],
+    ['an unsafe preset name', { preset: 'x;}body{display:none' }],
+    ['an unknown theme mode', { themeMode: 'sepia' }],
+  ])('refuses %s', (_label, brandingConfig) => {
+    expect(updateThemeSchema.safeParse({ brandingConfig }).success).toBe(false)
   })
 })
 

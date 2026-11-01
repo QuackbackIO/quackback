@@ -1,0 +1,175 @@
+{
+  "version": 2,
+  "mode": "dark",
+  "brand": {
+    "light": {
+      "accent": "#6e4cf5",
+      "background": "#ffffff",
+      "ink": "#0a0a0a"
+    },
+    "fonts": {
+      "heading": {
+        "kind": "bundled",
+        "id": "manrope"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "manrope"
+      },
+      "headingWeight": 700
+    },
+    "logo": {
+      "mark": {
+        "light": {
+          "key": "fixtures/orbit/mark-light.png"
+        },
+        "dark": {
+          "key": "fixtures/orbit/mark-dark.png"
+        }
+      },
+      "wordmark": {
+        "light": null,
+        "dark": null
+      },
+      "display": "mark_and_name",
+      "name": "orbit"
+    },
+    "favicon": {
+      "key": "fixtures/orbit/favicon.png"
+    },
+    "shareImage": null,
+    "dark": {
+      "accent": "#6e4cf5",
+      "background": "#0b0d12",
+      "ink": "#eef0f6",
+      "surface": "#12151c"
+    }
+  },
+  "shape": {
+    "corners": "rounded"
+  },
+  "layout": {
+    "header": "inline",
+    "nav": "pills",
+    "band": "none",
+    "cards": "raised",
+    "density": "comfortable",
+    "width": "wide",
+    "filters": "end"
+  },
+  "pages": {
+    "home": {
+      "headline": {
+        "title": {
+          "en": "Build with Orbit"
+        },
+        "subtitle": {
+          "en": "What we are shipping, what is next, and how it is running."
+        }
+      },
+      "blocks": [
+        {
+          "type": "status",
+          "width": "third"
+        },
+        {
+          "type": "updates",
+          "width": "two_thirds",
+          "count": 3
+        },
+        {
+          "type": "roadmap",
+          "width": "full",
+          "roadmapId": null
+        },
+        {
+          "type": "ideas",
+          "width": "half",
+          "sort": "new",
+          "count": 3
+        },
+        {
+          "type": "links",
+          "width": "half",
+          "links": [
+            {
+              "label": "Documentation",
+              "url": "https://docs.example.com"
+            },
+            {
+              "label": "API reference",
+              "url": "https://docs.example.com/api"
+            },
+            {
+              "label": "Source code",
+              "url": "https://code.example.com/orbit"
+            },
+            {
+              "label": "Community",
+              "url": "https://community.example.com"
+            }
+          ]
+        }
+      ]
+    },
+    "feedback": {
+      "headline": null,
+      "welcome": {
+        "show": false,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph"
+            }
+          ]
+        }
+      },
+      "defaultSort": "trending",
+      "copy": {}
+    }
+  },
+  "nav": {
+    "home": {
+      "on": true,
+      "tab": false
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": true
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true
+      },
+      {
+        "type": "link",
+        "id": "docs",
+        "label": "Docs",
+        "url": "https://docs.example.com",
+        "newTab": true
+      },
+      {
+        "type": "help",
+        "shown": false
+      },
+      {
+        "type": "support",
+        "shown": false
+      },
+      {
+        "type": "status",
+        "shown": true
+      }
+    ]
+  },
+  "vocabulary": {
+    "post": "post",
+    "board": "board"
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "version": 2,
+  "mode": "light",
+  "brand": {
+    "light": {
+      "accent": "#a21caf",
+      "background": "#fcfaff",
+      "ink": "#1e1530",
+      "surface": "#ffffff"
+    },
+    "fonts": {
+      "heading": {
+        "kind": "bundled",
+        "id": "lora"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "dm-sans"
+      },
+      "headingWeight": 500
+    },
+    "logo": {
+      "mark": {
+        "light": {
+          "key": "fixtures/plume/mark-light.png"
+        },
+        "dark": {
+          "key": "fixtures/plume/mark-dark.png"
+        }
+      },
+      "wordmark": {
+        "light": null,
+        "dark": null
+      },
+      "display": "mark_and_name",
+      "name": "Plume"
+    },
+    "favicon": {
+      "key": "fixtures/plume/favicon.png"
+    },
+    "shareImage": null
+  },
+  "shape": {
+    "corners": "rounded"
+  },
+  "layout": {
+    "header": "inline",
+    "nav": "pills",
+    "band": "fade",
+    "cards": "list",
+    "density": "spacious",
+    "width": "default",
+    "filters": "start"
+  },
+  "pages": {
+    "home": {
+      "headline": null,
+      "blocks": []
+    },
+    "feedback": {
+      "headline": {
+        "title": {
+          "en": "Help shape how Plume teaches"
+        },
+        "subtitle": {
+          "en": "Share an idea for a course, a feature or a fix."
+        }
+      },
+      "welcome": {
+        "show": false,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph"
+            }
+          ]
+        }
+      },
+      "defaultSort": "trending",
+      "copy": {}
+    }
+  },
+  "nav": {
+    "home": {
+      "on": false,
+      "tab": false
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": true,
+        "label": "Suggestions"
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true,
+        "label": "What’s new"
+      },
+      {
+        "type": "help",
+        "shown": true,
+        "label": "Guides"
+      },
+      {
+        "type": "support",
+        "shown": false
+      },
+      {
+        "type": "status",
+        "shown": false
+      }
+    ]
+  },
+  "vocabulary": {
+    "post": "suggestion",
+    "board": "category"
+  }
+}

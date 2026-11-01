@@ -65,6 +65,25 @@ describe('settings labs route', () => {
     expect(toggle).toHaveAttribute('aria-checked', 'true')
   })
 
+  it('switches the new portal design with its own flag', async () => {
+    const Page = options.component as () => ReactNode
+    render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <QueryClientProvider client={new QueryClient()}>
+          <Page />
+        </QueryClientProvider>
+      </IntlProvider>
+    )
+    const toggle = screen.getByRole('switch', { name: 'New portal design' })
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(toggle)
+    await waitFor(() => expect(state.updates).toContainEqual({ portalDesignV2: true }))
+    expect(screen.getByRole('switch', { name: 'Copilot on Home' })).toHaveAttribute(
+      'aria-checked',
+      'false'
+    )
+  })
+
   it('needs the manage settings permission', () => {
     expect(() => options.loader({ context: { permissions: [] } })).toThrow()
     expect(() =>

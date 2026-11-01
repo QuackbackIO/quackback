@@ -435,6 +435,31 @@ describe('ApprovalsPage', () => {
     expect(await screen.findByText('Workspace name')).toBeInTheDocument()
   })
 
+  it('lists a design publish by the names Appearance uses, under Branding', async () => {
+    state.waiting = [
+      view({
+        toolName: 'publish_portal_design',
+        diff: {
+          kind: 'design',
+          changes: [
+            { path: 'layout.density', label: 'Density', before: 'comfortable', after: 'compact' },
+            {
+              path: 'brand.light.accent',
+              label: 'Accent',
+              before: 'oklch(0.886 0.176 86)',
+              after: '#0f766e',
+            },
+          ],
+        },
+      }),
+    ]
+    renderPage()
+    expect(await screen.findByText('Density')).toBeInTheDocument()
+    expect(screen.getByText('compact')).toBeInTheDocument()
+    expect(screen.getByText('#0F766E')).toBeInTheDocument()
+    expect(screen.getByText(/Branding/)).toBeInTheDocument()
+  })
+
   it('shows a brand colour as a swatch and a hex value, never raw oklch', async () => {
     state.waiting = [
       view({

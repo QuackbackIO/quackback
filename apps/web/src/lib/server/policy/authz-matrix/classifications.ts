@@ -258,6 +258,22 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     SETTINGS_REGISTRY_PERMISSIONS,
     'the key needs the write:settings scope and the permission of the area changed, checked again in the registry and again when an approval is decided'
   ),
+  'routes/api/v1/settings/portal_design.ts::GET': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_BRANDING],
+    'the key needs the read:settings scope and its owner the branding permission (assertDesignAccess)'
+  ),
+  'routes/api/v1/settings/portal_design.ts::PATCH': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_BRANDING],
+    'the key needs the write:settings scope and its owner the branding permission; it writes the draft only'
+  ),
+  'routes/api/v1/settings/portal_design.draft.ts::DELETE': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_BRANDING],
+    'the key needs the write:settings scope and its owner the branding permission'
+  ),
+  'routes/api/v1/settings/portal_design.versions.ts::GET': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_BRANDING],
+    'the key needs the read:settings scope and its owner the branding permission'
+  ),
   'routes/api/v1/settings/receipts.$receiptId.undo.ts::POST': DYNAMIC_PERMISSION(
     SETTINGS_REGISTRY_PERMISSIONS,
     'the key needs the write:settings scope and the permission of every area the receipt changed'

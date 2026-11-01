@@ -58,8 +58,8 @@ Edges (28):
 
 ## 3. Server domains (lib/server/domains)
 
-Nodes (54): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (143):
+Nodes (55): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, design, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
+Edges (149):
 
 - activity -> principals
 - admin-overview -> changelog
@@ -79,6 +79,7 @@ Edges (143):
 - assistant -> changelog
 - assistant -> conversation
 - assistant -> conversation-attributes
+- assistant -> design
 - assistant -> embeddings
 - assistant -> files
 - assistant -> help-center
@@ -130,6 +131,10 @@ Edges (143):
 - conversation-attributes -> conversation
 - conversation-attributes -> settings
 - conversation-attributes -> workflows
+- design -> ai
+- design -> api
+- design -> settings
+- design -> settings-registry
 - embeddings -> ai
 - embeddings -> merge-suggestions
 - export -> companies
@@ -171,6 +176,7 @@ Edges (143):
 - sentiment -> ai
 - sentiment -> settings
 - settings -> ai
+- settings -> design
 - settings -> platform-credentials
 - settings -> sla
 - settings-registry -> api
@@ -209,6 +215,4 @@ Edges (143):
 
 Strongly connected components with more than one domain. A new entry here is a new cycle and needs an explicit decision.
 
-- ai <-> settings <-> sla
-- assistant <-> channel-accounts <-> channels <-> conversation <-> conversation-attributes <-> inbox <-> tickets <-> workflows
-- changelog <-> embeddings <-> merge-suggestions <-> posts <-> subscriptions
+- activity <-> ai <-> api <-> api-keys <-> assistant <-> boards <-> changelog <-> channel-accounts <-> channels <-> comments <-> conversation <-> conversation-attributes <-> design <-> embeddings <-> files <-> help-center <-> inbox <-> merge-suggestions <-> posts <-> principals <-> roles <-> settings <-> settings-registry <-> sla <-> status <-> subscriptions <-> tickets <-> users <-> webhooks <-> workflows

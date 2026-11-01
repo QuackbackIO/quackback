@@ -336,6 +336,9 @@ export {
   conversationOutboundEmails,
   // Schema tables - macros (canned replies + bundled actions)
   macros,
+  // Schema tables - portal designs (drafts and published revisions)
+  portalDesigns,
+  portalDesignRevisions,
   // Schema tables - notifications
   inAppNotifications,
   inAppNotificationsRelations,
@@ -542,6 +545,7 @@ export type {
   MacroPriority,
   MacroSnoozePreset,
   MacroAction,
+  PortalDesignSource,
 } from '@quackback/db'
 export type { ServiceMetadata } from '@quackback/db'
 export type { FileRecord, NewFileRecord } from '@quackback/db'

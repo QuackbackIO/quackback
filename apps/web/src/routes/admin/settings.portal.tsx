@@ -1,7 +1,16 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type ReactNode,
+} from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { ClientOnly, createFileRoute, useBlocker, useRouter } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, Link, useBlocker, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -22,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { RichTextEditor, type EditorDocument } from '@/components/ui/rich-text-editor'
 import { cn } from '@/lib/shared/utils'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { DraftBar } from '@/components/admin/settings/draft-bar'
@@ -49,7 +57,7 @@ import {
 import type { ThemeConfig } from '@/lib/shared/theme'
 import { primaryPresetIds, themePresets } from '@/lib/shared/theme/presets'
 import { useUpdatePortalConfig } from '@/lib/client/mutations/settings'
-import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { WelcomeBodyEditor } from '@/components/admin/settings/branding/welcome-body-editor'
 import { useStableCallback } from '@/lib/client/hooks/use-stable-callback'
 import { UpgradeModal } from '@/components/admin/upgrade'
 import {
@@ -70,9 +78,12 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { AppearanceView } from '@/components/admin/settings/appearance/appearance-view'
 
 export const Route = createFileRoute('/admin/settings/portal')({
   head: adminPageHead('Portal settings'),
+  validateSearch: (search: Record<string, unknown>): { tab?: 'navigation' } =>
+    search.tab === 'navigation' ? { tab: 'navigation' } : {},
   loader: async ({ context }) => {
     // Portal config reads/writes require settings.branding, which non-admin
     // team roles lack. Gate the page instead of letting managers land on a
@@ -87,12 +98,97 @@ export const Route = createFileRoute('/admin/settings/portal')({
       ensure(settingsQueries.customCss()),
       ensure(settingsQueries.portalConfig()),
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
+      // A workspace on the design engine opens on Appearance. Loaded here,
+      // not imported above: a loader's imports ship in the entry chunk.
+      context.settings?.portalDesign?.engine === 'v2'
+        ? import('@/lib/client/queries/portal-design').then(({ portalDesignQueries }) =>
+            Promise.all([
+              ensure(portalDesignQueries.editor()),
+              ensure(portalDesignQueries.aiStatus()),
+            ])
+          )
+        : undefined,
     ])
   },
-  component: PortalPage,
+  component: PortalSettingsPage,
 })
 
-function PortalPage() {
+/**
+ * On the design engine the page has two tabs: Appearance, which edits the
+ * design draft, and Navigation, which keeps the menu and welcome message
+ * until they move into the design too. Otherwise it is the page it has
+ * always been.
+ */
+function PortalSettingsPage() {
+  const settings = useWorkspaceSettings()
+  if (settings?.portalDesign?.engine !== 'v2') return <PortalPage />
+  return (
+    <DesignedPortalPage
+      workspaceName={settings.name}
+      faviconUrl={settings.faviconData?.url ?? settings.brandingData?.logoUrl ?? null}
+      logoUrl={settings.brandingData?.logoUrl ?? null}
+    />
+  )
+}
+
+function DesignedPortalPage({
+  workspaceName,
+  faviconUrl,
+  logoUrl,
+}: {
+  workspaceName: string
+  faviconUrl: string | null
+  logoUrl: string | null
+}) {
+  const { tab } = Route.useSearch()
+  const tabs = <PortalTabs current={tab ?? 'appearance'} />
+  if (tab === 'navigation') return <PortalPage tabs={tabs} onDesignEngine />
+  return (
+    <SettingsPage page="/admin/settings/portal" width="wide">
+      {tabs}
+      <AppearanceView workspaceName={workspaceName} faviconUrl={faviconUrl} logoUrl={logoUrl} />
+    </SettingsPage>
+  )
+}
+
+function PortalTabs({ current }: { current: 'appearance' | 'navigation' }) {
+  const tabs = [
+    { id: 'appearance', label: 'Appearance', search: {} },
+    { id: 'navigation', label: 'Navigation', search: { tab: 'navigation' as const } },
+  ] as const
+  return (
+    <nav
+      aria-label="Portal"
+      data-slot="tabs-list"
+      data-variant="line"
+      className="scrollbar-none relative flex items-center overflow-x-auto"
+    >
+      {tabs.map((tab) => (
+        <Link
+          key={tab.id}
+          to="/admin/settings/portal"
+          search={tab.search}
+          data-slot="tabs-trigger"
+          data-variant="line"
+          data-active={tab.id === current ? '' : undefined}
+          aria-current={tab.id === current ? 'page' : undefined}
+          className="inline-flex shrink-0 items-center text-sm whitespace-nowrap transition-colors"
+        >
+          {tab.label}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
+function PortalPage({
+  tabs,
+  onDesignEngine = false,
+}: {
+  tabs?: ReactNode
+  /** On the design engine, the theme and the welcome message are edited in Appearance. */
+  onDesignEngine?: boolean
+} = {}) {
   const router = useRouter()
   const settings = useWorkspaceSettings()
   const session = useSessionContext()
@@ -257,27 +353,30 @@ function PortalPage() {
 
   return (
     <SettingsPage page="/admin/settings/portal" width="wide">
+      {tabs}
       {/* Controls left, live portal preview right (sticky). */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] gap-6 items-start">
         <div className="space-y-4 min-w-0">
-          <SettingsCard
-            title="Appearance"
-            description="Theme, color palette and typography, also applied to the embedded widget."
-          >
-            <AppearanceSettings
-              themeMode={state.themeMode}
-              setThemeMode={state.setThemeMode}
-              activePresetId={state.activePresetId}
-              setPreset={state.setPreset}
-              font={state.font}
-              currentFontId={state.currentFontId}
-              setFont={state.setFont}
-              radius={state.radius}
-              setRadius={state.setRadius}
-              cssText={state.cssText}
-              setCssText={state.setCssText}
-            />
-          </SettingsCard>
+          {!onDesignEngine && (
+            <SettingsCard
+              title="Appearance"
+              description="Theme, color palette and typography, also applied to the embedded widget."
+            >
+              <AppearanceSettings
+                themeMode={state.themeMode}
+                setThemeMode={state.setThemeMode}
+                activePresetId={state.activePresetId}
+                setPreset={state.setPreset}
+                font={state.font}
+                currentFontId={state.currentFontId}
+                setFont={state.setFont}
+                radius={state.radius}
+                setRadius={state.setRadius}
+                cssText={state.cssText}
+                setCssText={state.setCssText}
+              />
+            </SettingsCard>
+          )}
 
           <SettingsCard
             title="Navigation"
@@ -294,12 +393,14 @@ function PortalPage() {
             </p>
           </SettingsCard>
 
-          <SettingsCard
-            title="Welcome message"
-            description="Shown above the post list on your portal home. Leave empty to show nothing."
-          >
-            <WelcomeBodyEditor value={welcomeBody} onChange={setWelcomeBody} />
-          </SettingsCard>
+          {!onDesignEngine && (
+            <SettingsCard
+              title="Welcome message"
+              description="Shown above the post list on your portal home. Leave empty to show nothing."
+            >
+              <WelcomeBodyEditor value={welcomeBody} onChange={setWelcomeBody} />
+            </SettingsCard>
+          )}
         </div>
 
         {/* ── Live portal preview ── */}
@@ -530,51 +631,6 @@ const PreviewControls = memo(function PreviewControls({
     </>
   )
 })
-
-/** Isolated so the rich-text editor's heavy deps don't re-render the page. */
-function WelcomeBodyEditor({
-  value,
-  onChange,
-}: {
-  value: TiptapContent
-  onChange: (v: TiptapContent) => void
-}) {
-  const { upload: uploadImage } = useImageUpload({ prefix: 'portal-welcome' })
-  // The editor reports its document once it mounts. The same document again
-  // is not an edit, and adopting that copy would re-render the whole page.
-  // The live preview and the dirty check read the JSON, so each edit takes it.
-  const handleChange = useCallback(
-    (document: EditorDocument) => {
-      const json = document.json()
-      if (JSON.stringify(json) === JSON.stringify(value)) return
-      onChange(json as TiptapContent)
-    },
-    [value, onChange]
-  )
-  return (
-    <RichTextEditor
-      value={value}
-      onDocumentChange={handleChange}
-      placeholder="Tell visitors what kind of feedback you'd love to hear…"
-      minHeight="160px"
-      className="[&_button]:size-6 [&_button_svg]:size-3.5"
-      features={{
-        headings: true,
-        images: true,
-        codeBlocks: true,
-        taskLists: true,
-        blockquotes: true,
-        tables: true,
-        dividers: true,
-        bubbleMenu: true,
-        slashMenu: true,
-        embeds: true,
-        quackbackEmbeds: true,
-      }}
-      onImageUpload={uploadImage}
-    />
-  )
-}
 
 // ==============================================
 // Font Select Group

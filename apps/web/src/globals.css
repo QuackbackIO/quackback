@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @import "tw-animate-css";
+/* A portal design's own CSS goes in the last layer, after Tailwind's. */
+@layer theme, base, components, utilities, tenant;
 /* Self-hosted fonts: Inter (the default/UI font, used on every page) loads
    statically here so there is zero regression for the default path. Every
    OTHER font referenced by the branding picker (FONT_OPTIONS in
@@ -17,10 +19,6 @@
 @import "@fontsource-variable/inter/index.css";
 
 @custom-variant dark (&:is(.dark *));
-
-@theme {
-  --font-family-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
-}
 
 /* ==============================================
    QUACKBACK THEME - tweakcn Compatible
@@ -112,7 +110,6 @@
     --nav-inactive-color: #525252;
     --portal-button-background: var(--primary);
     --portal-button-foreground: var(--primary-foreground);
-    --elevated: #f5f5f5;
     --radius-item: 999px;
     --radius-field: 0.5rem;
     --radius-panel: 0.75rem;
@@ -212,7 +209,6 @@
     --nav-inactive-color: #a1a1a1;
     --portal-button-background: var(--primary);
     --portal-button-foreground: var(--primary-foreground);
-    --elevated: #101010;
     /* Two-tone admin chrome, dark: the rail recedes and the page sheet is raised. */
     --chrome-background: #09090b;
     --chrome-hairline: #232327;
@@ -461,7 +457,6 @@
 
 @layer base {
   * {
-    color-scheme: light dark;
     @apply border-border outline-ring/50;
   }
   body {
@@ -626,7 +621,6 @@ a svg,
   --background: #131316;
   --card: #18181b;
   --popover: #18181b;
-  --elevated: #18181b;
   --muted: #1f1f23;
   --secondary: #1f1f23;
   --accent: #1f1f23;

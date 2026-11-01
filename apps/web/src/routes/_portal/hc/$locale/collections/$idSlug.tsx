@@ -214,7 +214,7 @@ function CollectionPage() {
         </>
       )}
 
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+      <div className="mx-auto max-w-[var(--qb-page-max,72rem)] px-4 sm:px-6">
         <div className="min-w-0 py-10">
           <HelpCenterBreadcrumbs items={breadcrumbs} />
 

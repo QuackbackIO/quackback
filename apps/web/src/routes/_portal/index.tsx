@@ -1,10 +1,11 @@
-import { Suspense, useDeferredValue, useState } from 'react'
+import { Suspense, useDeferredValue, useMemo, useState } from 'react'
 import { createFileRoute, notFound, redirect, useRouteContext } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { ViewerPortalNoBoards } from '@/components/public/portal-no-boards'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
+import { PortalBand } from '@/components/public/portal-band'
 import { PortalFeedSkeleton } from '@/components/public/feedback/portal-feed-skeleton'
 import { PortalPoweredBy } from '@/components/public/feedback/portal-powered-by'
 import {
@@ -13,7 +14,11 @@ import {
 } from '@/components/public/feedback/feed-input-handoff'
 import { usePreviewWelcomeCard } from '@/components/public/preview-draft-context'
 import { portalQueries, useSeedPortalStatusesCache } from '@/lib/client/queries/portal'
-import { isProductEnabled } from '@/lib/shared/types/settings'
+import {
+  isProductEnabled,
+  type PortalWelcomeCard as PortalWelcomeCardData,
+} from '@/lib/shared/types/settings'
+import { portalDefaultSort, savedWelcomeCard } from '@/lib/shared/design/view'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
@@ -43,11 +48,15 @@ const searchSchema = z.object({
 })
 
 /** Build the portalData query params from the current search + session. */
-function portalDataParams(searchParams: z.infer<typeof searchSchema>, userId: string | undefined) {
+function portalDataParams(
+  searchParams: z.infer<typeof searchSchema>,
+  userId: string | undefined,
+  defaultSort: 'trending' | 'top' | 'new'
+) {
   return {
     boardSlug: searchParams.board,
     search: searchParams.search,
-    sort: searchParams.sort ?? ('trending' as const),
+    sort: searchParams.sort ?? defaultSort,
     statusSlugs: searchParams.status?.length ? searchParams.status : undefined,
     tagIds: searchParams.tagIds?.length ? searchParams.tagIds : undefined,
     userId,
@@ -103,7 +112,9 @@ export const Route = createFileRoute('/_portal/')({
     // prefetchQuery never rejects (it swallows the queryFn error into the
     // cache), so no rejection handler is needed here.
     void queryClient.prefetchQuery(
-      portalQueries.portalData(portalDataParams(searchParams, session?.user?.id))
+      portalQueries.portalData(
+        portalDataParams(searchParams, session?.user?.id, portalDefaultSort(org))
+      )
     )
 
     const showPoweredBy = await getShowPoweredByFn()
@@ -146,24 +157,28 @@ function PublicPortalPage() {
   // Input typed while the feed loads is carried only within this visit's feed.
   const [feedHandoff] = useState(createFeedHandoff)
   return (
-    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-6">
-      {/* Hero renders immediately (context-only, no feed dependency). */}
-      <PortalHero />
-      {/* Only the feed region suspends on the streamed portalData query. */}
-      <FeedHandoffContext.Provider value={feedHandoff}>
-        <Suspense
-          fallback={
-            <PortalFeedSkeleton
-              poweredBy={
-                showPoweredBy ? <PortalPoweredBy workspaceSlug={settings?.slug ?? ''} /> : null
-              }
-            />
-          }
-        >
-          <PortalFeed />
-        </Suspense>
-      </FeedHandoffContext.Provider>
-    </div>
+    <>
+      <PortalBand />
+      <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-6">
+        {/* Hero renders immediately (context-only, no feed dependency). */}
+        <PortalHero />
+        {/* Only the feed region suspends on the streamed portalData query. */}
+        <FeedHandoffContext.Provider value={feedHandoff}>
+          <Suspense
+            fallback={
+              <PortalFeedSkeleton
+                defaultSort={portalDefaultSort(settings)}
+                poweredBy={
+                  showPoweredBy ? <PortalPoweredBy workspaceSlug={settings?.slug ?? ''} /> : null
+                }
+              />
+            }
+          >
+            <PortalFeed />
+          </Suspense>
+        </FeedHandoffContext.Provider>
+      </div>
+    </>
   )
 }
 
@@ -174,11 +189,24 @@ function PublicPortalPage() {
  */
 function PortalHero() {
   const draftWelcomeCard = usePreviewWelcomeCard()
-  const savedWelcomeCard = useRouteContext({
+  const legacyWelcomeCard = useRouteContext({
     from: '__root__',
     select: (context) => context.settings?.publicPortalConfig?.welcomeCard,
   })
-  return <PortalWelcomeCard welcomeCard={draftWelcomeCard ?? savedWelcomeCard} />
+  // On the design engine the welcome message is part of the design.
+  const design = useRouteContext({
+    from: '__root__',
+    select: (context) => context.settings?.portalDesign,
+  })
+  const savedCard = useMemo(
+    () => savedWelcomeCard(design, legacyWelcomeCard),
+    [design, legacyWelcomeCard]
+  )
+  return (
+    <PortalWelcomeCard
+      welcomeCard={(draftWelcomeCard ?? savedCard) as PortalWelcomeCardData | undefined}
+    />
+  )
 }
 
 /**
@@ -199,7 +227,8 @@ function PortalFeed() {
 
   const currentBoard = liveSearch.board
   const currentSearch = liveSearch.search
-  const currentSort = liveSearch.sort ?? 'trending'
+  const defaultSort = portalDefaultSort(settings)
+  const currentSort = liveSearch.sort ?? defaultSort
 
   // A visitor's first post or vote mints an anonymous session mid-action,
   // which changes the viewer and so the feed's key. Deferring the viewer
@@ -213,12 +242,12 @@ function PortalFeed() {
   const deferredViewerId = useDeferredValue(liveViewerId)
   const previousFeedCached =
     queryClient.getQueryData(
-      portalQueries.portalData(portalDataParams(search, deferredViewerId)).queryKey
+      portalQueries.portalData(portalDataParams(search, deferredViewerId, defaultSort)).queryKey
     ) !== undefined
   const viewerId =
     deferredViewerId !== liveViewerId && !previousFeedCached ? liveViewerId : deferredViewerId
   const { data: portalData } = useSuspenseQuery(
-    portalQueries.portalData(portalDataParams(search, viewerId))
+    portalQueries.portalData(portalDataParams(search, viewerId, defaultSort))
   )
 
   // Seeds the shared statuses cache from this response so a post-detail
@@ -251,6 +280,7 @@ function PortalFeed() {
       currentBoard={currentBoard}
       currentSearch={currentSearch}
       currentSort={currentSort}
+      defaultSort={defaultSort}
       defaultBoardId={portalData.boards[0]?.id}
       boardPermissions={portalData.boardPermissions}
       facets={portalData.facets}

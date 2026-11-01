@@ -21,7 +21,8 @@ import { AuthDialog } from '@/components/auth/auth-dialog'
 import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
 import { buildPortalAuthDialogConfig } from '@/components/auth/portal-auth-dialog-config'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
-import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
+import { portalFontIds, portalTheme } from '@/lib/shared/design/view'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -30,7 +31,8 @@ import {
   recordPortalAccessDeniedFn,
 } from '@/lib/server/functions/portal-access'
 import { parseAuthPromptSearch } from '@/lib/shared/auth-prompt'
-import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
+import { portalDesignStyles } from '@/lib/shared/safe-inline-content'
+import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
@@ -155,7 +157,7 @@ export const Route = createFileRoute('/_portal')({
       }
 
       const brandingData = settings?.brandingData ?? null
-      const brandingConfig = settings?.brandingConfig ?? {}
+      const theme = portalTheme(settings)
       // Locale so the gate's auth dialog renders under PortalIntlProvider.
       const locale = await getPortalLocaleFn().catch(() => DEFAULT_LOCALE)
       // Instant-SSO: when the workspace's only sign-in method is a single OIDC
@@ -178,9 +180,8 @@ export const Route = createFileRoute('/_portal')({
         reason: accessResult.reason,
         workspaceName: settings?.name ?? '',
         logoUrl: brandingData?.logoUrl ?? null,
-        themeStyles: generateWorkspaceThemeCSS(brandingConfig),
-        customCss: settings?.customCss ?? '',
-        configFontSans: readFontSans(brandingConfig.light),
+        customCss: theme.customCss,
+        configFontSans: theme.configFontSans,
         locale,
         // Only meaningful for 'unauthorized' — null for an anonymous visitor.
         // Lets the overlay say "you're signed in as alice@…, but…".
@@ -228,15 +229,10 @@ export const Route = createFileRoute('/_portal')({
 
     const brandingData = settings?.brandingData ?? null
     const faviconData = settings?.faviconData ?? null
-    const brandingConfig = settings?.brandingConfig ?? {}
-    const customCss = settings?.customCss ?? ''
     const publicPortalConfig = settings?.publicPortalConfig ?? null
 
-    const themeMode = brandingConfig.themeMode ?? 'user'
-    const themeStyles = generateWorkspaceThemeCSS(brandingConfig)
-
-    // Always apply custom CSS on top (cascades over theme styles)
-    const customCssToApply = customCss
+    // Custom CSS comes after the theme, so it cascades over it.
+    const { themeMode, customCss, configFontSans } = portalTheme(settings)
 
     const initialUserData = session?.user
       ? {
@@ -267,9 +263,8 @@ export const Route = createFileRoute('/_portal')({
       userRole,
       brandingData,
       faviconData,
-      themeStyles,
-      customCss: customCssToApply,
-      configFontSans: readFontSans(brandingConfig.light),
+      customCss,
+      configFontSans,
       themeMode,
       initialUserData,
       authConfig,
@@ -280,7 +275,12 @@ export const Route = createFileRoute('/_portal')({
       gate: null,
     }
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, matches }) => {
+    // The theme and custom CSS, from the settings the root already carries.
+    const styles = portalDesignStyles(
+      portalTheme((matches[0]?.context as { settings?: WorkspaceSettings | null })?.settings)
+    )
+
     // Access gate: a valid 200 sign-in page, but keep it out of search indexes.
     if (loaderData?.gate) {
       return {
@@ -289,6 +289,7 @@ export const Route = createFileRoute('/_portal')({
           { name: 'robots', content: 'noindex, nofollow' },
         ],
         links: [{ rel: 'icon', href: loaderData.gate.logoUrl || '/logo.png' }],
+        styles,
       }
     }
 
@@ -314,6 +315,7 @@ export const Route = createFileRoute('/_portal')({
     return {
       meta,
       links: [{ rel: 'icon', href: faviconUrl }],
+      styles,
     }
   },
   component: PortalLayout,
@@ -351,8 +353,6 @@ function PortalLayout() {
             workspaceName={gate.workspaceName}
             logoUrl={gate.logoUrl}
             authConfig={gate.authConfig}
-            themeStyles={gate.themeStyles}
-            customCss={gate.customCss}
             userEmail={gate.userEmail ?? null}
             locale={gate.locale}
             callbackUrl={gate.callbackUrl}
@@ -367,7 +367,6 @@ function PortalLayout() {
     workspaceName,
     userRole,
     brandingData,
-    themeStyles,
     customCss,
     configFontSans,
     themeMode,
@@ -394,13 +393,6 @@ function PortalLayout() {
           <PortalPreviewProvider enabled={preview === true}>
             <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
             <div data-portal="" className="min-h-screen bg-background flex flex-col">
-              {themeStyles && (
-                <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
-              )}
-              {/* Custom CSS is injected after theme styles so it can override */}
-              {customCss && (
-                <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(customCss) }} />
-              )}
               <PortalHeader
                 orgName={workspaceName}
                 orgLogo={brandingData?.logoUrl ?? null}
@@ -451,6 +443,7 @@ function PortalBrandingFontLoader({
   configFontSans: string | null
 }) {
   const draftCss = usePreviewCss()
-  useBrandingFont(draftCss ?? customCss, configFontSans)
+  const settings = useWorkspaceSettings()
+  useBrandingFont(draftCss ?? customCss, configFontSans, portalFontIds(settings))
   return null
 }

@@ -1,0 +1,119 @@
+{
+  "version": 2,
+  "mode": "light",
+  "brand": {
+    "light": {
+      "accent": "#0f766e",
+      "background": "#ffffff",
+      "ink": "#111827"
+    },
+    "fonts": {
+      "heading": {
+        "kind": "bundled",
+        "id": "ibm-plex-sans"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "ibm-plex-sans"
+      },
+      "headingWeight": 600
+    },
+    "logo": {
+      "mark": {
+        "light": {
+          "key": "fixtures/fieldnote/mark-light.png"
+        },
+        "dark": {
+          "key": "fixtures/fieldnote/mark-dark.png"
+        }
+      },
+      "wordmark": {
+        "light": null,
+        "dark": null
+      },
+      "display": "mark_and_name",
+      "name": "Fieldnote"
+    },
+    "favicon": {
+      "key": "fixtures/fieldnote/favicon.png"
+    },
+    "shareImage": null
+  },
+  "shape": {
+    "corners": "subtle"
+  },
+  "layout": {
+    "header": "inline",
+    "nav": "underline",
+    "band": "none",
+    "cards": "list",
+    "density": "compact",
+    "width": "default",
+    "filters": "end"
+  },
+  "pages": {
+    "home": {
+      "headline": null,
+      "blocks": []
+    },
+    "feedback": {
+      "headline": null,
+      "welcome": {
+        "show": false,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph"
+            }
+          ]
+        }
+      },
+      "defaultSort": "trending",
+      "copy": {}
+    }
+  },
+  "nav": {
+    "home": {
+      "on": false,
+      "tab": false
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": true
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true
+      },
+      {
+        "type": "link",
+        "id": "docs",
+        "label": "Docs",
+        "url": "https://docs.example.com",
+        "newTab": true
+      },
+      {
+        "type": "help",
+        "shown": false
+      },
+      {
+        "type": "support",
+        "shown": false
+      },
+      {
+        "type": "status",
+        "shown": true
+      }
+    ]
+  },
+  "vocabulary": {
+    "post": "feature_request",
+    "board": "board"
+  }
+}

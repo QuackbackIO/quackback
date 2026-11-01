@@ -44,6 +44,7 @@ import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { usePreviewDesignAttributes } from './preview-draft-context'
 
 interface PortalHeaderProps {
   orgName: string
@@ -282,36 +283,94 @@ export function PortalHeader({
     </div>
   )
 
+  // The design's header layout; in the admin preview, the draft's.
+  const previewAttributes = usePreviewDesignAttributes()
+  const savedDesign = settings?.portalDesign
+  const headerLayout =
+    previewAttributes?.['data-qb-header'] ??
+    (savedDesign?.engine === 'v2' ? savedDesign.attributes['data-qb-header'] : undefined) ??
+    'stacked'
+
+  const logo = (
+    <Link to="/" className="portal-header__logo flex items-center gap-2">
+      {orgLogo ? (
+        <img
+          src={orgLogo}
+          alt={orgName}
+          className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
+        />
+      ) : (
+        <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
+          {nameInitial(orgName)}
+        </div>
+      )}
+      <span
+        title={orgName}
+        className="portal-header__name font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--header-foreground)]"
+      >
+        {orgName}
+      </span>
+    </Link>
+  )
+  const navigation = (
+    <Navigation
+      navItems={navItems}
+      helpHeaderLinks={settings?.helpCenterConfig?.headerLinks}
+      supportUnreadTotal={supportUnreadTotal}
+    />
+  )
+  const headerClassName =
+    'portal-header sticky top-0 z-40 w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm'
+
+  // A design can put the menu beside the logo or centre both. Below md an
+  // inline header folds back to two rows, so the menu always has room.
+  if (headerLayout === 'inline') {
+    return (
+      <header ref={headerRef} className={headerClassName} data-qb-section="header">
+        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
+          <div className="flex h-12 items-center gap-4">
+            {logo}
+            <div className="hidden min-w-0 flex-1 overflow-x-auto scrollbar-none md:block">
+              {navigation}
+            </div>
+            <div className="ms-auto shrink-0">{authButtons}</div>
+          </div>
+        </div>
+        <div className="mt-2 overflow-x-auto scrollbar-none md:hidden">
+          <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
+            {navigation}
+          </div>
+        </div>
+      </header>
+    )
+  }
+  if (headerLayout === 'centered') {
+    return (
+      <header ref={headerRef} className={headerClassName} data-qb-section="header">
+        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
+          <div className="relative flex h-12 items-center justify-center">
+            {logo}
+            <div className="absolute end-0">{authButtons}</div>
+          </div>
+        </div>
+        <div className="mt-2 overflow-x-auto scrollbar-none">
+          <div className="max-w-[var(--qb-page-max,72rem)] mx-auto flex w-full justify-center px-4 sm:px-6">
+            {navigation}
+          </div>
+        </div>
+      </header>
+    )
+  }
+
   // Two-row layout: Logo + Auth on top, Navigation below
   return (
     // A banner landmark, so the logo and account controls sit in one.
-    <header
-      ref={headerRef}
-      className="portal-header sticky top-0 z-40 w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm"
-    >
+    <header ref={headerRef} className={headerClassName} data-qb-section="header">
       {/* Row 1: Logo + Name + Auth */}
       <div>
-        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
+        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
           <div className="flex h-12 items-center justify-between">
-            <Link to="/" className="portal-header__logo flex items-center gap-2">
-              {orgLogo ? (
-                <img
-                  src={orgLogo}
-                  alt={orgName}
-                  className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
-                />
-              ) : (
-                <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
-                  {nameInitial(orgName)}
-                </div>
-              )}
-              <span
-                title={orgName}
-                className="portal-header__name font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--header-foreground)]"
-              >
-                {orgName}
-              </span>
-            </Link>
+            {logo}
             {authButtons}
           </div>
         </div>
@@ -319,12 +378,8 @@ export function PortalHeader({
 
       {/* Row 2: Navigation */}
       <div className="mt-2 overflow-x-auto scrollbar-none">
-        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
-          <Navigation
-            navItems={navItems}
-            helpHeaderLinks={settings?.helpCenterConfig?.headerLinks}
-            supportUnreadTotal={supportUnreadTotal}
-          />
+        <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
+          {navigation}
         </div>
       </div>
     </header>
@@ -333,9 +388,9 @@ export function PortalHeader({
 
 const navItemClass = (isActive: boolean) =>
   cn(
-    'portal-nav__item px-3 py-2 text-sm font-medium transition-colors [border-radius:calc(var(--radius)*0.8)]',
+    'portal-nav__item px-3 py-2 text-sm font-medium transition-colors [border-radius:var(--qb-nav-radius,calc(var(--radius)*0.8))]',
     isActive
-      ? 'portal-nav__item--active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)]'
+      ? 'portal-nav__item--active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)] [[data-qb-nav=underline]_&]:rounded-none [[data-qb-nav=underline]_&]:shadow-[inset_0_-2px_0_var(--qb-accent)]'
       : 'text-[var(--nav-inactive-color)] hover:text-[var(--nav-active-foreground)] hover:bg-[var(--nav-active-background)]/50'
   )
 

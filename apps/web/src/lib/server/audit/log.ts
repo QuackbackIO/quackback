@@ -47,6 +47,10 @@ export type { JsonValue }
  * change — never reuse a retired identifier.
  */
 export type AuditEventType =
+  | 'branding.theme.changed'
+  | 'design.published'
+  | 'design.restored'
+  | 'branding.css.changed'
   | 'branding.website.applied'
   | 'branding.website.undone'
   | 'copilot.settings.applied'

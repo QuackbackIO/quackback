@@ -193,9 +193,16 @@ function LoadingComposer() {
  * the boards, statuses and tags stand in as bars, laid out like the loaded
  * page so it swaps in without moving.
  */
-export function PortalFeedSkeleton({ poweredBy }: { poweredBy?: React.ReactNode }) {
+export function PortalFeedSkeleton({
+  poweredBy,
+  defaultSort = 'trending',
+}: {
+  poweredBy?: React.ReactNode
+  /** The feed's sort when the visitor has not picked one. */
+  defaultSort?: 'trending' | 'top' | 'new'
+}) {
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
-  const sort = filters.sort ?? 'trending'
+  const sort = filters.sort ?? defaultSort
 
   return (
     <div>
@@ -210,7 +217,7 @@ export function PortalFeedSkeleton({ poweredBy }: { poweredBy?: React.ReactNode 
             onSearchChange={(search) =>
               setFilters({
                 search: search || undefined,
-                sort: sortForSearch(sort, filters.search, search, 'trending'),
+                sort: sortForSearch(sort, filters.search, search, defaultSort),
               })
             }
             filterButton={

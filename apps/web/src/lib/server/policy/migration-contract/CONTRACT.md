@@ -6,7 +6,7 @@ Regenerate with `bunx vitest run apps/web/src/lib/server/policy/migration-contra
 
 ## Summary
 
-Migrations scanned: 282. Migrations with destructive DDL: 39.
+Migrations scanned: 283. Migrations with destructive DDL: 39.
 
 | Kind | Occurrences |
 | --- | --- |

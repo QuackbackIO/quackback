@@ -497,7 +497,7 @@ export function PostCard({
   const tagClassName = 'inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium'
 
   const cardContent = (
-    <div className="flex items-start p-4 gap-4">
+    <div className="flex items-start p-[var(--qb-card-padding,1rem)] gap-4">
       {/* Vote column */}
       {voteButton}
 
@@ -525,7 +525,7 @@ export function PostCard({
         {/* Title */}
         <h3
           className={cn(
-            'font-semibold text-base line-clamp-1',
+            'font-semibold [font-size:var(--qb-title-size,1rem)] leading-normal line-clamp-1',
             isDone ? 'text-foreground/75' : 'text-foreground'
           )}
         >

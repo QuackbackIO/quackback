@@ -6,6 +6,7 @@
  * the requesting agent wrote, so a request cannot describe itself as safe or
  * name itself something it is not.
  */
+import { z } from 'zod'
 import type { ApprovalRisk } from '@/lib/server/db'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type {
@@ -18,6 +19,31 @@ import { AREAS } from './settings-proposals.areas'
 
 /** The tool name a settings request is filed under. */
 export const SETTINGS_PROPOSAL_TOOL = 'propose_settings_change'
+
+/** A request to publish the portal design draft; only a person's approval publishes it. */
+export const DESIGN_PUBLISH_TOOL = 'publish_portal_design'
+
+const designLeaf = z.union([z.string(), z.number(), z.boolean(), z.null()])
+
+/** What a design publish request stores: the draft it names and its changes as people read them. */
+export const designPublishArgsSchema = z.object({
+  /** The digest of the draft the request was filed for. */
+  draft: z.string(),
+  changes: z.array(
+    z.object({ path: z.string(), label: z.string(), before: designLeaf, after: designLeaf })
+  ),
+})
+export type DesignPublishArgs = z.infer<typeof designPublishArgsSchema>
+
+/** The permission a person needs to approve a design publish. */
+export const DESIGN_PUBLISH_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
+  PERMISSIONS.SETTINGS_BRANDING,
+])
+
+export function summarizeDesignPublish(args: DesignPublishArgs): string {
+  const count = args.changes.length
+  return `Publish the portal design (${count} ${count === 1 ? 'change' : 'changes'})`
+}
 
 const RISK_ORDER: Record<ApprovalRisk, number> = { low: 0, medium: 1, high: 2, critical: 3 }
 

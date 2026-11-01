@@ -1,0 +1,134 @@
+{
+  "version": 2,
+  "mode": "light",
+  "brand": {
+    "light": {
+      "accent": "#ff5a36",
+      "background": "#fff7f2",
+      "ink": "#1a1325",
+      "surface": "#ffffff"
+    },
+    "fonts": {
+      "heading": {
+        "kind": "bundled",
+        "id": "bricolage-grotesque"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "dm-sans"
+      },
+      "headingWeight": 800
+    },
+    "logo": {
+      "mark": {
+        "light": {
+          "key": "fixtures/bramble/mark-light.png"
+        },
+        "dark": {
+          "key": "fixtures/bramble/mark-dark.png"
+        }
+      },
+      "wordmark": {
+        "light": null,
+        "dark": null
+      },
+      "display": "mark_and_name",
+      "name": "bramble"
+    },
+    "favicon": {
+      "key": "fixtures/bramble/favicon.png"
+    },
+    "shareImage": null
+  },
+  "shape": {
+    "corners": "pill"
+  },
+  "layout": {
+    "header": "stacked",
+    "nav": "pills",
+    "band": "fade",
+    "cards": "bordered",
+    "density": "comfortable",
+    "width": "default",
+    "filters": "start"
+  },
+  "pages": {
+    "home": {
+      "headline": null,
+      "blocks": []
+    },
+    "feedback": {
+      "headline": {
+        "title": {
+          "en": "What should we make next?"
+        },
+        "subtitle": {
+          "en": "Post it, vote it up, watch it ship."
+        }
+      },
+      "welcome": {
+        "show": false,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph"
+            }
+          ]
+        }
+      },
+      "defaultSort": "trending",
+      "copy": {
+        "prompt": {
+          "en": "Got a wild idea? Drop it here"
+        }
+      }
+    }
+  },
+  "nav": {
+    "home": {
+      "on": false,
+      "tab": false
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": true,
+        "label": "Ideas"
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true,
+        "label": "Updates"
+      },
+      {
+        "type": "help",
+        "shown": true,
+        "label": "Help"
+      },
+      {
+        "type": "support",
+        "shown": false
+      },
+      {
+        "type": "status",
+        "shown": false
+      },
+      {
+        "type": "link",
+        "id": "community",
+        "label": "Community",
+        "url": "https://community.example.com",
+        "newTab": true
+      }
+    ]
+  },
+  "vocabulary": {
+    "post": "idea",
+    "board": "board"
+  }
+}

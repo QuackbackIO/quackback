@@ -114,7 +114,7 @@ function LocaleHelpCenterLandingPage() {
 
       <section
         aria-labelledby="hc-topics"
-        className="mx-auto max-w-6xl px-4 pb-16 pt-2 sm:px-6 animate-in fade-in duration-300 fill-mode-backwards"
+        className="mx-auto max-w-[var(--qb-page-max,72rem)] px-4 pb-16 pt-2 sm:px-6 animate-in fade-in duration-300 fill-mode-backwards"
         style={{ animationDelay: '100ms' }}
       >
         <div className="mb-6 flex items-baseline justify-between gap-4">

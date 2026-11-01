@@ -118,6 +118,10 @@ const configSchema = z
     baseUrl: z.string().url(),
     port: envInt.default(3000),
 
+    // Portal design engine. `legacy` keeps every workspace on today's theme,
+    // whatever the portalDesignV2 flag says.
+    portalDesignEngine: z.enum(['auto', 'legacy']).default('auto'),
+
     // Database
     //
     // Optional because a pooled fleet has no fleet-wide database: the workspace
@@ -369,6 +373,7 @@ function buildConfigFromEnv(): unknown {
     nodeEnv: process.env.NODE_ENV,
     baseUrl: process.env.BASE_URL,
     port: env('PORT'),
+    portalDesignEngine: env('PORTAL_DESIGN_ENGINE'),
 
     // Database
     databaseUrl: env('DATABASE_URL'),
@@ -560,6 +565,9 @@ export const config = {
   },
   get isPooledTenancy() {
     return loadConfig().tenancyMode === 'pooled'
+  },
+  get portalDesignEngine() {
+    return loadConfig().portalDesignEngine
   },
   get controlDatabaseUrl() {
     return loadConfig().controlDatabaseUrl
