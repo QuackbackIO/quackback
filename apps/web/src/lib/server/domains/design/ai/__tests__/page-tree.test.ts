@@ -37,4 +37,17 @@ describe('pageTree', () => {
       ['p', true],
     ])
   })
+
+  it('never leaves a script behind when its tags are split by another', () => {
+    const nodes = pageTree(
+      `<div><scr<script></script>ipt>alert(1)</script><a href="/">Go</a></div>`
+    )
+    expect(nodes.map((n) => n.tag)).not.toContain('script')
+    expect(nodes.find((n) => n.tag === 'a')?.text).toBe('Go')
+  })
+
+  it('reads a script left open as running to the end of the page', () => {
+    const nodes = pageTree(`<div><a href="/">Real</a><script>var x = '<a href="/">Fake</a>'</div>`)
+    expect(nodes.filter((n) => n.tag === 'a').map((n) => n.text)).toEqual(['Real'])
+  })
 })

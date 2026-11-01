@@ -35,8 +35,29 @@ const VOID = new Set([
 const WORDED = new Set(['a', 'button'])
 const LIMIT = 8000
 
+const BLOCK = /<(script|style|svg|noscript|template)\b[\s\S]*?<\/\1\s*>/gi
+const BLOCK_OPEN = /<(script|style|svg|noscript|template)\b/i
+const BLOCK_CLOSE = /<\/(script|style|svg|noscript|template)\b/gi
+
+/**
+ * The page without its scripts, styles and drawings. Removal repeats until
+ * nothing changes, since taking one block out can join the pieces of
+ * another. A block left open runs to the end of the page, as a browser
+ * reads it, and a stray closing tag is blanked.
+ */
+function withoutBlocks(html: string): string {
+  let body = html
+  for (let pass = 0; pass < 8; pass++) {
+    const next = body.replace(BLOCK, ' ')
+    if (next === body) break
+    body = next
+  }
+  const open = BLOCK_OPEN.exec(body)
+  return (open ? body.slice(0, open.index) : body).replace(BLOCK_CLOSE, ' ')
+}
+
 export function pageTree(html: string): PageNode[] {
-  const body = html.replace(/<(script|style|svg|noscript|template)\b[\s\S]*?<\/\1>/gi, ' ')
+  const body = withoutBlocks(html)
   const nodes: PageNode[] = []
   const open: number[] = []
   const starts = new Map<number, number>()
