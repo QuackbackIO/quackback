@@ -16,8 +16,36 @@ const LABELS: Record<string, string> = {
   mode: 'Mode',
   'brand.fonts.heading': 'Heading font',
   'brand.fonts.body': 'Body font',
+  'brand.fonts.display': 'Headline font',
   'brand.fonts.headingWeight': 'Heading weight',
   'shape.corners': 'Corners',
+  'shape.buttons': 'Buttons',
+  'shape.fill': 'Button colour',
+  'brand.light.support': 'Second colour',
+  'brand.dark.support': 'Dark second colour',
+  'brand.fonts.scale': 'Headline size',
+  'brand.fonts.tracking': 'Headline spacing',
+  'brand.fonts.headlineCase': 'Headline capitals',
+  'brand.fonts.labelCase': 'Menu and button capitals',
+  'brand.logoColours': 'Logo colours',
+  'brand.logo.tone': 'Wordmark ink',
+  'brand.logo.nameColour': 'Name colour',
+  'brand.logo.nameCase': 'Name capitals',
+  'brand.logo.nameAccent': 'Name part in colour',
+  'brand.fonts.headlineColour': 'Headline colour',
+  'shape.action': 'Band button colour',
+  'layout.tint': 'Second colour tint',
+  'layout.bandArt': 'Band art',
+  'layout.imageFocus': 'Band image focus',
+  'layout.blend': 'Blend',
+  'layout.bandAlign': 'Band words',
+  'layout.bandShape': 'Band shape',
+  'layout.headerOnBand': 'Header on the band',
+  'layout.imagePlace': 'Band image placement',
+  'layout.status': 'Status markers',
+  'pages.home.composer': 'Home composer',
+  'pages.feedback.headline.accent': 'Headline phrase',
+  'pages.home.headline.accent': 'Home headline phrase',
   'layout.header': 'Header',
   'layout.nav': 'Menu style',
   'layout.band': 'Top band',
@@ -44,6 +72,19 @@ const LABELS: Record<string, string> = {
   shape: 'Corners',
   brand: 'Brand',
   'pages.home.blocks': 'Home blocks',
+  'layout.pageTitles': 'Page titles',
+  tune: 'Exact values',
+  'tune.headline': 'Headline exact values',
+  'tune.heading': 'Section heading exact values',
+  'tune.label': 'Menu and button text exact values',
+  'tune.button': 'Button exact values',
+  'tune.card': 'Card exact values',
+  'tune.field': 'Field exact values',
+  'pages.titles.roadmap': 'Roadmap title',
+  'pages.titles.changelog': 'Changelog title',
+  'pages.titles.help': 'Help Center title',
+  'pages.titles.support': 'Support title',
+  'pages.titles': 'Page titles',
 }
 
 const COPY_LABELS: Record<string, string> = {
@@ -59,10 +100,11 @@ const IMAGES: Record<string, string> = {
   'brand.logo.wordmark.dark': 'Dark wordmark',
   'brand.favicon': 'Favicon',
   'brand.shareImage': 'Share image',
+  'brand.bandImage': 'Band image',
 }
 
 const IMAGE_PATH =
-  /^(brand\.(?:logo\.(?:mark|wordmark)\.(?:light|dark)|favicon|shareImage))(?:\.|$)/
+  /^(brand\.(?:logo\.(?:mark|wordmark)\.(?:light|dark)|favicon|shareImage|bandImage))(?:\.|$)/
 
 /** Whether a path holds an uploaded image, whose value is a storage key no one should read. */
 export function isImageField(path: string): boolean {

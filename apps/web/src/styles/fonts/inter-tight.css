@@ -2,6 +2,7 @@
    documents whose design selects Inter Tight. Loaded via
    src/lib/shared/theme/font-loader.ts. Keep weights in sync with its
    BUNDLED_FONTS entry in src/lib/shared/design/fonts.ts. */
+@import "@fontsource/inter-tight/300.css";
 @import "@fontsource/inter-tight/400.css";
 @import "@fontsource/inter-tight/500.css";
 @import "@fontsource/inter-tight/600.css";

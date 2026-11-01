@@ -69,6 +69,7 @@ vi.mock('@/lib/server/functions/powered-by', () => ({ getShowPoweredByFn: vi.fn(
 vi.mock('@/components/public/preview-draft-context', () => ({
   usePreviewWelcomeCard: () => null,
   usePreviewHeadline: () => undefined,
+  usePreviewTitles: () => undefined,
   usePreviewHome: () => undefined,
   usePreviewBandImage: () => undefined,
 }))

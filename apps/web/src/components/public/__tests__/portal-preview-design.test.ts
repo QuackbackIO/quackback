@@ -17,6 +17,7 @@ describe('a draft design read from the preview message', () => {
     ).toEqual({
       display: 'wordmark',
       name: 'Harbor',
+      nameAccent: null,
       wordmark: { light: '/api/storage/logos/a.svg', dark: null },
     })
     expect(message({ logo: { display: 'banner' } }).logo).toBeNull()

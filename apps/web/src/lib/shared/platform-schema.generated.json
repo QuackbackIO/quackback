@@ -81,6 +81,12 @@
         "sensitive": false
       },
       {
+        "key": "AI_DESIGN_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
         "key": "AI_ASSISTANT_VISION",
         "kind": "text",
         "group": "connection",

@@ -2,16 +2,6 @@ import { defineMessages } from 'react-intl'
 
 /** What Home's blocks say to visitors. */
 export const homeMessages = defineMessages({
-  composerPlaceholder: {
-    id: 'portal.feedback.header.titlePlaceholder',
-    defaultMessage:
-      "{postWord, select, post {What's on your mind?} feature_request {What should we build?} suggestion {What's your suggestion?} other {What's your idea?}}",
-  },
-  composerLabel: {
-    id: 'portal.feedback.header.titleLabel',
-    defaultMessage:
-      '{postWord, select, post {Post title} feature_request {Feature request title} suggestion {Suggestion title} other {Idea title}}',
-  },
   composerContinue: { id: 'portal.home.composer.continue', defaultMessage: 'Continue' },
   ideasTitle: {
     id: 'portal.home.ideas.title',

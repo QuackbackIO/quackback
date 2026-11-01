@@ -163,9 +163,9 @@ export function AppearanceView({
             scope={scope}
             busy={ai.busy}
             onClearScope={() => setScope('site')}
-            onAsk={(text, palette) => {
+            onAsk={(text, attachment) => {
               setTab('ask')
-              void ai.ask(text, scope, palette)
+              void ai.ask(text, scope, attachment)
             }}
           />
         )}

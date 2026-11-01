@@ -349,12 +349,12 @@ function PendingPostCard({
             <span className="text-foreground/80">{post.authorName || authorFallback}</span>
             {post.boardName && (
               <>
-                <span className="text-muted-foreground/40">·</span>
+                <span className="text-muted-foreground">·</span>
                 <span>{post.boardName}</span>
               </>
             )}
-            <span className="text-muted-foreground/40">·</span>
-            <TimeAgo date={new Date(post.createdAt)} className="text-muted-foreground/70" />
+            <span className="text-muted-foreground">·</span>
+            <TimeAgo date={new Date(post.createdAt)} className="text-muted-foreground" />
           </div>
         </div>
         <div className="flex shrink-0 gap-2">

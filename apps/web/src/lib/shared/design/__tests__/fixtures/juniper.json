@@ -53,7 +53,9 @@
     "width": "default",
     "filters": "end",
     "headerOnBand": true,
-    "status": "brand"
+    "status": "brand",
+    "bandArt": "hills",
+    "pageTitles": "band"
   },
   "pages": {
     "home": {
@@ -129,6 +131,30 @@
       },
       "defaultSort": "trending",
       "copy": {}
+    },
+    "titles": {
+      "roadmap": {
+        "title": {
+          "en": "What we are growing next"
+        },
+        "subtitle": {
+          "en": "Ideas on their way, by season."
+        }
+      },
+      "changelog": {
+        "title": {
+          "en": "Fresh from the garden"
+        },
+        "subtitle": {
+          "en": "Everything new, as it ships."
+        },
+        "accent": {
+          "style": "colour",
+          "text": {
+            "en": "garden"
+          }
+        }
+      }
     }
   },
   "nav": {

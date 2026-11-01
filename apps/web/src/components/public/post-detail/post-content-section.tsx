@@ -268,7 +268,13 @@ export function PostContentSection({
         </div>
       </div>
 
-      <h1 className="text-xl sm:text-2xl font-semibold text-foreground mb-4">{post.title}</h1>
+      {/* On the design's scale for page titles, held short of it for a long title. */}
+      <h1
+        data-qb-part="post-heading"
+        className="text-xl sm:text-2xl sm:[font-size:min(var(--qb-page-title-size,1.5rem),2.25rem)] [line-height:1.2] font-semibold text-foreground mb-4"
+      >
+        {post.title}
+      </h1>
 
       {post.moderationState === 'pending' && (
         <InlineModerationActions

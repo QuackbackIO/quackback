@@ -33,8 +33,18 @@ export type DesignAiScope = (typeof DESIGN_AI_SCOPES)[number]
 
 const SCOPE_FIELDS: Record<Exclude<DesignAiScope, 'site'>, readonly string[]> = {
   brand: ['mode', 'brand', 'shape', 'vocabulary'],
-  header: ['layout.header', 'layout.nav', 'nav', 'brand.logo.display'],
-  band: ['layout.band', 'pages.feedback.headline'],
+  header: ['layout.header', 'layout.nav', 'layout.headerOnBand', 'nav', 'brand.logo'],
+  band: [
+    'layout.band',
+    'layout.blend',
+    'layout.bandAlign',
+    'layout.bandShape',
+    'layout.imagePlace',
+    'brand.bandImage',
+    'pages.feedback.headline',
+    'layout.pageTitles',
+    'pages.titles',
+  ],
   welcome: ['pages.feedback.welcome'],
   feed: [
     'layout.cards',
@@ -42,6 +52,7 @@ const SCOPE_FIELDS: Record<Exclude<DesignAiScope, 'site'>, readonly string[]> = 
     'layout.width',
     'pages.feedback.defaultSort',
     'pages.feedback.copy',
+    'layout.status',
   ],
   filters: ['layout.filters'],
   home: ['pages.home', 'nav.home'],
@@ -80,6 +91,8 @@ export interface UntrustedChanges {
   links: ReadonlySet<string>
   /** Why the CSS cannot be saved, or null when it can. */
   checkCss: (css: string) => string | null
+  /** Files stored for this request, such as a website's wordmark, which the model may place. */
+  files?: ReadonlySet<string>
 }
 
 /** The language a translated field's plain-text shorthand writes. */
@@ -180,7 +193,8 @@ function homeBlock(value: unknown): unknown {
 /** The value as the document holds it, from the shorthand a person or the model wrote. */
 function shaped(doc: PortalDesign, path: string, value: unknown): unknown {
   const current = read(doc, path)
-  if (/^brand\.fonts\.(heading|body)$/.test(path) && typeof value === 'string') {
+  if (path === 'brand.fonts.display' && value === null) return undefined
+  if (/^brand\.fonts\.(heading|body|display)$/.test(path) && typeof value === 'string') {
     return (BUNDLED_FONT_IDS as readonly string[]).includes(value)
       ? { kind: 'bundled', id: value }
       : value
@@ -191,7 +205,7 @@ function shaped(doc: PortalDesign, path: string, value: unknown): unknown {
   }
   if (typeof value === 'string' && isRichText(current)) return textDoc(value)
   const translated =
-    /^pages\.(feedback\.copy\.(prompt|submit|emptyTitle)|(home|feedback)\.headline\.(title|subtitle))$/.test(
+    /^pages\.(feedback\.copy\.(prompt|submit|emptyTitle)|(home|feedback)\.headline\.(title|subtitle)|titles\.(roadmap|changelog|help|support)\.(title|subtitle))$/.test(
       path
     )
   if (
@@ -221,7 +235,20 @@ function write(doc: PortalDesign, path: string, value: unknown): PortalDesign | 
   const page = /^pages\.(home|feedback)\.headline\./.exec(path)?.[1] as
     'home' | 'feedback' | undefined
   if (page && !next.pages[page].headline) next.pages[page].headline = { title: {}, subtitle: {} }
+  // So can a page's own title.
+  const titled = /^pages\.titles\.(roadmap|changelog|help|support)\./.exec(path)?.[1] as
+    'roadmap' | 'changelog' | 'help' | 'support' | undefined
+  if (titled) {
+    next.pages.titles ??= {}
+    next.pages.titles[titled] ??= { title: {}, subtitle: {} }
+  }
   if (!writeAt(next, keys, shaped(next, path, value))) return 'there is no such field'
+  if (titled && next.pages.titles) {
+    const words = next.pages.titles[titled]
+    if (words && !Object.keys(words.title).length && !Object.keys(words.subtitle).length)
+      delete next.pages.titles[titled]
+    if (!Object.keys(next.pages.titles).length) delete next.pages.titles
+  }
   if (page) {
     const line = next.pages[page].headline
     if (line && !Object.keys(line.title).length && !Object.keys(line.subtitle).length)
@@ -248,7 +275,7 @@ function untrustedRefusal(
   checks: UntrustedChanges
 ): string | null {
   const files = valuesNamed('key', before)
-  if ([...valuesNamed('key', after)].some((key) => !files.has(key)))
+  if ([...valuesNamed('key', after)].some((key) => !files.has(key) && !checks.files?.has(key)))
     return 'images and fonts are uploaded in Brand'
   const had = valuesNamed('url', before)
   const link = [...valuesNamed('url', after)].find((url) => !had.has(url) && !checks.links.has(url))

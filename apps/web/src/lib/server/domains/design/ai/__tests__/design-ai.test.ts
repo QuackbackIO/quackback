@@ -43,8 +43,14 @@ vi.mock('@/lib/server/domains/ai/structured-chat', () => ({
     if (model.refusesImages && Array.isArray(input.messages[0]?.content))
       throw new Error('this model does not take images')
     const answer = model.answer as { looks?: Array<Record<string, unknown>> } | null
-    if (answer?.looks)
-      return { looks: answer.looks.map((look) => ({ ...model.fullLook, homeBlocks: [], ...look })) }
+    if (answer?.looks) {
+      // One look to a call: the role names which.
+      const role = input.systemPrompts[1] ?? ''
+      const index = /second/.test(role) ? 1 : /third/.test(role) ? 2 : 0
+      const look = answer.looks[index]
+      if (!look) throw new Error('no look for this role')
+      return { look: { ...model.fullLook, ...look } }
+    }
     return model.answer
   },
 }))
@@ -113,7 +119,7 @@ describe('askDesignAi', () => {
     // What was left alone is named with why, so the reply never overclaims.
     expect(result).toMatchObject({
       ok: true,
-      reply: 'Done. Left alone: Cards: it takes bordered, raised, list.',
+      reply: 'Done. Left alone: Cards: it takes bordered, raised, list, filled.',
       skipped: 1,
     })
     expect(result.ok && result.applied.map((change) => change.path)).toEqual(['brand.light.accent'])
@@ -149,7 +155,7 @@ describe('askDesignAi', () => {
       allows: ALLOWS,
     })
     expect(model.calls[0].systemPrompts[0]).toContain(
-      'Change only these fields and what is under them: layout.header, layout.nav, nav, brand.logo.display'
+      'Change only these fields and what is under them: layout.header, layout.nav, layout.headerOnBand, nav, brand.logo'
     )
     expect(model.calls[0].systemPrompts[0]).toContain('how the menu marks the current page')
   })
@@ -189,6 +195,43 @@ describe('askDesignAi', () => {
     )
   })
 
+  it('shows the model the attached picture itself, so a request to match it can be read', async () => {
+    model.answer = { reply: 'Done.', changes: [], outOfScope: false }
+    await askDesignAi({
+      message: 'Match our site',
+      design: defaultDesign(),
+      scope: 'site',
+      history: [],
+      allows: ALLOWS,
+      palette: ['#163300'],
+      image: 'data:image/jpeg;base64,AAAA',
+    })
+    const content = model.calls[0]!.messages.at(-1)!.content as Array<Record<string, unknown>>
+    expect(content[0]).toMatchObject({ type: 'text' })
+    expect(content[1]).toEqual({
+      type: 'image',
+      source: { type: 'data', value: 'AAAA', mimeType: 'image/jpeg' },
+    })
+  })
+
+  it('asks once more when an answer does not fit, then without the picture', async () => {
+    model.answer = { reply: 'Done.', changes: [], outOfScope: false }
+    model.misfits = 2
+    const result = await askDesignAi({
+      message: 'Match our site',
+      design: defaultDesign(),
+      scope: 'site',
+      history: [],
+      allows: ALLOWS,
+      palette: ['#163300'],
+      image: 'data:image/jpeg;base64,AAAA',
+    })
+    expect(result.ok).toBe(true)
+    expect(model.calls).toHaveLength(3)
+    // The last ask carries the picture's colours, not the picture.
+    expect(typeof model.calls[2]!.messages.at(-1)!.content).toBe('string')
+  })
+
   it('keeps the reply when everything asked for is already set', async () => {
     model.answer = {
       reply: 'The header is already stacked.',
@@ -221,7 +264,7 @@ describe('askDesignAi', () => {
       allows: ALLOWS,
     })
     if (!result.ok) throw new Error('expected an answer')
-    expect(result.reply).toBe('Nothing changed (Cards: it takes bordered, raised, list).')
+    expect(result.reply).toBe('Nothing changed (Cards: it takes bordered, raised, list, filled).')
     expect(result.outOfScope).toBe(false)
   })
 
@@ -491,6 +534,21 @@ describe('a logo or a screenshot', () => {
     })
   })
 
+  it('tells the model when the workspace has a logo mark', async () => {
+    model.answer = { looks: [look] }
+    await designDirections({
+      allows: ALLOWS,
+      design: defaultDesign(),
+      name: 'Northwind Bikes',
+      hasMark: true,
+      site: null,
+      words: 'Scandinavian bikes',
+    })
+    expect(model.calls[0]!.messages[0]!.content).toContain(
+      'They have a logo mark, a square icon the header can show beside their name.'
+    )
+  })
+
   it('leaves a model that does not take images with the colours', async () => {
     model.answer = { looks: [look] }
     model.refusesImages = true
@@ -503,26 +561,29 @@ describe('a logo or a screenshot', () => {
       image: 'data:image/jpeg;base64,AAAA',
     })
     expect(result.ok).toBe(true)
-    expect(model.calls).toHaveLength(2)
-    expect(model.calls[1]!.messages[0]!.content).toContain('#1f4d3a')
+    // The faithful look is asked for with the picture, then with its colours alone.
+    const faithful = model.calls.filter((call) =>
+      call.systemPrompts[1]?.startsWith('Write the first')
+    )
+    expect(faithful).toHaveLength(2)
+    expect(faithful[1]!.messages[0]!.content).toContain('#1f4d3a')
   })
 
-  it('asks again once when the looks do not fit the schema', async () => {
+  it('asks for a look once more when it does not fit the schema, and fails when none do', async () => {
     model.answer = { looks: [look] }
     model.misfits = 1
-    const result = await designDirections({
-      allows: ALLOWS,
-      design: defaultDesign(),
-      site: null,
-      words: 'calm',
-    })
-    expect(result.ok).toBe(true)
-    expect(model.calls).toHaveLength(2)
-    model.misfits = 2
+    const first = (call: { systemPrompts: string[] }) =>
+      call.systemPrompts[1]?.startsWith('Write the first')
+    expect(
+      await designDirections({ allows: ALLOWS, design: defaultDesign(), site: null, words: 'calm' })
+    ).toMatchObject({ ok: true })
+    expect(model.calls.filter(first).length).toBeLessThanOrEqual(2)
+    model.misfits = 100
     model.calls = []
     expect(
       await designDirections({ allows: ALLOWS, design: defaultDesign(), site: null, words: 'calm' })
     ).toMatchObject({ ok: false, code: 'AI_FAILED' })
-    expect(model.calls).toHaveLength(2)
+    // Each look is asked for twice before it is given up.
+    expect(model.calls.filter(first)).toHaveLength(2)
   })
 })

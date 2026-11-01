@@ -312,174 +312,195 @@ function PostDetailPage() {
   }, [post.comments])
 
   return (
-    <div
-      data-testid="post-detail"
-      className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-6"
-    >
-      <UnsubscribeBanner postId={post.id as PostId} />
+    <>
+      {/* Where the design sets page titles on the band, a post opens on a strip of it. */}
+      <div
+        data-qb-part="post-band"
+        className="hidden [[data-qb-page-titles=band]_&]:block [background:var(--qb-band-bg-narrow,var(--qb-band-bg))] sm:[background:var(--qb-band-bg)]"
+      >
+        <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 py-5 sm:px-6">
+          <BackLink
+            to="/"
+            search={{ board: slug }}
+            className="font-medium text-[var(--qb-band-ink)] hover:bg-[color-mix(in_oklch,var(--qb-band-ink)_12%,transparent)] hover:text-[var(--qb-band-ink)]"
+          >
+            {board.name}
+          </BackLink>
+        </div>
+      </div>
+      <div
+        data-testid="post-detail"
+        className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-6"
+      >
+        <UnsubscribeBanner postId={post.id as PostId} />
 
-      <BackLink to="/" search={{ board: slug }} className="mb-6">
-        {board.name}
-      </BackLink>
+        <BackLink
+          to="/"
+          search={{ board: slug }}
+          className="mb-6 [[data-qb-page-titles=band]_&]:hidden"
+        >
+          {board.name}
+        </BackLink>
 
-      {/* Merge banner for duplicate posts */}
-      {post.mergeInfo && (
-        <PortalMergeBanner
-          canonicalPostTitle={post.mergeInfo.canonicalPostTitle}
-          canonicalPostBoardSlug={post.mergeInfo.canonicalPostBoardSlug}
-          canonicalPostId={post.mergeInfo.canonicalPostId}
-        />
-      )}
-
-      {/* Post detail card */}
-      <div className="bg-card border border-border/40 rounded-lg overflow-hidden">
-        <div className="flex">
-          <Suspense fallback={<VoteSidebarSkeleton />}>
-            <VoteSidebar postId={postId} voteCount={post.voteCount} disabled={!!post.mergeInfo} />
-          </Suspense>
-
-          <PostContentSection
-            post={typedPost}
-            currentStatus={currentStatus}
-            authorAvatarUrl={post.authorAvatarUrl}
-            canEdit={effectiveCanEdit}
-            canDelete={effectiveCanDelete}
-            editReason={editReason}
-            deleteReason={deleteReason}
-            onDelete={() => setDeleteDialogOpen(true)}
-            isEditing={isEditingPost}
-            onEditStart={() => setIsEditingPost(true)}
-            onEditSave={canEdit ? editPost : (team.saveEditAsTeam ?? editPost)}
-            onEditCancel={() => setIsEditingPost(false)}
-            onImageUpload={canUploadPostMedia ? uploadMediaWithSession : undefined}
-            isSaving={isSavingEdit || team.isTeamSavingEdit}
-            canModerate={canModerate}
-            moderationBusy={approvePost.isPending || rejectPost.isPending}
-            onApprove={() => approvePost.mutate(postId)}
-            onReject={() => rejectPost.mutate({ postId })}
+        {/* Merge banner for duplicate posts */}
+        {post.mergeInfo && (
+          <PortalMergeBanner
+            canonicalPostTitle={post.mergeInfo.canonicalPostTitle}
+            canonicalPostBoardSlug={post.mergeInfo.canonicalPostBoardSlug}
+            canonicalPostId={post.mergeInfo.canonicalPostId}
           />
+        )}
 
-          <Suspense fallback={<MetadataSidebarSkeleton />}>
-            <MetadataSidebar
-              postId={postId}
-              voteCount={post.voteCount}
-              status={currentStatus}
-              board={board}
-              authorName={post.authorName}
+        {/* Post detail card */}
+        <div className="bg-card border border-border/40 rounded-lg overflow-hidden">
+          <div className="flex">
+            <Suspense fallback={<VoteSidebarSkeleton />}>
+              <VoteSidebar postId={postId} voteCount={post.voteCount} disabled={!!post.mergeInfo} />
+            </Suspense>
+
+            <PostContentSection
+              post={typedPost}
+              currentStatus={currentStatus}
               authorAvatarUrl={post.authorAvatarUrl}
-              createdAt={new Date(post.createdAt)}
-              eta={post.eta ?? null}
-              tags={post.tags}
-              allStatuses={
-                team.canSetStatus ? (statusesQuery.data as unknown as PostStatusEntity[]) : []
+              canEdit={effectiveCanEdit}
+              canDelete={effectiveCanDelete}
+              editReason={editReason}
+              deleteReason={deleteReason}
+              onDelete={() => setDeleteDialogOpen(true)}
+              isEditing={isEditingPost}
+              onEditStart={() => setIsEditingPost(true)}
+              onEditSave={canEdit ? editPost : (team.saveEditAsTeam ?? editPost)}
+              onEditCancel={() => setIsEditingPost(false)}
+              onImageUpload={canUploadPostMedia ? uploadMediaWithSession : undefined}
+              isSaving={isSavingEdit || team.isTeamSavingEdit}
+              canModerate={canModerate}
+              moderationBusy={approvePost.isPending || rejectPost.isPending}
+              onApprove={() => approvePost.mutate(postId)}
+              onReject={() => rejectPost.mutate({ postId })}
+            />
+
+            <Suspense fallback={<MetadataSidebarSkeleton />}>
+              <MetadataSidebar
+                postId={postId}
+                voteCount={post.voteCount}
+                status={currentStatus}
+                board={board}
+                authorName={post.authorName}
+                authorAvatarUrl={post.authorAvatarUrl}
+                createdAt={new Date(post.createdAt)}
+                eta={post.eta ?? null}
+                tags={post.tags}
+                allStatuses={
+                  team.canSetStatus ? (statusesQuery.data as unknown as PostStatusEntity[]) : []
+                }
+                onStatusChange={team.onStatusChange}
+                onEtaChange={team.onEtaChange}
+                allTags={team.allTags}
+                onTagsChange={team.onTagsChange}
+                allBoards={team.allBoards}
+                onBoardChange={team.onBoardChange}
+                owner={team.owner}
+                ownerCandidates={team.ownerCandidates}
+                onOwnerChange={team.onOwnerChange}
+                isUpdating={team.isMetaUpdating}
+                showVoters={team.canVoteOnBehalf}
+                votersQuery={team.votersQuery}
+                votersCanAddVoter={team.canSearchPeople}
+                votersCanCreateUser={team.canCreatePeople}
+                onVotersInvalidate={team.invalidateVoters}
+                manageActions={manageActions}
+              />
+            </Suspense>
+          </div>
+        </div>
+
+        {/* Comments card */}
+        <div className="bg-card border border-border/40 rounded-lg overflow-hidden mt-4">
+          <Suspense fallback={<CommentsSectionSkeleton count={post.commentsTotalRootCount} />}>
+            <CommentsSection
+              postId={postId}
+              comments={post.comments}
+              pinnedCommentId={post.pinnedCommentId}
+              disableCommenting={!!post.mergeInfo || !!post.isCommentsLocked}
+              lockedMessage={
+                post.isCommentsLocked
+                  ? intl.formatMessage({
+                      id: 'portal.postDetail.commentsLocked',
+                      defaultMessage:
+                        '{postWord, select, post {Comments are locked on this post} feature_request {Comments are locked on this feature request} suggestion {Comments are locked on this suggestion} other {Comments are locked on this idea}}',
+                    })
+                  : undefined
               }
-              onStatusChange={team.onStatusChange}
-              onEtaChange={team.onEtaChange}
-              allTags={team.allTags}
-              onTagsChange={team.onTagsChange}
-              allBoards={team.allBoards}
-              onBoardChange={team.onBoardChange}
-              owner={team.owner}
-              ownerCandidates={team.ownerCandidates}
-              onOwnerChange={team.onOwnerChange}
-              isUpdating={team.isMetaUpdating}
-              showVoters={team.canVoteOnBehalf}
-              votersQuery={team.votersQuery}
-              votersCanAddVoter={team.canSearchPeople}
-              votersCanCreateUser={team.canCreatePeople}
-              onVotersInvalidate={team.invalidateVoters}
-              manageActions={manageActions}
+              statuses={statusesQuery.data}
+              currentStatusId={post.statusId}
+              onPinComment={(commentId: PostCommentId) => pinComment.mutate(commentId)}
+              onUnpinComment={() => unpinComment.mutate()}
+              isPinPending={pinComment.isPending || unpinComment.isPending}
+              onDeleteComment={(commentId: PostCommentId) => deleteComment.mutate(commentId)}
+              deletingCommentId={
+                deleteComment.isPending ? (deleteComment.variables as PostCommentId) : null
+              }
+              onRestoreComment={(commentId: PostCommentId) => restoreComment.mutate(commentId)}
+              restoringCommentId={
+                restoreComment.isPending ? (restoreComment.variables as PostCommentId) : null
+              }
+              hasMoreComments={hasMoreComments}
+              onLoadMoreComments={loadMoreComments}
+              isLoadingMoreComments={isLoadingMoreComments}
+              remainingCommentCount={
+                post.commentsTotalRootCount != null
+                  ? Math.max(0, post.commentsTotalRootCount - post.comments.length)
+                  : undefined
+              }
+              onImageUpload={uploadMediaWithSession}
+              canModerate={canModerate}
             />
           </Suspense>
         </div>
-      </div>
 
-      {/* Comments card */}
-      <div className="bg-card border border-border/40 rounded-lg overflow-hidden mt-4">
-        <Suspense fallback={<CommentsSectionSkeleton count={post.commentsTotalRootCount} />}>
-          <CommentsSection
-            postId={postId}
-            comments={post.comments}
-            pinnedCommentId={post.pinnedCommentId}
-            disableCommenting={!!post.mergeInfo || !!post.isCommentsLocked}
-            lockedMessage={
-              post.isCommentsLocked
-                ? intl.formatMessage({
-                    id: 'portal.postDetail.commentsLocked',
-                    defaultMessage:
-                      '{postWord, select, post {Comments are locked on this post} feature_request {Comments are locked on this feature request} suggestion {Comments are locked on this suggestion} other {Comments are locked on this idea}}',
-                  })
-                : undefined
-            }
-            statuses={statusesQuery.data}
-            currentStatusId={post.statusId}
-            onPinComment={(commentId: PostCommentId) => pinComment.mutate(commentId)}
-            onUnpinComment={() => unpinComment.mutate()}
-            isPinPending={pinComment.isPending || unpinComment.isPending}
-            onDeleteComment={(commentId: PostCommentId) => deleteComment.mutate(commentId)}
-            deletingCommentId={
-              deleteComment.isPending ? (deleteComment.variables as PostCommentId) : null
-            }
-            onRestoreComment={(commentId: PostCommentId) => restoreComment.mutate(commentId)}
-            restoringCommentId={
-              restoreComment.isPending ? (restoreComment.variables as PostCommentId) : null
-            }
-            hasMoreComments={hasMoreComments}
-            onLoadMoreComments={loadMoreComments}
-            isLoadingMoreComments={isLoadingMoreComments}
-            remainingCommentCount={
-              post.commentsTotalRootCount != null
-                ? Math.max(0, post.commentsTotalRootCount - post.comments.length)
-                : undefined
-            }
-            onImageUpload={uploadMediaWithSession}
-            canModerate={canModerate}
-          />
+        <Suspense fallback={null}>
+          {deleteDialogMounted && (
+            <DeletePostDialog
+              open={deleteDialogOpen}
+              onOpenChange={setDeleteDialogOpen}
+              postTitle={post.title}
+              onConfirm={() => {
+                if (canDelete) {
+                  deletePost()
+                } else {
+                  void team.deletePostAsTeam?.()
+                }
+              }}
+              isPending={isDeleting || team.isTeamDeleting}
+            />
+          )}
+
+          {/* Merge dialogs, for team members holding post.merge only. Invalidate
+            on close so a completed merge is reflected on the portal page. */}
+          {team.canMerge && mergeIntoDialogMounted && (
+            <MergeIntoDialog
+              postId={postId}
+              postTitle={post.title}
+              open={mergeIntoDialogOpen}
+              onOpenChange={(open) => {
+                setMergeIntoDialogOpen(open)
+                if (!open) team.invalidatePortal()
+              }}
+            />
+          )}
+          {team.canMerge && mergeOthersDialogMounted && (
+            <MergeOthersDialog
+              postId={postId}
+              postTitle={post.title}
+              open={mergeOthersDialogOpen}
+              onOpenChange={(open) => {
+                setMergeOthersDialogOpen(open)
+                if (!open) team.invalidatePortal()
+              }}
+            />
+          )}
         </Suspense>
       </div>
-
-      <Suspense fallback={null}>
-        {deleteDialogMounted && (
-          <DeletePostDialog
-            open={deleteDialogOpen}
-            onOpenChange={setDeleteDialogOpen}
-            postTitle={post.title}
-            onConfirm={() => {
-              if (canDelete) {
-                deletePost()
-              } else {
-                void team.deletePostAsTeam?.()
-              }
-            }}
-            isPending={isDeleting || team.isTeamDeleting}
-          />
-        )}
-
-        {/* Merge dialogs, for team members holding post.merge only. Invalidate
-            on close so a completed merge is reflected on the portal page. */}
-        {team.canMerge && mergeIntoDialogMounted && (
-          <MergeIntoDialog
-            postId={postId}
-            postTitle={post.title}
-            open={mergeIntoDialogOpen}
-            onOpenChange={(open) => {
-              setMergeIntoDialogOpen(open)
-              if (!open) team.invalidatePortal()
-            }}
-          />
-        )}
-        {team.canMerge && mergeOthersDialogMounted && (
-          <MergeOthersDialog
-            postId={postId}
-            postTitle={post.title}
-            open={mergeOthersDialogOpen}
-            onOpenChange={(open) => {
-              setMergeOthersDialogOpen(open)
-              if (!open) team.invalidatePortal()
-            }}
-          />
-        )}
-      </Suspense>
-    </div>
+    </>
   )
 }

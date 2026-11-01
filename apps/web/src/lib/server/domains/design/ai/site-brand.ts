@@ -32,6 +32,8 @@ export interface SiteBrand {
   bold: boolean
   /** Its buttons are black or near-black: a monochrome brand that uses colour sparingly. */
   monochrome: boolean
+  /** The colour it fills hero and banner sections with, when it fills them with one. */
+  hero: string | null
 }
 
 /** Pages that answer a visit with a block rather than the site. */
@@ -107,7 +109,8 @@ export function pageLinks(html: string, base: string) {
 }
 
 /** A CSS colour as hex, or null for one that is transparent or not a colour. */
-function hex(value: string): string | null {
+/** A CSS colour as six-digit hex, or null when it is not one. */
+export function hex(value: string): string | null {
   const colour = normaliseColor(value.trim().replace(/\s*!important$/, ''))
   if (!colour) return null
   return colour.startsWith('#') ? colour : oklchToHex(colour)
@@ -141,7 +144,42 @@ function withoutDarkMode(css: string): string {
 /** A rule for a dark theme, such as `.dark body` or `[data-theme=dark]`. */
 const DARK_THEME = /(^|[\s.[#:-])(dark|night)([\s\]"'=_-]|$)/
 
-function readCss(css: string, weigh: (colour: string, weight: number) => void) {
+/** The classes a page's HTML uses, so styles for elements it never shows can be left out. */
+export function usedClasses(html: string): Set<string> {
+  const used = new Set<string>()
+  for (const [, list] of html.matchAll(/\bclass\s*=\s*["']([^"']*)["']/gi))
+    for (const name of list!.split(/\s+/)) if (name) used.add(name)
+  return used
+}
+
+/**
+ * How much a rule's colours count: fully when it can apply to the page (every
+ * class its selectors' last parts name is one the page uses), a quarter when
+ * not. A site's bundle carries styles for screens it is not showing, whose
+ * colours are seldom the brand's, though a class built as the page runs can
+ * be missing from its HTML.
+ */
+function weightOf(selector: string, used: Set<string> | null): number {
+  if (!used) return 1
+  const applies = selector.split(',').some((one) => {
+    const last =
+      one
+        .trim()
+        .split(/\s*[\s>+~]\s*/)
+        .pop() ?? ''
+    const classes = [...last.matchAll(/\.((?:\\.|[\w-])+)/g)].map((m) =>
+      m[1]!.replace(/\\(.)/g, '$1')
+    )
+    return classes.every((name) => used.has(name))
+  })
+  return applies ? 1 : 0.25
+}
+
+function readCss(
+  css: string,
+  weigh: (colour: string, weight: number) => void,
+  used: Set<string> | null = null
+) {
   css = withoutDarkMode(css)
   let background: string | null = null
   const buttons = new Map<string, number>()
@@ -151,10 +189,12 @@ function readCss(css: string, weigh: (colour: string, weight: number) => void) {
     body: new Map<string, number>(),
     any: new Map<string, number>(),
   }
-  const count = (map: Map<string, number>, font: string) => map.set(font, (map.get(font) ?? 0) + 1)
+  const count = (map: Map<string, number>, font: string, by = 1) =>
+    map.set(font, (map.get(font) ?? 0) + by)
   for (const [, selector, body] of css.matchAll(/([^{}@;]+)\{([^{}]*)\}/g)) {
     const sel = selector!.trim().toLowerCase()
     if (DARK_THEME.test(sel)) continue
+    const use = weightOf(selector!.trim(), used)
     // Focus rings and messages about state are not the brand.
     if (/:focus|:invalid|\b(error|danger|warning|success|alert|toast|valid)\b/.test(sel)) continue
     const onButton = /\b(btn|button|cta|primary)\b/.test(sel)
@@ -176,7 +216,8 @@ function readCss(css: string, weigh: (colour: string, weight: number) => void) {
               : onPage
                 ? fonts.body
                 : fonts.any,
-            name
+            name,
+            use
           )
         }
         continue
@@ -186,7 +227,7 @@ function readCss(css: string, weigh: (colour: string, weight: number) => void) {
         if (!colour) continue
         if (onPage && /^background(-color)?$/.test(prop)) background ??= colour
         if (/^background/.test(prop)) {
-          if (onButton) buttons.set(colour, (buttons.get(colour) ?? 0) + 1)
+          if (onButton) buttons.set(colour, (buttons.get(colour) ?? 0) + use)
           if (/\b(hero|banner|jumbotron|masthead|splash|promo|band|section)\b/.test(sel))
             fields.add(colour)
         }
@@ -199,13 +240,14 @@ function readCss(css: string, weigh: (colour: string, weight: number) => void) {
         const brandVar = prop.startsWith('--') && /(primary|brand|accent|theme|main|cta)/.test(prop)
         weigh(
           colour,
-          brandVar
-            ? 5
-            : onButton && /^background/.test(prop)
-              ? 4
-              : onButton || (onLink && prop === 'color')
-                ? 2
-                : 1
+          use *
+            (brandVar
+              ? 5
+              : onButton && /^background/.test(prop)
+                ? 4
+                : onButton || (onLink && prop === 'color')
+                  ? 2
+                  : 1)
         )
       }
     }
@@ -255,7 +297,8 @@ export function readSiteBrand(input: {
   named(tags(input.html, 'link').find((link) => /mask-icon/i.test(link.rel ?? ''))?.color, 8)
   named(input.manifest?.theme_color, 10)
 
-  const css = readCss(input.css.join('\n'), weigh)
+  // With the page's HTML, only the styles it can use count.
+  const css = readCss(input.css.join('\n'), weigh, input.html ? usedClasses(input.html) : null)
   const background =
     css.background ??
     (typeof input.manifest?.background_color === 'string'
@@ -293,5 +336,6 @@ export function readSiteBrand(input: {
     button: css.button,
     bold: !!palette[0] && css.fields.some((field) => distance(field, palette[0]!) < 48),
     monochrome: !!css.button && !isBrandColour(css.button) && luminance(css.button) < 0.2,
+    hero: css.fields.find(isBrandColour) ?? null,
   }
 }

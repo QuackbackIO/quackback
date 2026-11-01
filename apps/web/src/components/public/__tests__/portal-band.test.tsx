@@ -154,4 +154,12 @@ describe('PortalBand', () => {
     expect(band.hasAttribute('data-qb-band-image')).toBe(false)
     expect(band.getAttribute('style')).toBeNull()
   })
+
+  it('draws band art along the bottom or tiled, as the design marks it', () => {
+    root.portalDesign = view({ title: { en: 'Ideas' }, subtitle: {} }, 'tint')
+    mount()
+    const band = document.querySelector('[data-qb-part=band]')!
+    expect(band.className).toContain('[[data-qb-band-art=edge]_&]:[background:var(--qb-band-art)')
+    expect(band.className).toContain('[[data-qb-band-art=tile]_&]:[background:var(--qb-band-art)')
+  })
 })

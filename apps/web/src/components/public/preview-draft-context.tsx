@@ -97,6 +97,7 @@ export function usePreviewHeadline(): PreviewHeadline | undefined {
 /** A draft design's Home and menu, as the design stores them. */
 export type PreviewDesignPages = {
   home: PortalDesign['pages']['home'] | null
+  titles: NonNullable<PortalDesign['pages']['titles']>
   nav: PortalDesign['nav'] | null
 }
 
@@ -105,6 +106,11 @@ export const PreviewPagesContext = createContext<PreviewDesignPages | undefined>
 /** A draft design's Home, or undefined (always, outside a design preview). */
 export function usePreviewHome(): PortalDesign['pages']['home'] | undefined {
   return useContext(PreviewPagesContext)?.home ?? undefined
+}
+
+/** A draft design's page titles, or undefined (always, outside a design preview). */
+export function usePreviewTitles(): PreviewDesignPages['titles'] | undefined {
+  return useContext(PreviewPagesContext)?.titles
 }
 
 /** A draft design's menu, or undefined (always, outside a design preview). */

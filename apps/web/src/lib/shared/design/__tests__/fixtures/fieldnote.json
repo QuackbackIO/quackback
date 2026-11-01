@@ -53,7 +53,8 @@
     "density": "compact",
     "width": "default",
     "filters": "end",
-    "imagePlace": "pattern"
+    "imagePlace": "pattern",
+    "bandArt": "waves"
   },
   "pages": {
     "home": {

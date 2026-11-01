@@ -45,6 +45,7 @@ describe('designView', () => {
     expect(designView(doc, 1).logo).toEqual({
       display: 'wordmark',
       name: null,
+      nameAccent: null,
       wordmark: { light: '/api/storage/logos/ink.svg', dark: null },
     })
   })

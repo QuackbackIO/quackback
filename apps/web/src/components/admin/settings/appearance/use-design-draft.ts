@@ -146,6 +146,7 @@ export function useDesignDraft() {
       fontIds: view.fontIds,
       headline: view.feedback.headline,
       home: view.home,
+      titles: view.titles,
       nav: view.nav,
       vocabulary: view.vocabulary,
       copy: view.feedback.copy,

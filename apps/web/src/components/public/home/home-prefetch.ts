@@ -55,6 +55,11 @@ export function prefetchHome(
     if (block.type === 'ideas' && gates.feedback) {
       void queryClient.prefetchQuery(portalQueries.posts({ sort: block.sort }))
       void queryClient.prefetchQuery(portalQueries.statuses())
+      void queryClient.prefetchQuery(portalQueries.boardCapabilities())
+    }
+    if (block.type === 'composer' && gates.feedback) {
+      void queryClient.prefetchQuery(portalQueries.boards())
+      void queryClient.prefetchQuery(portalQueries.boardCapabilities())
     }
     if (block.type === 'roadmap' && gates.roadmap)
       void queryClient.prefetchQuery(portalQueries.roadmaps())

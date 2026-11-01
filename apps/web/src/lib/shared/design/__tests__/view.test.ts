@@ -47,6 +47,7 @@ describe('portalTheme', () => {
       attributes: {},
       feedback: { welcome: null, headline: null, defaultSort: 'trending' as const, copy: {} },
       home: { headline: null, blocks: [] },
+      titles: {},
       nav: defaultDesign().nav,
       vocabulary: { post: 'idea' as const, board: 'board' as const },
       logo: {
@@ -80,6 +81,7 @@ describe('portalFontIds', () => {
       attributes: {},
       feedback: { welcome: null, headline: null, defaultSort: 'trending' as const, copy: {} },
       home: { headline: null, blocks: [] },
+      titles: {},
       nav: defaultDesign().nav,
       vocabulary: { post: 'idea' as const, board: 'board' as const },
       logo: {
@@ -118,6 +120,7 @@ describe('portalFontLinks', () => {
       attributes: {},
       feedback: { welcome: null, headline: null, defaultSort: 'trending' as const, copy: {} },
       home: { headline: null, blocks: [] },
+      titles: {},
       nav: defaultDesign().nav,
       vocabulary: { post: 'idea' as const, board: 'board' as const },
       logo: {
@@ -158,6 +161,7 @@ describe('portalThemeMode', () => {
         feedback: { welcome: null, headline: null, defaultSort: 'trending' as const, copy: {} },
 
         home: { headline: null, blocks: [] },
+        titles: {},
         nav: defaultDesign().nav,
         vocabulary: { post: 'idea' as const, board: 'board' as const },
         logo: {
@@ -218,6 +222,7 @@ describe('portalDefaultSort', () => {
       attributes: {},
       feedback: { welcome: null, headline: null, defaultSort: 'new' as const, copy: {} },
       home: { headline: null, blocks: [] },
+      titles: {},
       nav: defaultDesign().nav,
       vocabulary: { post: 'idea' as const, board: 'board' as const },
       logo: {

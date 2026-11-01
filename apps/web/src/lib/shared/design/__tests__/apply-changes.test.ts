@@ -34,6 +34,38 @@ describe('applyDesignChanges', () => {
     expect(result.applied[0]).toMatchObject({ before: 'oklch(0.886 0.176 86)', after: '#0f766e' })
   })
 
+  it('words a page’s title a line at a time, and gives it back its usual title when emptied', () => {
+    const set = applyDesignChanges(
+      defaultDesign(),
+      [{ path: 'pages.titles.roadmap.title', value: 'On the wall next' }],
+      'site'
+    )
+    expect(set.design.pages.titles).toEqual({
+      roadmap: { title: { en: 'On the wall next' }, subtitle: {} },
+    })
+    const cleared = applyDesignChanges(
+      set.design,
+      [{ path: 'pages.titles.roadmap.title', value: '' }],
+      'site'
+    )
+    expect(cleared.design.pages.titles).toBeUndefined()
+  })
+
+  it('sets the headlines’ own face by name, and gives them back the heading font with null', () => {
+    const set = applyDesignChanges(
+      defaultDesign(),
+      [{ path: 'brand.fonts.display', value: 'oswald' }],
+      'site'
+    )
+    expect(set.design.brand.fonts.display).toEqual({ kind: 'bundled', id: 'oswald' })
+    const cleared = applyDesignChanges(
+      set.design,
+      [{ path: 'brand.fonts.display', value: null }],
+      'site'
+    )
+    expect(cleared.design.brand.fonts.display).toBeUndefined()
+  })
+
   it('refuses a field the design does not have, and a path that reaches outside it', () => {
     const result = applyDesignChanges(
       defaultDesign(),
@@ -165,8 +197,9 @@ describe('applyDesignChanges', () => {
     expect(scopeFields('header')).toEqual([
       'layout.header',
       'layout.nav',
+      'layout.headerOnBand',
       'nav',
-      'brand.logo.display',
+      'brand.logo',
     ])
     const home = applyDesignChanges(
       defaultDesign(),
@@ -213,6 +246,35 @@ describe('applyDesignChanges', () => {
     expect(result.refused).toEqual([])
     expect(result.design.pages.feedback.copy.prompt).toEqual({ en: 'Pitch an idea' })
     expect(result.design.brand.dark?.background).toBe('#101614')
+  })
+
+  it('places only files stored for the request, never one the model names', () => {
+    const untrusted = {
+      blockTypes: [],
+      links: new Set<string>(),
+      checkCss: () => null,
+      files: new Set(['header-logos/site-abc.svg']),
+    }
+    const placed = applyDesignChanges(
+      defaultDesign(),
+      [
+        { path: 'brand.logo.wordmark.light', value: { key: 'header-logos/site-abc.svg' } },
+        { path: 'brand.logo.display', value: 'wordmark' },
+      ],
+      'site',
+      untrusted
+    )
+    expect(placed.refused).toEqual([])
+    expect(placed.design.brand.logo.wordmark.light).toEqual({ key: 'header-logos/site-abc.svg' })
+    const named = applyDesignChanges(
+      defaultDesign(),
+      [{ path: 'brand.bandImage', value: { key: 'portal-images/other.jpg' } }],
+      'site',
+      untrusted
+    )
+    expect(named.refused).toEqual([
+      { path: 'brand.bandImage', reason: 'images and fonts are uploaded in Brand' },
+    ])
   })
 
   it('keeps the rest of a Home layout from the model when a block’s page is off', () => {

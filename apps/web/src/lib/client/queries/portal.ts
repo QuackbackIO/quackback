@@ -10,6 +10,7 @@ import {
   fetchPublicRoadmaps,
   fetchPublicRoadmapPosts,
   fetchPortalData,
+  fetchBoardCapabilitiesFn,
 } from '@/lib/server/functions/portal'
 
 /**
@@ -132,6 +133,16 @@ export const portalQueries = {
     queryOptions({
       queryKey: ['portal', 'boards'],
       queryFn: () => fetchPublicBoards(),
+    }),
+
+  /**
+   * Whether the viewer may submit and vote on each board. Under the board
+   * list's key, so it goes with the viewer on sign-in and sign-out.
+   */
+  boardCapabilities: () =>
+    queryOptions({
+      queryKey: ['portal', 'boards', 'capabilities'],
+      queryFn: () => fetchBoardCapabilitiesFn(),
     }),
 
   /**

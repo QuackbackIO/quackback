@@ -119,19 +119,19 @@ function ArticleRow({
       to={href as '/hc'}
       className="group flex items-start gap-3 px-5 py-3.5 hover:bg-accent/40 transition-colors"
     >
-      <DocumentTextIcon className="h-4 w-4 shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors mt-0.5" />
+      <DocumentTextIcon className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-muted-foreground transition-colors mt-0.5" />
       <div className="flex-1 min-w-0">
         <span className="block text-sm text-foreground group-hover:text-primary transition-colors font-medium">
           {title}
         </span>
         {description && (
-          <span className="block text-xs text-muted-foreground/60 mt-0.5 line-clamp-1">
+          <span className="block text-xs text-muted-foreground mt-0.5 line-clamp-1">
             {description}
           </span>
         )}
       </div>
       {readingTimeMinutes != null && (
-        <span className="text-xs text-muted-foreground/50 shrink-0 tabular-nums mt-0.5">
+        <span className="text-xs text-muted-foreground shrink-0 tabular-nums mt-0.5">
           <FormattedMessage
             id="portal.hc.collection.readingTime"
             defaultMessage="{minutes} min read"
@@ -139,7 +139,7 @@ function ArticleRow({
           />
         </span>
       )}
-      <ChevronRightIcon className="h-4 w-4 shrink-0 text-muted-foreground/40 group-hover:text-primary transition-colors mt-0.5" />
+      <ChevronRightIcon className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary transition-colors mt-0.5" />
     </Link>
   )
 }
@@ -258,7 +258,7 @@ function CollectionPage() {
                     />
                   )}
                 </span>
-                <span className="text-muted-foreground/40">·</span>
+                <span className="text-muted-foreground">·</span>
                 <span>
                   <FormattedMessage
                     id="portal.hc.articleCount"

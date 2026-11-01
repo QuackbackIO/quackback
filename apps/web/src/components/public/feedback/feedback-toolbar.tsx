@@ -157,7 +157,7 @@ export function FeedbackToolbar({
       {/* Search sits after the sort, capped so it reads as a field rather than
           a banner; on a phone it takes the row with the Filters button. */}
       <div className="flex min-w-0 flex-1 basis-44 items-center gap-2 sm:ms-auto sm:max-w-xs">
-        <label className="flex h-11 lg:h-8 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-transparent ps-3 pe-1 text-sm focus-within:ring-2 focus-within:ring-ring/50">
+        <label className="flex h-11 lg:h-8 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-transparent ps-3 pe-1 text-sm focus-within:ring-2 focus-within:ring-ring">
           <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           <input
             type="search"
@@ -165,7 +165,7 @@ export function FeedbackToolbar({
             placeholder={searchLabel}
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
+            className="min-w-0 flex-1 self-stretch bg-transparent outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
           />
           {searchValue && (
             <button

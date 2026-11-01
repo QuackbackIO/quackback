@@ -70,3 +70,18 @@ export function mixColor(a: string, b: string, weight: number): string {
   const h = c < 1e-6 ? 0 : ((Math.atan2(db, da) * 180) / Math.PI + 360) % 360
   return oklchToHex(formatOklch(l, c, h))
 }
+
+/**
+ * A pale tone of a colour for a surface near a page: the page's lightness,
+ * stepped toward the middle by `depth`, in the colour's own hue with a little
+ * of its chroma. Unlike a mix, a deep colour over a warm page stays its hue
+ * rather than turning grey.
+ */
+export function tintOf(color: string, page: string, depth: number): string {
+  const parse = (value: string) => parseOklch(value.startsWith('#') ? hexToOklch(value) : value)
+  const own = parse(color)
+  const ground = parse(page)
+  if (!own || !ground) return mixColor(color, page, depth * 2)
+  const l = ground.l > 0.5 ? ground.l - depth : ground.l + depth
+  return oklchToHex(formatOklch(l, Math.min(own.c * 0.5, 0.07), own.h))
+}

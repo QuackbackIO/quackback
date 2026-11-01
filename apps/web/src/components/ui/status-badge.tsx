@@ -50,3 +50,26 @@ export function StatusBadge({ name, color, className }: StatusBadgeProps): React
     </span>
   )
 }
+
+/** A status's or tag's dot on its own, in the colour this page shows it and the design's status style. */
+export function StatusColourDot({
+  colour,
+  className,
+}: {
+  colour: string | null | undefined
+  className?: string
+}): ReactElement {
+  const shown = useStatusColour(colour)
+  return (
+    <span
+      data-qb-status-dot=""
+      aria-hidden="true"
+      className={cn(
+        'shrink-0 rounded-full',
+        shown ? 'bg-[var(--qb-status)]' : 'bg-muted-foreground',
+        className
+      )}
+      style={shown ? ({ '--qb-status': shown } as CSSProperties) : undefined}
+    />
+  )
+}

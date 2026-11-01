@@ -114,11 +114,15 @@ function LocaleHelpCenterLandingPage() {
 
       <section
         aria-labelledby="hc-topics"
-        className="mx-auto max-w-[var(--qb-page-max,72rem)] px-4 pb-16 pt-2 sm:px-6 animate-in fade-in duration-300 fill-mode-backwards"
+        className="mx-auto max-w-[var(--qb-page-max,72rem)] px-4 pb-16 pt-2 sm:px-6 [[data-qb-page-titles=band]_&]:pt-10 animate-in fade-in duration-300 fill-mode-backwards"
         style={{ animationDelay: '100ms' }}
       >
         <div className="mb-6 flex items-baseline justify-between gap-4">
-          <h2 id="hc-topics" className="text-2xl font-semibold tracking-tight text-foreground">
+          <h2
+            id="hc-topics"
+            data-qb-part="section-heading"
+            className="text-2xl font-semibold tracking-tight text-foreground"
+          >
             <FormattedMessage id="portal.hc.home.browseByTopic" defaultMessage="Browse by topic" />
           </h2>
           {collectionCount > 0 && (

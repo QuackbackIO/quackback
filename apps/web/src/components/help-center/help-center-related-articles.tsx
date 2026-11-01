@@ -39,6 +39,7 @@ export function HelpCenterRelatedArticles({ articles, locale }: HelpCenterRelate
           <Link
             key={article.id}
             to={hrefFor(article)}
+            data-qb-surface="card"
             className="group flex items-start justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5 transition-colors hover:border-primary/40 hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className="min-w-0">

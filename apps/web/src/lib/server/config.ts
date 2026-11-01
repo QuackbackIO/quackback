@@ -276,6 +276,7 @@ const configSchema = z
     aiHelpCenterModel: z.string().optional(),
     aiHelpCenterTranslateModel: z.string().optional(),
     aiAssistantModel: z.string().optional(),
+    aiDesignModel: z.string().optional(),
     aiAssistantVision: z.string().optional(),
     aiInboxTranslationModel: z.string().optional(),
     aiClassificationModel: z.string().optional(),
@@ -442,6 +443,7 @@ function buildConfigFromEnv(): unknown {
     aiHelpCenterModel: env('AI_HELP_CENTER_MODEL'),
     aiHelpCenterTranslateModel: env('AI_HELP_CENTER_TRANSLATE_MODEL'),
     aiAssistantModel: env('AI_ASSISTANT_MODEL'),
+    aiDesignModel: env('AI_DESIGN_MODEL'),
     aiAssistantVision: env('AI_ASSISTANT_VISION'),
     aiInboxTranslationModel: env('AI_INBOX_TRANSLATION_MODEL'),
     aiClassificationModel: env('AI_CLASSIFICATION_MODEL'),
@@ -739,6 +741,9 @@ export const config = {
   },
   get aiAssistantModel() {
     return loadConfig().aiAssistantModel
+  },
+  get aiDesignModel() {
+    return loadConfig().aiDesignModel
   },
   get aiAssistantVision() {
     return loadConfig().aiAssistantVision

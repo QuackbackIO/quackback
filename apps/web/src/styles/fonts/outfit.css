@@ -2,6 +2,7 @@
    documents whose design selects Outfit. Loaded via
    src/lib/shared/theme/font-loader.ts. Keep weights in sync with its
    BUNDLED_FONTS entry in src/lib/shared/design/fonts.ts. */
+@import "@fontsource/outfit/300.css";
 @import "@fontsource/outfit/400.css";
 @import "@fontsource/outfit/500.css";
 @import "@fontsource/outfit/600.css";

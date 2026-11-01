@@ -153,4 +153,18 @@ describe('Home in Sections', () => {
     fireEvent.change(title, { target: { value: 'Willkommen' } })
     expect(seen.design.pages.home.headline?.title).toEqual({ en: 'Welcome', de: 'Willkommen' })
   })
+
+  it('moves the composer into the band, giving the contact block its own row', () => {
+    const start = defaultDesign()
+    start.nav.home.on = true
+    start.pages.home.blocks = [
+      { type: 'composer', width: 'two_thirds' },
+      { type: 'contact', width: 'third' },
+    ]
+    const seen = renderSection(start)
+    fireEvent.click(screen.getByText('In the band'))
+    expect(seen.design.pages.home.composer).toBe('band')
+    expect(seen.design.pages.home.blocks[1]).toEqual({ type: 'contact', width: 'full' })
+    expect(seen.edits).toBeGreaterThan(0)
+  })
 })

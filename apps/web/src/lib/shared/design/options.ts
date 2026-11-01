@@ -15,6 +15,10 @@ export const DESIGN_OPTIONS = {
   fontKind: ['bundled', 'uploaded'],
   /** `name` sets the workspace name in the heading font, a wordmark without a file. */
   logoDisplay: ['mark_and_name', 'mark', 'wordmark', 'name'],
+  /** A wordmark file's ink, so it can turn light on a dark header and dark on a light one. */
+  logoTone: ['dark', 'light'],
+  /** Text in the ink, or in the brand colour. */
+  inkOrAccent: ['ink', 'accent'],
   /** How large page headlines are. */
   typeScale: ['standard', 'large', 'display'],
   /** How closely headings are set. */
@@ -35,9 +39,24 @@ export const DESIGN_OPTIONS = {
   bandShape: ['full', 'inset', 'panel'],
   /** Where the band's image sits: beside the words, along its bottom, behind them, or tiled. */
   imagePlace: ['side', 'edge', 'cover', 'pattern'],
+  /** Quiet art drawn in the brand's colours, for a band without an image. */
+  bandArt: ['none', 'dots', 'grid', 'lines', 'waves', 'hills', 'petals', 'confetti'],
+  /** Where an image is cropped toward when it does not fit. */
+  imageFocus: ['left', 'centre', 'right'],
+  /** The other pages' titles: plain on the page, or on the band as Home's headline is. */
+  pageTitles: ['plain', 'band'],
+  /** The pages whose titles a design can word. */
+  titledPage: ['roadmap', 'changelog', 'help', 'support'],
   /** Home's composer: a block on the grid, or in the band under the headline. */
   composerPlace: ['block', 'band'],
-  cards: ['bordered', 'raised', 'list'],
+  /** `filled` cards have no edge: their own colour on the page, with larger corners. */
+  cards: ['bordered', 'raised', 'list', 'filled'],
+  /** What tints the vote box and the current menu item: the neutral raised colour, or the second colour. */
+  tint: ['neutral', 'support'],
+  /** The colour of the band's call to action. */
+  action: ['accent', 'support'],
+  /** What fills a primary button: the brand colour, or the text colour, as many brands' black buttons are. */
+  fill: ['accent', 'ink'],
   density: ['compact', 'comfortable', 'spacious'],
   width: ['narrow', 'default', 'wide'],
   /** Which side of the feed the filters sit on, `end` being the reading end. */
@@ -119,6 +138,6 @@ export const BLOCK_WIDTHS: Record<BlockType, readonly BlockWidth[]> = {
   help_search: ['half', 'two_thirds', 'full'],
   help_topics: ['half', 'two_thirds', 'full'],
   status: ['third', 'half'],
-  contact: ['third', 'half'],
+  contact: ['third', 'half', 'full'],
   links: ['third', 'half'],
 }

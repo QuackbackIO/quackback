@@ -46,6 +46,8 @@ export type PortalDesignView =
       }
       /** Home's headline and blocks, shown at `/` while the menu has Home on. */
       home: PortalDesign['pages']['home']
+      /** The other pages' own titles; a page left out keeps its usual one. */
+      titles: NonNullable<PortalDesign['pages']['titles']>
       /** The menu: Home's row, then the pages and links in order. */
       nav: PortalDesign['nav']
       /** The words visitors see for what they post and what groups it. */
@@ -70,6 +72,8 @@ export interface BandImage {
 export interface DesignLogo {
   display: PortalDesign['brand']['logo']['display']
   name: string | null
+  /** A part of the name set in the brand colour. */
+  nameAccent?: string | null
   wordmark: { light: string | null; dark: string | null }
 }
 

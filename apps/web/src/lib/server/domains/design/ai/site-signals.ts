@@ -14,11 +14,50 @@ import { fetchFollowingRedirects } from '@/lib/server/content/unfurl'
 import { logger } from '@/lib/server/logger'
 import { isStandardWebsiteUrl, parseWebsiteInput } from '@/lib/shared/website-branding'
 import { isBlockPage, pageLinks, readSiteBrand, type SiteBrand } from './site-brand'
+import { colourVividness, isBrandColour } from '@/lib/shared/design/palette'
+import { confirmedBy } from './faithful-look'
+import { findHeaderLogo, findShareImage, resolveSvgColours, type LogoCandidate } from './site-logo'
+import { measureSite } from './site-measure'
+import type { BrandMeasurements } from '@/lib/shared/design/measured-tune'
+
+/**
+ * The colour a logo drawn in the page's current colour most likely takes: a
+ * monochrome brand's near-black, else the most vivid colour the site uses,
+ * which a logo usually is.
+ */
+function logoColour(brand: SiteBrand): string {
+  if (brand.monochrome) return '#111111'
+  const vivid = [...brand.palette].sort((a, b) => colourVividness(b) - colourVividness(a))[0]
+  return vivid ?? brand.colour ?? '#111111'
+}
 
 const log = logger.child({ module: 'site-signals' })
 
+/**
+ * The brand led by what the page asks visitors to do: a coloured fill on its
+ * main call to action is the brand colour, ahead of the colours its CSS uses
+ * most, which can be illustrations or a bundle's leftovers. It leads only when
+ * the CSS bears it out, as one of the site's leading colours or its buttons':
+ * a page themed as it runs can leave its stylesheet's default theme, which no
+ * reader of the CSS alone can tell from the brand.
+ */
+function ledByAction(brand: SiteBrand, measured: BrandMeasurements): SiteBrand {
+  const fill = measured.button?.action ? measured.button.fill : undefined
+  if (!fill || !isBrandColour(fill)) return brand
+  const near = confirmedBy([...brand.palette.slice(0, 3), ...(brand.button ? [brand.button] : [])])
+  if (!near(fill)) return brand
+  const palette = [fill, ...brand.palette.filter((colour) => colour !== fill)].slice(0, 5)
+  return { ...brand, colour: fill, palette, button: fill }
+}
+
 export interface SiteSignals extends SiteBrand {
   domain: string
+  /** Its header logo: inline, with the colours it takes from the page written in, or an address. */
+  logo: LogoCandidate | null
+  /** The image it gives link previews. */
+  shareImage: string | null
+  /** Its type and shapes as its page's CSS sets them, as far as it can be read. */
+  measured: BrandMeasurements | null
 }
 
 export type SiteRead =
@@ -28,8 +67,11 @@ export type SiteRead =
 
 const AGENT = 'Mozilla/5.0 (compatible; QuackbackBrandReader/1.0; +https://quackback.io)'
 const PAGE_BYTES = 3 * 1024 * 1024
-const CSS_BYTES = 1024 * 1024
-const MAX_STYLESHEETS = 4
+// A site that bundles its styles into one sheet can ship it at a few megabytes.
+const CSS_BYTES = 4 * 1024 * 1024
+/** Sites that split their styles into many small sheets are read whole, within a budget. */
+const MAX_STYLESHEETS = 16
+const CSS_BUDGET = 8 * 1024 * 1024
 const MANIFEST_PATHS = ['/manifest.json', '/site.webmanifest', '/manifest.webmanifest']
 
 async function get(url: string, accept: string, maxBytes: number, timeoutMs: number) {
@@ -103,7 +145,14 @@ async function stylesheets(urls: string[]): Promise<string[]> {
       return response && response.status < 400 ? await response.text().catch(() => '') : ''
     })
   )
-  return texts.filter(Boolean)
+  const kept: string[] = []
+  let total = 0
+  for (const text of texts.filter(Boolean)) {
+    if (total + text.length > CSS_BUDGET) break
+    kept.push(text)
+    total += text.length
+  }
+  return kept
 }
 
 export async function readSiteSignals(site: string): Promise<SiteRead> {
@@ -122,13 +171,29 @@ export async function readSiteSignals(site: string): Promise<SiteRead> {
       manifest(links.manifest ? [links.manifest] : MANIFEST_PATHS.map((path) => origin + path)),
       stylesheets(links.stylesheets),
     ])
-    const brand = readSiteBrand({
-      html: found.html,
-      css: [links.inlineCss, ...css],
-      manifest: siteManifest,
-    })
-    log.info({ host, colour: brand.colour, stylesheets: css.length }, 'website read for its brand')
-    return { ok: true, signals: { domain: host, ...brand } }
+    const sheets = [links.inlineCss, ...css]
+    const brand = readSiteBrand({ html: found.html, css: sheets, manifest: siteManifest })
+    const header = findHeaderLogo(found.html, found.url)
+    const logo =
+      header && 'svg' in header
+        ? { svg: resolveSvgColours(header.svg, sheets, logoColour(brand), header.classes) }
+        : header
+    const shareImage = findShareImage(found.html, found.url)
+    log.info(
+      {
+        host,
+        colour: brand.colour,
+        stylesheets: css.length,
+        logo: !!logo,
+        shareImage: !!shareImage,
+      },
+      'website read for its brand'
+    )
+    const measured = measureSite(found.html, sheets, brand.button)
+    return {
+      ok: true,
+      signals: { domain: host, ...ledByAction(brand, measured), logo, shareImage, measured },
+    }
   }
   if (blocked) {
     // The page refused, but a manifest is a static file sites often serve to anyone.
@@ -136,7 +201,10 @@ export async function readSiteSignals(site: string): Promise<SiteRead> {
     const brand = siteManifest ? readSiteBrand({ html: '', css: [], manifest: siteManifest }) : null
     if (brand && (brand.colour || brand.title)) {
       log.info({ host }, 'website blocked its page; read its manifest')
-      return { ok: true, signals: { domain: host, ...brand } }
+      return {
+        ok: true,
+        signals: { domain: host, ...brand, logo: null, shareImage: null, measured: null },
+      }
     }
   }
   log.info({ host, blocked }, 'website could not be read for its brand')

@@ -4,6 +4,7 @@ import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/reac
 import { useTheme } from 'next-themes'
 import { isHelpPath, isTabActive, type PortalNavItem } from './portal-header-nav'
 import { usePortalNavItems } from './use-portal-nav-items'
+import { NavScroller } from './nav-scroller'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
@@ -46,6 +47,19 @@ import { NotificationBell } from '@/components/notifications'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { usePreviewDesignAttributes, usePreviewLogo } from './preview-draft-context'
 import { PORTAL_LANDING } from '@/lib/shared/design/paths'
+
+/** The name with its accent part, where it holds it, in the brand colour. */
+function twoTone(name: string, part: string | null | undefined) {
+  const at = part ? name.lastIndexOf(part) : -1
+  if (at < 0) return name
+  return (
+    <>
+      {name.slice(0, at)}
+      <span className="text-[var(--qb-name-accent)]">{part}</span>
+      {name.slice(at + part!.length)}
+    </>
+  )
+}
 
 /** On the band, the header's button takes the colour the design picks to read there. */
 const ON_BAND_ACTION =
@@ -313,8 +327,13 @@ export function PortalHeader({
       ? 'mark_and_name'
       : (designLogo?.display ?? 'mark_and_name')
 
+  // Beside the name, the mark is decoration; alone, it names the portal.
   const mark = orgLogo ? (
-    <img src={orgLogo} alt={orgName} className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]" />
+    <img
+      src={orgLogo}
+      alt={display === 'mark' ? orgName : ''}
+      className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)]"
+    />
   ) : (
     <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
       {nameInitial(orgName)}
@@ -323,7 +342,9 @@ export function PortalHeader({
   const logo = (
     <Link
       to={PORTAL_LANDING}
-      className="portal-header__logo flex items-center gap-2"
+      // Named for what it shows, so a wordmark or a mark alone still says whose portal it is.
+      aria-label={display === 'wordmark' || display === 'mark' ? brandName : undefined}
+      className="portal-header__logo flex min-h-6 items-center gap-2"
       data-qb-part="logo"
       data-qb-logo={display}
     >
@@ -333,7 +354,7 @@ export function PortalHeader({
           <img
             src={(wordmark?.light ?? wordmark?.dark)!}
             alt={brandName}
-            className={`h-8 w-auto max-w-[12rem] object-contain ${wordmark?.dark && wordmark.light ? 'dark:hidden' : ''}`}
+            className={`h-8 w-auto max-w-[12rem] object-contain [filter:var(--qb-wordmark-filter,none)] ${wordmark?.dark && wordmark.light ? 'dark:hidden' : ''}`}
           />
           {wordmark?.dark && wordmark.light ? (
             <img
@@ -347,9 +368,9 @@ export function PortalHeader({
         // The name as a wordmark: set in the heading font, and shown on phones too.
         <span
           title={brandName}
-          className="portal-header__name max-w-[18ch] truncate text-xl leading-none text-[var(--header-foreground)] [font-family:var(--qb-font-heading)] [font-weight:var(--qb-heading-weight)] [letter-spacing:var(--qb-heading-tracking)]"
+          className="portal-header__name max-w-[18ch] truncate text-xl leading-none text-[var(--qb-name-ink,var(--header-foreground))] [font-family:var(--qb-font-heading)] [font-weight:var(--qb-heading-weight)] [letter-spacing:var(--qb-name-tracking,var(--qb-headline-tracking))] [text-transform:var(--qb-name-case,none)]"
         >
-          {brandName}
+          {twoTone(brandName, designLogo?.nameAccent)}
         </span>
       ) : (
         <>
@@ -357,9 +378,9 @@ export function PortalHeader({
           {display === 'mark_and_name' ? (
             <span
               title={brandName}
-              className="portal-header__name font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--header-foreground)]"
+              className="portal-header__name font-semibold sr-only sm:not-sr-only sm:block max-w-[18ch] truncate text-[var(--qb-name-ink,var(--header-foreground))] [letter-spacing:var(--qb-name-tracking,normal)] [text-transform:var(--qb-name-case,none)]"
             >
-              {brandName}
+              {twoTone(brandName, designLogo?.nameAccent)}
             </span>
           ) : null}
         </>
@@ -389,17 +410,15 @@ export function PortalHeader({
         <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
           <div className="flex h-12 items-center gap-4">
             {logo}
-            <div className="hidden min-w-0 flex-1 overflow-x-auto scrollbar-none md:block">
-              {navigation}
-            </div>
+            <NavScroller className="hidden min-w-0 flex-1 md:block">{navigation}</NavScroller>
             <div className="ms-auto shrink-0">{authButtons}</div>
           </div>
         </div>
-        <div className="mt-2 overflow-x-auto scrollbar-none md:hidden">
+        <NavScroller className="mt-2 md:hidden">
           <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
             {navigation}
           </div>
-        </div>
+        </NavScroller>
       </header>
     )
   }
@@ -419,11 +438,11 @@ export function PortalHeader({
           </div>
         </div>
         {/* Centred while it fits; wider than the screen, it scrolls from its start. */}
-        <div className="mt-2 overflow-x-auto scrollbar-none">
+        <NavScroller className="mt-2">
           <div className="max-w-[var(--qb-page-max,72rem)] mx-auto flex w-max min-w-full justify-center px-4 sm:px-6">
             {navigation}
           </div>
-        </div>
+        </NavScroller>
       </header>
     )
   }
@@ -448,11 +467,11 @@ export function PortalHeader({
       </div>
 
       {/* Row 2: Navigation */}
-      <div className="mt-2 overflow-x-auto scrollbar-none">
+      <NavScroller className="mt-2">
         <div className="max-w-[var(--qb-page-max,72rem)] mx-auto w-full px-4 sm:px-6">
           {navigation}
         </div>
-      </div>
+      </NavScroller>
     </header>
   )
 }

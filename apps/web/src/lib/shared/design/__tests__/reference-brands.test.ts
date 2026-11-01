@@ -24,17 +24,22 @@ interface Fixture {
       tracking?: string
       headlineCase?: string
       labelCase?: string
+      headlineColour?: string
     }
-    logo: { display: string }
+    logo: { display: string; tone?: string; nameColour?: string; nameCase?: string }
     bandImage?: { key: string }
   }
-  shape: { corners: string; buttons?: string }
+  shape: { corners: string; buttons?: string; action?: string; fill?: string }
   layout: Record<'header' | 'nav' | 'band' | 'cards' | 'density' | 'width' | 'filters', string> & {
     blend?: string
     bandAlign?: string
     bandShape?: string
     status?: string
     imagePlace?: string
+    tint?: string
+    bandArt?: string
+    imageFocus?: string
+    pageTitles?: string
   }
   pages: {
     home: {
@@ -54,6 +59,7 @@ interface Fixture {
       defaultSort: string
       copy: Record<string, Record<string, string>>
     }
+    titles?: Record<string, Headline>
   }
   nav: {
     home: { on: boolean; tab: boolean }
@@ -81,20 +87,36 @@ function used(): Record<DesignOption, Set<string>> {
     add('fontKind', doc.brand.fonts.heading.kind)
     add('fontKind', doc.brand.fonts.body.kind)
     add('logoDisplay', doc.brand.logo.display)
+    if (doc.brand.logo.tone) add('logoTone', doc.brand.logo.tone)
+    add('inkOrAccent', doc.brand.logo.nameColour ?? 'ink')
+    add('inkOrAccent', doc.brand.fonts.headlineColour ?? 'ink')
+    add('textCase', doc.brand.logo.nameCase ?? 'sentence')
     // An absent type choice is today's type.
     const { scale, tracking, headlineCase, labelCase } = doc.brand.fonts
     add('typeScale', scale ?? 'standard')
     add('tracking', tracking ?? 'normal')
     add('textCase', headlineCase ?? 'sentence')
     add('textCase', labelCase ?? 'sentence')
-    for (const headline of [doc.pages.home.headline, doc.pages.feedback.headline])
+    const titles = doc.pages.titles ?? {}
+    for (const headline of [
+      doc.pages.home.headline,
+      doc.pages.feedback.headline,
+      ...Object.values(titles),
+    ])
       if (headline?.accent) add('headlineAccent', headline.accent.style)
+    for (const page of Object.keys(titles)) add('titledPage', page)
+    add('pageTitles', doc.layout.pageTitles ?? 'plain')
     for (const key of ['header', 'nav', 'band', 'cards', 'density', 'width', 'filters'] as const)
       add(key, doc.layout[key])
     if (doc.layout.band === 'blend') add('blend', doc.layout.blend ?? 'linear')
     add('bandAlign', doc.layout.bandAlign ?? (doc.layout.header === 'centered' ? 'centre' : 'left'))
     add('bandShape', doc.layout.bandShape ?? 'full')
     add('buttons', doc.shape.buttons ?? 'match')
+    add('action', doc.shape.action ?? 'accent')
+    add('fill', doc.shape.fill ?? 'accent')
+    add('tint', doc.layout.tint ?? 'neutral')
+    add('bandArt', doc.layout.bandArt ?? 'none')
+    if (doc.brand.bandImage) add('imageFocus', doc.layout.imageFocus ?? 'centre')
     add('status', doc.layout.status ?? 'colour')
     if (doc.brand.bandImage) add('imagePlace', doc.layout.imagePlace ?? 'side')
     if (doc.pages.home.blocks.some((block) => block.type === 'composer'))

@@ -57,14 +57,25 @@ export function useDesignAi({
   const say = (turn: DesignAiTurn) => setTurns((previous) => [...previous, turn])
 
   const ask = useCallback(
-    async (text: string, scope: DesignAiScope, palette?: string[]) => {
+    async (
+      text: string,
+      scope: DesignAiScope,
+      attachment?: { palette: string[]; image?: string }
+    ) => {
+      const palette = attachment?.palette
       setBusy(true)
       const history = turns.map((turn) => ({ role: turn.role, content: turn.text }))
       say({ role: 'user', text, ...(palette?.length ? { palette } : {}) })
       try {
         await flush()
         const result = await askPortalDesignAiFn({
-          data: { message: text, scope, history, ...(palette?.length ? { palette } : {}) },
+          data: {
+            message: text,
+            scope,
+            history,
+            ...(palette?.length ? { palette } : {}),
+            ...(attachment?.image ? { image: attachment.image } : {}),
+          },
         })
         if (!result.ok) {
           say({ role: 'assistant', text: result.message })

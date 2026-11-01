@@ -48,6 +48,7 @@ export function HelpCenterCategoryGrid({ categories, locale }: HelpCenterCategor
               slug: cat.slug,
             }) as '/hc'
           }
+          data-qb-surface="card"
           className="group flex items-start gap-4 rounded-2xl border border-border bg-card p-6 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background animate-in fade-in fill-mode-backwards"
           style={{ animationDelay: `${index * 40}ms` }}
         >

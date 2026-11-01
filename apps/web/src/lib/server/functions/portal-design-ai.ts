@@ -48,6 +48,8 @@ async function designAllowances() {
   return {
     /** The workspace's name, which its portal shows. */
     name: settings?.name ?? null,
+    /** Whether the workspace has a logo mark. */
+    hasMark: !!settings?.settings?.logoKey,
     blockTypes: homeBlockTypes(portalPageGates(settings, true)),
     writesCss,
     checkCss: (css: string) => {
@@ -64,6 +66,12 @@ export const askPortalDesignAiFn = createServerFn({ method: 'POST' })
     z.object({
       message: z.string().trim().min(1).max(2000),
       palette: z.array(hexColour).max(6).optional(),
+      /** An attached image, downscaled to a JPEG, for a model that reads images. */
+      image: z
+        .string()
+        .max(700_000)
+        .regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/)
+        .optional(),
       scope: z.enum(DESIGN_AI_SCOPES),
       history: z
         .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(2000) }))
@@ -129,11 +137,13 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
   )
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    const [{ designDirections }, { readSiteSignals }, actions] = await Promise.all([
-      import('@/lib/server/domains/design/ai/design-ai'),
-      import('@/lib/server/domains/design/ai/site-signals'),
-      import('@/lib/server/domains/design/design.actions'),
-    ])
+    const [{ designDirections }, { readSiteSignals }, { importSiteAssets }, actions] =
+      await Promise.all([
+        import('@/lib/server/domains/design/ai/design-ai'),
+        import('@/lib/server/domains/design/ai/site-signals'),
+        import('@/lib/server/domains/design/ai/site-assets'),
+        import('@/lib/server/domains/design/design.actions'),
+      ])
     const [read, logoAdopted] = data.site
       ? await Promise.all([
           readSiteSignals(data.site),
@@ -151,17 +161,21 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
             : 'That website could not be read. Check the address, or describe your brand instead.',
       }
     }
-    const [current, allows] = await Promise.all([
+    const [current, allows, assets] = await Promise.all([
       actions.readDesignForEditing(),
       designAllowances(),
+      // The site's wordmark and share image, stored for the looks to place.
+      site ? importSiteAssets(site) : null,
     ])
     const result = await designDirections({
       design: current.design,
       name: allows.name,
+      hasMark: allows.hasMark || logoAdopted,
       site,
       words: data.words ?? null,
       palette: data.palette ?? null,
       image: data.image ?? null,
+      assets,
       allows,
     })
     return result.ok ? { ...result, logoAdopted } : result

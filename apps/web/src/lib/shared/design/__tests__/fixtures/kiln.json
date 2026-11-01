@@ -29,7 +29,8 @@
       "headingWeight": 700,
       "scale": "display",
       "tracking": "tight",
-      "headlineCase": "upper"
+      "headlineCase": "upper",
+      "headlineColour": "accent"
     },
     "logo": {
       "mark": {
@@ -68,7 +69,9 @@
     "width": "default",
     "filters": "end",
     "bandShape": "inset",
-    "status": "ink"
+    "status": "ink",
+    "bandArt": "lines",
+    "pageTitles": "plain"
   },
   "pages": {
     "home": {
@@ -103,6 +106,24 @@
       },
       "defaultSort": "trending",
       "copy": {}
+    },
+    "titles": {
+      "help": {
+        "title": {
+          "en": "How can we help?"
+        },
+        "subtitle": {
+          "en": "Guides for every firing."
+        }
+      },
+      "support": {
+        "title": {
+          "en": "Talk to the studio"
+        },
+        "subtitle": {
+          "en": "Your conversations with our team."
+        }
+      }
     }
   },
   "nav": {

@@ -38,6 +38,7 @@ export function designView(
       copy: doc.pages.feedback.copy,
     },
     home: doc.pages.home,
+    titles: doc.pages.titles ?? {},
     nav: doc.nav,
     vocabulary: doc.vocabulary,
     logo: designLogo(doc),
@@ -56,10 +57,11 @@ function bandImage(doc: PortalDesign): BandImage | null {
 }
 
 function designLogo(doc: PortalDesign): DesignLogo {
-  const { display, name, wordmark } = doc.brand.logo
+  const { display, name, wordmark, nameAccent } = doc.brand.logo
   return {
     display,
     name: name ?? null,
+    nameAccent: nameAccent ?? null,
     wordmark: {
       light: wordmark.light ? designAssetUrl(wordmark.light.key) : null,
       dark: wordmark.dark ? designAssetUrl(wordmark.dark.key) : null,

@@ -33,8 +33,9 @@ const HOME = `<!doctype html><html><head>
   <meta name="description" content="Tools for teams who ship.">
   <link rel="stylesheet" href="/assets/site.css">
   <link rel="manifest" href="/site.webmanifest">
+  <meta property="og:image" content="/og.jpg">
   <style>.btn-primary { background: #0f766e; }</style>
-</head><body>Hello</body></html>`
+</head><body><header><a class="site-logo" href="/"><svg viewBox="0 0 120 30"><path fill="var(--brand-primary)"/></svg></a></header></body></html>`
 
 const CSS = `:root { --brand-primary: #0f766e; --grey: #e5e7eb; }
 body { background: #fffdf8; font-family: "IBM Plex Sans", sans-serif; }
@@ -48,6 +49,17 @@ beforeEach(() => {
 })
 
 describe('readSiteSignals', () => {
+  it('draws a logo in the page’s current colour in the site’s most vivid colour', async () => {
+    web.pages['https://example.com/'] = {
+      body: `<html><head><style>body { color: #112231; background: #ffffff } .btn { background: #112231 } a { color: #ff4f40 }</style></head>
+        <body><header><a class="logo" href="/"><svg viewBox="0 0 120 30"><path fill="currentColor"/></svg></a></header></body></html>`,
+    }
+    const read = await readSiteSignals('example.com')
+    expect(read.ok && read.signals.logo).toEqual({
+      svg: '<svg viewBox="0 0 120 30"><path fill="#ff4f40"/></svg>',
+    })
+  })
+
   it('reads the colours, background and fonts the site uses, saying who is asking', async () => {
     web.pages['https://example.com/'] = { body: HOME }
     web.pages['https://example.com/assets/site.css'] = { body: CSS, type: 'text/css' }
@@ -70,6 +82,12 @@ describe('readSiteSignals', () => {
         button: '#0f766e',
         bold: false,
         monochrome: false,
+        hero: null,
+        // The header logo with the colour its page gives it, and the link preview image.
+        logo: { svg: '<svg viewBox="0 0 120 30"><path fill="#0f766e"/></svg>' },
+        shareImage: 'https://example.com/og.jpg',
+        // Nothing on this page sizes its type or shapes.
+        measured: { headline: null, heading: null, button: null, card: null, field: null },
       },
     })
     expect(web.asked[0]!.agent).toMatch(/QuackbackBrandReader/)

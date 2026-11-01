@@ -32,8 +32,9 @@ export function uploadedFontFile(
 /** The `@font-face` rules for a design's uploaded families, one per file. */
 export function uploadedFontFaces(doc: PortalDesign): string {
   const rules = new Set<string>()
-  for (const font of [doc.brand.fonts.body, doc.brand.fonts.heading]) {
-    if (font.kind !== 'uploaded') continue
+  const { body, heading, display } = doc.brand.fonts
+  for (const font of [body, heading, display]) {
+    if (font?.kind !== 'uploaded') continue
     for (const file of font.files) {
       rules.add(
         `@font-face { font-family: "${font.family}"; src: url("${uploadedFontUrl(file.key)}") format("woff2"); font-weight: ${file.weight}; font-style: ${file.style}; font-display: swap; }`
@@ -83,16 +84,26 @@ export const BUNDLED_FONTS: Record<BundledFontId, BundledFont> = {
   lato: { label: 'Lato', category: 'sans', stack: `"Lato", ${SANS}`, weights: [400, 700] },
   nunito: { label: 'Nunito', category: 'sans', stack: `"Nunito", ${SANS}`, weights: STANDARD },
   poppins: { label: 'Poppins', category: 'sans', stack: `"Poppins", ${SANS}`, weights: STANDARD },
-  'dm-sans': { label: 'DM Sans', category: 'sans', stack: `"DM Sans", ${SANS}`, weights: STANDARD },
+  'dm-sans': {
+    label: 'DM Sans',
+    category: 'sans',
+    stack: `"DM Sans", ${SANS}`,
+    weights: [300, ...STANDARD],
+  },
   jakarta: {
     label: 'Plus Jakarta Sans',
     category: 'sans',
     stack: `"Plus Jakarta Sans", ${SANS}`,
-    weights: STANDARD,
+    weights: [300, ...STANDARD],
   },
   // The package publishes Geist as the "Geist Sans" family.
   geist: { label: 'Geist', category: 'sans', stack: `"Geist Sans", ${SANS}`, weights: STANDARD },
-  manrope: { label: 'Manrope', category: 'sans', stack: `"Manrope", ${SANS}`, weights: STANDARD },
+  manrope: {
+    label: 'Manrope',
+    category: 'sans',
+    stack: `"Manrope", ${SANS}`,
+    weights: [300, ...STANDARD],
+  },
   'space-grotesk': {
     label: 'Space Grotesk',
     category: 'sans',
@@ -134,31 +145,31 @@ export const BUNDLED_FONTS: Record<BundledFontId, BundledFont> = {
     label: 'Inter Tight',
     category: 'sans',
     stack: `"Inter Tight", ${SANS}`,
-    weights: [400, 500, 600, 700, 800],
+    weights: [300, 400, 500, 600, 700, 800],
   },
   sora: {
     label: 'Sora',
     category: 'sans',
     stack: `"Sora", ${SANS}`,
-    weights: [400, 500, 600, 700, 800],
+    weights: [300, 400, 500, 600, 700, 800],
   },
   outfit: {
     label: 'Outfit',
     category: 'sans',
     stack: `"Outfit", ${SANS}`,
-    weights: [400, 500, 600, 700, 800],
+    weights: [300, 400, 500, 600, 700, 800],
   },
   figtree: {
     label: 'Figtree',
     category: 'sans',
     stack: `"Figtree", ${SANS}`,
-    weights: [400, 500, 600, 700, 800],
+    weights: [300, 400, 500, 600, 700, 800],
   },
   'work-sans': {
     label: 'Work Sans',
     category: 'sans',
     stack: `"Work Sans", ${SANS}`,
-    weights: [400, 500, 600, 700, 800],
+    weights: [300, 400, 500, 600, 700, 800],
   },
   'instrument-sans': {
     label: 'Instrument Sans',
@@ -247,7 +258,7 @@ export function fontStack(font: DesignFont): string {
 
 /** The bundled families a design's pages load: body first, then headings. */
 export function designFontIds(doc: PortalDesign): BundledFontId[] {
-  const { body, heading } = doc.brand.fonts
+  const { body, heading, display } = doc.brand.fonts
   const id = (font: DesignFont) => (font.kind === 'bundled' ? font.id : font.fallback)
-  return [...new Set([id(body), id(heading)])]
+  return [...new Set([id(body), id(heading), ...(display ? [id(display)] : [])])]
 }

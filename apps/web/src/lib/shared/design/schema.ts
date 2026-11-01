@@ -3,6 +3,7 @@
  * AI, REST and MCP read and write. Every choice comes from DESIGN_OPTIONS.
  */
 import { z } from 'zod'
+import { tuneSchema } from './tune'
 import { roadmapIdSchema, typeIdSchema } from '@quackback/ids/zod'
 import { tiptapContentSchema } from '@/lib/shared/schemas/posts'
 import { isSafeThemeValue } from '@/lib/shared/theme/safe-theme-value'
@@ -187,6 +188,8 @@ export const portalDesignV2 = z
           .object({
             heading: font,
             body: font,
+            /** The page headlines' own face, such as a poster face; absent is the heading font. */
+            display: font.optional(),
             headingWeight: z.union(
               DESIGN_OPTIONS.headingWeight.map((w) => z.literal(w)) as [
                 z.ZodLiteral<500>,
@@ -200,6 +203,8 @@ export const portalDesignV2 = z
             tracking: z.enum(DESIGN_OPTIONS.tracking).optional(),
             headlineCase: z.enum(DESIGN_OPTIONS.textCase).optional(),
             labelCase: z.enum(DESIGN_OPTIONS.textCase).optional(),
+            /** Page headlines in the ink, or in the brand colour. */
+            headlineColour: z.enum(DESIGN_OPTIONS.inkOrAccent).optional(),
           })
           .strict(),
         logo: z
@@ -207,6 +212,12 @@ export const portalDesignV2 = z
             mark: z.object({ light: asset.nullable(), dark: asset.nullable() }).strict(),
             wordmark: z.object({ light: asset.nullable(), dark: asset.nullable() }).strict(),
             display: z.enum(DESIGN_OPTIONS.logoDisplay),
+            /** The wordmark's ink when it is one colour throughout. */
+            tone: z.enum(DESIGN_OPTIONS.logoTone).optional(),
+            /** The name as a wordmark: its colour, its case, and a part of it in the brand colour. */
+            nameColour: z.enum(DESIGN_OPTIONS.inkOrAccent).optional(),
+            nameCase: z.enum(DESIGN_OPTIONS.textCase).optional(),
+            nameAccent: z.string().trim().max(30).optional(),
             name: z.string().trim().max(60).optional(),
           })
           .strict(),
@@ -223,6 +234,10 @@ export const portalDesignV2 = z
         corners: z.enum(DESIGN_OPTIONS.corners),
         /** Absent follows the corners. */
         buttons: z.enum(DESIGN_OPTIONS.buttons).optional(),
+        /** The band's call to action in the brand colour or the second; absent is the brand colour. */
+        action: z.enum(DESIGN_OPTIONS.action).optional(),
+        /** Primary buttons in the brand colour or the text colour; absent is the brand colour. */
+        fill: z.enum(DESIGN_OPTIONS.fill).optional(),
       })
       .strict(),
     layout: z
@@ -240,8 +255,16 @@ export const portalDesignV2 = z
         headerOnBand: z.boolean().optional(),
         /** Absent is coloured dots. */
         status: z.enum(DESIGN_OPTIONS.status).optional(),
+        /** Absent is neutral. */
+        tint: z.enum(DESIGN_OPTIONS.tint).optional(),
         /** Where the band's image sits; absent is beside the words. */
         imagePlace: z.enum(DESIGN_OPTIONS.imagePlace).optional(),
+        /** What part of the image stays when it is cropped; absent is the centre. */
+        imageFocus: z.enum(DESIGN_OPTIONS.imageFocus).optional(),
+        /** The other pages' titles on the band, as Home's headline is; absent is plain. */
+        pageTitles: z.enum(DESIGN_OPTIONS.pageTitles).optional(),
+        /** Art in the brand's colours for a band without an image; absent is none. */
+        bandArt: z.enum(DESIGN_OPTIONS.bandArt).optional(),
         cards: z.enum(DESIGN_OPTIONS.cards),
         density: z.enum(DESIGN_OPTIONS.density),
         width: z.enum(DESIGN_OPTIONS.width),
@@ -273,6 +296,8 @@ export const portalDesignV2 = z
               .strict(),
           })
           .strict(),
+        /** The other pages' own titles; a page left out keeps its usual one. */
+        titles: z.partialRecord(z.enum(DESIGN_OPTIONS.titledPage), headline.unwrap()).optional(),
       })
       .strict(),
     nav: z
@@ -284,6 +309,8 @@ export const portalDesignV2 = z
     vocabulary: z
       .object({ post: z.enum(DESIGN_OPTIONS.postWord), board: z.enum(DESIGN_OPTIONS.boardWord) })
       .strict(),
+    /** Exact values under the choices above; each one left out keeps the choice's. */
+    tune: tuneSchema.optional(),
     /** The workspace's own CSS, in the tenant layer. */
     css: z.string().max(50_000).optional(),
   })

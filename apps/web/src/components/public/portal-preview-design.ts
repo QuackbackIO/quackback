@@ -20,6 +20,10 @@ type Headline = {
 /** A draft's Home: its headline and blocks, as the design stores them. */
 type Home = { headline: Headline; blocks: Array<Record<string, unknown>> }
 
+/** The pages whose titles a design can word. */
+type TitledPage = 'roadmap' | 'changelog' | 'help' | 'support'
+const TITLED_PAGES = new Set<string>(['roadmap', 'changelog', 'help', 'support'])
+
 /** A draft's menu, as the design stores it. */
 type Nav = {
   home: { on: boolean; tab: boolean; label?: string }
@@ -33,6 +37,8 @@ export interface DesignPreview {
   fontIds: string[]
   headline: Headline
   home: Home | null
+  /** The other pages' own titles, by page. */
+  titles: Partial<Record<TitledPage, NonNullable<Headline>>>
   nav: Nav | null
   /** The words the draft's messages select on. */
   words: PortalWords | null
@@ -69,13 +75,14 @@ const STORED_FILE = /^\/api\/storage\/[\w./-]+$/
 
 function readLogo(value: unknown): DesignLogo | null {
   if (!value || typeof value !== 'object') return null
-  const { display, name, wordmark } = value as Record<string, unknown>
+  const { display, name, wordmark, nameAccent } = value as Record<string, unknown>
   if (!LOGO_DISPLAYS.has(display as string)) return null
   const file = (url: unknown) => (typeof url === 'string' && STORED_FILE.test(url) ? url : null)
   const marks = (wordmark ?? {}) as Record<string, unknown>
   return {
     display: display as DesignLogo['display'],
     name: typeof name === 'string' ? name.slice(0, 60) : null,
+    nameAccent: typeof nameAccent === 'string' ? nameAccent.slice(0, 30) : null,
     wordmark: { light: file(marks.light), dark: file(marks.dark) },
   }
 }
@@ -132,6 +139,16 @@ function readHome(value: unknown): Home | null {
   }
 }
 
+function readTitles(value: unknown): DesignPreview['titles'] {
+  if (!value || typeof value !== 'object') return {}
+  const titles: DesignPreview['titles'] = {}
+  for (const [page, headline] of Object.entries(value)) {
+    const read = TITLED_PAGES.has(page) ? readHeadline(headline) : null
+    if (read) titles[page as TitledPage] = read
+  }
+  return titles
+}
+
 function readNav(value: unknown): Nav | null {
   if (!value || typeof value !== 'object') return null
   const { home, items } = value as Record<string, unknown>
@@ -174,6 +191,7 @@ export function readDesignPreview(value: unknown): DesignPreview | null {
     fontIds,
     headline,
     home,
+    titles,
     nav,
     vocabulary,
     copy,
@@ -194,6 +212,7 @@ export function readDesignPreview(value: unknown): DesignPreview | null {
     fontIds: fonts,
     headline: readHeadline(headline),
     home: readHome(home),
+    titles: readTitles(titles),
     nav: readNav(nav),
     words: readWords(vocabulary),
     copy: readCopy(copy),

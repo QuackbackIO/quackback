@@ -47,6 +47,12 @@ describe('designFontIds', () => {
     expect(designFontIds(doc)).toEqual(['inter', 'fraunces'])
   })
 
+  it('loads the headlines’ own face too', () => {
+    const doc = defaultDesign()
+    doc.brand.fonts.display = { kind: 'bundled', id: 'oswald' }
+    expect(designFontIds(doc)).toEqual(['inter', 'oswald'])
+  })
+
   it('loads an uploaded family’s bundled fallback', () => {
     const doc = defaultDesign()
     doc.brand.fonts.body = { kind: 'uploaded', family: 'Acme Sans', files: [], fallback: 'manrope' }
