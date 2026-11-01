@@ -138,12 +138,24 @@ describe('lookPalette', () => {
       ...fromPage({ ...page, button: null, action: false, hero: null }, ['#7c322c', '#ffdb00']),
       screenshot: null,
     }
-    expect(lookPalette({ ...staticSite, colour: '#0058a3' }, rendered)).toEqual([
-      '#0058a3',
-      '#7c322c',
-      '#ffdb00',
-    ])
+    expect(
+      lookPalette({ ...staticSite, colour: '#0058a3', palette: ['#0058a3', '#ffdb00'] }, rendered)
+    ).toEqual(['#0058a3', '#7c322c', '#ffdb00'])
     expect(lookPalette(null, rendered)).toEqual(['#7c322c', '#ffdb00'])
+  })
+
+  it("keeps the site's second colour when the first screen hardly shows it", () => {
+    const rendered = {
+      ...fromPage({ ...page, button: null, action: false, hero: null }, [
+        '#ffffff',
+        '#112231',
+        '#d8d4cf',
+      ]),
+      screenshot: null,
+    }
+    const site = { ...staticSite, colour: '#112231', palette: ['#112231', '#ff4f40', '#218fb7'] }
+    expect(lookPalette(site, rendered)).toContain('#ff4f40')
+    expect(lookPalette(site, rendered)[0]).toBe('#112231')
   })
 })
 

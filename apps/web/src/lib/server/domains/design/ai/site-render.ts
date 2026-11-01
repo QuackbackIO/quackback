@@ -158,13 +158,16 @@ export function withRendered(site: SiteSignals, rendered: RenderedSite): SiteSig
 
 /**
  * The colours the looks start from when the rendered screen stands in for a
- * screenshot: the site's brand colour first, then the screen's. A screen's
- * own leading colour can be a photo's.
+ * screenshot: the site's brand colour first, then the screen's, then the
+ * site's other leading colours. A screen's own leading colour can be a
+ * photo's, and a second brand colour used only in small places may not
+ * show on the first screen at all.
  */
 export function lookPalette(site: SiteSignals | null, rendered: RenderedSite): string[] {
-  return [site?.colour, ...rendered.brand.palette]
+  const screen = rendered.brand.palette.slice(0, 5)
+  return [site?.colour, ...screen, ...(site?.palette.slice(0, 3) ?? [])]
     .filter((c, i, all): c is string => !!c && all.indexOf(c) === i)
-    .slice(0, 6)
+    .slice(0, 8)
 }
 
 /** Signals from the render alone, when the page's HTML could not be read. */
