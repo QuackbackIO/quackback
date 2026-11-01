@@ -72,6 +72,26 @@ services:
       retries: 5
       start_period: 40s
 
+  # Optional: a website reader that renders a page in a headless browser, so
+  # Quackback AI reads a website's exact type, colours and buttons and sees a
+  # clean screenshot of it. Without it, websites are read from their HTML and
+  # CSS. Turn it on with `--profile browser`, and set QUACKBACK_BROWSER_URL=
+  # http://browser:3200 and QUACKBACK_BROWSER_TOKEN in .env. It holds no secret
+  # but its token and reaches public hosts only.
+  browser:
+    image: ghcr.io/quackbackio/quackback-browser:${QUACKBACK_TAG:-latest}
+    container_name: quackback-browser
+    profiles: ['browser']
+    restart: unless-stopped
+    init: true
+    environment:
+      QUACKBACK_BROWSER_TOKEN: ${QUACKBACK_BROWSER_TOKEN:?set QUACKBACK_BROWSER_TOKEN in .env (openssl rand -hex 24)}
+    # A heavy page can need over a gigabyte while it renders; a read that needs
+    # more ends on its own and the website is read from its HTML instead.
+    mem_limit: 1536m
+    tmpfs:
+      - /tmp
+
   postgres:
     build:
       context: ./docker/postgres

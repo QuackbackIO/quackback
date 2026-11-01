@@ -6,6 +6,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { parseWebsiteInput } from '@/lib/shared/website-branding'
 import { DESIGN_AI_SCOPES } from '@/lib/shared/design/apply-changes'
 import { requireAuth } from './auth-helpers'
 import { logger } from '@/lib/server/logger'
@@ -137,21 +138,31 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
   )
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    const [{ designDirections }, { readSiteSignals }, { importSiteAssets }, actions] =
+    const [{ designDirections }, { readSiteSignals }, render, { importSiteAssets }, actions] =
       await Promise.all([
         import('@/lib/server/domains/design/ai/design-ai'),
         import('@/lib/server/domains/design/ai/site-signals'),
+        import('@/lib/server/domains/design/ai/site-render'),
         import('@/lib/server/domains/design/ai/site-assets'),
         import('@/lib/server/domains/design/design.actions'),
       ])
-    const [read, logoAdopted] = data.site
+    // The page's HTML and CSS, and the page as a browser renders it when a reader is set up.
+    const [read, rendered, logoAdopted] = data.site
       ? await Promise.all([
           readSiteSignals(data.site),
+          render.renderSite(data.site),
           adoptSiteLogo(data.site, auth.permissions.includes(PERMISSIONS.SETTINGS_MANAGE)),
         ])
-      : [null, false]
-    const site = read?.ok ? read.signals : null
-    if (read && !read.ok && !data.words && !data.palette) {
+      : [null, null, false]
+    const domain = data.site ? (parseWebsiteInput(data.site)?.hostname ?? data.site) : ''
+    const site = read?.ok
+      ? rendered
+        ? render.withRendered(read.signals, rendered)
+        : read.signals
+      : rendered
+        ? render.renderedSignals(domain, rendered)
+        : null
+    if (read && !site && !read.ok && !data.words && !data.palette) {
       return {
         ok: false as const,
         code: 'SITE_UNREADABLE' as const,
@@ -173,8 +184,10 @@ export const portalDesignDirectionsFn = createServerFn({ method: 'POST' })
       hasMark: allows.hasMark || logoAdopted,
       site,
       words: data.words ?? null,
-      palette: data.palette ?? null,
-      image: data.image ?? null,
+      // The rendered first screen stands in for a screenshot when none is given.
+      palette:
+        data.palette ?? (data.image || !rendered ? null : render.lookPalette(site, rendered)),
+      image: data.image ?? rendered?.screenshot ?? null,
       assets,
       allows,
     })

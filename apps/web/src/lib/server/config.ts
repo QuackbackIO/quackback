@@ -124,6 +124,10 @@ const configSchema = z
     // Quackback AI may write a portal design's CSS as well as its fields. Off
     // until it is shown to design better with it.
     portalDesignAiCss: envBoolean,
+    // A website reader beside Quackback that renders a page in a headless
+    // browser. Optional: without it, websites are read from their HTML and CSS.
+    browserUrl: z.string().url().optional(),
+    browserToken: z.string().min(16).optional(),
 
     // Database
     //
@@ -379,6 +383,8 @@ function buildConfigFromEnv(): unknown {
     port: env('PORT'),
     portalDesignEngine: env('PORTAL_DESIGN_ENGINE'),
     portalDesignAiCss: env('PORTAL_DESIGN_AI_CSS'),
+    browserUrl: env('QUACKBACK_BROWSER_URL'),
+    browserToken: env('QUACKBACK_BROWSER_TOKEN'),
 
     // Database
     databaseUrl: env('DATABASE_URL'),
@@ -577,6 +583,12 @@ export const config = {
   },
   get portalDesignAiCss() {
     return loadConfig().portalDesignAiCss
+  },
+  get browserUrl() {
+    return loadConfig().browserUrl
+  },
+  get browserToken() {
+    return loadConfig().browserToken
   },
   get controlDatabaseUrl() {
     return loadConfig().controlDatabaseUrl
