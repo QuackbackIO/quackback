@@ -38,7 +38,7 @@ export type PortalDesignView =
       feedback: {
         /** The welcome message, or null when it is off or empty. */
         welcome: TiptapContent | null
-        headline: { title: LocalizedText; subtitle: LocalizedText } | null
+        headline: PortalDesign['pages']['feedback']['headline']
         /** The feed's sort when the visitor has not picked one. */
         defaultSort: 'trending' | 'top' | 'new'
         /** The workspace's own wording, by language. */
@@ -50,7 +50,28 @@ export type PortalDesignView =
       nav: PortalDesign['nav']
       /** The words visitors see for what they post and what groups it. */
       vocabulary: PortalDesign['vocabulary']
+      /** How the header shows the brand. */
+      logo: DesignLogo
+      /** The logo's colours that status markers take, when the design asks for them. */
+      statusColours: string[] | null
+      /** The band's image and where it sits, or null. */
+      bandImage: BandImage | null
     }
+
+export interface BandImage {
+  url: string
+  place: NonNullable<PortalDesign['layout']['imagePlace']>
+}
+
+/**
+ * The header's logo: the display, the name it shows when not the workspace's,
+ * and the wordmark files' addresses, for light and dark.
+ */
+export interface DesignLogo {
+  display: PortalDesign['brand']['logo']['display']
+  name: string | null
+  wordmark: { light: string | null; dark: string | null }
+}
 
 /** The settings a portal page reads its theme from. */
 interface ThemeSettings {

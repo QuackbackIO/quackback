@@ -1,0 +1,9 @@
+/* Split out of globals.css so this family's @font-face rules only ship to
+   documents whose design selects Sora. Loaded via
+   src/lib/shared/theme/font-loader.ts. Keep weights in sync with its
+   BUNDLED_FONTS entry in src/lib/shared/design/fonts.ts. */
+@import "@fontsource/sora/400.css";
+@import "@fontsource/sora/500.css";
+@import "@fontsource/sora/600.css";
+@import "@fontsource/sora/700.css";
+@import "@fontsource/sora/800.css";

@@ -4,12 +4,19 @@
  * has nothing to show. Every block is a `home-block` part and a section the
  * Appearance preview can select.
  */
-import { Suspense, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  Suspense,
+  useContext,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useQuery, useSuspenseInfiniteQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { RichTextContent } from '@/components/ui/rich-text-content'
-import { StatusBadge } from '@/components/ui/status-badge'
+import { StatusBadge, useStatusColour } from '@/components/ui/status-badge'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
 import { HelpCenterCompactSearch } from '@/components/help-center/help-center-search'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -30,6 +37,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
 import { useFeedCopy } from '@/components/public/preview-draft-context'
 import { homeMessages } from './home-messages'
+import { filledSpans } from '@/lib/shared/design/home-spans'
 import { popularArticlesQuery } from './home-prefetch'
 
 export type HomeBlock = PortalDesign['pages']['home']['blocks'][number]
@@ -46,12 +54,68 @@ const WIDTH_CLASS: Record<HomeBlock['width'], string> = {
 }
 
 /** A block's card: the brand's card style, its title and its way on. */
+const MEDIUM_SPAN: Record<number, string> = { 1: 'md:col-span-1', 2: 'md:col-span-2' }
+const WIDE_SPAN: Record<number, string> = {
+  2: 'lg:col-span-2',
+  3: 'lg:col-span-3',
+  4: 'lg:col-span-4',
+  5: 'lg:col-span-5',
+  6: 'lg:col-span-6',
+}
+
+/** Each shown block's columns, by its index, once Home's rows are filled. */
+const SpansContext = createContext<ReadonlyMap<number, string>>(new Map())
+
+/**
+ * The columns of the blocks Home shows, by index: a block whose page is off
+ * is left out first, so its neighbours fill the row instead of leaving a hole.
+ */
+export function HomeSpans({
+  blocks,
+  gates,
+  skip,
+  children,
+}: {
+  blocks: HomeBlock[]
+  gates: PortalPageGates
+  /** A block drawn elsewhere, such as the composer in the band. */
+  skip?: number
+  children: ReactNode
+}) {
+  const shown = blocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block, index }) => index !== skip && blockShown(block, gates))
+  const widths = shown.map(({ block }) => block.width)
+  const [medium, wide] = [filledSpans(widths, 'medium'), filledSpans(widths, 'wide')]
+  const spans = new Map(
+    shown.map(({ index }, at) => [index, `${MEDIUM_SPAN[medium[at]!]} ${WIDE_SPAN[wide[at]!]}`])
+  )
+  return <SpansContext.Provider value={spans}>{children}</SpansContext.Provider>
+}
+
+const useSpan = (block: HomeBlock, index: number) =>
+  useContext(SpansContext).get(index) ?? WIDTH_CLASS[block.width]
+
+/** A roadmap column's status colour, as the design shows status colours. */
+function StatusDot({ colour }: { colour: string | null | undefined }) {
+  const shown = useStatusColour(colour)
+  return (
+    <span
+      aria-hidden="true"
+      data-qb-status-dot=""
+      className="size-2 rounded-full bg-[var(--qb-status)]"
+      style={shown ? ({ '--qb-status': shown } as CSSProperties) : undefined}
+    />
+  )
+}
+
 function BlockCard({
   block,
   index,
   title,
   action,
   bare = false,
+  row = false,
   children,
 }: {
   block: HomeBlock
@@ -60,8 +124,11 @@ function BlockCard({
   action?: { label: string; to: string }
   /** A block that is already a card, such as the composer, takes no card of its own. */
   bare?: boolean
+  /** A wide block's title, text and action on one line. */
+  row?: boolean
   children: ReactNode
 }) {
+  const span = useSpan(block, index)
   return (
     <section
       data-qb-section={`block-${index}`}
@@ -74,7 +141,8 @@ function BlockCard({
           '[[data-qb-cards=raised]_&]:border-transparent [[data-qb-cards=raised]_&]:shadow-md',
           '[[data-qb-cards=list]_&]:rounded-none [[data-qb-cards=list]_&]:border-x-0 [[data-qb-cards=list]_&]:border-t-0 [[data-qb-cards=list]_&]:bg-transparent [[data-qb-cards=list]_&]:shadow-none',
         ],
-        WIDTH_CLASS[block.width]
+        row && 'md:flex-row md:items-center md:gap-6 md:[&>p]:flex-1',
+        span
       )}
     >
       {title && <h2 className="text-lg font-semibold text-foreground">{title}</h2>}
@@ -82,7 +150,10 @@ function BlockCard({
       {action && (
         <Link
           to={action.to}
-          className="mt-auto pt-1 text-sm font-medium text-[var(--qb-accent-text,var(--primary))] hover:underline"
+          className={cn(
+            'mt-auto pt-1 text-sm font-medium text-[var(--qb-accent-text,var(--primary))] hover:underline',
+            row && 'md:mt-0 md:shrink-0 md:pt-0'
+          )}
         >
           {action.label}
         </Link>
@@ -92,14 +163,12 @@ function BlockCard({
 }
 
 /** A block waiting on its data: the card's outline, so the grid does not jump. */
-function BlockSkeleton({ block }: { block: HomeBlock }) {
+function BlockSkeleton({ block, index }: { block: HomeBlock; index: number }) {
+  const span = useSpan(block, index)
   return (
     <div
       aria-hidden="true"
-      className={cn(
-        'col-span-1 min-h-32 animate-pulse rounded-lg bg-muted/40',
-        WIDTH_CLASS[block.width]
-      )}
+      className={cn('col-span-1 min-h-32 animate-pulse rounded-lg bg-muted/40', span)}
     />
   )
 }
@@ -124,6 +193,18 @@ function WelcomeBlock({
  * with them to the feed, whose composer opens with it.
  */
 function ComposerBlock({ block, index }: { block: HomeBlock; index: number }) {
+  return (
+    <BlockCard block={block} index={index} bare>
+      <HomeComposer />
+    </BlockCard>
+  )
+}
+
+/**
+ * Home's composer, on the grid or in the band. In the band its button is
+ * filled, and on phones it takes a line of its own below the field.
+ */
+export function HomeComposer({ inBand = false }: { inBand?: boolean }) {
   const intl = useIntl()
   const copy = useFeedCopy()
   const navigate = useNavigate()
@@ -131,41 +212,48 @@ function ComposerBlock({ block, index }: { block: HomeBlock; index: number }) {
   const open = () =>
     void navigate({ to: HOME_FEED_PATH, state: { composeTitle: title.trim() } as never })
   return (
-    <BlockCard block={block} index={index} bare>
-      <form
-        data-qb-part="composer"
-        action={HOME_FEED_PATH}
-        className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5 shadow-sm"
-        onSubmit={(event) => {
-          event.preventDefault()
-          open()
-        }}
+    <form
+      data-qb-part="composer"
+      action={HOME_FEED_PATH}
+      className={cn(
+        'flex items-center gap-3 rounded-[var(--qb-radius-composer,0.5rem)] border border-border bg-card px-4 py-3.5 shadow-sm',
+        inBand && 'flex-wrap py-3 shadow-lg sm:flex-nowrap'
+      )}
+      onSubmit={(event) => {
+        event.preventDefault()
+        open()
+      }}
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
+          <path
+            d="M11.1 2.3a1.6 1.6 0 0 1 2.3 2.3L5.6 12.4 2.5 13.5l1.1-3.1z"
+            fill="currentColor"
+          />
+        </svg>
+      </span>
+      <input
+        type="text"
+        value={title}
+        maxLength={200}
+        onChange={(event) => setTitle(event.target.value)}
+        placeholder={copy.prompt ?? intl.formatMessage(homeMessages.composerPlaceholder)}
+        aria-label={intl.formatMessage(homeMessages.composerLabel)}
+        className="min-w-0 flex-1 border-0 bg-transparent font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground"
+      />
+      <button
+        type="submit"
+        data-qb-label=""
+        className={cn(
+          'shrink-0 text-sm font-medium',
+          inBand
+            ? 'basis-full rounded-[var(--qb-radius-button,999px)] bg-primary px-4 py-2 font-semibold text-primary-foreground hover:bg-primary/90 sm:basis-auto'
+            : 'rounded-full px-3 py-1.5 text-[var(--qb-accent-text,var(--primary))] hover:bg-muted'
+        )}
       >
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
-            <path
-              d="M11.1 2.3a1.6 1.6 0 0 1 2.3 2.3L5.6 12.4 2.5 13.5l1.1-3.1z"
-              fill="currentColor"
-            />
-          </svg>
-        </span>
-        <input
-          type="text"
-          value={title}
-          maxLength={200}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder={copy.prompt ?? intl.formatMessage(homeMessages.composerPlaceholder)}
-          aria-label={intl.formatMessage(homeMessages.composerLabel)}
-          className="min-w-0 flex-1 border-0 bg-transparent font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground/60"
-        />
-        <button
-          type="submit"
-          className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-[var(--qb-accent-text,var(--primary))] hover:bg-muted"
-        >
-          {copy.submit ?? intl.formatMessage(homeMessages.composerContinue)}
-        </button>
-      </form>
-    </BlockCard>
+        {copy.submit ?? intl.formatMessage(homeMessages.composerContinue)}
+      </button>
+    </form>
   )
 }
 
@@ -280,11 +368,7 @@ function RoadmapBlock({
         {columns.map((column) => (
           <div key={column.id} className="min-w-0 space-y-2">
             <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-              <span
-                aria-hidden="true"
-                className="size-2 rounded-full"
-                style={{ backgroundColor: column.color }}
-              />
+              <StatusDot colour={column.color} />
               {column.name}
             </h3>
             <RoadmapColumnPosts roadmapId={roadmap.id} statusId={column.statusId ?? undefined} />
@@ -441,6 +525,7 @@ function ContactBlock({ block, index }: { block: HomeBlock; index: number }) {
     <BlockCard
       block={block}
       index={index}
+      row={block.width === 'full'}
       title={intl.formatMessage(homeMessages.contactTitle)}
       action={{ label: intl.formatMessage(homeMessages.contactStart), to: '/support' }}
     >
@@ -496,6 +581,12 @@ const BLOCK_PAGE: Partial<Record<HomeBlock['type'], keyof PortalPageGates>> = {
 }
 
 /** One block, drawn when its page is on, with its data streamed in. */
+/** Whether a block's page is on, so Home draws it. */
+export function blockShown(block: HomeBlock, gates: PortalPageGates): boolean {
+  const page = BLOCK_PAGE[block.type]
+  return !page || gates[page]
+}
+
 export function HomeBlockView({
   block,
   index,
@@ -506,8 +597,7 @@ export function HomeBlockView({
   /** Which pages exist, from the loader; a block whose page is off is not drawn. */
   gates: PortalPageGates
 }) {
-  const page = BLOCK_PAGE[block.type]
-  if (page && !gates[page]) return null
+  if (!blockShown(block, gates)) return null
   const body = (() => {
     switch (block.type) {
       case 'welcome':
@@ -532,5 +622,5 @@ export function HomeBlockView({
         return <LinksBlock block={block} index={index} />
     }
   })()
-  return <Suspense fallback={<BlockSkeleton block={block} />}>{body}</Suspense>
+  return <Suspense fallback={<BlockSkeleton block={block} index={index} />}>{body}</Suspense>
 }

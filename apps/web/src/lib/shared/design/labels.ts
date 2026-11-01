@@ -34,6 +34,15 @@ const LABELS: Record<string, string> = {
   'vocabulary.post': 'What people post',
   'vocabulary.board': 'What groups them',
   css: 'Custom CSS',
+  'pages.feedback.copy': 'Own wording',
+  'pages.feedback.welcome': 'Welcome message',
+  'pages.home': 'Home',
+  'nav.home': 'Home page',
+  nav: 'Menu',
+  vocabulary: 'Words',
+  layout: 'Layout',
+  shape: 'Corners',
+  brand: 'Brand',
   'pages.home.blocks': 'Home blocks',
 }
 
@@ -79,5 +88,9 @@ export function changeLabel(path: string): string {
     return headline[1] === 'home' ? `Home ${name.toLowerCase()}` : name
   }
   const font = path.match(/^(brand\.fonts\.(?:heading|body))\./)
-  return LABELS[font ? font[1] : path] ?? path
+  if (font) return LABELS[font[1]!]!
+  // A field inside a list or a part takes the name of the nearest one named.
+  for (let field = path; field; field = field.slice(0, Math.max(field.lastIndexOf('.'), 0)))
+    if (LABELS[field]) return LABELS[field]
+  return path
 }

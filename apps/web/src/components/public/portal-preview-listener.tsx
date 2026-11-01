@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { extractCssVariables, loadBrandingFont, normalizeFontSans } from '@/lib/shared/theme'
 import { PortalWordsIntl } from '@/lib/client/hooks/use-intl-setup'
+import { BrandStatusColours } from './brand-status-colours'
 import {
   PreviewDraftProvider,
   PreviewAttributesContext,
+  PreviewLogoContext,
+  PreviewBandImageContext,
   PreviewHeadlineContext,
   PreviewPagesContext,
   FeedCopyContext,
@@ -149,13 +152,19 @@ export function PortalPreviewProvider({
       <PreviewHeadlineContext.Provider value={design ? design.headline : undefined}>
         <PreviewPagesContext.Provider value={pages}>
           <PreviewAttributesContext.Provider value={design?.attributes}>
-            <DraftCopy copy={design?.copy}>
-              {design?.words ? (
-                <PortalWordsIntl words={design.words}>{children}</PortalWordsIntl>
-              ) : (
-                children
-              )}
-            </DraftCopy>
+            <PreviewLogoContext.Provider value={design?.logo ?? undefined}>
+              <BrandStatusColours colours={design?.statusColours}>
+                <PreviewBandImageContext.Provider value={design ? design.bandImage : undefined}>
+                  <DraftCopy copy={design?.copy}>
+                    {design?.words ? (
+                      <PortalWordsIntl words={design.words}>{children}</PortalWordsIntl>
+                    ) : (
+                      children
+                    )}
+                  </DraftCopy>
+                </PreviewBandImageContext.Provider>
+              </BrandStatusColours>
+            </PreviewLogoContext.Provider>
           </PreviewAttributesContext.Provider>
         </PreviewPagesContext.Provider>
       </PreviewHeadlineContext.Provider>

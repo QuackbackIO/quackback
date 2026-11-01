@@ -10,7 +10,7 @@ import { expandTheme } from '@/lib/shared/theme/expand'
 import { variableMap } from '@/lib/shared/theme/generator'
 import type { ThemeVariables } from '@/lib/shared/theme/types'
 import { contrastRatio, solveContrast } from './contrast'
-import { baseTokens, modeTokens, PORTAL_ALIASES, type TokenMap } from './components'
+import { bandError, baseTokens, modeTokens, PORTAL_ALIASES, type TokenMap } from './components'
 import { fontStack } from './fonts'
 import type { PortalDesign } from './schema'
 
@@ -129,6 +129,8 @@ export function resolveDesign(doc: PortalDesign): ResolvedDesign {
   const resolveMode = (mode: Mode) => {
     const vars = expandMode(doc, mode)
     solveMode(vars, mode, adjustments, errors)
+    const band = bandError(doc, vars, mode)
+    if (band) errors.push(band)
     return vars
   }
   const light = doc.mode === 'dark' ? null : resolveMode('light')
@@ -230,7 +232,11 @@ export function renderDesignCss(resolved: ResolvedDesign): string {
     '@layer base { [data-portal-theme] :is(h1, h2, h3) { font-family: var(--qb-font-heading); } }'
   )
   parts.push(
-    '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: -0.02em; } }'
+    '@layer design { [data-portal-theme] { letter-spacing: -0.01em; } [data-portal-theme] :is(h1, h2, h3) { font-weight: var(--qb-heading-weight); letter-spacing: var(--qb-heading-tracking); } [data-portal-theme] [data-qb-part=headline] { text-transform: var(--qb-headline-case); } [data-portal-theme] :is([data-qb-part=nav-item], [data-qb-label]) { text-transform: var(--qb-label-case); letter-spacing: var(--qb-label-tracking); } }'
+  )
+  // Status markers: in the ink, or as tags tinted with each status's colour.
+  parts.push(
+    '@layer design { [data-qb-status=ink][data-portal-theme] [data-qb-status-dot] { background: var(--qb-ink); } [data-qb-status=pill][data-portal-theme] [data-qb-part=status-badge] { padding: 0.125rem 0.5rem; border-radius: var(--qb-radius-control); background: color-mix(in oklch, var(--qb-status, var(--qb-muted)) 18%, var(--qb-surface)); } [data-qb-status=pill][data-portal-theme] [data-qb-part=status-badge] > [data-qb-status-dot] { display: none; } }'
   )
   return parts.join(' ')
 }

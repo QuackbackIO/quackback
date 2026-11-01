@@ -55,6 +55,60 @@ describe('size tokens of the default design', () => {
   })
 })
 
+describe('a headline’s accent phrase', () => {
+  it('is the brand colour where it reads, and readable on a band of the brand colour', () => {
+    const plain = resolveDesign(design((d) => (d.brand.light.accent = '#0f766e'))).tokens.light
+    expect(plain['--qb-band-accent']).toBe('#0f766e')
+    const filled = resolveDesign(
+      design((d) => {
+        d.brand.light.accent = '#0f766e'
+        d.layout.band = 'brand'
+      })
+    ).tokens.light
+    const [accent, band] = [filled['--qb-band-accent']!, filled['--qb-band-bg']!]
+    expect(contrastRatio(accent, band)).toBeGreaterThanOrEqual(3)
+  })
+})
+
+describe('type style', () => {
+  it('keeps today’s headline size, tracking and case', () => {
+    const { tokens } = resolveDesign(design())
+    expect(tokens.base).toMatchObject({
+      '--qb-headline-size': 'clamp(1.5rem, 1.25rem + 1vw, 1.875rem)',
+      '--qb-heading-tracking': '-0.02em',
+      '--qb-headline-case': 'none',
+      '--qb-label-case': 'none',
+      '--qb-label-tracking': 'normal',
+    })
+  })
+
+  it('sets display headlines large, tight and upper case, and spaces upper-case labels', () => {
+    const { tokens } = resolveDesign(
+      design((d) => {
+        Object.assign(d.brand.fonts, {
+          scale: 'display',
+          tracking: 'tight',
+          headlineCase: 'upper',
+          labelCase: 'upper',
+        })
+      })
+    )
+    expect(tokens.base).toMatchObject({
+      '--qb-headline-size': 'clamp(2.25rem, 1.2rem + 4.6vw, 4.75rem)',
+      '--qb-headline-leading': '1.02',
+      '--qb-heading-tracking': '-0.035em',
+      '--qb-headline-case': 'uppercase',
+      '--qb-label-case': 'uppercase',
+      '--qb-label-tracking': '0.06em',
+    })
+  })
+
+  it('sizes large between the two', () => {
+    const { tokens } = resolveDesign(design((d) => (d.brand.fonts.scale = 'large')))
+    expect(tokens.base['--qb-headline-size']).toBe('clamp(2rem, 1.5rem + 2.2vw, 3rem)')
+  })
+})
+
 describe('shape and layout choices', () => {
   it('squares every corner for sharp', () => {
     const { tokens } = resolveDesign(design((d) => (d.shape.corners = 'sharp')))
@@ -77,6 +131,164 @@ describe('shape and layout choices', () => {
   it('runs list cards together', () => {
     const { tokens } = resolveDesign(design((d) => (d.layout.cards = 'list')))
     expect(tokens.base['--qb-feed-gap']).toBe('0rem')
+  })
+})
+
+describe('buttons’ own shape', () => {
+  it('follows the corners until it is set', () => {
+    const { base } = resolveDesign(design((d) => (d.shape.corners = 'subtle'))).tokens
+    expect(base['--qb-radius-button']).toBe(base['--qb-radius-control'])
+    expect(base['--qb-radius-composer']).toBe(base['--qb-radius-field'])
+  })
+
+  it('squares or rounds buttons, and the composer with them, whatever the corners', () => {
+    const square = resolveDesign(
+      design((d) => {
+        d.shape.corners = 'rounded'
+        d.shape.buttons = 'square'
+      })
+    ).tokens.base
+    expect([square['--qb-radius-button'], square['--qb-radius-composer']]).toEqual(['0rem', '0rem'])
+    expect(square['--qb-radius-panel']).toBe('0.75rem')
+    const pill = resolveDesign(design((d) => (d.shape.buttons = 'pill'))).tokens.base
+    expect([pill['--qb-radius-button'], pill['--qb-radius-composer']]).toEqual(['999px', '1.75rem'])
+  })
+
+  it('names the status style', () => {
+    expect(layoutAttributes(design((d) => (d.layout.status = 'pill')))['data-qb-status']).toBe(
+      'pill'
+    )
+  })
+})
+
+describe('a second brand colour', () => {
+  const withSupport = (band: PortalDesign['layout']['band'], change?: (d: PortalDesign) => void) =>
+    resolveDesign(
+      design((d) => {
+        d.brand.light.accent = '#4a1942'
+        d.brand.light.support = '#e58fae'
+        d.layout.band = band
+        change?.(d)
+      })
+    )
+
+  it('fills a support band with it, with text readable on it', () => {
+    const { light } = withSupport('support').tokens
+    expect(light['--qb-band-bg']).toBe('#e58fae')
+    expect(contrastRatio(light['--qb-band-ink']!, '#e58fae')).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(light['--qb-band-muted']!, '#e58fae')).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('fills a support band with the accent when there is no second colour', () => {
+    const { light } = resolveDesign(design((d) => (d.layout.band = 'support'))).tokens
+    expect(light['--qb-band-bg']).toBe(resolveDesign(design()).light!.primary)
+  })
+
+  it('blends the two in a line, with text readable where it sits', () => {
+    const { light } = withSupport('blend').tokens
+    expect(light['--qb-band-bg']).toBe('linear-gradient(110deg, #4a1942 0%, #e58fae 100%)')
+    const ink = light['--qb-band-ink']!
+    expect(contrastRatio(ink, '#4a1942')).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(ink, mixColor('#4a1942', '#e58fae', 0.5))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('refuses a blend that no text reads across', () => {
+    const doc = design((d) => {
+      d.brand.light.accent = '#22c55e'
+      d.brand.light.support = '#1e1b4b'
+      d.layout.band = 'blend'
+    })
+    expect(resolveDesign(doc).errors).toEqual([
+      'light: no text reaches 4.5:1 across the band',
+      'dark: no text reaches 4.5:1 across the band',
+    ])
+  })
+
+  it('blends the two as a mesh beside the words, plain under them and on phones', () => {
+    const { light } = withSupport('blend', (d) => (d.layout.blend = 'mesh')).tokens
+    const background = resolveDesign(design()).light!.background
+    expect(light['--qb-band-bg']).toContain('radial-gradient(circle at 72% 22%, #4a1942')
+    expect(light['--qb-band-bg']).toContain('#e58fae')
+    expect(light['--qb-band-bg']).toMatch(/^linear-gradient\(90deg, \S+ 34%/)
+    expect(light['--qb-band-bg-narrow']).toBe(background)
+    expect(light['--qb-band-ink']).toBe(resolveDesign(design()).light!.foreground)
+  })
+
+  it('highlights in it', () => {
+    const { light } = withSupport('none').tokens
+    expect(light['--qb-band-highlight']).toBe(
+      mixColor('#e58fae', resolveDesign(design()).light!.background!, 0.35)
+    )
+  })
+
+  it('carries it into dark mode when dark does not set its own', () => {
+    const { dark } = withSupport('support', (d) => (d.mode = 'auto')).tokens
+    expect(dark['--qb-band-bg']).toBe('#e58fae')
+  })
+})
+
+describe('a panel in the band', () => {
+  it('is the second colour, else the card colour, with readable words', () => {
+    const plain = resolveDesign(
+      design((d) => {
+        d.layout.band = 'brand'
+        d.layout.bandShape = 'panel'
+      })
+    )
+    expect(plain.tokens.light['--qb-band-panel-bg']).toBe(plain.light!.card)
+    const yellow = resolveDesign(
+      design((d) => {
+        d.brand.light.accent = '#0058a3'
+        d.brand.light.support = '#ffdb00'
+        d.layout.band = 'brand'
+        d.layout.bandShape = 'panel'
+      })
+    ).tokens.light
+    expect(yellow['--qb-band-panel-bg']).toBe('#ffdb00')
+    for (const text of ['--qb-band-panel-ink', '--qb-band-panel-muted'] as const)
+      expect(contrastRatio(yellow[text]!, '#ffdb00')).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(yellow['--qb-band-panel-accent']!, '#ffdb00')).toBeGreaterThanOrEqual(3)
+  })
+})
+
+describe('a header on the band', () => {
+  const onBand = (change: (d: PortalDesign) => void) =>
+    resolveDesign(
+      design((d) => {
+        d.layout.headerOnBand = true
+        change(d)
+      })
+    ).tokens.light
+
+  it('takes the band’s colour and text, with no rule under it', () => {
+    const tokens = onBand((d) => {
+      d.brand.light.accent = '#163300'
+      d.brand.light.support = '#9fe870'
+      d.layout.band = 'support'
+    })
+    expect(tokens['--qb-header-bg']).toBe('#9fe870')
+    expect(tokens['--qb-header-ink']).toBe(tokens['--qb-band-ink'])
+    expect(tokens['--qb-header-rule']).toBe('transparent')
+    expect(contrastRatio(tokens['--qb-nav-ink']!, '#9fe870')).toBeGreaterThanOrEqual(4.5)
+    // The brand colour still reads as a button on the band.
+    expect(tokens['--qb-header-action-bg']).toBe('#163300')
+  })
+
+  it('turns its button to the band’s text where the brand colour would vanish', () => {
+    const tokens = onBand((d) => {
+      d.brand.light.accent = '#0f766e'
+      d.layout.band = 'brand'
+    })
+    expect(tokens['--qb-header-bg']).toBe(tokens['--qb-band-bg'])
+    expect(tokens['--qb-header-action-bg']).toBe(tokens['--qb-band-ink'])
+    expect(
+      contrastRatio(tokens['--qb-header-action-ink']!, tokens['--qb-header-action-bg']!)
+    ).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('leaves the header alone on a band with no colour', () => {
+    const tokens = onBand(() => {})
+    expect(tokens['--qb-header-bg']).toBe(resolveDesign(design()).tokens.light['--qb-header-bg'])
   })
 })
 
@@ -183,9 +395,35 @@ describe('layoutAttributes', () => {
       'data-qb-header': 'inline',
       'data-qb-nav': 'pills',
       'data-qb-band': 'none',
+      'data-qb-band-align': 'left',
+      'data-qb-band-shape': 'full',
+      'data-qb-header-band': 'off',
+      'data-qb-status': 'colour',
       'data-qb-cards': 'list',
       'data-qb-filters': 'start',
     })
+  })
+
+  it('centres the band under a centred header unless it says otherwise', () => {
+    const centred = design((d) => (d.layout.header = 'centered'))
+    expect(layoutAttributes(centred)['data-qb-band-align']).toBe('centre')
+    centred.layout.bandAlign = 'left'
+    expect(layoutAttributes(centred)['data-qb-band-align']).toBe('left')
+    const inline = design((d) => (d.layout.bandAlign = 'centre'))
+    expect(layoutAttributes(inline)['data-qb-band-align']).toBe('centre')
+  })
+
+  it('names the band’s shape, and a header on the band only where the band has colour', () => {
+    const doc = design((d) => {
+      d.layout.bandShape = 'panel'
+      d.layout.headerOnBand = true
+    })
+    expect(layoutAttributes(doc)).toMatchObject({
+      'data-qb-band-shape': 'panel',
+      'data-qb-header-band': 'off',
+    })
+    doc.layout.band = 'brand'
+    expect(layoutAttributes(doc)['data-qb-header-band']).toBe('on')
   })
 })
 
@@ -193,7 +431,7 @@ describe('PORTAL_ALIASES', () => {
   it('points the portal’s own variables at the tokens', () => {
     expect(PORTAL_ALIASES['--header-background']).toBe('--qb-header-bg')
     expect(PORTAL_ALIASES['--nav-inactive-color']).toBe('--qb-nav-ink')
-    expect(PORTAL_ALIASES['--radius-item']).toBe('--qb-radius-control')
+    expect(PORTAL_ALIASES['--radius-item']).toBe('--qb-radius-button')
     expect(PORTAL_ALIASES['--radius-panel']).toBe('--qb-radius-panel')
   })
 })

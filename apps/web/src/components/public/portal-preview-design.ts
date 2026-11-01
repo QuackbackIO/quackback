@@ -6,10 +6,16 @@
  * shared code into a chunk of its own.
  */
 
-import type { PortalWords } from '@/lib/shared/design/view'
+import type { BandImage, DesignLogo, PortalWords } from '@/lib/shared/design/view'
+
+type TextByLocale = Record<string, string>
 
 /** A page headline by locale; the same shape the preview context carries. */
-type Headline = { title: Record<string, string>; subtitle: Record<string, string> } | null
+type Headline = {
+  title: TextByLocale
+  subtitle: TextByLocale
+  accent?: { style: 'colour' | 'highlight'; text: TextByLocale }
+} | null
 
 /** A draft's Home: its headline and blocks, as the design stores them. */
 type Home = { headline: Headline; blocks: Array<Record<string, unknown>> }
@@ -32,6 +38,46 @@ export interface DesignPreview {
   words: PortalWords | null
   /** The draft's own wording, by language. */
   copy: Partial<Record<'prompt' | 'submit' | 'emptyTitle', Record<string, string>>> | null
+  logo: DesignLogo | null
+  /** The logo's colours status markers take, when the draft asks for them. */
+  statusColours: string[] | null
+  bandImage: BandImage | null
+}
+
+const IMAGE_PLACES = new Set(['side', 'edge', 'cover', 'pattern'])
+
+function readBandImage(value: unknown): BandImage | null {
+  if (!value || typeof value !== 'object') return null
+  const { url, place } = value as Record<string, unknown>
+  return typeof url === 'string' && STORED_FILE.test(url) && IMAGE_PLACES.has(place as string)
+    ? { url, place: place as BandImage['place'] }
+    : null
+}
+
+/** A colour as a design stores it: hex, or oklch(). */
+const STORED_COLOUR = /^(#[\da-f]{6}|oklch\([\d.\s%]+\))$/i
+
+function readStatusColours(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null
+  const colours = value.filter((c): c is string => typeof c === 'string' && STORED_COLOUR.test(c))
+  return colours.length > 0 ? colours.slice(0, 6) : null
+}
+
+const LOGO_DISPLAYS = new Set(['mark_and_name', 'mark', 'wordmark', 'name'])
+/** A wordmark comes from the workspace's own storage. */
+const STORED_FILE = /^\/api\/storage\/[\w./-]+$/
+
+function readLogo(value: unknown): DesignLogo | null {
+  if (!value || typeof value !== 'object') return null
+  const { display, name, wordmark } = value as Record<string, unknown>
+  if (!LOGO_DISPLAYS.has(display as string)) return null
+  const file = (url: unknown) => (typeof url === 'string' && STORED_FILE.test(url) ? url : null)
+  const marks = (wordmark ?? {}) as Record<string, unknown>
+  return {
+    display: display as DesignLogo['display'],
+    name: typeof name === 'string' ? name.slice(0, 60) : null,
+    wordmark: { light: file(marks.light), dark: file(marks.dark) },
+  }
 }
 
 const COPY_FIELDS = ['prompt', 'submit', 'emptyTitle'] as const
@@ -108,20 +154,33 @@ const isTextByLocale = (value: unknown): value is Record<string, string> =>
 
 function readHeadline(value: unknown): Headline {
   if (!value || typeof value !== 'object') return null
-  const { title, subtitle } = value as Record<string, unknown>
-  return isTextByLocale(title) && isTextByLocale(subtitle) ? { title, subtitle } : null
+  const { title, subtitle, accent } = value as Record<string, unknown>
+  if (!isTextByLocale(title) || !isTextByLocale(subtitle)) return null
+  const { style, text } = (accent ?? {}) as Record<string, unknown>
+  return (style === 'colour' || style === 'highlight') && isTextByLocale(text)
+    ? { title, subtitle, accent: { style, text } }
+    : { title, subtitle }
 }
 
-const DESIGN_ATTRIBUTE = /^data-qb-[a-z]+$/
+const DESIGN_ATTRIBUTE = /^data-qb-[a-z]+(?:-[a-z]+)*$/
 const DESIGN_VALUE = /^[a-z_]+$/
 
 /** The message's design, keeping only the structural attributes a design sets. */
 export function readDesignPreview(value: unknown): DesignPreview | null {
   if (!value || typeof value !== 'object') return null
-  const { css, attributes, fontIds, headline, home, nav, vocabulary, copy } = value as Record<
-    string,
-    unknown
-  >
+  const {
+    css,
+    attributes,
+    fontIds,
+    headline,
+    home,
+    nav,
+    vocabulary,
+    copy,
+    logo,
+    statusColours,
+    bandImage,
+  } = value as Record<string, unknown>
   if (typeof css !== 'string') return null
   const safe = Object.fromEntries(
     Object.entries((attributes as Record<string, unknown>) ?? {}).filter(
@@ -138,6 +197,9 @@ export function readDesignPreview(value: unknown): DesignPreview | null {
     nav: readNav(nav),
     words: readWords(vocabulary),
     copy: readCopy(copy),
+    logo: readLogo(logo),
+    statusColours: readStatusColours(statusColours),
+    bandImage: readBandImage(bandImage),
   }
 }
 

@@ -34,4 +34,46 @@ describe('designView', () => {
       subtitle: {},
     })
   })
+
+  it('carries how the header shows the brand, with its wordmark files', () => {
+    const doc = defaultDesign()
+    doc.brand.logo = {
+      ...doc.brand.logo,
+      display: 'wordmark',
+      wordmark: { light: { key: 'logos/ink.svg' }, dark: null },
+    }
+    expect(designView(doc, 1).logo).toEqual({
+      display: 'wordmark',
+      name: null,
+      wordmark: { light: '/api/storage/logos/ink.svg', dark: null },
+    })
+  })
+
+  it('carries the logo’s colours for status markers only when the design asks for them', () => {
+    const doc = defaultDesign()
+    doc.brand.logoColours = ['#ecb22e', '#36c5f0']
+    expect(designView(doc, 1).statusColours).toBeNull()
+    doc.layout.status = 'brand'
+    expect(designView(doc, 1).statusColours).toEqual(['#ecb22e', '#36c5f0'])
+    doc.brand.logoColours = []
+    expect(designView(doc, 1).statusColours).toBeNull()
+  })
+
+  it('carries the band image and where it sits, beside the words unless it says', () => {
+    const doc = defaultDesign()
+    expect(designView(doc, 1).bandImage).toBeNull()
+    doc.brand.bandImage = { key: 'portal-images/room.jpg' }
+    expect(designView(doc, 1).bandImage).toEqual({
+      url: '/api/storage/portal-images/room.jpg',
+      place: 'side',
+    })
+    doc.layout.imagePlace = 'pattern'
+    expect(designView(doc, 1).bandImage?.place).toBe('pattern')
+  })
+
+  it('carries a name the header shows in place of the workspace’s', () => {
+    const doc = defaultDesign()
+    doc.brand.logo = { ...doc.brand.logo, display: 'name', name: 'Harbor & Pine' }
+    expect(designView(doc, 1).logo).toMatchObject({ display: 'name', name: 'Harbor & Pine' })
+  })
 })

@@ -13,6 +13,7 @@ const SCOPE_LABEL: Record<DesignAiScope, string> = {
   welcome: 'Welcome message',
   feed: 'Feed',
   filters: 'Filters',
+  home: 'Home',
 }
 
 /**

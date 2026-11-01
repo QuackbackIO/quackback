@@ -121,6 +121,9 @@ const configSchema = z
     // Portal design engine. `legacy` keeps every workspace on today's theme,
     // whatever the portalDesignV2 flag says.
     portalDesignEngine: z.enum(['auto', 'legacy']).default('auto'),
+    // Quackback AI may write a portal design's CSS as well as its fields. Off
+    // until it is shown to design better with it.
+    portalDesignAiCss: envBoolean,
 
     // Database
     //
@@ -374,6 +377,7 @@ function buildConfigFromEnv(): unknown {
     baseUrl: process.env.BASE_URL,
     port: env('PORT'),
     portalDesignEngine: env('PORTAL_DESIGN_ENGINE'),
+    portalDesignAiCss: env('PORTAL_DESIGN_AI_CSS'),
 
     // Database
     databaseUrl: env('DATABASE_URL'),
@@ -568,6 +572,9 @@ export const config = {
   },
   get portalDesignEngine() {
     return loadConfig().portalDesignEngine
+  },
+  get portalDesignAiCss() {
+    return loadConfig().portalDesignAiCss
   },
   get controlDatabaseUrl() {
     return loadConfig().controlDatabaseUrl

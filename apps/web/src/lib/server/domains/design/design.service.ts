@@ -24,6 +24,7 @@ import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/erro
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import { lintDesignCss } from './css-lint'
 import { portalDesign, type PortalDesign } from '@/lib/shared/design/schema'
+import { readStoredDesign } from '@/lib/shared/design/stored-design'
 import { logger } from '@/lib/server/logger'
 import { digestOf } from '@/lib/server/utils/canonical-json'
 
@@ -44,6 +45,23 @@ export interface DesignState {
   published: { revisionId: PortalDesignRevisionId; number: number; document: PortalDesign } | null
   draft: PortalDesign | null
   draftBaseRevisionId: PortalDesignRevisionId | null
+}
+
+/**
+ * A stored document as this build reads it. Fields a newer build added are set
+ * aside, so a rollback keeps the brand; a document that is not a design at all
+ * reads as null.
+ */
+function storedDesign(document: unknown, which: string): PortalDesign | null {
+  const read = readStoredDesign(document)
+  if (!read) {
+    log.error({ which }, 'stored design no longer parses')
+    return null
+  }
+  if (read.dropped.length > 0) {
+    log.warn({ which, dropped: read.dropped }, 'stored design has fields this build does not know')
+  }
+  return read.design
 }
 
 /** A document checked twice: by the schema, then by the contrast solver. */
@@ -82,7 +100,7 @@ async function assertCssAllowed(
   const css = document.css?.trim() ?? ''
   if (!css) return
   const published = await revision(executor, publishedRevisionId)
-  const live = published ? portalDesign.parse(published.document).css?.trim() : undefined
+  const live = published ? storedDesign(published.document, 'published')?.css?.trim() : undefined
   if (css === live) return
   const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
   await assertTierFeature('customCss', 'Custom CSS')
@@ -116,16 +134,14 @@ export async function getDesignState(): Promise<DesignState | null> {
   const row = await designRow(db)
   if (!row) return null
   const published = await revision(db, row.publishedRevisionId)
+  const document = published ? storedDesign(published.document, 'published') : null
   return {
     id: row.id,
-    published: published
-      ? {
-          revisionId: published.id,
-          number: published.number,
-          document: portalDesign.parse(published.document),
-        }
-      : null,
-    draft: row.draft ? portalDesign.parse(row.draft) : null,
+    published:
+      published && document
+        ? { revisionId: published.id, number: published.number, document }
+        : null,
+    draft: row.draft ? storedDesign(row.draft, 'draft') : null,
     draftBaseRevisionId: row.draftBaseRevisionId,
   }
 }
@@ -145,16 +161,8 @@ export async function getPublishedRevision(): Promise<{
     .where(defaultSite())
     .limit(1)
   if (!row) return null
-  const parsed = portalDesign.safeParse(row.document)
-  if (!parsed.success) {
-    // Every revision was validated when it was published, so this is a stored row gone bad.
-    log.error(
-      { revision: row.number, issues: parsed.error.issues },
-      'published design no longer parses'
-    )
-    return null
-  }
-  return { document: parsed.data, number: row.number }
+  const document = storedDesign(row.document, `revision ${row.number}`)
+  return document ? { document, number: row.number } : null
 }
 
 /** The design visitors see, or null when the site has never published one. */
@@ -394,10 +402,13 @@ export async function restoreRevision(
     }
     const draft = row.draft
     const draftBase = row.draftBaseRevisionId
+    const document = storedDesign(old.document, `revision ${old.number}`)
+    if (!document)
+      throw new NotFoundError('REVISION_NOT_FOUND', 'That version can no longer be read.')
     const published = await publishDocument(
       tx,
       row.id,
-      portalDesign.parse(old.document),
+      document,
       author,
       'restore',
       `Restored version ${old.number}`

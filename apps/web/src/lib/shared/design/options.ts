@@ -7,12 +7,36 @@ export const DESIGN_OPTIONS = {
   /** `auto` follows the visitor's device. */
   mode: ['light', 'dark', 'auto'],
   corners: ['sharp', 'subtle', 'rounded', 'pill'],
+  /** Buttons' own shape; `match` follows the corners. */
+  buttons: ['match', 'square', 'rounded', 'pill'],
+  /** Status markers: coloured dots, dots in the ink, tinted tags, or the logo's colours. */
+  status: ['colour', 'ink', 'pill', 'brand'],
   headingWeight: [500, 600, 700, 800],
   fontKind: ['bundled', 'uploaded'],
-  logoDisplay: ['mark_and_name', 'mark', 'wordmark'],
+  /** `name` sets the workspace name in the heading font, a wordmark without a file. */
+  logoDisplay: ['mark_and_name', 'mark', 'wordmark', 'name'],
+  /** How large page headlines are. */
+  typeScale: ['standard', 'large', 'display'],
+  /** How closely headings are set. */
+  tracking: ['normal', 'tight'],
+  /** Headlines, or labels (the menu and buttons), in sentence or upper case. */
+  textCase: ['sentence', 'upper'],
+  /** How a headline marks out a phrase: in the accent colour, or highlighted. */
+  headlineAccent: ['colour', 'highlight'],
   header: ['stacked', 'inline', 'centered'],
   nav: ['tabs', 'underline', 'pills'],
-  band: ['none', 'tint', 'fade', 'brand'],
+  /** `support` fills with the second brand colour; `blend` runs the two together. */
+  band: ['none', 'tint', 'fade', 'brand', 'support', 'blend'],
+  /** How a blend band runs: in a line, or as a soft mesh beside the words. */
+  blend: ['linear', 'mesh'],
+  /** Where the band's words sit. */
+  bandAlign: ['left', 'centre'],
+  /** The band across the page, as a rounded panel within it, or with its words on a panel. */
+  bandShape: ['full', 'inset', 'panel'],
+  /** Where the band's image sits: beside the words, along its bottom, behind them, or tiled. */
+  imagePlace: ['side', 'edge', 'cover', 'pattern'],
+  /** Home's composer: a block on the grid, or in the band under the headline. */
+  composerPlace: ['block', 'band'],
   cards: ['bordered', 'raised', 'list'],
   density: ['compact', 'comfortable', 'spacious'],
   width: ['narrow', 'default', 'wide'],
@@ -67,6 +91,19 @@ export const BUNDLED_FONT_IDS = [
   'ibm-plex-sans',
   'fraunces',
   'bricolage-grotesque',
+  'inter-tight',
+  'sora',
+  'outfit',
+  'figtree',
+  'work-sans',
+  'instrument-sans',
+  'noto-sans',
+  'rubik',
+  'karla',
+  'libre-franklin',
+  'barlow-condensed',
+  'oswald',
+  'source-serif',
   'system-mono',
 ] as const
 export type BlockType = (typeof DESIGN_OPTIONS.blockType)[number]

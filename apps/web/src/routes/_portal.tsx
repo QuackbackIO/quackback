@@ -39,6 +39,7 @@ import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
 import { usePreviewCss } from '@/components/public/preview-draft-context'
+import { BrandStatusColours } from '@/components/public/brand-status-colours'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 import { shownName } from '@/lib/shared/greeting-name'
 
@@ -384,6 +385,13 @@ function PortalLayout() {
     permissionKeys,
   } = loaderData
   const words = usePublishedPortalWords()
+  const statusColours = useRouteContext({
+    from: '__root__',
+    select: (context) =>
+      context.settings?.portalDesign?.engine === 'v2'
+        ? context.settings.portalDesign.statusColours
+        : null,
+  })
   const feedCopy = useRouteContext({
     from: '__root__',
     select: (context) =>
@@ -405,26 +413,28 @@ function PortalLayout() {
           {/* Draft bridge for the admin branding preview; renders children
               untouched (and provides no context) outside preview mode. */}
           <FeedCopyContext.Provider value={feedCopy}>
-            <PortalPreviewProvider enabled={preview === true}>
-              <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
-              <div data-portal="" className="min-h-screen bg-background flex flex-col">
-                <PortalHeader
-                  orgName={workspaceName}
-                  orgLogo={brandingData?.logoUrl ?? null}
-                  userRole={userRole}
-                  initialUserData={initialUserData}
-                  // The toggle is inert under a forced theme, and the preview
-                  // always forces one — hide it there.
-                  showThemeToggle={themeMode === 'user' && !preview}
-                />
-                <main className="flex-1 w-full flex flex-col">
-                  <FileViewerProvider onJumpToMessage={scrollToMessage}>
-                    <Outlet />
-                  </FileViewerProvider>
-                </main>
-                <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
-              </div>
-            </PortalPreviewProvider>
+            <BrandStatusColours colours={statusColours}>
+              <PortalPreviewProvider enabled={preview === true}>
+                <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
+                <div data-portal="" className="min-h-screen bg-background flex flex-col">
+                  <PortalHeader
+                    orgName={workspaceName}
+                    orgLogo={brandingData?.logoUrl ?? null}
+                    userRole={userRole}
+                    initialUserData={initialUserData}
+                    // The toggle is inert under a forced theme, and the preview
+                    // always forces one — hide it there.
+                    showThemeToggle={themeMode === 'user' && !preview}
+                  />
+                  <main className="flex-1 w-full flex flex-col">
+                    <FileViewerProvider onJumpToMessage={scrollToMessage}>
+                      <Outlet />
+                    </FileViewerProvider>
+                  </main>
+                  <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
+                </div>
+              </PortalPreviewProvider>
+            </BrandStatusColours>
           </FeedCopyContext.Provider>
         </AuthPopoverProvider>
       </PortalPermissionsProvider>

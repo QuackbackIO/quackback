@@ -6,7 +6,8 @@
       "accent": "#f5b301",
       "background": "#fffaf0",
       "ink": "#1c1408",
-      "surface": "#ffffff"
+      "surface": "#ffffff",
+      "support": "#2b2a28"
     },
     "fonts": {
       "heading": {
@@ -25,7 +26,10 @@
         "kind": "bundled",
         "id": "inter"
       },
-      "headingWeight": 700
+      "headingWeight": 700,
+      "scale": "display",
+      "tracking": "tight",
+      "headlineCase": "upper"
     },
     "logo": {
       "mark": {
@@ -52,16 +56,19 @@
     }
   },
   "shape": {
-    "corners": "subtle"
+    "corners": "subtle",
+    "buttons": "square"
   },
   "layout": {
     "header": "centered",
     "nav": "tabs",
-    "band": "brand",
+    "band": "support",
     "cards": "bordered",
     "density": "compact",
     "width": "default",
-    "filters": "end"
+    "filters": "end",
+    "bandShape": "inset",
+    "status": "ink"
   },
   "pages": {
     "home": {
@@ -75,6 +82,12 @@
         },
         "subtitle": {
           "en": "Ideas from players shape every update."
+        },
+        "accent": {
+          "style": "colour",
+          "text": {
+            "en": "next season"
+          }
         }
       },
       "welcome": {

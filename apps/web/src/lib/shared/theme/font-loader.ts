@@ -39,6 +39,32 @@ export function loadBrandingFont(id: BrandingFontId | string | null | undefined)
       return import('@/styles/fonts/manrope.css')
     case 'space-grotesk':
       return import('@/styles/fonts/space-grotesk.css')
+    case 'inter-tight':
+      return import('@/styles/fonts/inter-tight.css')
+    case 'sora':
+      return import('@/styles/fonts/sora.css')
+    case 'outfit':
+      return import('@/styles/fonts/outfit.css')
+    case 'figtree':
+      return import('@/styles/fonts/figtree.css')
+    case 'work-sans':
+      return import('@/styles/fonts/work-sans.css')
+    case 'instrument-sans':
+      return import('@/styles/fonts/instrument-sans.css')
+    case 'noto-sans':
+      return import('@/styles/fonts/noto-sans.css')
+    case 'rubik':
+      return import('@/styles/fonts/rubik.css')
+    case 'karla':
+      return import('@/styles/fonts/karla.css')
+    case 'libre-franklin':
+      return import('@/styles/fonts/libre-franklin.css')
+    case 'barlow-condensed':
+      return import('@/styles/fonts/barlow-condensed.css')
+    case 'oswald':
+      return import('@/styles/fonts/oswald.css')
+    case 'source-serif':
+      return import('@/styles/fonts/source-serif-4.css')
     case 'playfair':
       return import('@/styles/fonts/playfair-display.css')
     case 'merriweather':

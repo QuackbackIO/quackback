@@ -50,6 +50,8 @@ const palette = z
     /** Secondary text. Derived to 4.5:1 when missing. */
     muted: color.optional(),
     border: color.optional(),
+    /** A second brand colour, for bands and highlights. Dark keeps light's when missing. */
+    support: color.optional(),
   })
   .strict()
 
@@ -92,7 +94,18 @@ const font = z.discriminatedUnion('kind', [
 
 const sort = z.enum(DESIGN_OPTIONS.sort)
 const width = z.enum(DESIGN_OPTIONS.blockWidth)
-const headline = z.object({ title: localized, subtitle: localized }).strict().nullable()
+const headline = z
+  .object({
+    title: localized,
+    subtitle: localized,
+    /** A phrase of the title, by locale, set apart in the accent colour or highlighted. */
+    accent: z
+      .object({ style: z.enum(DESIGN_OPTIONS.headlineAccent), text: localizedUpTo(60) })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .nullable()
 const link = z.object({ label, url: httpUrl }).strict()
 
 /** Home blocks. `roadmapId: null` is the first public roadmap; empty `categoryIds` the first public categories. */
@@ -182,6 +195,11 @@ export const portalDesignV2 = z
                 z.ZodLiteral<800>,
               ]
             ),
+            /** Absent fields read as standard, normal and sentence: today's type. */
+            scale: z.enum(DESIGN_OPTIONS.typeScale).optional(),
+            tracking: z.enum(DESIGN_OPTIONS.tracking).optional(),
+            headlineCase: z.enum(DESIGN_OPTIONS.textCase).optional(),
+            labelCase: z.enum(DESIGN_OPTIONS.textCase).optional(),
           })
           .strict(),
         logo: z
@@ -192,16 +210,38 @@ export const portalDesignV2 = z
             name: z.string().trim().max(60).optional(),
           })
           .strict(),
+        /** An image for the band, such as a photo or a pattern. */
+        bandImage: asset.optional(),
+        /** The logo's own colours, for status markers in the brand's colours. */
+        logoColours: z.array(color).max(6).optional(),
         favicon: asset.nullable(),
         shareImage: asset.nullable(),
       })
       .strict(),
-    shape: z.object({ corners: z.enum(DESIGN_OPTIONS.corners) }).strict(),
+    shape: z
+      .object({
+        corners: z.enum(DESIGN_OPTIONS.corners),
+        /** Absent follows the corners. */
+        buttons: z.enum(DESIGN_OPTIONS.buttons).optional(),
+      })
+      .strict(),
     layout: z
       .object({
         header: z.enum(DESIGN_OPTIONS.header),
         nav: z.enum(DESIGN_OPTIONS.nav),
         band: z.enum(DESIGN_OPTIONS.band),
+        /** How a blend band runs; absent is linear. */
+        blend: z.enum(DESIGN_OPTIONS.blend).optional(),
+        /** Absent follows the header: centred under a centred header, else left. */
+        bandAlign: z.enum(DESIGN_OPTIONS.bandAlign).optional(),
+        /** Absent is full. */
+        bandShape: z.enum(DESIGN_OPTIONS.bandShape).optional(),
+        /** The header in the band's colour, so the two read as one. */
+        headerOnBand: z.boolean().optional(),
+        /** Absent is coloured dots. */
+        status: z.enum(DESIGN_OPTIONS.status).optional(),
+        /** Where the band's image sits; absent is beside the words. */
+        imagePlace: z.enum(DESIGN_OPTIONS.imagePlace).optional(),
         cards: z.enum(DESIGN_OPTIONS.cards),
         density: z.enum(DESIGN_OPTIONS.density),
         width: z.enum(DESIGN_OPTIONS.width),
@@ -210,7 +250,14 @@ export const portalDesignV2 = z
       .strict(),
     pages: z
       .object({
-        home: z.object({ headline, blocks: z.array(homeBlock).max(12) }).strict(),
+        home: z
+          .object({
+            headline,
+            blocks: z.array(homeBlock).max(12),
+            /** Where its composer block shows; absent is on the grid. */
+            composer: z.enum(DESIGN_OPTIONS.composerPlace).optional(),
+          })
+          .strict(),
         feedback: z
           .object({
             headline,

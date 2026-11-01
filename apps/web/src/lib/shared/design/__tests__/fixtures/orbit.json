@@ -16,7 +16,9 @@
         "kind": "bundled",
         "id": "manrope"
       },
-      "headingWeight": 700
+      "headingWeight": 700,
+      "scale": "large",
+      "labelCase": "upper"
     },
     "logo": {
       "mark": {
@@ -31,7 +33,7 @@
         "light": null,
         "dark": null
       },
-      "display": "mark_and_name",
+      "display": "name",
       "name": "orbit"
     },
     "favicon": {
@@ -46,7 +48,8 @@
     }
   },
   "shape": {
-    "corners": "rounded"
+    "corners": "rounded",
+    "buttons": "pill"
   },
   "layout": {
     "header": "inline",
@@ -55,7 +58,8 @@
     "cards": "raised",
     "density": "comfortable",
     "width": "wide",
-    "filters": "end"
+    "filters": "end",
+    "status": "pill"
   },
   "pages": {
     "home": {
@@ -65,9 +69,19 @@
         },
         "subtitle": {
           "en": "What we are shipping, what is next, and how it is running."
+        },
+        "accent": {
+          "style": "highlight",
+          "text": {
+            "en": "Orbit"
+          }
         }
       },
       "blocks": [
+        {
+          "type": "composer",
+          "width": "full"
+        },
         {
           "type": "status",
           "width": "third"

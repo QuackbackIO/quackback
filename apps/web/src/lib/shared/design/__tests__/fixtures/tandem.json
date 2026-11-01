@@ -6,7 +6,8 @@
       "accent": "#2952e3",
       "background": "#f7f9fc",
       "ink": "#0f172a",
-      "surface": "#ffffff"
+      "surface": "#ffffff",
+      "support": "#14b8a6"
     },
     "fonts": {
       "heading": {
@@ -41,16 +42,18 @@
     "shareImage": null
   },
   "shape": {
-    "corners": "rounded"
+    "corners": "rounded",
+    "buttons": "rounded"
   },
   "layout": {
     "header": "stacked",
     "nav": "underline",
-    "band": "none",
+    "band": "blend",
     "cards": "raised",
     "density": "comfortable",
     "width": "default",
-    "filters": "end"
+    "filters": "end",
+    "blend": "mesh"
   },
   "pages": {
     "home": {

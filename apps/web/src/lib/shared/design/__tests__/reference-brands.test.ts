@@ -8,20 +8,38 @@
 import { describe, expect, it } from 'vitest'
 import { BLOCK_WIDTHS, DESIGN_OPTIONS, type DesignOption } from '../options'
 
+type Headline = { title: unknown; accent?: { style: string } } | null
+
 interface Fixture {
   version: number
   mode: string
   brand: {
     light: Record<string, string>
     dark?: Record<string, string>
-    fonts: { heading: { kind: string }; body: { kind: string }; headingWeight: number }
+    fonts: {
+      heading: { kind: string }
+      body: { kind: string }
+      headingWeight: number
+      scale?: string
+      tracking?: string
+      headlineCase?: string
+      labelCase?: string
+    }
     logo: { display: string }
+    bandImage?: { key: string }
   }
-  shape: { corners: string }
-  layout: Record<'header' | 'nav' | 'band' | 'cards' | 'density' | 'width' | 'filters', string>
+  shape: { corners: string; buttons?: string }
+  layout: Record<'header' | 'nav' | 'band' | 'cards' | 'density' | 'width' | 'filters', string> & {
+    blend?: string
+    bandAlign?: string
+    bandShape?: string
+    status?: string
+    imagePlace?: string
+  }
   pages: {
     home: {
-      headline: unknown
+      headline: Headline
+      composer?: string
       blocks: Array<{
         type: string
         width: string
@@ -31,7 +49,7 @@ interface Fixture {
       }>
     }
     feedback: {
-      headline: unknown
+      headline: Headline
       welcome: { show: boolean }
       defaultSort: string
       copy: Record<string, Record<string, string>>
@@ -63,8 +81,24 @@ function used(): Record<DesignOption, Set<string>> {
     add('fontKind', doc.brand.fonts.heading.kind)
     add('fontKind', doc.brand.fonts.body.kind)
     add('logoDisplay', doc.brand.logo.display)
+    // An absent type choice is today's type.
+    const { scale, tracking, headlineCase, labelCase } = doc.brand.fonts
+    add('typeScale', scale ?? 'standard')
+    add('tracking', tracking ?? 'normal')
+    add('textCase', headlineCase ?? 'sentence')
+    add('textCase', labelCase ?? 'sentence')
+    for (const headline of [doc.pages.home.headline, doc.pages.feedback.headline])
+      if (headline?.accent) add('headlineAccent', headline.accent.style)
     for (const key of ['header', 'nav', 'band', 'cards', 'density', 'width', 'filters'] as const)
       add(key, doc.layout[key])
+    if (doc.layout.band === 'blend') add('blend', doc.layout.blend ?? 'linear')
+    add('bandAlign', doc.layout.bandAlign ?? (doc.layout.header === 'centered' ? 'centre' : 'left'))
+    add('bandShape', doc.layout.bandShape ?? 'full')
+    add('buttons', doc.shape.buttons ?? 'match')
+    add('status', doc.layout.status ?? 'colour')
+    if (doc.brand.bandImage) add('imagePlace', doc.layout.imagePlace ?? 'side')
+    if (doc.pages.home.blocks.some((block) => block.type === 'composer'))
+      add('composerPlace', doc.pages.home.composer ?? 'block')
     add('sort', doc.pages.feedback.defaultSort)
     for (const block of doc.pages.home.blocks) {
       add('blockType', block.type)

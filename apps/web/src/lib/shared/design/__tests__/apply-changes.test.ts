@@ -1,11 +1,13 @@
 /**
- * Quackback AI changes the draft through a short list of design fields. Each
- * change is applied on its own and kept only when the design stays valid and
- * readable; a change outside the scope a person picked is never applied.
+ * Quackback AI changes the draft with one tool: any field of the design, by
+ * its path. Each change is applied on its own and kept only when the design
+ * stays valid and readable; a change outside the scope a person picked is
+ * never applied, and the model's own changes bring in nothing the workspace
+ * did not give it.
  */
 import { describe, expect, it } from 'vitest'
 import { defaultDesign } from '@/lib/shared/design/schema'
-import { applyDesignChanges, DESIGN_AI_PATHS, scopeFields } from '../apply-changes'
+import { applyDesignChanges, docText, scopeFields } from '../apply-changes'
 
 describe('applyDesignChanges', () => {
   it('applies colours, fonts and layout, and reports each one', () => {
@@ -32,18 +34,24 @@ describe('applyDesignChanges', () => {
     expect(result.applied[0]).toMatchObject({ before: 'oklch(0.886 0.176 86)', after: '#0f766e' })
   })
 
-  it('skips a path it does not offer, such as CSS', () => {
+  it('refuses a field the design does not have, and a path that reaches outside it', () => {
     const result = applyDesignChanges(
       defaultDesign(),
       [
-        { path: 'css', value: 'body { display: none }' },
+        { path: 'brand.gradient', value: 'linear-gradient(red, blue)' },
+        { path: '__proto__.polluted', value: true },
+        { path: 'layout.cards.inner', value: 1 },
         { path: 'brand.logo.display', value: 'mark' },
       ],
       'site'
     )
-    expect(result.applied).toEqual([])
-    expect(result.skipped).toBe(2)
-    expect(result.design.css).toBeUndefined()
+    expect(result.applied.map((change) => change.path)).toEqual(['brand.logo.display'])
+    expect(result.refused.map((change) => change.path)).toEqual([
+      'brand.gradient',
+      '__proto__.polluted',
+      'layout.cards.inner',
+    ])
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
   })
 
   it('skips a value the design does not allow, and keeps the rest', () => {
@@ -114,8 +122,8 @@ describe('applyDesignChanges', () => {
     })
     expect(result.applied[1]).toEqual({
       path: 'pages.feedback.headline.subtitle',
-      before: null,
-      after: 'Tell us what would help.',
+      before: {},
+      after: { en: 'Tell us what would help.' },
     })
   })
 
@@ -129,7 +137,7 @@ describe('applyDesignChanges', () => {
       ],
       'header'
     )
-    expect(result.outOfScope).toEqual(['layout.band'])
+    expect(result.outOfScope).toEqual(['layout.band', 'css'])
     expect(result.applied.map((change) => change.path)).toEqual(['layout.nav'])
   })
 
@@ -149,20 +157,82 @@ describe('applyDesignChanges', () => {
         { type: 'paragraph', content: [{ type: 'text', text: 'Tell us what would help.' }] },
       ],
     })
-    expect(result.applied[1]).toEqual({
-      path: 'pages.feedback.welcome.body',
-      before: null,
-      after: 'Welcome!\n\nTell us what would help.',
-    })
+    expect(result.applied[1]?.path).toBe('pages.feedback.welcome.body')
+    expect(docText(result.applied[1]?.after)).toBe('Welcome!\n\nTell us what would help.')
   })
 
-  it('lists the fields each section reaches', () => {
-    expect(scopeFields('header')).toEqual(['layout.header', 'layout.nav'])
-    expect(scopeFields('site')).toEqual([...DESIGN_AI_PATHS])
+  it('lists the fields each section reaches, and everything under them', () => {
+    expect(scopeFields('header')).toEqual([
+      'layout.header',
+      'layout.nav',
+      'nav',
+      'brand.logo.display',
+    ])
+    const home = applyDesignChanges(
+      defaultDesign(),
+      [
+        { path: 'nav.home.on', value: true },
+        { path: 'pages.home.blocks.0', value: { type: 'composer', width: 'full' } },
+        { path: 'layout.cards', value: 'list' },
+      ],
+      'home'
+    )
+    expect(home.applied.map((change) => change.path)).toEqual([
+      'nav.home.on',
+      'pages.home.blocks.0',
+    ])
+    expect(home.outOfScope).toEqual(['layout.cards'])
   })
 
-  it('offers every path a scope names', () => {
-    expect(DESIGN_AI_PATHS).toContain('pages.feedback.defaultSort')
-    expect(DESIGN_AI_PATHS).not.toContain('css')
+  it('undoes any change by writing back what was there, a removed field included', () => {
+    const changed = applyDesignChanges(
+      defaultDesign(),
+      [
+        { path: 'pages.feedback.copy.submit', value: 'Send it' },
+        { path: 'nav.items', value: [{ type: 'feedback', shown: true }] },
+      ],
+      'site'
+    )
+    const undone = applyDesignChanges(
+      changed.design,
+      changed.applied.map((change) => ({ path: change.path, value: change.before })),
+      'site'
+    )
+    expect(undone.design).toEqual(defaultDesign())
+  })
+
+  it('writes own wording and dark colours that are not there yet', () => {
+    const result = applyDesignChanges(
+      defaultDesign(),
+      [
+        { path: 'pages.feedback.copy.prompt', value: 'Pitch an idea' },
+        { path: 'brand.dark.background', value: '#101614' },
+      ],
+      'site'
+    )
+    expect(result.refused).toEqual([])
+    expect(result.design.pages.feedback.copy.prompt).toEqual({ en: 'Pitch an idea' })
+    expect(result.design.brand.dark?.background).toBe('#101614')
+  })
+
+  it('keeps the rest of a Home layout from the model when a block’s page is off', () => {
+    const result = applyDesignChanges(
+      defaultDesign(),
+      [
+        {
+          path: 'pages.home.blocks',
+          value: [
+            { type: 'composer', width: 'two_thirds' },
+            { type: 'status', width: 'third' },
+          ],
+        },
+      ],
+      'site',
+      { blockTypes: ['composer'], links: new Set(), checkCss: () => null }
+    )
+    expect(result.design.pages.home.blocks.map((block) => block.type)).toEqual(['composer'])
+    expect(result.refused).toEqual([
+      { path: 'pages.home.blocks', reason: 'the status block needs its page on' },
+    ])
   })
 })
