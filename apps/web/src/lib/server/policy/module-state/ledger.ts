@@ -506,6 +506,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'identical for every workspace.',
   },
   {
+    file: 'apps/web/src/lib/server/trusted-proxy-peers.ts',
+    name: 'cached',
+    category: 'content-addressed',
+    reason:
+      'The compiled BlockList for one TRUSTED_PROXY_CIDRS value, keyed by that value joined into a ' +
+      'string. The list is env-only and the same for every workspace, so a cross-workspace hit is ' +
+      'the list the requesting workspace would have built from the same string. One entry, ' +
+      'replaced when the value changes.',
+  },
+  {
     file: 'apps/web/src/lib/shared/i18n.ts',
     name: 'messageCache',
     category: 'content-addressed',

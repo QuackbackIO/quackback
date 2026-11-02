@@ -16,6 +16,7 @@ import {
 import { API_MONTH_BUCKET_KEY, secondsUntilNextUtcMonth } from './monthly-usage'
 import { isIP } from 'node:net'
 import { config } from '@/lib/server/config'
+import { isTrustedProxyPeer } from '@/lib/server/trusted-proxy-peers'
 import { getRequestIP } from '@tanstack/react-start/server'
 import { logger } from '@/lib/server/logger'
 import {
@@ -190,6 +191,18 @@ function requestHostname(source: Request | Headers, headers: Headers): string | 
   }
 }
 
+/** The socket peer address, or null when the platform does not report a usable one. */
+function socketPeer(): string | null {
+  try {
+    const peer = getRequestIP()
+    if (peer && isIP(peer)) return peer
+  } catch {
+    // Not inside a request context (e.g. some test/tooling setups), so
+    // report no peer rather than throwing.
+  }
+  return null
+}
+
 /**
  * Extract client IP from request headers.
  *
@@ -230,6 +243,13 @@ function requestHostname(source: Request | Headers, headers: Headers): string | 
  *   from the client. Only the operator knows, which is why reading one
  *   takes an explicit TRUSTED_CLIENT_IP_HEADER.
  *
+ * With TRUSTED_PROXY_CIDRS set, the header and hop rules above apply only to a
+ * request whose socket peer is inside that list. A peer outside it is not a
+ * proxy the operator vouched for, so it is the client and its client-IP
+ * headers (X-Forwarded-For and TRUSTED_CLIENT_IP_HEADER) are ignored. Without a usable socket peer the result is
+ * 'unknown'. This closes the spoofing path of an app port that is reachable
+ * both through the proxy and directly.
+ *
  * All of these yield to a visitor address signed by the trusted edge proxy that
  * serves custom hostnames (see `edgeClientIp` in workspaces/saas-edge-host):
  * that proxy is the TCP peer and the last X-Forwarded-For hop of every such
@@ -255,6 +275,19 @@ export function getClientIp(source: Request | Headers): string {
   // Startup validates config before serving traffic. Unit-level consumers may
   // intentionally load this helper without a complete runtime environment;
   // fail closed to direct-peer semantics in that case.
+  const proxyCidrs = (() => {
+    try {
+      return config.trustedProxyCidrs ?? []
+    } catch {
+      return []
+    }
+  })()
+  if (proxyCidrs.length > 0) {
+    const peer = socketPeer()
+    if (!peer) return 'unknown'
+    if (!isTrustedProxyPeer(peer, proxyCidrs)) return peer
+  }
+
   const trustedHeader = (() => {
     try {
       return config.trustedClientIpHeader
@@ -279,14 +312,7 @@ export function getClientIp(source: Request | Headers): string {
     // With a trusted header configured the operator has described their proxy;
     // its own warning above covers a request that lacks it.
     if (!trustedHeader) warnIfForwardedHeaders(headers)
-    try {
-      const peer = getRequestIP()
-      if (peer && isIP(peer)) return peer
-    } catch {
-      // Not inside a request context (e.g. some test/tooling setups), so
-      // fall through to 'unknown' rather than throwing.
-    }
-    return 'unknown'
+    return socketPeer() ?? 'unknown'
   }
 
   const forwarded = headers.get('x-forwarded-for')
