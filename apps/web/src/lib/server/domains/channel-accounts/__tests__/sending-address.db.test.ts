@@ -20,10 +20,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 const createIdentity = vi.fn<(domain: string) => Promise<SesIdentityCreation>>()
+/** What the provider reports for a domain before anything is created here. */
+const existingIdentity = vi.fn<(domain: string) => SesDomainIdentity | null>()
 vi.mock('@quackback/email/ses-identity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@quackback/email/ses-identity')>()),
   createSesDomainIdentity: (domain: string) => createIdentity(domain),
-  getSesDomainIdentity: async (domain: string) => identity(domain),
+  getSesDomainIdentity: async (domain: string) => existingIdentity(domain) ?? identity(domain),
   putSesMailFromDomain: async () => {},
 }))
 
@@ -44,7 +46,12 @@ vi.mock('@/lib/server/email/recipient', async (importOriginal) => ({
   resolveAccountRecipient: async (userId: string) => accountEmails.get(userId) ?? null,
 }))
 
-/** A zone with nothing in it, so pre-flight finds every name free. */
+/**
+ * A zone with nothing in it, so pre-flight finds every name free. The
+ * nameserver lookup runs a test's hook first, for work that has to land
+ * between an add looking for its domain and inserting one.
+ */
+const duringPreflight = vi.fn<() => Promise<void>>()
 vi.mock('../dns-resolver', () => {
   const none = async () => {
     throw Object.assign(new Error('ENODATA'), { code: 'ENODATA' })
@@ -55,7 +62,10 @@ vi.mock('../dns-resolver', () => {
       resolveCname: none,
       resolveMx: none,
       resolve4: none,
-      resolveNs: none,
+      resolveNs: async () => {
+        await duringPreflight()
+        return none()
+      },
     },
   }
 })
@@ -166,6 +176,8 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       .mockReset()
       .mockImplementation(async (domain) => ({ identity: identity(domain), preexisting: false }))
     maxSendingDomains.mockReset().mockReturnValue(null)
+    existingIdentity.mockReset().mockReturnValue(null)
+    duringPreflight.mockReset().mockResolvedValue()
     sent.mockReset()
     accountEmails.clear()
     guardAsked.mockReset()
@@ -295,6 +307,67 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       expect(account).toMatchObject({ address: 'help@b.example', sendingDomainId: null })
       expect((await domainsOf(teamId)).map((d) => d.domain)).toEqual(['a.example'])
     })
+
+    it('leaves a domain verified by hand alone on a single-workspace server', async () => {
+      // The operator verified acme.com themselves; creating a row and an
+      // identity setup over it would only get in the way.
+      vi.stubEnv('QUACKBACK_TENANCY', '')
+      existingIdentity.mockImplementation((domain) =>
+        domain === 'acme.com'
+          ? { ...identity(domain), dkimStatus: 'SUCCESS', verifiedForSending: true }
+          : null
+      )
+      const teamId = await seedTeam()
+      const account = await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@acme.com',
+        module: 'support',
+      })
+      expect(account).toMatchObject({ address: 'help@acme.com', sendingDomainId: null })
+      expect(await domainsOf(teamId)).toEqual([])
+      expect(createIdentity).not.toHaveBeenCalled()
+    })
+
+    it('still sets up an unverified identity on a single-workspace server', async () => {
+      vi.stubEnv('QUACKBACK_TENANCY', '')
+      existingIdentity.mockImplementation((domain) => ({
+        ...identity(domain),
+        verifiedForSending: false,
+      }))
+      const teamId = await seedTeam()
+      const account = await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@acme.com',
+        module: 'support',
+      })
+      expect(account.sendingDomainId).not.toBeNull()
+      expect(createIdentity).toHaveBeenCalledWith('acme.com')
+    })
+
+    it.each([
+      ['shared', 'pooled'],
+      ['single-workspace', ''],
+    ])(
+      'reuses the row another add created for the same domain a moment earlier (%s)',
+      async (_l, tenancy) => {
+        // The other add's row lands after this one looked for it and before it
+        // inserted its own, which is the unique-key race.
+        vi.stubEnv('QUACKBACK_TENANCY', tenancy)
+        const teamId = await seedTeam()
+        let winner: { id: string } | undefined
+        duringPreflight.mockImplementationOnce(async () => {
+          winner = await seedDomain(teamId, 'acme.com', 'pending')
+        })
+        const account = await addSendingAddress({
+          owningTeamId: teamId,
+          address: 'help@acme.com',
+          module: 'support',
+        })
+        expect(winner).toBeDefined()
+        expect(await domainsOf(teamId)).toHaveLength(1)
+        expect(account.sendingDomainId).toBe(winner?.id)
+      }
+    )
 
     it('adds the platform default address without setting up a domain', async () => {
       const teamId = await seedTeam()

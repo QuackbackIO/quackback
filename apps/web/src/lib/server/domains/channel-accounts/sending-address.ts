@@ -12,9 +12,11 @@
  */
 import { getEmailFrom, sendRawEmail } from '@quackback/email'
 import { addressDomain } from '@quackback/email/ses'
+import { getSesDomainIdentity } from '@quackback/email/ses-identity'
 import type { ChannelAccountId, SendingDomainId, TeamId, UserId } from '@quackback/ids'
 import type { ChannelAccount, EmailSendingDomain } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import { isUniqueViolation } from '@/lib/server/utils/pg-error'
 import { resolveAccountRecipient } from '@/lib/server/email/recipient'
 import {
   createSendingAddress,
@@ -90,8 +92,10 @@ function verifiedCovering(domains: EmailSendingDomain[], domain: string) {
  *   domain: this workspace's row for it in whatever state, or a new one under
  *   the usual rules (plan cap, pre-flight, refusals).
  * - In `any` mode the address is accepted regardless: a setup that cannot
- *   happen leaves it unlinked, as it always was there. In `unavailable` mode
+ *   happen leaves it unlinked, as it always was there, and a domain the
+ *   provider already reports verified is left as it is. In `unavailable` mode
  *   it is refused.
+ * - Two adds racing to set up the same new domain share the row that won.
  */
 export async function addSendingAddress(input: {
   owningTeamId: TeamId
@@ -115,23 +119,36 @@ export async function addSendingAddress(input: {
   }
   if (!customSendingDomainsAvailable()) return createSendingAddress({ ...input, address })
 
-  const existing = domain ? domains.find((d) => toAsciiDomain(d.domain) === domain) : undefined
-  let row: EmailSendingDomain
-  try {
-    row =
-      existing ??
-      (await provisionSendingDomain({ owningTeamId: input.owningTeamId, domain: domain ?? '' }))
-  } catch (err) {
-    if (mode !== 'any') throw err
-    log.warn({ err, domain }, 'sending domain setup failed; adding the address without it')
-    return createSendingAddress({ ...input, address })
+  const sameDomain = (d: EmailSendingDomain) => toAsciiDomain(d.domain) === domain
+  let row = domains.find(sameDomain)
+  let created = false
+  if (!row) {
+    try {
+      // A single workspace may have verified the domain with the provider by
+      // hand. Setting it up again here would only get in the way of that.
+      if (mode === 'any' && (await getSesDomainIdentity(domain ?? ''))?.verifiedForSending) {
+        return createSendingAddress({ ...input, address })
+      }
+      row = await provisionSendingDomain({ owningTeamId: input.owningTeamId, domain: domain ?? '' })
+      created = true
+    } catch (err) {
+      // Another add for the same new domain inserted its row first: use it.
+      if (isUniqueViolation(err)) {
+        row = (await listSendingDomains(input.owningTeamId)).find(sameDomain)
+      }
+      if (!row) {
+        if (mode !== 'any') throw err
+        log.warn({ err, domain }, 'sending domain setup failed; adding the address without it')
+        return createSendingAddress({ ...input, address })
+      }
+    }
   }
   try {
     return await createSendingAddress({ ...input, address, sendingDomainId: row.id })
   } catch (err) {
     // A domain set up for this address and nothing else would hold a plan
     // slot with no address to use it.
-    if (!existing) await deleteSendingDomain(row.id)
+    if (created) await deleteSendingDomain(row.id)
     throw err
   }
 }
