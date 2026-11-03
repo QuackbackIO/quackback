@@ -54,8 +54,10 @@ import { resolveEmailProvider } from '@quackback/email/provider'
 import type { SendingDomainId, TeamId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 import {
+  and,
   db,
   eq,
+  ne,
   emailSendingDomains,
   type EmailSendingDomain,
   type SendingDomainDnsRecord,
@@ -531,26 +533,38 @@ export async function refreshSendingDomain(
     checkRecords(row.domain, composed, systemResolver, now),
     readDmarc(row.domain, systemResolver),
   ])
-  const [updated] = await db
+  // Every field but the move to verified, which is made below on its own.
+  const promoted = status === 'verified'
+  const [written] = await db
     .update(emailSendingDomains)
     .set({
-      status,
+      ...(promoted ? {} : { status }),
       dnsRecords,
       ...(dmarc ? { preflight: { ...row.preflight, dmarc } } : {}),
       lastCheckedAt: now,
-      // Stamped once, on the transition. A domain that was verified and then
-      // regressed keeps the date it first became trustworthy, which is the
-      // question that date is ever asked.
-      ...(status === 'verified' && !row.verifiedAt ? { verifiedAt: now } : {}),
       updatedAt: now,
     })
     .where(eq(emailSendingDomains.id, id))
     .returning()
+  let updated = written
 
   // The one place a domain goes live, whether the watch job, the daily sweep or
-  // a person's click got it there.
-  if (updated && status === 'verified' && row.status !== 'verified') {
-    await notifySendingDomainLive(updated)
+  // a person's click got it there. Conditional, so when two checks find it
+  // live at once only the one whose update moved it rings the bell. The
+  // verified stamp is set once: a domain that regressed and recovered keeps the
+  // date it first became trustworthy.
+  if (written && promoted) {
+    const [won] = await db
+      .update(emailSendingDomains)
+      .set({ status: 'verified', ...(row.verifiedAt ? {} : { verifiedAt: now }), updatedAt: now })
+      .where(and(eq(emailSendingDomains.id, id), ne(emailSendingDomains.status, 'verified')))
+      .returning()
+    if (won) {
+      updated = won
+      await notifySendingDomainLive(won)
+    } else {
+      updated = (await getSendingDomain(id)) ?? written
+    }
   }
 
   log.info(

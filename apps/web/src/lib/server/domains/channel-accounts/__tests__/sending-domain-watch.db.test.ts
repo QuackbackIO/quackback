@@ -311,6 +311,28 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
       await refreshSendingDomain(row.id)
       expect(await bellsFor([admin], 'sending_domain_live')).toHaveLength(1)
     })
+    it('rings the live bell once when two checks see the domain go live together', async () => {
+      // The watch job and a person's Check again, at the same moment: both
+      // read the row as pending and both find it verified.
+      const admin = await seedPerson('admin')
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'a.example' })
+      await testDb.insert(channelAccounts).values({
+        owningTeamId: teamId,
+        role: 'sending',
+        address: 'help@a.example',
+        module: 'support',
+      })
+      publish('a.example', row.dnsRecords)
+      providerState.set('a.example', verifiedIdentity('a.example'))
+
+      const [first, second] = await Promise.all([
+        refreshSendingDomain(row.id),
+        refreshSendingDomain(row.id),
+      ])
+      expect(first?.status).toBe('verified')
+      expect(second?.status).toBe('verified')
+      expect(await bellsFor([admin], 'sending_domain_live')).toHaveLength(1)
+    })
   })
 
   describe('restartSendingDomainChecks', () => {
