@@ -27,6 +27,7 @@ import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/err
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { ProvenZoneSource } from '@/lib/shared/domain-proof'
 import { diffProviderAudit } from '@/lib/server/auth/idp-audit-diff'
 import { applyClaimMappingEdits } from '@/lib/shared/sso-claim-mapping-edit'
 import { PROFILE_FIELDS, isRoleRuleRoleId } from '@/lib/shared/oidc-claim-mapping'
@@ -134,7 +135,7 @@ export const removeVerifiedDomainFn = createServerFn({ method: 'POST' })
   })
 
 export type VerifyDomainResult =
-  | { verified: true; verifiedAt: string }
+  | { verified: true; verifiedAt: string; via: 'dns' | ProvenZoneSource }
   | { verified: false; reason: 'no-record' | 'lookup-failed' | 'mismatch' | 'no-pending-domain' }
 
 /** Read-only listing of the workspace's verified-domain rows. */
@@ -685,14 +686,11 @@ export const verifyProviderDomainFn = createServerFn({ method: 'POST' })
     }
     await assertVerifyDomainRateLimit(workspace.settings.id, dom.id)
 
-    const { lookupVerificationTxt } = await import('@/lib/server/auth/dns-verify')
-    const expected = `qb-domain-verify=${dom.verificationToken}`
-    const result = await lookupVerificationTxt(`_quackback-verify.${dom.name}`)
-    if (!result.ok) {
-      return { verified: false, reason: result.reason }
-    }
-    if (!result.values.includes(expected)) {
-      return { verified: false, reason: 'mismatch' }
+    const { checkSsoDomainOwnership } =
+      await import('@/lib/server/domains/domain-proof/sso-domain-check')
+    const check = await checkSsoDomainOwnership(dom)
+    if (!check.ok) {
+      return { verified: false, reason: check.reason }
     }
 
     const verifiedAt = new Date().toISOString()
@@ -709,8 +707,30 @@ export const verifyProviderDomainFn = createServerFn({ method: 'POST' })
       }
       throw err
     }
-    return { verified: true, verifiedAt }
+    return { verified: true, verifiedAt, via: check.via }
   })
+
+/**
+ * The single sign-on domains another proof already covers, by domain id, with
+ * the source that covers each. A pending one shows that note instead of the
+ * TXT record, and a verified one says where its proof came from.
+ */
+export const getSsoDomainProofsFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<Record<string, ProvenZoneSource>> => {
+    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+    const { getProvenZones, provenZoneCovering } =
+      await import('@/lib/server/domains/domain-proof/proven-zones')
+    const [workspace, zones] = await Promise.all([getWorkspaceSettings(), getProvenZones()])
+    const others = zones.filter((z) => z.source !== 'sso')
+    const proofs: Record<string, ProvenZoneSource> = {}
+    for (const d of workspace?.verifiedDomains ?? []) {
+      const covering = provenZoneCovering(d.name, others)
+      if (covering) proofs[d.id] = covering.source
+    }
+    return proofs
+  }
+)
 
 const setDomainEnforcedInput = z.object({
   id: verifiedDomainId,

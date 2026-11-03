@@ -12,7 +12,7 @@
  * has no Save button of its own — every action here is immediate.
  */
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { CheckCircleIcon, ClockIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
@@ -24,6 +24,7 @@ import { WarningBox } from '@/components/shared/warning-box'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import {
   addProviderDomainFn,
+  getSsoDomainProofsFn,
   removeVerifiedDomainFn,
   setDomainEnforcedFn,
   verifyProviderDomainFn,
@@ -31,6 +32,11 @@ import {
 } from '@/lib/server/functions/sso'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
+import {
+  proofSourceName,
+  verifiedThroughLabel,
+  type ProvenZoneSource,
+} from '@/lib/shared/domain-proof'
 import { IDENTITY_PROVIDERS_KEY, getConnectionTestState } from './provider-shared'
 
 const VERIFY_REASON_MESSAGES: Record<
@@ -44,6 +50,8 @@ const VERIFY_REASON_MESSAGES: Record<
   'lookup-failed': 'DNS lookup failed. Try again in a moment.',
   'no-pending-domain': 'No pending domain to verify.',
 }
+
+const SSO_DOMAIN_PROOFS_KEY = ['settings', 'ssoDomainProofs'] as const
 
 export function DomainsSection({
   provider,
@@ -59,12 +67,22 @@ export function DomainsSection({
   const [addError, setAddError] = useState('')
 
   const domains = provider?.domains ?? []
+  const getProofs = useServerFn(getSsoDomainProofsFn)
+  const proofs = useQuery({
+    queryKey: SSO_DOMAIN_PROOFS_KEY,
+    queryFn: () => getProofs(),
+    enabled: domains.length > 0,
+  })
   const hasVerified = domains.some((d) => d.verifiedAt)
   // Enforcement is available once the provider has a fresh test sign-in — same
   // predicate that drives the connection status line (see getConnectionTestState).
   const enforceable = getConnectionTestState(provider).kind === 'verified'
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY }),
+      queryClient.invalidateQueries({ queryKey: SSO_DOMAIN_PROOFS_KEY }),
+    ])
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -104,6 +122,7 @@ export function DomainsSection({
                 <DomainRow
                   key={d.id}
                   domain={d}
+                  provenBy={proofs.data?.[d.id] ?? null}
                   disabled={disabled}
                   enforceable={enforceable}
                   onChanged={refresh}
@@ -155,11 +174,14 @@ export function DomainsSection({
 
 function DomainRow({
   domain,
+  provenBy,
   disabled,
   enforceable,
   onChanged,
 }: {
   domain: VerifiedDomain
+  /** Another proof this workspace holds that already covers the domain. */
+  provenBy: ProvenZoneSource | null
   disabled: boolean
   /** True when the provider has a fresh test sign-in — the enforcement
    *  checkbox is enabled. False disables the checkbox to prevent setting
@@ -235,7 +257,11 @@ function DomainRow({
           )}
           <span className="truncate text-sm font-medium">{domain.name}</span>
           <span className="text-sm text-muted-foreground">
-            {isVerified ? 'Verified' : 'Pending verification'}
+            {isVerified
+              ? provenBy
+                ? verifiedThroughLabel(provenBy)
+                : 'Verified'
+              : 'Pending verification'}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -280,7 +306,12 @@ function DomainRow({
         </div>
       </div>
 
-      {!isVerified && (
+      {!isVerified && provenBy && (
+        <p className="text-xs text-muted-foreground">
+          {`Already proven through ${proofSourceName(provenBy)}. Click Verify to use it.`}
+        </p>
+      )}
+      {!isVerified && !provenBy && (
         <div className="space-y-1 rounded bg-muted/30 p-2 text-xs text-muted-foreground">
           <p>Add this DNS TXT record, then click Verify:</p>
           <code className="block break-all">
