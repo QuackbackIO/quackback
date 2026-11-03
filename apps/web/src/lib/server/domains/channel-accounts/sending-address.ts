@@ -31,6 +31,7 @@ import {
   permittedSendingIdentity,
   sendingIdentityContext,
   toAsciiDomain,
+  type SendingIdentityContext,
 } from './outbound-identity'
 import {
   CUSTOM_DOMAINS_UNAVAILABLE_MESSAGE,
@@ -42,6 +43,29 @@ import {
 const log = logger.child({ component: 'sending-address' })
 
 type SendingModule = 'support' | 'feedback' | 'changelog'
+
+/**
+ * Which addresses this server lets a workspace add.
+ *
+ * - `any`: one workspace, so the send guard permits any From. Every address is
+ *   accepted, and an unverified domain is still offered setup when this server
+ *   can set domains up.
+ * - `verified-domains`: shared, and domains can be set up. An address on an
+ *   unverified domain brings its domain with it.
+ * - `unavailable`: shared, and domains cannot be set up. Only addresses the
+ *   guard already permits.
+ */
+export type SendingAddressMode = 'any' | 'verified-domains' | 'unavailable'
+
+/** The mode for a guard context: the same answer the guard gives for an unknown From. */
+function addressModeFor(ctx: SendingIdentityContext): SendingAddressMode {
+  if (!ctx.pooled) return 'any'
+  return customSendingDomainsAvailable() ? 'verified-domains' : 'unavailable'
+}
+
+export async function sendingAddressMode(): Promise<SendingAddressMode> {
+  return addressModeFor(await sendingIdentityContext())
+}
 
 /** The A-label domain of an address, or null when it has none. */
 function domainOfAddress(address: string): string | null {
@@ -65,8 +89,9 @@ function verifiedCovering(domains: EmailSendingDomain[], domain: string) {
  * - Otherwise, where this server can set up domains, the address brings its
  *   domain: this workspace's row for it in whatever state, or a new one under
  *   the usual rules (plan cap, pre-flight, refusals).
- * - Otherwise a single-workspace server keeps adding it as before, since its
- *   send guard already permits any address, and a shared one refuses.
+ * - In `any` mode the address is accepted regardless: a setup that cannot
+ *   happen leaves it unlinked, as it always was there. In `unavailable` mode
+ *   it is refused.
  */
 export async function addSendingAddress(input: {
   owningTeamId: TeamId
@@ -76,6 +101,7 @@ export async function addSendingAddress(input: {
   const address = input.address.trim().toLowerCase()
   const domain = domainOfAddress(address)
   const ctx = await sendingIdentityContext()
+  const mode = addressModeFor(ctx)
   const domains = await listSendingDomains(input.owningTeamId)
 
   // Asked as if the server were shared, so "may send" means a real reason to,
@@ -84,18 +110,22 @@ export async function addSendingAddress(input: {
     const covering = domain ? verifiedCovering(domains, domain) : undefined
     return createSendingAddress({ ...input, address, sendingDomainId: covering?.id })
   }
-
-  if (!customSendingDomainsAvailable()) {
-    if (isSendingIdentityPermitted(address, ctx)) {
-      return createSendingAddress({ ...input, address })
-    }
+  if (mode === 'unavailable') {
     throw new SendingDomainRefusedError(CUSTOM_DOMAINS_UNAVAILABLE_MESSAGE)
   }
+  if (!customSendingDomainsAvailable()) return createSendingAddress({ ...input, address })
 
   const existing = domain ? domains.find((d) => toAsciiDomain(d.domain) === domain) : undefined
-  const row =
-    existing ??
-    (await provisionSendingDomain({ owningTeamId: input.owningTeamId, domain: domain ?? '' }))
+  let row: EmailSendingDomain
+  try {
+    row =
+      existing ??
+      (await provisionSendingDomain({ owningTeamId: input.owningTeamId, domain: domain ?? '' }))
+  } catch (err) {
+    if (mode !== 'any') throw err
+    log.warn({ err, domain }, 'sending domain setup failed; adding the address without it')
+    return createSendingAddress({ ...input, address })
+  }
   try {
     return await createSendingAddress({ ...input, address, sendingDomainId: row.id })
   } catch (err) {

@@ -87,7 +87,8 @@ export function EmailChannelSettings() {
         addresses={data?.sendingAddresses ?? []}
         domains={data?.domains ?? []}
         defaultFrom={data?.defaultFrom ?? null}
-        available={data?.customDomains !== 'unavailable'}
+        available={data?.addressMode !== 'unavailable'}
+        guardPermitsAny={data?.addressMode === 'any'}
       />
     </div>
   )
@@ -286,11 +287,14 @@ function defaultMeta(uncovered: string[]): string {
 }
 
 /** The meta line of a row whose domain is not live yet. */
-function pendingMeta(domain: SendingDomainDTO, phase: DomainPhase, first: boolean): string | null {
+function pendingMeta(
+  domain: SendingDomainDTO,
+  phase: DomainPhase,
+  first: boolean,
+  fallback: string
+): string | null {
   if (!first) return `Waiting for ${domain.domain}`
-  if (phase === 'not-found') {
-    return 'Records not found after 72 hours. Replies send from the default address.'
-  }
+  if (phase === 'not-found') return `Records not found after 72 hours.${fallback}`
   if (phase === 'attention') {
     const failing = domain.dnsRecords.find((r) => r.check && r.check.state !== 'found')
     const name = failingRecordName(domain)
@@ -301,9 +305,9 @@ function pendingMeta(domain: SendingDomainDTO, phase: DomainPhase, first: boolea
           : failing.check?.state === 'proxied'
             ? 'is proxied'
             : 'has the wrong value'
-      return `The ${name} ${what}. Replies send from the default address.`
+      return `The ${name} ${what}.${fallback}`
     }
-    return `${domain.domain} needs attention. Replies send from the default address.`
+    return `${domain.domain} needs attention.${fallback}`
   }
   return null
 }
@@ -313,11 +317,14 @@ function SendingAddressesSection({
   domains,
   defaultFrom,
   available,
+  guardPermitsAny,
 }: {
   addresses: SendingAddress[]
   domains: SendingDomainDTO[]
   defaultFrom: string | null
   available: boolean
+  /** One workspace: replies still leave as the address, so nothing falls back. */
+  guardPermitsAny: boolean
 }) {
   const [address, setAddress] = useState('')
   const [module, setModule] = useState<(typeof MODULES)[number]>('support')
@@ -344,6 +351,7 @@ function SendingAddressesSection({
   const showError = (fallback: string) => (error: unknown) =>
     setActionError(errorText(error, fallback))
   const now = new Date()
+  const fallbackNote = guardPermitsAny ? '' : ' Replies send from the default address.'
 
   const rows = addresses.map((a) => {
     const domain = domainOf(a, domains)
@@ -433,7 +441,10 @@ function SendingAddressesSection({
               <SettingsListRow
                 leading={<RowIcon icon={EnvelopeIcon} />}
                 title={label}
-                meta={(domain && pendingMeta(domain, phase, first)) || moduleLabel(a.module)}
+                meta={
+                  (domain && pendingMeta(domain, phase, first, fallbackNote)) ||
+                  moduleLabel(a.module)
+                }
                 badges={
                   phase === 'setting-up' ? (
                     <Badge size="sm" variant="secondary">

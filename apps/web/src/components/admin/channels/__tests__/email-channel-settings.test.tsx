@@ -108,7 +108,7 @@ function renderSettings({
   addresses = [] as ReturnType<typeof address>[],
   domains = [] as SendingDomainDTO[],
   inboundRoute = null as unknown,
-  customDomains = 'available' as 'available' | 'unavailable',
+  addressMode = 'verified-domains' as 'any' | 'verified-domains' | 'unavailable',
 } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
   client.setQueryData(emailChannelConfigQuery().queryKey, {
@@ -116,7 +116,7 @@ function renderSettings({
     platformAddress: null,
     sendingAddresses: addresses,
     domains,
-    customDomains,
+    addressMode,
     defaultFrom: 'Acme <notifications@example.com>',
   } as never)
   return render(
@@ -244,6 +244,17 @@ describe('address rows', () => {
       'The return path record is missing. Replies send from the default address.'
     )
     expect(within(panels()[0] as HTMLElement).getByText('Missing')).toBeTruthy()
+  })
+
+  it('does not claim replies fall back where the guard permits any address', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com', 'support')],
+      domains: [NOT_FOUND],
+      addressMode: 'any',
+    })
+    const r = row('help@acme.com')
+    expect(r.textContent).toContain('Records not found after 72 hours.')
+    expect(r.textContent).not.toContain('Replies send from the default address.')
   })
 
   it('offers Send test email on a live address only', async () => {
@@ -428,8 +439,8 @@ describe('the add form', () => {
     expect(screen.queryByRole('button', { name: 'Add domain' })).toBeNull()
   })
 
-  it('is disabled with one line when this server cannot set up domains', () => {
-    renderSettings({ customDomains: 'unavailable' })
+  it('is disabled with one line on a shared server that cannot set up domains', () => {
+    renderSettings({ addressMode: 'unavailable' })
     expect(
       screen.getByText("Custom sending addresses aren't available on this server.")
     ).toBeTruthy()
@@ -437,13 +448,17 @@ describe('the add form', () => {
     expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('is enabled with no note when available', () => {
-    renderSettings()
-    expect(
-      screen.queryByText("Custom sending addresses aren't available on this server.")
-    ).toBeNull()
-    expect((screen.getByLabelText('Address') as HTMLInputElement).disabled).toBe(false)
-  })
+  it.each(['any', 'verified-domains'] as const)(
+    'is enabled with no note in %s mode',
+    (addressMode) => {
+      renderSettings({ addressMode })
+      expect(
+        screen.queryByText("Custom sending addresses aren't available on this server.")
+      ).toBeNull()
+      expect((screen.getByLabelText('Address') as HTMLInputElement).disabled).toBe(false)
+      expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true)
+    }
+  )
 
   it('shows a failure inline, not as a toast, until the next attempt', async () => {
     createAddress.mockImplementationOnce(

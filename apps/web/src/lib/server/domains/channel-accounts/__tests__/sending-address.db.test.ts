@@ -89,7 +89,12 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', async (importOrigin
   }
 })
 
-import { addSendingAddress, removeSendingAddress, sendTestEmail } from '../sending-address'
+import {
+  addSendingAddress,
+  removeSendingAddress,
+  sendTestEmail,
+  sendingAddressMode,
+} from '../sending-address'
 
 const identity = (domain: string): SesDomainIdentity => ({
   domain,
@@ -258,6 +263,39 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       expect(await domainsOf(teamId)).toEqual([])
     })
 
+    it('sets up the domain on a single-workspace server that can, and links the address', async () => {
+      vi.stubEnv('QUACKBACK_TENANCY', '')
+      const teamId = await seedTeam()
+      const account = await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@acme.com',
+        module: 'support',
+      })
+      const [domain] = await domainsOf(teamId)
+      expect(domain).toMatchObject({ domain: 'acme.com', status: 'pending' })
+      expect(account.sendingDomainId).toBe(domain.id)
+    })
+
+    it('still adds the address on a single-workspace server when its domain cannot be set up', async () => {
+      // The address was always accepted here; a refused setup must not refuse it.
+      vi.stubEnv('QUACKBACK_TENANCY', '')
+      const teamId = await seedTeam()
+      maxSendingDomains.mockReturnValue(1)
+      await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@a.example',
+        module: 'support',
+      })
+
+      const account = await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@b.example',
+        module: 'feedback',
+      })
+      expect(account).toMatchObject({ address: 'help@b.example', sendingDomainId: null })
+      expect((await domainsOf(teamId)).map((d) => d.domain)).toEqual(['a.example'])
+    })
+
     it('adds the platform default address without setting up a domain', async () => {
       const teamId = await seedTeam()
       const account = await addSendingAddress({
@@ -280,6 +318,24 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
         addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com', module: 'support' })
       ).rejects.toThrow()
       expect(await domainsOf(teamId)).toEqual([])
+    })
+  })
+
+  describe('sendingAddressMode', () => {
+    it('is any on a single-workspace server, whatever it can set up', async () => {
+      vi.stubEnv('QUACKBACK_TENANCY', '')
+      expect(await sendingAddressMode()).toBe('any')
+      vi.stubEnv('EMAIL_SES_IDENTITY_ACCESS_KEY_ID', '')
+      expect(await sendingAddressMode()).toBe('any')
+    })
+
+    it('is verified-domains on a shared server that can set up domains', async () => {
+      expect(await sendingAddressMode()).toBe('verified-domains')
+    })
+
+    it('is unavailable on a shared server that cannot', async () => {
+      vi.stubEnv('EMAIL_SES_IDENTITY_ACCESS_KEY_ID', '')
+      expect(await sendingAddressMode()).toBe('unavailable')
     })
   })
 

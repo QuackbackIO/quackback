@@ -30,12 +30,14 @@ const hoisted = vi.hoisted(() => ({
   addAddress: vi.fn(),
   removeAddress: vi.fn(),
   sendTest: vi.fn(),
+  addressMode: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/channel-accounts/sending-address', () => ({
   addSendingAddress: hoisted.addAddress,
   removeSendingAddress: hoisted.removeAddress,
   sendTestEmail: hoisted.sendTest,
+  sendingAddressMode: hoisted.addressMode,
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({ requireAuth: hoisted.requireAuth }))
@@ -69,7 +71,9 @@ const {
   createSendingAddressFn,
   deleteChannelAccountFn,
   sendTestEmailFn,
+  getEmailChannelConfigFn,
 } = await import('../channel-accounts')
+const getConfig = getEmailChannelConfigFn as unknown as AnyHandler
 const createAddress = createSendingAddressFn as unknown as AnyHandler
 const deleteAccount = deleteChannelAccountFn as unknown as AnyHandler
 const sendTest = sendTestEmailFn as unknown as AnyHandler
@@ -275,4 +279,15 @@ describe('sendTestEmailFn', () => {
     )
     expect(hoisted.sendTest).not.toHaveBeenCalled()
   })
+})
+
+describe('getEmailChannelConfigFn', () => {
+  it.each(['any', 'verified-domains', 'unavailable'] as const)(
+    'tells the page the %s address mode the server decided',
+    async (mode) => {
+      hoisted.addressMode.mockResolvedValue(mode)
+      hoisted.defaultTeamId.mockResolvedValue(null)
+      expect(await getConfig()).toMatchObject({ addressMode: mode })
+    }
+  )
 })

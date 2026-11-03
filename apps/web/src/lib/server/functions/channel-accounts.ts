@@ -35,6 +35,7 @@ import {
   addSendingAddress,
   removeSendingAddress,
   sendTestEmail,
+  sendingAddressMode,
 } from '@/lib/server/domains/channel-accounts/sending-address'
 import {
   domainActionMessage,
@@ -145,6 +146,11 @@ export interface EmailChannelConfigDTO {
    * one the server will accept.
    */
   customDomains: 'available' | 'unavailable'
+  /**
+   * Which addresses the add form accepts (see `sendingAddressMode`): any
+   * address, addresses whose domain can be set up, or only the default.
+   */
+  addressMode: 'any' | 'verified-domains' | 'unavailable'
   /** The address mail sends from when no sending address is live, or null when none is set. */
   defaultFrom: string | null
 }
@@ -201,6 +207,7 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
     const platformAddress = platformInboxAddress(currentMailSlug())
     const customDomains = customSendingDomainsAvailable() ? 'available' : 'unavailable'
     const defaultFrom = await defaultFromAddress()
+    const addressMode = await sendingAddressMode()
     const teamId = await defaultTeamId()
     if (!teamId) {
       return {
@@ -209,6 +216,7 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
         domains: [],
         platformAddress,
         customDomains,
+        addressMode,
         defaultFrom,
       }
     }
@@ -225,6 +233,7 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
       domains: domains.map(toDomain),
       platformAddress,
       customDomains,
+      addressMode,
       defaultFrom,
     }
   }
