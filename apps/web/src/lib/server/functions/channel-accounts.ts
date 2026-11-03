@@ -18,7 +18,6 @@ import {
   setInboundForwardingTarget,
   createSendingAddress,
   deleteSendingDomain,
-  SendingDomainInUseError,
   softDeleteChannelAccount,
   updateInboundTrust,
   clearInboundForwarding,
@@ -28,52 +27,37 @@ import { platformInboxAddress } from '@/lib/server/domains/conversation/conversa
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import {
   SendingDomainRefusedError,
+  assertCustomSendingDomainsAvailable,
+  customSendingDomainsAvailable,
   provisionSendingDomain,
   refreshSendingDomain,
 } from '@/lib/server/domains/channel-accounts/sending-identity'
+import { assertSendingIdentityPermitted } from '@/lib/server/domains/channel-accounts/outbound-identity'
 import {
-  SendingIdentityRefusedError,
-  assertSendingIdentityPermitted,
-} from '@/lib/server/domains/channel-accounts/outbound-identity'
-import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
+  domainActionMessage,
+  isDomainActionRefusal,
+  type DomainAction,
+} from '@/lib/server/domains/channel-accounts/domain-action-message'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'channel-accounts-fn' })
 
 /**
- * The message a person is allowed to see for a failed sending-domain action.
+ * Run a sending-domain action, replacing its failure with the sentence a person
+ * may read (see `domain-action-message.ts`).
  *
- * Our own refusals are written for the person reading them and name the fix, so
- * they pass through. Everything else is a provider or transport failure whose
- * text is the provider's prose about its own API — it names actions, exception
- * types and services this person did not ask about and cannot act on, and
- * putting it in a toast turns an operator problem into a customer-facing
- * mystery written in a vendor's voice. The detail is not lost: it is already in
- * the server log, which is where the person who can act on it is looking.
+ * The cause is kept even though only the message crosses the wire, and anything
+ * that is not one of our own refusals is logged here with it: the provider's
+ * own text is read in the server log, by the operator who can act on it.
  */
-function domainActionMessage(error: unknown, fallback: string): string {
-  if (
-    error instanceof SendingDomainRefusedError ||
-    error instanceof SendingIdentityRefusedError ||
-    error instanceof SendingDomainInUseError ||
-    error instanceof TierLimitError
-  ) {
-    return error.message
-  }
-  log.error({ err: error }, 'sending domain action failed')
-  return fallback
-}
-
-/** Run a sending-domain action, replacing any non-refusal failure's message. */
-async function withDomainActionMessage<T>(fallback: string, run: () => Promise<T>): Promise<T> {
+async function withDomainActionMessage<T>(action: DomainAction, run: () => Promise<T>): Promise<T> {
   try {
     return await run()
   } catch (error) {
-    // The cause is kept even though only the message crosses the wire: the
-    // server-side log line below the throw is where the provider's own text is
-    // read, and losing the chain there would leave nobody able to answer the
-    // question the toast is deliberately not answering.
-    throw new Error(domainActionMessage(error, fallback), { cause: error })
+    if (!isDomainActionRefusal(error)) {
+      log.error({ err: error, action }, 'sending domain action failed')
+    }
+    throw new Error(domainActionMessage(error, action), { cause: error })
   }
 }
 
@@ -125,6 +109,12 @@ export interface EmailChannelConfigDTO {
    * slug — in both of which there is no address to name.
    */
   platformAddress: string | null
+  /**
+   * Whether this server can provision a customer-owned sending domain. The
+   * same answer `createSendingDomainFn` refuses on, so a form offered here is
+   * one the server will accept.
+   */
+  customDomains: 'available' | 'unavailable'
 }
 
 const toAccount = (a: ChannelAccount, domains: EmailSendingDomain[] = []): ChannelAccountDTO => {
@@ -163,9 +153,16 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
   async (): Promise<EmailChannelConfigDTO> => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
     const platformAddress = platformInboxAddress(currentMailSlug())
+    const customDomains = customSendingDomainsAvailable() ? 'available' : 'unavailable'
     const teamId = await defaultTeamId()
     if (!teamId) {
-      return { inboundRoute: null, sendingAddresses: [], domains: [], platformAddress }
+      return {
+        inboundRoute: null,
+        sendingAddresses: [],
+        domains: [],
+        platformAddress,
+        customDomains,
+      }
     }
     const [inbound, accounts, domains] = await Promise.all([
       getInboundRoute(teamId),
@@ -179,6 +176,7 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
         .map((a) => toAccount(a, domains)),
       domains: domains.map(toDomain),
       platformAddress,
+      customDomains,
     }
   }
 )
@@ -231,13 +229,15 @@ export const createSendingDomainFn = createServerFn({ method: 'POST' })
   .validator(z.object({ domain: z.string().min(3) }))
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
-    const teamId = await requireDefaultTeam()
     // Creates the provider identity, attaches the custom MAIL FROM, and stores
     // the records the domain's owner has to publish — including the ownership
-    // token that is the only thing tying this domain to this workspace.
-    return withDomainActionMessage('Could not add the domain. Check the server logs.', async () =>
-      toDomain(await provisionSendingDomain({ owningTeamId: teamId, domain: data.domain }))
-    )
+    // token that is the only thing tying this domain to this workspace. Refused
+    // first, before any database read, on a server that cannot provision.
+    return withDomainActionMessage('add', async () => {
+      assertCustomSendingDomainsAvailable()
+      const teamId = await requireDefaultTeam()
+      return toDomain(await provisionSendingDomain({ owningTeamId: teamId, domain: data.domain }))
+    })
   })
 
 export const verifySendingDomainFn = createServerFn({ method: 'POST' })
@@ -248,14 +248,11 @@ export const verifySendingDomainFn = createServerFn({ method: 'POST' })
     // own lookup for whether this workspace owns the zone. A domain another
     // workspace verified reads back as verified from the provider, so its answer
     // alone is never enough. See sending-identity.ts.
-    return withDomainActionMessage(
-      'Could not check the records. Check the server logs.',
-      async () => {
-        const refreshed = await refreshSendingDomain(data.id as SendingDomainId)
-        if (!refreshed) throw new SendingDomainRefusedError('That sending domain no longer exists.')
-        return toDomain(refreshed)
-      }
-    )
+    return withDomainActionMessage('verify', async () => {
+      const refreshed = await refreshSendingDomain(data.id as SendingDomainId)
+      if (!refreshed) throw new SendingDomainRefusedError('That sending domain no longer exists.')
+      return toDomain(refreshed)
+    })
   })
 
 export const deleteSendingDomainFn = createServerFn({ method: 'POST' })
@@ -265,12 +262,9 @@ export const deleteSendingDomainFn = createServerFn({ method: 'POST' })
     // Removes our row and the plan slot it held. The identity on the shared
     // provider account is deliberately left for an operator to reap; see
     // `deleteSendingDomain` for why nothing here is allowed to delete one.
-    await withDomainActionMessage(
-      'Could not remove the domain. Check the server logs.',
-      async () => {
-        await deleteSendingDomain(data.id as SendingDomainId)
-      }
-    )
+    await withDomainActionMessage('remove', async () => {
+      await deleteSendingDomain(data.id as SendingDomainId)
+    })
     return { id: data.id }
   })
 

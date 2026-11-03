@@ -6,6 +6,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 const deleteAccount = vi.fn()
 const deleteDomain = vi.fn()
 const clearRoute = vi.fn()
+const createDomain = vi.fn()
+const verifyDomain = vi.fn()
+const toastError = vi.hoisted(() => vi.fn())
+
+vi.mock('sonner', () => ({ toast: { error: toastError, success: vi.fn() } }))
 
 vi.mock('@/lib/server/functions/channel-accounts', () => ({
   getEmailChannelConfigFn: vi.fn(),
@@ -15,8 +20,8 @@ vi.mock('@/lib/client/mutations/channel-accounts', () => {
   return {
     useCreateInboundRoute: idle,
     useCreateSendingAddress: idle,
-    useCreateSendingDomain: idle,
-    useVerifySendingDomain: idle,
+    useCreateSendingDomain: () => ({ mutate: createDomain, isPending: false }),
+    useVerifySendingDomain: () => ({ mutate: verifyDomain, isPending: false }),
     useUpdateInboundTrust: idle,
     useClearInboundForwarding: () => ({ mutate: clearRoute, isPending: false }),
     useUpdateSendingAddressSmtp: idle,
@@ -28,7 +33,10 @@ vi.mock('@/lib/client/mutations/channel-accounts', () => {
 const { EmailChannelSettings } = await import('../email-channel-settings')
 const { emailChannelConfigQuery } = await import('@/lib/client/queries/channel-accounts')
 
-function renderSettings(inboundRoute: unknown = null) {
+function renderSettings(
+  inboundRoute: unknown = null,
+  customDomains: 'available' | 'unavailable' = 'available'
+) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
   client.setQueryData(emailChannelConfigQuery().queryKey, {
     inboundRoute,
@@ -43,6 +51,7 @@ function renderSettings(inboundRoute: unknown = null) {
       },
     ],
     domains: [{ id: 'dom_1', domain: 'acme.com', status: 'verified', dnsRecords: [] }],
+    customDomains,
   } as never)
   return render(
     <QueryClientProvider client={client}>
@@ -55,6 +64,9 @@ beforeEach(() => {
   deleteAccount.mockReset()
   deleteDomain.mockReset()
   clearRoute.mockReset()
+  createDomain.mockReset()
+  verifyDomain.mockReset()
+  toastError.mockReset()
 })
 afterEach(cleanup)
 
@@ -121,5 +133,54 @@ describe('add forms', () => {
       expect(button.className).toContain('border-border/50')
       expect(button.className).not.toContain('bg-primary')
     }
+  })
+})
+
+describe('sending domain availability and errors', () => {
+  it('disables the add form with one line when this server cannot provision', () => {
+    renderSettings(null, 'unavailable')
+    expect(
+      screen.getByText("Custom sending addresses aren't available on this server.")
+    ).toBeTruthy()
+    expect((screen.getByLabelText('Domain') as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Add domain' }) as HTMLButtonElement).disabled).toBe(
+      true
+    )
+  })
+
+  it('keeps the add form enabled when available', () => {
+    renderSettings()
+    expect(
+      screen.queryByText("Custom sending addresses aren't available on this server.")
+    ).toBeNull()
+    expect((screen.getByLabelText('Domain') as HTMLInputElement).disabled).toBe(false)
+  })
+
+  it('shows an add failure inline, not as a toast, until the next attempt', async () => {
+    createDomain.mockImplementationOnce(
+      (_domain: string, opts: { onError: (e: unknown) => void }) =>
+        opts.onError(new Error("Couldn't reach the mail provider. Try again in a minute."))
+    )
+    renderSettings()
+    fireEvent.change(screen.getByLabelText('Domain'), { target: { value: 'example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add domain' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe("Couldn't reach the mail provider. Try again in a minute.")
+    expect(toastError).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add domain' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+    expect(createDomain).toHaveBeenLastCalledWith('example.com', expect.anything())
+  })
+
+  it('shows a check failure inline too', async () => {
+    verifyDomain.mockImplementationOnce((_id: string, opts: { onError: (e: unknown) => void }) =>
+      opts.onError(new Error("Couldn't check the records."))
+    )
+    renderSettings()
+    fireEvent.click(screen.getByRole('button', { name: 'Re-check' }))
+    expect((await screen.findByRole('alert')).textContent).toBe("Couldn't check the records.")
+    expect(toastError).not.toHaveBeenCalled()
   })
 })

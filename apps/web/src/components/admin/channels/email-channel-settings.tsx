@@ -72,7 +72,10 @@ export function EmailChannelSettings() {
         inboundTrust={data?.inboundRoute?.inboundTrust ?? 'strict'}
       />
       <SendingAddressesSection addresses={data?.sendingAddresses ?? []} />
-      <SendingDomainsSection domains={data?.domains ?? []} />
+      <SendingDomainsSection
+        domains={data?.domains ?? []}
+        available={data?.customDomains !== 'unavailable'}
+      />
     </div>
   )
 }
@@ -508,8 +511,13 @@ function DnsRecordRow({ record }: { record: DnsRecordView }) {
   )
 }
 
+/** The server's sentence for a failed domain action, or the generic line. */
+const errorText = (error: unknown, fallback: string): string =>
+  error instanceof Error && error.message ? error.message : fallback
+
 function SendingDomainsSection({
   domains,
+  available,
 }: {
   domains: {
     id: string
@@ -517,12 +525,18 @@ function SendingDomainsSection({
     status: string
     dnsRecords: DnsRecordView[]
   }[]
+  available: boolean
 }) {
   const [domain, setDomain] = useState('')
   const [removeTarget, setRemoveTarget] = useState<{ id: string; domain: string } | null>(null)
+  // One inline line for the last failed action, cleared when the next one
+  // starts: these failures name a fix, and a toast is gone before it is read.
+  const [actionError, setActionError] = useState<string | null>(null)
   const create = useCreateSendingDomain()
   const verify = useVerifySendingDomain()
   const remove = useDeleteSendingDomain()
+  const showError = (fallback: string) => (error: unknown) =>
+    setActionError(errorText(error, fallback))
   return (
     <SettingsCard
       title="Sending domains"
@@ -544,9 +558,10 @@ function SendingDomainsSection({
                 size="sm"
                 variant="outline"
                 disabled={verify.isPending}
-                onClick={() =>
-                  verify.mutate(d.id, { onError: reason('Could not check the records') })
-                }
+                onClick={() => {
+                  setActionError(null)
+                  verify.mutate(d.id, { onError: showError("Couldn't check the records.") })
+                }}
               >
                 {d.status === 'verified' ? 'Re-check' : 'Verify'}
               </Button>
@@ -581,29 +596,41 @@ function SendingDomainsSection({
           </div>
         ))}
       </div>
+      {!available && (
+        <p className="text-sm text-muted-foreground">
+          Custom sending addresses aren&apos;t available on this server.
+        </p>
+      )}
       <div className="flex items-end gap-2">
         <div className="flex-1 space-y-1.5">
           <Label htmlFor="domain">Domain</Label>
           <Input
             id="domain"
             value={domain}
+            disabled={!available}
             onChange={(e) => setDomain(e.target.value)}
             placeholder="yourcompany.com"
           />
         </div>
         <Button
           variant="outline"
-          disabled={!domain.trim() || create.isPending}
-          onClick={() =>
+          disabled={!available || !domain.trim() || create.isPending}
+          onClick={() => {
+            setActionError(null)
             create.mutate(domain.trim(), {
               onSuccess: () => setDomain(''),
-              onError: reason('Could not add the domain'),
+              onError: showError("Couldn't add the domain."),
             })
-          }
+          }}
         >
           Add domain
         </Button>
       </div>
+      {actionError && (
+        <p role="alert" className="text-sm text-destructive">
+          {actionError}
+        </p>
+      )}
       <ConfirmDialog
         open={removeTarget !== null}
         onOpenChange={(open) => !open && setRemoveTarget(null)}
@@ -618,7 +645,8 @@ function SendingDomainsSection({
         isPending={remove.isPending}
         onConfirm={() => {
           if (removeTarget) {
-            remove.mutate(removeTarget.id, { onError: reason('Could not remove it') })
+            setActionError(null)
+            remove.mutate(removeTarget.id, { onError: showError("Couldn't remove the domain.") })
           }
           setRemoveTarget(null)
         }}

@@ -10,6 +10,7 @@ import {
   OWNERSHIP_RECORD_HOST,
   OWNERSHIP_VALUE_PREFIX,
   SendingDomainRefusedError,
+  customSendingDomainsAvailable,
   domainsOverlap,
   mailFromDomainFor,
   mintOwnershipToken,
@@ -307,5 +308,48 @@ describe('when a domain counts as verified', () => {
         ownershipProven: true,
       })
     ).toBe('pending')
+  })
+})
+
+describe('whether custom sending domains are available on this server', () => {
+  const ses = {
+    EMAIL_SES_ACCESS_KEY_ID: 'AKIASEND',
+    EMAIL_SES_SECRET_ACCESS_KEY: 'send-secret',
+    EMAIL_SES_REGION: REGION,
+    EMAIL_SES_IDENTITY_ACCESS_KEY_ID: 'AKIAIDENT',
+    EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY: 'ident-secret',
+  }
+
+  it('is available with SES sending, the identity credential and a region', () => {
+    expect(customSendingDomainsAvailable(ses)).toBe(true)
+  })
+
+  it('is unavailable without the identity credential', () => {
+    expect(
+      customSendingDomainsAvailable({ ...ses, EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY: '' })
+    ).toBe(false)
+    expect(
+      customSendingDomainsAvailable({ ...ses, EMAIL_SES_IDENTITY_ACCESS_KEY_ID: undefined })
+    ).toBe(false)
+  })
+
+  it('is unavailable without a region', () => {
+    expect(customSendingDomainsAvailable({ ...ses, EMAIL_SES_REGION: ' ' })).toBe(false)
+  })
+
+  it('is unavailable when another provider sends', () => {
+    const smtp = {
+      EMAIL_SMTP_HOST: 'smtp.example.com',
+      EMAIL_SES_REGION: REGION,
+      EMAIL_SES_IDENTITY_ACCESS_KEY_ID: 'AKIAIDENT',
+      EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY: 'ident-secret',
+    }
+    expect(customSendingDomainsAvailable(smtp)).toBe(false)
+  })
+
+  it('is unavailable when the provider configuration conflicts', () => {
+    expect(customSendingDomainsAvailable({ ...ses, EMAIL_SMTP_HOST: 'smtp.example.com' })).toBe(
+      false
+    )
   })
 })

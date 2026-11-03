@@ -159,8 +159,10 @@ export interface SesIdentityDeps {
   region: string
 }
 
-function readEnv(key: string): string | undefined {
-  return process.env[key]
+type EnvLike = Record<string, string | undefined>
+
+function readEnv(key: string, env: EnvLike = process.env): string | undefined {
+  return env[key]
 }
 
 /**
@@ -172,9 +174,11 @@ function readEnv(key: string): string | undefined {
  * given. Both halves are required, for the same reason as the sending pair —
  * neither authorizes anything alone.
  */
-function identityCredentials(): { accessKeyId: string; secretAccessKey: string } | null {
-  const accessKeyId = readEnv('EMAIL_SES_IDENTITY_ACCESS_KEY_ID')?.trim()
-  const secretAccessKey = readEnv('EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY')?.trim()
+function identityCredentials(
+  env: EnvLike = process.env
+): { accessKeyId: string; secretAccessKey: string } | null {
+  const accessKeyId = readEnv('EMAIL_SES_IDENTITY_ACCESS_KEY_ID', env)?.trim()
+  const secretAccessKey = readEnv('EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY', env)?.trim()
   if (!accessKeyId || !secretAccessKey) return null
   return { accessKeyId, secretAccessKey }
 }
@@ -186,8 +190,8 @@ function identityCredentials(): { accessKeyId: string; secretAccessKey: string }
  * the credential is never quietly dropped to a rung that provisions nothing. A
  * missing region is refused out loud at the call, naming the variable.
  */
-export function isSesIdentityConfigured(): boolean {
-  return identityCredentials() !== null
+export function isSesIdentityConfigured(env: EnvLike = process.env): boolean {
+  return identityCredentials(env) !== null
 }
 
 /** One client per process, rebuilt when the credential or region changes. */

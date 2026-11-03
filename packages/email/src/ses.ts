@@ -477,8 +477,8 @@ export function isSesEmailConfigured(): boolean {
  * configured and unusable is worse than one that refuses to send, so this
  * returns null and the send says which variable is missing.
  */
-export function sesRegion(): string | null {
-  return readEnv('EMAIL_SES_REGION')?.trim() || null
+export function sesRegion(env: Record<string, string | undefined> = process.env): string | null {
+  return env.EMAIL_SES_REGION?.trim() || null
 }
 
 /** The configuration set to apply, or undefined when none is configured. */

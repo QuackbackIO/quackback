@@ -50,6 +50,7 @@ import {
 } from '@quackback/email/ses-identity'
 import type { SesDomainIdentity } from '@quackback/email/ses-identity'
 import { sesRegion } from '@quackback/email/ses'
+import { resolveEmailProvider } from '@quackback/email/provider'
 import type { SendingDomainId, TeamId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 import {
@@ -101,6 +102,38 @@ export class SendingDomainRefusedError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'SendingDomainRefusedError'
+  }
+}
+
+/** The one line a person sees when this server cannot provision a domain at all. */
+export const CUSTOM_DOMAINS_UNAVAILABLE_MESSAGE =
+  "Custom sending addresses aren't available on this server."
+
+/**
+ * Can this server provision a customer-owned sending domain at all?
+ *
+ * Three conditions, all process-wide: mail leaves through SES (a domain
+ * verified with SES signs nothing sent through another provider), the separate
+ * identity credential is present, and a region names where the identity lives.
+ * The settings page and the server function read this same answer, so the form
+ * is never offered where the action would be refused.
+ */
+export function customSendingDomainsAvailable(env: NodeJS.ProcessEnv = process.env): boolean {
+  let provider: string
+  try {
+    provider = resolveEmailProvider(env)
+  } catch {
+    // Two providers configured: boot refuses that environment, and nothing
+    // here can say which one a verified domain would sign for.
+    return false
+  }
+  return provider === 'ses' && isSesIdentityConfigured(env) && sesRegion(env) !== null
+}
+
+/** Refuse, before any database or provider work, on a server that cannot provision. */
+export function assertCustomSendingDomainsAvailable(env: NodeJS.ProcessEnv = process.env): void {
+  if (!customSendingDomainsAvailable(env)) {
+    throw new SendingDomainRefusedError(CUSTOM_DOMAINS_UNAVAILABLE_MESSAGE)
   }
 }
 
