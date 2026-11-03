@@ -115,7 +115,7 @@ import {
   restartSendingDomainChecks,
   sweepSendingDomains,
 } from '../sending-identity'
-import { PROVIDER_RECHECK_MS, watchSendingDomains } from '../sending-domain-watch'
+import { PROVIDER_RECHECK_MS, WATCH_BUDGET_MS, watchSendingDomains } from '../sending-domain-watch'
 
 const REGION = 'eu-west-2'
 
@@ -234,6 +234,27 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
       expect(zoneLookups.some((l) => l.endsWith('b.example'))).toBe(false)
       expect(zoneLookups.some((l) => l.endsWith('c.example'))).toBe(false)
       expect((await getSendingDomain(inWindow.id))?.dnsRecords[0].check?.state).toBe('missing')
+    })
+
+    it('stops when its time budget is spent and leaves the rest for the next tick', async () => {
+      await provisionSendingDomain({ owningTeamId: teamId, domain: 'a.example' })
+      await provisionSendingDomain({ owningTeamId: teamId, domain: 'b.example' })
+      await provisionSendingDomain({ owningTeamId: teamId, domain: 'c.example' })
+      zoneLookups.length = 0
+      // The first domain takes the whole budget.
+      const clock = vi.fn<() => number>().mockReturnValueOnce(0).mockReturnValueOnce(0)
+      clock.mockReturnValue(WATCH_BUDGET_MS)
+
+      expect((await watchSendingDomains(new Date(), { clock })).watched).toBe(1)
+      const looked = new Set(zoneLookups.map((l) => l.split('.').slice(-2).join('.')))
+      expect(looked.size).toBe(1)
+
+      // The next tick starts with the ones left unchecked.
+      zoneLookups.length = 0
+      const next = await watchSendingDomains(new Date(Date.now() + 60_000))
+      expect(next.watched).toBe(3)
+      const order = [...new Set(zoneLookups.map((l) => l.split('.').slice(-2).join('.')))]
+      expect(order[order.length - 1]).toBe([...looked][0])
     })
 
     it('does nothing at all with nothing pending', async () => {

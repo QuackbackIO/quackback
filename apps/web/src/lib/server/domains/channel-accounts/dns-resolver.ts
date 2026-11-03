@@ -6,7 +6,7 @@
  * lookup the checks make goes through this object, so a fake zone sees every
  * name that was asked for.
  */
-import { resolve4, resolveCname, resolveMx, resolveNs, resolveTxt } from 'node:dns/promises'
+import { Resolver } from 'node:dns/promises'
 
 export interface DnsResolver {
   resolveTxt(host: string): Promise<string[][]>
@@ -16,10 +16,18 @@ export interface DnsResolver {
   resolveNs(host: string): Promise<string[]>
 }
 
+/**
+ * Two seconds and one try per lookup, so a domain whose nameservers do not
+ * answer costs seconds rather than the default's much longer retry cycle.
+ * Created on first use; it holds configuration only, nothing per workspace.
+ */
+let resolver: Resolver | null = null
+const shared = (): Resolver => (resolver ??= new Resolver({ timeout: 2000, tries: 1 }))
+
 export const systemResolver: DnsResolver = {
-  resolveTxt: (host) => resolveTxt(host),
-  resolveCname: (host) => resolveCname(host),
-  resolveMx: (host) => resolveMx(host),
-  resolve4: (host) => resolve4(host),
-  resolveNs: (host) => resolveNs(host),
+  resolveTxt: (host) => shared().resolveTxt(host),
+  resolveCname: (host) => shared().resolveCname(host),
+  resolveMx: (host) => shared().resolveMx(host),
+  resolve4: (host) => shared().resolve4(host),
+  resolveNs: (host) => shared().resolveNs(host),
 }
