@@ -553,6 +553,7 @@ export type {
   ChannelAccountConfig,
   SendingDomainDnsRecord,
   SendingDomainOwnershipRecord,
+  SendingDomainRecordCheck,
 } from '@quackback/db'
 export type { OfficeHoursSchedule, OfficeHoursInterval } from '@quackback/db'
 export type { ChangelogSubscriptionSource } from '@quackback/db'

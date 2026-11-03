@@ -57,6 +57,52 @@ vi.mock('../domain-verification', () => ({
 }))
 
 /**
+ * The zone the per-record checks read, keyed by full name and record type.
+ *
+ * Answers only for what was published under the exact name asked, and
+ * ENODATA for anything else, so a check made against the wrong name finds
+ * nothing.
+ */
+type ZoneEntry = {
+  TXT?: string[][]
+  CNAME?: string[]
+  MX?: { exchange: string; priority: number }[]
+  A?: string[]
+  NS?: string[]
+}
+const zone = new Map<string, ZoneEntry>()
+vi.mock('../dns-resolver', () => {
+  const read = async <K extends keyof ZoneEntry>(host: string, kind: K) => {
+    const value = zone.get(host)?.[kind]
+    if (!value || value.length === 0) {
+      throw Object.assign(new Error(`ENODATA ${host}`), { code: 'ENODATA' })
+    }
+    return value as NonNullable<ZoneEntry[K]>
+  }
+  return {
+    systemResolver: {
+      resolveTxt: (host: string) => read(host, 'TXT'),
+      resolveCname: (host: string) => read(host, 'CNAME'),
+      resolveMx: (host: string) => read(host, 'MX'),
+      resolve4: (host: string) => read(host, 'A'),
+      resolveNs: (host: string) => read(host, 'NS'),
+    },
+  }
+})
+
+/** Publish records into the zone exactly as a domain owner following them would. */
+function publish(domain: string, records: SendingDomainDnsRecord[]) {
+  for (const r of records) {
+    const name = r.host === '@' ? domain : `${r.host}.${domain}`
+    const entry = zone.get(name) ?? {}
+    if (r.type === 'TXT') entry.TXT = [...(entry.TXT ?? []), [r.value]]
+    if (r.type === 'CNAME') entry.CNAME = [r.value]
+    if (r.type === 'MX') entry.MX = [{ exchange: r.value, priority: r.priority }]
+    zone.set(name, entry)
+  }
+}
+
+/**
  * The plan's cap on sending domains, settable per test.
  *
  * Mocked rather than written into settings because the real reader caches per
@@ -139,6 +185,7 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     checkedRecords.mockReset()
     ownershipResolves.mockReset().mockResolvedValue(false)
     maxSendingDomains.mockReset().mockReturnValue(null)
+    zone.clear()
   })
   afterEach(async () => {
     vi.unstubAllEnvs()
@@ -366,6 +413,55 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     ownershipResolves.mockResolvedValue(true)
     getIdentity.mockResolvedValue(identity({ dkimStatus: 'FAILED', verifiedForSending: false }))
     expect((await refreshSendingDomain(row.id))?.status).toBe('failed')
+  })
+
+  describe('per-record checks', () => {
+    it('marks every published record found and still waits for the provider', async () => {
+      // Our lookups explain; the provider decides. Every record in place and
+      // the provider still scanning is a pending domain, not a verified one.
+      const teamId = await seedTeam()
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+      publish('tenant-a.example', row.dnsRecords)
+      ownershipResolves.mockResolvedValue(true)
+      getIdentity.mockResolvedValue(identity({ dkimStatus: 'PENDING', verifiedForSending: false }))
+
+      const refreshed = await refreshSendingDomain(row.id)
+      expect(refreshed?.status).toBe('pending')
+      expect(refreshed?.dnsRecords).toHaveLength(6)
+      for (const record of refreshed?.dnsRecords ?? []) {
+        expect(record.check?.state).toBe('found')
+      }
+    })
+
+    it('says which record is wrong and what was there instead', async () => {
+      const teamId = await seedTeam()
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+      publish(
+        'tenant-a.example',
+        row.dnsRecords.filter((r) => r.type !== 'MX')
+      )
+      zone.set('bounce.tenant-a.example', {
+        ...zone.get('bounce.tenant-a.example'),
+        MX: [{ exchange: 'mx.example.com', priority: 10 }],
+      })
+
+      const refreshed = await refreshSendingDomain(row.id)
+      const states = refreshed?.dnsRecords.map((r) => `${r.type} ${r.host} ${r.check?.state}`)
+      expect(states).toEqual([
+        'TXT _quackback found',
+        'CNAME aaa._domainkey found',
+        'CNAME bbb._domainkey found',
+        'CNAME ccc._domainkey found',
+        'MX bounce mismatch',
+        'TXT bounce found',
+      ])
+      expect(refreshed?.dnsRecords.find((r) => r.type === 'MX')?.check?.seen).toBe(
+        '10 mx.example.com'
+      )
+      // Stored, so the settings page reads it without asking DNS itself.
+      const stored = await getSendingDomain(row.id)
+      expect(stored?.dnsRecords.find((r) => r.type === 'MX')?.check?.state).toBe('mismatch')
+    })
   })
 
   it('reports nothing for a row that does not exist', async () => {

@@ -61,13 +61,22 @@ async function withDomainActionMessage<T>(action: DomainAction, run: () => Promi
   }
 }
 
+/** What our own lookup last found for a record (see `record-check.ts`). */
+export type DnsRecordCheckDTO = {
+  state: 'found' | 'missing' | 'mismatch' | 'proxied'
+  seen?: string
+  reason?: 'doubled-name'
+  checkedAt: string
+}
+
 /** A record to publish, flattened for the wire. `priority` is present on MX only. */
-type DnsRecord = {
+export type DnsRecordDTO = {
   type: string
   host: string
   value: string
   purpose: string
   priority?: number
+  check?: DnsRecordCheckDTO
 }
 
 // createServerFn requires serializable returns; the jsonb config is JSON at
@@ -90,7 +99,7 @@ export interface SendingDomainDTO {
   id: string
   domain: string
   status: string
-  dnsRecords: DnsRecord[]
+  dnsRecords: DnsRecordDTO[]
   verifiedAt: string | null
 }
 

@@ -33,6 +33,27 @@ import { teams } from './teams'
 export type SendingDomainRecordPurpose = 'ownership' | 'dkim' | 'mail-from'
 
 /**
+ * What our own lookup found for one record, the last time it looked.
+ *
+ * Explanation, not authority: the mail provider decides whether a domain is
+ * verified, and this only says which record is holding it up and why.
+ */
+export interface SendingDomainRecordCheck {
+  state: 'found' | 'missing' | 'mismatch' | 'proxied'
+  /** What we resolved, when it differs from what we asked for. */
+  seen?: string
+  /**
+   * Why a mismatch is one, when there is a name for it. `doubled-name` means
+   * the record was found under the domain written twice
+   * (`_quackback.acme.com.acme.com`), the form a DNS host produces when the
+   * full name is typed into a field that appends the domain itself.
+   */
+  reason?: 'doubled-name'
+  /** ISO timestamp of the lookup. */
+  checkedAt: string
+}
+
+/**
  * A DNS record the domain's owner must publish before we can send as it.
  *
  * A union rather than one shape with optional fields, because an MX record
@@ -53,6 +74,7 @@ export type SendingDomainDnsRecord =
       host: string
       value: string
       purpose: SendingDomainRecordPurpose
+      check?: SendingDomainRecordCheck
     }
   | {
       type: 'MX'
@@ -61,6 +83,7 @@ export type SendingDomainDnsRecord =
       /** RFC 5321 preference. Lower is preferred; a single MX is conventionally 10. */
       priority: number
       purpose: SendingDomainRecordPurpose
+      check?: SendingDomainRecordCheck
     }
 
 /**
@@ -77,6 +100,7 @@ export interface SendingDomainOwnershipRecord {
   host: string
   value: string
   purpose: 'ownership'
+  check?: SendingDomainRecordCheck
 }
 
 export const emailSendingDomains = pgTable(

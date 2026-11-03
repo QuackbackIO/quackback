@@ -68,6 +68,8 @@ import {
   listAllSendingDomains,
 } from './channel-account.service'
 import { verifySendingDomainDns } from './domain-verification'
+import { systemResolver } from './dns-resolver'
+import { checkRecords } from './record-check'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 import { isAtOrUnder, platformSendingDomains, toAsciiDomain } from './outbound-identity'
 
@@ -409,6 +411,26 @@ export async function provisionSendingDomain(input: {
   return updated ?? row
 }
 
+/** The identity of a record across a recompose: what to publish, where. */
+function recordKey(r: SendingDomainDnsRecord): string {
+  return `${r.type} ${r.host} ${r.value}`
+}
+
+/**
+ * Carry each stored record's last check onto the recomposed set, so a lookup
+ * that fails this time leaves the previous answer in place rather than none.
+ */
+export function withPreviousChecks(
+  composed: SendingDomainDnsRecord[],
+  stored: SendingDomainDnsRecord[]
+): SendingDomainDnsRecord[] {
+  const previous = new Map(stored.filter((r) => r.check).map((r) => [recordKey(r), r.check]))
+  return composed.map((r) => {
+    const check = previous.get(recordKey(r))
+    return check ? { ...r, check } : r
+  })
+}
+
 /**
  * Re-ask both authorities and write the answer back.
  *
@@ -451,11 +473,18 @@ export async function refreshSendingDomain(
   const status = sendingDomainStatusFrom({ identity, ownershipProven })
 
   const now = new Date()
+  // Each record's own state, for the person publishing them. Recorded beside
+  // the status and never feeding it: the provider's scan is what decides.
+  const composed = withPreviousChecks(
+    sendingDomainDnsRecords({ domain: row.domain, region, ownershipToken, identity }),
+    row.dnsRecords ?? []
+  )
+  const dnsRecords = await checkRecords(row.domain, composed, systemResolver, now)
   const [updated] = await db
     .update(emailSendingDomains)
     .set({
       status,
-      dnsRecords: sendingDomainDnsRecords({ domain: row.domain, region, ownershipToken, identity }),
+      dnsRecords,
       lastCheckedAt: now,
       // Stamped once, on the transition. A domain that was verified and then
       // regressed keeps the date it first became trustworthy, which is the
