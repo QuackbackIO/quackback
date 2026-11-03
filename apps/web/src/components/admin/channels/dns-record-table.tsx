@@ -1,68 +1,59 @@
 /**
- * The DNS records a sending domain needs, grouped by what each one does, with
- * what our last lookup found for each.
+ * The DNS records a sending domain needs, one row each, with what our last
+ * lookup found shown as an icon. A record that needs fixing gets one sentence
+ * under it saying what to do; nothing is said up front.
  *
- * Names are shown relative to the domain, with the domain itself muted beside
- * them: most DNS hosts append it, so the part to copy is the short one.
+ * Names are relative to the domain, since most DNS hosts append it.
  */
 import { Fragment } from 'react'
+import { CheckCircleIcon, ClockIcon, ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { CopyButton } from '@/components/shared/copy-button'
 import type { DnsRecordDTO, SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import { cn } from '@/lib/shared/utils'
-import { DMARC_SUGGESTION, recordTypeLabel, type DomainPhase } from './sending-domain-view'
+import { recordLabel, recordTypeLabel, type DomainPhase } from './sending-domain-view'
 
-const GROUPS: { purpose: string; label: string; note?: string }[] = [
-  { purpose: 'ownership', label: 'Ownership' },
-  { purpose: 'dkim', label: 'Signing (DKIM)' },
-  { purpose: 'mail-from', label: 'Return path' },
-  { purpose: 'dmarc', label: 'DMARC', note: 'optional' },
-]
+type RecordState = 'found' | 'waiting' | 'problem'
 
-type Tone = 'ok' | 'wait' | 'bad'
-
-/** A record's status line and, when there is more to say, the detail under it. */
+/** A record's state and, when it needs fixing, the one sentence that says how. */
 export function recordStatus(
   record: DnsRecordDTO,
-  ctx: { domain: string; phase: DomainPhase; allFound: boolean }
-): { label: string; tone: Tone; detail?: string } {
-  if (record.purpose === 'dmarc') return { label: 'Optional', tone: 'wait' }
+  ctx: { domain: string; phase: DomainPhase }
+): { state: RecordState; fix?: string } {
   const check = record.check
-  if (!check) return { label: 'Waiting', tone: 'wait' }
+  if (!check) return { state: 'waiting' }
   switch (check.state) {
     case 'found':
-      return ctx.phase === 'setting-up' && ctx.allFound
-        ? { label: 'Found, waiting for confirmation', tone: 'ok' }
-        : { label: 'Found', tone: 'ok' }
+      return { state: 'found' }
     case 'proxied':
       return {
-        label: 'Proxied',
-        tone: 'bad',
-        detail:
-          'This name returns an address instead of pointing to the value above. Turn off any proxy for it.',
+        state: 'problem',
+        fix: 'This name returns an address instead of pointing to the value above. Turn off any proxy for it.',
       }
     case 'mismatch':
       return {
-        label: 'Wrong value',
-        tone: 'bad',
-        detail:
+        state: 'problem',
+        fix:
           check.reason === 'doubled-name'
             ? `The domain looks like it was entered twice. Use just the part before .${ctx.domain}.`
             : check.seen
-              ? `Found ${check.seen}`
-              : undefined,
+              ? `This name has a different value: ${check.seen}. Replace it with the value above.`
+              : 'This name has a different value. Replace it with the value above.',
       }
     case 'missing':
       return ctx.phase === 'setting-up'
-        ? { label: 'Waiting', tone: 'wait' }
-        : { label: 'Missing', tone: 'bad' }
+        ? { state: 'waiting' }
+        : {
+            state: 'problem',
+            fix: "We couldn't find this record. Add it with the name and value above.",
+          }
   }
 }
 
-const TONE_CLASS: Record<Tone, string> = {
-  ok: 'text-success',
-  wait: 'text-muted-foreground',
-  bad: 'text-destructive',
-}
+const STATE_ICON = {
+  found: { icon: CheckCircleIcon, label: 'Found', tone: 'text-success' },
+  waiting: { icon: ClockIcon, label: 'Waiting', tone: 'text-muted-foreground/70' },
+  problem: { icon: ExclamationCircleIcon, label: 'Needs a fix', tone: 'text-destructive' },
+} as const
 
 export function DnsRecordTable({
   domain,
@@ -71,90 +62,62 @@ export function DnsRecordTable({
   domain: SendingDomainDTO
   phase: DomainPhase
 }) {
-  const records = [
-    ...domain.dnsRecords,
-    ...(domain.preflight.dmarc?.found === false ? [DMARC_SUGGESTION] : []),
-  ]
-  const required = domain.dnsRecords
-  const allFound = required.length > 0 && required.every((r) => r.check?.state === 'found')
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[13px]">
         <thead>
           <tr className="text-left text-xs text-muted-foreground">
-            <th className="py-1.5 pr-3 font-medium">Type</th>
+            <th className="py-1.5 pr-3 font-medium">Record</th>
             <th className="py-1.5 pr-3 font-medium">Name</th>
-            <th className="py-1.5 pr-3 font-medium">Value</th>
-            <th className="py-1.5 font-medium">Status</th>
+            <th className="py-1.5 pr-3 font-medium">Type</th>
+            <th className="py-1.5 font-medium">Value</th>
           </tr>
         </thead>
         <tbody>
-          {GROUPS.map((group) => {
-            const rows = records.filter((r) => r.purpose === group.purpose)
-            if (rows.length === 0) return null
+          {domain.dnsRecords.map((r) => {
+            const status = recordStatus(r, { domain: domain.domain, phase })
+            const { icon: Icon, label, tone } = STATE_ICON[status.state]
             return (
-              <Fragment key={group.purpose}>
-                <tr>
-                  <th
-                    colSpan={4}
-                    scope="colgroup"
-                    className="pt-3 pb-1 text-left text-xs font-medium text-foreground"
-                  >
-                    {group.label}
-                    {group.note && (
-                      <span className="ml-1.5 font-normal text-muted-foreground">{group.note}</span>
-                    )}
-                  </th>
+              <Fragment key={`${r.type} ${r.host} ${r.value}`}>
+                <tr data-slot="dns-record" className="border-t border-border/50 align-top">
+                  <td className="py-1.5 pr-3 whitespace-nowrap">
+                    <span className="flex items-center gap-1.5">
+                      <Icon className={cn('size-4 shrink-0', tone)} aria-hidden="true" />
+                      <span className="sr-only">{label}: </span>
+                      {recordLabel(r)}
+                    </span>
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <span className="flex items-start gap-1">
+                      <span className="font-mono break-all">{r.host}</span>
+                      <CopyButton
+                        value={r.host}
+                        variant="ghost"
+                        className="size-6"
+                        aria-label={`Copy name ${r.host}`}
+                      />
+                    </span>
+                  </td>
+                  <td className="py-1.5 pr-3 font-mono whitespace-nowrap">{recordTypeLabel(r)}</td>
+                  <td className="py-1.5">
+                    <span className="flex items-start gap-1">
+                      <span className="font-mono break-all">{r.value}</span>
+                      <CopyButton
+                        value={r.value}
+                        variant="ghost"
+                        className="size-6"
+                        aria-label={`Copy value for ${r.host}`}
+                      />
+                    </span>
+                  </td>
                 </tr>
-                {rows.map((r) => {
-                  const status = recordStatus(r, { domain: domain.domain, phase, allFound })
-                  return (
-                    <tr
-                      key={`${r.type} ${r.host} ${r.value}`}
-                      data-slot="dns-record"
-                      className="border-t border-border/50 align-top"
-                    >
-                      <td className="py-1.5 pr-3 font-mono whitespace-nowrap">
-                        {recordTypeLabel(r)}
-                      </td>
-                      <td className="py-1.5 pr-3">
-                        <div className="flex items-start gap-1">
-                          <span className="font-mono break-all">
-                            {r.host}
-                            <span className="text-muted-foreground">.{domain.domain}</span>
-                          </span>
-                          <CopyButton
-                            value={r.host}
-                            variant="ghost"
-                            className="size-6"
-                            aria-label={`Copy name ${r.host}`}
-                          />
-                        </div>
-                      </td>
-                      <td className="py-1.5 pr-3">
-                        <div className="flex items-start gap-1">
-                          <span className="font-mono break-all">{r.value}</span>
-                          <CopyButton
-                            value={r.value}
-                            variant="ghost"
-                            className="size-6"
-                            aria-label={`Copy value for ${r.host}`}
-                          />
-                        </div>
-                      </td>
-                      <td className="py-1.5 min-w-32">
-                        <span className={cn('font-medium', TONE_CLASS[status.tone])}>
-                          {status.label}
-                        </span>
-                        {status.detail && (
-                          <span className="mt-0.5 block text-xs text-muted-foreground break-all">
-                            {status.detail}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
+                {status.fix && (
+                  <tr data-slot="dns-record-fix">
+                    <td colSpan={4} className="pb-2 text-xs text-destructive break-all">
+                      {status.fix}
+                    </td>
+                  </tr>
+                )}
               </Fragment>
             )
           })}

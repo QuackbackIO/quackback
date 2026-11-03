@@ -13,7 +13,6 @@ import { RowIcon, SettingsList, SettingsListRow } from '@/components/admin/setti
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { StateBadge } from '@/components/shared/state-badge'
 import { emailChannelConfigQuery } from '@/lib/client/queries/channel-accounts'
-import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 import {
   useCreateInboundRoute,
   useCreateSendingAddress,
@@ -27,12 +26,7 @@ import {
 } from '@/lib/client/mutations/channel-accounts'
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import { DomainSetupPanel } from './domain-setup-panel'
-import {
-  domainPhase,
-  failingRecordName,
-  instructionsText,
-  type DomainPhase,
-} from './sending-domain-view'
+import { domainPhase, failingRecordName, type DomainPhase } from './sending-domain-view'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -281,9 +275,9 @@ function domainOf(a: SendingAddress, domains: SendingDomainDTO[]): SendingDomain
 
 /** The meta line of the default address: which areas it still answers for. */
 function defaultMeta(uncovered: string[]): string {
-  if (uncovered.length === MODULES.length) return 'Default for every area'
-  if (uncovered.length === 0) return 'Used when an address is not live'
-  return `Default for ${listOf(uncovered)}`
+  return uncovered.length === MODULES.length || uncovered.length === 0
+    ? 'Default'
+    : `Default for ${listOf(uncovered)}`
 }
 
 /** The meta line of a row whose domain is not live yet. */
@@ -331,13 +325,11 @@ function SendingAddressesSection({
   const [smtpFor, setSmtpFor] = useState<{ id: string; address: string; smtp?: SmtpConfig } | null>(
     null
   )
-  const [removeTarget, setRemoveTarget] = useState<{ id: string; address: string } | null>(null)
-  const [domainRemoveTarget, setDomainRemoveTarget] = useState<{
+  const [removeTarget, setRemoveTarget] = useState<{
     id: string
-    domain: string
+    alsoDomain: string | null
   } | null>(null)
-  // Records panels the person opened or closed, by domain. Unset means the
-  // default: open while a domain still needs its records, closed once live.
+  // Records of live domains the person opened from the row menu, by domain.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   // One inline line for the last failed action, cleared when the next starts:
   // these failures name a fix, and a toast is gone before it is read.
@@ -347,7 +339,6 @@ function SendingAddressesSection({
   const removeDomain = useDeleteSendingDomain()
   const restart = useRestartSendingDomainChecks()
   const sendTest = useSendTestEmail()
-  const { copy } = useCopyToClipboard()
   const showError = (fallback: string) => (error: unknown) =>
     setActionError(errorText(error, fallback))
   const now = new Date()
@@ -384,7 +375,8 @@ function SendingAddressesSection({
         {rows.map(({ a, domain, phase }) => {
           const smtp = a.config.smtp as SmtpConfig | undefined
           const first = firstOnDomain.has(a.id)
-          const open = domain ? (expanded[domain.id] ?? phase !== 'live') : false
+          // Always open while the domain needs its records; opened from the menu once live.
+          const open = domain ? phase !== 'live' || (expanded[domain.id] ?? false) : false
           const label = a.address ?? ''
           const items = [
             ...(domain && phase === 'live'
@@ -406,7 +398,7 @@ function SendingAddressesSection({
                   },
                 ]
               : []),
-            ...(domain && first
+            ...(domain && first && phase === 'live'
               ? [
                   {
                     label: open ? 'Hide DNS records' : 'DNS records',
@@ -418,22 +410,18 @@ function SendingAddressesSection({
               label: 'SMTP override',
               onSelect: () => setSmtpFor({ id: a.id, address: label, smtp }),
             },
-            ...(domain && phase !== 'live'
-              ? [
-                  {
-                    label: 'Copy instructions',
-                    onSelect: () => {
-                      void copy(instructionsText(domain)).then(
-                        (ok) => ok && toast.success('Instructions copied')
-                      )
-                    },
-                  },
-                ]
-              : []),
             {
               label: 'Remove',
               destructive: true,
-              onSelect: () => setRemoveTarget({ id: a.id, address: label }),
+              onSelect: () =>
+                setRemoveTarget({
+                  id: a.id,
+                  // Removing the last address on a domain removes the domain too.
+                  alsoDomain:
+                    domain && rows.filter((r) => r.domain?.id === domain.id).length === 1
+                      ? domain.domain
+                      : null,
+                }),
             },
           ]
           return (
@@ -533,39 +521,32 @@ function SendingAddressesSection({
         open={removeTarget !== null}
         onOpenChange={(open) => !open && setRemoveTarget(null)}
         title="Delete address?"
-        description="Replies can no longer be sent from this address."
+        description={
+          removeTarget?.alsoDomain
+            ? `Replies can no longer be sent from this address. ${removeTarget.alsoDomain} will be removed too.`
+            : 'Replies can no longer be sent from this address.'
+        }
         confirmLabel="Delete address"
         variant="destructive"
         isPending={del.isPending}
         onConfirm={() => {
           if (removeTarget) {
+            const { id, alsoDomain } = removeTarget
             setActionError(null)
-            del.mutate(removeTarget.id, {
-              onSuccess: (result) => {
-                if (result.lastOnDomain) setDomainRemoveTarget(result.lastOnDomain)
+            del.mutate(id, {
+              // Only the domain the dialog named, and only when the server
+              // agrees no address uses it any more.
+              onSuccess: ({ lastOnDomain }) => {
+                if (alsoDomain && lastOnDomain?.domain === alsoDomain) {
+                  removeDomain.mutate(lastOnDomain.id, {
+                    onError: showError("Couldn't remove the domain."),
+                  })
+                }
               },
               onError: showError("Couldn't remove the address."),
             })
           }
           setRemoveTarget(null)
-        }}
-      />
-      <ConfirmDialog
-        open={domainRemoveTarget !== null}
-        onOpenChange={(open) => !open && setDomainRemoveTarget(null)}
-        title={domainRemoveTarget ? `Also remove ${domainRemoveTarget.domain}?` : 'Remove domain?'}
-        description="No address uses it now. Its DNS records can be deleted afterwards."
-        confirmLabel="Remove domain"
-        cancelLabel="Keep"
-        variant="destructive"
-        isPending={removeDomain.isPending}
-        onConfirm={() => {
-          if (domainRemoveTarget) {
-            removeDomain.mutate(domainRemoveTarget.id, {
-              onError: showError("Couldn't remove the domain."),
-            })
-          }
-          setDomainRemoveTarget(null)
         }}
       />
     </SettingsCard>

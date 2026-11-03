@@ -168,7 +168,8 @@ describe('the default address', () => {
     renderSettings()
     const first = document.querySelector('[data-slot="settings-list-row"]')
     expect(first?.textContent).toContain('notifications@example.com')
-    expect(first?.textContent).toContain('Default for every area')
+    expect(first?.textContent).toContain('Default')
+    expect(first?.textContent).not.toContain('Default for')
   })
 
   it('names the areas it still covers once an address is live', () => {
@@ -180,7 +181,7 @@ describe('the default address', () => {
 
   it('still covers an area whose address is not live yet', () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [domain()] })
-    expect(row('notifications@example.com').textContent).toContain('Default for every area')
+    expect(row('notifications@example.com').textContent).not.toContain('Default for')
   })
 })
 
@@ -203,9 +204,9 @@ describe('address rows', () => {
     expect(within(r).getByText('Setting up').getAttribute('data-slot')).toBe('badge')
     expect(within(r).queryByText('Needs attention')).toBeNull()
     expect(screen.getByText('Set up acme.com')).toBeTruthy()
-    expect(
-      screen.getByText('Checking automatically for 72 hours · last checked less than a minute ago')
-    ).toBeTruthy()
+    const footer = screen.getByText("Checking automatically. We'll let you know when it's live.")
+    expect(footer.getAttribute('title')).toBe('Last checked less than a minute ago')
+    expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull()
   })
 
   it('shows the setup panel once per domain and the other addresses wait for it', () => {
@@ -232,6 +233,7 @@ describe('address rows', () => {
     expect(r.textContent).toContain(
       'Records not found after 72 hours. Replies send from the default address.'
     )
+    expect(screen.getByText("We couldn't find these records yet.")).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
     expect(restartChecks).toHaveBeenCalledWith('dom_1', expect.anything())
   })
@@ -243,7 +245,12 @@ describe('address rows', () => {
     expect(r.textContent).toContain(
       'The return path record is missing. Replies send from the default address.'
     )
-    expect(within(panels()[0] as HTMLElement).getByText('Missing')).toBeTruthy()
+    const panel = panels()[0] as HTMLElement
+    expect(
+      within(panel).getByText("We couldn't find this record. Add it with the name and value above.")
+    ).toBeTruthy()
+    // One sentence, under the one record that needs it.
+    expect(panel.querySelectorAll('[data-slot="dns-record-fix"]')).toHaveLength(1)
   })
 
   it('does not claim replies fall back where the guard permits any address', () => {
@@ -271,14 +278,16 @@ describe('address rows', () => {
 
     user = await openMenu('hi@beta.example')
     expect(screen.queryByRole('menuitem', { name: 'Send test email' })).toBeNull()
-    expect(screen.getByRole('menuitem', { name: 'Copy instructions' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /DNS records/ })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Copy instructions' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: 'SMTP override' })).toBeTruthy()
   })
 
   it('opens the records of a live domain from the menu, to keep in place', async () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [LIVE] })
     const user = await openMenu('help@acme.com')
     await user.click(screen.getByRole('menuitem', { name: 'DNS records' }))
-    expect(screen.getByText("Keep these published. They're checked daily.")).toBeTruthy()
+    expect(screen.getByText('Keep these published.')).toBeTruthy()
   })
 })
 
@@ -291,7 +300,7 @@ describe('the record table', () => {
     await waitFor(() => expect(clipboard).toHaveBeenLastCalledWith('qb-bounce'))
   })
 
-  it('shows MX with its priority and each record state', () => {
+  it('shows MX with its priority, a label per record and a fix only under a broken one', () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com', 'support')],
       domains: [
@@ -309,45 +318,47 @@ describe('the record table', () => {
         }),
       ],
     })
+    const rows = document.querySelectorAll('[data-slot="dns-record"]')
+    expect(rows[0].textContent).toContain('Found: Ownership')
+    expect(rows[1].textContent).toContain('Needs a fix: Signing')
+    expect(rows[2].textContent).toContain('Needs a fix: Return path')
     expect(screen.getByText('MX 10')).toBeTruthy()
-    expect(screen.getByText('Found')).toBeTruthy()
-    expect(screen.getByText('Proxied')).toBeTruthy()
-    expect(screen.getByText('Wrong value')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'This name returns an address instead of pointing to the value above. Turn off any proxy for it.'
+      )
+    ).toBeTruthy()
     expect(
       screen.getByText(
         'The domain looks like it was entered twice. Use just the part before .acme.com.'
       )
     ).toBeTruthy()
+    expect(document.querySelectorAll('[data-slot="dns-record-fix"]')).toHaveLength(2)
   })
 
-  it('says found, waiting for confirmation, when every record is in place', () => {
+  it('shows a missing record as waiting while the domain is being set up', () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com', 'support')],
-      domains: [domain({ dnsRecords: records({ ownership: found, dkim: found, mx: found }) })],
+      domains: [domain({ dnsRecords: records({ ownership: found, dkim: missing, mx: missing }) })],
     })
-    expect(screen.getAllByText('Found, waiting for confirmation')).toHaveLength(3)
+    expect(document.querySelectorAll('[data-slot="dns-record"]')[1].textContent).toContain(
+      'Waiting: Signing'
+    )
+    expect(document.querySelectorAll('[data-slot="dns-record-fix"]')).toHaveLength(0)
   })
 
-  it('offers DMARC as optional only when the domain has none', () => {
-    renderSettings({
-      addresses: [address('a1', 'help@acme.com', 'support')],
-      domains: [domain({ preflight: { dmarc: { found: false } } })],
-    })
-    expect(screen.getByText('v=DMARC1; p=none')).toBeTruthy()
-    cleanup()
+  it('leaves out DMARC, pre-flight badges and host tips', () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com', 'support')],
       domains: [
-        domain({ preflight: { dmarc: { found: true, policy: 'none' }, dnsHost: 'cloudflare' } }),
+        domain({
+          preflight: { dmarc: { found: false }, dnsHost: 'cloudflare', mailFromFree: true },
+        }),
       ],
     })
-    expect(screen.queryByText('v=DMARC1; p=none')).toBeNull()
-    expect(screen.getByText('DMARC found')).toBeTruthy()
-    expect(
-      screen.getByText(
-        'Cloudflare: set the three _domainkey records to DNS only. Enter names without .acme.com; Cloudflare adds it.'
-      )
-    ).toBeTruthy()
+    const panel = panels()[0] as HTMLElement
+    expect(panel.textContent).not.toMatch(/DMARC|Cloudflare|is free|Enter names/)
+    expect(panel.querySelectorAll('[data-slot="dns-record"]')).toHaveLength(3)
   })
 
   it('copies instructions as plain text with relative names', async () => {
@@ -382,27 +393,55 @@ describe('removing a sending address', () => {
     await waitFor(() => expect(deleteAccount).toHaveBeenCalledWith('a1', expect.anything()))
   })
 
-  it('offers to remove the domain too when it was the last address on it', async () => {
+  it('removes the domain too, in the same confirm, when it was the last address on it', async () => {
     deleteAccount.mockImplementation((_id: string, opts: { onSuccess: (r: unknown) => void }) =>
       opts.onSuccess({ id: 'a1', lastOnDomain: { id: 'dom_1', domain: 'acme.com' } })
     )
     renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [LIVE] })
-    await confirmRemove()
-    const title = await screen.findByText('Also remove acme.com?')
-    const dialog = title.closest('[role="alertdialog"]') as HTMLElement
-    expect(deleteDomain).not.toHaveBeenCalled()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove domain' }))
+    const user = await openMenu('help@acme.com')
+    await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/acme\.com will be removed too\./)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete address' }))
     await waitFor(() => expect(deleteDomain).toHaveBeenCalledWith('dom_1', expect.anything()))
+    expect(screen.queryAllByRole('alertdialog')).toHaveLength(0)
   })
 
-  it('does not ask about the domain when other addresses still use it', async () => {
+  it('keeps the domain while another address uses it', async () => {
     deleteAccount.mockImplementation((_id: string, opts: { onSuccess: (r: unknown) => void }) =>
       opts.onSuccess({ id: 'a1', lastOnDomain: null })
     )
-    renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [LIVE] })
+    renderSettings({
+      addresses: [
+        address('a1', 'help@acme.com', 'support'),
+        address('a2', 'news@acme.com', 'changelog'),
+      ],
+      domains: [LIVE],
+    })
+    const user = await openMenu('help@acme.com')
+    await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog.textContent).not.toContain('will be removed too')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete address' }))
+    await waitFor(() => expect(deleteAccount).toHaveBeenCalled())
+    expect(deleteDomain).not.toHaveBeenCalled()
+  })
+
+  it('never removes a domain the dialog did not name', async () => {
+    // The page thought another address used it; the server says none does.
+    deleteAccount.mockImplementation((_id: string, opts: { onSuccess: (r: unknown) => void }) =>
+      opts.onSuccess({ id: 'a1', lastOnDomain: { id: 'dom_1', domain: 'acme.com' } })
+    )
+    renderSettings({
+      addresses: [
+        address('a1', 'help@acme.com', 'support'),
+        address('a2', 'news@acme.com', 'changelog'),
+      ],
+      domains: [LIVE],
+    })
     await confirmRemove()
     await waitFor(() => expect(deleteAccount).toHaveBeenCalled())
-    expect(screen.queryByText('Also remove acme.com?')).toBeNull()
+    expect(deleteDomain).not.toHaveBeenCalled()
   })
 })
 

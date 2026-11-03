@@ -51,12 +51,15 @@ export function recordTypeLabel(record: Pick<DnsRecordDTO, 'type' | 'priority'>)
     : record.type
 }
 
-/** The optional DMARC record, offered only when the domain has none. */
-export const DMARC_SUGGESTION: DnsRecordDTO = {
-  type: 'TXT',
-  host: '_dmarc',
-  value: 'v=DMARC1; p=none',
-  purpose: 'dmarc',
+const RECORD_LABEL: Record<string, string> = {
+  ownership: 'Ownership',
+  dkim: 'Signing',
+  'mail-from': 'Return path',
+}
+
+/** The short label for what a record does. */
+export function recordLabel(record: Pick<DnsRecordDTO, 'purpose'>): string {
+  return RECORD_LABEL[record.purpose] ?? record.purpose
 }
 
 /**
@@ -64,14 +67,7 @@ export const DMARC_SUGGESTION: DnsRecordDTO = {
  * a message to whoever manages their DNS.
  */
 export function instructionsText(domain: SendingDomainDTO): string {
-  const records = [
-    ...domain.dnsRecords,
-    ...(domain.preflight.dmarc?.found === false ? [DMARC_SUGGESTION] : []),
-  ]
-  const lines = records.map(
-    (r) =>
-      `${recordTypeLabel(r)}  ${r.host}  ${r.value}${r.purpose === 'dmarc' ? '  (optional)' : ''}`
-  )
+  const lines = domain.dnsRecords.map((r) => `${recordTypeLabel(r)}  ${r.host}  ${r.value}`)
   return [
     `Add these DNS records to ${domain.domain} so replies can be sent from it. Enter each name as shown; most DNS hosts add .${domain.domain} themselves.`,
     '',
