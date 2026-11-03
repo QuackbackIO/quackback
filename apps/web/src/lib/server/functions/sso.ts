@@ -718,15 +718,11 @@ export const verifyProviderDomainFn = createServerFn({ method: 'POST' })
 export const getSsoDomainProofsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Record<string, ProvenZoneSource>> => {
     await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
-    const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
-    const { getProvenZones, provenZoneCovering } =
-      await import('@/lib/server/domains/domain-proof/proven-zones')
-    const [workspace, zones] = await Promise.all([getWorkspaceSettings(), getProvenZones()])
-    const others = zones.filter((z) => z.source !== 'sso')
+    const { listSignInDomainSummaries } =
+      await import('@/lib/server/domains/domain-proof/domains-overview')
     const proofs: Record<string, ProvenZoneSource> = {}
-    for (const d of workspace?.verifiedDomains ?? []) {
-      const covering = provenZoneCovering(d.name, others)
-      if (covering) proofs[d.id] = covering.source
+    for (const d of await listSignInDomainSummaries()) {
+      if (d.provenBy) proofs[d.id] = d.provenBy
     }
     return proofs
   }

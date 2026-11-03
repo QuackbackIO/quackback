@@ -60,6 +60,16 @@ export interface SettingsModuleRow {
   pages: SettingsModuleRowPage[]
 }
 
+/**
+ * Who can open the Domains page: a holder of any permission that owns one of
+ * the kinds of domain it lists (web addresses, email sending, sign-in).
+ */
+export const DOMAINS_PAGE_PERMISSIONS = [
+  PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+  PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+  PERMISSIONS.AUTH_MANAGE,
+] as const satisfies readonly PermissionKey[]
+
 /** The permission each module page's route checks when it opens. */
 const MODULE_PAGE_PERMISSIONS = {
   '/admin/settings/boards': PERMISSIONS.BOARD_MANAGE,
@@ -203,8 +213,7 @@ export function isNavModule(entry: NavEntry): entry is NavModule {
  */
 export function buildNavSections(
   flags?: Partial<FeatureFlags>,
-  billingEnabled = false,
-  operatorEnabled = false
+  billingEnabled = false
 ): NavSection[] {
   const products: NavEntry[] = buildSettingsModuleRows(flags).map((module): NavEntry => {
     const [only, ...rest] = module.pages
@@ -239,14 +248,7 @@ export function buildNavSections(
           ...navPage('/admin/settings/general'),
           permission: PERMISSIONS.SETTINGS_MANAGE,
         },
-        ...(operatorEnabled
-          ? [
-              {
-                ...navPage('/admin/settings/domains'),
-                permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
-              },
-            ]
-          : []),
+        { ...navPage('/admin/settings/domains'), anyOf: DOMAINS_PAGE_PERMISSIONS },
         { ...navPage('/admin/settings/notifications') },
         {
           ...navPage('/admin/settings/portal'),

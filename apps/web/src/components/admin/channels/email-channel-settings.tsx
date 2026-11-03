@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { RowIcon, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { StateBadge } from '@/components/shared/state-badge'
+import { PhaseBadge } from './phase-badge'
 import { emailChannelConfigQuery } from '@/lib/client/queries/channel-accounts'
 import {
   useCreateInboundRoute,
@@ -30,7 +30,6 @@ import { domainPhase, failingRecordName, type DomainPhase } from './sending-doma
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
@@ -307,18 +306,6 @@ function pendingMeta(
     return `${domain.domain} needs attention.${fallback}`
   }
   return null
-}
-
-/** No badge when live; Setting up while pending; Needs attention otherwise. */
-function PhaseBadge({ phase }: { phase: DomainPhase }) {
-  if (phase === 'live') return null
-  return phase === 'setting-up' ? (
-    <Badge size="sm" variant="secondary">
-      Setting up
-    </Badge>
-  ) : (
-    <StateBadge state="attention" />
-  )
 }
 
 function SendingAddressesSection({

@@ -109,6 +109,8 @@ interface SettingsListRowProps {
   /** Makes the whole row a link with a trailing chevron (and no menu). */
   to?: string
   params?: Record<string, string>
+  /** Search params for `to`, such as a tab. */
+  search?: Record<string, string>
   onClick?: () => void
 }
 
@@ -125,6 +127,7 @@ export function SettingsListRow({
   actionsLabel,
   to,
   params,
+  search,
   onClick,
 }: SettingsListRowProps) {
   const height = meta ? 'min-h-[52px]' : 'min-h-[44px]'
@@ -164,6 +167,7 @@ export function SettingsListRow({
       <Link
         to={to}
         params={params}
+        search={search}
         data-slot="settings-list-row"
         className={cn(ROW_BASE, height, 'transition-colors hover:bg-muted/40')}
       >

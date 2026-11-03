@@ -85,6 +85,6 @@ describe('<DomainsCard>', () => {
   it('names no hosting provider in its description', () => {
     renderCard([])
     expect(screen.queryByText(/cloud/i)).toBeNull()
-    expect(screen.getByText('Point a hostname you own at this workspace.')).toBeTruthy()
+    expect(screen.getByText('Where people reach your portal and help center.')).toBeTruthy()
   })
 })

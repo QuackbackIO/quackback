@@ -130,7 +130,6 @@ Examples:
         featureFlags,
         billingEnabled:
           commercial.enabled && (commercial.canUpgrade || commercial.canManageBilling),
-        domainsEnabled: commercial.enabled,
       }).find((item) => item.href === entry.href)
       if (!page) return errorResult(new Error('This page is unavailable for this workspace.'))
       return compactJsonResult({

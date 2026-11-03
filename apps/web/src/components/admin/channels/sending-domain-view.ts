@@ -16,7 +16,10 @@ import type { DnsRecordDTO, SendingDomainDTO } from '@/lib/server/functions/chan
  */
 export type DomainPhase = 'live' | 'setting-up' | 'not-found' | 'attention'
 
-export function domainPhase(domain: SendingDomainDTO, now: Date = new Date()): DomainPhase {
+export function domainPhase(
+  domain: Pick<SendingDomainDTO, 'status' | 'verifiedAt' | 'autoCheckUntil'>,
+  now: Date = new Date()
+): DomainPhase {
   if (domain.status === 'verified') return 'live'
   if (domain.status === 'failed' || domain.verifiedAt) return 'attention'
   // No window at all is a domain from before windows existed that the
