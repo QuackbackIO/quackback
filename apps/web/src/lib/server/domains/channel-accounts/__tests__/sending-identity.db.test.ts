@@ -136,7 +136,7 @@ const identity = (over: Partial<SesDomainIdentity> = {}): SesDomainIdentity => (
   signingHostedZone: null,
   dkimStatus: 'SUCCESS',
   verifiedForSending: true,
-  mailFrom: { domain: 'bounce.tenant-a.example', status: 'SUCCESS' },
+  mailFrom: { domain: 'qb-bounce.tenant-a.example', status: 'SUCCESS' },
   ...over,
 })
 
@@ -200,7 +200,7 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     expect(createIdentity).toHaveBeenCalledWith('tenant-a.example')
     // A subdomain that receives no mail, so the bounce MX cannot displace the
     // owner's real routing.
-    expect(putMailFrom).toHaveBeenCalledWith('tenant-a.example', 'bounce.tenant-a.example')
+    expect(putMailFrom).toHaveBeenCalledWith('tenant-a.example', 'qb-bounce.tenant-a.example')
 
     expect(row.domain).toBe('tenant-a.example')
     expect(row.status).toBe('pending')
@@ -209,8 +209,8 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
       'CNAME aaa._domainkey',
       'CNAME bbb._domainkey',
       'CNAME ccc._domainkey',
-      'MX bounce',
-      'TXT bounce',
+      'MX qb-bounce',
+      'TXT qb-bounce',
     ])
     const ownership = row.dnsRecords.find((r) => r.purpose === 'ownership')
     expect(ownership?.value.startsWith(OWNERSHIP_VALUE_PREFIX)).toBe(true)
@@ -292,7 +292,7 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
 
     ownershipResolves.mockResolvedValue(true)
     await refreshSendingDomain(row.id)
-    expect(putMailFrom).toHaveBeenCalledWith('tenant-a.example', 'bounce.tenant-a.example')
+    expect(putMailFrom).toHaveBeenCalledWith('tenant-a.example', 'qb-bounce.tenant-a.example')
   })
 
   it('leaves a MAIL FROM alone on a poll that proves nothing', async () => {
@@ -385,7 +385,7 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
 
     ownershipResolves.mockResolvedValue(true)
     getIdentity.mockResolvedValue(
-      identity({ mailFrom: { domain: 'bounce.tenant-a.example', status: 'PENDING' } })
+      identity({ mailFrom: { domain: 'qb-bounce.tenant-a.example', status: 'PENDING' } })
     )
     expect((await refreshSendingDomain(row.id))?.status).toBe('pending')
   })
@@ -415,6 +415,79 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     expect((await refreshSendingDomain(row.id))?.status).toBe('failed')
   })
 
+  describe('the stored MAIL FROM label and pre-flight', () => {
+    it('gives a new domain qb-bounce, a 72 hour check window and its pre-flight', async () => {
+      zone.set('tenant-a.example', { NS: ['ada.ns.cloudflare.com'] })
+      const teamId = await seedTeam()
+      const before = Date.now()
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+
+      expect(row.mailFromLabel).toBe('qb-bounce')
+      const window = (row.autoCheckUntil?.getTime() ?? 0) - before
+      expect(window).toBeGreaterThanOrEqual(72 * 3600 * 1000 - 5000)
+      expect(window).toBeLessThanOrEqual(72 * 3600 * 1000 + 5000)
+      expect(row.preflight).toMatchObject({
+        dnsHost: 'cloudflare',
+        mailFromFree: true,
+        dmarc: { found: false },
+      })
+    })
+
+    it('keeps bounce for a domain stored before the label was', async () => {
+      // A row as the migration leaves it: the column default, nothing else.
+      // Its owner published records under bounce, and they must keep matching.
+      const teamId = await seedTeam()
+      const [legacy] = await testDb
+        .insert(emailSendingDomains)
+        .values({ owningTeamId: teamId, domain: 'tenant-a.example', status: 'verified' })
+        .returning()
+      expect(legacy.mailFromLabel).toBe('bounce')
+
+      ownershipResolves.mockResolvedValue(true)
+      getIdentity.mockResolvedValue(
+        identity({ mailFrom: { domain: 'bounce.tenant-a.example', status: 'SUCCESS' } })
+      )
+      const refreshed = await refreshSendingDomain(legacy.id)
+
+      expect(refreshed?.status).toBe('verified')
+      expect(
+        refreshed?.dnsRecords.filter((r) => r.purpose === 'mail-from').map((r) => r.host)
+      ).toEqual(['bounce', 'bounce'])
+      // Already attached under its own label, so nothing is rewritten.
+      expect(putMailFrom).not.toHaveBeenCalled()
+    })
+
+    it('refuses a domain whose qb-bounce name is already in use, before anything is created', async () => {
+      zone.set('qb-bounce.tenant-a.example', { A: ['192.0.2.1'] })
+      const teamId = await seedTeam()
+      await expect(
+        provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+      ).rejects.toThrow(
+        "qb-bounce.tenant-a.example is already in use, so we can't set up sending for tenant-a.example. Contact us to use another name."
+      )
+      expect(createIdentity).not.toHaveBeenCalled()
+      const rows = await testDb
+        .select()
+        .from(emailSendingDomains)
+        .where(eq(emailSendingDomains.owningTeamId, teamId))
+      expect(rows).toEqual([])
+    })
+
+    it('reads DMARC again on each check and keeps the rest of the pre-flight', async () => {
+      zone.set('tenant-a.example', { NS: ['ns01.domaincontrol.com'] })
+      const teamId = await seedTeam()
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+      expect(row.preflight.dmarc).toEqual({ found: false })
+
+      zone.set('_dmarc.tenant-a.example', { TXT: [['v=DMARC1; p=reject']] })
+      const refreshed = await refreshSendingDomain(row.id)
+      expect(refreshed?.preflight).toMatchObject({
+        dnsHost: 'godaddy',
+        dmarc: { found: true, policy: 'reject' },
+      })
+    })
+  })
+
   describe('per-record checks', () => {
     it('marks every published record found and still waits for the provider', async () => {
       // Our lookups explain; the provider decides. Every record in place and
@@ -440,8 +513,8 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
         'tenant-a.example',
         row.dnsRecords.filter((r) => r.type !== 'MX')
       )
-      zone.set('bounce.tenant-a.example', {
-        ...zone.get('bounce.tenant-a.example'),
+      zone.set('qb-bounce.tenant-a.example', {
+        ...zone.get('qb-bounce.tenant-a.example'),
         MX: [{ exchange: 'mx.example.com', priority: 10 }],
       })
 
@@ -452,8 +525,8 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
         'CNAME aaa._domainkey found',
         'CNAME bbb._domainkey found',
         'CNAME ccc._domainkey found',
-        'MX bounce mismatch',
-        'TXT bounce found',
+        'MX qb-bounce mismatch',
+        'TXT qb-bounce found',
       ])
       expect(refreshed?.dnsRecords.find((r) => r.type === 'MX')?.check?.seen).toBe(
         '10 mx.example.com'
@@ -569,7 +642,7 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
       expect((await refreshSendingDomain(row.id))?.status).toBe('verified')
 
       getIdentity.mockResolvedValue(
-        identity({ mailFrom: { domain: 'bounce.tenant-a.example', status: 'FAILED' } })
+        identity({ mailFrom: { domain: 'qb-bounce.tenant-a.example', status: 'FAILED' } })
       )
       expect((await sweepSendingDomains()).demoted).toBe(1)
       expect((await getSendingDomain(row.id))?.status).toBe('pending')

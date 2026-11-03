@@ -103,6 +103,22 @@ export interface SendingDomainOwnershipRecord {
   check?: SendingDomainRecordCheck
 }
 
+/**
+ * What was learned about a domain's DNS before its identity was created, and
+ * refreshed (the DMARC part) on each check. Read to tailor the setup steps;
+ * nothing here decides whether the domain is verified.
+ */
+export interface SendingDomainPreflight {
+  /** The DNS host the domain's nameservers belong to, matched by suffix. */
+  dnsHost?: 'cloudflare' | 'route53' | 'godaddy' | 'namecheap' | 'google' | 'other'
+  /** Whether nothing resolved at the MAIL FROM subdomain before we used it. */
+  mailFromFree?: boolean
+  /** The domain's DMARC record, read and never required. */
+  dmarc?: { found: boolean; policy?: 'none' | 'quarantine' | 'reject' }
+  /** ISO timestamp of the lookups. */
+  checkedAt?: string
+}
+
 export const emailSendingDomains = pgTable(
   'email_sending_domains',
   {
@@ -118,6 +134,18 @@ export const emailSendingDomains = pgTable(
       .default(sql`'[]'::jsonb`),
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
     lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+    /**
+     * The MAIL FROM subdomain label. Stored per row because it changed:
+     * domains verified before it was stored keep `bounce`, the column default,
+     * and new rows are written with `qb-bounce`.
+     */
+    mailFromLabel: text('mail_from_label').notNull().default('bounce'),
+    /** Until when a pending domain is checked automatically. Null: not in a window. */
+    autoCheckUntil: timestamp('auto_check_until', { withTimezone: true }),
+    preflight: jsonb('preflight')
+      .$type<SendingDomainPreflight>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

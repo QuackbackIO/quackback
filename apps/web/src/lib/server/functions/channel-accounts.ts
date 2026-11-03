@@ -95,12 +95,30 @@ export interface ChannelAccountDTO {
   sendingDomain: { domain: string; status: string } | null
 }
 
+/** Pre-flight findings for a domain (see `preflight.ts`). Every field may be absent. */
+export interface SendingDomainPreflightDTO {
+  dnsHost?: 'cloudflare' | 'route53' | 'godaddy' | 'namecheap' | 'google' | 'other'
+  mailFromFree?: boolean
+  dmarc?: { found: boolean; policy?: 'none' | 'quarantine' | 'reject' }
+  checkedAt?: string
+}
+
 export interface SendingDomainDTO {
   id: string
   domain: string
   status: string
   dnsRecords: DnsRecordDTO[]
   verifiedAt: string | null
+  /** The MAIL FROM subdomain label the records are composed under. */
+  mailFromLabel: string
+  /**
+   * Until when a pending domain is checked automatically. A pending domain
+   * whose window has passed (or is null) is "not found after 72 hours".
+   */
+  autoCheckUntil: string | null
+  /** The last full check, provider included. Each record's `check.checkedAt` is its own lookup. */
+  lastCheckedAt: string | null
+  preflight: SendingDomainPreflightDTO
 }
 
 export interface EmailChannelConfigDTO {
@@ -150,6 +168,10 @@ const toDomain = (d: EmailSendingDomain): SendingDomainDTO => ({
   // and the wire shape says the same thing with an optional field.
   dnsRecords: (d.dnsRecords ?? []).map((r) => ({ ...r })),
   verifiedAt: d.verifiedAt ? d.verifiedAt.toISOString() : null,
+  mailFromLabel: d.mailFromLabel,
+  autoCheckUntil: d.autoCheckUntil ? d.autoCheckUntil.toISOString() : null,
+  lastCheckedAt: d.lastCheckedAt ? d.lastCheckedAt.toISOString() : null,
+  preflight: { ...d.preflight },
 })
 
 async function requireDefaultTeam(): Promise<TeamId> {

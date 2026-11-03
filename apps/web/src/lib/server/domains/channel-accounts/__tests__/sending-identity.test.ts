@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import type { SesDomainIdentity } from '@quackback/email/ses-identity'
 import {
+  LEGACY_MAIL_FROM_LABEL,
   MAIL_FROM_LABEL,
   OWNERSHIP_RECORD_HOST,
   OWNERSHIP_VALUE_PREFIX,
@@ -39,6 +40,7 @@ describe('the records a domain owner has to publish', () => {
       region: REGION,
       ownershipToken: 'tok',
       identity: identity(),
+      mailFromLabel: MAIL_FROM_LABEL,
     })
 
     expect(records.filter((r) => r.purpose === 'ownership')).toEqual([
@@ -94,6 +96,7 @@ describe('the records a domain owner has to publish', () => {
       region: REGION,
       ownershipToken: 'tok',
       identity: identity({ dkimTokens: ['aaa'], signingHostedZone: 'dkim.elsewhere.example' }),
+      mailFromLabel: MAIL_FROM_LABEL,
     })
     expect(records.find((r) => r.purpose === 'dkim')?.value).toBe('aaa.dkim.elsewhere.example')
   })
@@ -106,6 +109,7 @@ describe('the records a domain owner has to publish', () => {
       region: REGION,
       ownershipToken: 'tok',
       identity: identity({ dkimTokens: [] }),
+      mailFromLabel: MAIL_FROM_LABEL,
     })
     expect(records.filter((r) => r.purpose === 'dkim')).toEqual([])
     expect(records).toHaveLength(3)
@@ -122,6 +126,7 @@ describe('the records a domain owner has to publish', () => {
       region: REGION,
       ownershipToken: 'tok',
       identity: identity(),
+      mailFromLabel: MAIL_FROM_LABEL,
     })
     expect(ownershipRecordsOf(records)).toHaveLength(1)
     expect(ownershipRecordsOf([])).toEqual([])
@@ -150,8 +155,28 @@ describe('the records a domain owner has to publish', () => {
     ).toEqual([])
   })
 
-  it('puts the MAIL FROM on a subdomain that receives no mail', () => {
-    expect(mailFromDomainFor('tenant-a.example')).toBe('bounce.tenant-a.example')
+  it('puts the MAIL FROM on the subdomain the row stores', () => {
+    expect(mailFromDomainFor('tenant-a.example', 'bounce')).toBe('bounce.tenant-a.example')
+    expect(mailFromDomainFor('tenant-a.example', 'qb-bounce')).toBe('qb-bounce.tenant-a.example')
+  })
+
+  it('uses qb-bounce for new domains and keeps bounce for existing ones', () => {
+    expect(MAIL_FROM_LABEL).toBe('qb-bounce')
+    expect(LEGACY_MAIL_FROM_LABEL).toBe('bounce')
+  })
+
+  it('composes the MAIL FROM pair under the label it is given', () => {
+    const records = sendingDomainDnsRecords({
+      domain: 'tenant-a.example',
+      region: REGION,
+      ownershipToken: 'tok',
+      identity: identity(),
+      mailFromLabel: LEGACY_MAIL_FROM_LABEL,
+    })
+    expect(records.filter((r) => r.purpose === 'mail-from').map((r) => r.host)).toEqual([
+      'bounce',
+      'bounce',
+    ])
   })
 })
 

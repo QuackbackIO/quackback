@@ -70,6 +70,7 @@ import {
 import { verifySendingDomainDns } from './domain-verification'
 import { systemResolver } from './dns-resolver'
 import { checkRecords } from './record-check'
+import { readDmarc, runPreflight } from './preflight'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 import { isAtOrUnder, platformSendingDomains, toAsciiDomain } from './outbound-identity'
 
@@ -90,14 +91,25 @@ export const OWNERSHIP_RECORD_HOST = '_quackback'
 export const OWNERSHIP_VALUE_PREFIX = 'quackback-domain-verification='
 
 /**
- * The subdomain the envelope sender moves to.
+ * The subdomain the envelope sender moves to, for a domain added from here on.
  *
  * A custom MAIL FROM domain must be a subdomain of the verified domain and must
  * not be one that receives mail, because the provider publishes an MX there for
  * bounce handling and that MX would otherwise displace the owner's real mail
- * routing. `bounce` says what it is for.
+ * routing. Prefixed so it is unlikely to be a name the owner already uses;
+ * pre-flight refuses the domain when it is.
+ *
+ * Stored on each row (`mail_from_label`) and read from there everywhere else:
+ * domains verified before the label was stored keep {@link LEGACY_MAIL_FROM_LABEL},
+ * and their published records must keep matching.
  */
-export const MAIL_FROM_LABEL = 'bounce'
+export const MAIL_FROM_LABEL = 'qb-bounce'
+
+/** The label domains verified before it was stored were set up with. */
+export const LEGACY_MAIL_FROM_LABEL = 'bounce'
+
+/** How long a new or restarted domain is checked automatically. */
+export const AUTO_CHECK_WINDOW_MS = 72 * 60 * 60 * 1000
 
 /** Thrown when a domain cannot be added at all, with a reason for the operator. */
 export class SendingDomainRefusedError extends Error {
@@ -139,9 +151,9 @@ export function assertCustomSendingDomainsAvailable(env: NodeJS.ProcessEnv = pro
   }
 }
 
-/** The MAIL FROM subdomain for a verified domain. */
-export function mailFromDomainFor(domain: string): string {
-  return `${MAIL_FROM_LABEL}.${domain}`
+/** The MAIL FROM subdomain for a domain, under the label its row stores. */
+export function mailFromDomainFor(domain: string, label: string): string {
+  return `${label}.${domain}`
 }
 
 /** A fresh ownership token: unguessable, and unique to one row. */
@@ -254,6 +266,8 @@ export function sendingDomainDnsRecords(args: {
   region: string
   ownershipToken: string
   identity: SesDomainIdentity | null
+  /** The row's stored MAIL FROM label. */
+  mailFromLabel: string
 }): SendingDomainDnsRecord[] {
   const records: SendingDomainDnsRecord[] = [ownershipRecord(args.ownershipToken)]
   for (const token of args.identity?.dkimTokens ?? []) {
@@ -270,14 +284,14 @@ export function sendingDomainDnsRecords(args: {
   records.push(
     {
       type: 'MX',
-      host: MAIL_FROM_LABEL,
+      host: args.mailFromLabel,
       value: sesMailFromMxValue(args.region),
       priority: SES_MAIL_FROM_MX_PRIORITY,
       purpose: 'mail-from',
     },
     {
       type: 'TXT',
-      host: MAIL_FROM_LABEL,
+      host: args.mailFromLabel,
       value: SES_MAIL_FROM_SPF_VALUE,
       purpose: 'mail-from',
     }
@@ -328,9 +342,13 @@ function requireRegion(): string {
  * provider's account is shared, so the question "is it already right" is what
  * separates a legitimate attach from an attack that resets somebody else's.
  */
-function mailFromAlreadyAttached(identity: SesDomainIdentity | null, domain: string): boolean {
+function mailFromAlreadyAttached(
+  identity: SesDomainIdentity | null,
+  domain: string,
+  label: string
+): boolean {
   const attached = identity?.mailFrom?.domain?.trim().toLowerCase()
-  return attached === mailFromDomainFor(domain)
+  return attached === mailFromDomainFor(domain, label)
 }
 
 /**
@@ -368,6 +386,17 @@ export async function provisionSendingDomain(input: {
   const region = requireRegion()
   const domain = normalizeSendingDomain(input.domain)
   const ownershipToken = mintOwnershipToken()
+  const mailFromLabel = MAIL_FROM_LABEL
+
+  // Before anything is written or created: our MX at a name the owner already
+  // uses would displace whatever lives there.
+  const preflight = await runPreflight(domain, mailFromLabel, systemResolver)
+  if (preflight.mailFromFree === false) {
+    throw new SendingDomainRefusedError(
+      `${mailFromDomainFor(domain, mailFromLabel)} is already in use, so we can't set up ` +
+        `sending for ${domain}. Contact us to use another name.`
+    )
+  }
 
   // The slot, taken before anything account-wide is consumed. Carries the
   // ownership record already, so a row can never exist without the one record
@@ -382,7 +411,7 @@ export async function provisionSendingDomain(input: {
   try {
     const created = await createSesDomainIdentity(domain)
     if (!created.preexisting) {
-      await putSesMailFromDomain(domain, mailFromDomainFor(domain))
+      await putSesMailFromDomain(domain, mailFromDomainFor(domain, mailFromLabel))
     }
     // Re-read so the stored MAIL FROM state is the provider's, not our assumption
     // of what the call we just made implies.
@@ -394,11 +423,21 @@ export async function provisionSendingDomain(input: {
     throw err
   }
 
-  // Records only: the status and the verified stamp are the poll's to move.
+  // Records and setup only: the status and the verified stamp are the poll's
+  // to move.
   const [updated] = await db
     .update(emailSendingDomains)
     .set({
-      dnsRecords: sendingDomainDnsRecords({ domain, region, ownershipToken, identity }),
+      mailFromLabel,
+      autoCheckUntil: new Date(Date.now() + AUTO_CHECK_WINDOW_MS),
+      preflight,
+      dnsRecords: sendingDomainDnsRecords({
+        domain,
+        region,
+        ownershipToken,
+        identity,
+        mailFromLabel,
+      }),
       updatedAt: new Date(),
     })
     .where(eq(emailSendingDomains.id, row.id))
@@ -465,8 +504,12 @@ export async function refreshSendingDomain(
   // it for an identity that already existed, precisely so it cannot land on
   // another workspace's; here the ownership token has just been found in this
   // domain's zone, so the workspace asking is the one entitled to ask.
-  if (ownershipProven && identity && !mailFromAlreadyAttached(identity, row.domain)) {
-    await putSesMailFromDomain(row.domain, mailFromDomainFor(row.domain))
+  if (
+    ownershipProven &&
+    identity &&
+    !mailFromAlreadyAttached(identity, row.domain, row.mailFromLabel)
+  ) {
+    await putSesMailFromDomain(row.domain, mailFromDomainFor(row.domain, row.mailFromLabel))
     identity = (await getSesDomainIdentity(row.domain)) ?? identity
   }
 
@@ -476,15 +519,27 @@ export async function refreshSendingDomain(
   // Each record's own state, for the person publishing them. Recorded beside
   // the status and never feeding it: the provider's scan is what decides.
   const composed = withPreviousChecks(
-    sendingDomainDnsRecords({ domain: row.domain, region, ownershipToken, identity }),
+    sendingDomainDnsRecords({
+      domain: row.domain,
+      region,
+      ownershipToken,
+      identity,
+      mailFromLabel: row.mailFromLabel,
+    }),
     row.dnsRecords ?? []
   )
-  const dnsRecords = await checkRecords(row.domain, composed, systemResolver, now)
+  // DMARC is read on every check because it is one lookup and the owner may
+  // add one while setting up; a failed read keeps what was there.
+  const [dnsRecords, dmarc] = await Promise.all([
+    checkRecords(row.domain, composed, systemResolver, now),
+    readDmarc(row.domain, systemResolver),
+  ])
   const [updated] = await db
     .update(emailSendingDomains)
     .set({
       status,
       dnsRecords,
+      ...(dmarc ? { preflight: { ...row.preflight, dmarc } } : {}),
       lastCheckedAt: now,
       // Stamped once, on the transition. A domain that was verified and then
       // regressed keeps the date it first became trustworthy, which is the
