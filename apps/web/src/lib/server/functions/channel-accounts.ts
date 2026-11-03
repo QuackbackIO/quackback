@@ -145,6 +145,18 @@ export interface EmailChannelConfigDTO {
    * one the server will accept.
    */
   customDomains: 'available' | 'unavailable'
+  /** The address mail sends from when no sending address is live, or null when none is set. */
+  defaultFrom: string | null
+}
+
+/** This install's default From, or null when it has none configured. */
+async function defaultFromAddress(): Promise<string | null> {
+  const { getEmailFrom } = await import('@quackback/email')
+  try {
+    return getEmailFrom()
+  } catch {
+    return null
+  }
 }
 
 const toAccount = (a: ChannelAccount, domains: EmailSendingDomain[] = []): ChannelAccountDTO => {
@@ -188,6 +200,7 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
     const platformAddress = platformInboxAddress(currentMailSlug())
     const customDomains = customSendingDomainsAvailable() ? 'available' : 'unavailable'
+    const defaultFrom = await defaultFromAddress()
     const teamId = await defaultTeamId()
     if (!teamId) {
       return {
@@ -196,6 +209,7 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
         domains: [],
         platformAddress,
         customDomains,
+        defaultFrom,
       }
     }
     const [inbound, accounts, domains] = await Promise.all([
@@ -211,6 +225,7 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
       domains: domains.map(toDomain),
       platformAddress,
       customDomains,
+      defaultFrom,
     }
   }
 )
