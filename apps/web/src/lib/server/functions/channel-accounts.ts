@@ -113,7 +113,7 @@ export interface SendingDomainDTO {
   mailFromLabel: string
   /**
    * Until when a pending domain is checked automatically. A pending domain
-   * whose window has passed (or is null) is "not found after 72 hours".
+   * whose window has passed is "not found after 72 hours"; one with no window yet is still being set up.
    */
   autoCheckUntil: string | null
   /** The last full check, provider included. Each record's `check.checkedAt` is its own lookup. */

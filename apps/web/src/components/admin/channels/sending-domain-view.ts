@@ -11,6 +11,7 @@ import type { DnsRecordDTO, SendingDomainDTO } from '@/lib/server/functions/chan
  * - `live`: verified; addresses on it send as themselves.
  * - `setting-up`: pending inside its automatic check window.
  * - `not-found`: pending after the window ran out without the records.
+ *   A pending domain with no window yet counts as setting up.
  * - `attention`: was verified and stopped being, or the provider failed it.
  */
 export type DomainPhase = 'live' | 'setting-up' | 'not-found' | 'attention'
@@ -18,8 +19,10 @@ export type DomainPhase = 'live' | 'setting-up' | 'not-found' | 'attention'
 export function domainPhase(domain: SendingDomainDTO, now: Date = new Date()): DomainPhase {
   if (domain.status === 'verified') return 'live'
   if (domain.status === 'failed' || domain.verifiedAt) return 'attention'
-  const until = domain.autoCheckUntil ? new Date(domain.autoCheckUntil) : null
-  return until && until > now ? 'setting-up' : 'not-found'
+  // No window at all is a domain from before windows existed that the
+  // migration has not reached yet: still being set up, not overdue.
+  if (!domain.autoCheckUntil) return 'setting-up'
+  return new Date(domain.autoCheckUntil) > now ? 'setting-up' : 'not-found'
 }
 
 /** The latest of the domain's own record lookups, or null before the first. */

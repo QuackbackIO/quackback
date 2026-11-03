@@ -209,6 +209,16 @@ describe('address rows', () => {
     expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull()
   })
 
+  it('treats a pending domain with no check window yet as setting up', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com', 'support')],
+      domains: [domain({ autoCheckUntil: null })],
+    })
+    const r = row('help@acme.com')
+    expect(within(r).getByText('Setting up')).toBeTruthy()
+    expect(within(r).queryByText('Needs attention')).toBeNull()
+  })
+
   it('shows the setup panel once per domain and the other addresses wait for it', () => {
     renderSettings({
       addresses: [
