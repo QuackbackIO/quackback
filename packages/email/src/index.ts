@@ -65,6 +65,10 @@ import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { FeedbackLinkedEmail } from './templates/feedback-linked'
 import { PasswordResetEmail } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
+import {
+  SendingDomainAttentionEmail,
+  type SendingDomainAttentionRecord,
+} from './templates/sending-domain-attention'
 import { NewSignInEmail } from './templates/new-sign-in'
 import { StatusIncidentPublishedEmail } from './templates/status-incident-published'
 import type { IncidentImpact } from './templates/status-incident-published'
@@ -930,6 +934,37 @@ export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<E
     }),
     emailType: 'NewSignInEmail',
     preview: { occurredAt },
+  })
+}
+
+// ============================================================================
+// Sending domain needs attention
+// ============================================================================
+
+interface SendSendingDomainAttentionParams {
+  to: SecureRecipient
+  domain: string
+  record?: SendingDomainAttentionRecord | null
+  settingsUrl?: string | null
+  workspaceName?: string
+  logoUrl?: string
+}
+
+/**
+ * To a person who manages email channels, when a verified sending domain stops
+ * verifying and replies fall back to the default address.
+ */
+export async function sendSendingDomainAttentionEmail(
+  params: SendSendingDomainAttentionParams
+): Promise<EmailResult> {
+  const { to, domain, record, settingsUrl, workspaceName, logoUrl } = params
+  log.debug('sending sending-domain attention alert')
+  return sendEmail({
+    to,
+    subject: `Sending from ${domain} needs attention`,
+    react: SendingDomainAttentionEmail({ domain, record, settingsUrl, workspaceName, logoUrl }),
+    emailType: 'SendingDomainAttentionEmail',
+    preview: { domain },
   })
 }
 
@@ -1824,6 +1859,11 @@ export { ChangelogPublishedEmail } from './templates/changelog-published'
 export { FeedbackLinkedEmail } from './templates/feedback-linked'
 export { PasswordResetEmail } from './templates/password-reset'
 export { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
+export {
+  SendingDomainAttentionEmail,
+  sendingDomainProblem,
+} from './templates/sending-domain-attention'
+export type { SendingDomainAttentionRecord } from './templates/sending-domain-attention'
 export { NewSignInEmail } from './templates/new-sign-in'
 export { StatusIncidentPublishedEmail } from './templates/status-incident-published'
 export type { IncidentImpact } from './templates/status-incident-published'

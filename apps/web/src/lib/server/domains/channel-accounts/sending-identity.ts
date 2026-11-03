@@ -71,6 +71,7 @@ import { verifySendingDomainDns } from './domain-verification'
 import { systemResolver } from './dns-resolver'
 import { checkRecords } from './record-check'
 import { readDmarc, runPreflight } from './preflight'
+import { notifySendingDomainLive, notifySendingDomainNeedsAttention } from './sending-domain-notify'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 import { isAtOrUnder, platformSendingDomains, toAsciiDomain } from './outbound-identity'
 
@@ -550,6 +551,12 @@ export async function refreshSendingDomain(
     .where(eq(emailSendingDomains.id, id))
     .returning()
 
+  // The one place a domain goes live, whether the watch job, the daily sweep or
+  // a person's click got it there.
+  if (updated && status === 'verified' && row.status !== 'verified') {
+    await notifySendingDomainLive(updated)
+  }
+
   log.info(
     {
       sending_domain_id: id,
@@ -562,6 +569,23 @@ export async function refreshSendingDomain(
     'sending domain checked'
   )
   return updated ?? null
+}
+
+/**
+ * Open a fresh automatic check window on a domain and check it now: the
+ * "Check again" action, for a domain whose window ran out before its records
+ * were published.
+ */
+export async function restartSendingDomainChecks(
+  id: SendingDomainId
+): Promise<EmailSendingDomain | null> {
+  const [row] = await db
+    .update(emailSendingDomains)
+    .set({ autoCheckUntil: new Date(Date.now() + AUTO_CHECK_WINDOW_MS), updatedAt: new Date() })
+    .where(eq(emailSendingDomains.id, id))
+    .returning({ id: emailSendingDomains.id })
+  if (!row) return null
+  return refreshSendingDomain(id)
 }
 
 /**
@@ -612,6 +636,7 @@ export async function sweepSendingDomains(): Promise<{ checked: number; demoted:
           { sending_domain_id: row.id, domain: row.domain, status: updated.status },
           'sending domain is no longer verified; falling back to the platform sender'
         )
+        await notifySendingDomainNeedsAttention(updated)
       }
     } catch (err) {
       // One domain's provider or DNS failure must not stop the rest being

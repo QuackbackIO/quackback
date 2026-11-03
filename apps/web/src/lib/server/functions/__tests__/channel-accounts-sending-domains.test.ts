@@ -24,6 +24,7 @@ const hoisted = vi.hoisted(() => ({
   defaultTeamId: vi.fn(),
   provision: vi.fn(),
   refresh: vi.fn(),
+  restart: vi.fn(),
   deleteDomain: vi.fn(),
   listSendingDomains: vi.fn(),
 }))
@@ -48,10 +49,16 @@ vi.mock('@/lib/server/domains/channel-accounts/sending-identity', async (importO
   >()),
   provisionSendingDomain: hoisted.provision,
   refreshSendingDomain: hoisted.refresh,
+  restartSendingDomainChecks: hoisted.restart,
 }))
 
-const { createSendingDomainFn, verifySendingDomainFn, deleteSendingDomainFn } =
-  await import('../channel-accounts')
+const {
+  createSendingDomainFn,
+  verifySendingDomainFn,
+  deleteSendingDomainFn,
+  restartSendingDomainChecksFn,
+} = await import('../channel-accounts')
+const restartChecks = restartSendingDomainChecksFn as unknown as AnyHandler
 const createDomain = createSendingDomainFn as unknown as AnyHandler
 const verifyDomain = verifySendingDomainFn as unknown as AnyHandler
 const deleteDomain = deleteSendingDomainFn as unknown as AnyHandler
@@ -146,6 +153,36 @@ describe('verifySendingDomainFn and deleteSendingDomainFn', () => {
     hoisted.deleteDomain.mockRejectedValue(new Error('connection reset'))
     await expect(deleteDomain({ data: { id: 'sending_domain_1' } })).rejects.toThrow(
       "Couldn't remove the domain. Try again, and if it keeps failing, contact your workspace's operator."
+    )
+  })
+})
+
+describe('restartSendingDomainChecksFn', () => {
+  it('restarts the named domain and returns its window', async () => {
+    hoisted.restart.mockResolvedValue({
+      id: 'sending_domain_1',
+      domain: 'acme.com',
+      status: 'pending',
+      dnsRecords: [],
+      verifiedAt: null,
+      mailFromLabel: 'qb-bounce',
+      autoCheckUntil: new Date('2026-11-06T10:00:00.000Z'),
+      preflight: {},
+      lastCheckedAt: new Date('2026-11-03T10:00:00.000Z'),
+    })
+    const result = await restartChecks({ data: { id: 'sending_domain_1' } })
+    expect(hoisted.restart).toHaveBeenCalledWith('sending_domain_1')
+    expect(result).toMatchObject({
+      autoCheckUntil: '2026-11-06T10:00:00.000Z',
+      lastCheckedAt: '2026-11-03T10:00:00.000Z',
+      mailFromLabel: 'qb-bounce',
+    })
+  })
+
+  it('says so when the domain is gone', async () => {
+    hoisted.restart.mockResolvedValue(null)
+    await expect(restartChecks({ data: { id: 'sending_domain_1' } })).rejects.toThrow(
+      'That sending domain no longer exists.'
     )
   })
 })

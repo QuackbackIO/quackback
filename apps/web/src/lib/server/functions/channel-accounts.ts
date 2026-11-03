@@ -31,6 +31,7 @@ import {
   customSendingDomainsAvailable,
   provisionSendingDomain,
   refreshSendingDomain,
+  restartSendingDomainChecks,
 } from '@/lib/server/domains/channel-accounts/sending-identity'
 import { assertSendingIdentityPermitted } from '@/lib/server/domains/channel-accounts/outbound-identity'
 import {
@@ -281,6 +282,19 @@ export const verifySendingDomainFn = createServerFn({ method: 'POST' })
     // alone is never enough. See sending-identity.ts.
     return withDomainActionMessage('verify', async () => {
       const refreshed = await refreshSendingDomain(data.id as SendingDomainId)
+      if (!refreshed) throw new SendingDomainRefusedError('That sending domain no longer exists.')
+      return toDomain(refreshed)
+    })
+  })
+
+export const restartSendingDomainChecksFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ id: z.string() }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    // "Check again": a fresh 72 hour window of automatic checks, and one check
+    // now, for a domain whose window ran out before its records appeared.
+    return withDomainActionMessage('verify', async () => {
+      const refreshed = await restartSendingDomainChecks(data.id as SendingDomainId)
       if (!refreshed) throw new SendingDomainRefusedError('That sending domain no longer exists.')
       return toDomain(refreshed)
     })

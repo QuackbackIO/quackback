@@ -1,0 +1,79 @@
+import { Heading, Link, Text } from '@react-email/components'
+import { EmailLayout, TransactionalFooter } from './email-layout'
+import { typography, utils } from './shared-styles'
+
+/** The record whose check failed, as the settings page names it. */
+export interface SendingDomainAttentionRecord {
+  purpose: 'ownership' | 'dkim' | 'mail-from'
+  type: string
+  /** The full DNS name, e.g. `qb-bounce.acme.com`. */
+  name: string
+  state: 'missing' | 'mismatch' | 'proxied'
+  /** What was found instead, for a mismatch. */
+  seen?: string
+}
+
+export interface SendingDomainAttentionEmailProps {
+  domain: string
+  /** The first record that failed its check; absent when every record still looks right. */
+  record?: SendingDomainAttentionRecord | null
+  settingsUrl?: string | null
+  workspaceName?: string
+  logoUrl?: string
+}
+
+const PURPOSE_LABEL: Record<SendingDomainAttentionRecord['purpose'], string> = {
+  ownership: 'ownership record',
+  dkim: 'signing (DKIM) record',
+  'mail-from': 'return path record',
+}
+
+/** One sentence naming the record and what is wrong with it. */
+export function sendingDomainProblem(
+  domain: string,
+  record: SendingDomainAttentionRecord | null | undefined
+): string {
+  if (!record) return `The mail provider stopped confirming ${domain}.`
+  const named = `The ${PURPOSE_LABEL[record.purpose]} (${record.type} ${record.name})`
+  if (record.state === 'proxied') return `${named} is proxied. Turn off any proxy for it.`
+  if (record.state === 'mismatch') {
+    return record.seen
+      ? `${named} has a different value: ${record.seen}.`
+      : `${named} has a different value.`
+  }
+  return `${named} is missing.`
+}
+
+/**
+ * Sent to the people who manage email channels when a verified sending domain
+ * stops verifying, because from that moment replies leave from the default
+ * address instead of the domain.
+ */
+export function SendingDomainAttentionEmail({
+  domain,
+  record,
+  settingsUrl,
+  workspaceName,
+  logoUrl,
+}: SendingDomainAttentionEmailProps) {
+  const title = `Sending from ${domain} needs attention`
+  return (
+    <EmailLayout preview={title} logoUrl={logoUrl}>
+      <Heading style={typography.h1}>{title}</Heading>
+      <Text style={typography.text}>{sendingDomainProblem(domain, record)}</Text>
+      <Text style={typography.text}>Replies send from the default address until it is fixed.</Text>
+      {settingsUrl ? (
+        <Text style={typography.text}>
+          <Link href={settingsUrl} style={utils.link}>
+            Open email settings
+          </Link>{' '}
+          to see every record and check again.
+        </Text>
+      ) : null}
+      <TransactionalFooter>
+        You&apos;re receiving this because you manage email channels
+        {workspaceName ? ` for ${workspaceName}` : ''}.
+      </TransactionalFooter>
+    </EmailLayout>
+  )
+}

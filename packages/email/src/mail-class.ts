@@ -39,6 +39,7 @@ export const EMAIL_BILLABLE: Record<string, boolean> = {
   PasswordResetEmail: false,
   RecoveryCodeUsedEmail: false,
   NewSignInEmail: false,
+  SendingDomainAttentionEmail: false,
   InvitationEmail: false,
   PortalInviteEmail: false,
   VerifyAddressEmail: false,

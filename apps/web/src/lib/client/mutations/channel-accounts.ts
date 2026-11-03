@@ -5,6 +5,7 @@ import {
   createSendingAddressFn,
   createSendingDomainFn,
   verifySendingDomainFn,
+  restartSendingDomainChecksFn,
   deleteSendingDomainFn,
   deleteChannelAccountFn,
   updateInboundTrustFn,
@@ -36,6 +37,9 @@ export const useCreateSendingDomain = () =>
 
 export const useVerifySendingDomain = () =>
   useConfigMutation((id: string) => verifySendingDomainFn({ data: { id } }))
+
+export const useRestartSendingDomainChecks = () =>
+  useConfigMutation((id: string) => restartSendingDomainChecksFn({ data: { id } }))
 
 export const useDeleteSendingDomain = () =>
   useConfigMutation((id: string) => deleteSendingDomainFn({ data: { id } }))
