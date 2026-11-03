@@ -631,6 +631,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "send behind another workspace's sends by at most the 30s wait cap, never read or alter them.",
   },
   {
+    file: 'apps/web/src/lib/server/domains/channel-accounts/dns-resolver.ts',
+    name: 'resolver',
+    category: 'fleet-wide',
+    reason:
+      'A DNS resolver built from fixed options (two second timeout, one try) and the system ' +
+      'nameservers. It holds no answers and no workspace: every lookup is a fresh public DNS ' +
+      'query, so a cross-workspace hit asks the same question of the same nameservers that ' +
+      'either workspace would have built a resolver to ask.',
+  },
+  {
     file: 'packages/email/src/ses-identity.ts',
     name: 'cachedClient',
     category: 'fleet-wide',
