@@ -301,6 +301,47 @@ describe('address rows', () => {
   })
 })
 
+describe('domains no address uses', () => {
+  it('lists each as its own row with the setup panel while it is not live', () => {
+    renderSettings({ domains: [domain()] })
+    const r = row('acme.com')
+    expect(r.textContent).toContain('No address uses this domain')
+    expect(within(r).getByText('Setting up')).toBeTruthy()
+    expect(panels()).toHaveLength(1)
+  })
+
+  it('shows a live one quietly, with its records in the menu', async () => {
+    renderSettings({ domains: [LIVE] })
+    const r = row('acme.com')
+    expect(within(r).queryByText('Setting up')).toBeNull()
+    expect(within(r).queryByText('Needs attention')).toBeNull()
+    expect(panels()).toHaveLength(0)
+    const user = await openMenu('acme.com')
+    await user.click(screen.getByRole('menuitem', { name: 'DNS records' }))
+    expect(panels()).toHaveLength(1)
+  })
+
+  it('flags one that needs attention', () => {
+    renderSettings({ domains: [DEMOTED] })
+    expect(within(row('acme.com')).getByText('Needs attention')).toBeTruthy()
+  })
+
+  it('removes the domain after a confirm', async () => {
+    renderSettings({ domains: [LIVE] })
+    const user = await openMenu('acme.com')
+    await user.click(screen.getByRole('menuitem', { name: 'Remove' }))
+    expect(deleteDomain).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove domain' }))
+    await waitFor(() => expect(deleteDomain).toHaveBeenCalledWith('dom_1', expect.anything()))
+  })
+
+  it('does not list a domain an address uses', () => {
+    renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [LIVE] })
+    expect(screen.queryByText('No address uses this domain')).toBeNull()
+  })
+})
+
 describe('the record table', () => {
   it('copies the name relative to the domain, not the full name', async () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [domain()] })

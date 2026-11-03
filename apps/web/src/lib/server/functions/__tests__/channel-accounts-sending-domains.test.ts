@@ -29,6 +29,8 @@ const hoisted = vi.hoisted(() => ({
   removeAddress: vi.fn(),
   sendTest: vi.fn(),
   addressMode: vi.fn(),
+  getInboundRoute: vi.fn(),
+  listChannelAccounts: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/channel-accounts/sending-address', () => ({
@@ -49,6 +51,8 @@ vi.mock(
     defaultTeamId: hoisted.defaultTeamId,
     deleteSendingDomain: hoisted.deleteDomain,
     listSendingDomains: hoisted.listSendingDomains,
+    getInboundRoute: hoisted.getInboundRoute,
+    listChannelAccounts: hoisted.listChannelAccounts,
   })
 )
 
@@ -222,4 +226,29 @@ describe('getEmailChannelConfigFn', () => {
       expect(await getConfig()).toMatchObject({ addressMode: mode })
     }
   )
+})
+
+describe('getEmailChannelConfigFn domains', () => {
+  it('returns a domain no address uses, so the page can list it', async () => {
+    hoisted.addressMode.mockResolvedValue('verified-domains')
+    hoisted.getInboundRoute.mockResolvedValue(null)
+    hoisted.listChannelAccounts.mockResolvedValue([])
+    hoisted.listSendingDomains.mockResolvedValue([
+      {
+        id: 'sending_domain_1',
+        domain: 'acme.com',
+        status: 'pending',
+        dnsRecords: [],
+        verifiedAt: null,
+        mailFromLabel: 'bounce',
+        autoCheckUntil: null,
+        preflight: {},
+        lastCheckedAt: null,
+      },
+    ])
+    const config = (await getConfig()) as { sendingAddresses: unknown[]; domains: unknown[] }
+    expect(hoisted.listSendingDomains).toHaveBeenCalledWith('team_1')
+    expect(config.sendingAddresses).toEqual([])
+    expect(config.domains).toMatchObject([{ id: 'sending_domain_1', domain: 'acme.com' }])
+  })
 })

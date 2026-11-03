@@ -6,7 +6,7 @@
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { EnvelopeIcon } from '@heroicons/react/24/outline'
+import { EnvelopeIcon, GlobeAltIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { RowIcon, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
@@ -306,6 +306,18 @@ function pendingMeta(
   return null
 }
 
+/** No badge when live; Setting up while pending; Needs attention otherwise. */
+function PhaseBadge({ phase }: { phase: DomainPhase }) {
+  if (phase === 'live') return null
+  return phase === 'setting-up' ? (
+    <Badge size="sm" variant="secondary">
+      Setting up
+    </Badge>
+  ) : (
+    <StateBadge state="attention" />
+  )
+}
+
 function SendingAddressesSection({
   addresses,
   domains,
@@ -325,6 +337,10 @@ function SendingAddressesSection({
   const [smtpFor, setSmtpFor] = useState<{ id: string; address: string; smtp?: SmtpConfig } | null>(
     null
   )
+  const [domainRemoveTarget, setDomainRemoveTarget] = useState<{
+    id: string
+    domain: string
+  } | null>(null)
   const [removeTarget, setRemoveTarget] = useState<{
     id: string
     alsoDomain: string | null
@@ -356,6 +372,22 @@ function SendingAddressesSection({
       firstOnDomain.add(a.id)
     }
   }
+  // Domains no address uses: added before addresses brought their domains,
+  // or left behind. Listed so they can be finished or removed.
+  const unused = domains
+    .filter((d) => !rows.some((r) => r.domain?.id === d.id))
+    .map((d) => ({ domain: d, phase: domainPhase(d, now) }))
+  const setupPanel = (domain: SendingDomainDTO, phase: DomainPhase) => (
+    <DomainSetupPanel
+      domain={domain}
+      phase={phase}
+      checking={restart.isPending}
+      onCheckAgain={() => {
+        setActionError(null)
+        restart.mutate(domain.id, { onError: showError("Couldn't check the records.") })
+      }}
+    />
+  )
   const uncovered = MODULES.filter(
     (m) => !rows.some((r) => r.a.module === m && r.phase === 'live')
   ).map((m) => MODULE_LABEL[m])
@@ -433,28 +465,39 @@ function SendingAddressesSection({
                   (domain && pendingMeta(domain, phase, first, fallbackNote)) ||
                   moduleLabel(a.module)
                 }
-                badges={
-                  phase === 'setting-up' ? (
-                    <Badge size="sm" variant="secondary">
-                      Setting up
-                    </Badge>
-                  ) : phase === 'not-found' || phase === 'attention' ? (
-                    <StateBadge state="attention" />
-                  ) : null
-                }
+                badges={<PhaseBadge phase={phase} />}
                 actions={items}
               />
-              {domain && first && open && (
-                <DomainSetupPanel
-                  domain={domain}
-                  phase={phase}
-                  checking={restart.isPending}
-                  onCheckAgain={() => {
-                    setActionError(null)
-                    restart.mutate(domain.id, { onError: showError("Couldn't check the records.") })
-                  }}
-                />
-              )}
+              {domain && first && open && setupPanel(domain, phase)}
+            </div>
+          )
+        })}
+        {unused.map(({ domain, phase }) => {
+          const open = phase !== 'live' || (expanded[domain.id] ?? false)
+          return (
+            <div key={domain.id}>
+              <SettingsListRow
+                leading={<RowIcon icon={GlobeAltIcon} />}
+                title={domain.domain}
+                meta="No address uses this domain"
+                badges={<PhaseBadge phase={phase} />}
+                actions={[
+                  ...(phase === 'live'
+                    ? [
+                        {
+                          label: open ? 'Hide DNS records' : 'DNS records',
+                          onSelect: () => setExpanded((e) => ({ ...e, [domain.id]: !open })),
+                        },
+                      ]
+                    : []),
+                  {
+                    label: 'Remove',
+                    destructive: true,
+                    onSelect: () => setDomainRemoveTarget({ id: domain.id, domain: domain.domain }),
+                  },
+                ]}
+              />
+              {open && setupPanel(domain, phase)}
             </div>
           )
         })}
@@ -547,6 +590,24 @@ function SendingAddressesSection({
             })
           }
           setRemoveTarget(null)
+        }}
+      />
+      <ConfirmDialog
+        open={domainRemoveTarget !== null}
+        onOpenChange={(open) => !open && setDomainRemoveTarget(null)}
+        title={domainRemoveTarget ? `Remove ${domainRemoveTarget.domain}?` : 'Remove domain?'}
+        description="Its DNS records can be deleted afterwards."
+        confirmLabel="Remove domain"
+        variant="destructive"
+        isPending={removeDomain.isPending}
+        onConfirm={() => {
+          if (domainRemoveTarget) {
+            setActionError(null)
+            removeDomain.mutate(domainRemoveTarget.id, {
+              onError: showError("Couldn't remove the domain."),
+            })
+          }
+          setDomainRemoveTarget(null)
         }}
       />
     </SettingsCard>
