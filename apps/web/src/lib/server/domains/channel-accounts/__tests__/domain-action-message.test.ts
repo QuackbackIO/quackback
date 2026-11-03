@@ -20,13 +20,13 @@ const UNREACHABLE = "Couldn't reach the mail provider. Try again in a minute."
 describe('domainActionMessage', () => {
   it('passes our own refusals through, since they name the fix', () => {
     const refusal = new SendingDomainRefusedError('acme.com is not a valid domain name.')
-    expect(domainActionMessage(refusal, 'add')).toBe('acme.com is not a valid domain name.')
+    expect(domainActionMessage(refusal, 'address')).toBe('acme.com is not a valid domain name.')
     expect(domainActionMessage(new SendingDomainInUseError(), 'remove')).toBe(
       'Remove the sending addresses that use this domain first.'
     )
     const identity = new SendingIdentityRefusedError('help@acme.com')
-    expect(domainActionMessage(identity, 'add')).toBe(identity.message)
-    expect(domainActionMessage(new ChannelAddressInUseError('help@acme.com'), 'add')).toBe(
+    expect(domainActionMessage(identity, 'address')).toBe(identity.message)
+    expect(domainActionMessage(new ChannelAddressInUseError('help@acme.com'), 'address')).toBe(
       "help@acme.com is already in use by this workspace's inbound route."
     )
   })
@@ -38,17 +38,17 @@ describe('domainActionMessage', () => {
       current: 3,
       max: 3,
     })
-    expect(domainActionMessage(limit, 'add')).toBe('Your plan allows 3 sending domains.')
+    expect(domainActionMessage(limit, 'address')).toBe('Your plan allows 3 sending domains.')
   })
 
   it('says the server is not set up when the identity credential is missing', () => {
     const err = new SesIdentityConfigError('EMAIL_SES_IDENTITY_ACCESS_KEY_ID is required')
-    expect(domainActionMessage(err, 'add')).toBe(NOT_SET_UP)
+    expect(domainActionMessage(err, 'address')).toBe(NOT_SET_UP)
   })
 
   it('says the server is not set up when the provider denies the action', () => {
     const err = new SesIdentityError('SES refused', 400, 'AccessDeniedException', false)
-    expect(domainActionMessage(err, 'add')).toBe(NOT_SET_UP)
+    expect(domainActionMessage(err, 'address')).toBe(NOT_SET_UP)
   })
 
   it('names the check, not an add, when a check meets a broken setup', () => {
@@ -60,14 +60,14 @@ describe('domainActionMessage', () => {
 
   it('asks for a retry when the provider failure is transient', () => {
     const err = new SesIdentityError('SES throttled', 429, 'TooManyRequestsException', true)
-    expect(domainActionMessage(err, 'add')).toBe(UNREACHABLE)
+    expect(domainActionMessage(err, 'address')).toBe(UNREACHABLE)
     expect(domainActionMessage(err, 'verify')).toBe(UNREACHABLE)
   })
 
   it('falls back per action for a permanent provider failure, without server-log wording', () => {
     const err = new SesIdentityError('SES bad request', 400, 'BadRequestException', false)
-    expect(domainActionMessage(err, 'add')).toBe(
-      "Couldn't add the domain. Try again, and if it keeps failing, contact your workspace's operator."
+    expect(domainActionMessage(err, 'address')).toBe(
+      "Couldn't add the address. Try again, and if it keeps failing, contact your workspace's operator."
     )
   })
 
@@ -82,7 +82,7 @@ describe('domainActionMessage', () => {
     expect(domainActionMessage(err, 'test')).toBe(
       "Couldn't send the test email. Try again, and if it keeps failing, contact your workspace's operator."
     )
-    for (const action of ['add', 'verify', 'remove', 'test'] as const) {
+    for (const action of ['address', 'verify', 'remove', 'test'] as const) {
       expect(domainActionMessage(err, action)).not.toMatch(/log/i)
       expect(domainActionMessage(err, action)).not.toContain('10.0.0.1')
     }

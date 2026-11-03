@@ -165,6 +165,17 @@ describe('createSendingAddressFn', () => {
   })
 })
 
+describe('createSendingAddressFn failures', () => {
+  it('names the address, not a domain, when an unknown failure stops the add', async () => {
+    hoisted.addAddress.mockRejectedValue(new Error('connection reset'))
+    await expect(
+      createAddress({ data: { address: 'help@acme.com', module: 'support' } })
+    ).rejects.toThrow(
+      "Couldn't add the address. Try again, and if it keeps failing, contact your workspace's operator."
+    )
+  })
+})
+
 describe('deleteChannelAccountFn', () => {
   it('reports the domain its last address was on', async () => {
     hoisted.removeAddress.mockResolvedValue({

@@ -256,7 +256,7 @@ export const createSendingAddressFn = createServerFn({ method: 'POST' })
     // domain with it and sends from the default until the domain is live; the
     // send guard reads the domain, so a pending address claims nothing. See
     // `sending-address.ts`.
-    return withDomainActionMessage('add', async () =>
+    return withDomainActionMessage('address', async () =>
       toAccount(
         await addSendingAddress({
           owningTeamId: teamId,

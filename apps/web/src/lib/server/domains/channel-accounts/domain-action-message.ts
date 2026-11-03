@@ -15,10 +15,10 @@ import { ChannelAddressInUseError, SendingDomainInUseError } from './channel-acc
 import { SendingDomainRefusedError } from './sending-identity'
 import { SendingIdentityRefusedError } from './outbound-identity'
 
-export type DomainAction = 'add' | 'verify' | 'remove' | 'test'
+export type DomainAction = 'address' | 'verify' | 'remove' | 'test'
 
 const NOT_SET_UP: Record<DomainAction, string> = {
-  add: "Custom sending domains aren't set up correctly on this server. Nothing was added.",
+  address: "Custom sending domains aren't set up correctly on this server. Nothing was added.",
   verify:
     "Custom sending domains aren't set up correctly on this server, so the records weren't checked.",
   remove: "Custom sending domains aren't set up correctly on this server. Nothing was removed.",
@@ -30,7 +30,7 @@ const UNREACHABLE = "Couldn't reach the mail provider. Try again in a minute."
 const ASK_OPERATOR = "Try again, and if it keeps failing, contact your workspace's operator."
 
 const FALLBACK: Record<DomainAction, string> = {
-  add: `Couldn't add the domain. ${ASK_OPERATOR}`,
+  address: `Couldn't add the address. ${ASK_OPERATOR}`,
   verify: `Couldn't check the records. ${ASK_OPERATOR}`,
   remove: `Couldn't remove the domain. ${ASK_OPERATOR}`,
   test: `Couldn't send the test email. ${ASK_OPERATOR}`,
