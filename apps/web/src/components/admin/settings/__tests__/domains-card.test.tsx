@@ -82,6 +82,39 @@ describe('<DomainsCard>', () => {
     expect(screen.queryByText(/TXT record/i)).toBeNull()
   })
 
+  it("lists a pending hostname's records as waiting, with no fix yet", () => {
+    renderCard([
+      {
+        ...base,
+        readiness: 'pending',
+        ownershipTxt: null,
+        ownershipProof: { name: '_quackback-challenge.feedback.example.com', value: 'proof-1' },
+      } as CustomDomainInstruction,
+    ])
+    const rows = [...document.querySelectorAll('[data-slot="dns-record"]')]
+    expect(rows.map((r) => r.textContent)).toEqual([
+      'Waiting: Routingfeedback.example.comCNAMEedge.example.net',
+      'Waiting: Ownership_quackback-challenge.feedback.example.comTXTproof-1',
+    ])
+    expect(document.querySelectorAll('[data-slot="dns-record-fix"]')).toHaveLength(0)
+  })
+
+  it('explains a failed hostname once, under its last record', () => {
+    renderCard([
+      {
+        ...base,
+        readiness: 'failed',
+        ownershipTxt: null,
+        ownershipProof: { name: '_quackback-challenge.feedback.example.com', value: 'proof-1' },
+      } as CustomDomainInstruction,
+    ])
+    const rows = [...document.querySelectorAll('[data-slot="dns-record"]')]
+    expect(rows.every((r) => r.textContent?.startsWith('Needs a fix:'))).toBe(true)
+    const fixes = document.querySelectorAll('[data-slot="dns-record-fix"]')
+    expect(fixes).toHaveLength(1)
+    expect(rows[1]!.nextElementSibling).toBe(fixes[0])
+  })
+
   it('names no hosting provider in its description', () => {
     renderCard([])
     expect(screen.queryByText(/cloud/i)).toBeNull()

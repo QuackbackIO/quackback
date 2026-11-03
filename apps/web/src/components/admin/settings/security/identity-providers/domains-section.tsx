@@ -22,6 +22,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { WarningBox } from '@/components/shared/warning-box'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { DnsRecordTable, type DnsRecordRow } from '@/components/shared/dns-record-table'
 import {
   addProviderDomainFn,
   getSsoDomainProofsFn,
@@ -52,6 +53,22 @@ const VERIFY_REASON_MESSAGES: Record<
 }
 
 const SSO_DOMAIN_PROOFS_KEY = ['settings', 'ssoDomainProofs'] as const
+
+/** The TXT record a pending domain needs, with what the last Verify found. */
+export function ssoTxtRecord(
+  domain: Pick<VerifiedDomain, 'name' | 'verificationToken'>,
+  result: VerifyDomainResult | null
+): DnsRecordRow {
+  const record = {
+    label: 'Ownership',
+    type: 'TXT',
+    name: `_quackback-verify.${domain.name}`,
+    value: `qb-domain-verify=${domain.verificationToken}`,
+  }
+  return result && !result.verified
+    ? { ...record, state: 'problem', problem: VERIFY_REASON_MESSAGES[result.reason] }
+    : { ...record, state: 'waiting' }
+}
 
 export function DomainsSection({
   provider,
@@ -312,15 +329,13 @@ function DomainRow({
         </p>
       )}
       {!isVerified && !provenBy && (
-        <div className="space-y-1 rounded bg-muted/30 p-2 text-xs text-muted-foreground">
-          <p>Add this DNS TXT record, then click Verify:</p>
-          <code className="block break-all">
-            _quackback-verify.{domain.name} = qb-domain-verify={domain.verificationToken}
-          </code>
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">Add this record, then click Verify.</p>
+          <DnsRecordTable records={[ssoTxtRecord(domain, verifyResult)]} />
         </div>
       )}
 
-      {verifyResult && !verifyResult.verified && (
+      {provenBy && verifyResult && !verifyResult.verified && (
         <Alert variant="destructive">
           <AlertDescription className="text-xs">
             {VERIFY_REASON_MESSAGES[verifyResult.reason]}

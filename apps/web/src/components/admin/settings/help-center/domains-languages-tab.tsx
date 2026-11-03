@@ -5,6 +5,7 @@ import { TrashIcon, XCircleIcon } from '@heroicons/react/24/solid'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { DnsRecordTable, type DnsRecordRow } from '@/components/shared/dns-record-table'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
@@ -203,13 +204,6 @@ function DomainCard({ domain }: { domain: HelpCenterConfig['domain'] }) {
           <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
             <div className="flex items-center gap-2">
               <VerifiedChip verifiedAt={domain.verifiedAt} />
-              {statusQuery.data && !statusQuery.data.verified && (
-                <span className="text-xs text-muted-foreground">
-                  {!statusQuery.data.dnsResolved
-                    ? 'DNS has not propagated yet'
-                    : "The domain doesn't reach this instance yet"}
-                </span>
-              )}
             </div>
             <Button
               variant="outline"
@@ -221,6 +215,14 @@ function DomainCard({ domain }: { domain: HelpCenterConfig['domain'] }) {
               Verify
             </Button>
           </div>
+        )}
+
+        {domain.domain && statusQuery.data?.cnameTarget && (
+          <DnsRecordTable
+            records={[
+              helpCenterCnameRecord(domain.domain, statusQuery.data.cnameTarget, statusQuery.data),
+            ]}
+          />
         )}
 
         <Collapsible>
@@ -251,6 +253,23 @@ function DomainCard({ domain }: { domain: HelpCenterConfig['domain'] }) {
       </div>
     </SettingsCard>
   )
+}
+
+/** The CNAME a help center domain needs, with the state its last check found. */
+export function helpCenterCnameRecord(
+  domain: string,
+  cnameTarget: string,
+  status: { dnsResolved: boolean; verified: boolean }
+): DnsRecordRow {
+  const record = { label: 'Routing', type: 'CNAME', name: domain, value: cnameTarget }
+  if (status.verified) return { ...record, state: 'found' }
+  if (!status.dnsResolved) return { ...record, state: 'waiting' }
+  return {
+    ...record,
+    state: 'problem',
+    problem:
+      'This name resolves but does not reach this instance yet. Check the CNAME and your proxy.',
+  }
 }
 
 function VerifiedChip({ verifiedAt }: { verifiedAt: string | null }) {

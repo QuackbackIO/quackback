@@ -66,3 +66,25 @@ describe('<DomainsSection> with domains another proof covers', () => {
     expect(screen.getByText('Verified')).toBeInTheDocument()
   })
 })
+
+describe('ssoTxtRecord', () => {
+  const pending = domain('a', 'acme.com', false)
+
+  it('asks for the verify TXT and waits until Verify fails', async () => {
+    const { ssoTxtRecord } = await import('../domains-section')
+    expect(ssoTxtRecord(pending, null)).toEqual({
+      label: 'Ownership',
+      type: 'TXT',
+      name: '_quackback-verify.acme.com',
+      value: 'qb-domain-verify=tok-a',
+      state: 'waiting',
+    })
+  })
+
+  it('carries the reason Verify failed as its problem sentence', async () => {
+    const { ssoTxtRecord } = await import('../domains-section')
+    const record = ssoTxtRecord(pending, { verified: false, reason: 'mismatch' })
+    expect(record.state).toBe('problem')
+    expect(record.problem).toMatch(/didn't match/)
+  })
+})

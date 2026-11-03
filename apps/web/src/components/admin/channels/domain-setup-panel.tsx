@@ -7,7 +7,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
-import { DnsRecordTable } from './dns-record-table'
+import { SendingRecordTable } from './dns-record-table'
 import { instructionsText, lastCheckedAt, type DomainPhase } from './sending-domain-view'
 
 export function DomainSetupPanel({
@@ -40,7 +40,7 @@ export function DomainSetupPanel({
             ? `Fix ${domain.domain}`
             : `Set up ${domain.domain}`}
       </h3>
-      <DnsRecordTable domain={domain} phase={phase} />
+      <SendingRecordTable domain={domain} phase={phase} />
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span className="mr-auto" title={checkedTitle}>
           {phase === 'live'

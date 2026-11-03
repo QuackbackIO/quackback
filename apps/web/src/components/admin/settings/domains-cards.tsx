@@ -5,6 +5,7 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { UpgradeNotice } from '@/components/admin/upgrade'
 import { Button } from '@/components/ui/button'
 import { StateBadge } from '@/components/shared/state-badge'
+import { DnsRecordTable, type DnsRecordRow } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 
 export function QuackbackUrlCard(props: {
@@ -63,6 +64,43 @@ function isTxtRecord(value: unknown): value is { name: string; value: string } {
   if (!value || typeof value !== 'object') return false
   const record = value as { name?: unknown; value?: unknown }
   return typeof record.name === 'string' && typeof record.value === 'string'
+}
+
+const READINESS_STATE = {
+  pending: 'waiting',
+  ready: 'found',
+  failed: 'problem',
+} as const
+
+/**
+ * The records a hostname needs: the CNAME that routes it and, until it is
+ * seen, the TXT that proves this workspace controls it. Readiness is reported
+ * for the hostname as a whole, so every row shares it and a failure is
+ * explained once, under the last row.
+ */
+function hostnameRecords(domain: CustomDomainInstruction): DnsRecordRow[] {
+  const state = READINESS_STATE[domain.readiness]
+  const records: DnsRecordRow[] = [
+    {
+      label: 'Routing',
+      type: 'CNAME',
+      name: domain.hostname,
+      value: domain.cnameTarget,
+      state,
+    },
+  ]
+  if (isTxtRecord(domain.ownershipProof)) {
+    records.push({
+      label: 'Ownership',
+      type: 'TXT',
+      name: domain.ownershipProof.name,
+      value: domain.ownershipProof.value,
+      state,
+    })
+  }
+  records[records.length - 1]!.problem =
+    "We couldn't confirm these records. Check each name and value, then check status."
+  return records
 }
 
 /** No badge when ready; Setting up while pending; Needs attention when failed. */
@@ -170,23 +208,7 @@ export function DomainsCard(props: {
                   </Button>
                 </div>
               </div>
-              {domain.readiness !== 'ready' && (
-                <div className="rounded-md bg-muted/30 px-3 py-2 text-[13px]">
-                  <p className="text-muted-foreground">
-                    Add a CNAME from <span className="font-mono">{domain.hostname}</span> to{' '}
-                    <span className="font-mono">{domain.cnameTarget}</span>.
-                  </p>
-                  {isTxtRecord(domain.ownershipProof) && (
-                    <p className="mt-1 text-muted-foreground">
-                      Then add a TXT record at{' '}
-                      <span className="font-mono break-all">{domain.ownershipProof.name}</span> with
-                      the value{' '}
-                      <span className="font-mono break-all">{domain.ownershipProof.value}</span> to
-                      prove you own the domain.
-                    </p>
-                  )}
-                </div>
-              )}
+              {domain.readiness !== 'ready' && <DnsRecordTable records={hostnameRecords(domain)} />}
             </li>
           ))}
         </ul>
