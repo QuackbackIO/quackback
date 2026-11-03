@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest'
 import type { SendingDomainDnsRecord, SendingDomainOwnershipRecord } from '@/lib/server/db'
 import { ownershipRecordSatisfied, verifySendingDomainDns } from '../domain-verification'
+import { generateDkimKey } from '../dkim-key'
 
 /**
  * A zone that has published EVERY record we hand out, plus a token.
@@ -143,6 +144,54 @@ describe('verifySendingDomainDns refuses to prove ownership from a public value'
             purpose: 'mail-from',
           }),
         ],
+        publishesEverything
+      )
+    ).toBe(false)
+  })
+})
+
+describe('verifySendingDomainDns with a row-minted signing key', () => {
+  const keyA = generateDkimKey().record
+  const keyB = generateDkimKey().record
+  /** A zone that answers each name with what was published there, and nothing else. */
+  const zoneOf =
+    (published: Record<string, string[]>) =>
+    async (host: string): Promise<string[][]> => {
+      const values = published[host]
+      if (!values) throw Object.assign(new Error('ENODATA'), { code: 'ENODATA' })
+      // Long values arrive in chunks; split to prove they are joined.
+      return values.map((v) => [v.slice(0, 100), v.slice(100)])
+    }
+
+  it('proves ownership when this row’s key is published at this row’s selector', async () => {
+    const zone = zoneOf({ [`${keyA.host}.acme.com`]: [keyA.value] })
+    expect(await verifySendingDomainDns('acme.com', [keyA], zone)).toBe(true)
+  })
+
+  it('matches on the key, forgiving spacing and tag order', async () => {
+    const p = keyA.value.split('p=')[1]
+    const zone = zoneOf({
+      [`${keyA.host}.acme.com`]: [`p=${p.slice(0, 50)} ${p.slice(50)}; v=DKIM1`],
+    })
+    expect(await verifySendingDomainDns('acme.com', [keyA], zone)).toBe(true)
+  })
+
+  it('refuses another row’s key, at either selector', async () => {
+    const zone = zoneOf({
+      [`${keyB.host}.acme.com`]: [keyB.value],
+      [`${keyA.host}.acme.com`]: [keyB.value],
+    })
+    expect(await verifySendingDomainDns('acme.com', [keyA], zone)).toBe(false)
+    expect(await verifySendingDomainDns('acme.com', [keyB], zone)).toBe(true)
+  })
+
+  it('refuses a DKIM TXT that carries no key of its own', async () => {
+    expect(
+      await verifySendingDomainDns(
+        'acme.com',
+        [
+          { type: 'TXT', host: 'x._domainkey', value: 'v=DKIM1; k=rsa', purpose: 'dkim' },
+        ] as unknown as SendingDomainOwnershipRecord[],
         publishesEverything
       )
     ).toBe(false)

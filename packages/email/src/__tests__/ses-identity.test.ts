@@ -10,7 +10,7 @@
  * DNS regression a year later costs SPF alignment instead of every outbound
  * reply.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
@@ -159,6 +159,46 @@ describe('creating a domain identity', () => {
       verifiedForSending: false,
       mailFrom: null,
     })
+  })
+
+  it('creates the identity with a key of our own when given one, and never logs it', async () => {
+    const { deps, commands } = fakeClient(() => ({
+      DkimAttributes: { Tokens: ['qb1a2b3c4d'], Status: 'PENDING' },
+      VerifiedForSendingStatus: false,
+    }))
+    const logged = vi.spyOn(process.stdout, 'write')
+    await createSesDomainIdentity('tenant-a.example', deps, {
+      selector: 'qb1a2b3c4d',
+      privateKey: 'UFJJVkFURUtFWQ==',
+    })
+    expect((commands[0] as CreateEmailIdentityCommand).input).toEqual({
+      EmailIdentity: 'tenant-a.example',
+      DkimSigningAttributes: {
+        DomainSigningSelector: 'qb1a2b3c4d',
+        DomainSigningPrivateKey: 'UFJJVkFURUtFWQ==',
+      },
+    })
+    const output = logged.mock.calls.map(([chunk]) => String(chunk)).join('')
+    logged.mockRestore()
+    expect(output).not.toContain('UFJJVkFURUtFWQ==')
+  })
+
+  it('does not re-key an identity that already exists', async () => {
+    const { deps, commands } = fakeClient((command) =>
+      command instanceof CreateEmailIdentityCommand
+        ? serviceError('AlreadyExistsException', 400)
+        : { DkimAttributes: { Status: 'SUCCESS' }, VerifiedForSendingStatus: true }
+    )
+    const created = await createSesDomainIdentity('tenant-a.example', deps, {
+      selector: 'qb1a2b3c4d',
+      privateKey: 'UFJJVkFURUtFWQ==',
+    })
+    expect(created.preexisting).toBe(true)
+    // A create that bounced, then a read: nothing that sets signing attributes.
+    expect(commands.map((c) => c.constructor.name)).toEqual([
+      'CreateEmailIdentityCommand',
+      'GetEmailIdentityCommand',
+    ])
   })
 
   it('reads an identity that already exists rather than failing', async () => {

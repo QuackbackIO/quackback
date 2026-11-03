@@ -19,13 +19,40 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
-const createIdentity = vi.fn<(domain: string) => Promise<SesIdentityCreation>>()
+/** Every log line the code under test writes, with its fields, to search for secrets. */
+const logged = vi.hoisted(() => [] as unknown[])
+vi.mock('@/lib/server/logger', async (importOriginal) => {
+  type Recorder = { [level: string]: (...args: unknown[]) => unknown }
+  const recorder = (): Recorder => {
+    const r: Recorder = { child: () => recorder() }
+    for (const level of ['trace', 'debug', 'info', 'warn', 'error', 'fatal']) {
+      r[level] = (...args: unknown[]) => logged.push(args)
+    }
+    return r
+  }
+  return {
+    ...(await importOriginal<typeof import('@/lib/server/logger')>()),
+    logger: recorder(),
+  }
+})
+
+const createIdentity =
+  vi.fn<
+    (
+      domain: string,
+      signing?: { selector: string; privateKey: string }
+    ) => Promise<SesIdentityCreation>
+  >()
 const getIdentity = vi.fn<(domain: string) => Promise<SesDomainIdentity | null>>()
 const putMailFrom = vi.fn<(domain: string, mailFrom: string) => Promise<void>>()
 
 vi.mock('@quackback/email/ses-identity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@quackback/email/ses-identity')>()),
-  createSesDomainIdentity: (domain: string) => createIdentity(domain),
+  createSesDomainIdentity: (
+    domain: string,
+    _deps?: unknown,
+    signing?: { selector: string; privateKey: string }
+  ) => createIdentity(domain, signing),
   getSesDomainIdentity: (domain: string) => getIdentity(domain),
   putSesMailFromDomain: (domain: string, mailFrom: string) => putMailFrom(domain, mailFrom),
 }))
@@ -50,7 +77,10 @@ vi.mock('../domain-verification', () => ({
     // ownership record and never returns true for an empty expectation. Both
     // are the behaviours a caller could break silently, so the fake keeps them.
     if (expected.length === 0) return false
-    if (expected.some((r) => r.type !== 'TXT' || r.purpose !== 'ownership')) return false
+    const isProof = (r: SendingDomainDnsRecord) =>
+      r.type === 'TXT' &&
+      (r.purpose === 'ownership' || (r.purpose === 'dkim' && r.value.includes('p=')))
+    if (!expected.every(isProof)) return false
     return ownershipResolves()
   },
   ownershipRecordSatisfied: () => false,
@@ -173,6 +203,23 @@ async function seedTeam(): Promise<TeamId> {
   return team.id
 }
 
+/**
+ * A row set up on the provider's own DKIM keys, as every row was before rows
+ * were given keys of their own. Its records are composed on the first check.
+ */
+async function easyRow(teamId: TeamId, domain: string) {
+  const [row] = await testDb
+    .insert(emailSendingDomains)
+    .values({
+      owningTeamId: teamId,
+      domain,
+      mailFromLabel: 'qb-bounce',
+      autoCheckUntil: new Date(Date.now() + 3600_000),
+    })
+    .returning()
+  return row
+}
+
 describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', () => {
   beforeEach(async () => {
     await fixture.begin()
@@ -180,6 +227,7 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     vi.stubEnv('EMAIL_FROM', 'Quackback <notifications@mail.platform.test>')
     vi.stubEnv('EMAIL_INBOUND_DOMAIN', 'mail.platform.test')
     createIdentity.mockReset().mockResolvedValue(madeIt({ dkimStatus: 'PENDING' }))
+    logged.length = 0
     getIdentity.mockReset().mockResolvedValue(identity({ dkimStatus: 'PENDING' }))
     putMailFrom.mockReset().mockResolvedValue()
     checkedRecords.mockReset()
@@ -193,27 +241,85 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
   })
   afterAll(fixture.close)
 
-  it('creates the identity, attaches the MAIL FROM subdomain, and records what to publish', async () => {
+  it('creates the identity with a key of its own, attaches the MAIL FROM, and records what to publish', async () => {
     const teamId = await seedTeam()
     const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'Tenant-A.Example' })
 
-    expect(createIdentity).toHaveBeenCalledWith('tenant-a.example')
+    expect(createIdentity).toHaveBeenCalledWith('tenant-a.example', {
+      selector: expect.stringMatching(/^qb[0-9a-f]{8}$/),
+      privateKey: expect.any(String),
+    })
     // A subdomain that receives no mail, so the bounce MX cannot displace the
     // owner's real routing.
     expect(putMailFrom).toHaveBeenCalledWith('tenant-a.example', 'qb-bounce.tenant-a.example')
 
     expect(row.domain).toBe('tenant-a.example')
     expect(row.status).toBe('pending')
+    expect(row.dkimMode).toBe('byo')
+    const selector = createIdentity.mock.calls[0][1]?.selector
+    // Three records: the key, and the MAIL FROM pair. No token, no CNAMEs.
     expect(row.dnsRecords.map((r) => `${r.type} ${r.host}`)).toEqual([
-      'TXT _quackback',
-      'CNAME aaa._domainkey',
-      'CNAME bbb._domainkey',
-      'CNAME ccc._domainkey',
+      `TXT ${selector}._domainkey`,
       'MX qb-bounce',
       'TXT qb-bounce',
     ])
-    const ownership = row.dnsRecords.find((r) => r.purpose === 'ownership')
-    expect(ownership?.value.startsWith(OWNERSHIP_VALUE_PREFIX)).toBe(true)
+    expect(row.dnsRecords[0].value).toMatch(/^v=DKIM1; k=rsa; p=/)
+  })
+
+  it('never keeps the private key: not in the row, the DTO or the logs', async () => {
+    const teamId = await seedTeam()
+    const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+    const privateKey = createIdentity.mock.calls[0][1]?.privateKey ?? ''
+    expect(privateKey.length).toBeGreaterThan(100)
+
+    const [stored] = await testDb
+      .select()
+      .from(emailSendingDomains)
+      .where(eq(emailSendingDomains.id, row.id))
+    expect(JSON.stringify(stored)).not.toContain(privateKey)
+    expect(JSON.stringify(row)).not.toContain(privateKey)
+    expect(JSON.stringify(logged)).not.toContain(privateKey)
+    expect(logged.length).toBeGreaterThan(0)
+  })
+
+  it('checks the zone for THIS row’s own key and nothing else', async () => {
+    const teamId = await seedTeam()
+    const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+    await refreshSendingDomain(row.id)
+    expect(lastChecked()).toEqual([
+      {
+        type: 'TXT',
+        host: row.dnsRecords[0].host,
+        value: row.dnsRecords[0].value,
+        purpose: 'dkim',
+      },
+    ])
+  })
+
+  it('lets two rows on one domain each prove ownership with their own key, re-keying nothing', async () => {
+    const a = await provisionSendingDomain({
+      owningTeamId: await seedTeam(),
+      domain: 'tenant-a.example',
+    })
+    createIdentity.mockResolvedValue(foundIt())
+    const b = await provisionSendingDomain({
+      owningTeamId: await seedTeam(),
+      domain: 'tenant-a.example',
+    })
+    expect(a.dnsRecords[0].value).not.toBe(b.dnsRecords[0].value)
+    // Only the create calls: nothing that sets signing attributes on the identity.
+    expect(createIdentity).toHaveBeenCalledTimes(2)
+
+    ownershipResolves.mockResolvedValue(true)
+    getIdentity.mockResolvedValue(identity())
+    await refreshSendingDomain(a.id)
+    const checkedForA = lastChecked()
+    await refreshSendingDomain(b.id)
+    const checkedForB = lastChecked()
+    expect(checkedForA.map((r) => r.value)).toEqual([a.dnsRecords[0].value])
+    expect(checkedForB.map((r) => r.value)).toEqual([b.dnsRecords[0].value])
+    expect((await getSendingDomain(a.id))?.status).toBe('verified')
+    expect((await getSendingDomain(b.id))?.status).toBe('verified')
   })
 
   it('checks the zone for THIS row’s ownership token and nothing else', async () => {
@@ -226,16 +332,20 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     // any workspace that followed the instructions verified for a domain it
     // does not own. So this pins the records the checker was actually handed.
     const teamId = await seedTeam()
-    const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+    const row = (await refreshSendingDomain((await easyRow(teamId, 'tenant-a.example')).id))!
     const token = row.dnsRecords.find((r) => r.purpose === 'ownership')?.value
 
     await refreshSendingDomain(row.id)
 
     expect(checkedRecords).toHaveBeenCalledWith('tenant-a.example', expect.anything())
     // Exactly the ownership record, carrying this row's own minted token.
-    expect(lastChecked()).toEqual([
-      { type: 'TXT', host: '_quackback', value: token, purpose: 'ownership' },
-    ])
+    expect(lastChecked()).toHaveLength(1)
+    expect(lastChecked()[0]).toMatchObject({
+      type: 'TXT',
+      host: '_quackback',
+      value: token,
+      purpose: 'ownership',
+    })
     // Never nothing, and never a value another workspace also publishes.
     expect(lastChecked()).not.toHaveLength(0)
     for (const record of lastChecked()) {
@@ -276,7 +386,7 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
 
     await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
 
-    expect(createIdentity).toHaveBeenCalledWith('tenant-a.example')
+    expect(createIdentity).toHaveBeenCalledWith('tenant-a.example', expect.anything())
     expect(putMailFrom).not.toHaveBeenCalled()
   })
 
@@ -365,7 +475,7 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     // the owner cannot publish, and that would keep the row pending forever
     // while looking checked.
     const teamId = await seedTeam()
-    const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+    const row = await easyRow(teamId, 'tenant-a.example')
     await testDb
       .update(emailSendingDomains)
       .set({
@@ -384,9 +494,10 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
   it('mints a different ownership token for every row', async () => {
     // Two workspaces adding the same domain get different tokens, which is what
     // makes publishing one of them proof of anything.
-    const a = await provisionSendingDomain({ owningTeamId: await seedTeam(), domain: 'a.example' })
-    const b = await provisionSendingDomain({ owningTeamId: await seedTeam(), domain: 'b.example' })
+    const a = (await refreshSendingDomain((await easyRow(await seedTeam(), 'a.example')).id))!
+    const b = (await refreshSendingDomain((await easyRow(await seedTeam(), 'b.example')).id))!
     const tokenOf = (r: typeof a) => r.dnsRecords.find((x) => x.purpose === 'ownership')?.value
+    expect(tokenOf(a)).toMatch(new RegExp(`^${OWNERSHIP_VALUE_PREFIX}`))
     expect(tokenOf(a)).not.toBe(tokenOf(b))
   })
 
@@ -400,9 +511,8 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
 
   it('fills in the DKIM records the provider had not issued at create time', async () => {
     const teamId = await seedTeam()
-    createIdentity.mockResolvedValue(madeIt({ dkimTokens: [], dkimStatus: 'NOT_STARTED' }))
     getIdentity.mockResolvedValue(identity({ dkimTokens: [], dkimStatus: 'NOT_STARTED' }))
-    const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+    const row = (await refreshSendingDomain((await easyRow(teamId, 'tenant-a.example')).id))!
     expect(row.dnsRecords.filter((r) => r.purpose === 'dkim')).toEqual([])
 
     getIdentity.mockResolvedValue(identity({ dkimStatus: 'PENDING' }))
@@ -412,8 +522,9 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
 
   it('keeps the ownership token across a poll, so a published record stays valid', async () => {
     const teamId = await seedTeam()
-    const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+    const row = (await refreshSendingDomain((await easyRow(teamId, 'tenant-a.example')).id))!
     const before = row.dnsRecords.find((r) => r.purpose === 'ownership')?.value
+    expect(before).toMatch(new RegExp(`^${OWNERSHIP_VALUE_PREFIX}`))
 
     const refreshed = await refreshSendingDomain(row.id)
     expect(refreshed?.dnsRecords.find((r) => r.purpose === 'ownership')?.value).toBe(before)
@@ -568,7 +679,7 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
 
       const refreshed = await refreshSendingDomain(row.id)
       expect(refreshed?.status).toBe('pending')
-      expect(refreshed?.dnsRecords).toHaveLength(6)
+      expect(refreshed?.dnsRecords).toHaveLength(3)
       for (const record of refreshed?.dnsRecords ?? []) {
         expect(record.check?.state).toBe('found')
       }
@@ -589,10 +700,7 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
       const refreshed = await refreshSendingDomain(row.id)
       const states = refreshed?.dnsRecords.map((r) => `${r.type} ${r.host} ${r.check?.state}`)
       expect(states).toEqual([
-        'TXT _quackback found',
-        'CNAME aaa._domainkey found',
-        'CNAME bbb._domainkey found',
-        'CNAME ccc._domainkey found',
+        `TXT ${row.dnsRecords[0].host} found`,
         'MX qb-bounce mismatch',
         'TXT qb-bounce found',
       ])

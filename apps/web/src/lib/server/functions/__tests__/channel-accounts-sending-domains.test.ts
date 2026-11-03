@@ -252,3 +252,35 @@ describe('getEmailChannelConfigFn domains', () => {
     expect(config.domains).toMatchObject([{ id: 'sending_domain_1', domain: 'acme.com' }])
   })
 })
+
+describe('the sending domain DTO', () => {
+  it.each(['easy', 'byo'] as const)('carries the %s signing mode', async (dkimMode) => {
+    hoisted.addressMode.mockResolvedValue('verified-domains')
+    hoisted.getInboundRoute.mockResolvedValue(null)
+    hoisted.listChannelAccounts.mockResolvedValue([])
+    hoisted.listSendingDomains.mockResolvedValue([
+      {
+        id: 'sending_domain_1',
+        domain: 'acme.com',
+        status: 'pending',
+        dnsRecords: [
+          {
+            type: 'TXT',
+            host: 'qb1a2b3c4d._domainkey',
+            value: 'v=DKIM1; k=rsa; p=PUB',
+            purpose: 'dkim',
+          },
+        ],
+        verifiedAt: null,
+        mailFromLabel: 'qb-bounce',
+        autoCheckUntil: null,
+        preflight: {},
+        lastCheckedAt: null,
+        dkimMode,
+      },
+    ])
+    const config = (await getConfig()) as { domains: unknown[] }
+    expect(config.domains).toMatchObject([{ dkimMode }])
+    expect(JSON.stringify(config)).not.toMatch(/PRIVATE|privateKey/i)
+  })
+})

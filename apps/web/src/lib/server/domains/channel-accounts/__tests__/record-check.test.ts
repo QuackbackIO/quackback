@@ -134,6 +134,45 @@ describe('TXT records', () => {
   })
 })
 
+describe('a signing key TXT', () => {
+  const key: SendingDomainDnsRecord = {
+    type: 'TXT',
+    host: 'qb1a2b3c4d._domainkey',
+    value: 'v=DKIM1; k=rsa; p=MIGfMA0KEYA',
+    purpose: 'dkim',
+  }
+  const NAME = 'qb1a2b3c4d._domainkey.acme.com'
+
+  it.each([
+    [
+      'the same key, split and spaced differently',
+      { [NAME]: { TXT: [['v=DKIM1; k=rsa; p=MIGf', 'MA0 KEYA']] } },
+      { state: 'found' },
+    ],
+    [
+      'a different key',
+      { [NAME]: { TXT: [['v=DKIM1; k=rsa; p=OTHERKEY']] } },
+      { state: 'mismatch', seen: 'v=DKIM1; k=rsa; p=OTHERKEY' },
+    ],
+    ['nothing', {}, { state: 'missing' }],
+    [
+      'an address where the TXT should be',
+      { [NAME]: { A: ['192.0.2.1'] } },
+      { state: 'proxied', seen: '192.0.2.1' },
+    ],
+    [
+      'the key under the domain typed twice',
+      { [`${NAME}.acme.com`]: { TXT: [['v=DKIM1; k=rsa; p=MIGfMA0KEYA']] } },
+      { state: 'mismatch', seen: `${NAME}.acme.com`, reason: 'doubled-name' },
+    ],
+  ])('finds %s', async (_label, zone, expected) => {
+    expect(await checkRecord(DOMAIN, key, zoneResolver(zone as Zone), NOW)).toEqual({
+      ...expected,
+      checkedAt: NOW.toISOString(),
+    })
+  })
+})
+
 describe('CNAME records', () => {
   it.each([
     [

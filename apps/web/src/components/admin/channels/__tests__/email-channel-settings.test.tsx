@@ -86,6 +86,7 @@ function domain(over: Partial<SendingDomainDTO> = {}): SendingDomainDTO {
     verifiedAt: null,
     dnsRecords: records(),
     mailFromLabel: 'qb-bounce',
+    dkimMode: 'easy',
     autoCheckUntil: new Date(Date.now() + 48 * HOUR).toISOString(),
     lastCheckedAt: null,
     preflight: {},
@@ -339,6 +340,82 @@ describe('domains no address uses', () => {
   it('does not list a domain an address uses', () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [LIVE] })
     expect(screen.queryByText('No address uses this domain')).toBeNull()
+  })
+})
+
+describe('the two signing modes', () => {
+  const mailFrom = [
+    {
+      type: 'MX',
+      host: 'qb-bounce',
+      value: 'feedback-smtp.example.com',
+      priority: 10,
+      purpose: 'mail-from',
+    },
+    {
+      type: 'TXT',
+      host: 'qb-bounce',
+      value: 'v=spf1 include:example.com ~all',
+      purpose: 'mail-from',
+    },
+  ]
+  const labels = () =>
+    [...document.querySelectorAll('[data-slot="dns-record"]')].map(
+      (r) => r.querySelector('td')?.textContent?.split(': ')[1]
+    )
+
+  it('shows three records for a domain signed with its own key', async () => {
+    const byo = domain({
+      dkimMode: 'byo',
+      dnsRecords: [
+        {
+          type: 'TXT',
+          host: 'qb1a2b3c4d._domainkey',
+          value: 'v=DKIM1; k=rsa; p=PUBLICKEY',
+          purpose: 'dkim',
+        },
+        ...mailFrom,
+      ] as SendingDomainDTO['dnsRecords'],
+    })
+    renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [byo] })
+    expect(labels()).toEqual(['Signing', 'Return path', 'Return path'])
+    fireEvent.click(screen.getByRole('button', { name: 'Copy instructions' }))
+    await waitFor(() => expect(clipboard).toHaveBeenCalled())
+    const lines = clipboard.mock.calls[0][0].split('\n').filter((l) => /^(TXT|MX)/.test(l))
+    expect(lines).toEqual([
+      'TXT  qb1a2b3c4d._domainkey  v=DKIM1; k=rsa; p=PUBLICKEY',
+      'MX 10  qb-bounce  feedback-smtp.example.com',
+      'TXT  qb-bounce  v=spf1 include:example.com ~all',
+    ])
+  })
+
+  it('keeps all six records for a domain on the provider’s keys', () => {
+    const easy = domain({
+      dnsRecords: [
+        {
+          type: 'TXT',
+          host: '_quackback',
+          value: 'quackback-domain-verification=abc',
+          purpose: 'ownership',
+        },
+        ...['aaa', 'bbb', 'ccc'].map((t) => ({
+          type: 'CNAME',
+          host: `${t}._domainkey`,
+          value: `${t}.dkim.example.com`,
+          purpose: 'dkim',
+        })),
+        ...mailFrom,
+      ] as SendingDomainDTO['dnsRecords'],
+    })
+    renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [easy] })
+    expect(labels()).toEqual([
+      'Ownership',
+      'Signing',
+      'Signing',
+      'Signing',
+      'Return path',
+      'Return path',
+    ])
   })
 })
 

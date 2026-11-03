@@ -324,17 +324,25 @@ function toIdentity(
  * follow a create with the writes a create implies, and on a shared account
  * those land on somebody else's identity.
  *
- * Easy DKIM at 2048 bits: SES's own default is 2048 for identities created
- * through the API, and stating it means a change to that default cannot silently
- * downgrade a customer's signing key.
+ * With `signing`, the identity signs with that key under that selector (the
+ * caller's own key, published as one TXT record). The private key goes into
+ * this one request and nowhere else: it is not logged and not returned. An
+ * identity that already exists keeps the key it has; nothing here re-keys one.
+ *
+ * Without it, Easy DKIM at 2048 bits: SES's own default is 2048 for identities
+ * created through the API, and stating it means a change to that default cannot
+ * silently downgrade a customer's signing key.
  */
 export async function createSesDomainIdentity(
   domain: string,
-  deps: SesIdentityDeps = depsFromEnv()
+  deps: SesIdentityDeps = depsFromEnv(),
+  signing?: { selector: string; privateKey: string }
 ): Promise<SesIdentityCreation> {
   const command = new CreateEmailIdentityCommand({
     EmailIdentity: domain,
-    DkimSigningAttributes: { NextSigningKeyLength: 'RSA_2048_BIT' },
+    DkimSigningAttributes: signing
+      ? { DomainSigningSelector: signing.selector, DomainSigningPrivateKey: signing.privateKey }
+      : { NextSigningKeyLength: 'RSA_2048_BIT' },
   })
   try {
     const response = (await deps.client.send(command)) as CreateEmailIdentityCommandOutput

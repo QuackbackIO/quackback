@@ -15,6 +15,7 @@
  */
 import type { SendingDomainDnsRecord, SendingDomainRecordCheck } from '@/lib/server/db'
 import type { DnsResolver } from './dns-resolver'
+import { dkimPublicKeyOf, isKeyRecord } from './dkim-key'
 
 export type { DnsResolver } from './dns-resolver'
 
@@ -72,6 +73,21 @@ async function stateAt(
   record: SendingDomainDnsRecord,
   resolver: DnsResolver
 ): Promise<Omit<SendingDomainRecordCheck, 'checkedAt'>> {
+  if (isKeyRecord(record)) {
+    // A signing key is compared on its key alone, whatever the spacing, chunking
+    // or tag order. A TXT here with another key is this record entered wrong.
+    const values = (await answer(() => resolver.resolveTxt(name))).map((chunks) => chunks.join(''))
+    const want = dkimPublicKeyOf(record.value)
+    if (values.some((v) => dkimPublicKeyOf(v) === want)) return { state: 'found' }
+    const other = values.find((v) => dkimPublicKeyOf(v) !== null)
+    if (other !== undefined) return { state: 'mismatch', seen: other.trim() }
+    if (values.length === 0) {
+      const addresses = await answer(() => resolver.resolve4(name))
+      if (addresses.length > 0) return { state: 'proxied', seen: addresses[0] }
+    }
+    return { state: 'missing' }
+  }
+
   if (record.type === 'TXT') {
     const values = (await answer(() => resolver.resolveTxt(name))).map((chunks) => chunks.join(''))
     const want = normalizeText(record.value)

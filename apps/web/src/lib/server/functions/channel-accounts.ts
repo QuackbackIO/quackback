@@ -112,6 +112,12 @@ export interface SendingDomainDTO {
   /** The MAIL FROM subdomain label the records are composed under. */
   mailFromLabel: string
   /**
+   * How the domain is signed: `byo` with a key of its own (one TXT, which also
+   * proves ownership), `easy` with the provider's keys (CNAMEs plus the
+   * ownership TXT). The records reflect it; the page needs nothing else.
+   */
+  dkimMode: 'easy' | 'byo'
+  /**
    * Until when a pending domain is checked automatically. A pending domain
    * whose window has passed is "not found after 72 hours"; one with no window yet is still being set up.
    */
@@ -180,6 +186,7 @@ const toDomain = (d: EmailSendingDomain): SendingDomainDTO => ({
   dnsRecords: (d.dnsRecords ?? []).map((r) => ({ ...r })),
   verifiedAt: d.verifiedAt ? d.verifiedAt.toISOString() : null,
   mailFromLabel: d.mailFromLabel,
+  dkimMode: d.dkimMode,
   autoCheckUntil: d.autoCheckUntil ? d.autoCheckUntil.toISOString() : null,
   lastCheckedAt: d.lastCheckedAt ? d.lastCheckedAt.toISOString() : null,
   preflight: { ...d.preflight },

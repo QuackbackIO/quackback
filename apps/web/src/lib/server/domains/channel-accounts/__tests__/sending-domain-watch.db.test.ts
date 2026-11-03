@@ -49,10 +49,12 @@ vi.mock('../domain-verification', () => ({
     expected: { host: string; value: string; type: string; purpose: string }[]
   ) => {
     if (expected.length === 0) return false
+    // The real checker's rule: only a row's own proof record counts (its
+    // token, or its signing key), matched against what the zone publishes.
     return expected.every(
       (r) =>
         r.type === 'TXT' &&
-        r.purpose === 'ownership' &&
+        (r.purpose === 'ownership' || (r.purpose === 'dkim' && r.value.includes('p='))) &&
         (zone.get(`${r.host}.${domain}`)?.TXT ?? []).some((v) => v.join('') === r.value)
     )
   },

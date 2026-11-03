@@ -553,6 +553,9 @@ export type {
   ChannelAccountConfig,
   SendingDomainDnsRecord,
   SendingDomainOwnershipRecord,
+  SendingDomainKeyRecord,
+  SendingDomainProofRecord,
+  SendingDomainDkimMode,
   SendingDomainRecordCheck,
   SendingDomainPreflight,
 } from '@quackback/db'

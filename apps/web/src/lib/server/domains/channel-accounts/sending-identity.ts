@@ -62,6 +62,9 @@ import {
   type EmailSendingDomain,
   type SendingDomainDnsRecord,
   type SendingDomainOwnershipRecord,
+  type SendingDomainKeyRecord,
+  type SendingDomainDkimMode,
+  type SendingDomainProofRecord,
 } from '@/lib/server/db'
 import {
   createSendingDomain,
@@ -73,6 +76,7 @@ import { verifySendingDomainDns } from './domain-verification'
 import { systemResolver } from './dns-resolver'
 import { checkRecords } from './record-check'
 import { readDmarc, runPreflight } from './preflight'
+import { generateDkimKey, isKeyRecord } from './dkim-key'
 import { notifySendingDomainLive, notifySendingDomainNeedsAttention } from './sending-domain-notify'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 import { isAtOrUnder, platformSendingDomains, toAsciiDomain } from './outbound-identity'
@@ -260,13 +264,22 @@ export function normalizeSendingDomain(
 export function sendingDomainDnsRecords(args: {
   domain: string
   region: string
-  ownershipToken: string
+  /** The `_quackback` token, for a row on the provider's own keys. */
+  ownershipToken?: string
   identity: SesDomainIdentity | null
   /** The row's stored MAIL FROM label. */
   mailFromLabel: string
+  /**
+   * The row's own signing key records, for a row signed with its own key. They
+   * replace the token and the provider's CNAMEs: the key is both the signing
+   * record and the proof.
+   */
+  signingKeys?: SendingDomainKeyRecord[]
 }): SendingDomainDnsRecord[] {
-  const records: SendingDomainDnsRecord[] = [ownershipRecord(args.ownershipToken)]
-  for (const token of args.identity?.dkimTokens ?? []) {
+  const records: SendingDomainDnsRecord[] = args.signingKeys
+    ? args.signingKeys.map(({ type, host, value, purpose }) => ({ type, host, value, purpose }))
+    : [ownershipRecord(args.ownershipToken ?? '')]
+  for (const token of args.signingKeys ? [] : (args.identity?.dkimTokens ?? [])) {
     records.push({
       type: 'CNAME',
       host: `${token}._domainkey`,
@@ -311,11 +324,18 @@ export function sendingDomainDnsRecords(args: {
 export function sendingDomainStatusFrom(args: {
   identity: SesDomainIdentity | null
   ownershipProven: boolean
+  /**
+   * A row signed with its own key waits on the provider's readiness to send,
+   * not on its DKIM status: on a shared identity that status is about the key
+   * the identity already had, not this row's.
+   */
+  dkimMode?: SendingDomainDkimMode
 }): 'pending' | 'verified' | 'failed' {
   const { identity, ownershipProven } = args
   if (identity?.dkimStatus === 'FAILED') return 'failed'
   if (!ownershipProven || !identity) return 'pending'
-  const signable = identity.dkimStatus === 'SUCCESS' && identity.verifiedForSending
+  const signable =
+    (args.dkimMode === 'byo' || identity.dkimStatus === 'SUCCESS') && identity.verifiedForSending
   const mailFromReady = identity.mailFrom?.status === 'SUCCESS'
   return signable && mailFromReady ? 'verified' : 'pending'
 }
@@ -384,7 +404,6 @@ export async function provisionSendingDomain(input: {
 }): Promise<EmailSendingDomain> {
   const region = requireRegion()
   const domain = normalizeSendingDomain(input.domain)
-  const ownershipToken = mintOwnershipToken()
   // A label already in use on the identity wins over ours: re-pointing the
   // identity would reset the MAIL FROM an existing setup verified with.
   const mailFromLabel =
@@ -400,18 +419,30 @@ export async function provisionSendingDomain(input: {
     )
   }
 
-  // The slot, taken before anything account-wide is consumed. Carries the
-  // ownership record already, so a row can never exist without the one record
-  // that makes it provable.
+  // A key of the row's own: its public half is the one signing record the
+  // owner publishes, and proves ownership too. The private half goes to the
+  // provider in the create call below and is not kept anywhere.
+  const key = generateDkimKey()
+
+  // The slot, taken before anything account-wide is consumed. Carries the key
+  // record already, so a row can never exist without the one record that makes
+  // it provable.
   const row = await createSendingDomain({
     owningTeamId: input.owningTeamId,
     domain,
-    dnsRecords: [ownershipRecord(ownershipToken)],
+    dnsRecords: [key.record],
+    dkimMode: 'byo',
   })
 
   let identity: SesDomainIdentity
   try {
-    const created = await createSesDomainIdentity(domain)
+    // An identity that already exists (another workspace's, or a re-add) keeps
+    // its key: the provider signs with that, and this row's record still proves
+    // this workspace's ownership.
+    const created = await createSesDomainIdentity(domain, undefined, {
+      selector: key.selector,
+      privateKey: key.privateKey,
+    })
     if (!created.preexisting) {
       await putSesMailFromDomain(domain, mailFromDomainFor(domain, mailFromLabel))
     }
@@ -436,9 +467,9 @@ export async function provisionSendingDomain(input: {
       dnsRecords: sendingDomainDnsRecords({
         domain,
         region,
-        ownershipToken,
         identity,
         mailFromLabel,
+        signingKeys: [key.record],
       }),
       updatedAt: new Date(),
     })
@@ -488,13 +519,23 @@ export async function refreshSendingDomain(
   if (!row) return null
   const region = requireRegion()
 
+  // A row signed with its own key proves ownership with that key, which cannot
+  // be re-minted (the private half was never kept). A row on the provider's own
+  // keys proves it with its `_quackback` token.
+  const byo = row.dkimMode === 'byo'
+  const signingKeys = byo ? (row.dnsRecords ?? []).filter(isKeyRecord) : undefined
   const existing = ownershipRecordsOf(row.dnsRecords ?? [])
-  const ownershipToken =
-    existing[0]?.value.slice(OWNERSHIP_VALUE_PREFIX.length) || mintOwnershipToken()
-  // Only ever this row's own ownership records. Anything else in the set is a
-  // value published from our instructions and therefore identical for every
+  const ownershipToken = byo
+    ? undefined
+    : existing[0]?.value.slice(OWNERSHIP_VALUE_PREFIX.length) || mintOwnershipToken()
+  // Only ever this row's own proof records. Anything else in the set is a value
+  // published from our instructions and therefore identical for every
   // workspace, which is the definition of a record that proves nothing.
-  const proofRecords = existing.length > 0 ? existing : [ownershipRecord(ownershipToken)]
+  const proofRecords: SendingDomainProofRecord[] = signingKeys
+    ? signingKeys
+    : existing.length > 0
+      ? existing
+      : [ownershipRecord(ownershipToken ?? '')]
 
   const [found, ownershipProven] = await Promise.all([
     getSesDomainIdentity(row.domain),
@@ -512,7 +553,7 @@ export async function refreshSendingDomain(
     identity = (await getSesDomainIdentity(row.domain)) ?? identity
   }
 
-  const status = sendingDomainStatusFrom({ identity, ownershipProven })
+  const status = sendingDomainStatusFrom({ identity, ownershipProven, dkimMode: row.dkimMode })
 
   const now = new Date()
   // Each record's own state, for the person publishing them. Recorded beside
@@ -524,6 +565,7 @@ export async function refreshSendingDomain(
       ownershipToken,
       identity,
       mailFromLabel: row.mailFromLabel,
+      signingKeys,
     }),
     row.dnsRecords ?? []
   )

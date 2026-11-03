@@ -274,6 +274,50 @@ describe('domains that may never be claimed', () => {
   })
 })
 
+describe('the records of a domain signed with its own key', () => {
+  const key = {
+    type: 'TXT' as const,
+    host: 'qb1a2b3c4d._domainkey',
+    value: 'v=DKIM1; k=rsa; p=KEY',
+    purpose: 'dkim' as const,
+  }
+
+  it('is the key and the MAIL FROM pair, with no token and no provider CNAMEs', () => {
+    const records = sendingDomainDnsRecords({
+      domain: 'tenant-a.example',
+      region: REGION,
+      identity: identity(),
+      mailFromLabel: MAIL_FROM_LABEL,
+      signingKeys: [key],
+    })
+    expect(records.map((r) => `${r.type} ${r.host} ${r.purpose}`)).toEqual([
+      'TXT qb1a2b3c4d._domainkey dkim',
+      `MX ${MAIL_FROM_LABEL} mail-from`,
+      `TXT ${MAIL_FROM_LABEL} mail-from`,
+    ])
+  })
+
+  it('counts as verified on its own proof, the provider sending, and MAIL FROM ready', () => {
+    // On a shared identity the provider signs with whatever key it already
+    // has, so its DKIM status is not this row's to wait on.
+    const shared = identity({ dkimStatus: 'PENDING', verifiedForSending: true })
+    expect(
+      sendingDomainStatusFrom({ identity: shared, ownershipProven: true, dkimMode: 'byo' })
+    ).toBe('verified')
+    expect(sendingDomainStatusFrom({ identity: shared, ownershipProven: true })).toBe('pending')
+    expect(
+      sendingDomainStatusFrom({
+        identity: identity({ verifiedForSending: false }),
+        ownershipProven: true,
+        dkimMode: 'byo',
+      })
+    ).toBe('pending')
+    expect(
+      sendingDomainStatusFrom({ identity: identity(), ownershipProven: false, dkimMode: 'byo' })
+    ).toBe('pending')
+  })
+})
+
 describe('when a domain counts as verified', () => {
   it('needs the provider AND this workspace’s own proof of ownership', () => {
     // The provider reports a domain verified to every workspace on the shared

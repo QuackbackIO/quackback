@@ -76,6 +76,7 @@ export async function createSendingDomain(input: {
   owningTeamId: TeamId
   domain: string
   dnsRecords?: SendingDomainDnsRecord[]
+  dkimMode?: EmailSendingDomain['dkimMode']
 }): Promise<EmailSendingDomain> {
   const limit = (await getTierLimits()).maxSendingDomains
   return db.transaction(async (tx) => {
@@ -83,11 +84,8 @@ export async function createSendingDomain(input: {
     await tierEnforce.enforceSendingDomainLimit(limit, tx)
     const [row] = await tx
       .insert(emailSendingDomains)
-      .values({
-        owningTeamId: input.owningTeamId,
-        domain: input.domain.trim().toLowerCase(),
-        dnsRecords: input.dnsRecords ?? [],
-      })
+      // Records and signing mode left out take the column defaults.
+      .values({ ...input, domain: input.domain.trim().toLowerCase() })
       .returning()
     return row
   })

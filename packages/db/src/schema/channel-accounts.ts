@@ -69,6 +69,7 @@ export interface SendingDomainRecordCheck {
  */
 export type SendingDomainDnsRecord =
   | SendingDomainOwnershipRecord
+  | SendingDomainKeyRecord
   | {
       type: 'TXT' | 'CNAME'
       host: string
@@ -104,6 +105,36 @@ export interface SendingDomainOwnershipRecord {
 }
 
 /**
+ * The public half of a signing key minted for one row: a TXT at
+ * `<selector>._domainkey` carrying `v=DKIM1; k=rsa; p=<key>`.
+ *
+ * Unique to its row (a fresh key and selector each time), so unlike a DKIM
+ * CNAME or the MAIL FROM records it is something only the workspace that holds
+ * the row could have published, and it proves ownership in place of the
+ * `_quackback` token on rows set up this way.
+ */
+export interface SendingDomainKeyRecord {
+  type: 'TXT'
+  host: string
+  value: string
+  purpose: 'dkim'
+  check?: SendingDomainRecordCheck
+}
+
+/** A record whose value exists in one row only, and so can prove ownership. */
+export type SendingDomainProofRecord = SendingDomainOwnershipRecord | SendingDomainKeyRecord
+
+/**
+ * How a domain is signed.
+ *
+ * - `easy`: the provider's own keys, published as three DKIM CNAMEs, with the
+ *   `_quackback` TXT as ownership proof. Rows set up before `byo` existed.
+ * - `byo`: a key minted for the row, published as one TXT that also proves
+ *   ownership.
+ */
+export type SendingDomainDkimMode = 'easy' | 'byo'
+
+/**
  * What was learned about a domain's DNS before its identity was created, and
  * refreshed (the DMARC part) on each check. Read to tailor the setup steps;
  * nothing here decides whether the domain is verified.
@@ -133,6 +164,7 @@ export const emailSendingDomains = pgTable(
       .notNull()
       .default(sql`'[]'::jsonb`),
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    dkimMode: text('dkim_mode').$type<SendingDomainDkimMode>().notNull().default('easy'),
     lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
     /**
      * The MAIL FROM subdomain label. Stored per row because it changed:
