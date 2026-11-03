@@ -23,7 +23,7 @@ import {
   type SendingDomainDnsRecord,
 } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
-import { systemResolver } from './dns-resolver'
+import { systemResolver } from '@/lib/server/dns/resolver'
 import { checkRecords } from './record-check'
 import { customSendingDomainsAvailable, refreshSendingDomain } from './sending-identity'
 

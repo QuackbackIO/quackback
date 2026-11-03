@@ -73,7 +73,7 @@ import {
   listAllSendingDomains,
 } from './channel-account.service'
 import { verifySendingDomainDns } from './domain-verification'
-import { systemResolver } from './dns-resolver'
+import { systemResolver } from '@/lib/server/dns/resolver'
 import { checkRecords } from './record-check'
 import { readDmarc, runPreflight } from './preflight'
 import { generateDkimKey, isKeyRecord } from './dkim-key'

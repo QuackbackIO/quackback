@@ -17,6 +17,7 @@ type Zone = Record<
     CNAME?: string[]
     MX?: { exchange: string; priority: number }[]
     A?: string[]
+    AAAA?: string[]
     NS?: string[]
   }
 >
@@ -47,6 +48,7 @@ function zoneResolver(
     resolveCname: (host) => read(host, 'CNAME'),
     resolveMx: (host) => read(host, 'MX'),
     resolve4: (host) => read(host, 'A'),
+    resolve6: (host) => read(host, 'AAAA'),
     resolveNs: (host) => read(host, 'NS'),
   }
 }

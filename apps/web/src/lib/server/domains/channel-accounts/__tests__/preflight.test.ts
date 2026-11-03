@@ -6,7 +6,7 @@
  * of its own, the way a wildcard record does.
  */
 import { describe, expect, it } from 'vitest'
-import type { DnsResolver } from '../dns-resolver'
+import type { DnsResolver } from '@/lib/server/dns/resolver'
 import { dnsHostFromNameservers, readDmarc, runPreflight } from '../preflight'
 
 type Entry = {
@@ -14,6 +14,7 @@ type Entry = {
   CNAME?: string[]
   MX?: { exchange: string; priority: number }[]
   A?: string[]
+  AAAA?: string[]
   NS?: string[]
 }
 
@@ -30,6 +31,7 @@ function zoneResolver(zone: Record<string, Entry>, failing = new Set<string>()):
     resolveCname: (h) => read(h, 'CNAME'),
     resolveMx: (h) => read(h, 'MX'),
     resolve4: (h) => read(h, 'A'),
+    resolve6: (h) => read(h, 'AAAA'),
     resolveNs: (h) => read(h, 'NS'),
   }
 }

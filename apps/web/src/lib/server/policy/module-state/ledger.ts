@@ -631,7 +631,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "send behind another workspace's sends by at most the 30s wait cap, never read or alter them.",
   },
   {
-    file: 'apps/web/src/lib/server/domains/channel-accounts/dns-resolver.ts',
+    file: 'apps/web/src/lib/server/dns/resolver.ts',
     name: 'resolver',
     category: 'fleet-wide',
     reason:

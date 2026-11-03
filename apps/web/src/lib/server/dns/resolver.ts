@@ -1,6 +1,7 @@
 /**
- * The resolver sending-domain checks read DNS through, and the system one they
- * use outside tests.
+ * The resolver every domain check reads DNS through, and the system one used
+ * outside tests: sending domains, single sign-on domains and the help center
+ * domain alike.
  *
  * A module of its own so a test can replace the whole zone in one place: every
  * lookup the checks make goes through this object, so a fake zone sees every
@@ -13,6 +14,7 @@ export interface DnsResolver {
   resolveCname(host: string): Promise<string[]>
   resolveMx(host: string): Promise<{ exchange: string; priority: number }[]>
   resolve4(host: string): Promise<string[]>
+  resolve6(host: string): Promise<string[]>
   resolveNs(host: string): Promise<string[]>
 }
 
@@ -29,5 +31,6 @@ export const systemResolver: DnsResolver = {
   resolveCname: (host) => shared().resolveCname(host),
   resolveMx: (host) => shared().resolveMx(host),
   resolve4: (host) => shared().resolve4(host),
+  resolve6: (host) => shared().resolve6(host),
   resolveNs: (host) => shared().resolveNs(host),
 }

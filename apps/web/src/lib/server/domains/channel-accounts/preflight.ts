@@ -14,7 +14,7 @@
 import { randomBytes } from 'node:crypto'
 import { SES_MAIL_FROM_SPF_VALUE, sesMailFromMxValue } from '@quackback/email/ses-identity'
 import type { SendingDomainPreflight } from '@/lib/server/db'
-import type { DnsResolver } from './dns-resolver'
+import type { DnsResolver } from '@/lib/server/dns/resolver'
 
 type DnsHost = NonNullable<SendingDomainPreflight['dnsHost']>
 type DmarcPolicy = NonNullable<NonNullable<SendingDomainPreflight['dmarc']>['policy']>

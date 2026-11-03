@@ -52,7 +52,7 @@ vi.mock('@/lib/server/email/recipient', async (importOriginal) => ({
  * between an add looking for its domain and inserting one.
  */
 const duringPreflight = vi.fn<() => Promise<void>>()
-vi.mock('../dns-resolver', () => {
+vi.mock('@/lib/server/dns/resolver', () => {
   const none = async () => {
     throw Object.assign(new Error('ENODATA'), { code: 'ENODATA' })
   }

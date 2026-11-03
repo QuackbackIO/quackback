@@ -16,12 +16,13 @@ vi.mock('node:dns/promises', () => {
     resolveCname = async (host: string) => (asked('CNAME', host), ['x.example.com'])
     resolveMx = async (host: string) => (asked('MX', host), [])
     resolve4 = async (host: string) => (asked('A', host), [])
+    resolve6 = async (host: string) => (asked('AAAA', host), [])
     resolveNs = async (host: string) => (asked('NS', host), [])
   }
   return { Resolver }
 })
 
-const { systemResolver } = await import('../dns-resolver')
+const { systemResolver } = await import('../resolver')
 
 describe('systemResolver', () => {
   it('asks through one resolver with a short timeout and a single try', async () => {
@@ -30,6 +31,7 @@ describe('systemResolver', () => {
     await systemResolver.resolveCname('aaa._domainkey.acme.com')
     await systemResolver.resolveMx('qb-bounce.acme.com')
     await systemResolver.resolve4('qb-bounce.acme.com')
+    await systemResolver.resolve6('help.acme.com')
     await systemResolver.resolveNs('acme.com')
 
     expect(constructed).toHaveBeenCalledTimes(1)
@@ -39,6 +41,7 @@ describe('systemResolver', () => {
       ['CNAME', 'aaa._domainkey.acme.com'],
       ['MX', 'qb-bounce.acme.com'],
       ['A', 'qb-bounce.acme.com'],
+      ['AAAA', 'help.acme.com'],
       ['NS', 'acme.com'],
     ])
   })

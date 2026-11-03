@@ -101,7 +101,7 @@ type ZoneEntry = {
   NS?: string[]
 }
 const zone = new Map<string, ZoneEntry>()
-vi.mock('../dns-resolver', () => {
+vi.mock('@/lib/server/dns/resolver', () => {
   const read = async <K extends keyof ZoneEntry>(host: string, kind: K) => {
     const value = zone.get(host)?.[kind]
     if (!value || value.length === 0) {

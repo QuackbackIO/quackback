@@ -14,10 +14,10 @@
  *   pointing at the value (reported as `proxied`).
  */
 import type { SendingDomainDnsRecord, SendingDomainRecordCheck } from '@/lib/server/db'
-import type { DnsResolver } from './dns-resolver'
+import type { DnsResolver } from '@/lib/server/dns/resolver'
 import { dkimPublicKeyOf, isKeyRecord } from './dkim-key'
 
-export type { DnsResolver } from './dns-resolver'
+export type { DnsResolver } from '@/lib/server/dns/resolver'
 
 /** Lookup failures that mean "nothing is published here", not "we could not ask". */
 const NO_ANSWER = new Set(['ENODATA', 'ENOTFOUND', 'NOTFOUND', 'ENONAME'])
