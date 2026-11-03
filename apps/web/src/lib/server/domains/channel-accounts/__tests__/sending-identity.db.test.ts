@@ -295,6 +295,58 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     expect(putMailFrom).toHaveBeenCalledWith('tenant-a.example', 'qb-bounce.tenant-a.example')
   })
 
+  it('adopts the label of a MAIL FROM already attached to the identity, and keeps it', async () => {
+    // Another setup verified this domain with bounce.<domain>. Pointing the
+    // identity at qb-bounce would knock that setup back to pending.
+    const teamId = await seedTeam()
+    const attached = { mailFrom: { domain: 'bounce.tenant-a.example', status: 'SUCCESS' as const } }
+    createIdentity.mockResolvedValue(foundIt(attached))
+    getIdentity.mockResolvedValue(identity(attached))
+    const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+
+    expect(row.mailFromLabel).toBe('bounce')
+    expect(row.dnsRecords.filter((r) => r.purpose === 'mail-from').map((r) => r.host)).toEqual([
+      'bounce',
+      'bounce',
+    ])
+
+    ownershipResolves.mockResolvedValue(true)
+    await refreshSendingDomain(row.id)
+    expect(putMailFrom).not.toHaveBeenCalled()
+  })
+
+  it('runs the pre-flight against the adopted label, where our own records already are', async () => {
+    const teamId = await seedTeam()
+    const attached = { mailFrom: { domain: 'bounce.tenant-a.example', status: 'SUCCESS' as const } }
+    createIdentity.mockResolvedValue(foundIt(attached))
+    getIdentity.mockResolvedValue(identity(attached))
+    // Something foreign at qb-bounce would refuse qb-bounce; bounce is fine.
+    zone.set('qb-bounce.tenant-a.example', { CNAME: ['elsewhere.example.com'] })
+    const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+    expect(row.preflight.mailFromFree).toBe(true)
+  })
+
+  it('never re-points a MAIL FROM attached under another label', async () => {
+    // Two rows on the shared identity, set up under different labels.
+    const [a, b] = [await seedTeam(), await seedTeam()]
+    const [legacy] = await testDb
+      .insert(emailSendingDomains)
+      .values({ owningTeamId: a, domain: 'tenant-a.example', status: 'verified' })
+      .returning()
+    const [newer] = await testDb
+      .insert(emailSendingDomains)
+      .values({ owningTeamId: b, domain: 'tenant-a.example', mailFromLabel: 'qb-bounce' })
+      .returning()
+    getIdentity.mockResolvedValue(
+      identity({ mailFrom: { domain: 'bounce.tenant-a.example', status: 'SUCCESS' } })
+    )
+    ownershipResolves.mockResolvedValue(true)
+
+    await refreshSendingDomain(newer.id)
+    await refreshSendingDomain(legacy.id)
+    expect(putMailFrom).not.toHaveBeenCalled()
+  })
+
   it('leaves a MAIL FROM alone on a poll that proves nothing', async () => {
     const teamId = await seedTeam()
     createIdentity.mockResolvedValue(foundIt({ mailFrom: null }))

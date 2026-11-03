@@ -330,19 +330,22 @@ function requireRegion(): string {
 }
 
 /**
- * Whether the identity's MAIL FROM is already the subdomain this domain needs.
+ * The label of the MAIL FROM already attached to an identity, when it is a
+ * single label directly under the domain; null when none is attached or it is
+ * shaped otherwise.
  *
- * Attaching one is a write only the domain's owner may perform, and the
- * provider's account is shared, so the question "is it already right" is what
- * separates a legitimate attach from an attack that resets somebody else's.
+ * An identity on the shared account may already carry a MAIL FROM from an
+ * earlier setup of the same domain. A new row adopts that label, so its records
+ * match what the identity already uses and nothing has to be re-pointed.
  */
-function mailFromAlreadyAttached(
+export function attachedMailFromLabel(
   identity: SesDomainIdentity | null,
-  domain: string,
-  label: string
-): boolean {
-  const attached = identity?.mailFrom?.domain?.trim().toLowerCase()
-  return attached === mailFromDomainFor(domain, label)
+  domain: string
+): string | null {
+  const attached = identity?.mailFrom?.domain?.trim().toLowerCase().replace(/\.$/, '')
+  if (!attached?.endsWith(`.${domain}`)) return null
+  const label = attached.slice(0, -(domain.length + 1))
+  return label && !label.includes('.') ? label : null
 }
 
 /**
@@ -380,7 +383,10 @@ export async function provisionSendingDomain(input: {
   const region = requireRegion()
   const domain = normalizeSendingDomain(input.domain)
   const ownershipToken = mintOwnershipToken()
-  const mailFromLabel = MAIL_FROM_LABEL
+  // A label already in use on the identity wins over ours: re-pointing the
+  // identity would reset the MAIL FROM an existing setup verified with.
+  const mailFromLabel =
+    attachedMailFromLabel(await getSesDomainIdentity(domain), domain) ?? MAIL_FROM_LABEL
 
   // Before anything is written or created: our MX and SPF cannot sit beside a
   // CNAME, another MX or another SPF record at the same name.
@@ -494,15 +500,12 @@ export async function refreshSendingDomain(
   ])
 
   let identity = found
-  // The owner-only write, performed once there is an owner. Provisioning skips
-  // it for an identity that already existed, precisely so it cannot land on
-  // another workspace's; here the ownership token has just been found in this
-  // domain's zone, so the workspace asking is the one entitled to ask.
-  if (
-    ownershipProven &&
-    identity &&
-    !mailFromAlreadyAttached(identity, row.domain, row.mailFromLabel)
-  ) {
+  // The owner-only write, performed once there is an owner and only onto an
+  // identity with no MAIL FROM at all. Provisioning skips it for an identity
+  // that already existed, so it cannot land on another workspace's; and an
+  // identity that already has one, under any label, is never re-pointed,
+  // because that would reset the setup that attached it.
+  if (ownershipProven && identity && !identity.mailFrom?.domain) {
     await putSesMailFromDomain(row.domain, mailFromDomainFor(row.domain, row.mailFromLabel))
     identity = (await getSesDomainIdentity(row.domain)) ?? identity
   }
