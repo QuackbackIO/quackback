@@ -93,6 +93,8 @@ export interface ChannelAccountDTO {
   inboundTrust: 'strict' | 'lenient'
   sendingDomainId: string | null
   sendingDomain: { domain: string; status: string } | null
+  /** When the account was added, so the page can tell the oldest on a domain. */
+  createdAt: string
 }
 
 /** Pre-flight findings for a domain (see `preflight.ts`). Every field may be absent. */
@@ -174,6 +176,7 @@ const toAccount = (a: ChannelAccount, domains: EmailSendingDomain[] = []): Chann
     inboundTrust: a.inboundTrust,
     sendingDomainId: a.sendingDomainId,
     sendingDomain: domain ? { domain: domain.domain, status: domain.status } : null,
+    createdAt: a.createdAt.toISOString(),
   }
 }
 

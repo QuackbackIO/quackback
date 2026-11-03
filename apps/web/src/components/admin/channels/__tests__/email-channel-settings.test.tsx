@@ -101,8 +101,19 @@ const DEMOTED = domain({
   dnsRecords: records({ ownership: found, dkim: found, mx: missing }),
 })
 
+let added = 0
+/** An address; each one made is newer than the last, as the server lists them newest first. */
 function address(id: string, addr: string, module: string, domainId: string | null = 'dom_1') {
-  return { id, address: addr, module, config: {}, sendingDomainId: domainId, sendingDomain: null }
+  added += 1
+  return {
+    id,
+    address: addr,
+    module,
+    config: {},
+    sendingDomainId: domainId,
+    sendingDomain: null,
+    createdAt: new Date(Date.UTC(2026, 9, 1) + added * 60_000).toISOString(),
+  }
 }
 
 function renderSettings({
@@ -273,6 +284,7 @@ describe('address rows', () => {
     const r = row('help@acme.com')
     expect(r.textContent).toContain('Records not found after 72 hours.')
     expect(r.textContent).not.toContain('Replies send from the default address.')
+    expect(r.textContent).toContain('may land in spam')
   })
 
   it('offers Send test email on a live address only', async () => {
@@ -299,6 +311,79 @@ describe('address rows', () => {
     const user = await openMenu('help@acme.com')
     await user.click(screen.getByRole('menuitem', { name: 'DNS records' }))
     expect(screen.getByText('Keep these published.')).toBeTruthy()
+  })
+})
+
+describe('rows on a domain with several addresses', () => {
+  it('shows the area alone on a second address of a live domain', () => {
+    renderSettings({
+      addresses: [
+        address('a1', 'help@acme.com', 'support'),
+        address('a2', 'news@acme.com', 'changelog'),
+      ],
+      domains: [LIVE],
+    })
+    expect(row('news@acme.com').textContent).toContain('Changelog')
+    expect(row('news@acme.com').textContent).not.toContain('Waiting for')
+  })
+
+  it('keeps the area beside the waiting note while the domain is set up', () => {
+    const older = address('a1', 'help@acme.com', 'support')
+    const newer = address('a2', 'news@acme.com', 'changelog')
+    renderSettings({ addresses: [newer, older], domains: [domain()] })
+    expect(row('news@acme.com').textContent).toContain('Changelog · Waiting for acme.com')
+    expect(within(row('news@acme.com')).getByText('Setting up')).toBeTruthy()
+  })
+
+  it('attaches the panel to the address that has been on the domain longest', () => {
+    // Newest first, as the server lists them: adding news@ must not move it.
+    const older = address('a1', 'help@acme.com', 'support')
+    const newer = address('a2', 'news@acme.com', 'changelog')
+    renderSettings({ addresses: [newer, older], domains: [NOT_FOUND] })
+    expect(row('help@acme.com').textContent).toContain('Records not found after 72 hours.')
+    expect(row('news@acme.com').textContent).toContain('Waiting for acme.com')
+    const panel = panels()[0] as HTMLElement
+    const helpRow = row('help@acme.com')
+    expect(helpRow.parentElement?.contains(panel)).toBe(true)
+  })
+})
+
+describe('a domain that broke after it was live', () => {
+  it('asks to fix it, not to set it up, and says the records are gone', () => {
+    renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [DEMOTED] })
+    expect(screen.getByText('Fix acme.com')).toBeTruthy()
+    expect(screen.queryByText('Set up acme.com')).toBeNull()
+    expect(screen.getByText("We can't find these records any more.")).toBeTruthy()
+  })
+
+  it('keeps the first-time wording for a domain never live', () => {
+    renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [NOT_FOUND] })
+    expect(screen.getByText('Set up acme.com')).toBeTruthy()
+    expect(screen.getByText("We couldn't find these records yet.")).toBeTruthy()
+  })
+})
+
+describe('what happens to replies meanwhile', () => {
+  const SPAM = 'Replies still send from this address but may land in spam until this is fixed.'
+  const FALLBACK = 'Replies send from the default address.'
+
+  it.each([
+    ['not found', NOT_FOUND],
+    ['broken', DEMOTED],
+  ])('on a single workspace, says replies may land in spam (%s)', (_l, d) => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com', 'support')],
+      domains: [d],
+      addressMode: 'any',
+    })
+    expect(row('help@acme.com').textContent).toContain(SPAM)
+    expect(row('help@acme.com').textContent).not.toContain(FALLBACK)
+  })
+
+  it('on a shared server, says replies send from the default address', () => {
+    renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [NOT_FOUND] })
+    expect(row('help@acme.com').textContent).toContain(FALLBACK)
+    expect(row('help@acme.com').textContent).not.toContain(SPAM)
   })
 })
 

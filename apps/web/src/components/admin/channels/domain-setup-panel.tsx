@@ -21,6 +21,8 @@ export function DomainSetupPanel({
   onCheckAgain: () => void
   checking?: boolean
 }) {
+  // Was live once and is not now: the records were there, so this is a fix.
+  const broken = phase === 'attention' && domain.verifiedAt !== null
   const checked = lastCheckedAt(domain)
   const checkedTitle = checked
     ? `Last checked ${formatDistanceToNow(checked, { addSuffix: true })}`
@@ -32,7 +34,11 @@ export function DomainSetupPanel({
       className="space-y-3 border-t border-border/50 bg-muted/20 px-4 py-3 sm:px-6"
     >
       <h3 className="text-sm font-medium">
-        {phase === 'live' ? domain.domain : `Set up ${domain.domain}`}
+        {phase === 'live'
+          ? domain.domain
+          : broken
+            ? `Fix ${domain.domain}`
+            : `Set up ${domain.domain}`}
       </h3>
       <DnsRecordTable domain={domain} phase={phase} />
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -41,7 +47,9 @@ export function DomainSetupPanel({
             ? 'Keep these published.'
             : phase === 'setting-up'
               ? "Checking automatically. We'll let you know when it's live."
-              : "We couldn't find these records yet."}
+              : broken
+                ? "We can't find these records any more."
+                : "We couldn't find these records yet."}
         </span>
         {(phase === 'not-found' || phase === 'attention') && (
           <Button size="sm" variant="outline" disabled={checking} onClick={onCheckAgain}>

@@ -243,6 +243,7 @@ type SendingAddress = {
   config: Record<string, unknown>
   sendingDomainId?: string | null
   sendingDomain: { domain: string; status: string } | null
+  createdAt?: string
 }
 
 type SmtpConfig = { host?: string; port?: number; secure?: boolean; user?: string }
@@ -285,9 +286,11 @@ function pendingMeta(
   domain: SendingDomainDTO,
   phase: DomainPhase,
   first: boolean,
+  area: string,
   fallback: string
 ): string | null {
-  if (!first) return `Waiting for ${domain.domain}`
+  if (phase === 'live') return null
+  if (!first) return `${area} · Waiting for ${domain.domain}`
   if (phase === 'not-found') return `Records not found after 72 hours.${fallback}`
   if (phase === 'attention') {
     const failing = domain.dnsRecords.find((r) => r.check && r.check.state !== 'found')
@@ -358,15 +361,24 @@ function SendingAddressesSection({
   const showError = (fallback: string) => (error: unknown) =>
     setActionError(errorText(error, fallback))
   const now = new Date()
-  const fallbackNote = guardPermitsAny ? '' : ' Replies send from the default address.'
+  // What replies do meanwhile: one workspace still sends as the address; a
+  // shared server falls back to the default.
+  const fallbackNote = guardPermitsAny
+    ? ' Replies still send from this address but may land in spam until this is fixed.'
+    : ' Replies send from the default address.'
 
   const rows = addresses.map((a) => {
     const domain = domainOf(a, domains)
     return { a, domain, phase: domain ? domainPhase(domain, now) : ('live' as const) }
   })
+  // The panel and the domain's status line sit under the address that has
+  // been on the domain longest, so adding another one does not move them.
   const firstOnDomain = new Set<string>()
   const seen = new Set<string>()
-  for (const { a, domain } of rows) {
+  const oldestFirst = [...rows].sort((x, y) =>
+    (x.a.createdAt ?? '').localeCompare(y.a.createdAt ?? '')
+  )
+  for (const { a, domain } of oldestFirst) {
     if (domain && !seen.has(domain.id)) {
       seen.add(domain.id)
       firstOnDomain.add(a.id)
@@ -462,7 +474,8 @@ function SendingAddressesSection({
                 leading={<RowIcon icon={EnvelopeIcon} />}
                 title={label}
                 meta={
-                  (domain && pendingMeta(domain, phase, first, fallbackNote)) ||
+                  (domain &&
+                    pendingMeta(domain, phase, first, moduleLabel(a.module), fallbackNote)) ||
                   moduleLabel(a.module)
                 }
                 badges={<PhaseBadge phase={phase} />}

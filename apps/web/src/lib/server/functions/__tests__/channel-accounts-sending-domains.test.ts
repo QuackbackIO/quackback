@@ -142,6 +142,7 @@ const ACCOUNT = {
   config: {},
   inboundTrust: 'strict',
   sendingDomainId: 'sending_domain_1',
+  createdAt: new Date('2026-11-01T09:00:00.000Z'),
 }
 
 describe('createSendingAddressFn', () => {
@@ -154,7 +155,11 @@ describe('createSendingAddressFn', () => {
       address: 'help@acme.com',
       module: 'support',
     })
-    expect(result).toMatchObject({ id: 'channel_account_1', sendingDomainId: 'sending_domain_1' })
+    expect(result).toMatchObject({
+      id: 'channel_account_1',
+      sendingDomainId: 'sending_domain_1',
+      createdAt: '2026-11-01T09:00:00.000Z',
+    })
   })
 
   it('carries a provider failure back as a sentence a person can act on', async () => {
