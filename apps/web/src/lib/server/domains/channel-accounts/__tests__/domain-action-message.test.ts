@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { SesIdentityConfigError, SesIdentityError } from '@quackback/email/ses-identity'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
-import { SendingDomainInUseError } from '../channel-account.service'
+import { ChannelAddressInUseError, SendingDomainInUseError } from '../channel-account.service'
 import { SendingDomainRefusedError } from '../sending-identity'
 import { SendingIdentityRefusedError } from '../outbound-identity'
 import { domainActionMessage } from '../domain-action-message'
@@ -26,6 +26,9 @@ describe('domainActionMessage', () => {
     )
     const identity = new SendingIdentityRefusedError('help@acme.com')
     expect(domainActionMessage(identity, 'add')).toBe(identity.message)
+    expect(domainActionMessage(new ChannelAddressInUseError('help@acme.com'), 'add')).toBe(
+      "help@acme.com is already in use by this workspace's inbound route."
+    )
   })
 
   it('passes a plan limit through', () => {
@@ -76,7 +79,10 @@ describe('domainActionMessage', () => {
     expect(domainActionMessage(err, 'remove')).toBe(
       "Couldn't remove the domain. Try again, and if it keeps failing, contact your workspace's operator."
     )
-    for (const action of ['add', 'verify', 'remove'] as const) {
+    expect(domainActionMessage(err, 'test')).toBe(
+      "Couldn't send the test email. Try again, and if it keeps failing, contact your workspace's operator."
+    )
+    for (const action of ['add', 'verify', 'remove', 'test'] as const) {
       expect(domainActionMessage(err, action)).not.toMatch(/log/i)
       expect(domainActionMessage(err, action)).not.toContain('10.0.0.1')
     }

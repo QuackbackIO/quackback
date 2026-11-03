@@ -16,9 +16,7 @@ import {
   listChannelAccounts,
   listSendingDomains,
   setInboundForwardingTarget,
-  createSendingAddress,
   deleteSendingDomain,
-  softDeleteChannelAccount,
   updateInboundTrust,
   clearInboundForwarding,
   updateSendingAddressSmtp,
@@ -33,7 +31,11 @@ import {
   refreshSendingDomain,
   restartSendingDomainChecks,
 } from '@/lib/server/domains/channel-accounts/sending-identity'
-import { assertSendingIdentityPermitted } from '@/lib/server/domains/channel-accounts/outbound-identity'
+import {
+  addSendingAddress,
+  removeSendingAddress,
+  sendTestEmail,
+} from '@/lib/server/domains/channel-accounts/sending-address'
 import {
   domainActionMessage,
   isDomainActionRefusal,
@@ -239,21 +241,18 @@ export const createSendingAddressFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
     const teamId = await requireDefaultTeam()
-    // Refused here rather than at the send: the mail provider will sign for any
-    // identity verified on the account this workspace shares with every other
-    // one, so a sending address on a domain this workspace never proved it owns
-    // is an impersonation waiting for its first reply. The send path guards this
-    // too, and this is where a person is present to read the reason.
-    await assertSendingIdentityPermitted(data.address.trim().toLowerCase())
-    // Re-adding an address this workspace already sends from moves it; only one
-    // already serving as the inbound route is refused, and that refusal reaches
-    // this person as its own sentence, like the identity one above it.
-    return toAccount(
-      await createSendingAddress({
-        owningTeamId: teamId,
-        address: data.address,
-        module: data.module,
-      })
+    // An address on a domain this workspace has not verified brings that
+    // domain with it and sends from the default until the domain is live; the
+    // send guard reads the domain, so a pending address claims nothing. See
+    // `sending-address.ts`.
+    return withDomainActionMessage('add', async () =>
+      toAccount(
+        await addSendingAddress({
+          owningTeamId: teamId,
+          address: data.address,
+          module: data.module,
+        })
+      )
     )
   })
 
@@ -358,8 +357,21 @@ export const deleteChannelAccountFn = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
-    await softDeleteChannelAccount(data.id as ChannelAccountId)
-    return { id: data.id }
+    // The domain the last address on it was using, so the page can offer to
+    // remove that too and free its plan slot.
+    const { lastOnDomain } = await removeSendingAddress(data.id as ChannelAccountId)
+    return { id: data.id, lastOnDomain }
+  })
+
+export const sendTestEmailFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ addressId: z.string() }))
+  .handler(async ({ data }) => {
+    const { user } = await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    // To the person asking and nobody else: the recipient is their own
+    // account address, never something the request names.
+    return withDomainActionMessage('test', () =>
+      sendTestEmail({ addressId: data.addressId as ChannelAccountId, userId: user.id })
+    )
   })
 
 export const listRecentEmailLogFn = createServerFn({ method: 'GET' }).handler(async () => {

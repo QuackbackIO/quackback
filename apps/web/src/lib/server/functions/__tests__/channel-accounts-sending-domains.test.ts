@@ -27,6 +27,15 @@ const hoisted = vi.hoisted(() => ({
   restart: vi.fn(),
   deleteDomain: vi.fn(),
   listSendingDomains: vi.fn(),
+  addAddress: vi.fn(),
+  removeAddress: vi.fn(),
+  sendTest: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/channel-accounts/sending-address', () => ({
+  addSendingAddress: hoisted.addAddress,
+  removeSendingAddress: hoisted.removeAddress,
+  sendTestEmail: hoisted.sendTest,
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({ requireAuth: hoisted.requireAuth }))
@@ -57,7 +66,13 @@ const {
   verifySendingDomainFn,
   deleteSendingDomainFn,
   restartSendingDomainChecksFn,
+  createSendingAddressFn,
+  deleteChannelAccountFn,
+  sendTestEmailFn,
 } = await import('../channel-accounts')
+const createAddress = createSendingAddressFn as unknown as AnyHandler
+const deleteAccount = deleteChannelAccountFn as unknown as AnyHandler
+const sendTest = sendTestEmailFn as unknown as AnyHandler
 const restartChecks = restartSendingDomainChecksFn as unknown as AnyHandler
 const createDomain = createSendingDomainFn as unknown as AnyHandler
 const verifyDomain = verifySendingDomainFn as unknown as AnyHandler
@@ -85,7 +100,10 @@ function stubEnv(env: Record<string, string>) {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.unstubAllEnvs()
-  hoisted.requireAuth.mockResolvedValue({ principal: { id: 'principal_1', role: 'admin' } })
+  hoisted.requireAuth.mockResolvedValue({
+    principal: { id: 'principal_1', role: 'admin' },
+    user: { id: 'user_1', email: 'admin@example.com' },
+  })
   hoisted.defaultTeamId.mockResolvedValue('team_1')
 })
 
@@ -184,5 +202,77 @@ describe('restartSendingDomainChecksFn', () => {
     await expect(restartChecks({ data: { id: 'sending_domain_1' } })).rejects.toThrow(
       'That sending domain no longer exists.'
     )
+  })
+})
+
+const ACCOUNT = {
+  id: 'channel_account_1',
+  role: 'sending',
+  address: 'help@acme.com',
+  module: 'support',
+  config: {},
+  inboundTrust: 'strict',
+  sendingDomainId: 'sending_domain_1',
+}
+
+describe('createSendingAddressFn', () => {
+  it('adds the address through the domain-aware path for the default team', async () => {
+    hoisted.addAddress.mockResolvedValue(ACCOUNT)
+    const result = await createAddress({ data: { address: 'help@acme.com', module: 'support' } })
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'channel_account.manage' })
+    expect(hoisted.addAddress).toHaveBeenCalledWith({
+      owningTeamId: 'team_1',
+      address: 'help@acme.com',
+      module: 'support',
+    })
+    expect(result).toMatchObject({ id: 'channel_account_1', sendingDomainId: 'sending_domain_1' })
+  })
+
+  it('carries a provider failure back as a sentence a person can act on', async () => {
+    hoisted.addAddress.mockRejectedValue(
+      new SesIdentityError('SES refused', 400, 'AccessDeniedException', false)
+    )
+    await expect(
+      createAddress({ data: { address: 'help@acme.com', module: 'support' } })
+    ).rejects.toThrow(
+      "Custom sending domains aren't set up correctly on this server. Nothing was added."
+    )
+  })
+})
+
+describe('deleteChannelAccountFn', () => {
+  it('reports the domain its last address was on', async () => {
+    hoisted.removeAddress.mockResolvedValue({
+      lastOnDomain: { id: 'sending_domain_1', domain: 'acme.com' },
+    })
+    const result = await deleteAccount({ data: { id: 'channel_account_1' } })
+    expect(hoisted.removeAddress).toHaveBeenCalledWith('channel_account_1')
+    expect(result).toEqual({
+      id: 'channel_account_1',
+      lastOnDomain: { id: 'sending_domain_1', domain: 'acme.com' },
+    })
+  })
+})
+
+describe('sendTestEmailFn', () => {
+  it('needs the channel permission and sends to the caller, never to an input', async () => {
+    hoisted.sendTest.mockResolvedValue({ from: 'help@acme.com', to: 'admin@example.com' })
+    const result = await sendTest({
+      data: { addressId: 'channel_account_1', to: 'someone@example.net' },
+    })
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'channel_account.manage' })
+    expect(hoisted.sendTest).toHaveBeenCalledWith({
+      addressId: 'channel_account_1',
+      userId: 'user_1',
+    })
+    expect(result).toEqual({ from: 'help@acme.com', to: 'admin@example.com' })
+  })
+
+  it('sends nothing when the caller lacks the permission', async () => {
+    hoisted.requireAuth.mockRejectedValue(new Error('Access denied'))
+    await expect(sendTest({ data: { addressId: 'channel_account_1' } })).rejects.toThrow(
+      'Access denied'
+    )
+    expect(hoisted.sendTest).not.toHaveBeenCalled()
   })
 })
