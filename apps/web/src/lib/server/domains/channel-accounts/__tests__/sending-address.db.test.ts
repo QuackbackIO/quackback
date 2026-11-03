@@ -378,6 +378,23 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       expect(await removeSendingAddress(linked.id)).toEqual({ lastOnDomain: null })
     })
 
+    it('flags the domain of an unlinked address by its zone', async () => {
+      const teamId = await seedTeam()
+      const verified = await seedDomain(teamId, 'acme.com', 'verified')
+      const [old] = await testDb
+        .insert(channelAccounts)
+        .values({
+          owningTeamId: teamId,
+          role: 'sending',
+          address: 'old@acme.com',
+          module: 'support',
+        })
+        .returning()
+      expect(await removeSendingAddress(old.id)).toEqual({
+        lastOnDomain: { id: verified.id, domain: 'acme.com' },
+      })
+    })
+
     it('flags nothing for an address with no domain', async () => {
       const teamId = await seedTeam()
       const account = await addSendingAddress({

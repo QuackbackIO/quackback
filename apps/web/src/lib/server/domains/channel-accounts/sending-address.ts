@@ -137,6 +137,19 @@ export async function addSendingAddress(input: {
 }
 
 /**
+ * The domain an unlinked address sends through, found by its zone: the first
+ * of this workspace's domains, newest first, that the address is at or under.
+ * The settings page resolves it the same way, so what it promises on removal
+ * is what happens.
+ */
+async function domainByZone(account: ChannelAccount): Promise<EmailSendingDomain | null> {
+  const own = account.address ? domainOfAddress(account.address) : null
+  if (!own) return null
+  const domains = await listSendingDomains(account.owningTeamId)
+  return domains.find((d) => isAtOrUnder(own, toAsciiDomain(d.domain))) ?? null
+}
+
+/**
  * Remove a sending address, and say whether it was the last one on its domain.
  *
  * "Last" counts every live sending address the domain covers, linked or not,
@@ -147,9 +160,11 @@ export async function removeSendingAddress(
 ): Promise<{ lastOnDomain: { id: SendingDomainId; domain: string } | null }> {
   const account = await getChannelAccount(id)
   await softDeleteChannelAccount(id)
-  if (!account?.sendingDomainId) return { lastOnDomain: null }
+  if (!account) return { lastOnDomain: null }
 
-  const domain = await getSendingDomain(account.sendingDomainId)
+  const domain = account.sendingDomainId
+    ? await getSendingDomain(account.sendingDomainId)
+    : await domainByZone(account)
   if (!domain) return { lastOnDomain: null }
   const zone = toAsciiDomain(domain.domain)
   const remaining = (await listChannelAccounts(account.owningTeamId)).filter((a) => {
