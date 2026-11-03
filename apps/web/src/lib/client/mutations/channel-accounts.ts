@@ -3,8 +3,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   createInboundRouteFn,
   createSendingAddressFn,
-  createSendingDomainFn,
-  verifySendingDomainFn,
   restartSendingDomainChecksFn,
   deleteSendingDomainFn,
   deleteChannelAccountFn,
@@ -32,12 +30,6 @@ export const useCreateSendingAddress = () =>
   useConfigMutation((data: { address: string; module: 'support' | 'feedback' | 'changelog' }) =>
     createSendingAddressFn({ data })
   )
-
-export const useCreateSendingDomain = () =>
-  useConfigMutation((domain: string) => createSendingDomainFn({ data: { domain } }))
-
-export const useVerifySendingDomain = () =>
-  useConfigMutation((id: string) => verifySendingDomainFn({ data: { id } }))
 
 export const useRestartSendingDomainChecks = () =>
   useConfigMutation((id: string) => restartSendingDomainChecksFn({ data: { id } }))

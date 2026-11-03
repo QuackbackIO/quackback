@@ -25,10 +25,6 @@ import { platformInboxAddress } from '@/lib/server/domains/conversation/conversa
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import {
   SendingDomainRefusedError,
-  assertCustomSendingDomainsAvailable,
-  customSendingDomainsAvailable,
-  provisionSendingDomain,
-  refreshSendingDomain,
   restartSendingDomainChecks,
 } from '@/lib/server/domains/channel-accounts/sending-identity'
 import {
@@ -141,12 +137,6 @@ export interface EmailChannelConfigDTO {
    */
   platformAddress: string | null
   /**
-   * Whether this server can provision a customer-owned sending domain. The
-   * same answer `createSendingDomainFn` refuses on, so a form offered here is
-   * one the server will accept.
-   */
-  customDomains: 'available' | 'unavailable'
-  /**
    * Which addresses the add form accepts (see `sendingAddressMode`): any
    * address, addresses whose domain can be set up, or only the default.
    */
@@ -205,7 +195,6 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
   async (): Promise<EmailChannelConfigDTO> => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
     const platformAddress = platformInboxAddress(currentMailSlug())
-    const customDomains = customSendingDomainsAvailable() ? 'available' : 'unavailable'
     const defaultFrom = await defaultFromAddress()
     const addressMode = await sendingAddressMode()
     const teamId = await defaultTeamId()
@@ -215,7 +204,6 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
         sendingAddresses: [],
         domains: [],
         platformAddress,
-        customDomains,
         addressMode,
         defaultFrom,
       }
@@ -232,7 +220,6 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
         .map((a) => toAccount(a, domains)),
       domains: domains.map(toDomain),
       platformAddress,
-      customDomains,
       addressMode,
       defaultFrom,
     }
@@ -278,36 +265,6 @@ export const createSendingAddressFn = createServerFn({ method: 'POST' })
         })
       )
     )
-  })
-
-export const createSendingDomainFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ domain: z.string().min(3) }))
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
-    // Creates the provider identity, attaches the custom MAIL FROM, and stores
-    // the records the domain's owner has to publish — including the ownership
-    // token that is the only thing tying this domain to this workspace. Refused
-    // first, before any database read, on a server that cannot provision.
-    return withDomainActionMessage('add', async () => {
-      assertCustomSendingDomainsAvailable()
-      const teamId = await requireDefaultTeam()
-      return toDomain(await provisionSendingDomain({ owningTeamId: teamId, domain: data.domain }))
-    })
-  })
-
-export const verifySendingDomainFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: z.string() }))
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
-    // Both authorities, re-asked: the provider for whether it will sign, and our
-    // own lookup for whether this workspace owns the zone. A domain another
-    // workspace verified reads back as verified from the provider, so its answer
-    // alone is never enough. See sending-identity.ts.
-    return withDomainActionMessage('verify', async () => {
-      const refreshed = await refreshSendingDomain(data.id as SendingDomainId)
-      if (!refreshed) throw new SendingDomainRefusedError('That sending domain no longer exists.')
-      return toDomain(refreshed)
-    })
   })
 
 export const restartSendingDomainChecksFn = createServerFn({ method: 'POST' })

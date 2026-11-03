@@ -145,13 +145,6 @@ export function customSendingDomainsAvailable(env: NodeJS.ProcessEnv = process.e
   return provider === 'ses' && isSesIdentityConfigured(env) && sesRegion(env) !== null
 }
 
-/** Refuse, before any database or provider work, on a server that cannot provision. */
-export function assertCustomSendingDomainsAvailable(env: NodeJS.ProcessEnv = process.env): void {
-  if (!customSendingDomainsAvailable(env)) {
-    throw new SendingDomainRefusedError(CUSTOM_DOMAINS_UNAVAILABLE_MESSAGE)
-  }
-}
-
 /** The MAIL FROM subdomain for a domain, under the label its row stores. */
 export function mailFromDomainFor(domain: string, label: string): string {
   return `${label}.${domain}`
