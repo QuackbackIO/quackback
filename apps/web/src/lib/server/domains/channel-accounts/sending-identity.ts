@@ -389,13 +389,13 @@ export async function provisionSendingDomain(input: {
   const ownershipToken = mintOwnershipToken()
   const mailFromLabel = MAIL_FROM_LABEL
 
-  // Before anything is written or created: our MX at a name the owner already
-  // uses would displace whatever lives there.
-  const preflight = await runPreflight(domain, mailFromLabel, systemResolver)
+  // Before anything is written or created: our MX and SPF cannot sit beside a
+  // CNAME, another MX or another SPF record at the same name.
+  const preflight = await runPreflight(domain, mailFromLabel, region, systemResolver)
   if (preflight.mailFromFree === false) {
     throw new SendingDomainRefusedError(
-      `${mailFromDomainFor(domain, mailFromLabel)} is already in use, so we can't set up ` +
-        `sending for ${domain}. Contact us to use another name.`
+      `${mailFromDomainFor(domain, mailFromLabel)} already has records that would conflict, ` +
+        `so it can't be used for bounces. Remove them and try again.`
     )
   }
 

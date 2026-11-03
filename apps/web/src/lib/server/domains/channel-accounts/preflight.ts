@@ -3,14 +3,16 @@
  *
  * Three cheap lookups that shape the setup steps without deciding anything:
  * who hosts the domain's DNS (so the instructions can name that host's quirks),
- * whether the MAIL FROM subdomain is already in use (publishing our MX there
- * would displace whatever lives at it, so a taken name is refused), and the
- * domain's DMARC record (read and shown, never required or changed).
+ * whether the MAIL FROM subdomain already holds records ours would conflict
+ * with (so a taken name is refused), and the domain's DMARC record (read and
+ * shown, never required or changed).
  *
  * A lookup that fails leaves its field out rather than guessing: an unknown
  * host is just generic instructions, and an unknown MAIL FROM name is not a
  * reason to refuse.
  */
+import { randomBytes } from 'node:crypto'
+import { SES_MAIL_FROM_SPF_VALUE, sesMailFromMxValue } from '@quackback/email/ses-identity'
 import type { SendingDomainPreflight } from '@/lib/server/db'
 import type { DnsResolver } from './dns-resolver'
 
@@ -66,17 +68,74 @@ async function zoneNameservers(
   return []
 }
 
-/** Whether anything at all answers at a name. Undefined when we could not ask. */
-async function nameInUse(name: string, resolver: DnsResolver): Promise<boolean | undefined> {
-  const answers = await Promise.all([
-    lookup(() => resolver.resolveTxt(name)),
+const normalName = (n: string) => n.trim().toLowerCase().replace(/\.$/, '')
+const normalText = (t: string) => t.trim().replace(/\s+/g, ' ').toLowerCase()
+
+const sameAnswers = (a: string[], b: string[]) =>
+  a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n')
+
+/** Read the three record types that can conflict with ours at a name. */
+async function conflictingTypes(name: string, resolver: DnsResolver) {
+  const [cname, mx, txt] = await Promise.all([
     lookup(() => resolver.resolveCname(name)),
     lookup(() => resolver.resolveMx(name)),
-    lookup(() => resolver.resolve4(name)),
+    lookup(() => resolver.resolveTxt(name)),
   ])
-  if (answers.some((a) => a !== undefined && a.length > 0)) return true
-  if (answers.some((a) => a === undefined)) return undefined
-  return false
+  return {
+    cname: cname?.map(normalName),
+    mx: mx?.map((m) => normalName(m.exchange)),
+    spf: txt?.map((chunks) => normalText(chunks.join(''))).filter((v) => v.startsWith('v=spf1')),
+  }
+}
+
+/**
+ * Whether the MAIL FROM name already holds records ours would conflict with.
+ * Undefined when we could not ask.
+ *
+ * Our MX and SPF TXT sit beside anything else at the name, so only three things
+ * conflict: a CNAME (nothing may sit beside one), an MX that is not ours, and
+ * an SPF record that is not ours. Addresses and other TXT records coexist, and
+ * our own MX and SPF (left from a domain removed and added again) are what we
+ * would publish anyway.
+ *
+ * A wildcard answers at every name that holds nothing of its own, so the same
+ * types are read at a random sibling too: an answer identical there comes from
+ * the wildcard, and an explicit record we publish overrides it.
+ */
+async function mailFromNameTaken(
+  name: string,
+  domain: string,
+  region: string,
+  resolver: DnsResolver
+): Promise<boolean | undefined> {
+  const probe = `qb-probe-${randomBytes(6).toString('hex')}.${domain}`
+  const [here, wildcard] = await Promise.all([
+    conflictingTypes(name, resolver),
+    conflictingTypes(probe, resolver),
+  ])
+  const ours = {
+    cname: [] as string[],
+    mx: [normalName(sesMailFromMxValue(region))],
+    spf: [normalText(SES_MAIL_FROM_SPF_VALUE)],
+  }
+  let unknown = false
+  for (const type of ['cname', 'mx', 'spf'] as const) {
+    const found = here[type]
+    if (found === undefined) {
+      unknown = true
+      continue
+    }
+    const foreign = found.filter((v) => !ours[type].includes(v))
+    if (foreign.length === 0) continue
+    const fromWildcard = wildcard[type]
+    if (fromWildcard === undefined) {
+      unknown = true
+      continue
+    }
+    if (sameAnswers(found, fromWildcard)) continue
+    return true
+  }
+  return unknown ? undefined : false
 }
 
 /** The domain's DMARC record, or undefined when the lookup failed. */
@@ -97,12 +156,13 @@ export async function readDmarc(
 export async function runPreflight(
   domain: string,
   mailFromLabel: string,
+  region: string,
   resolver: DnsResolver,
   now: Date = new Date()
 ): Promise<SendingDomainPreflight> {
   const [nameservers, inUse, dmarc] = await Promise.all([
     zoneNameservers(domain, resolver),
-    nameInUse(`${mailFromLabel}.${domain}`, resolver),
+    mailFromNameTaken(`${mailFromLabel}.${domain}`, domain, region, resolver),
     readDmarc(domain, resolver),
   ])
   const dnsHost = nameservers ? dnsHostFromNameservers(nameservers) : undefined

@@ -120,7 +120,7 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', async (importOrigin
   }
 })
 
-import { getSendingDomain } from '../channel-account.service'
+import { deleteSendingDomain, getSendingDomain } from '../channel-account.service'
 import {
   OWNERSHIP_VALUE_PREFIX,
   provisionSendingDomain,
@@ -458,12 +458,12 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     })
 
     it('refuses a domain whose qb-bounce name is already in use, before anything is created', async () => {
-      zone.set('qb-bounce.tenant-a.example', { A: ['192.0.2.1'] })
+      zone.set('qb-bounce.tenant-a.example', { MX: [{ exchange: 'mx.example.com', priority: 10 }] })
       const teamId = await seedTeam()
       await expect(
         provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
       ).rejects.toThrow(
-        "qb-bounce.tenant-a.example is already in use, so we can't set up sending for tenant-a.example. Contact us to use another name."
+        "qb-bounce.tenant-a.example already has records that would conflict, so it can't be used for bounces. Remove them and try again."
       )
       expect(createIdentity).not.toHaveBeenCalled()
       const rows = await testDb
@@ -471,6 +471,22 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
         .from(emailSendingDomains)
         .where(eq(emailSendingDomains.owningTeamId, teamId))
       expect(rows).toEqual([])
+    })
+
+    it('adds a domain again over the records it published the first time', async () => {
+      const teamId = await seedTeam()
+      const first = await provisionSendingDomain({
+        owningTeamId: teamId,
+        domain: 'tenant-a.example',
+      })
+      publish('tenant-a.example', first.dnsRecords)
+      await deleteSendingDomain(first.id)
+
+      const again = await provisionSendingDomain({
+        owningTeamId: teamId,
+        domain: 'tenant-a.example',
+      })
+      expect(again.preflight.mailFromFree).toBe(true)
     })
 
     it('reads DMARC again on each check and keeps the rest of the pre-flight', async () => {
