@@ -92,7 +92,9 @@ export function sendingDomainDnsRecords(args: {
   /**
    * `shared`: the identity signs with the key it already had, so its CNAMEs
    * are listed too when that key is the provider's. A key supplied elsewhere
-   * cannot be read, so nothing is listed for it.
+   * cannot be read, so nothing is listed for it: the row's own key is the
+   * signing record to publish, and the identity is re-keyed to it once it is
+   * published (see `pending-signing-key.ts`).
    */
   dkimMode?: SendingDomainDkimMode
   /**

@@ -19,6 +19,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
+/** The install secret a held signing key is encrypted under; the cipher is real. */
+vi.mock('@/lib/server/secret-key', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/secret-key')>()),
+  activeSecretKey: () => 'sending-domain-test-secret-0123456789abcdef',
+}))
+
 /** Every log line the code under test writes, with its fields, to search for secrets. */
 const logged = vi.hoisted(() => [] as unknown[])
 vi.mock('@/lib/server/logger', async (importOriginal) => {
@@ -45,6 +51,8 @@ const createIdentity =
   >()
 const getIdentity = vi.fn<(domain: string) => Promise<SesDomainIdentity | null>>()
 const putMailFrom = vi.fn<(domain: string, mailFrom: string) => Promise<void>>()
+const putDkimKey =
+  vi.fn<(domain: string, signing: { selector: string; privateKey: string }) => Promise<void>>()
 
 vi.mock('@quackback/email/ses-identity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@quackback/email/ses-identity')>()),
@@ -55,6 +63,8 @@ vi.mock('@quackback/email/ses-identity', async (importOriginal) => ({
   ) => createIdentity(domain, signing),
   getSesDomainIdentity: (domain: string) => getIdentity(domain),
   putSesMailFromDomain: (domain: string, mailFrom: string) => putMailFrom(domain, mailFrom),
+  putSesDkimSigningKey: (domain: string, signing: { selector: string; privateKey: string }) =>
+    putDkimKey(domain, signing),
 }))
 
 /**
@@ -230,6 +240,7 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     logged.length = 0
     getIdentity.mockReset().mockResolvedValue(identity({ dkimStatus: 'PENDING' }))
     putMailFrom.mockReset().mockResolvedValue()
+    putDkimKey.mockReset().mockResolvedValue()
     checkedRecords.mockReset()
     ownershipResolves.mockReset().mockResolvedValue(false)
     maxSendingDomains.mockReset().mockReturnValue(null)
@@ -334,10 +345,12 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     })
 
     it('lists no signing records when the identity signs with a key supplied elsewhere', async () => {
+      // A key that already verifies: the row joins it as is (see
+      // sending-domain-rekey.db.test.ts for one that does not).
       const teamId = await seedTeam()
       const external = { signingOrigin: 'external' as const, dkimTokens: ['other'] }
-      createIdentity.mockResolvedValue(foundIt({ ...external, dkimStatus: 'PENDING' }))
-      getIdentity.mockResolvedValue(identity({ ...external, dkimStatus: 'PENDING' }))
+      createIdentity.mockResolvedValue(foundIt({ ...external, dkimStatus: 'SUCCESS' }))
+      getIdentity.mockResolvedValue(identity({ ...external, dkimStatus: 'SUCCESS' }))
       const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
 
       expect(row.dkimMode).toBe('shared')
@@ -356,6 +369,7 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
         identity({ ...external, dkimStatus: 'SUCCESS', ...verifiedState })
       )
       expect((await refreshSendingDomain(row.id))?.status).toBe('verified')
+      expect(putDkimKey).not.toHaveBeenCalled()
     })
 
     it('recomposes the signing records from the identity each check', async () => {

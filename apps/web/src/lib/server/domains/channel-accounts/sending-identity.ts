@@ -91,6 +91,7 @@ export {
   withPreviousChecks,
 } from './sending-domain-records'
 import { notifySendingDomainLive, notifySendingDomainNeedsAttention } from './sending-domain-notify'
+import { rekeyToHeldSigningKey, sealSigningKey, shouldHoldSigningKey } from './pending-signing-key'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 import { isAtOrUnder, platformSendingDomains, toAsciiDomain } from './outbound-identity'
 
@@ -363,7 +364,9 @@ export async function provisionSendingDomain(input: {
 
   // A key of the row's own: its public half is the one signing record the
   // owner publishes, and proves ownership too. The private half goes to the
-  // provider in the create call below and is not kept anywhere.
+  // provider in the create call below and is not kept, except encrypted on a
+  // row that joins an identity signing with a key nobody can publish (see
+  // `pending-signing-key.ts`).
   const key = generateDkimKey()
 
   // The slot, taken before anything account-wide is consumed. Carries the key
@@ -379,8 +382,7 @@ export async function provisionSendingDomain(input: {
   let created: SesIdentityCreation
   try {
     // An identity that already exists (another workspace's, or a re-add) keeps
-    // its key: the provider signs with that, and this row's record still proves
-    // this workspace's ownership.
+    // its key for now: this row's record proves this workspace's ownership.
     created = await createSesDomainIdentity(domain, undefined, {
       selector: key.selector,
       privateKey: key.privateKey,
@@ -413,8 +415,11 @@ export async function provisionSendingDomain(input: {
   }
 
   // An identity that was already there keeps signing with its own key; this
-  // row's key then proves ownership only.
+  // row's key then proves ownership only. When that key is one nobody can
+  // publish, the row holds its own until ownership is proved and the identity
+  // is re-keyed to it.
   const dkimMode: SendingDomainDkimMode = preexisting ? 'shared' : 'byo'
+  const pendingSigningKey = shouldHoldSigningKey(created) ? sealSigningKey(key.privateKey) : null
 
   // Records and setup only: the status and the verified stamp are the poll's
   // to move.
@@ -423,6 +428,7 @@ export async function provisionSendingDomain(input: {
     .set({
       mailFromLabel,
       dkimMode,
+      pendingSigningKey,
       autoCheckUntil: new Date(Date.now() + AUTO_CHECK_WINDOW_MS),
       preflight,
       dnsRecords: sendingDomainDnsRecords({
@@ -458,16 +464,16 @@ export async function provisionSendingDomain(input: {
 export async function refreshSendingDomain(
   id: SendingDomainId
 ): Promise<EmailSendingDomain | null> {
-  const row = await getSendingDomain(id)
-  if (!row) return null
+  const stored = await getSendingDomain(id)
+  if (!stored) return null
   const region = requireRegion()
 
   // A row signed with its own key proves ownership with that key, which cannot
-  // be re-minted (the private half was never kept). A row on the provider's own
+  // be re-minted (the provider holds the private half). A row on the provider's own
   // keys proves it with its `_quackback` token.
-  const byo = row.dkimMode !== 'easy'
-  const signingKeys = byo ? (row.dnsRecords ?? []).filter(isKeyRecord) : undefined
-  const existing = ownershipRecordsOf(row.dnsRecords ?? [])
+  const byo = stored.dkimMode !== 'easy'
+  const signingKeys = byo ? (stored.dnsRecords ?? []).filter(isKeyRecord) : undefined
+  const existing = ownershipRecordsOf(stored.dnsRecords ?? [])
   const ownershipToken = byo
     ? undefined
     : existing[0]?.value.slice(OWNERSHIP_VALUE_PREFIX.length) || mintOwnershipToken()
@@ -481,11 +487,16 @@ export async function refreshSendingDomain(
       : [ownershipRecord(ownershipToken ?? '')]
 
   const [found, ownershipProven] = await Promise.all([
-    getSesDomainIdentity(row.domain),
-    verifySendingDomainDns(row.domain, proofRecords),
+    getSesDomainIdentity(stored.domain),
+    verifySendingDomainDns(stored.domain, proofRecords),
   ])
 
   let identity = found
+  // A row holding its own key re-keys the identity once, after it proves
+  // ownership; until then the identity's key is not one anybody can publish.
+  const rekey = await rekeyToHeldSigningKey(stored, identity, ownershipProven)
+  const row = rekey.row
+  if (rekey.rekeyed) identity = (await getSesDomainIdentity(row.domain)) ?? identity
   // The owner-only write, performed once there is an owner and only onto an
   // identity with no MAIL FROM at all. Provisioning skips it for an identity
   // that already existed, so it cannot land on another workspace's; and an
@@ -496,7 +507,10 @@ export async function refreshSendingDomain(
     identity = (await getSesDomainIdentity(row.domain)) ?? identity
   }
 
-  const status = sendingDomainStatusFrom({ identity, ownershipProven })
+  // A row still holding its key is waiting to replace the identity's key, so
+  // that key failing is not this row's verdict.
+  const verdict = sendingDomainStatusFrom({ identity, ownershipProven })
+  const status = verdict === 'failed' && row.pendingSigningKey ? 'pending' : verdict
 
   const now = new Date()
   // Each record's own state, for the person publishing them. Recorded beside

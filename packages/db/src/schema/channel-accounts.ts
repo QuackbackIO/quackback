@@ -138,7 +138,9 @@ export type SendingDomainProofRecord = SendingDomainOwnershipRecord | SendingDom
  * - `shared`: the identity already existed when the row was added, so it keeps
  *   signing with the key it had. The row's own key TXT proves ownership only,
  *   and the records the identity signs with are listed beside it when they are
- *   the provider's CNAMEs.
+ *   the provider's CNAMEs. When that key was supplied elsewhere and does not
+ *   verify, the row holds its own key (`pendingSigningKey`) and becomes `byo`
+ *   once it proves ownership and the identity is re-keyed to it.
  */
 export type SendingDomainDkimMode = 'easy' | 'byo' | 'shared'
 
@@ -186,6 +188,13 @@ export const emailSendingDomains = pgTable(
       .$type<SendingDomainPreflight>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    /**
+     * The row's own private signing key, encrypted, held only while the
+     * identity it joined signs with a key nobody can publish. Used once, to
+     * re-key the identity after this row proves ownership, then cleared. Never
+     * returned, logged or sent anywhere else.
+     */
+    pendingSigningKey: text('pending_signing_key'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
