@@ -357,9 +357,6 @@ function requireRegion(): string {
   return region
 }
 
-/** One DNS label as a hostname uses it: letters, digits and inner hyphens. */
-const DNS_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
-
 /**
  * The prefix of the MAIL FROM already attached to an identity, relative to the
  * domain (`bounce`, or `mail.bounces` for a nested name); null when none is
@@ -374,9 +371,9 @@ export function attachedMailFromLabel(
   domain: string
 ): string | null {
   const attached = identity?.mailFrom?.domain?.trim().toLowerCase().replace(/\.$/, '')
-  if (!attached?.endsWith(`.${domain}`)) return null
-  const label = attached.slice(0, -(domain.length + 1))
-  return label.split('.').every((l) => DNS_LABEL_RE.test(l)) ? label : null
+  // A valid name under the domain has a prefix of valid DNS labels.
+  if (!attached?.endsWith(`.${domain}`) || !MAIL_DOMAIN_RE.test(attached)) return null
+  return attached.slice(0, -(domain.length + 1))
 }
 
 /**
