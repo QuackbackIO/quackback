@@ -65,8 +65,8 @@ import {
   getSendingDomain,
   listAllSendingDomains,
 } from './channel-account.service'
-import { verifySendingDomainDns } from './domain-verification'
-import { systemResolver } from '@/lib/server/dns/resolver'
+import { checkSendingDomainOwnership, type ZoneReader } from './domain-verification'
+import { interactiveResolver, systemResolver } from '@/lib/server/dns/resolver'
 import { checkRecords } from './record-check'
 import { readDmarc, runPreflight } from './preflight'
 import { generateDkimKey, isKeyRecord } from './dkim-key'
@@ -490,10 +490,28 @@ export async function refreshSendingDomain(
       ? existing
       : [ownershipRecord(ownershipToken ?? '')]
 
-  const [found, ownershipProven] = await Promise.all([
+  // A verified row is read with two tries, so one dropped packet does not cost
+  // a live domain its status; a pending row has nothing to lose and keeps the
+  // single bounded try.
+  const wasVerified = stored.status === 'verified'
+  const resolver = wasVerified ? interactiveResolver : systemResolver
+  const readZone: ZoneReader = (host) => resolver.resolveTxt(host)
+  const [found, ownership] = await Promise.all([
     getSesDomainIdentity(stored.domain),
-    verifySendingDomainDns(stored.domain, proofRecords),
+    checkSendingDomainOwnership(stored.domain, proofRecords, readZone),
   ])
+  // Proven only on a read that found the proof: the owner-only writes below
+  // need it. A verified row whose lookup went unanswered keeps the proof it
+  // already has for its status, so only the zone saying the record is gone, or
+  // the provider changing its answer, can demote it.
+  const ownershipProven = ownership === 'proven'
+  const ownershipKept = wasVerified && ownership === 'unknown'
+  if (ownershipKept) {
+    log.warn(
+      { sending_domain_id: id, domain: stored.domain },
+      'sending domain ownership lookup went unanswered; keeping its verified status until the next check'
+    )
+  }
 
   let identity = found
   // A row holding its own key re-keys the identity once, after it proves
@@ -513,7 +531,10 @@ export async function refreshSendingDomain(
 
   // A row still holding its key is waiting to replace the identity's key, so
   // that key failing is not this row's verdict.
-  const verdict = sendingDomainStatusFrom({ identity, ownershipProven })
+  const verdict = sendingDomainStatusFrom({
+    identity,
+    ownershipProven: ownershipProven || ownershipKept,
+  })
   const status = verdict === 'failed' && row.pendingSigningKey ? 'pending' : verdict
 
   const now = new Date()
@@ -535,8 +556,8 @@ export async function refreshSendingDomain(
   // DMARC is read on every check because it is one lookup and the owner may
   // add one while setting up; a failed read keeps what was there.
   const [dnsRecords, dmarc] = await Promise.all([
-    checkRecords(row.domain, composed, systemResolver, now),
-    readDmarc(row.domain, systemResolver),
+    checkRecords(row.domain, composed, resolver, now),
+    readDmarc(row.domain, resolver),
   ])
   // Every field but the move to verified, which is made below on its own.
   const promoted = status === 'verified'
@@ -578,7 +599,7 @@ export async function refreshSendingDomain(
       sending_domain_id: id,
       domain: row.domain,
       status,
-      ownership_proven: ownershipProven,
+      ownership,
       dkim_status: identity?.dkimStatus ?? null,
       mail_from_status: identity?.mailFrom?.status ?? null,
     },
