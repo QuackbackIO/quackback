@@ -20,6 +20,7 @@ import {
   ownershipRecordsOf,
   sendingDomainDnsRecords,
   sendingDomainStatusFrom,
+  storedReturnPathTarget,
 } from '../sending-identity'
 
 const REGION = 'eu-west-2'
@@ -87,6 +88,58 @@ describe('the records a domain owner has to publish', () => {
         purpose: 'mail-from',
       },
     ])
+  })
+
+  it('makes the return path one CNAME when it is given a target', () => {
+    const key = {
+      type: 'TXT' as const,
+      host: 'qb1._domainkey',
+      value: 'v=DKIM1; k=rsa; p=KEY',
+      purpose: 'dkim' as const,
+    }
+    const records = sendingDomainDnsRecords({
+      domain: 'tenant-a.example',
+      region: REGION,
+      identity: identity(),
+      mailFromLabel: MAIL_FROM_LABEL,
+      signingKeys: [key],
+      returnPathTarget: 'ws-abc.bounces.example.net',
+    })
+    expect(records).toEqual([
+      key,
+      {
+        type: 'CNAME',
+        host: MAIL_FROM_LABEL,
+        value: 'ws-abc.bounces.example.net',
+        purpose: 'mail-from',
+      },
+    ])
+    expect(JSON.stringify(records)).not.toContain('amazonses')
+  })
+
+  it('reads the return path target a row was set up with from its stored records', () => {
+    expect(
+      storedReturnPathTarget([
+        { type: 'TXT', host: 'qb1._domainkey', value: 'v=DKIM1; p=K', purpose: 'dkim' },
+        {
+          type: 'CNAME',
+          host: 'qb-bounce',
+          value: 'ws-abc.bounces.example.net',
+          purpose: 'mail-from',
+        },
+      ])
+    ).toBe('ws-abc.bounces.example.net')
+    expect(
+      storedReturnPathTarget(
+        sendingDomainDnsRecords({
+          domain: 'tenant-a.example',
+          region: REGION,
+          ownershipToken: 'tok',
+          identity: identity(),
+          mailFromLabel: MAIL_FROM_LABEL,
+        })
+      )
+    ).toBeNull()
   })
 
   it('points the DKIM CNAMEs at the zone the provider named, when it names one', () => {

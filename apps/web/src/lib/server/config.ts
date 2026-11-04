@@ -13,6 +13,7 @@
 import { z } from 'zod'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 
 const log = logger.child({ component: 'config' })
 
@@ -237,6 +238,26 @@ const configSchema = z
      */
     emailSesIdentityAccessKeyId: z.string().optional(),
     emailSesIdentitySecretAccessKey: z.string().optional(),
+    /**
+     * Domain the operator serves bounce records under (a wildcard MX to the
+     * provider's feedback host and a wildcard SPF TXT). Set, a new sending
+     * domain's return path is one CNAME to `<workspace label>.<this domain>`
+     * instead of an MX and a TXT. Read by `sesReturnPathDomain` in
+     * @quackback/email; validated here so a malformed value stops boot rather
+     * than quietly reading as unset.
+     */
+    emailReturnPathDomain: z.preprocess(
+      (v) =>
+        typeof v === 'string'
+          ? v.trim() === ''
+            ? undefined
+            : v.trim().toLowerCase().replace(/\.$/, '')
+          : v,
+      z
+        .string()
+        .regex(MAIL_DOMAIN_RE, 'must be a domain name, such as bounces.example.net')
+        .optional()
+    ),
 
     // S3 (optional)
     s3Endpoint: z.string().optional(),
@@ -407,6 +428,7 @@ function buildConfigFromEnv(): unknown {
     emailSesMaxSendRate: env('EMAIL_SES_MAX_SEND_RATE'),
     emailSesIdentityAccessKeyId: env('EMAIL_SES_IDENTITY_ACCESS_KEY_ID'),
     emailSesIdentitySecretAccessKey: env('EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY'),
+    emailReturnPathDomain: env('EMAIL_RETURN_PATH_DOMAIN'),
 
     // S3
     s3Endpoint: env('S3_ENDPOINT'),
@@ -646,6 +668,9 @@ export const config = {
   },
   get emailSesIdentitySecretAccessKey() {
     return loadConfig().emailSesIdentitySecretAccessKey
+  },
+  get emailReturnPathDomain() {
+    return loadConfig().emailReturnPathDomain
   },
 
   // S3

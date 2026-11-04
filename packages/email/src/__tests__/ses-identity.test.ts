@@ -30,6 +30,7 @@ import {
   putSesMailFromDomain,
   sesDkimCnameTarget,
   sesMailFromMxValue,
+  sesReturnPathDomain,
 } from '../ses-identity'
 import type { SesIdentityClient, SesIdentityDeps } from '../ses-identity'
 
@@ -338,6 +339,26 @@ describe('the record values the provider expects to find', () => {
     expect(SES_MAIL_FROM_MX_PRIORITY).toBe(10)
     expect(SES_MAIL_FROM_SPF_VALUE).toBe('v=spf1 include:amazonses.com ~all')
   })
+})
+
+describe('the operator return path domain', () => {
+  it('is unset by default', () => {
+    expect(sesReturnPathDomain({})).toBeNull()
+    expect(sesReturnPathDomain({ EMAIL_RETURN_PATH_DOMAIN: '  ' })).toBeNull()
+  })
+
+  it('reads the domain in one spelling', () => {
+    expect(sesReturnPathDomain({ EMAIL_RETURN_PATH_DOMAIN: ' Bounces.Example.NET. ' })).toBe(
+      'bounces.example.net'
+    )
+  })
+
+  it.each(['bounces', 'https://bounces.example.net', '*.bounces.example.net', 'a..example.net'])(
+    'ignores %s, which is not a domain name',
+    (value) => {
+      expect(sesReturnPathDomain({ EMAIL_RETURN_PATH_DOMAIN: value })).toBeNull()
+    }
+  )
 })
 
 describe('a provider message never carries an address into a log or a row', () => {

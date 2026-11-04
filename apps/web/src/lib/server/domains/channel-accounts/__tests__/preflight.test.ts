@@ -184,3 +184,44 @@ describe('runPreflight', () => {
     })
   })
 })
+
+describe('runPreflight for a return path that is one CNAME', () => {
+  const TARGET = 'ws-0123456789abcdef01234567.bounces.example.net'
+  const cname = (resolver: DnsResolver) =>
+    runPreflight('acme.com', 'qb-bounce', REGION, resolver, NOW, TARGET)
+
+  it('finds the name free when nothing is there', async () => {
+    expect((await cname(zoneResolver({}))).mailFromFree).toBe(true)
+  })
+
+  it.each([
+    ['an address', { A: ['192.0.2.1'] }],
+    ['an IPv6 address', { AAAA: ['2001:db8::1'] }],
+    ['a TXT that is not SPF', { TXT: [['site-verification=abc']] }],
+    ['our own MX and SPF from an earlier setup', { MX: [OUR_MX], TXT: [[OUR_SPF]] }],
+    ['a CNAME elsewhere', { CNAME: ['elsewhere.example.com'] }],
+  ])('finds the name taken by %s, since nothing may sit beside a CNAME', async (_l, entry) => {
+    const resolver = zoneResolver({ 'qb-bounce.acme.com': entry as Entry })
+    expect((await cname(resolver)).mailFromFree).toBe(false)
+  })
+
+  it('finds the name free when it already holds our CNAME, as on a re-add', async () => {
+    // A resolver follows the CNAME, so the target's MX and SPF answer here too.
+    const resolver = zoneResolver({
+      'qb-bounce.acme.com': { CNAME: [`${TARGET.toUpperCase()}.`], MX: [OUR_MX], TXT: [[OUR_SPF]] },
+    })
+    expect((await cname(resolver)).mailFromFree).toBe(true)
+  })
+
+  it('does not count answers that come from a wildcard', async () => {
+    const resolver = zoneResolver({
+      '*.acme.com': { A: ['192.0.2.1'], TXT: [['v=spf1 -all']], CNAME: ['catchall.example.com'] },
+    })
+    expect((await cname(resolver)).mailFromFree).toBe(true)
+  })
+
+  it('does not know, rather than refuse, when the name cannot be read', async () => {
+    const resolver = zoneResolver({}, new Set(['qb-bounce.acme.com']))
+    expect((await cname(resolver)).mailFromFree).toBeUndefined()
+  })
+})

@@ -74,17 +74,32 @@ const normalText = (t: string) => t.trim().replace(/\s+/g, ' ').toLowerCase()
 const sameAnswers = (a: string[], b: string[]) =>
   a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n')
 
-/** Read the three record types that can conflict with ours at a name. */
-async function conflictingTypes(name: string, resolver: DnsResolver) {
-  const [cname, mx, txt] = await Promise.all([
+type Kind = 'cname' | 'mx' | 'spf' | 'txt' | 'a' | 'aaaa'
+type Answers = Partial<Record<Kind, string[] | undefined>>
+
+/**
+ * Read the record types that can conflict with ours at a name: for an MX and
+ * SPF TXT, a CNAME, an MX and an SPF record; for a CNAME, anything at all.
+ */
+async function conflictingTypes(
+  name: string,
+  resolver: DnsResolver,
+  forCname: boolean
+): Promise<Answers> {
+  const [cname, mx, txt, a, aaaa] = await Promise.all([
     lookup(() => resolver.resolveCname(name)),
     lookup(() => resolver.resolveMx(name)),
     lookup(() => resolver.resolveTxt(name)),
+    forCname ? lookup(() => resolver.resolve4(name)) : Promise.resolve([]),
+    forCname ? lookup(() => resolver.resolve6(name)) : Promise.resolve([]),
   ])
+  const texts = txt?.map((chunks) => normalText(chunks.join('')))
   return {
     cname: cname?.map(normalName),
     mx: mx?.map((m) => normalName(m.exchange)),
-    spf: txt?.map((chunks) => normalText(chunks.join(''))).filter((v) => v.startsWith('v=spf1')),
+    ...(forCname
+      ? { txt: texts, a: a?.map(normalName), aaaa: aaaa?.map(normalName) }
+      : { spf: texts?.filter((v) => v.startsWith('v=spf1')) }),
   }
 }
 
@@ -93,10 +108,14 @@ async function conflictingTypes(name: string, resolver: DnsResolver) {
  * Undefined when we could not ask.
  *
  * Our MX and SPF TXT sit beside anything else at the name, so only three things
- * conflict: a CNAME (nothing may sit beside one), an MX that is not ours, and
- * an SPF record that is not ours. Addresses and other TXT records coexist, and
- * our own MX and SPF (left from a domain removed and added again) are what we
- * would publish anyway.
+ * conflict with them: a CNAME (nothing may sit beside one), an MX that is not
+ * ours, and an SPF record that is not ours. Addresses and other TXT records
+ * coexist, and our own MX and SPF (left from a domain removed and added again)
+ * are what we would publish anyway.
+ *
+ * A return path that is one CNAME (`returnPathTarget`) can sit beside nothing,
+ * so any record at the name conflicts, except that same CNAME already there.
+ * Other types read at a name holding our CNAME are the target's, followed.
  *
  * A wildcard answers at every name that holds nothing of its own, so the same
  * types are read at a random sibling too: an answer identical there comes from
@@ -106,26 +125,27 @@ async function mailFromNameTaken(
   name: string,
   domain: string,
   region: string,
-  resolver: DnsResolver
+  resolver: DnsResolver,
+  returnPathTarget: string | null
 ): Promise<boolean | undefined> {
+  const forCname = returnPathTarget !== null
   const probe = `qb-probe-${randomBytes(6).toString('hex')}.${domain}`
   const [here, wildcard] = await Promise.all([
-    conflictingTypes(name, resolver),
-    conflictingTypes(probe, resolver),
+    conflictingTypes(name, resolver, forCname),
+    conflictingTypes(probe, resolver, forCname),
   ])
-  const ours = {
-    cname: [] as string[],
-    mx: [normalName(sesMailFromMxValue(region))],
-    spf: [normalText(SES_MAIL_FROM_SPF_VALUE)],
-  }
+  const ours: Answers = forCname
+    ? { cname: [normalName(returnPathTarget)] }
+    : { mx: [normalName(sesMailFromMxValue(region))], spf: [normalText(SES_MAIL_FROM_SPF_VALUE)] }
+  if (forCname && here.cname?.some((v) => ours.cname?.includes(v))) return false
   let unknown = false
-  for (const type of ['cname', 'mx', 'spf'] as const) {
+  for (const type of Object.keys(here) as Kind[]) {
     const found = here[type]
     if (found === undefined) {
       unknown = true
       continue
     }
-    const foreign = found.filter((v) => !ours[type].includes(v))
+    const foreign = found.filter((v) => !(ours[type] ?? []).includes(v))
     if (foreign.length === 0) continue
     const fromWildcard = wildcard[type]
     if (fromWildcard === undefined) {
@@ -158,11 +178,13 @@ export async function runPreflight(
   mailFromLabel: string,
   region: string,
   resolver: DnsResolver,
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** Set when the return path is one CNAME to this name rather than an MX and TXT. */
+  returnPathTarget: string | null = null
 ): Promise<SendingDomainPreflight> {
   const [nameservers, inUse, dmarc] = await Promise.all([
     zoneNameservers(domain, resolver),
-    mailFromNameTaken(`${mailFromLabel}.${domain}`, domain, region, resolver),
+    mailFromNameTaken(`${mailFromLabel}.${domain}`, domain, region, resolver, returnPathTarget),
     readDmarc(domain, resolver),
   ])
   const dnsHost = nameservers ? dnsHostFromNameservers(nameservers) : undefined

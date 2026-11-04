@@ -255,6 +255,59 @@ describe('CNAME records', () => {
   })
 })
 
+describe('a return path CNAME', () => {
+  const TARGET = 'ws-0123456789abcdef01234567.bounces.example.net'
+  const returnPath: SendingDomainDnsRecord = {
+    type: 'CNAME',
+    host: 'qb-bounce',
+    value: TARGET,
+    purpose: 'mail-from',
+  }
+  const PLATFORM_MX = [{ exchange: 'feedback-smtp.eu-west-2.amazonses.com', priority: 10 }]
+  const PLATFORM_SPF = [['v=spf1 include:amazonses.com ~all']]
+  // The operator's wildcard, as the target answers it.
+  const operator: Zone = { [TARGET]: { MX: PLATFORM_MX, TXT: PLATFORM_SPF } }
+
+  it.each([
+    [
+      'found when the name points at the target',
+      { 'qb-bounce.acme.com': { CNAME: [`${TARGET}.`] } },
+      { state: 'found' },
+    ],
+    [
+      'found when a host flattens the CNAME and the name answers with the target records',
+      {
+        'qb-bounce.acme.com': { MX: PLATFORM_MX, TXT: [['site-verification=x'], ...PLATFORM_SPF] },
+      },
+      { state: 'found' },
+    ],
+    [
+      'missing when the name answers with only part of the target records',
+      { 'qb-bounce.acme.com': { MX: PLATFORM_MX } },
+      { state: 'missing' },
+    ],
+    [
+      'mismatch, naming the target found',
+      { 'qb-bounce.acme.com': { CNAME: ['ws-other.bounces.example.net'] } },
+      { state: 'mismatch', seen: 'ws-other.bounces.example.net' },
+    ],
+    ['missing when nothing is there', {}, { state: 'missing' }],
+  ] as const)('%s', async (_label, zone, expected) => {
+    expect(await check(returnPath, { ...operator, ...(zone as Zone) })).toEqual({
+      ...expected,
+      checkedAt: NOW.toISOString(),
+    })
+  })
+
+  it('never counts a flattened name as found while the target answers nothing', async () => {
+    const zone: Zone = { 'qb-bounce.acme.com': { MX: PLATFORM_MX, TXT: PLATFORM_SPF } }
+    expect(await check(returnPath, zone)).toEqual({
+      state: 'missing',
+      checkedAt: NOW.toISOString(),
+    })
+  })
+})
+
 describe('MX records', () => {
   it.each([
     [

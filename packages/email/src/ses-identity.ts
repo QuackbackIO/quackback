@@ -480,3 +480,26 @@ export const SES_MAIL_FROM_SPF_VALUE = 'v=spf1 include:amazonses.com ~all'
 
 /** Preference on the MAIL FROM MX record. One host, so the number is by convention. */
 export const SES_MAIL_FROM_MX_PRIORITY = 10
+
+/** The operator setting that moves new domains' return path onto one CNAME. */
+export const RETURN_PATH_DOMAIN_ENV = 'EMAIL_RETURN_PATH_DOMAIN'
+
+/** Two or more DNS labels, each 1-63 of `[a-z0-9-]` not starting or ending with `-`. */
+const RETURN_PATH_DOMAIN_RE =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
+
+/**
+ * The domain the operator serves bounce records under, or null when unset
+ * (the default, and every install that has not set one up).
+ *
+ * When set, the operator publishes a wildcard MX to the provider's feedback
+ * host and a wildcard SPF TXT under it, so a customer's MAIL FROM name that is
+ * only a CNAME to `<workspace label>.<this domain>` verifies: the provider
+ * follows the CNAME and finds both. The customer then publishes one record
+ * instead of two, and none of them names the provider. A value that is not a
+ * domain name reads as unset; boot validation refuses it before that matters.
+ */
+export function sesReturnPathDomain(env: EnvLike = process.env): string | null {
+  const value = readEnv(RETURN_PATH_DOMAIN_ENV, env)?.trim().toLowerCase().replace(/\.$/, '')
+  return value && RETURN_PATH_DOMAIN_RE.test(value) ? value : null
+}

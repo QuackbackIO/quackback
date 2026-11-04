@@ -12,6 +12,9 @@
  *   with `reason: 'doubled-name'`);
  * - a CNAME a DNS host proxies, so the name answers with addresses rather than
  *   pointing at the value (reported as `proxied`).
+ *
+ * A return path CNAME a DNS host flattens (serving the target's MX and SPF
+ * under the name rather than the CNAME) counts as found.
  */
 import type { SendingDomainDnsRecord, SendingDomainRecordCheck } from '@/lib/server/db'
 import type { DnsResolver } from '@/lib/server/dns/resolver'
@@ -81,6 +84,36 @@ function keyMismatch(seen: string, want: string): Omit<SendingDomainRecordCheck,
   return { state: 'mismatch', seen }
 }
 
+/** A name's MX hosts and SPF values, in the form they are compared. */
+async function mailAnswers(name: string, resolver: DnsResolver) {
+  const [mx, txt] = await Promise.all([
+    answer(() => resolver.resolveMx(name)),
+    answer(() => resolver.resolveTxt(name)),
+  ])
+  return {
+    mx: mx.map((m) => `${m.priority} ${normalizeName(m.exchange)}`),
+    spf: txt.map((chunks) => normalizeText(chunks.join(''))).filter((v) => v.startsWith('v=spf1')),
+  }
+}
+
+/**
+ * Whether a return path name with no CNAME visible answers as its target does:
+ * the same MX and the same SPF record. Some DNS hosts flatten a CNAME, serving
+ * the target's records under the name instead of the CNAME itself, which the
+ * provider accepts just the same. Both must be present at the target, so a
+ * name is never counted found against a target that answers nothing.
+ */
+async function flattened(name: string, target: string, resolver: DnsResolver): Promise<boolean> {
+  const [here, there] = await Promise.all([
+    mailAnswers(name, resolver),
+    mailAnswers(normalizeName(target), resolver),
+  ])
+  if (there.mx.length === 0 || there.spf.length === 0) return false
+  return (
+    there.mx.every((mx) => here.mx.includes(mx)) && there.spf.every((spf) => here.spf.includes(spf))
+  )
+}
+
 /** What one name holds for this record type, as a state relative to the wanted record. */
 async function stateAt(
   name: string,
@@ -117,6 +150,9 @@ async function stateAt(
       const want = normalizeName(record.value)
       if (targets.some((t) => normalizeName(t) === want)) return { state: 'found' }
       return { state: 'mismatch', seen: normalizeName(targets[0]) }
+    }
+    if (record.purpose === 'mail-from' && (await flattened(name, record.value, resolver))) {
+      return { state: 'found' }
     }
     const addresses = await answer(() => resolver.resolve4(name))
     if (addresses.length > 0) return { state: 'proxied', seen: addresses[0] }
