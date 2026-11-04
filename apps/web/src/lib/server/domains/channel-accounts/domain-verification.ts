@@ -23,16 +23,17 @@
  * below catches the same mistake arriving out of a jsonb column, where no type
  * survives.
  */
-import { resolveTxt } from 'node:dns/promises'
-import type { SendingDomainOwnershipRecord } from '@/lib/server/db'
+import type { SendingDomainOwnershipRecord, SendingDomainProofRecord } from '@/lib/server/db'
+import { dkimPublicKeyOf, isKeyRecord } from './dkim-key'
 import { logger } from '@/lib/server/logger'
+import { systemResolver } from '@/lib/server/dns/resolver'
 
 const log = logger.child({
   component: 'sending-domain-verification',
 })
 
 /** The host to query for a record: '@' is the domain apex, else `host.domain`. */
-function hostFor(record: SendingDomainOwnershipRecord, domain: string): string {
+function hostFor(record: SendingDomainProofRecord, domain: string): string {
   return record.host === '@' ? domain : `${record.host}.${domain}`
 }
 
@@ -52,9 +53,30 @@ export function ownershipRecordSatisfied(
   return resolved.some((r) => r.trim().toLowerCase() === want)
 }
 
-/** Is this stored record one that could prove ownership at all? */
-function isOwnershipRecord(record: { type: string; purpose: string }): boolean {
-  return record.type === 'TXT' && record.purpose === 'ownership'
+/**
+ * Whether the resolved values carry this row's own signing key.
+ *
+ * Compared on the `p=` key alone, whitespace removed, since that is the part
+ * minted for this row; the other tags are the same for every key.
+ */
+export function keyRecordSatisfied(resolved: string[], record: SendingDomainProofRecord): boolean {
+  const want = dkimPublicKeyOf(record.value)
+  if (!want) return false
+  return resolved.some((r) => dkimPublicKeyOf(r) === want)
+}
+
+/**
+ * Is this stored record one that could prove ownership at all? The
+ * `_quackback` token, or a signing key minted for this row. A DKIM CNAME is
+ * the provider's and the same for everyone who follows the instructions, so it
+ * never is.
+ */
+function isProofRecord(record: {
+  type: string
+  purpose: string
+  value: string
+}): record is SendingDomainProofRecord {
+  return (record.type === 'TXT' && record.purpose === 'ownership') || isKeyRecord(record)
 }
 
 /**
@@ -69,6 +91,9 @@ function isOwnershipRecord(record: { type: string; purpose: string }): boolean {
  */
 export type ZoneReader = (host: string) => Promise<string[][]>
 
+/** One bounded try, like every other background domain check. */
+const readTxt: ZoneReader = (host) => systemResolver.resolveTxt(host)
+
 /**
  * Resolve and check every expected ownership record. A lookup failure (NXDOMAIN,
  * no record yet) counts as unsatisfied, not an error — the owner is still
@@ -81,11 +106,14 @@ export type ZoneReader = (host: string) => Promise<string[][]>
  */
 export async function verifySendingDomainDns(
   domain: string,
-  expected: SendingDomainOwnershipRecord[],
-  readZone: ZoneReader = resolveTxt
+  expected: SendingDomainProofRecord[],
+  readZone: ZoneReader = readTxt
 ): Promise<boolean> {
   if (expected.length === 0) return false
-  const notOwnership = expected.filter((r) => !isOwnershipRecord(r))
+  // Typed as proof, but read out of a jsonb column where no type survives.
+  const notOwnership = (expected as { type: string; purpose: string; value: string }[]).filter(
+    (r) => !isProofRecord(r)
+  )
   if (notOwnership.length > 0) {
     log.error(
       { domain, purposes: notOwnership.map((r) => `${r.type}/${r.purpose}`) },
@@ -98,7 +126,11 @@ export async function verifySendingDomainDns(
       // A long TXT arrives split into 255-byte chunks; joined, it is the value
       // the domain owner typed.
       const resolved = (await readZone(hostFor(record, domain))).map((chunks) => chunks.join(''))
-      if (!ownershipRecordSatisfied(resolved, record)) return false
+      const satisfied =
+        record.purpose === 'dkim'
+          ? keyRecordSatisfied(resolved, record)
+          : ownershipRecordSatisfied(resolved, record)
+      if (!satisfied) return false
     } catch {
       return false
     }

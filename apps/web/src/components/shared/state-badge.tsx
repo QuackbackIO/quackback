@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 
-export type BadgeState = 'on' | 'off' | 'paused' | 'connected' | 'attention' | 'error'
+export type BadgeState =
+  'on' | 'off' | 'paused' | 'connected' | 'setting-up' | 'attention' | 'error'
 
 const STATES: Record<
   BadgeState,
@@ -10,6 +11,7 @@ const STATES: Record<
   off: { label: 'Off', variant: 'secondary' },
   paused: { label: 'Paused', variant: 'secondary' },
   connected: { label: 'Connected', variant: 'success' },
+  'setting-up': { label: 'Setting up', variant: 'secondary' },
   attention: { label: 'Needs attention', variant: 'warning' },
   error: { label: 'Error', variant: 'destructive' },
 }

@@ -13,6 +13,7 @@ import {
   checkHelpCenterDomainStatus,
 } from '@/lib/server/domains/help-center/help-center-domain.service'
 import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
+import { getBaseUrl } from '@/lib/server/config'
 
 export const updateHelpCenterDomainFn = createServerFn({ method: 'POST' })
   .validator(updateHelpCenterDomainSchema)
@@ -35,5 +36,15 @@ export const getHelpCenterDomainStatusFn = createServerFn({ method: 'GET' })
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     const config = await getHelpCenterConfig()
     if (!config.domain?.domain) return null
-    return checkHelpCenterDomainStatus(config.domain.domain)
+    const status = await checkHelpCenterDomainStatus(config.domain.domain)
+    return { ...status, cnameTarget: instanceHostname() }
   })
+
+/** The host a help center domain's CNAME points at: this instance's own. */
+function instanceHostname(): string | null {
+  try {
+    return new URL(getBaseUrl()).hostname || null
+  } catch {
+    return null
+  }
+}

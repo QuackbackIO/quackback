@@ -35,12 +35,14 @@
 import {
   CreateEmailIdentityCommand,
   GetEmailIdentityCommand,
+  PutEmailIdentityDkimSigningAttributesCommand,
   PutEmailIdentityMailFromAttributesCommand,
   SESv2Client,
 } from '@aws-sdk/client-sesv2'
 import type {
   CreateEmailIdentityCommandOutput,
   GetEmailIdentityCommandOutput,
+  PutEmailIdentityDkimSigningAttributesCommandOutput,
   PutEmailIdentityMailFromAttributesCommandOutput,
 } from '@aws-sdk/client-sesv2'
 import { createLogger } from '@quackback/logger'
@@ -55,6 +57,21 @@ export const SES_IDENTITY_ACTIONS = [
   'ses:CreateEmailIdentity',
   'ses:GetEmailIdentity',
   'ses:PutEmailIdentityMailFromAttributes',
+  'ses:PutEmailIdentityDkimSigningAttributes',
+] as const
+
+/**
+ * The further IAM actions the same credential calls when the operator isolates
+ * reputation per workspace (`EMAIL_SES_TENANTS`); see `ses-tenant.ts`. Granted
+ * on `tenant/*`, and the two association actions also on the identities and the
+ * configuration set they associate. No tags are set, so no `ses:TagResource`.
+ */
+export const SES_TENANT_ACTIONS = [
+  'ses:CreateTenant',
+  'ses:GetTenant',
+  'ses:CreateTenantResourceAssociation',
+  'ses:DeleteTenantResourceAssociation',
+  'ses:GetReputationEntity',
 ] as const
 
 /**
@@ -117,6 +134,12 @@ export interface SesDomainIdentity {
    */
   signingHostedZone: string | null
   dkimStatus: SesDkimStatus | null
+  /**
+   * Whose key the identity signs with, when SES says: `ses` for a key SES
+   * issued (Easy DKIM, published as CNAMEs), `external` for a key someone
+   * supplied. Absent when the response does not name it.
+   */
+  signingOrigin?: 'ses' | 'external'
   /** SES's own summary of whether it will sign for this identity. */
   verifiedForSending: boolean
   mailFrom: { domain: string; status: SesMailFromStatus | null } | null
@@ -145,10 +168,12 @@ export interface SesIdentityClient {
       | CreateEmailIdentityCommand
       | GetEmailIdentityCommand
       | PutEmailIdentityMailFromAttributesCommand
+      | PutEmailIdentityDkimSigningAttributesCommand
   ): Promise<
     | CreateEmailIdentityCommandOutput
     | GetEmailIdentityCommandOutput
     | PutEmailIdentityMailFromAttributesCommandOutput
+    | PutEmailIdentityDkimSigningAttributesCommandOutput
   >
 }
 
@@ -159,8 +184,10 @@ export interface SesIdentityDeps {
   region: string
 }
 
-function readEnv(key: string): string | undefined {
-  return process.env[key]
+type EnvLike = Record<string, string | undefined>
+
+function readEnv(key: string, env: EnvLike = process.env): string | undefined {
+  return env[key]
 }
 
 /**
@@ -172,9 +199,11 @@ function readEnv(key: string): string | undefined {
  * given. Both halves are required, for the same reason as the sending pair —
  * neither authorizes anything alone.
  */
-function identityCredentials(): { accessKeyId: string; secretAccessKey: string } | null {
-  const accessKeyId = readEnv('EMAIL_SES_IDENTITY_ACCESS_KEY_ID')?.trim()
-  const secretAccessKey = readEnv('EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY')?.trim()
+function identityCredentials(
+  env: EnvLike = process.env
+): { accessKeyId: string; secretAccessKey: string } | null {
+  const accessKeyId = readEnv('EMAIL_SES_IDENTITY_ACCESS_KEY_ID', env)?.trim()
+  const secretAccessKey = readEnv('EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY', env)?.trim()
   if (!accessKeyId || !secretAccessKey) return null
   return { accessKeyId, secretAccessKey }
 }
@@ -186,8 +215,8 @@ function identityCredentials(): { accessKeyId: string; secretAccessKey: string }
  * the credential is never quietly dropped to a rung that provisions nothing. A
  * missing region is refused out loud at the call, naming the variable.
  */
-export function isSesIdentityConfigured(): boolean {
-  return identityCredentials() !== null
+export function isSesIdentityConfigured(env: EnvLike = process.env): boolean {
+  return identityCredentials(env) !== null
 }
 
 /** One client per process, rebuilt when the credential or region changes. */
@@ -200,6 +229,15 @@ function configFailure(message: string): SesIdentityConfigError {
 }
 
 function depsFromEnv(): SesIdentityDeps {
+  return sesManagementClient()
+}
+
+/**
+ * The identity credential's client and region, for every call that manages
+ * account resources rather than sending: identities here, tenants in
+ * `ses-tenant.ts`. Refuses out loud when the credential or region is missing.
+ */
+export function sesManagementClient(): { client: SESv2Client; region: string } {
   const credentials = identityCredentials()
   if (!credentials) {
     throw configFailure(
@@ -207,7 +245,8 @@ function depsFromEnv(): SesIdentityDeps {
         'required to verify a sending domain. This is a separate credential from the sending ' +
         `one and needs exactly: ${SES_IDENTITY_ACTIONS.join(', ')}. Do not grant ` +
         'ses:DeleteEmailIdentity: one process able to delete identities can stop every ' +
-        'workspace on this account from sending.'
+        'workspace on this account from sending. With EMAIL_SES_TENANTS it also needs: ' +
+        `${SES_TENANT_ACTIONS.join(', ')}.`
     )
   }
   const region = sesRegion()
@@ -288,11 +327,19 @@ function toIdentity(
 ): SesDomainIdentity {
   const dkim = response.DkimAttributes
   const mailFrom = 'MailFromAttributes' in response ? response.MailFromAttributes : undefined
+  // Region-specific Easy DKIM keys report AWS_SES_<REGION>; all are SES-issued.
+  const origin = dkim?.SigningAttributesOrigin
+  const signingOrigin = origin?.startsWith('AWS_SES')
+    ? 'ses'
+    : origin === 'EXTERNAL'
+      ? 'external'
+      : undefined
   return {
     domain,
     dkimTokens: dkim?.Tokens ?? [],
     signingHostedZone: dkim?.SigningHostedZone ?? null,
     dkimStatus: (dkim?.Status as SesDkimStatus | undefined) ?? null,
+    ...(signingOrigin ? { signingOrigin } : {}),
     verifiedForSending: response.VerifiedForSendingStatus === true,
     mailFrom: mailFrom?.MailFromDomain
       ? {
@@ -320,17 +367,26 @@ function toIdentity(
  * follow a create with the writes a create implies, and on a shared account
  * those land on somebody else's identity.
  *
- * Easy DKIM at 2048 bits: SES's own default is 2048 for identities created
- * through the API, and stating it means a change to that default cannot silently
- * downgrade a customer's signing key.
+ * With `signing`, the identity signs with that key under that selector (the
+ * caller's own key, published as one TXT record). The private key goes into
+ * this one request and nowhere else: it is not logged and not returned. An
+ * identity that already exists keeps the key it has; re-keying one is the
+ * separate {@link putSesDkimSigningKey}.
+ *
+ * Without it, Easy DKIM at 2048 bits: SES's own default is 2048 for identities
+ * created through the API, and stating it means a change to that default cannot
+ * silently downgrade a customer's signing key.
  */
 export async function createSesDomainIdentity(
   domain: string,
-  deps: SesIdentityDeps = depsFromEnv()
+  deps: SesIdentityDeps = depsFromEnv(),
+  signing?: { selector: string; privateKey: string }
 ): Promise<SesIdentityCreation> {
   const command = new CreateEmailIdentityCommand({
     EmailIdentity: domain,
-    DkimSigningAttributes: { NextSigningKeyLength: 'RSA_2048_BIT' },
+    DkimSigningAttributes: signing
+      ? { DomainSigningSelector: signing.selector, DomainSigningPrivateKey: signing.privateKey }
+      : { NextSigningKeyLength: 'RSA_2048_BIT' },
   })
   try {
     const response = (await deps.client.send(command)) as CreateEmailIdentityCommandOutput
@@ -421,6 +477,38 @@ export async function putSesMailFromDomain(
   }
 }
 
+/**
+ * Make an existing identity sign with the caller's own key under its selector.
+ *
+ * The caller decides when this is safe: re-keying an identity replaces the key
+ * every sender on the account signs with for that domain, so it is only ever
+ * done for a domain whose owner has just proved control of the zone by
+ * publishing this same key. The private key goes into this one request and
+ * nowhere else: it is not logged, and a failure carries the provider's message,
+ * never the request.
+ */
+export async function putSesDkimSigningKey(
+  domain: string,
+  signing: { selector: string; privateKey: string },
+  deps: SesIdentityDeps = depsFromEnv()
+): Promise<void> {
+  try {
+    await deps.client.send(
+      new PutEmailIdentityDkimSigningAttributesCommand({
+        EmailIdentity: domain,
+        SigningAttributesOrigin: 'EXTERNAL',
+        SigningAttributes: {
+          DomainSigningSelector: signing.selector,
+          DomainSigningPrivateKey: signing.privateKey,
+        },
+      })
+    )
+    log.info({ domain, selector: signing.selector }, 'ses identity re-keyed to a supplied key')
+  } catch (error) {
+    throw identityFailure(error, 'ses:PutEmailIdentityDkimSigningAttributes', domain)
+  }
+}
+
 // ============================================================================
 // The record values SES expects to find. Provider knowledge, so it lives beside
 // the provider's client rather than in the domain layer that composes rows out
@@ -454,3 +542,26 @@ export const SES_MAIL_FROM_SPF_VALUE = 'v=spf1 include:amazonses.com ~all'
 
 /** Preference on the MAIL FROM MX record. One host, so the number is by convention. */
 export const SES_MAIL_FROM_MX_PRIORITY = 10
+
+/** The operator setting that moves new domains' return path onto one CNAME. */
+export const RETURN_PATH_DOMAIN_ENV = 'EMAIL_RETURN_PATH_DOMAIN'
+
+/** Two or more DNS labels, each 1-63 of `[a-z0-9-]` not starting or ending with `-`. */
+const RETURN_PATH_DOMAIN_RE =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
+
+/**
+ * The domain the operator serves bounce records under, or null when unset
+ * (the default, and every install that has not set one up).
+ *
+ * When set, the operator publishes a wildcard MX to the provider's feedback
+ * host and a wildcard SPF TXT under it, so a customer's MAIL FROM name that is
+ * only a CNAME to `<workspace label>.<this domain>` verifies: the provider
+ * follows the CNAME and finds both. The customer then publishes one record
+ * instead of two, and none of them names the provider. A value that is not a
+ * domain name reads as unset; boot validation refuses it before that matters.
+ */
+export function sesReturnPathDomain(env: EnvLike = process.env): string | null {
+  const value = readEnv(RETURN_PATH_DOMAIN_ENV, env)?.trim().toLowerCase().replace(/\.$/, '')
+  return value && RETURN_PATH_DOMAIN_RE.test(value) ? value : null
+}
