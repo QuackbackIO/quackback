@@ -69,3 +69,13 @@ describe('lookupVerificationTxt', () => {
     expect(result).toEqual({ ok: false, reason: 'lookup-failed' })
   })
 })
+
+describe('lookupVerificationTxt resolver', () => {
+  it('reads through the resolver it is given', async () => {
+    const given = { resolveTxt: vi.fn(async () => [['qb-domain-verify=x']]) }
+    const result = await lookupVerificationTxt('_quackback-verify.acme.com', given as never)
+    expect(result).toEqual({ ok: true, values: ['qb-domain-verify=x'] })
+    expect(given.resolveTxt).toHaveBeenCalledWith('_quackback-verify.acme.com')
+    expect(hoisted.mockResolveTxt).not.toHaveBeenCalled()
+  })
+})

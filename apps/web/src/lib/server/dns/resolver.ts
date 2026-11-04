@@ -19,18 +19,41 @@ export interface DnsResolver {
 }
 
 /**
- * Two seconds and one try per lookup, so a domain whose nameservers do not
- * answer costs seconds rather than the default's much longer retry cycle.
- * Created on first use; it holds configuration only, nothing per workspace.
+ * Two seconds per try, so a domain whose nameservers do not answer costs
+ * seconds rather than the default's much longer retry cycle. One resolver per
+ * try count, created on first use; each holds configuration only, nothing per
+ * workspace.
  */
-let resolver: Resolver | null = null
-const shared = (): Resolver => (resolver ??= new Resolver({ timeout: 2000, tries: 1 }))
+const resolvers = new Map<number, Resolver>()
 
+function shared(tries: number): Resolver {
+  let resolver = resolvers.get(tries)
+  if (!resolver) {
+    resolver = new Resolver({ timeout: 2000, tries })
+    resolvers.set(tries, resolver)
+  }
+  return resolver
+}
+
+/** One try: for checks that run in the background or on a page load. */
 export const systemResolver: DnsResolver = {
-  resolveTxt: (host) => shared().resolveTxt(host),
-  resolveCname: (host) => shared().resolveCname(host),
-  resolveMx: (host) => shared().resolveMx(host),
-  resolve4: (host) => shared().resolve4(host),
-  resolve6: (host) => shared().resolve6(host),
-  resolveNs: (host) => shared().resolveNs(host),
+  resolveTxt: (host) => shared(1).resolveTxt(host),
+  resolveCname: (host) => shared(1).resolveCname(host),
+  resolveMx: (host) => shared(1).resolveMx(host),
+  resolve4: (host) => shared(1).resolve4(host),
+  resolve6: (host) => shared(1).resolve6(host),
+  resolveNs: (host) => shared(1).resolveNs(host),
+}
+
+/**
+ * Two tries: for a lookup someone clicked a button for and is waiting on, where
+ * a single dropped packet would read as a missing record.
+ */
+export const interactiveResolver: DnsResolver = {
+  resolveTxt: (host) => shared(2).resolveTxt(host),
+  resolveCname: (host) => shared(2).resolveCname(host),
+  resolveMx: (host) => shared(2).resolveMx(host),
+  resolve4: (host) => shared(2).resolve4(host),
+  resolve6: (host) => shared(2).resolve6(host),
+  resolveNs: (host) => shared(2).resolveNs(host),
 }

@@ -1,4 +1,4 @@
-import { systemResolver } from '@/lib/server/dns/resolver'
+import { systemResolver, type DnsResolver } from '@/lib/server/dns/resolver'
 
 export type LookupResult =
   { ok: true; values: string[] } | { ok: false; reason: 'no-record' | 'lookup-failed' }
@@ -12,12 +12,16 @@ export type LookupResult =
  * else (timeout, transport failure, malformed response) becomes
  * `lookup-failed` so the caller can render a retry-friendly message.
  *
- * Read through the shared resolver, which gives up on a slow nameserver
- * after one short try, so a hung zone cannot hold the verify endpoint.
+ * Read through the shared resolver (one short try by default; a caller a
+ * person is waiting on passes the two-try one), so a hung zone cannot hold
+ * the verify endpoint.
  */
-export async function lookupVerificationTxt(name: string): Promise<LookupResult> {
+export async function lookupVerificationTxt(
+  name: string,
+  resolver: Pick<DnsResolver, 'resolveTxt'> = systemResolver
+): Promise<LookupResult> {
   try {
-    const records = await systemResolver.resolveTxt(name)
+    const records = await resolver.resolveTxt(name)
     const values = records.map((chunks) => chunks.join(''))
     if (values.length === 0) return { ok: false, reason: 'no-record' }
     return { ok: true, values }

@@ -632,10 +632,10 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'apps/web/src/lib/server/dns/resolver.ts',
-    name: 'resolver',
+    name: 'resolvers',
     category: 'fleet-wide',
     reason:
-      'A DNS resolver built from fixed options (two second timeout, one try) and the system ' +
+      'DNS resolvers keyed by try count, each built from fixed options (two second timeout) and the system ' +
       'nameservers. It holds no answers and no workspace: every lookup is a fresh public DNS ' +
       'query, so a cross-workspace hit asks the same question of the same nameservers that ' +
       'either workspace would have built a resolver to ask.',

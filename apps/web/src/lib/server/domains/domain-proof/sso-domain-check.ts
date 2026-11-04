@@ -7,6 +7,7 @@
  * decides, as before.
  */
 import { lookupVerificationTxt } from '@/lib/server/auth/dns-verify'
+import { interactiveResolver } from '@/lib/server/dns/resolver'
 import type { ProvenZoneSource } from '@/lib/shared/domain-proof'
 import { ssoDomainProvenBy } from './proven-zones'
 
@@ -21,7 +22,11 @@ export async function checkSsoDomainOwnership(domain: {
   const provenBy = await ssoDomainProvenBy(domain.name)
   if (provenBy) return { ok: true, via: provenBy }
 
-  const result = await lookupVerificationTxt(`_quackback-verify.${domain.name}`)
+  // Run when someone clicks Verify, so the lookup gets a second try.
+  const result = await lookupVerificationTxt(
+    `_quackback-verify.${domain.name}`,
+    interactiveResolver
+  )
   if (!result.ok) return { ok: false, reason: result.reason }
   if (!result.values.includes(`qb-domain-verify=${domain.verificationToken}`)) {
     return { ok: false, reason: 'mismatch' }

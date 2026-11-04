@@ -24,10 +24,16 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 const zone = vi.hoisted(() => ({
   published: new Map<string, string[]>(),
   asked: [] as string[],
+  through: [] as unknown[],
+}))
+vi.mock('@/lib/server/dns/resolver', () => ({
+  systemResolver: { kind: 'background' },
+  interactiveResolver: { kind: 'interactive' },
 }))
 vi.mock('@/lib/server/auth/dns-verify', () => ({
-  lookupVerificationTxt: async (name: string) => {
+  lookupVerificationTxt: async (name: string, resolver: unknown) => {
     zone.asked.push(name)
+    zone.through.push(resolver)
     const values = zone.published.get(name)
     return values ? { ok: true, values } : { ok: false, reason: 'no-record' }
   },
@@ -132,6 +138,7 @@ describe.skipIf(!fixture.available)('proven zones (real DB, rolled back)', () =>
   beforeEach(async () => {
     zone.published.clear()
     zone.asked.length = 0
+    zone.through.length = 0
     await fixture.begin()
   })
   afterEach(fixture.rollback)
@@ -273,6 +280,8 @@ describe.skipIf(!fixture.available)('proven zones (real DB, rolled back)', () =>
         `qb-domain-verify=${sso.verificationToken}`,
       ])
       expect(await checkSsoDomainOwnership(sso)).toEqual({ ok: true, via: 'dns' })
+      // Someone clicked Verify and is waiting: the lookup gets a second try.
+      expect(zone.through).toEqual([{ kind: 'interactive' }])
 
       zone.published.set('_quackback-verify.acme.com', ['qb-domain-verify=someone-else'])
       expect(await checkSsoDomainOwnership(sso)).toEqual({ ok: false, reason: 'mismatch' })
