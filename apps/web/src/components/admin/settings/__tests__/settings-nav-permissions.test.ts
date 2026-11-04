@@ -187,6 +187,24 @@ describe('firstSettingsPath', () => {
     expect(first(new Set([PERMISSIONS.WORKFLOW_MANAGE]))).toBe('/admin/settings/workflows')
   })
 
+  it('never lands on the Domains overview; a domain owner opens their own page', () => {
+    expect(first(new Set([PERMISSIONS.AUTH_MANAGE]))).toBe(
+      '/admin/settings/security/authentication'
+    )
+    // With the inbox on, the email page is under Channels, which needs more.
+    expect(first(new Set([PERMISSIONS.CHANNEL_ACCOUNT_MANAGE]))).toBe(
+      '/admin/settings/notifications'
+    )
+    const email = buildNavSections({ supportTickets: true }, false)
+    expect(first(new Set([PERMISSIONS.CHANNEL_ACCOUNT_MANAGE]), email)).toBe(
+      '/admin/settings/channels/email'
+    )
+    // Domains is its only page, and it is an overview: the personal page instead.
+    expect(first(new Set([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]))).toBe(
+      '/admin/settings/notifications'
+    )
+  })
+
   it('opens Notifications for a viewer with no settings permission', () => {
     expect(first(new Set())).toBe('/admin/settings/notifications')
     expect(first(new Set([PERMISSIONS.WORKFLOW_MANAGE]), buildNavSections({}, false))).toBe(

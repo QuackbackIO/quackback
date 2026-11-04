@@ -82,7 +82,7 @@ async function seedSendingDomain(
   domain: string,
   opts: {
     status?: 'pending' | 'verified' | 'failed'
-    dkimMode?: 'easy' | 'byo'
+    dkimMode?: 'easy' | 'byo' | 'shared'
     dnsRecords?: SendingDomainDnsRecord[]
   } = {}
 ): Promise<void> {
@@ -168,7 +168,23 @@ describe.skipIf(!fixture.available)('proven zones (real DB, rolled back)', () =>
       // Brought its own key but holds only an ownership token, which a
       // byo row is not verified by.
       await seedSendingDomain('byo.example.com', { dkimMode: 'byo', dnsRecords: [OWNERSHIP] })
+      // Over an identity that already existed: proven by its own key, never by
+      // the provider's CNAMEs or a token it is not verified with.
+      await seedSendingDomain('shared.example.com', {
+        dkimMode: 'shared',
+        dnsRecords: [OWNERSHIP, PROVIDER_CNAME],
+      })
       expect(await getProvenZones()).toEqual([])
+    })
+
+    it('counts a verified shared-identity row by its own key', async () => {
+      await seedSendingDomain('shared.example.com', {
+        dkimMode: 'shared',
+        dnsRecords: [SIGNING_KEY, PROVIDER_CNAME],
+      })
+      expect(await getProvenZones()).toEqual([
+        { zone: 'shared.example.com', source: 'email-sending', exact: false },
+      ])
     })
 
     it('leaves out pending SSO domains and operator hostnames that are not ready', async () => {

@@ -25,6 +25,11 @@ export interface NavItem {
   permission?: PermissionKey
   /** Pages that open to a holder of any one of these, instead of a single permission. */
   anyOf?: readonly PermissionKey[]
+  /**
+   * A page that summarises others (Domains). It is offered in the nav, but never
+   * chosen as the page Settings opens on: its viewers each own a page of their own.
+   */
+  overview?: true
 }
 
 /**
@@ -248,7 +253,7 @@ export function buildNavSections(
           ...navPage('/admin/settings/general'),
           permission: PERMISSIONS.SETTINGS_MANAGE,
         },
-        { ...navPage('/admin/settings/domains'), anyOf: DOMAINS_PAGE_PERMISSIONS },
+        { ...navPage('/admin/settings/domains'), anyOf: DOMAINS_PAGE_PERMISSIONS, overview: true },
         { ...navPage('/admin/settings/notifications') },
         {
           ...navPage('/admin/settings/portal'),
@@ -363,7 +368,8 @@ const NOTIFICATIONS_PATH = '/admin/settings/notifications'
 /**
  * The page the Settings entry opens for a viewer: General when they may open
  * it, otherwise the first page in nav order they hold the permission for, and
- * the personal Notifications page when they hold none. It never names a page
+ * the personal Notifications page when they hold none. An overview page is
+ * never chosen. It never names a page
  * whose route would answer Access denied.
  */
 export function firstSettingsPath(
@@ -373,6 +379,7 @@ export function firstSettingsPath(
   const gatedPaths = navSectionsFor(sections, permissions)
     .flatMap((section) => section.items)
     .flatMap((entry) => (isNavModule(entry) ? entry.pages : [entry]))
+    .filter((item) => !item.overview)
     .filter((item) => item.permission !== undefined || item.anyOf !== undefined)
     .map((item) => item.to)
   if (gatedPaths.includes(GENERAL_PATH)) return GENERAL_PATH

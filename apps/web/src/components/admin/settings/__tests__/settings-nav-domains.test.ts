@@ -21,7 +21,12 @@ describe('settings nav Domains row', () => {
       (item) => !isNavModule(item) && item.to === '/admin/settings/domains'
     )
     expect(domains).toEqual([
-      { label: 'Domains', to: '/admin/settings/domains', anyOf: DOMAINS_PAGE_PERMISSIONS },
+      {
+        label: 'Domains',
+        to: '/admin/settings/domains',
+        anyOf: DOMAINS_PAGE_PERMISSIONS,
+        overview: true,
+      },
     ])
     const labels = workspace.items.map((item) => item.label)
     expect(labels.indexOf('Domains')).toBe(labels.indexOf('General') + 1)

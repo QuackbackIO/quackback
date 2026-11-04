@@ -8,7 +8,7 @@
  *
  * - a verified sending domain. Verification already required the row's own
  *   ownership proof: the `_quackback` token for a domain on the provider's
- *   keys, or the row's own signing key for one that brought its own. A
+ *   keys, or the row's own key for one set up with a key of its own. A
  *   verified row that no longer carries either is left out, since nothing it
  *   holds says the zone is this workspace's;
  * - a verified single sign-on domain, proven by its `_quackback-verify` TXT;
@@ -55,7 +55,11 @@ export function sendingRowProvesZone(row: {
 }): boolean {
   if (row.status !== 'verified') return false
   const records = row.dnsRecords ?? []
-  return row.dkimMode === 'byo' ? records.some(isKeyRecord) : ownershipRecordsOf(records).length > 0
+  // A row with a key of its own (`byo`, or `shared` over an identity that
+  // already existed) is verified by that key; only `easy` by its token.
+  return row.dkimMode === 'easy'
+    ? ownershipRecordsOf(records).length > 0
+    : records.some(isKeyRecord)
 }
 
 /**
