@@ -36,7 +36,7 @@ export type CustomDomainInstruction = {
   ownershipProof?: { name: string; value: string } | null
   /** Set when a zone this workspace already proved stood in for that record. */
   ownership?: 'proven-zone'
-  proofSource?: HostnameProofSource
+  ownershipSource?: HostnameProofSource
 }
 
 export async function requestWorkspaceIdentityMutation(input: {

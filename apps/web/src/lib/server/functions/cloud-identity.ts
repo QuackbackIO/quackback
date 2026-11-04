@@ -90,7 +90,7 @@ export const getCloudCustomDomainsFn = createServerFn({ method: 'GET' }).handler
     return domains.map((domain) => {
       const source =
         proofFor(domain.hostname)?.source ??
-        (domain.ownership === 'proven-zone' ? domain.proofSource : undefined)
+        (domain.ownership === 'proven-zone' ? domain.ownershipSource : undefined)
       return { ...domain, provenBy: source ? shownProofSource(source, auth.permissions) : null }
     })
   }

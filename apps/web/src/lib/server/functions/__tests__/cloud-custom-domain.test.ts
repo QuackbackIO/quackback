@@ -183,7 +183,7 @@ describe('getCloudCustomDomainsFn', () => {
       pending('feedback.example.org', {
         ownershipProof: null,
         ownership: 'proven-zone',
-        proofSource: 'sso',
+        ownershipSource: 'sso',
       }),
     ]
     h.permissions = [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN, PERMISSIONS.AUTH_MANAGE]

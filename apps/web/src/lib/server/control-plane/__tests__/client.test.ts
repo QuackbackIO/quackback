@@ -118,7 +118,7 @@ describe('workspace control-plane credential', () => {
       ownershipTxt: null,
       ownershipProof: null,
       ownership: 'proven-zone',
-      proofSource: 'email-sending',
+      ownershipSource: 'email-sending',
     }
     hoisted.fetch.mockResolvedValue(
       new Response(JSON.stringify({ customDomains: [row] }), { status: 200 })
