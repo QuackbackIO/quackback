@@ -99,6 +99,8 @@ describe.skipIf(!fixture.available)('Domains page rows (real DB, rolled back)', 
       { name: 'eu.acme.com', verificationToken: 't2' },
       { name: 'example.net', verificationToken: 't3' },
       { name: 'example.org', verificationToken: 't4', verifiedAt: new Date() },
+      // Under a verified sign-in domain: one sign-in domain never proves another.
+      { name: 'eu.example.org', verificationToken: 't5' },
     ])
 
     const shown = async (viewer: PermissionKey[]) =>
@@ -110,6 +112,7 @@ describe.skipIf(!fixture.available)('Domains page rows (real DB, rolled back)', 
       'eu.acme.com': [false, 'email-sending'],
       'example.net': [false, null],
       'example.org': [true, null],
+      'eu.example.org': [false, null],
     })
     // A viewer who cannot see sending learns only that a proof exists.
     expect(await shown([PERMISSIONS.AUTH_MANAGE])).toEqual({
@@ -117,6 +120,7 @@ describe.skipIf(!fixture.available)('Domains page rows (real DB, rolled back)', 
       'eu.acme.com': [false, 'workspace'],
       'example.net': [false, null],
       'example.org': [true, null],
+      'eu.example.org': [false, null],
     })
   })
 })

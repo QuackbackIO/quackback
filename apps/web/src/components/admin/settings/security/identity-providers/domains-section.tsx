@@ -34,7 +34,9 @@ import {
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 import {
+  SSO_VERIFY_RECORD_HOST,
   pendingProvenLabel,
+  ssoVerifyRecordValue,
   verifiedThroughLabel,
   type ShownProofSource,
 } from '@/lib/shared/domain-proof'
@@ -62,8 +64,8 @@ export function ssoTxtRecord(
   const record = {
     label: 'Ownership',
     type: 'TXT',
-    name: '_quackback-verify',
-    value: `qb-domain-verify=${domain.verificationToken}`,
+    name: SSO_VERIFY_RECORD_HOST,
+    value: ssoVerifyRecordValue(domain.verificationToken),
   }
   return result && !result.verified
     ? { ...record, state: 'problem', problem: VERIFY_REASON_MESSAGES[result.reason] }

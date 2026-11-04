@@ -8,10 +8,13 @@ import { PERMISSIONS, type PermissionKey } from './permissions'
 /**
  * - `email-sending`: a verified sending domain, proven by its own ownership
  *   record or its own key.
+ * - `sso`: a verified single sign-on domain, proven by its own verification
+ *   record. It counts for web addresses only, never for another single
+ *   sign-on domain.
  * - `web-address`: an operator-managed hostname that is ready. It proves that
  *   exact hostname and nothing under or above it.
  */
-export type ProvenZoneSource = 'email-sending' | 'web-address'
+export type ProvenZoneSource = 'email-sending' | 'sso' | 'web-address'
 
 /**
  * A source as a viewer may see it: named when they may see what proved it,
@@ -22,6 +25,7 @@ export type ShownProofSource = ProvenZoneSource | 'workspace'
 /** The permission that shows each kind of proof. */
 const SOURCE_PERMISSION: Record<ProvenZoneSource, PermissionKey> = {
   'email-sending': PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+  sso: PERMISSIONS.AUTH_MANAGE,
   'web-address': PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
 }
 
@@ -34,6 +38,7 @@ export function shownProofSource(
 
 const SOURCE_LABEL: Record<ProvenZoneSource, string> = {
   'email-sending': 'email sending',
+  sso: 'single sign-on',
   'web-address': 'a web address',
 }
 
@@ -49,4 +54,12 @@ export function pendingProvenLabel(source: ShownProofSource): string {
   return source === 'workspace'
     ? 'Already proven by this workspace'
     : `Already proven through ${SOURCE_LABEL[source]}`
+}
+
+/** The label a single sign-on domain's verification TXT is published under. */
+export const SSO_VERIFY_RECORD_HOST = '_quackback-verify'
+
+/** The value of a single sign-on domain's verification TXT. */
+export function ssoVerifyRecordValue(token: string): string {
+  return `qb-domain-verify=${token}`
 }
