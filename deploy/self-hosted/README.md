@@ -105,7 +105,14 @@ With `docker-compose.prod.yml`, pin the release with `QUACKBACK_TAG` in `.env`.
 | `EMAIL_SES_MAX_SEND_RATE`          | Most SES sends per second from each app process; sends beyond it wait their turn. The quota is per AWS account, so with N processes sending set roughly the account quota (`aws ses get-send-quota`) divided by N                                                                                       | `10`         |
 | `EMAIL_SES_IDENTITY_ACCESS_KEY_ID` | Separate SES key id used only to verify a customer-owned sending domain; needs `EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY`. Grant `ses:CreateEmailIdentity`, `ses:GetEmailIdentity`, `ses:PutEmailIdentityMailFromAttributes`, `ses:PutEmailIdentityDkimSigningAttributes` and NOT `ses:DeleteEmailIdentity` | -            |
 | `EMAIL_RETURN_PATH_DOMAIN`         | Optional domain you serve bounce records under, with a wildcard MX `10 feedback-smtp.<region>.amazonses.com` and a wildcard TXT `v=spf1 include:amazonses.com ~all`. Set, a new sending domain's return path is one CNAME to `<workspace label>.<this domain>` instead of an MX and a TXT               | -            |
+| `EMAIL_SES_TENANTS`                | Optional, `true` to send each workspace's mail under an SES tenant of its own, so SES tracks bounces and complaints per workspace and pauses only the one at fault. Needs `EMAIL_SES_CONFIGURATION_SET` and the identity key; see [Amazon SES IAM](#amazon-ses-iam)                                     | `false`      |
 | `EMAIL_FROM`                       | From address for emails. Configure exactly one sending provider (SMTP, Amazon SES or Resend): with more than one set, the app refuses to start and names the variables. A Resend key kept only for inbound mail beside SMTP or SES needs `EMAIL_INBOUND_PROVIDER=resend`                                | -            |
+
+#### Amazon SES IAM
+
+The sending key (`EMAIL_SES_ACCESS_KEY_ID`) needs `ses:SendEmail` on the sending identities, and on `configuration-set/<name>` when `EMAIL_SES_CONFIGURATION_SET` is set. Sending under a tenant uses the same action; scope it with the `ses:TenantName` condition key if you want to.
+
+The identity key (`EMAIL_SES_IDENTITY_ACCESS_KEY_ID`) needs `ses:CreateEmailIdentity`, `ses:GetEmailIdentity`, `ses:PutEmailIdentityMailFromAttributes` and `ses:PutEmailIdentityDkimSigningAttributes`. With `EMAIL_SES_TENANTS` it also needs `ses:CreateTenant`, `ses:GetTenant` and `ses:GetReputationEntity` on `tenant/*`, and `ses:CreateTenantResourceAssociation` and `ses:DeleteTenantResourceAssociation` on `tenant/*`, `identity/*` and `configuration-set/<name>`. Never grant `ses:DeleteEmailIdentity`. An identity associated with a tenant cannot be deleted in SES until it is released; the app releases a domain's identity when its last sending domain row is removed.
 
 ### Sign-in Providers and Integrations
 

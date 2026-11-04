@@ -91,6 +91,7 @@ export {
   withPreviousChecks,
 } from './sending-domain-records'
 import { notifySendingDomainLive, notifySendingDomainNeedsAttention } from './sending-domain-notify'
+import { enqueueSesTenantReconcile } from './ses-tenant-queue'
 import { rekeyToHeldSigningKey, sealSigningKey, shouldHoldSigningKey } from './pending-signing-key'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 import { isAtOrUnder, platformSendingDomains, toAsciiDomain } from './outbound-identity'
@@ -449,6 +450,9 @@ export async function provisionSendingDomain(input: {
     { domain, sending_domain_id: row.id, dkim_status: identity.dkimStatus },
     'sending domain provisioned'
   )
+  // Associates the new identity with the workspace's provider tenant early, so
+  // the domain can send under it the moment it verifies.
+  await enqueueSesTenantReconcile('sending-domain-added')
   return updated ?? row
 }
 
@@ -563,6 +567,7 @@ export async function refreshSendingDomain(
     if (won) {
       updated = won
       await notifySendingDomainLive(won)
+      await enqueueSesTenantReconcile('sending-domain-verified')
     } else {
       updated = (await getSendingDomain(id)) ?? written
     }

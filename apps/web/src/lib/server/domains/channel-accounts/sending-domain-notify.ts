@@ -93,7 +93,7 @@ async function addressOn(domain: EmailSendingDomain): Promise<string> {
 }
 
 /** Ring the bell for every manager whose in-app preference allows this type. */
-async function ringManagers(
+export async function ringManagers(
   managers: Manager[],
   type: NotificationType,
   bell: { title: string; body?: string; metadata: Record<string, unknown> }

@@ -46,12 +46,23 @@ function currentWorkspaceKey(env: EnvLike): string | null {
 }
 
 /**
+ * The per-workspace label for the workspace this process is acting for, or
+ * null on a pooled process outside any scope. Also the workspace's mail
+ * provider tenant name (see `ses-tenant-state.ts`), so an operator reading
+ * either sees the same label.
+ */
+export function currentWorkspaceLabel(env: EnvLike = process.env): string | null {
+  const key = currentWorkspaceKey(env)
+  return key ? returnPathLabel(key) : null
+}
+
+/**
  * The CNAME target for a new domain's return path, or null when the domain
  * publishes the MX and TXT itself.
  */
 export function returnPathTarget(env: EnvLike = process.env): string | null {
   const domain = sesReturnPathDomain(env)
   if (!domain) return null
-  const key = currentWorkspaceKey(env)
-  return key ? `${returnPathLabel(key)}.${domain}` : null
+  const label = currentWorkspaceLabel(env)
+  return label ? `${label}.${domain}` : null
 }

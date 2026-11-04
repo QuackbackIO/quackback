@@ -670,6 +670,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'cross-workspace cache.',
   },
   {
+    file: 'packages/email/src/tenant-hooks.ts',
+    name: 'hooks',
+    category: 'process-lifetime',
+    reason:
+      'Holds two function pointers installed at boot. Each send awaits the tenant lookup, which ' +
+      'derives the tenant name from getCurrentWorkspace() and reads that workspace row through ' +
+      'the scoped db Proxy, so two workspaces in one process get their own tenants. Nothing about ' +
+      'a workspace is kept in here.',
+  },
+  {
     file: 'packages/email/src/default-from.ts',
     name: 'resolver',
     category: 'process-lifetime',

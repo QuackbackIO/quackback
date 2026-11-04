@@ -38,6 +38,8 @@ import {
   isDomainActionRefusal,
   type DomainAction,
 } from '@/lib/server/domains/channel-accounts/domain-action-message'
+import { sesTenantPausedNotice } from '@/lib/server/domains/channel-accounts/ses-tenant-status'
+import { enqueueSesTenantReconcile } from '@/lib/server/domains/channel-accounts/ses-tenant-queue'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'channel-accounts-fn' })
@@ -160,6 +162,11 @@ export interface EmailChannelConfigDTO {
   addressMode: 'any' | 'verified-domains' | 'unavailable'
   /** The address mail sends from when no sending address is live, or null when none is set. */
   defaultFrom: string | null
+  /**
+   * Set when the email provider has paused this workspace's sending, with the
+   * provider's reason when it is short. Null while mail sends.
+   */
+  sendingPaused: { cause: string | null } | null
 }
 
 /** This install's default From, or null when it has none configured. */
@@ -217,6 +224,7 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
     const platformAddress = platformInboxAddress(currentMailSlug())
     const defaultFrom = await defaultFromAddress()
     const addressMode = await sendingAddressMode()
+    const sendingPaused = await sesTenantPausedNotice()
     const teamId = await defaultTeamId()
     if (!teamId) {
       return {
@@ -226,6 +234,7 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
         platformAddress,
         addressMode,
         defaultFrom,
+        sendingPaused,
       }
     }
     const [inbound, accounts, domains] = await Promise.all([
@@ -242,6 +251,7 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
       platformAddress,
       addressMode,
       defaultFrom,
+      sendingPaused,
     }
   }
 )
@@ -310,6 +320,10 @@ export const deleteSendingDomainFn = createServerFn({ method: 'POST' })
     await withDomainActionMessage('remove', async () => {
       await deleteSendingDomain(data.id as SendingDomainId)
     })
+    // Releases the domain's identity from the workspace's provider tenant,
+    // unless another row here still uses it. Off the request path; a no-op
+    // when tenants are off.
+    await enqueueSesTenantReconcile('sending-domain-removed')
     return { id: data.id }
   })
 

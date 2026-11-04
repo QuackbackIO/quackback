@@ -339,6 +339,27 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // The workspace's mail provider tenant, when the operator isolates sending
+    // reputation per workspace. Hourly, but each tick returns after one row
+    // read unless the workspace has never been reconciled, is not ready, or
+    // was last reconciled a day ago; adding, verifying or removing a sending
+    // domain enqueues one on demand. Capped across the fleet because each run
+    // makes several provider management calls.
+    name: 'ses-tenant-reconcile',
+    cron: '41 * * * *',
+    cronEnabled: () =>
+      import('@/lib/server/domains/channel-accounts/ses-tenant-queue').then((m) =>
+        m.sesTenantReconcileEnabled()
+      ),
+    fleetConcurrency: 2,
+    maxAttempts: 3,
+    retryBackoffMs: 60_000,
+    handler: () =>
+      import('@/lib/server/domains/channel-accounts/ses-tenant-queue').then(
+        (m) => m.runSesTenantReconcile
+      ),
+  },
+  {
     // Whole-table aggregates in every workspace's database, all against the
     // one shared server, so the fleet runs a few at a time rather than all of
     // them inside the hour's first minute.
