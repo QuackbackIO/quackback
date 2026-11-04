@@ -10,10 +10,11 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { DomainsCard } from '../domains-cards'
 import { FULL_NAMES_NOTE } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
+import type { ShownProofSource } from '@/lib/shared/domain-proof'
 
 afterEach(cleanup)
 
-function renderCard(domains: CustomDomainInstruction[]) {
+function renderCard(domains: (CustomDomainInstruction & { provenBy?: ShownProofSource | null })[]) {
   return render(
     <DomainsCard
       entitled
@@ -116,6 +117,39 @@ describe('<DomainsCard>', () => {
     const fixes = document.querySelectorAll('[data-slot="dns-record-fix"]')
     expect(fixes).toHaveLength(1)
     expect(rows[1]!.nextElementSibling).toBe(fixes[0])
+  })
+
+  /** A pending hostname the operator still sends a challenge record for. */
+  const challenged = (provenBy: ShownProofSource | null) => ({
+    ...base,
+    readiness: 'pending' as const,
+    updatedAt: '2026-10-01T12:00:00.000Z',
+    ownershipTxt: null,
+    ownershipProof: { name: '_quackback-challenge.feedback.example.com', value: 'proof-1' },
+    provenBy,
+  })
+
+  it('shows a covered hostname as already proven in place of the challenge record', () => {
+    renderCard([challenged('email-sending')])
+    const rows = [...document.querySelectorAll('[data-slot="dns-record"]')]
+    expect(rows.map((r) => r.textContent)).toEqual([
+      'Waiting: Routingfeedback.example.comCNAMEedge.example.net',
+    ])
+    expect(screen.queryByText('proof-1')).toBeNull()
+    expect(screen.getByText('Already proven through email sending')).toBeTruthy()
+  })
+
+  it('says only that the workspace proved it when the viewer may not see the source', () => {
+    renderCard([challenged('workspace')])
+    expect(screen.getByText('Already proven by this workspace')).toBeTruthy()
+    expect(screen.queryByText(/email sending|single sign-on/)).toBeNull()
+    expect(screen.queryByText('proof-1')).toBeNull()
+  })
+
+  it('asks for the challenge record as before when nothing covers the hostname', () => {
+    renderCard([challenged(null)])
+    expect(screen.getByText('proof-1')).toBeTruthy()
+    expect(screen.queryByText(/Already proven/)).toBeNull()
   })
 
   it('names no hosting provider in its description', () => {
