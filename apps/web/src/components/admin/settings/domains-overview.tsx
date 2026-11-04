@@ -82,8 +82,8 @@ export function EmailSendingSection({
 }
 
 function signInMeta(d: SignInDomainSummary): string | undefined {
-  if (d.verified) return d.provenBy ? verifiedThroughLabel(d.provenBy) : 'Verified'
-  return d.provenBy ? 'Already verified elsewhere, ready to use' : undefined
+  if (d.verified) return d.provenBy ? verifiedThroughLabel(d.provenBy) : undefined
+  return d.provenBy ? 'Already verified. Click Verify to use it.' : undefined
 }
 
 export function SignInSection({
