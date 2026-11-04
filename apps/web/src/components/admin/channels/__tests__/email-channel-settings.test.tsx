@@ -584,6 +584,21 @@ describe('a domain whose identity already had a key (shared)', () => {
     expect(screen.getByText(MUTED)).toBeTruthy()
   })
 
+  it('labels its own key Signing while the identity waits to be re-keyed to it', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com', 'support')],
+      domains: [
+        domain({
+          dkimMode: 'shared',
+          signingKeyPending: true,
+          dnsRecords: [ownKey, ...returnPath] as SendingDomainDTO['dnsRecords'],
+        }),
+      ],
+    })
+    expect(labels()).toEqual(['Signing', 'Return path', 'Return path'])
+    expect(screen.queryByText(MUTED)).toBeNull()
+  })
+
   it('names the signing key when every listed record is found and it still is not live', () => {
     const found = { state: 'found', checkedAt: CHECKED }
     renderSettings({

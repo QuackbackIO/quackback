@@ -118,9 +118,16 @@ export interface SendingDomainDTO {
    * proves ownership), `easy` with the provider's keys (CNAMEs plus the
    * ownership TXT), `shared` with the key the identity already had (the row's
    * own key TXT proves ownership only, beside the provider's CNAMEs when that
-   * key is the provider's).
+   * key is the provider's; when that key is one nobody can publish, the row's
+   * key is the one to publish and the row becomes `byo` once it is found).
    */
   dkimMode: 'easy' | 'byo' | 'shared'
+  /**
+   * A `shared` domain whose identity is re-keyed to the row's own key once
+   * that key is found: its key TXT is then the signing record, not ownership
+   * only. Says only that; the key itself never leaves the server.
+   */
+  signingKeyPending?: boolean
   /**
    * Until when a pending domain is checked automatically. A pending domain
    * whose window has passed is "not found after 72 hours"; one with no window yet is still being set up.
@@ -192,6 +199,7 @@ const toDomain = (d: EmailSendingDomain): SendingDomainDTO => ({
   verifiedAt: d.verifiedAt ? d.verifiedAt.toISOString() : null,
   mailFromLabel: d.mailFromLabel,
   dkimMode: d.dkimMode,
+  signingKeyPending: d.pendingSigningKey != null,
   autoCheckUntil: d.autoCheckUntil ? d.autoCheckUntil.toISOString() : null,
   lastCheckedAt: d.lastCheckedAt ? d.lastCheckedAt.toISOString() : null,
   preflight: { ...d.preflight },

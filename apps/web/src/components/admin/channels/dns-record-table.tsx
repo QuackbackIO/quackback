@@ -10,7 +10,7 @@ import {
   type DnsRecordState,
 } from '@/components/shared/dns-record-table'
 import type { DnsRecordDTO, SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
-import { recordLabel, recordTypeLabel, type DomainPhase } from './sending-domain-view'
+import { recordLabel, recordTypeLabel, signingMode, type DomainPhase } from './sending-domain-view'
 
 /** A record's state and, when it needs fixing, the one sentence that says how. */
 export function recordStatus(
@@ -72,7 +72,7 @@ export function SendingRecordTable({
       records={domain.dnsRecords.map((r): DnsRecordRow => {
         const status = recordStatus(r, { domain: domain.domain, phase })
         return {
-          label: recordLabel(r, domain.dkimMode),
+          label: recordLabel(r, signingMode(domain)),
           type: recordTypeLabel(r),
           name: r.host,
           value: r.value,

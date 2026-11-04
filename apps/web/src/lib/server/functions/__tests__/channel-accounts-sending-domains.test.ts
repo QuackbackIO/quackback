@@ -126,6 +126,26 @@ describe('restartSendingDomainChecksFn', () => {
     })
   })
 
+  it('never sends a held signing key to the page', async () => {
+    hoisted.restart.mockResolvedValue({
+      id: 'sending_domain_1',
+      domain: 'acme.com',
+      status: 'pending',
+      dnsRecords: [],
+      verifiedAt: null,
+      mailFromLabel: 'qb-bounce',
+      dkimMode: 'shared',
+      pendingSigningKey: 'SEALED-SIGNING-KEY',
+      autoCheckUntil: null,
+      preflight: {},
+      lastCheckedAt: null,
+    })
+    const result = await restartChecks({ data: { id: 'sending_domain_1' } })
+    expect(result).not.toHaveProperty('pendingSigningKey')
+    expect(result).toMatchObject({ signingKeyPending: true })
+    expect(JSON.stringify(result)).not.toContain('SEALED-SIGNING-KEY')
+  })
+
   it('says so when the domain is gone', async () => {
     hoisted.restart.mockResolvedValue(null)
     await expect(restartChecks({ data: { id: 'sending_domain_1' } })).rejects.toThrow(

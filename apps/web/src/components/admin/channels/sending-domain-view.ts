@@ -64,6 +64,17 @@ const RECORD_LABEL: Record<string, string> = {
 }
 
 /**
+ * How a domain's records sign: a `shared` domain waiting to re-key its
+ * identity to the row's own key reads as `byo`, since that key is the one
+ * that will sign.
+ */
+export function signingMode(
+  domain: Pick<SendingDomainDTO, 'dkimMode' | 'signingKeyPending'>
+): SendingDomainDTO['dkimMode'] {
+  return domain.signingKeyPending ? 'byo' : domain.dkimMode
+}
+
+/**
  * The short label for what a record does. On a `shared` domain the row's own
  * key TXT signs nothing (the identity keeps its key) and only proves ownership.
  */
@@ -80,7 +91,7 @@ export function recordLabel(
 /** Whether a shared domain signs with a key none of its listed records carry. */
 export function signsWithUnlistedKey(domain: SendingDomainDTO): boolean {
   return (
-    domain.dkimMode === 'shared' &&
+    signingMode(domain) === 'shared' &&
     !domain.dnsRecords.some((r) => r.purpose === 'dkim' && r.type === 'CNAME')
   )
 }
