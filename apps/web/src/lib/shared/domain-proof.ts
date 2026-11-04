@@ -3,15 +3,36 @@
  * settings page can show. The proofs themselves are read on the server (see
  * `domains/domain-proof/proven-zones.ts`).
  */
+import { PERMISSIONS, type PermissionKey } from './permissions'
 
 /**
  * - `email-sending`: a verified sending domain, proven by its own ownership
- *   record or its own signing key.
+ *   record or its own key.
  * - `sso`: a verified single sign-on domain, proven by its TXT record.
  * - `web-address`: an operator-managed hostname that is ready. It proves that
  *   exact hostname and nothing under or above it.
  */
 export type ProvenZoneSource = 'email-sending' | 'sso' | 'web-address'
+
+/**
+ * A source as a viewer may see it: named when they may see what proved it,
+ * otherwise `workspace`, which says only that this workspace holds a proof.
+ */
+export type ShownProofSource = ProvenZoneSource | 'workspace'
+
+/** The permission that shows each kind of proof. */
+const SOURCE_PERMISSION: Record<ProvenZoneSource, PermissionKey> = {
+  'email-sending': PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+  sso: PERMISSIONS.AUTH_MANAGE,
+  'web-address': PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+}
+
+export function shownProofSource(
+  source: ProvenZoneSource,
+  permissions: readonly PermissionKey[]
+): ShownProofSource {
+  return permissions.includes(SOURCE_PERMISSION[source]) ? source : 'workspace'
+}
 
 const SOURCE_LABEL: Record<ProvenZoneSource, string> = {
   'email-sending': 'email sending',
@@ -19,12 +40,16 @@ const SOURCE_LABEL: Record<ProvenZoneSource, string> = {
   'web-address': 'a web address',
 }
 
-/** The source in words: "email sending", "a web address". */
-export function proofSourceName(source: ProvenZoneSource): string {
-  return SOURCE_LABEL[source]
+/** "Verified through email sending" and the like. */
+export function verifiedThroughLabel(source: ShownProofSource): string {
+  return source === 'workspace'
+    ? 'Verified, already proven by this workspace'
+    : `Verified through ${SOURCE_LABEL[source]}`
 }
 
-/** "Verified through email sending" and the like. */
-export function verifiedThroughLabel(source: ProvenZoneSource): string {
-  return `Verified through ${proofSourceName(source)}`
+/** For a pending domain another proof covers: "Already proven through email sending". */
+export function pendingProvenLabel(source: ShownProofSource): string {
+  return source === 'workspace'
+    ? 'Already proven by this workspace'
+    : `Already proven through ${SOURCE_LABEL[source]}`
 }

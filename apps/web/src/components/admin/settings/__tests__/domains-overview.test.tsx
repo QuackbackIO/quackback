@@ -84,6 +84,8 @@ describe('Sign-in section', () => {
           { id: 'domain_a', name: 'acme.com', verified: true, provenBy: 'email-sending' },
           { id: 'domain_b', name: 'example.org', verified: true, provenBy: null },
           { id: 'domain_c', name: 'example.net', verified: false, provenBy: null },
+          { id: 'domain_d', name: 'eu.acme.com', verified: false, provenBy: 'email-sending' },
+          { id: 'domain_e', name: 'example.io', verified: true, provenBy: 'workspace' },
         ]}
       />
     )
@@ -95,6 +97,10 @@ describe('Sign-in section', () => {
     expect(pending).toHaveTextContent('Setting up')
     expect(pending).not.toHaveTextContent('Verified')
     expect(pending).toHaveAttribute('href', '/admin/settings/security/authentication')
+    const ready = rowOf('eu.acme.com')
+    expect(ready).toHaveTextContent('Already proven, ready to verify')
+    expect(ready).toHaveTextContent('Setting up')
+    expect(rowOf('example.io')).toHaveTextContent('Verified, already proven by this workspace')
   })
 })
 

@@ -34,9 +34,9 @@ import {
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 import {
-  proofSourceName,
+  pendingProvenLabel,
   verifiedThroughLabel,
-  type ProvenZoneSource,
+  type ShownProofSource,
 } from '@/lib/shared/domain-proof'
 import { IDENTITY_PROVIDERS_KEY, getConnectionTestState } from './provider-shared'
 
@@ -161,7 +161,7 @@ export function DomainsSection({
               <Input
                 value={draftName}
                 onChange={(e) => setDraftName(e.target.value)}
-                placeholder="acme.com"
+                placeholder="example.com"
                 disabled={adding || disabled}
                 className="h-9"
                 aria-label="Add domain"
@@ -198,7 +198,7 @@ function DomainRow({
 }: {
   domain: VerifiedDomain
   /** Another proof this workspace holds that already covers the domain. */
-  provenBy: ProvenZoneSource | null
+  provenBy: ShownProofSource | null
   disabled: boolean
   /** True when the provider has a fresh test sign-in — the enforcement
    *  checkbox is enabled. False disables the checkbox to prevent setting
@@ -325,7 +325,7 @@ function DomainRow({
 
       {!isVerified && provenBy && (
         <p className="text-xs text-muted-foreground">
-          {`Already proven through ${proofSourceName(provenBy)}. Click Verify to use it.`}
+          {`${pendingProvenLabel(provenBy)}. Click Verify to use it.`}
         </p>
       )}
       {!isVerified && !provenBy && (

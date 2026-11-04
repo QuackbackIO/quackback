@@ -27,7 +27,7 @@ import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/err
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import type { ProvenZoneSource } from '@/lib/shared/domain-proof'
+import { shownProofSource, type ShownProofSource } from '@/lib/shared/domain-proof'
 import { diffProviderAudit } from '@/lib/server/auth/idp-audit-diff'
 import { applyClaimMappingEdits } from '@/lib/shared/sso-claim-mapping-edit'
 import { PROFILE_FIELDS, isRoleRuleRoleId } from '@/lib/shared/oidc-claim-mapping'
@@ -135,7 +135,7 @@ export const removeVerifiedDomainFn = createServerFn({ method: 'POST' })
   })
 
 export type VerifyDomainResult =
-  | { verified: true; verifiedAt: string; via: 'dns' | ProvenZoneSource }
+  | { verified: true; verifiedAt: string; via: 'dns' | ShownProofSource }
   | { verified: false; reason: 'no-record' | 'lookup-failed' | 'mismatch' | 'no-pending-domain' }
 
 /** Read-only listing of the workspace's verified-domain rows. */
@@ -670,7 +670,7 @@ const verifyProviderDomainInput = z.object({
 export const verifyProviderDomainFn = createServerFn({ method: 'POST' })
   .validator(verifyProviderDomainInput)
   .handler(async ({ data }): Promise<VerifyDomainResult> => {
-    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
     const { getWorkspaceSettings, stampVerifiedDomain } =
       await import('@/lib/server/domains/settings/settings.service')
@@ -707,7 +707,11 @@ export const verifyProviderDomainFn = createServerFn({ method: 'POST' })
       }
       throw err
     }
-    return { verified: true, verifiedAt, via: check.via }
+    return {
+      verified: true,
+      verifiedAt,
+      via: check.via === 'dns' ? 'dns' : shownProofSource(check.via, auth.permissions),
+    }
   })
 
 /**
@@ -716,12 +720,12 @@ export const verifyProviderDomainFn = createServerFn({ method: 'POST' })
  * TXT record, and a verified one says where its proof came from.
  */
 export const getSsoDomainProofsFn = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<Record<string, ProvenZoneSource>> => {
-    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+  async (): Promise<Record<string, ShownProofSource>> => {
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
     const { listSignInDomainSummaries } =
       await import('@/lib/server/domains/domain-proof/domains-overview')
-    const proofs: Record<string, ProvenZoneSource> = {}
-    for (const d of await listSignInDomainSummaries()) {
+    const proofs: Record<string, ShownProofSource> = {}
+    for (const d of await listSignInDomainSummaries(auth.permissions)) {
       if (d.provenBy) proofs[d.id] = d.provenBy
     }
     return proofs

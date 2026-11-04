@@ -81,6 +81,11 @@ export function EmailSendingSection({
   )
 }
 
+function signInMeta(d: SignInDomainSummary): string | undefined {
+  if (d.verified) return d.provenBy ? verifiedThroughLabel(d.provenBy) : 'Verified'
+  return d.provenBy ? 'Already proven, ready to verify' : undefined
+}
+
 export function SignInSection({
   domains,
   canOpen,
@@ -96,9 +101,7 @@ export function SignInSection({
             key={d.id}
             leading={<RowIcon icon={LockClosedIcon} />}
             title={d.name}
-            meta={
-              d.verified ? (d.provenBy ? verifiedThroughLabel(d.provenBy) : 'Verified') : undefined
-            }
+            meta={signInMeta(d)}
             badges={d.verified ? undefined : <StateBadge state="setting-up" />}
             to={canOpen ? '/admin/settings/security/authentication' : undefined}
           />

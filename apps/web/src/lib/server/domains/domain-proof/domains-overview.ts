@@ -12,7 +12,8 @@ import {
   isNull,
   ssoVerifiedDomain,
 } from '@/lib/server/db'
-import type { ProvenZoneSource } from '@/lib/shared/domain-proof'
+import { shownProofSource, type ShownProofSource } from '@/lib/shared/domain-proof'
+import type { PermissionKey } from '@/lib/shared/permissions'
 import { toAsciiDomain } from '@/lib/server/domains/channel-accounts/outbound-identity'
 import { getProvenZones, provenZoneCovering, sendingRowProvesZone } from './proven-zones'
 
@@ -31,8 +32,11 @@ export interface SignInDomainSummary {
   id: string
   name: string
   verified: boolean
-  /** Another proof that covers the domain, when one does. */
-  provenBy: ProvenZoneSource | null
+  /**
+   * Another proof that covers the domain, when one does, named only when the
+   * viewer may see what proved it.
+   */
+  provenBy: ShownProofSource | null
 }
 
 function localPart(address: string): string | null {
@@ -78,7 +82,10 @@ export async function listSendingDomainSummaries(): Promise<SendingDomainSummary
   })
 }
 
-export async function listSignInDomainSummaries(): Promise<SignInDomainSummary[]> {
+/** The SSO domains, as a viewer holding `viewer` may see them. */
+export async function listSignInDomainSummaries(
+  viewer: readonly PermissionKey[]
+): Promise<SignInDomainSummary[]> {
   const [rows, zones] = await Promise.all([
     db
       .select({
@@ -91,10 +98,13 @@ export async function listSignInDomainSummaries(): Promise<SignInDomainSummary[]
     getProvenZones(),
   ])
   const others = zones.filter((z) => z.source !== 'sso')
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    verified: r.verifiedAt !== null,
-    provenBy: provenZoneCovering(r.name, others)?.source ?? null,
-  }))
+  return rows.map((r) => {
+    const covering = provenZoneCovering(r.name, others)
+    return {
+      id: r.id,
+      name: r.name,
+      verified: r.verifiedAt !== null,
+      provenBy: covering ? shownProofSource(covering.source, viewer) : null,
+    }
+  })
 }

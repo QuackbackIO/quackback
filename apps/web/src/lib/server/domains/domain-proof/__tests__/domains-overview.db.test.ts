@@ -11,6 +11,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { listSendingDomainSummaries, listSignInDomainSummaries } from '../domains-overview'
 
 const fixture = await createDbTestFixture({
@@ -100,10 +101,20 @@ describe.skipIf(!fixture.available)('Domains page rows (real DB, rolled back)', 
       { name: 'example.org', verificationToken: 't4', verifiedAt: new Date() },
     ])
 
-    const rows = await listSignInDomainSummaries()
-    expect(Object.fromEntries(rows.map((r) => [r.name, [r.verified, r.provenBy]]))).toEqual({
+    const shown = async (viewer: PermissionKey[]) =>
+      Object.fromEntries(
+        (await listSignInDomainSummaries(viewer)).map((r) => [r.name, [r.verified, r.provenBy]])
+      )
+    expect(await shown([PERMISSIONS.AUTH_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE])).toEqual({
       'acme.com': [true, 'email-sending'],
       'eu.acme.com': [false, 'email-sending'],
+      'example.net': [false, null],
+      'example.org': [true, null],
+    })
+    // A viewer who cannot see sending learns only that a proof exists.
+    expect(await shown([PERMISSIONS.AUTH_MANAGE])).toEqual({
+      'acme.com': [true, 'workspace'],
+      'eu.acme.com': [false, 'workspace'],
       'example.net': [false, null],
       'example.org': [true, null],
     })

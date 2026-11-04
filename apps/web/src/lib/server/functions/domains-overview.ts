@@ -29,10 +29,10 @@ export const getSendingDomainSummariesFn = createServerFn({ method: 'GET' }).han
 
 export const getSignInDomainSummariesFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<SignInDomainSummary[]> => {
-    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
     const { listSignInDomainSummaries } =
       await import('@/lib/server/domains/domain-proof/domains-overview')
-    return listSignInDomainSummaries()
+    return listSignInDomainSummaries(auth.permissions)
   }
 )
 

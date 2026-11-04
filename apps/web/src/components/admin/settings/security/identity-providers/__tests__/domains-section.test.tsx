@@ -57,6 +57,24 @@ describe('<DomainsSection> with domains another proof covers', () => {
     expect(screen.getAllByRole('button', { name: 'Verify' })).toHaveLength(2)
   })
 
+  it('names no source to a viewer who cannot see it', async () => {
+    renderSection([domain('a', 'acme.com', false), domain('b', 'example.org', true)], {
+      domain_a: 'workspace',
+      domain_b: 'workspace',
+    })
+
+    expect(
+      await screen.findByText('Already proven by this workspace. Click Verify to use it.')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Verified, already proven by this workspace')).toBeInTheDocument()
+    expect(screen.queryByText(/email sending/)).not.toBeInTheDocument()
+  })
+
+  it('suggests a neutral domain in the add field', () => {
+    renderSection([], {})
+    expect(screen.getByPlaceholderText('example.com')).toBeInTheDocument()
+  })
+
   it('says where a covered verified domain was proven', async () => {
     renderSection([domain('a', 'acme.com', true), domain('b', 'example.org', true)], {
       domain_a: 'email-sending',
