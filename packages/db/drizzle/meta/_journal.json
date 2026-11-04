@@ -1982,6 +1982,13 @@
       "when": 1791001000000,
       "tag": "0305_sending_domain_setup",
       "breakpoints": true
+    },
+    {
+      "idx": 283,
+      "version": "7",
+      "when": 1791001100000,
+      "tag": "0306_email_ses_tenants",
+      "breakpoints": true
     }
   ]
 }

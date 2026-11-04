@@ -258,6 +258,7 @@ export {
   channelAccounts,
   channelThreads,
   emailSendingDomains,
+  emailSesTenants,
   // Schema tables - office hours + SLA (support platform §4.6)
   officeHoursSchedules,
   slaPolicies,
@@ -550,6 +551,7 @@ export type { PermissionKey, PermissionCategory, SystemRoleKey } from '@quackbac
 export type {
   ChannelAccount,
   EmailSendingDomain,
+  EmailSesTenant,
   ChannelAccountConfig,
   SendingDomainDnsRecord,
   SendingDomainOwnershipRecord,
