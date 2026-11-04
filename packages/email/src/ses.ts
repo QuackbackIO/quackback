@@ -39,6 +39,7 @@ import { sesWireMessageId } from './message-id'
 import { createSendRateLimiter, SendRateQueueFullError } from './send-rate'
 import type { SendRateLimiter } from './send-rate'
 import type { EmailAttachment } from './attachment'
+import { isTenantPausedFailure } from './ses-tenant-paused'
 
 const log = createLogger({ base: { service_name: 'quackback-email' } }).child({
   component: 'email-ses',
@@ -193,6 +194,13 @@ export interface SesSendRequest {
    *  request (threading headers, Message-ID handling) stays exactly as it is
    *  without them. */
   attachments?: EmailAttachment[]
+  /**
+   * The provider tenant this message is sent for, when the operator isolates
+   * reputation per workspace. The provider then checks that the From identity
+   * and the configuration set are associated with the tenant and refuses the
+   * send if not, so a caller passes one only when it knows both are.
+   */
+  tenantName?: string
 }
 
 export interface SesSendResult {
@@ -362,6 +370,24 @@ export class SesEmailError extends Error {
   }
 }
 
+/**
+ * A send refused because the tenant it was sent for is paused by the provider.
+ *
+ * Permanent: the tenant stays paused until it is resumed, and no retry within
+ * a backoff changes that. `detail` is the provider's reason, made safe to keep.
+ */
+export class SesTenantPausedError extends SesEmailError {
+  constructor(
+    readonly tenantName: string,
+    readonly detail: string,
+    status: number | null,
+    code: string | null
+  ) {
+    super(`SES email send refused: the sending tenant is paused: ${detail}`, status, code, false)
+    this.name = 'SesTenantPausedError'
+  }
+}
+
 /** Longest run of provider prose allowed onto a log line or a stored row. */
 const MAX_DETAIL_CHARS = 200
 
@@ -477,8 +503,8 @@ export function isSesEmailConfigured(): boolean {
  * configured and unusable is worse than one that refuses to send, so this
  * returns null and the send says which variable is missing.
  */
-export function sesRegion(): string | null {
-  return readEnv('EMAIL_SES_REGION')?.trim() || null
+export function sesRegion(env: Record<string, string | undefined> = process.env): string | null {
+  return env.EMAIL_SES_REGION?.trim() || null
 }
 
 /** The configuration set to apply, or undefined when none is configured. */
@@ -638,7 +664,7 @@ function depsFromEnv(): SesEmailDeps {
 }
 
 /** Turn whatever the SDK threw into an error that says whether to try again. */
-function sendFailure(error: unknown, from: string): SesEmailError {
+function sendFailure(error: unknown, from: string, tenantName?: string): SesEmailError {
   const shaped = error as {
     name?: unknown
     code?: unknown
@@ -670,6 +696,16 @@ function sendFailure(error: unknown, from: string): SesEmailError {
   // only on modeled service exceptions, never on a socket failure, and by the
   // time an error reaches here the SDK has already spent its own retry budget
   // acting on it.
+  const rawMessage = typeof shaped?.message === 'string' ? shaped.message : null
+  if (tenantName && isTenantPausedFailure({ tenantName, code, message: rawMessage })) {
+    // A warning, not an error: the provider is doing what it was asked to, and
+    // the workspace's managers are told through the app, not through this line.
+    log.warn(
+      { status, code, from_domain: addressDomain(from), tenant: tenantName, detail },
+      'ses email send refused: tenant paused'
+    )
+    return new SesTenantPausedError(tenantName, detail, status, code)
+  }
   const throttled = isThrottling(status, code)
   const retryable = status === null || statusIsRetryable(status) || throttled
   // The sending DOMAIN, never the address: the single most common cause of a
@@ -729,6 +765,7 @@ export async function sendViaSes(
       ? { ReplyToAddresses: [formatAddress(request.replyTo)] }
       : {}),
     ...(deps.configurationSet ? { ConfigurationSetName: deps.configurationSet } : {}),
+    ...(request.tenantName ? { TenantName: request.tenantName } : {}),
     Content: {
       Simple: {
         Subject: { Data: request.subject, Charset: 'UTF-8' },
@@ -776,7 +813,7 @@ export async function sendViaSes(
   try {
     response = await deps.client.send(command)
   } catch (error) {
-    throw sendFailure(error, request.from)
+    throw sendFailure(error, request.from, request.tenantName)
   }
 
   // Reported as given, minus the brackets a header form would carry, and
