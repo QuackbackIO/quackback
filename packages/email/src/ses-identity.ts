@@ -35,12 +35,14 @@
 import {
   CreateEmailIdentityCommand,
   GetEmailIdentityCommand,
+  PutEmailIdentityDkimSigningAttributesCommand,
   PutEmailIdentityMailFromAttributesCommand,
   SESv2Client,
 } from '@aws-sdk/client-sesv2'
 import type {
   CreateEmailIdentityCommandOutput,
   GetEmailIdentityCommandOutput,
+  PutEmailIdentityDkimSigningAttributesCommandOutput,
   PutEmailIdentityMailFromAttributesCommandOutput,
 } from '@aws-sdk/client-sesv2'
 import { createLogger } from '@quackback/logger'
@@ -55,6 +57,7 @@ export const SES_IDENTITY_ACTIONS = [
   'ses:CreateEmailIdentity',
   'ses:GetEmailIdentity',
   'ses:PutEmailIdentityMailFromAttributes',
+  'ses:PutEmailIdentityDkimSigningAttributes',
 ] as const
 
 /**
@@ -151,10 +154,12 @@ export interface SesIdentityClient {
       | CreateEmailIdentityCommand
       | GetEmailIdentityCommand
       | PutEmailIdentityMailFromAttributesCommand
+      | PutEmailIdentityDkimSigningAttributesCommand
   ): Promise<
     | CreateEmailIdentityCommandOutput
     | GetEmailIdentityCommandOutput
     | PutEmailIdentityMailFromAttributesCommandOutput
+    | PutEmailIdentityDkimSigningAttributesCommandOutput
   >
 }
 
@@ -341,7 +346,8 @@ function toIdentity(
  * With `signing`, the identity signs with that key under that selector (the
  * caller's own key, published as one TXT record). The private key goes into
  * this one request and nowhere else: it is not logged and not returned. An
- * identity that already exists keeps the key it has; nothing here re-keys one.
+ * identity that already exists keeps the key it has; re-keying one is the
+ * separate {@link putSesDkimSigningKey}.
  *
  * Without it, Easy DKIM at 2048 bits: SES's own default is 2048 for identities
  * created through the API, and stating it means a change to that default cannot
@@ -444,6 +450,38 @@ export async function putSesMailFromDomain(
     log.info({ domain, mail_from_domain: mailFromDomain }, 'ses custom mail from attached')
   } catch (error) {
     throw identityFailure(error, 'ses:PutEmailIdentityMailFromAttributes', domain)
+  }
+}
+
+/**
+ * Make an existing identity sign with the caller's own key under its selector.
+ *
+ * The caller decides when this is safe: re-keying an identity replaces the key
+ * every sender on the account signs with for that domain, so it is only ever
+ * done for a domain whose owner has just proved control of the zone by
+ * publishing this same key. The private key goes into this one request and
+ * nowhere else: it is not logged, and a failure carries the provider's message,
+ * never the request.
+ */
+export async function putSesDkimSigningKey(
+  domain: string,
+  signing: { selector: string; privateKey: string },
+  deps: SesIdentityDeps = depsFromEnv()
+): Promise<void> {
+  try {
+    await deps.client.send(
+      new PutEmailIdentityDkimSigningAttributesCommand({
+        EmailIdentity: domain,
+        SigningAttributesOrigin: 'EXTERNAL',
+        SigningAttributes: {
+          DomainSigningSelector: signing.selector,
+          DomainSigningPrivateKey: signing.privateKey,
+        },
+      })
+    )
+    log.info({ domain, selector: signing.selector }, 'ses identity re-keyed to a supplied key')
+  } catch (error) {
+    throw identityFailure(error, 'ses:PutEmailIdentityDkimSigningAttributes', domain)
   }
 }
 

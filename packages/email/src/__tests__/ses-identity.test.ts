@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url'
 import {
   CreateEmailIdentityCommand,
   GetEmailIdentityCommand,
+  PutEmailIdentityDkimSigningAttributesCommand,
   PutEmailIdentityMailFromAttributesCommand,
 } from '@aws-sdk/client-sesv2'
 import {
@@ -27,6 +28,7 @@ import {
   createSesDomainIdentity,
   getSesDomainIdentity,
   isSesIdentityConfigured,
+  putSesDkimSigningKey,
   putSesMailFromDomain,
   sesDkimCnameTarget,
   sesMailFromMxValue,
@@ -318,6 +320,45 @@ describe('the custom MAIL FROM', () => {
     const { deps } = fakeClient(() => serviceError('AccessDeniedException', 403))
     const error = await putSesMailFromDomain('a.example', 'bounce.a.example', deps).catch((e) => e)
     expect(error.message).toContain('ses:PutEmailIdentityMailFromAttributes')
+  })
+})
+
+describe('re-keying an identity to a caller-held key', () => {
+  it('sets an external key under the given selector', async () => {
+    const { deps, commands } = fakeClient(() => ({}))
+    await putSesDkimSigningKey(
+      'tenant-a.example',
+      { selector: 'qb0011aabb', privateKey: 'PRIVATE-KEY-BASE64' },
+      deps
+    )
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toBeInstanceOf(PutEmailIdentityDkimSigningAttributesCommand)
+    expect((commands[0] as PutEmailIdentityDkimSigningAttributesCommand).input).toEqual({
+      EmailIdentity: 'tenant-a.example',
+      SigningAttributesOrigin: 'EXTERNAL',
+      SigningAttributes: {
+        DomainSigningSelector: 'qb0011aabb',
+        DomainSigningPrivateKey: 'PRIVATE-KEY-BASE64',
+      },
+    })
+  })
+
+  it('names its own action when denied, and never carries the key in the error', async () => {
+    const { deps } = fakeClient(() => serviceError('AccessDeniedException', 403))
+    const error = await putSesDkimSigningKey(
+      'a.example',
+      { selector: 'qb1', privateKey: 'PRIVATE-KEY-BASE64' },
+      deps
+    ).catch((e) => e)
+    expect(error).toBeInstanceOf(SesIdentityError)
+    expect(error.message).toContain('ses:PutEmailIdentityDkimSigningAttributes')
+    expect(JSON.stringify({ ...error, message: error.message })).not.toContain(
+      'PRIVATE-KEY-BASE64'
+    )
+  })
+
+  it('is one of the actions the identity credential is told to hold', () => {
+    expect(SES_IDENTITY_ACTIONS).toContain('ses:PutEmailIdentityDkimSigningAttributes')
   })
 })
 
