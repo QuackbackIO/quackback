@@ -11,6 +11,8 @@ export interface SendingDomainAttentionRecord {
   state: 'missing' | 'mismatch' | 'proxied'
   /** What was found instead, for a mismatch. */
   seen?: string
+  /** A value the DNS host cut short or saved with its quote marks. */
+  reason?: 'truncated' | 'quoted'
 }
 
 /**
@@ -45,6 +47,8 @@ export function sendingDomainProblem(
   const named = `The ${PURPOSE_LABEL[record.purpose]} (${record.type} ${record.name})`
   if (record.state === 'proxied') return `${named} is proxied. Turn off any proxy for it.`
   if (record.state === 'mismatch') {
+    if (record.reason === 'truncated') return `${named} was cut short by your DNS host.`
+    if (record.reason === 'quoted') return `${named} has quote marks saved in its value.`
     return record.seen
       ? `${named} has a different value: ${record.seen}.`
       : `${named} has a different value.`

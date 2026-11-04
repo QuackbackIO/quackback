@@ -28,6 +28,18 @@ export function recordStatus(
         fix: 'This name returns an address instead of pointing to the value above. Turn off any proxy for it.',
       }
     case 'mismatch':
+      if (check.reason === 'truncated') {
+        return {
+          state: 'problem',
+          fix: 'Your DNS host cut this value short. Paste it again, or use Copy as parts.',
+        }
+      }
+      if (check.reason === 'quoted') {
+        return {
+          state: 'problem',
+          fix: 'Your DNS host saved the quote marks as part of this value. Paste it again without them.',
+        }
+      }
       return {
         state: 'problem',
         fix:

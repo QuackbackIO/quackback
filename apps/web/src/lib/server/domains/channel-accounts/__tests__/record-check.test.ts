@@ -175,6 +175,58 @@ describe('a signing key TXT', () => {
   })
 })
 
+describe('a 2048-bit signing key TXT', () => {
+  // A 392-character key: the value is 410 characters, more than one TXT
+  // string holds, so DNS carries it as two strings of one record.
+  const KEY = `MIIBIjAN${'Q'.repeat(384)}`
+  const VALUE = `v=DKIM1; k=rsa; p=${KEY}`
+  const key: SendingDomainDnsRecord = {
+    type: 'TXT',
+    host: 'qb1a2b3c4d._domainkey',
+    value: VALUE,
+    purpose: 'dkim',
+  }
+  const NAME = 'qb1a2b3c4d._domainkey.acme.com'
+  const at = (txt: string[][]) =>
+    checkRecord(DOMAIN, key, zoneResolver({ [NAME]: { TXT: txt } }), NOW)
+
+  it('counts the value split across two strings as found', async () => {
+    expect(VALUE).toHaveLength(410)
+    expect(await at([[VALUE.slice(0, 255), VALUE.slice(255)]])).toEqual({
+      state: 'found',
+      checkedAt: NOW.toISOString(),
+    })
+  })
+
+  it('says the host cut the value short when only its start is published', async () => {
+    expect(await at([[VALUE.slice(0, 255)]])).toEqual({
+      state: 'mismatch',
+      seen: VALUE.slice(0, 255),
+      reason: 'truncated',
+      checkedAt: NOW.toISOString(),
+    })
+  })
+
+  it('says the value carries quote marks when the parts were saved with them', async () => {
+    const quoted = `"${VALUE.slice(0, 255)}" "${VALUE.slice(255)}"`
+    expect(await at([[quoted]])).toEqual({
+      state: 'mismatch',
+      seen: quoted,
+      reason: 'quoted',
+      checkedAt: NOW.toISOString(),
+    })
+  })
+
+  it('reports another key as a plain mismatch', async () => {
+    const other = `v=DKIM1; k=rsa; p=${'Z'.repeat(392)}`
+    expect(await at([[other]])).toEqual({
+      state: 'mismatch',
+      seen: other,
+      checkedAt: NOW.toISOString(),
+    })
+  })
+})
+
 describe('CNAME records', () => {
   it.each([
     [

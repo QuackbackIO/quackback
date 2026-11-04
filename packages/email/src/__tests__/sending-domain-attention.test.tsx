@@ -102,4 +102,32 @@ describe('SendingDomainAttentionEmail', () => {
     const html = await render(SendingDomainAttentionEmail({ domain: 'acme.com' }))
     expect(html).not.toContain('—')
   })
+
+  it.each([
+    [
+      'truncated',
+      'The signing (DKIM) record (TXT qb1._domainkey.acme.com) was cut short by your DNS host.',
+    ],
+    [
+      'quoted',
+      'The signing (DKIM) record (TXT qb1._domainkey.acme.com) has quote marks saved in its value.',
+    ],
+  ] as const)('names a value the DNS host mangled (%s)', async (reason, sentence) => {
+    const text = visibleText(
+      await render(
+        SendingDomainAttentionEmail({
+          domain: 'acme.com',
+          record: {
+            purpose: 'dkim',
+            type: 'TXT',
+            name: 'qb1._domainkey.acme.com',
+            state: 'mismatch',
+            seen: 'v=DKIM1; k=rsa; p=AAA',
+            reason,
+          },
+        })
+      )
+    )
+    expect(text).toContain(sentence)
+  })
 })

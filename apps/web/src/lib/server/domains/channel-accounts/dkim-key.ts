@@ -1,9 +1,12 @@
 /**
  * The signing key a new sending domain is created with.
  *
- * Each row gets its own 1024-bit RSA key under its own selector. The public
- * half is the one DKIM record the domain's owner publishes; at 1024 bits it
- * fits in a single TXT string, which every DNS host accepts as typed. The
+ * Each row gets its own 2048-bit RSA key under its own selector. The public
+ * half is the one DKIM record the domain's owner publishes. At 2048 bits the
+ * value is longer than one 255-character TXT string, so DNS carries it as
+ * several strings of one record; most DNS hosts split a long value themselves,
+ * and the rest take it pasted as quoted parts. Rows created with a 1024-bit
+ * key keep it: the key is fixed once the provider holds its private half. The
  * private half is handed to the mail provider when the identity is created and
  * dropped: it is never stored, logged or returned.
  *
@@ -25,7 +28,7 @@ export interface GeneratedDkimKey {
 export function generateDkimKey(): GeneratedDkimKey {
   const selector = `qb${randomBytes(4).toString('hex')}`
   const { publicKey, privateKey } = generateKeyPairSync('rsa', {
-    modulusLength: 1024,
+    modulusLength: 2048,
     publicKeyEncoding: { type: 'spki', format: 'der' },
     privateKeyEncoding: { type: 'pkcs1', format: 'der' },
   })

@@ -73,6 +73,9 @@ export function failingRecord(domain: EmailSendingDomain): SendingDomainAttentio
     name: recordName(domain.domain, failing.host),
     state: failing.check.state,
     ...(failing.check.seen ? { seen: failing.check.seen } : {}),
+    ...(failing.check.reason === 'truncated' || failing.check.reason === 'quoted'
+      ? { reason: failing.check.reason }
+      : {}),
   }
 }
 

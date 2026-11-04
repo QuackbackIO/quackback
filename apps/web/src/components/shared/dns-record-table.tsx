@@ -9,6 +9,8 @@
 import { Fragment } from 'react'
 import { CheckCircleIcon, ClockIcon, ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { CopyButton } from '@/components/shared/copy-button'
+import { Button } from '@/components/ui/button'
+import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 import { cn } from '@/lib/shared/utils'
 
 export type DnsRecordState = 'found' | 'waiting' | 'problem'
@@ -31,6 +33,37 @@ export interface DnsRecordRow {
   state: DnsRecordState
   /** The sentence that says how to fix it, for a record in the problem state. */
   problem?: string
+}
+
+/** The most characters one TXT string holds; a longer value is several strings of one record. */
+const TXT_STRING_MAX = 255
+
+/**
+ * A value as quoted parts of at most 255 characters each, `"<part>" "<rest>"`:
+ * the form DNS hosts that do not split a long TXT value themselves expect.
+ */
+export function txtParts(value: string): string {
+  const parts: string[] = []
+  for (let i = 0; i < value.length; i += TXT_STRING_MAX) {
+    parts.push(`"${value.slice(i, i + TXT_STRING_MAX)}"`)
+  }
+  return parts.join(' ')
+}
+
+function CopyAsParts({ value, name }: { value: string; name: string }) {
+  const { copied, copy } = useCopyToClipboard()
+  return (
+    <Button
+      type="button"
+      variant="link"
+      size="sm"
+      onClick={() => copy(txtParts(value))}
+      className="h-auto p-0 text-xs font-normal text-muted-foreground"
+      aria-label={`Copy as parts for ${name}`}
+    >
+      {copied ? 'Copied' : 'Copy as parts'}
+    </Button>
+  )
 }
 
 const STATE_ICON = {
@@ -88,6 +121,14 @@ export function DnsRecordTable({ records }: { records: DnsRecordRow[] }) {
                     </span>
                   </td>
                 </tr>
+                {r.value.length > TXT_STRING_MAX && (
+                  <tr data-slot="dns-record-parts">
+                    <td colSpan={3} />
+                    <td className="pb-1.5">
+                      <CopyAsParts value={r.value} name={r.name} />
+                    </td>
+                  </tr>
+                )}
                 {r.state === 'problem' && r.problem && (
                   <tr data-slot="dns-record-fix">
                     <td colSpan={4} className="pb-2 text-xs text-destructive break-all">

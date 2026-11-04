@@ -8,12 +8,15 @@ import { describe, expect, it } from 'vitest'
 import { generateDkimKey, dkimPublicKeyOf } from '../dkim-key'
 
 describe('generateDkimKey', () => {
-  it('publishes the public key as a single TXT string under 255 characters', () => {
+  it('publishes the public key of a 2048-bit key as one TXT value', () => {
     const { record } = generateDkimKey()
     expect(record.type).toBe('TXT')
     expect(record.purpose).toBe('dkim')
     expect(record.value).toMatch(/^v=DKIM1; k=rsa; p=[A-Za-z0-9+/]+=*$/)
-    expect(record.value.length).toBeLessThan(255)
+    // 392 characters of key: longer than one 255-character TXT string, so
+    // DNS carries it as two strings of one record.
+    expect(dkimPublicKeyOf(record.value)).toHaveLength(392)
+    expect(record.value).toHaveLength(410)
   })
 
   it('names a short DNS-safe selector unique to each key', () => {
@@ -34,7 +37,7 @@ describe('generateDkimKey', () => {
       format: 'der',
       type: 'pkcs1',
     })
-    expect(priv.asymmetricKeyDetails?.modulusLength).toBe(1024)
+    expect(priv.asymmetricKeyDetails?.modulusLength).toBe(2048)
     const pub = createPublicKey({
       key: Buffer.from(dkimPublicKeyOf(record.value) ?? '', 'base64'),
       format: 'der',

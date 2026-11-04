@@ -67,6 +67,20 @@ function textPrefix(value: string): string {
   return eq > 0 ? v.slice(0, eq + 1) : v
 }
 
+/**
+ * A signing key TXT holding another value, named for the two ways a DNS host
+ * mangles a long one: cut at its length limit (the found key is the start of
+ * the wanted one), or with the quote marks of pasted parts kept as text.
+ */
+function keyMismatch(seen: string, want: string): Omit<SendingDomainRecordCheck, 'checkedAt'> {
+  if (seen.includes('"')) return { state: 'mismatch', seen, reason: 'quoted' }
+  const key = dkimPublicKeyOf(seen) ?? ''
+  if (key.length < want.length && want.startsWith(key)) {
+    return { state: 'mismatch', seen, reason: 'truncated' }
+  }
+  return { state: 'mismatch', seen }
+}
+
 /** What one name holds for this record type, as a state relative to the wanted record. */
 async function stateAt(
   name: string,
@@ -80,7 +94,7 @@ async function stateAt(
     const want = dkimPublicKeyOf(record.value)
     if (values.some((v) => dkimPublicKeyOf(v) === want)) return { state: 'found' }
     const other = values.find((v) => dkimPublicKeyOf(v) !== null)
-    if (other !== undefined) return { state: 'mismatch', seen: other.trim() }
+    if (other !== undefined) return keyMismatch(other.trim(), want ?? '')
     if (values.length === 0) {
       const addresses = await answer(() => resolver.resolve4(name))
       if (addresses.length > 0) return { state: 'proxied', seen: addresses[0] }

@@ -65,7 +65,7 @@ async function withDomainActionMessage<T>(action: DomainAction, run: () => Promi
 export type DnsRecordCheckDTO = {
   state: 'found' | 'missing' | 'mismatch' | 'proxied'
   seen?: string
-  reason?: 'doubled-name'
+  reason?: 'doubled-name' | 'truncated' | 'quoted'
   checkedAt: string
 }
 

@@ -47,8 +47,12 @@ export interface SendingDomainRecordCheck {
    * the record was found under the domain written twice
    * (`_quackback.acme.com.acme.com`), the form a DNS host produces when the
    * full name is typed into a field that appends the domain itself.
+   * `truncated` means the value found is the start of the wanted one and no
+   * more, the form a DNS host that caps a value's length produces; `quoted`
+   * means the value carries literal quote marks, from parts pasted into a host
+   * that stores them as typed.
    */
-  reason?: 'doubled-name'
+  reason?: 'doubled-name' | 'truncated' | 'quoted'
   /** ISO timestamp of the lookup. */
   checkedAt: string
 }
