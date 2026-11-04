@@ -347,9 +347,8 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   // Settings is offered to anyone who can open at least one of its pages; the
   // rest would only reach an access-denied page.
   const showSettings = useMemo(
-    () =>
-      canOpenSettings(buildNavSections(flags, Boolean(billingEnabled), cloudEnabled), permissions),
-    [flags, billingEnabled, cloudEnabled, permissions]
+    () => canOpenSettings(buildNavSections(flags, Boolean(billingEnabled)), permissions),
+    [flags, billingEnabled, permissions]
   )
   // The org's own logo (resolved in brandingData by the root loader, same source
   // PortalBrandMark uses); fall back to the Quackback mark when none is set.
