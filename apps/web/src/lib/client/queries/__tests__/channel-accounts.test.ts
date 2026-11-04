@@ -2,7 +2,6 @@
  * The email settings card keeps itself current while a domain is being
  * checked automatically, and goes quiet once nothing is.
  */
-import { QueryClient } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   EmailChannelConfigDTO,
@@ -38,12 +37,10 @@ const config = (domains: SendingDomainDTO[]): EmailChannelConfigDTO => ({
 
 /** The interval the query asks for with this config cached. */
 function intervalWith(data: EmailChannelConfigDTO | undefined) {
-  const client = new QueryClient()
-  const options = emailChannelConfigQuery()
-  if (data) client.setQueryData(options.queryKey, data)
-  const query = client.getQueryCache().build(client, options)
-  const interval = options.refetchInterval
-  return typeof interval === 'function' ? interval(query) : interval
+  const interval = emailChannelConfigQuery().refetchInterval
+  if (typeof interval !== 'function') return interval
+  // The callback reads only the cached data off the query it is handed.
+  return interval({ state: { data } } as unknown as Parameters<typeof interval>[0])
 }
 
 describe('emailChannelConfigQuery polling', () => {
