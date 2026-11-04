@@ -53,7 +53,16 @@ export function hostnameProofFrom(
   return candidates[0] ?? null
 }
 
-/** The proof this workspace holds for `hostname`, read from its own database. */
+/**
+ * Reads this workspace's proven zones once, from its own database, and
+ * answers for any number of hostnames.
+ */
+export async function readHostnameProofs(): Promise<(hostname: string) => HostnameProof | null> {
+  const zones = await getProvenZones({ includeSso: true })
+  return (hostname) => hostnameProofFrom(hostname, zones)
+}
+
+/** The proof this workspace holds for `hostname`. */
 export async function getHostnameProof(hostname: string): Promise<HostnameProof | null> {
-  return hostnameProofFrom(hostname, await getProvenZones({ includeSso: true }))
+  return (await readHostnameProofs())(hostname)
 }
