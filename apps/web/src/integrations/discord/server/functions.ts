@@ -22,6 +22,8 @@ export interface DiscordChannel {
   id: string
   name: string
   isPrivate: boolean
+  /** Whether the bot can see and send messages in the channel. */
+  canPost: boolean
 }
 
 interface DiscordIntegrationConfig {

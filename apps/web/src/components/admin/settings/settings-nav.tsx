@@ -14,11 +14,7 @@ import {
   type NavModule,
 } from './settings-nav-sections'
 import { SettingsNavContext } from './settings-page'
-import {
-  useBillingEnabled,
-  useCloudEnabled,
-  useFeatureFlags,
-} from '@/lib/client/hooks/use-root-context'
+import { useBillingEnabled, useFeatureFlags } from '@/lib/client/hooks/use-root-context'
 
 type IconComponent = ComponentType<{ className?: string }>
 
@@ -47,12 +43,11 @@ function settingsRowClass(active: boolean) {
 export function SettingsNavProvider({ children }: { children: ReactNode }) {
   const flags = useFeatureFlags()
   const billingEnabled = useBillingEnabled()
-  const cloudEnabled = useCloudEnabled()
   const permissions = usePermissions()
 
   const navSections = useMemo(
-    () => navSectionsFor(buildNavSections(flags, billingEnabled, cloudEnabled), permissions),
-    [flags, billingEnabled, cloudEnabled, permissions]
+    () => navSectionsFor(buildNavSections(flags, billingEnabled), permissions),
+    [flags, billingEnabled, permissions]
   )
 
   return <SettingsNavContext.Provider value={navSections}>{children}</SettingsNavContext.Provider>

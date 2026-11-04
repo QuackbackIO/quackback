@@ -13,13 +13,12 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 const mockResolve4 = vi.fn()
 const mockResolve6 = vi.fn()
 
-vi.mock('node:dns/promises', () => {
-  const resolve4 = (...args: unknown[]) => mockResolve4(...args)
-  const resolve6 = (...args: unknown[]) => mockResolve6(...args)
-  // node:dns/promises carries a default export; vitest's ESM interop needs it
-  // present on the mock alongside the named exports the service imports.
-  return { default: { resolve4, resolve6 }, resolve4, resolve6 }
-})
+vi.mock('@/lib/server/dns/resolver', () => ({
+  systemResolver: {
+    resolve4: (...args: unknown[]) => mockResolve4(...args),
+    resolve6: (...args: unknown[]) => mockResolve6(...args),
+  },
+}))
 
 const {
   resolveHelpCenterDomainRedirect,
@@ -166,6 +165,17 @@ describe('checkHelpCenterDomainStatus', () => {
 
     const status = await checkHelpCenterDomainStatus('help.acme.com')
     expect(status).toEqual({ dnsResolved: true, instanceReachable: true, verified: true })
+    expect(mockResolve4).toHaveBeenCalledWith('help.acme.com')
+  })
+
+  it('counts an AAAA-only domain as resolving', async () => {
+    mockResolve4.mockRejectedValue(Object.assign(new Error('no data'), { code: 'ENODATA' }))
+    mockResolve6.mockResolvedValue(['2001:db8::1'])
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch
+
+    const status = await checkHelpCenterDomainStatus('help.acme.com')
+    expect(status.dnsResolved).toBe(true)
+    expect(mockResolve6).toHaveBeenCalledWith('help.acme.com')
   })
 
   it('is unverified when DNS fails to resolve', async () => {
