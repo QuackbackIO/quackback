@@ -11,6 +11,10 @@ import {
   type DnsRecordRow,
 } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
+import { pendingProvenLabel, type ShownProofSource } from '@/lib/shared/domain-proof'
+
+/** A hostname, with the proof that covers it when this workspace already holds one. */
+type HostnameRow = CustomDomainInstruction & { provenBy?: ShownProofSource | null }
 
 export function QuackbackUrlCard(props: {
   platformLabel: string
@@ -78,11 +82,12 @@ const READINESS_STATE = {
 
 /**
  * The records a hostname needs: the CNAME that routes it and, until it is
- * seen, the TXT that proves this workspace controls it. Readiness is reported
- * for the hostname as a whole, so every row shares it and a failure is
- * explained once, under the last row.
+ * seen, the TXT that proves this workspace controls it, unless a zone the
+ * workspace already proved covers it. Readiness is reported for the hostname
+ * as a whole, so every row shares it and a failure is explained once, under
+ * the last row.
  */
-function hostnameRecords(domain: CustomDomainInstruction): DnsRecordRow[] {
+function hostnameRecords(domain: HostnameRow): DnsRecordRow[] {
   const state = READINESS_STATE[domain.readiness]
   const records: DnsRecordRow[] = [
     {
@@ -93,7 +98,7 @@ function hostnameRecords(domain: CustomDomainInstruction): DnsRecordRow[] {
       state,
     },
   ]
-  if (isTxtRecord(domain.ownershipProof)) {
+  if (!domain.provenBy && isTxtRecord(domain.ownershipProof)) {
     records.push({
       label: 'Ownership',
       type: 'TXT',
@@ -115,7 +120,7 @@ function ReadinessBadge({ readiness }: { readiness: CustomDomainInstruction['rea
 
 export function DomainsCard(props: {
   entitled: boolean
-  domains: CustomDomainInstruction[]
+  domains: HostnameRow[]
   hostname: string
   pending: boolean
   error: Error | null
@@ -215,6 +220,11 @@ export function DomainsCard(props: {
               {domain.readiness !== 'ready' && (
                 <div className="space-y-1">
                   <DnsRecordTable records={hostnameRecords(domain)} />
+                  {domain.provenBy && (
+                    <p className="text-xs text-muted-foreground">
+                      {pendingProvenLabel(domain.provenBy)}
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">{FULL_NAMES_NOTE}</p>
                 </div>
               )}

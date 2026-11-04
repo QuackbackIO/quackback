@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { PERMISSIONS } from '../permissions'
-import { pendingProvenLabel, shownProofSource, verifiedThroughLabel } from '../domain-proof'
+import {
+  SSO_VERIFY_RECORD_HOST,
+  pendingProvenLabel,
+  shownProofSource,
+  ssoVerifyRecordValue,
+  verifiedThroughLabel,
+} from '../domain-proof'
 
 describe('shownProofSource', () => {
   it('names the source only to a viewer who may see what proved it', () => {
@@ -10,6 +16,7 @@ describe('shownProofSource', () => {
     expect(shownProofSource('web-address', [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])).toBe(
       'web-address'
     )
+    expect(shownProofSource('sso', [PERMISSIONS.AUTH_MANAGE])).toBe('sso')
   })
 
   it('says only that this workspace proved it to anyone else', () => {
@@ -20,6 +27,7 @@ describe('shownProofSource', () => {
     expect(shownProofSource('email-sending', [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])).toBe(
       'workspace'
     )
+    expect(shownProofSource('sso', [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN])).toBe('workspace')
   })
 })
 
@@ -29,5 +37,13 @@ describe('labels', () => {
     expect(verifiedThroughLabel('workspace')).toBe('Verified, already proven by this workspace')
     expect(pendingProvenLabel('email-sending')).toBe('Already proven through email sending')
     expect(pendingProvenLabel('workspace')).toBe('Already proven by this workspace')
+    expect(pendingProvenLabel('sso')).toBe('Already proven through single sign-on')
+  })
+})
+
+describe('single sign-on verification record', () => {
+  it('is the TXT the sign-in domain check looks for', () => {
+    expect(SSO_VERIFY_RECORD_HOST).toBe('_quackback-verify')
+    expect(ssoVerifyRecordValue('abc123')).toBe('qb-domain-verify=abc123')
   })
 })

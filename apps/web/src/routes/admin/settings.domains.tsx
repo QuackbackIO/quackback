@@ -13,8 +13,8 @@ import {
   mutateCloudCustomDomainFn,
   platformLabelFromHostname,
   updateCloudIdentityFn,
+  type WebAddress,
 } from '@/lib/server/functions/cloud-identity'
-import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import { platformUrlSuffix } from '@/lib/shared/platform-label'
 import { DomainsCard, QuackbackUrlCard } from '@/components/admin/settings/domains-cards'
 import {
@@ -71,7 +71,7 @@ async function loadOperatorHostnames(context: {
   const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
   const [entitled, domains, cloudIdentity] = await Promise.all([
     hasCustomDomainEntitlementFn(),
-    getCloudCustomDomainsFn().catch(() => [] as CustomDomainInstruction[]),
+    getCloudCustomDomainsFn().catch(() => [] as WebAddress[]),
     getCloudIdentityFn().catch(() => null),
     ensureBillingCatalogue(context.queryClient, context.billingEnabled),
   ])

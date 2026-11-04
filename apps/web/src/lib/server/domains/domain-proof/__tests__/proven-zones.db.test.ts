@@ -154,12 +154,40 @@ describe.skipIf(!fixture.available)('proven zones (real DB, rolled back)', () =>
       const zones = await getProvenZones()
       expect(zones).toEqual(
         expect.arrayContaining([
-          { zone: 'acme.com', source: 'email-sending', exact: false },
-          { zone: 'signed.example.com', source: 'email-sending', exact: false },
-          { zone: 'feedback.example.net', source: 'web-address', exact: true },
+          {
+            zone: 'acme.com',
+            source: 'email-sending',
+            exact: false,
+            record: { name: '_quackback.acme.com', value: OWNERSHIP.value },
+          },
+          {
+            zone: 'signed.example.com',
+            source: 'email-sending',
+            exact: false,
+            record: { name: 'qb._domainkey.signed.example.com', value: SIGNING_KEY.value },
+          },
+          { zone: 'feedback.example.net', source: 'web-address', exact: true, record: null },
         ])
       )
       expect(zones).toHaveLength(3)
+    })
+
+    it('adds verified single sign-on domains only when asked to', async () => {
+      const sso = await seedSsoDomain('Example.ORG', true)
+      await seedSsoDomain('pending.example.org', false)
+
+      expect(await getProvenZones()).toEqual([])
+      expect(await getProvenZones({ includeSso: true })).toEqual([
+        {
+          zone: 'example.org',
+          source: 'sso',
+          exact: false,
+          record: {
+            name: '_quackback-verify.example.org',
+            value: `qb-domain-verify=${sso.verificationToken}`,
+          },
+        },
+      ])
     })
 
     it('leaves out pending and failed sending rows', async () => {
@@ -189,7 +217,12 @@ describe.skipIf(!fixture.available)('proven zones (real DB, rolled back)', () =>
         dnsRecords: [SIGNING_KEY, PROVIDER_CNAME],
       })
       expect(await getProvenZones()).toEqual([
-        { zone: 'shared.example.com', source: 'email-sending', exact: false },
+        {
+          zone: 'shared.example.com',
+          source: 'email-sending',
+          exact: false,
+          record: { name: 'qb._domainkey.shared.example.com', value: SIGNING_KEY.value },
+        },
       ])
     })
 
@@ -199,7 +232,7 @@ describe.skipIf(!fixture.available)('proven zones (real DB, rolled back)', () =>
         { hostname: 'pending.example.net', readiness: 'pending' },
         { hostname: 'failed.example.net', readiness: 'failed' },
       ])
-      expect(await getProvenZones()).toEqual([])
+      expect(await getProvenZones({ includeSso: true })).toEqual([])
     })
   })
 
