@@ -17,7 +17,8 @@ import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
-import { applyDisplayName, sendViaSes } from './ses'
+import { applyDisplayName, sendViaSes, SesTenantPausedError } from './ses'
+import { reportSesTenantPaused, resolveSesTenant } from './tenant-hooks'
 import { sendViaResend } from './resend'
 import { listUnsubscribeHeaders } from './list-unsubscribe'
 import { currentEmailIdempotencyKey } from './idempotency'
@@ -76,6 +77,9 @@ import { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-
 import { CsatRequestEmail } from './templates/csat-request'
 import { VerifyAddressEmail } from './templates/verify-address'
 export { setEmailPoweredByResolver } from './powered-by'
+export { setSesTenantHooks } from './tenant-hooks'
+export type { SesTenantHooks, SesTenantSendContext } from './tenant-hooks'
+export { SesTenantPausedError } from './ses'
 export { setDefaultFromResolver, resetDefaultFromResolver } from './default-from'
 import { createElement } from 'react'
 import { EmailPoweredByProvider, resolveEmailPoweredBy } from './powered-by'
@@ -416,8 +420,13 @@ async function dispatch(
     // threading. What is lost is our ability to CHOOSE the id; the Message-ID
     // route home survives because the caller records the assigned one instead
     // of the minted one.
+    //
+    // The tenant is asked for here and nowhere else: only this provider has
+    // them, and auth mail never reaches the app's resolver (see tenant-hooks).
+    const tenantName = await resolveSesTenant({ emailType, from })
     const result = await sendViaSes({
       from,
+      ...(tenantName ? { tenantName } : {}),
       to: options.to,
       subject: options.subject,
       ...(html !== undefined ? { html } : {}),
@@ -427,6 +436,11 @@ async function dispatch(
       ...(options.attachments && options.attachments.length > 0
         ? { attachments: options.attachments }
         : {}),
+    }).catch(async (error: unknown) => {
+      if (error instanceof SesTenantPausedError) {
+        await reportSesTenantPaused(error.tenantName, error.detail)
+      }
+      throw error
     })
     // The id as the provider reported it, which is what its delivery events and
     // the threading map both name the message by. A raw inbound header quotes
