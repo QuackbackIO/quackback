@@ -8,9 +8,20 @@
  * the instructions rather than for whoever owns the domain. So the token is
  * matched WHOLE, and a record that merely mentions it is not proof.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { SendingDomainDnsRecord, SendingDomainOwnershipRecord } from '@/lib/server/db'
+
+/**
+ * The bounded resolver every other domain check reads through. With no reader
+ * passed, the check has to ask this one, never an unbounded lookup that can
+ * hold a background job for as long as a silent nameserver keeps it waiting.
+ */
+const boundedTxt = vi.hoisted(() => vi.fn<(host: string) => Promise<string[][]>>())
+vi.mock('@/lib/server/dns/resolver', () => ({
+  systemResolver: { resolveTxt: (host: string) => boundedTxt(host) },
+}))
 import { ownershipRecordSatisfied, verifySendingDomainDns } from '../domain-verification'
+import { generateDkimKey } from '../dkim-key'
 
 /**
  * A zone that has published EVERY record we hand out, plus a token.
@@ -146,5 +157,61 @@ describe('verifySendingDomainDns refuses to prove ownership from a public value'
         publishesEverything
       )
     ).toBe(false)
+  })
+})
+
+describe('verifySendingDomainDns with a row-minted signing key', () => {
+  const keyA = generateDkimKey().record
+  const keyB = generateDkimKey().record
+  /** A zone that answers each name with what was published there, and nothing else. */
+  const zoneOf =
+    (published: Record<string, string[]>) =>
+    async (host: string): Promise<string[][]> => {
+      const values = published[host]
+      if (!values) throw Object.assign(new Error('ENODATA'), { code: 'ENODATA' })
+      // Long values arrive in chunks; split to prove they are joined.
+      return values.map((v) => [v.slice(0, 100), v.slice(100)])
+    }
+
+  it('proves ownership when this row’s key is published at this row’s selector', async () => {
+    const zone = zoneOf({ [`${keyA.host}.acme.com`]: [keyA.value] })
+    expect(await verifySendingDomainDns('acme.com', [keyA], zone)).toBe(true)
+  })
+
+  it('matches on the key, forgiving spacing and tag order', async () => {
+    const p = keyA.value.split('p=')[1]
+    const zone = zoneOf({
+      [`${keyA.host}.acme.com`]: [`p=${p.slice(0, 50)} ${p.slice(50)}; v=DKIM1`],
+    })
+    expect(await verifySendingDomainDns('acme.com', [keyA], zone)).toBe(true)
+  })
+
+  it('refuses another row’s key, at either selector', async () => {
+    const zone = zoneOf({
+      [`${keyB.host}.acme.com`]: [keyB.value],
+      [`${keyA.host}.acme.com`]: [keyB.value],
+    })
+    expect(await verifySendingDomainDns('acme.com', [keyA], zone)).toBe(false)
+    expect(await verifySendingDomainDns('acme.com', [keyB], zone)).toBe(true)
+  })
+
+  it('refuses a DKIM TXT that carries no key of its own', async () => {
+    expect(
+      await verifySendingDomainDns(
+        'acme.com',
+        [
+          { type: 'TXT', host: 'x._domainkey', value: 'v=DKIM1; k=rsa', purpose: 'dkim' },
+        ] as unknown as SendingDomainOwnershipRecord[],
+        publishesEverything
+      )
+    ).toBe(false)
+  })
+})
+
+describe('verifySendingDomainDns with no reader passed', () => {
+  it('reads the zone through the bounded system resolver', async () => {
+    boundedTxt.mockResolvedValue([[ownership.value]])
+    expect(await verifySendingDomainDns('tenant-a.example', [ownership])).toBe(true)
+    expect(boundedTxt).toHaveBeenCalledWith('_quackback.tenant-a.example')
   })
 })

@@ -2,11 +2,40 @@ import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { buildAskDestinations } from '@/lib/shared/ask-destinations'
+import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
 import { getFeatureFlags } from '@/lib/server/domains/settings/settings.service'
 import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
 import { resolveMcpActor } from '../resolve-actor'
 import type { McpAuthContext, McpScope } from '../types'
-import { registerTool, requireScope, errorResult, compactJsonResult, READ_ONLY } from './helpers'
+import {
+  registerTool,
+  requireScope,
+  errorResult,
+  compactJsonResult,
+  heldPermissions,
+  READ_ONLY,
+} from './helpers'
+
+/**
+ * A page the tool links to and the permission its route opens to: one
+ * permission, or any one of several for a page that opens to holders of any.
+ */
+type NavigationEntry = { href: string; scope: McpScope } & (
+  { permission: PermissionKey } | { anyOf: readonly [PermissionKey, ...PermissionKey[]] }
+)
+
+/**
+ * The permission to ask of this caller: the entry's own, or the first of its
+ * `anyOf` they hold (the first listed when they hold none, so the refusal names
+ * one).
+ */
+export function navigationPermission(
+  entry: NavigationEntry,
+  held: ReadonlySet<PermissionKey> | undefined
+): PermissionKey {
+  if ('permission' in entry) return entry.permission
+  return entry.anyOf.find((p) => held?.has(p)) ?? entry.anyOf[0]
+}
 
 export const WORKSPACE_NAVIGATION = {
   general: {
@@ -31,7 +60,7 @@ export const WORKSPACE_NAVIGATION = {
   },
   domains: {
     href: '/admin/settings/domains',
-    permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+    anyOf: DOMAINS_PAGE_PERMISSIONS,
     scope: 'read:settings',
   },
   members: {
@@ -84,7 +113,7 @@ export const WORKSPACE_NAVIGATION = {
     permission: PERMISSIONS.STATUS_PAGE_MANAGE,
     scope: 'read:settings',
   },
-} as const satisfies Record<string, { href: string; permission: PermissionKey; scope: McpScope }>
+} as const satisfies Record<string, NavigationEntry>
 
 export type WorkspaceNavigationDestination = keyof typeof WORKSPACE_NAVIGATION
 export const WORKSPACE_NAVIGATION_DESTINATIONS = Object.keys(WORKSPACE_NAVIGATION) as [
@@ -103,7 +132,9 @@ export const workspaceNavigationInputSchema = z
 export function registerNavigationTools(server: McpServer, auth: McpAuthContext) {
   registerTool<{ destination: WorkspaceNavigationDestination }>(server, auth, {
     name: 'navigate_workspace',
-    permissions: ({ destination }) => [WORKSPACE_NAVIGATION[destination].permission],
+    permissions: ({ destination }, toolAuth) => [
+      navigationPermission(WORKSPACE_NAVIGATION[destination], heldPermissions(toolAuth)),
+    ],
     description: `Return an allowed workspace deep link without changing anything. Use this for operator-managed workspace names, billing or plans, authentication or SSO, domains, members or roles, API keys, integration OAuth, installing a site snippet, creating a board, portal header customization, and every delete request. These areas cannot be changed from chat. Never invent a URL. A delete request opens its product page for a person to review.
 Examples:
 {"destination":"members"}
@@ -117,10 +148,11 @@ Examples:
       const scopeDenied = requireScope(auth, entry.scope)
       if (scopeDenied) return scopeDenied
       const actor = await resolveMcpActor(auth, entry.scope)
-      if (!actor.permissions?.has(entry.permission)) {
+      const permission = navigationPermission(entry, actor.permissions)
+      if (!actor.permissions?.has(permission)) {
         return errorResult(
           new Error(
-            `Ask a workspace owner or an admin with ${entry.permission} permission to open this page.`
+            `Ask a workspace owner or an admin with ${permission} permission to open this page.`
           )
         )
       }
@@ -130,7 +162,6 @@ Examples:
         featureFlags,
         billingEnabled:
           commercial.enabled && (commercial.canUpgrade || commercial.canManageBilling),
-        domainsEnabled: commercial.enabled,
       }).find((item) => item.href === entry.href)
       if (!page) return errorResult(new Error('This page is unavailable for this workspace.'))
       return compactJsonResult({
