@@ -105,6 +105,7 @@ import {
   sendTestEmail,
   sendingAddressMode,
 } from '../sending-address'
+import { deleteSendingDomain, SendingDomainInUseError } from '../channel-account.service'
 
 const identity = (domain: string): SesDomainIdentity => ({
   domain,
@@ -482,6 +483,34 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       expect(await removeSendingAddress(old.id)).toEqual({
         lastOnDomain: { id: verified.id, domain: 'acme.com' },
       })
+    })
+
+    it('lets the domain be deleted once its last address is removed', async () => {
+      const teamId = await seedTeam()
+      const account = await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@acme.com',
+        module: 'support',
+      })
+      const { lastOnDomain } = await removeSendingAddress(account.id)
+      if (!lastOnDomain) throw new Error('expected the domain to be flagged')
+
+      await deleteSendingDomain(lastOnDomain.id)
+      expect(await domainsOf(teamId)).toEqual([])
+    })
+
+    it('still refuses to delete a domain a live address uses', async () => {
+      const teamId = await seedTeam()
+      const account = await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@acme.com',
+        module: 'support',
+      })
+      if (!account.sendingDomainId) throw new Error('expected a linked domain')
+      await expect(deleteSendingDomain(account.sendingDomainId)).rejects.toThrow(
+        SendingDomainInUseError
+      )
+      expect(await domainsOf(teamId)).toHaveLength(1)
     })
 
     it('flags nothing for an address with no domain', async () => {

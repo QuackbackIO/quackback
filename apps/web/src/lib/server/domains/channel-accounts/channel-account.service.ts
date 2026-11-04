@@ -15,6 +15,7 @@ import {
   and,
   or,
   isNull,
+  isNotNull,
   inArray,
   desc,
   sql,
@@ -146,13 +147,21 @@ export class SendingDomainInUseError extends Error {
 }
 
 export async function deleteSendingDomain(id: SendingDomainId): Promise<void> {
-  const [referenced] = await db
-    .select({ id: channelAccounts.id })
-    .from(channelAccounts)
-    .where(and(eq(channelAccounts.sendingDomainId, id), isNull(channelAccounts.deletedAt)))
-    .limit(1)
-  if (referenced) throw new SendingDomainInUseError()
-  await db.delete(emailSendingDomains).where(eq(emailSendingDomains.id, id))
+  await db.transaction(async (tx) => {
+    const [referenced] = await tx
+      .select({ id: channelAccounts.id })
+      .from(channelAccounts)
+      .where(and(eq(channelAccounts.sendingDomainId, id), isNull(channelAccounts.deletedAt)))
+      .limit(1)
+    if (referenced) throw new SendingDomainInUseError()
+    // A removed address keeps its link, and the RESTRICT counts it too, so the
+    // link goes before the domain does.
+    await tx
+      .update(channelAccounts)
+      .set({ sendingDomainId: null })
+      .where(and(eq(channelAccounts.sendingDomainId, id), isNotNull(channelAccounts.deletedAt)))
+    await tx.delete(emailSendingDomains).where(eq(emailSendingDomains.id, id))
+  })
 }
 
 // ---------------------------------------------------------------------------
