@@ -1,5 +1,6 @@
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { AI_ANY_PERMISSIONS } from '@/lib/shared/ai-permissions'
+import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
 import {
   AUTOMATION_PAGES,
@@ -65,16 +66,6 @@ export interface SettingsModuleRow {
   to: SettingsPagePath
   pages: SettingsModuleRowPage[]
 }
-
-/**
- * Who can open the Domains page: a holder of any permission that owns one of
- * the kinds of domain it lists (web addresses, email sending, sign-in).
- */
-export const DOMAINS_PAGE_PERMISSIONS = [
-  PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
-  PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
-  PERMISSIONS.AUTH_MANAGE,
-] as const satisfies readonly PermissionKey[]
 
 /** The permission each module page's route checks when it opens. */
 const MODULE_PAGE_PERMISSIONS = {

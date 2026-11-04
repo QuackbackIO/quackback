@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
 import {
-  DOMAINS_PAGE_PERMISSIONS,
   buildNavSections,
   isNavModule,
   navSectionsFor,

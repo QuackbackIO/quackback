@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { assertRouteAnyPermission } from '@/lib/shared/route-permission'
-import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/settings-nav-sections'
+import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
 import { useMutation, type QueryClient } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
