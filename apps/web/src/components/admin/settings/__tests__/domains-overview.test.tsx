@@ -61,15 +61,15 @@ describe('Email sending section', () => {
     )
 
     const live = rowOf('acme.com')
-    expect(live).toHaveTextContent('billing@, help@ · Ownership proven')
-    expect(live).not.toHaveTextContent('Setting up')
+    expect(live).toHaveTextContent('billing@, help@ · Ownership verified')
+    expect(live).not.toHaveTextContent('Pending')
     expect(live).not.toHaveTextContent('Needs attention')
     expect(live).toHaveAttribute('href', '/admin/settings/channels/email')
 
     const pending = rowOf('acme.co.uk')
     expect(pending).toHaveTextContent('updates@')
-    expect(pending).not.toHaveTextContent('Ownership proven')
-    expect(pending).toHaveTextContent('Setting up')
+    expect(pending).not.toHaveTextContent('Ownership verified')
+    expect(pending).toHaveTextContent('Pending')
 
     expect(rowOf('example.org')).toHaveTextContent('Needs attention')
   })
@@ -94,24 +94,24 @@ describe('Sign-in section', () => {
     expect(rowOf('example.org')).toHaveTextContent('Verified')
     expect(rowOf('example.org')).not.toHaveTextContent('through')
     const pending = rowOf('example.net')
-    expect(pending).toHaveTextContent('Setting up')
+    expect(pending).toHaveTextContent('Pending')
     expect(pending).not.toHaveTextContent('Verified')
     expect(pending).toHaveAttribute('href', '/admin/settings/security/authentication')
     const ready = rowOf('eu.acme.com')
-    expect(ready).toHaveTextContent('Already proven, ready to verify')
-    expect(ready).toHaveTextContent('Setting up')
-    expect(rowOf('example.io')).toHaveTextContent('Verified, already proven by this workspace')
+    expect(ready).toHaveTextContent('Already verified elsewhere, ready to use')
+    expect(ready).toHaveTextContent('Pending')
+    expect(rowOf('example.io')).toHaveTextContent('Verified by this workspace')
   })
 })
 
-describe('Help center web address', () => {
+describe('Help center custom domain', () => {
   it('links to the help center Domains tab for a viewer who can open it', () => {
     render(
       <HelpCenterAddressSection domain={{ domain: 'help.acme.com', verified: false }} canOpen />
     )
     const row = rowOf('help.acme.com')
     expect(row).toHaveAttribute('href', '/admin/settings/help-center?tab=domains-languages')
-    expect(row).toHaveTextContent('Setting up')
+    expect(row).toHaveTextContent('Pending')
   })
 
   it('renders without a link or chevron for a viewer who cannot', () => {
@@ -124,7 +124,7 @@ describe('Help center web address', () => {
     const row = rowOf('help.acme.com')
     expect(row.tagName).not.toBe('A')
     expect(row.querySelector('[data-slot="settings-list-chevron"]')).toBeNull()
-    expect(row).not.toHaveTextContent('Setting up')
+    expect(row).not.toHaveTextContent('Pending')
   })
 })
 

@@ -610,7 +610,7 @@ export async function refreshSendingDomain(
 
 /**
  * Open a fresh automatic check window on a domain and check it now: the
- * "Check again" action, for a domain whose window ran out before its records
+ * "Verify" action, for a domain whose window ran out before its records
  * were published.
  */
 export async function restartSendingDomainChecks(

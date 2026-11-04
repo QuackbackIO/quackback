@@ -1,5 +1,5 @@
 /**
- * The automatic check on domains being set up, the "Check again" restart, and
+ * The automatic check on domains being set up, the "Verify" restart, and
  * the notifications a status change sends, against a real database, a fake
  * provider and a fake zone.
  *
@@ -336,7 +336,7 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
       expect(await bellsFor([admin], 'sending_domain_live')).toHaveLength(1)
     })
     it('rings the live bell once when two checks see the domain go live together', async () => {
-      // The watch job and a person's Check again, at the same moment: both
+      // The watch job and a person's Verify, at the same moment: both
       // read the row as pending and both find it verified.
       const admin = await seedPerson('admin')
       const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'a.example' })
