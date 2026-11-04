@@ -26,7 +26,13 @@ import {
 } from '@/lib/client/mutations/channel-accounts'
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import { DomainSetupPanel } from './domain-setup-panel'
-import { domainPhase, failingRecordName, type DomainPhase } from './sending-domain-view'
+import {
+  domainPhase,
+  failingRecordName,
+  signingKeyFailing,
+  signingKeyProblem,
+  type DomainPhase,
+} from './sending-domain-view'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -290,6 +296,7 @@ function pendingMeta(
 ): string | null {
   if (phase === 'live') return null
   if (!first) return `${area} · Waiting for ${domain.domain}`
+  if (signingKeyFailing(domain, phase)) return `${signingKeyProblem(domain.domain)}${fallback}`
   if (phase === 'not-found') return `Records not found after 72 hours.${fallback}`
   if (phase === 'attention') {
     const failing = domain.dnsRecords.find((r) => r.check && r.check.state !== 'found')

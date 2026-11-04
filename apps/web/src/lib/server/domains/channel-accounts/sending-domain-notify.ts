@@ -10,7 +10,7 @@
  * the status change it reports.
  */
 import type { PrincipalId, UserId } from '@quackback/ids'
-import type { SendingDomainAttentionRecord } from '@quackback/email'
+import type { SendingDomainAttentionProblem } from '@quackback/email'
 import {
   db,
   and,
@@ -30,6 +30,7 @@ import type { NotificationType } from '@/lib/server/domains/notifications/notifi
 import { batchGetNotificationPreferences } from '@/lib/server/domains/subscriptions/subscription.service'
 import { shouldNotify } from '@/lib/server/domains/subscriptions/notification-matrix'
 import { recordName } from './record-check'
+import { isKeyRecord } from './dkim-key'
 
 const log = logger.child({ component: 'sending-domain-notify' })
 
@@ -55,13 +56,19 @@ export async function sendingDomainManagers(): Promise<Manager[]> {
 }
 
 /** The first record whose own check says it is wrong, in the order they are published. */
-export function failingRecord(domain: EmailSendingDomain): SendingDomainAttentionRecord | null {
+export function failingRecord(domain: EmailSendingDomain): SendingDomainAttentionProblem {
   const failing = (domain.dnsRecords ?? []).find(
     (r: SendingDomainDnsRecord) => r.check && r.check.state !== 'found'
   )
-  if (!failing?.check || failing.check.state === 'found') return null
+  // Every listed record looks right (or the key signing the mail is not one of
+  // them), yet the domain stopped verifying: the signing key is what failed.
+  if (!failing?.check || failing.check.state === 'found') return 'signing-key'
+  // On a row whose identity already had a key, the row's own key TXT proves
+  // ownership and signs nothing, so it is named as the ownership record.
+  const purpose =
+    domain.dkimMode === 'shared' && isKeyRecord(failing) ? 'ownership' : failing.purpose
   return {
-    purpose: failing.purpose,
+    purpose,
     type: failing.type,
     name: recordName(domain.domain, failing.host),
     state: failing.check.state,
@@ -136,7 +143,7 @@ export async function notifySendingDomainNeedsAttention(domain: EmailSendingDoma
 async function emailManagers(
   managers: Manager[],
   domain: EmailSendingDomain,
-  record: SendingDomainAttentionRecord | null
+  record: SendingDomainAttentionProblem
 ): Promise<void> {
   const { sendSendingDomainAttentionEmail, isEmailConfigured } = await import('@quackback/email')
   if (!isEmailConfigured()) return

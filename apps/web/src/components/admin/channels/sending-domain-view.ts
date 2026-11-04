@@ -63,10 +63,40 @@ const RECORD_LABEL: Record<string, string> = {
   'mail-from': 'Return path',
 }
 
-/** The short label for what a record does. */
-export function recordLabel(record: Pick<DnsRecordDTO, 'purpose'>): string {
+/**
+ * The short label for what a record does. On a `shared` domain the row's own
+ * key TXT signs nothing (the identity keeps its key) and only proves ownership.
+ */
+export function recordLabel(
+  record: Pick<DnsRecordDTO, 'purpose' | 'type'>,
+  dkimMode?: SendingDomainDTO['dkimMode']
+): string {
+  if (dkimMode === 'shared' && record.purpose === 'dkim' && record.type === 'TXT') {
+    return 'Ownership'
+  }
   return RECORD_LABEL[record.purpose] ?? record.purpose
 }
+
+/** Whether a shared domain signs with a key none of its listed records carry. */
+export function signsWithUnlistedKey(domain: SendingDomainDTO): boolean {
+  return (
+    domain.dkimMode === 'shared' &&
+    !domain.dnsRecords.some((r) => r.purpose === 'dkim' && r.type === 'CNAME')
+  )
+}
+
+/**
+ * Whether a domain that should be live is held up by its signing key rather
+ * than a record: every listed record is found, yet it is not live.
+ */
+export function signingKeyFailing(domain: SendingDomainDTO, phase: DomainPhase): boolean {
+  if (phase !== 'not-found' && phase !== 'attention') return false
+  const records = domain.dnsRecords
+  return records.length > 0 && records.every((r) => r.check?.state === 'found')
+}
+
+/** The sentence for a signing key that is not working. */
+export const signingKeyProblem = (domain: string) => `The signing key for ${domain} isn't working.`
 
 /**
  * The records to publish, as plain text a person can paste into a ticket or

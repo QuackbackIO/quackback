@@ -297,23 +297,23 @@ describe('the records of a domain signed with its own key', () => {
     ])
   })
 
-  it('counts as verified on its own proof, the provider sending, and MAIL FROM ready', () => {
-    // On a shared identity the provider signs with whatever key it already
-    // has, so its DKIM status is not this row's to wait on.
-    const shared = identity({ dkimStatus: 'PENDING', verifiedForSending: true })
+  it('needs the provider to sign with a working key, whoever supplied it', () => {
+    // A key that is not yet working (or has stopped) must hold the row back,
+    // so a signing problem always shows rather than hiding behind found records.
     expect(
-      sendingDomainStatusFrom({ identity: shared, ownershipProven: true, dkimMode: 'byo' })
-    ).toBe('verified')
-    expect(sendingDomainStatusFrom({ identity: shared, ownershipProven: true })).toBe('pending')
+      sendingDomainStatusFrom({
+        identity: identity({ dkimStatus: 'PENDING', verifiedForSending: true }),
+        ownershipProven: true,
+      })
+    ).toBe('pending')
+    expect(sendingDomainStatusFrom({ identity: identity(), ownershipProven: true })).toBe(
+      'verified'
+    )
     expect(
       sendingDomainStatusFrom({
         identity: identity({ verifiedForSending: false }),
         ownershipProven: true,
-        dkimMode: 'byo',
       })
-    ).toBe('pending')
-    expect(
-      sendingDomainStatusFrom({ identity: identity(), ownershipProven: false, dkimMode: 'byo' })
     ).toBe('pending')
   })
 })

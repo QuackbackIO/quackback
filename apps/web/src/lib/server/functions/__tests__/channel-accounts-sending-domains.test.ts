@@ -259,7 +259,7 @@ describe('getEmailChannelConfigFn domains', () => {
 })
 
 describe('the sending domain DTO', () => {
-  it.each(['easy', 'byo'] as const)('carries the %s signing mode', async (dkimMode) => {
+  it.each(['easy', 'byo', 'shared'] as const)('carries the %s signing mode', async (dkimMode) => {
     hoisted.addressMode.mockResolvedValue('verified-domains')
     hoisted.getInboundRoute.mockResolvedValue(null)
     hoisted.listChannelAccounts.mockResolvedValue([])

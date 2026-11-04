@@ -328,6 +328,22 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       expect(createIdentity).not.toHaveBeenCalled()
     })
 
+    it('sets up a pending identity that already exists without re-keying it (single workspace)', async () => {
+      vi.stubEnv('QUACKBACK_TENANCY', '')
+      existingIdentity.mockImplementation((domain) => ({
+        ...identity(domain),
+        verifiedForSending: false,
+      }))
+      createIdentity.mockImplementation(async (domain) => ({
+        identity: { ...identity(domain), verifiedForSending: false },
+        preexisting: true,
+      }))
+      const teamId = await seedTeam()
+      await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com', module: 'support' })
+      const [row] = await domainsOf(teamId)
+      expect(row.dkimMode).toBe('shared')
+    })
+
     it('still sets up an unverified identity on a single-workspace server', async () => {
       vi.stubEnv('QUACKBACK_TENANCY', '')
       existingIdentity.mockImplementation((domain) => ({

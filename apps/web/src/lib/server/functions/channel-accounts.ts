@@ -116,9 +116,11 @@ export interface SendingDomainDTO {
   /**
    * How the domain is signed: `byo` with a key of its own (one TXT, which also
    * proves ownership), `easy` with the provider's keys (CNAMEs plus the
-   * ownership TXT). The records reflect it; the page needs nothing else.
+   * ownership TXT), `shared` with the key the identity already had (the row's
+   * own key TXT proves ownership only, beside the provider's CNAMEs when that
+   * key is the provider's).
    */
-  dkimMode: 'easy' | 'byo'
+  dkimMode: 'easy' | 'byo' | 'shared'
   /**
    * Until when a pending domain is checked automatically. A pending domain
    * whose window has passed is "not found after 72 hours"; one with no window yet is still being set up.

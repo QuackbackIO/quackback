@@ -67,7 +67,7 @@ import { PasswordResetEmail } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 import {
   SendingDomainAttentionEmail,
-  type SendingDomainAttentionRecord,
+  type SendingDomainAttentionProblem,
 } from './templates/sending-domain-attention'
 import { NewSignInEmail } from './templates/new-sign-in'
 import { StatusIncidentPublishedEmail } from './templates/status-incident-published'
@@ -944,7 +944,7 @@ export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<E
 interface SendSendingDomainAttentionParams {
   to: SecureRecipient
   domain: string
-  record?: SendingDomainAttentionRecord | null
+  record?: SendingDomainAttentionProblem | null
   settingsUrl?: string | null
   workspaceName?: string
   logoUrl?: string
@@ -1863,7 +1863,10 @@ export {
   SendingDomainAttentionEmail,
   sendingDomainProblem,
 } from './templates/sending-domain-attention'
-export type { SendingDomainAttentionRecord } from './templates/sending-domain-attention'
+export type {
+  SendingDomainAttentionRecord,
+  SendingDomainAttentionProblem,
+} from './templates/sending-domain-attention'
 export { NewSignInEmail } from './templates/new-sign-in'
 export { StatusIncidentPublishedEmail } from './templates/status-incident-published'
 export type { IncidentImpact } from './templates/status-incident-published'

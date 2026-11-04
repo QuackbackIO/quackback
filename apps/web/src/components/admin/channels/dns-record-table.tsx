@@ -60,7 +60,7 @@ export function SendingRecordTable({
       records={domain.dnsRecords.map((r): DnsRecordRow => {
         const status = recordStatus(r, { domain: domain.domain, phase })
         return {
-          label: recordLabel(r),
+          label: recordLabel(r, domain.dkimMode),
           type: recordTypeLabel(r),
           name: r.host,
           value: r.value,

@@ -270,16 +270,27 @@ export function sendingDomainDnsRecords(args: {
   /** The row's stored MAIL FROM label. */
   mailFromLabel: string
   /**
-   * The row's own signing key records, for a row signed with its own key. They
-   * replace the token and the provider's CNAMEs: the key is both the signing
-   * record and the proof.
+   * The row's own key records, for a row set up with a key of its own. They
+   * replace the token: the key is the proof, and for `byo` also the signing
+   * record.
    */
   signingKeys?: SendingDomainKeyRecord[]
+  /**
+   * `shared`: the identity signs with the key it already had, so its CNAMEs
+   * are listed too when that key is the provider's. A key supplied elsewhere
+   * cannot be read, so nothing is listed for it.
+   */
+  dkimMode?: SendingDomainDkimMode
 }): SendingDomainDnsRecord[] {
   const records: SendingDomainDnsRecord[] = args.signingKeys
     ? args.signingKeys.map(({ type, host, value, purpose }) => ({ type, host, value, purpose }))
     : [ownershipRecord(args.ownershipToken ?? '')]
-  for (const token of args.signingKeys ? [] : (args.identity?.dkimTokens ?? [])) {
+  const providerKeys =
+    !args.signingKeys ||
+    (args.dkimMode === 'shared' &&
+      (args.identity?.signingOrigin === 'ses' ||
+        (!args.identity?.signingOrigin && (args.identity?.dkimTokens.length ?? 0) > 0)))
+  for (const token of providerKeys ? (args.identity?.dkimTokens ?? []) : []) {
     records.push({
       type: 'CNAME',
       host: `${token}._domainkey`,
@@ -324,18 +335,13 @@ export function sendingDomainDnsRecords(args: {
 export function sendingDomainStatusFrom(args: {
   identity: SesDomainIdentity | null
   ownershipProven: boolean
-  /**
-   * A row signed with its own key waits on the provider's readiness to send,
-   * not on its DKIM status: on a shared identity that status is about the key
-   * the identity already had, not this row's.
-   */
-  dkimMode?: SendingDomainDkimMode
 }): 'pending' | 'verified' | 'failed' {
   const { identity, ownershipProven } = args
   if (identity?.dkimStatus === 'FAILED') return 'failed'
   if (!ownershipProven || !identity) return 'pending'
-  const signable =
-    (args.dkimMode === 'byo' || identity.dkimStatus === 'SUCCESS') && identity.verifiedForSending
+  // Whatever key signs (the provider's, this row's, or one the identity already
+  // had), its DKIM status is required, so a signing problem always shows.
+  const signable = identity.dkimStatus === 'SUCCESS' && identity.verifiedForSending
   const mailFromReady = identity.mailFrom?.status === 'SUCCESS'
   return signable && mailFromReady ? 'verified' : 'pending'
 }
@@ -435,6 +441,7 @@ export async function provisionSendingDomain(input: {
   })
 
   let identity: SesDomainIdentity
+  let preexisting = false
   try {
     // An identity that already exists (another workspace's, or a re-add) keeps
     // its key: the provider signs with that, and this row's record still proves
@@ -443,7 +450,8 @@ export async function provisionSendingDomain(input: {
       selector: key.selector,
       privateKey: key.privateKey,
     })
-    if (!created.preexisting) {
+    preexisting = created.preexisting
+    if (!preexisting) {
       await putSesMailFromDomain(domain, mailFromDomainFor(domain, mailFromLabel))
     }
     // Re-read so the stored MAIL FROM state is the provider's, not our assumption
@@ -456,12 +464,17 @@ export async function provisionSendingDomain(input: {
     throw err
   }
 
+  // An identity that was already there keeps signing with its own key; this
+  // row's key then proves ownership only.
+  const dkimMode: SendingDomainDkimMode = preexisting ? 'shared' : 'byo'
+
   // Records and setup only: the status and the verified stamp are the poll's
   // to move.
   const [updated] = await db
     .update(emailSendingDomains)
     .set({
       mailFromLabel,
+      dkimMode,
       autoCheckUntil: new Date(Date.now() + AUTO_CHECK_WINDOW_MS),
       preflight,
       dnsRecords: sendingDomainDnsRecords({
@@ -470,6 +483,7 @@ export async function provisionSendingDomain(input: {
         identity,
         mailFromLabel,
         signingKeys: [key.record],
+        dkimMode,
       }),
       updatedAt: new Date(),
     })
@@ -522,7 +536,7 @@ export async function refreshSendingDomain(
   // A row signed with its own key proves ownership with that key, which cannot
   // be re-minted (the private half was never kept). A row on the provider's own
   // keys proves it with its `_quackback` token.
-  const byo = row.dkimMode === 'byo'
+  const byo = row.dkimMode !== 'easy'
   const signingKeys = byo ? (row.dnsRecords ?? []).filter(isKeyRecord) : undefined
   const existing = ownershipRecordsOf(row.dnsRecords ?? [])
   const ownershipToken = byo
@@ -553,7 +567,7 @@ export async function refreshSendingDomain(
     identity = (await getSesDomainIdentity(row.domain)) ?? identity
   }
 
-  const status = sendingDomainStatusFrom({ identity, ownershipProven, dkimMode: row.dkimMode })
+  const status = sendingDomainStatusFrom({ identity, ownershipProven })
 
   const now = new Date()
   // Each record's own state, for the person publishing them. Recorded beside
@@ -566,6 +580,7 @@ export async function refreshSendingDomain(
       identity,
       mailFromLabel: row.mailFromLabel,
       signingKeys,
+      dkimMode: row.dkimMode,
     }),
     row.dnsRecords ?? []
   )

@@ -296,6 +296,94 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     ])
   })
 
+  describe('an identity that already existed (shared)', () => {
+    const verifiedState = {
+      verifiedForSending: true,
+      mailFrom: { domain: 'qb-bounce.tenant-a.example', status: 'SUCCESS' as const },
+    }
+
+    it('lists the provider CNAMEs it signs with, and its own key as ownership only', async () => {
+      const teamId = await seedTeam()
+      createIdentity.mockResolvedValue(foundIt({ signingOrigin: 'ses', dkimStatus: 'PENDING' }))
+      getIdentity.mockResolvedValue(identity({ signingOrigin: 'ses', dkimStatus: 'PENDING' }))
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+
+      expect(row.dkimMode).toBe('shared')
+      expect(row.dnsRecords.map((r) => `${r.type} ${r.host} ${r.purpose}`)).toEqual([
+        `TXT ${createIdentity.mock.calls[0][1]?.selector}._domainkey dkim`,
+        'CNAME aaa._domainkey dkim',
+        'CNAME bbb._domainkey dkim',
+        'CNAME ccc._domainkey dkim',
+        'MX qb-bounce mail-from',
+        'TXT qb-bounce mail-from',
+      ])
+
+      // Owned, sending, MAIL FROM ready, but the provider's key not yet working.
+      ownershipResolves.mockResolvedValue(true)
+      getIdentity.mockResolvedValue(
+        identity({ signingOrigin: 'ses', dkimStatus: 'PENDING', ...verifiedState })
+      )
+      expect((await refreshSendingDomain(row.id))?.status).toBe('pending')
+      expect(lastChecked().map((r) => r.purpose)).toEqual(['dkim'])
+      expect(lastChecked()[0].type).toBe('TXT')
+
+      getIdentity.mockResolvedValue(
+        identity({ signingOrigin: 'ses', dkimStatus: 'SUCCESS', ...verifiedState })
+      )
+      expect((await refreshSendingDomain(row.id))?.status).toBe('verified')
+    })
+
+    it('lists no signing records when the identity signs with a key supplied elsewhere', async () => {
+      const teamId = await seedTeam()
+      const external = { signingOrigin: 'external' as const, dkimTokens: ['other'] }
+      createIdentity.mockResolvedValue(foundIt({ ...external, dkimStatus: 'PENDING' }))
+      getIdentity.mockResolvedValue(identity({ ...external, dkimStatus: 'PENDING' }))
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+
+      expect(row.dkimMode).toBe('shared')
+      expect(row.dnsRecords.map((r) => `${r.type} ${r.purpose}`)).toEqual([
+        'TXT dkim',
+        'MX mail-from',
+        'TXT mail-from',
+      ])
+
+      ownershipResolves.mockResolvedValue(true)
+      getIdentity.mockResolvedValue(
+        identity({ ...external, dkimStatus: 'FAILED', ...verifiedState })
+      )
+      expect((await refreshSendingDomain(row.id))?.status).toBe('failed')
+      getIdentity.mockResolvedValue(
+        identity({ ...external, dkimStatus: 'SUCCESS', ...verifiedState })
+      )
+      expect((await refreshSendingDomain(row.id))?.status).toBe('verified')
+    })
+
+    it('recomposes the signing records from the identity each check', async () => {
+      const teamId = await seedTeam()
+      createIdentity.mockResolvedValue(foundIt({ signingOrigin: 'external', dkimTokens: ['x'] }))
+      getIdentity.mockResolvedValue(identity({ signingOrigin: 'external', dkimTokens: ['x'] }))
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+      expect(row.dnsRecords.filter((r) => r.type === 'CNAME')).toEqual([])
+
+      getIdentity.mockResolvedValue(identity({ signingOrigin: 'ses' }))
+      const refreshed = await refreshSendingDomain(row.id)
+      expect(refreshed?.dnsRecords.filter((r) => r.type === 'CNAME')).toHaveLength(3)
+      // Its own key is kept, never re-minted.
+      expect(refreshed?.dnsRecords[0].value).toBe(row.dnsRecords[0].value)
+    })
+  })
+
+  it('keeps a fresh row on its own key, and waits for the provider to sign with it', async () => {
+    const teamId = await seedTeam()
+    const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+    expect(row.dkimMode).toBe('byo')
+    ownershipResolves.mockResolvedValue(true)
+    getIdentity.mockResolvedValue(identity({ dkimStatus: 'PENDING' }))
+    expect((await refreshSendingDomain(row.id))?.status).toBe('pending')
+    getIdentity.mockResolvedValue(identity({ dkimStatus: 'SUCCESS' }))
+    expect((await refreshSendingDomain(row.id))?.status).toBe('verified')
+  })
+
   it('lets two rows on one domain each prove ownership with their own key, re-keying nothing', async () => {
     const a = await provisionSendingDomain({
       owningTeamId: await seedTeam(),

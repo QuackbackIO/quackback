@@ -13,10 +13,17 @@ export interface SendingDomainAttentionRecord {
   seen?: string
 }
 
+/**
+ * What is wrong: the first listed record that failed its check, or
+ * `signing-key` when every listed record looks right (or the key signing the
+ * mail is not one of them) and signing still fails.
+ */
+export type SendingDomainAttentionProblem = SendingDomainAttentionRecord | 'signing-key'
+
 export interface SendingDomainAttentionEmailProps {
   domain: string
-  /** The first record that failed its check; absent when every record still looks right. */
-  record?: SendingDomainAttentionRecord | null
+  /** What failed; absent when nothing more specific is known. */
+  record?: SendingDomainAttentionProblem | null
   settingsUrl?: string | null
   workspaceName?: string
   logoUrl?: string
@@ -31,9 +38,10 @@ const PURPOSE_LABEL: Record<SendingDomainAttentionRecord['purpose'], string> = {
 /** One sentence naming the record and what is wrong with it. */
 export function sendingDomainProblem(
   domain: string,
-  record: SendingDomainAttentionRecord | null | undefined
+  record: SendingDomainAttentionProblem | null | undefined
 ): string {
   if (!record) return `The mail provider stopped confirming ${domain}.`
+  if (record === 'signing-key') return `The signing key for ${domain} isn't working.`
   const named = `The ${PURPOSE_LABEL[record.purpose]} (${record.type} ${record.name})`
   if (record.state === 'proxied') return `${named} is proxied. Turn off any proxy for it.`
   if (record.state === 'mismatch') {

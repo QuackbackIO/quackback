@@ -34,9 +34,10 @@ const providerState = new Map<string, SesDomainIdentity>()
 const getIdentity = vi.fn(async (domain: string) => providerState.get(domain) ?? null)
 vi.mock('@quackback/email/ses-identity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@quackback/email/ses-identity')>()),
+  // An identity the provider already holds is reported as pre-existing, as SES does.
   createSesDomainIdentity: async (domain: string): Promise<SesIdentityCreation> => ({
     identity: providerState.get(domain) ?? pendingIdentity(domain),
-    preexisting: false,
+    preexisting: providerState.has(domain),
   }),
   getSesDomainIdentity: (domain: string) => getIdentity(domain),
   putSesMailFromDomain: async () => undefined,
@@ -423,6 +424,32 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
       // The next sweep finds it already demoted, and says nothing again.
       await sweepSendingDomains()
       expect(await bellsFor([admin], 'sending_domain_needs_attention')).toHaveLength(1)
+    })
+
+    it('names the signing key when an identity that was already there stops signing', async () => {
+      const admin = await seedPerson('admin')
+      // The identity existed before this row: it keeps the key it signs with.
+      providerState.set('a.example', {
+        ...verifiedIdentity('a.example'),
+        signingOrigin: 'external',
+      })
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'a.example' })
+      expect(row.dkimMode).toBe('shared')
+      publish('a.example', row.dnsRecords)
+      await refreshSendingDomain(row.id)
+      expect((await getSendingDomain(row.id))?.status).toBe('verified')
+
+      // Every listed record is still in place; the key nobody here lists failed.
+      providerState.set('a.example', {
+        ...verifiedIdentity('a.example'),
+        signingOrigin: 'external',
+        dkimStatus: 'FAILED',
+      })
+      expect((await sweepSendingDomains()).demoted).toBe(1)
+
+      const bells = await bellsFor([admin], 'sending_domain_needs_attention')
+      expect(bells.map((b) => b.body)).toEqual(["The signing key for a.example isn't working."])
+      expect(sentAttention.mock.calls[0][0]).toMatchObject({ record: 'signing-key' })
     })
   })
 })

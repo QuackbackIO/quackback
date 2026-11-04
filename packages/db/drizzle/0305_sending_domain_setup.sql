@@ -2,7 +2,8 @@
 -- Sending domain setup v1: stored MAIL FROM label, automatic check window,
 -- pre-flight results, and how the domain is signed. Existing domains keep the
 -- label they were verified with and stay on the provider's own DKIM keys
--- ('easy'); new ones are created with a key of their own ('byo').
+-- ('easy'); new ones are created with a key of their own ('byo'), or keep the
+-- key an identity that already existed signs with ('shared').
 ALTER TABLE "email_sending_domains"
   ADD COLUMN IF NOT EXISTS "mail_from_label" text NOT NULL DEFAULT 'bounce',
   ADD COLUMN IF NOT EXISTS "auto_check_until" timestamptz,

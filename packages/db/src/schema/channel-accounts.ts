@@ -131,8 +131,12 @@ export type SendingDomainProofRecord = SendingDomainOwnershipRecord | SendingDom
  *   `_quackback` TXT as ownership proof. Rows set up before `byo` existed.
  * - `byo`: a key minted for the row, published as one TXT that also proves
  *   ownership.
+ * - `shared`: the identity already existed when the row was added, so it keeps
+ *   signing with the key it had. The row's own key TXT proves ownership only,
+ *   and the records the identity signs with are listed beside it when they are
+ *   the provider's CNAMEs.
  */
-export type SendingDomainDkimMode = 'easy' | 'byo'
+export type SendingDomainDkimMode = 'easy' | 'byo' | 'shared'
 
 /**
  * What was learned about a domain's DNS before its identity was created, and

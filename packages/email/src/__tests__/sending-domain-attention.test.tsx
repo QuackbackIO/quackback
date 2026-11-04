@@ -17,6 +17,13 @@ function visibleText(html: string): string {
 }
 
 describe('SendingDomainAttentionEmail', () => {
+  it('says the signing key is not working when no listed record is at fault', async () => {
+    const text = visibleText(
+      await render(SendingDomainAttentionEmail({ domain: 'acme.com', record: 'signing-key' }))
+    )
+    expect(text).toContain("The signing key for acme.com isn't working.")
+  })
+
   it('names the domain and the record that is missing', async () => {
     const text = visibleText(
       await render(

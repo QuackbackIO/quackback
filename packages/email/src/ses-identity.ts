@@ -117,6 +117,12 @@ export interface SesDomainIdentity {
    */
   signingHostedZone: string | null
   dkimStatus: SesDkimStatus | null
+  /**
+   * Whose key the identity signs with, when SES says: `ses` for a key SES
+   * issued (Easy DKIM, published as CNAMEs), `external` for a key someone
+   * supplied. Absent when the response does not name it.
+   */
+  signingOrigin?: 'ses' | 'external'
   /** SES's own summary of whether it will sign for this identity. */
   verifiedForSending: boolean
   mailFrom: { domain: string; status: SesMailFromStatus | null } | null
@@ -292,11 +298,19 @@ function toIdentity(
 ): SesDomainIdentity {
   const dkim = response.DkimAttributes
   const mailFrom = 'MailFromAttributes' in response ? response.MailFromAttributes : undefined
+  // Region-specific Easy DKIM keys report AWS_SES_<REGION>; all are SES-issued.
+  const origin = dkim?.SigningAttributesOrigin
+  const signingOrigin = origin?.startsWith('AWS_SES')
+    ? 'ses'
+    : origin === 'EXTERNAL'
+      ? 'external'
+      : undefined
   return {
     domain,
     dkimTokens: dkim?.Tokens ?? [],
     signingHostedZone: dkim?.SigningHostedZone ?? null,
     dkimStatus: (dkim?.Status as SesDkimStatus | undefined) ?? null,
+    ...(signingOrigin ? { signingOrigin } : {}),
     verifiedForSending: response.VerifiedForSendingStatus === true,
     mailFrom: mailFrom?.MailFromDomain
       ? {

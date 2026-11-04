@@ -8,7 +8,14 @@ import { Button } from '@/components/ui/button'
 import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import { SendingRecordTable } from './dns-record-table'
-import { instructionsText, lastCheckedAt, type DomainPhase } from './sending-domain-view'
+import {
+  instructionsText,
+  lastCheckedAt,
+  signingKeyFailing,
+  signingKeyProblem,
+  signsWithUnlistedKey,
+  type DomainPhase,
+} from './sending-domain-view'
 
 export function DomainSetupPanel({
   domain,
@@ -41,6 +48,14 @@ export function DomainSetupPanel({
             : `Set up ${domain.domain}`}
       </h3>
       <SendingRecordTable domain={domain} phase={phase} />
+      {signsWithUnlistedKey(domain) && (
+        <p className="text-xs text-muted-foreground">
+          Signing uses a key already set up for {domain.domain}.
+        </p>
+      )}
+      {signingKeyFailing(domain, phase) && (
+        <p className="text-xs text-destructive">{signingKeyProblem(domain.domain)}</p>
+      )}
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span className="mr-auto" title={checkedTitle}>
           {phase === 'live'

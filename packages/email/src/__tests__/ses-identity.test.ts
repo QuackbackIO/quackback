@@ -201,6 +201,20 @@ describe('creating a domain identity', () => {
     ])
   })
 
+  it.each([
+    ['AWS_SES', 'ses'],
+    ['AWS_SES_EU_WEST_2', 'ses'],
+    ['EXTERNAL', 'external'],
+  ])('reads a %s signing key as %s', async (origin, expected) => {
+    const { deps } = fakeClient((command) =>
+      command instanceof CreateEmailIdentityCommand
+        ? serviceError('AlreadyExistsException', 400)
+        : { DkimAttributes: { Status: 'SUCCESS', SigningAttributesOrigin: origin } }
+    )
+    const created = await createSesDomainIdentity('tenant-a.example', deps)
+    expect(created.identity.signingOrigin).toBe(expected)
+  })
+
   it('reads an identity that already exists rather than failing', async () => {
     // The customer clicking Add twice, a retried job, and an identity another
     // workspace created all arrive here. None of them is an error, and none of

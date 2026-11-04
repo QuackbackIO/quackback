@@ -504,6 +504,92 @@ describe('the two signing modes', () => {
   })
 })
 
+describe('a domain whose identity already had a key (shared)', () => {
+  const ownKey = {
+    type: 'TXT',
+    host: 'qb1a2b3c4d._domainkey',
+    value: 'v=DKIM1; k=rsa; p=PUBLICKEY',
+    purpose: 'dkim',
+  }
+  const returnPath = [
+    {
+      type: 'MX',
+      host: 'qb-bounce',
+      value: 'feedback-smtp.example.com',
+      priority: 10,
+      purpose: 'mail-from',
+    },
+    {
+      type: 'TXT',
+      host: 'qb-bounce',
+      value: 'v=spf1 include:example.com ~all',
+      purpose: 'mail-from',
+    },
+  ]
+  const labels = () =>
+    [...document.querySelectorAll('[data-slot="dns-record"]')].map(
+      (r) => r.querySelector('td')?.textContent?.split(': ')[1]
+    )
+  const MUTED = 'Signing uses a key already set up for acme.com.'
+
+  it('labels its own key Ownership and the provider CNAMEs Signing', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com', 'support')],
+      domains: [
+        domain({
+          dkimMode: 'shared',
+          dnsRecords: [
+            ownKey,
+            {
+              type: 'CNAME',
+              host: 'aaa._domainkey',
+              value: 'aaa.dkim.example.com',
+              purpose: 'dkim',
+            },
+            ...returnPath,
+          ] as SendingDomainDTO['dnsRecords'],
+        }),
+      ],
+    })
+    expect(labels()).toEqual(['Ownership', 'Signing', 'Return path', 'Return path'])
+    expect(screen.queryByText(MUTED)).toBeNull()
+  })
+
+  it('says signing uses a key already set up when none is listed', () => {
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com', 'support')],
+      domains: [
+        domain({
+          dkimMode: 'shared',
+          dnsRecords: [ownKey, ...returnPath] as SendingDomainDTO['dnsRecords'],
+        }),
+      ],
+    })
+    expect(labels()).toEqual(['Ownership', 'Return path', 'Return path'])
+    expect(screen.getByText(MUTED)).toBeTruthy()
+  })
+
+  it('names the signing key when every listed record is found and it still is not live', () => {
+    const found = { state: 'found', checkedAt: CHECKED }
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com', 'support')],
+      domains: [
+        domain({
+          dkimMode: 'shared',
+          verifiedAt: '2026-10-01T00:00:00.000Z',
+          dnsRecords: [ownKey, ...returnPath].map((r) => ({
+            ...r,
+            check: found,
+          })) as SendingDomainDTO['dnsRecords'],
+        }),
+      ],
+    })
+    const sentence = "The signing key for acme.com isn't working."
+    expect(row('help@acme.com').textContent).toContain(sentence)
+    expect(within(panels()[0] as HTMLElement).getByText(sentence)).toBeTruthy()
+  })
+})
+
 describe('the record table', () => {
   it('copies the name relative to the domain, not the full name', async () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [domain()] })
