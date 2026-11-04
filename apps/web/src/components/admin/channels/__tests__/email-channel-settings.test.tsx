@@ -295,11 +295,11 @@ describe('address rows', () => {
       ],
       domains: [LIVE, domain({ id: 'dom_2', domain: 'beta.example' })],
     })
-    let user = await openMenu('help@acme.com')
+    const user = await openMenu('help@acme.com')
     await user.click(screen.getByRole('menuitem', { name: 'Send test email' }))
     expect(sendTest).toHaveBeenCalledWith('a1', expect.anything())
 
-    user = await openMenu('hi@beta.example')
+    await openMenu('hi@beta.example')
     expect(screen.queryByRole('menuitem', { name: 'Send test email' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: /DNS records/ })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: 'Copy instructions' })).toBeNull()
