@@ -357,13 +357,16 @@ function requireRegion(): string {
   return region
 }
 
+/** One DNS label as a hostname uses it: letters, digits and inner hyphens. */
+const DNS_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
+
 /**
- * The label of the MAIL FROM already attached to an identity, when it is a
- * single label directly under the domain; null when none is attached or it is
- * shaped otherwise.
+ * The prefix of the MAIL FROM already attached to an identity, relative to the
+ * domain (`bounce`, or `mail.bounces` for a nested name); null when none is
+ * attached or it is not a name under the domain.
  *
  * An identity on the shared account may already carry a MAIL FROM from an
- * earlier setup of the same domain. A new row adopts that label, so its records
+ * earlier setup of the same domain. A new row adopts that prefix, so its records
  * match what the identity already uses and nothing has to be re-pointed.
  */
 export function attachedMailFromLabel(
@@ -373,7 +376,7 @@ export function attachedMailFromLabel(
   const attached = identity?.mailFrom?.domain?.trim().toLowerCase().replace(/\.$/, '')
   if (!attached?.endsWith(`.${domain}`)) return null
   const label = attached.slice(0, -(domain.length + 1))
-  return label && !label.includes('.') ? label : null
+  return label.split('.').every((l) => DNS_LABEL_RE.test(l)) ? label : null
 }
 
 /**

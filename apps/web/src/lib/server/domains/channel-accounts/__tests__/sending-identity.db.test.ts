@@ -513,6 +513,27 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
     expect(putMailFrom).not.toHaveBeenCalled()
   })
 
+  it('adopts a nested MAIL FROM prefix whole, and verifies on it without re-pointing', async () => {
+    const teamId = await seedTeam()
+    const attached = {
+      mailFrom: { domain: 'mail.bounces.tenant-a.example', status: 'SUCCESS' as const },
+    }
+    createIdentity.mockResolvedValue(foundIt(attached))
+    getIdentity.mockResolvedValue(identity(attached))
+    const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+
+    expect(row.mailFromLabel).toBe('mail.bounces')
+    expect(row.dnsRecords.filter((r) => r.purpose === 'mail-from').map((r) => r.host)).toEqual([
+      'mail.bounces',
+      'mail.bounces',
+    ])
+
+    ownershipResolves.mockResolvedValue(true)
+    const checked = await refreshSendingDomain(row.id)
+    expect(putMailFrom).not.toHaveBeenCalled()
+    expect(checked?.status).toBe('verified')
+  })
+
   it('runs the pre-flight against the adopted label, where our own records already are', async () => {
     const teamId = await seedTeam()
     const attached = { mailFrom: { domain: 'bounce.tenant-a.example', status: 'SUCCESS' as const } }

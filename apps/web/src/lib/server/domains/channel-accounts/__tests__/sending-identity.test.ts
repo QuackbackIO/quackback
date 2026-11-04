@@ -11,6 +11,7 @@ import {
   OWNERSHIP_RECORD_HOST,
   OWNERSHIP_VALUE_PREFIX,
   SendingDomainRefusedError,
+  attachedMailFromLabel,
   customSendingDomainsAvailable,
   domainsOverlap,
   mailFromDomainFor,
@@ -420,5 +421,34 @@ describe('whether custom sending domains are available on this server', () => {
     expect(customSendingDomainsAvailable({ ...ses, EMAIL_SMTP_HOST: 'smtp.example.com' })).toBe(
       false
     )
+  })
+})
+
+describe('the MAIL FROM label adopted from an identity', () => {
+  const attached = (domain: string | null) =>
+    identity({ mailFrom: domain ? { domain, status: 'SUCCESS' } : null })
+
+  it('is the single label under the domain', () => {
+    expect(attachedMailFromLabel(attached('bounce.acme.com'), 'acme.com')).toBe('bounce')
+  })
+
+  it('keeps a nested prefix whole, so the records match what is attached', () => {
+    const label = attachedMailFromLabel(attached('Mail.Bounces.acme.com.'), 'acme.com')
+    expect(label).toBe('mail.bounces')
+    expect(mailFromDomainFor('acme.com', label ?? '')).toBe('mail.bounces.acme.com')
+  })
+
+  it('is null when nothing is attached, or the name is not under the domain', () => {
+    expect(attachedMailFromLabel(attached(null), 'acme.com')).toBeNull()
+    expect(attachedMailFromLabel(null, 'acme.com')).toBeNull()
+    expect(attachedMailFromLabel(attached('bounce.other.com'), 'acme.com')).toBeNull()
+    expect(attachedMailFromLabel(attached('bounce.notacme.com'), 'acme.com')).toBeNull()
+  })
+
+  it('is null for a name that is not made of valid DNS labels', () => {
+    expect(attachedMailFromLabel(attached('mail..acme.com'), 'acme.com')).toBeNull()
+    expect(attachedMailFromLabel(attached('-bad.acme.com'), 'acme.com')).toBeNull()
+    expect(attachedMailFromLabel(attached('bad_label.acme.com'), 'acme.com')).toBeNull()
+    expect(attachedMailFromLabel(attached(`${'a'.repeat(64)}.acme.com`), 'acme.com')).toBeNull()
   })
 })
