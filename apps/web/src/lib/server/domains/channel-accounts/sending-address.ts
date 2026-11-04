@@ -17,6 +17,7 @@ import type { ChannelAccountId, SendingDomainId, TeamId, UserId } from '@quackba
 import type { ChannelAccount, EmailSendingDomain } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { isUniqueViolation } from '@/lib/server/utils/pg-error'
+import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { resolveAccountRecipient } from '@/lib/server/email/recipient'
 import {
   createSendingAddress,
@@ -133,7 +134,9 @@ export async function addSendingAddress(input: {
       created = true
     } catch (err) {
       // Another add for the same new domain inserted its row first: use it.
-      if (isUniqueViolation(err)) {
+      // Refused at the plan cap is the same race when that add took the last
+      // slot, so it reads the domains again too.
+      if (isUniqueViolation(err) || err instanceof TierLimitError) {
         row = (await listSendingDomains(input.owningTeamId)).find(sameDomain)
       }
       if (!row) {

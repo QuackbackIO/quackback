@@ -386,6 +386,37 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       }
     )
 
+    it('reuses the row another add created when that add took the last plan slot', async () => {
+      // The winner's row fills the plan, so this add is refused at the cap
+      // before it ever reaches the unique key. The domain exists all the same.
+      maxSendingDomains.mockReturnValue(1)
+      const teamId = await seedTeam()
+      let winner: { id: string } | undefined
+      duringPreflight.mockImplementationOnce(async () => {
+        winner = await seedDomain(teamId, 'acme.com', 'pending')
+      })
+      const account = await addSendingAddress({
+        owningTeamId: teamId,
+        address: 'help@acme.com',
+        module: 'support',
+      })
+      expect(winner).toBeDefined()
+      expect(await domainsOf(teamId)).toHaveLength(1)
+      expect(account.sendingDomainId).toBe(winner?.id)
+    })
+
+    it('still refuses at the plan cap when the domain was not added meanwhile', async () => {
+      maxSendingDomains.mockReturnValue(1)
+      const teamId = await seedTeam()
+      duringPreflight.mockImplementationOnce(async () => {
+        await seedDomain(teamId, 'other.example', 'pending')
+      })
+      await expect(
+        addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com', module: 'support' })
+      ).rejects.toThrow(/sending domains/i)
+      expect(await liveAddresses(teamId)).toEqual([])
+    })
+
     it('adds the platform default address without setting up a domain', async () => {
       const teamId = await seedTeam()
       const account = await addSendingAddress({
