@@ -583,6 +583,22 @@ File uploads (logos, avatars, changelog images) work out of the box via the incl
 
 See [Railway pricing](https://railway.com/pricing) for costs.
 
+### Coolify
+
+[`docker-compose.coolify.yml`](../../docker-compose.coolify.yml) deploys Quackback + PostgreSQL (with pgvector) + [RustFS](https://rustfs.com) (S3-compatible storage) on [Coolify](https://coolify.io). It builds no images and mounts no repo files, so you can either:
+
+- create a **Docker Compose** resource from this repository and set **Docker Compose Location** to `/docker-compose.coolify.yml`, or
+- paste the file into an **Empty Docker Compose** resource.
+
+Coolify generates the app secret, the Postgres credentials and the RustFS keys on the first deploy. Only the app gets a public domain; Postgres and RustFS stay on the internal network, and uploads are served through the app at `/api/storage`. After deploying:
+
+1. **Domain**: set the domain on the `app` service. `BASE_URL` follows it automatically
+2. **Configure email** (recommended): add SMTP, Amazon SES or Resend credentials (one of them) in the Environment Variables tab, then redeploy
+3. **AI** (optional): set `OPENAI_API_KEY`. The base URL and models default to OpenAI (`gpt-4o-mini`, `text-embedding-3-small`); the embedding model must produce 1536-dimension vectors
+4. **Proxy hops**: `TRUSTED_PROXY_HOPS` defaults to `1` for Coolify's proxy. Use `2` if a CDN such as Cloudflare's proxy is also in front
+
+This stack is meant for new installs. It does not reuse the `minio_data` volume or the `pg_cron` Postgres image from `docker-compose.prod.yml`.
+
 ---
 
 ## Support
