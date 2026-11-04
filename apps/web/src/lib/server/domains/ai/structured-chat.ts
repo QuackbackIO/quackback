@@ -15,6 +15,7 @@
  * `code`s `chat({ outputSchema })` uses, so `isStructuredOutputError` checks
  * in callers cover both paths.
  */
+import { getOpenAIClientOptions } from '@/lib/server/domains/ai/client-options'
 import { chat, type ChatMiddleware } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
@@ -97,7 +98,7 @@ export async function structuredChat<S extends z.ZodType>(
   input: StructuredChatInput<S>
 ): Promise<z.infer<S>> {
   const baseURL = config.openaiBaseUrl!
-  const adapter = openaiCompatibleText(input.model, { baseURL, apiKey: config.openaiApiKey! })
+  const adapter = openaiCompatibleText(input.model, getOpenAIClientOptions(config))
   const common = {
     adapter,
     messages: input.messages,

@@ -39,6 +39,7 @@
  * re-attempts on a later open; a thrown/transient failure (network,
  * unparseable response) leaves the column `null` and free to retry.
  */
+import { getOpenAIClientOptions } from '@/lib/server/domains/ai/client-options'
 import {
   db,
   eq,
@@ -234,10 +235,7 @@ async function callInboxTranslationModel<T>(
     metadata: { stage, ...metadata },
   })
   const result = await chat({
-    adapter: openaiCompatibleText(model, {
-      baseURL: config.openaiBaseUrl!,
-      apiKey: config.openaiApiKey!,
-    }),
+    adapter: openaiCompatibleText(model, getOpenAIClientOptions(config)),
     systemPrompts: [system],
     messages: [{ role: 'user', content: user }],
     outputSchema,

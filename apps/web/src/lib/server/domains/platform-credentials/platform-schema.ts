@@ -196,6 +196,7 @@ function classify(envKey: string, zodType: string): { kind: AiKeyKind; group: Ai
   // states to choose from and never free text.
   if (zodType === 'envBoolean') return { kind: 'tristate', group: 'advanced' }
   if (envKey.endsWith('_MODEL')) return { kind: 'model', group: 'models' }
+  if (envKey === 'OPENAI_DEFAULT_HEADERS') return { kind: 'secret', group: 'connection' }
   if (envKey.endsWith('_API_KEY')) return { kind: 'secret', group: 'connection' }
   if (envKey.endsWith('_URL')) return { kind: 'url', group: 'connection' }
   return { kind: 'text', group: 'connection' }
