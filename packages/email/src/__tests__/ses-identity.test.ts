@@ -10,12 +10,13 @@
  * DNS regression a year later costs SPF alignment instead of every outbound
  * reply.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
   CreateEmailIdentityCommand,
   GetEmailIdentityCommand,
+  PutEmailIdentityDkimSigningAttributesCommand,
   PutEmailIdentityMailFromAttributesCommand,
 } from '@aws-sdk/client-sesv2'
 import {
@@ -27,9 +28,11 @@ import {
   createSesDomainIdentity,
   getSesDomainIdentity,
   isSesIdentityConfigured,
+  putSesDkimSigningKey,
   putSesMailFromDomain,
   sesDkimCnameTarget,
   sesMailFromMxValue,
+  sesReturnPathDomain,
 } from '../ses-identity'
 import type { SesIdentityClient, SesIdentityDeps } from '../ses-identity'
 
@@ -161,6 +164,60 @@ describe('creating a domain identity', () => {
     })
   })
 
+  it('creates the identity with a key of our own when given one, and never logs it', async () => {
+    const { deps, commands } = fakeClient(() => ({
+      DkimAttributes: { Tokens: ['qb1a2b3c4d'], Status: 'PENDING' },
+      VerifiedForSendingStatus: false,
+    }))
+    const logged = vi.spyOn(process.stdout, 'write')
+    await createSesDomainIdentity('tenant-a.example', deps, {
+      selector: 'qb1a2b3c4d',
+      privateKey: 'UFJJVkFURUtFWQ==',
+    })
+    expect((commands[0] as CreateEmailIdentityCommand).input).toEqual({
+      EmailIdentity: 'tenant-a.example',
+      DkimSigningAttributes: {
+        DomainSigningSelector: 'qb1a2b3c4d',
+        DomainSigningPrivateKey: 'UFJJVkFURUtFWQ==',
+      },
+    })
+    const output = logged.mock.calls.map(([chunk]) => String(chunk)).join('')
+    logged.mockRestore()
+    expect(output).not.toContain('UFJJVkFURUtFWQ==')
+  })
+
+  it('does not re-key an identity that already exists', async () => {
+    const { deps, commands } = fakeClient((command) =>
+      command instanceof CreateEmailIdentityCommand
+        ? serviceError('AlreadyExistsException', 400)
+        : { DkimAttributes: { Status: 'SUCCESS' }, VerifiedForSendingStatus: true }
+    )
+    const created = await createSesDomainIdentity('tenant-a.example', deps, {
+      selector: 'qb1a2b3c4d',
+      privateKey: 'UFJJVkFURUtFWQ==',
+    })
+    expect(created.preexisting).toBe(true)
+    // A create that bounced, then a read: nothing that sets signing attributes.
+    expect(commands.map((c) => (c as object).constructor.name)).toEqual([
+      'CreateEmailIdentityCommand',
+      'GetEmailIdentityCommand',
+    ])
+  })
+
+  it.each([
+    ['AWS_SES', 'ses'],
+    ['AWS_SES_EU_WEST_2', 'ses'],
+    ['EXTERNAL', 'external'],
+  ])('reads a %s signing key as %s', async (origin, expected) => {
+    const { deps } = fakeClient((command) =>
+      command instanceof CreateEmailIdentityCommand
+        ? serviceError('AlreadyExistsException', 400)
+        : { DkimAttributes: { Status: 'SUCCESS', SigningAttributesOrigin: origin } }
+    )
+    const created = await createSesDomainIdentity('tenant-a.example', deps)
+    expect(created.identity.signingOrigin).toBe(expected)
+  })
+
   it('reads an identity that already exists rather than failing', async () => {
     // The customer clicking Add twice, a retried job, and an identity another
     // workspace created all arrive here. None of them is an error, and none of
@@ -266,6 +323,45 @@ describe('the custom MAIL FROM', () => {
   })
 })
 
+describe('re-keying an identity to a caller-held key', () => {
+  it('sets an external key under the given selector', async () => {
+    const { deps, commands } = fakeClient(() => ({}))
+    await putSesDkimSigningKey(
+      'tenant-a.example',
+      { selector: 'qb0011aabb', privateKey: 'PRIVATE-KEY-BASE64' },
+      deps
+    )
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toBeInstanceOf(PutEmailIdentityDkimSigningAttributesCommand)
+    expect((commands[0] as PutEmailIdentityDkimSigningAttributesCommand).input).toEqual({
+      EmailIdentity: 'tenant-a.example',
+      SigningAttributesOrigin: 'EXTERNAL',
+      SigningAttributes: {
+        DomainSigningSelector: 'qb0011aabb',
+        DomainSigningPrivateKey: 'PRIVATE-KEY-BASE64',
+      },
+    })
+  })
+
+  it('names its own action when denied, and never carries the key in the error', async () => {
+    const { deps } = fakeClient(() => serviceError('AccessDeniedException', 403))
+    const error = await putSesDkimSigningKey(
+      'a.example',
+      { selector: 'qb1', privateKey: 'PRIVATE-KEY-BASE64' },
+      deps
+    ).catch((e) => e)
+    expect(error).toBeInstanceOf(SesIdentityError)
+    expect(error.message).toContain('ses:PutEmailIdentityDkimSigningAttributes')
+    expect(JSON.stringify({ ...error, message: error.message })).not.toContain(
+      'PRIVATE-KEY-BASE64'
+    )
+  })
+
+  it('is one of the actions the identity credential is told to hold', () => {
+    expect(SES_IDENTITY_ACTIONS).toContain('ses:PutEmailIdentityDkimSigningAttributes')
+  })
+})
+
 describe('the record values the provider expects to find', () => {
   it('prefers the zone the provider named over the derived one', async () => {
     // Newer regions publish keys somewhere other than dkim.<region>, and a CNAME
@@ -284,6 +380,26 @@ describe('the record values the provider expects to find', () => {
     expect(SES_MAIL_FROM_MX_PRIORITY).toBe(10)
     expect(SES_MAIL_FROM_SPF_VALUE).toBe('v=spf1 include:amazonses.com ~all')
   })
+})
+
+describe('the operator return path domain', () => {
+  it('is unset by default', () => {
+    expect(sesReturnPathDomain({})).toBeNull()
+    expect(sesReturnPathDomain({ EMAIL_RETURN_PATH_DOMAIN: '  ' })).toBeNull()
+  })
+
+  it('reads the domain in one spelling', () => {
+    expect(sesReturnPathDomain({ EMAIL_RETURN_PATH_DOMAIN: ' Bounces.Example.NET. ' })).toBe(
+      'bounces.example.net'
+    )
+  })
+
+  it.each(['bounces', 'https://bounces.example.net', '*.bounces.example.net', 'a..example.net'])(
+    'ignores %s, which is not a domain name',
+    (value) => {
+      expect(sesReturnPathDomain({ EMAIL_RETURN_PATH_DOMAIN: value })).toBeNull()
+    }
+  )
 })
 
 describe('a provider message never carries an address into a log or a row', () => {
