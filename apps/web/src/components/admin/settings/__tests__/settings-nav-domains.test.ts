@@ -25,7 +25,7 @@ describe('settings nav Domains row', () => {
         label: 'Domains',
         to: '/admin/settings/domains',
         anyOf: DOMAINS_PAGE_PERMISSIONS,
-        overview: true,
+        overview: { owner: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN },
       },
     ])
     const labels = workspace.items.map((item) => item.label)

@@ -26,10 +26,11 @@ export interface NavItem {
   /** Pages that open to a holder of any one of these, instead of a single permission. */
   anyOf?: readonly PermissionKey[]
   /**
-   * A page that summarises others (Domains). It is offered in the nav, but never
-   * chosen as the page Settings opens on: its viewers each own a page of their own.
+   * A page that summarises others (Domains). It is offered in the nav, but chosen
+   * as the page Settings opens on only for a holder of `owner`, the one permission
+   * whose setup lives on the page itself; every other viewer owns a page of their own.
    */
-  overview?: true
+  overview?: { owner: PermissionKey }
 }
 
 /**
@@ -253,7 +254,7 @@ export function buildNavSections(
           ...navPage('/admin/settings/general'),
           permission: PERMISSIONS.SETTINGS_MANAGE,
         },
-        { ...navPage('/admin/settings/domains'), anyOf: DOMAINS_PAGE_PERMISSIONS, overview: true },
+        { ...navPage('/admin/settings/domains'), anyOf: DOMAINS_PAGE_PERMISSIONS, overview: { owner: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN } },
         { ...navPage('/admin/settings/notifications') },
         {
           ...navPage('/admin/settings/portal'),
@@ -369,7 +370,7 @@ const NOTIFICATIONS_PATH = '/admin/settings/notifications'
  * The page the Settings entry opens for a viewer: General when they may open
  * it, otherwise the first page in nav order they hold the permission for, and
  * the personal Notifications page when they hold none. An overview page is
- * never chosen. It never names a page
+ * chosen only for a holder of its owner permission. It never names a page
  * whose route would answer Access denied.
  */
 export function firstSettingsPath(
@@ -379,7 +380,7 @@ export function firstSettingsPath(
   const gatedPaths = navSectionsFor(sections, permissions)
     .flatMap((section) => section.items)
     .flatMap((entry) => (isNavModule(entry) ? entry.pages : [entry]))
-    .filter((item) => !item.overview)
+    .filter((item) => !item.overview || permissions.has(item.overview.owner))
     .filter((item) => item.permission !== undefined || item.anyOf !== undefined)
     .map((item) => item.to)
   if (gatedPaths.includes(GENERAL_PATH)) return GENERAL_PATH

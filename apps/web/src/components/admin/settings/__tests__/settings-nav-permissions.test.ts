@@ -199,10 +199,10 @@ describe('firstSettingsPath', () => {
     expect(first(new Set([PERMISSIONS.CHANNEL_ACCOUNT_MANAGE]), email)).toBe(
       '/admin/settings/channels/email'
     )
-    // Domains is its only page, and it is an overview: the personal page instead.
-    expect(first(new Set([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]))).toBe(
-      '/admin/settings/notifications'
-    )
+    // Domains holds web address setup, which this permission owns: it lands there.
+    expect(first(new Set([PERMISSIONS.SETTINGS_CUSTOM_DOMAIN]))).toBe('/admin/settings/domains')
+    // A viewer who only reaches Domains through another page's permission does not.
+    expect(first(new Set([PERMISSIONS.AUTH_MANAGE]))).not.toBe('/admin/settings/domains')
   })
 
   it('opens Notifications for a viewer with no settings permission', () => {
