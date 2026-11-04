@@ -195,7 +195,7 @@ describe('creating a domain identity', () => {
     })
     expect(created.preexisting).toBe(true)
     // A create that bounced, then a read: nothing that sets signing attributes.
-    expect(commands.map((c) => c.constructor.name)).toEqual([
+    expect(commands.map((c) => (c as object).constructor.name)).toEqual([
       'CreateEmailIdentityCommand',
       'GetEmailIdentityCommand',
     ])
