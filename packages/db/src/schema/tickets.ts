@@ -129,7 +129,7 @@ export const tickets = pgTable(
     // SLA targets, which live in `sla_applied`. NULL = no due date.
     dueAt: timestamp('due_at', { withTimezone: true }),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
-    // Due-date alert markers (0305): each holds the `due_at` value the
+    // Due-date alert markers (0307): each holds the `due_at` value the
     // ticket-due sweep last alerted for, so moving the due date re-arms both
     // alerts without a reset write. NULL = never alerted.
     dueSoonNotifiedFor: timestamp('due_soon_notified_for', { withTimezone: true }),
