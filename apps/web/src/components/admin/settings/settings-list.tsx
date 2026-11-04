@@ -100,6 +100,8 @@ interface SettingsListRowProps {
   title: ReactNode
   /** The muted second line. A row with meta is 52px, without it 44px. */
   meta?: ReactNode
+  /** Let the meta wrap instead of cutting it to one line, for a status sentence. */
+  wrapMeta?: boolean
   /** Only for non-default state (StateBadge). */
   badges?: ReactNode
   trailing?: ReactNode
@@ -109,6 +111,8 @@ interface SettingsListRowProps {
   /** Makes the whole row a link with a trailing chevron (and no menu). */
   to?: string
   params?: Record<string, string>
+  /** Search params for `to`, such as a tab. */
+  search?: Record<string, string>
   onClick?: () => void
 }
 
@@ -119,12 +123,14 @@ export function SettingsListRow({
   grip,
   title,
   meta,
+  wrapMeta = false,
   badges,
   trailing,
   actions,
   actionsLabel,
   to,
   params,
+  search,
   onClick,
 }: SettingsListRowProps) {
   const height = meta ? 'min-h-[52px]' : 'min-h-[44px]'
@@ -146,7 +152,11 @@ export function SettingsListRow({
           <span className="truncate text-sm font-medium">{title}</span>
           {badges}
         </div>
-        {meta && <div className="mt-px truncate text-[13px] text-muted-foreground">{meta}</div>}
+        {meta && (
+          <div className={cn('mt-px text-[13px] text-muted-foreground', !wrapMeta && 'truncate')}>
+            {meta}
+          </div>
+        )}
       </div>
       {trailing && (
         <div
@@ -164,6 +174,7 @@ export function SettingsListRow({
       <Link
         to={to}
         params={params}
+        search={search}
         data-slot="settings-list-row"
         className={cn(ROW_BASE, height, 'transition-colors hover:bg-muted/40')}
       >

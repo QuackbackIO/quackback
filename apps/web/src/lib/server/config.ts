@@ -13,6 +13,7 @@
 import { z } from 'zod'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 
 const log = logger.child({ component: 'config' })
 
@@ -237,6 +238,35 @@ const configSchema = z
      */
     emailSesIdentityAccessKeyId: z.string().optional(),
     emailSesIdentitySecretAccessKey: z.string().optional(),
+    /**
+     * Send each workspace's mail under a provider tenant of its own, so the
+     * provider tracks bounces and complaints per workspace and pauses only the
+     * one at fault. Off by default. Needs the configuration set (a tenant sends
+     * only with one associated) and the identity credential (which manages the
+     * tenants); boot refuses it without either. Read by `sesTenantsEnabled` in
+     * @quackback/email.
+     */
+    emailSesTenants: envBoolean,
+    /**
+     * Domain the operator serves bounce records under (a wildcard MX to the
+     * provider's feedback host and a wildcard SPF TXT). Set, a new sending
+     * domain's return path is one CNAME to `<workspace label>.<this domain>`
+     * instead of an MX and a TXT. Read by `sesReturnPathDomain` in
+     * @quackback/email; validated here so a malformed value stops boot rather
+     * than quietly reading as unset.
+     */
+    emailReturnPathDomain: z.preprocess(
+      (v) =>
+        typeof v === 'string'
+          ? v.trim() === ''
+            ? undefined
+            : v.trim().toLowerCase().replace(/\.$/, '')
+          : v,
+      z
+        .string()
+        .regex(MAIL_DOMAIN_RE, 'must be a domain name, such as bounces.example.net')
+        .optional()
+    ),
 
     // S3 (optional)
     s3Endpoint: z.string().optional(),
@@ -329,6 +359,27 @@ const configSchema = z
       })
     }
 
+    if (cfg.emailSesTenants) {
+      const missing: string[] = []
+      if (!cfg.emailSesConfigurationSet?.trim()) missing.push('EMAIL_SES_CONFIGURATION_SET')
+      if (
+        !cfg.emailSesIdentityAccessKeyId?.trim() ||
+        !cfg.emailSesIdentitySecretAccessKey?.trim()
+      ) {
+        missing.push('EMAIL_SES_IDENTITY_ACCESS_KEY_ID and EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY')
+      }
+      if (missing.length > 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['emailSesTenants'],
+          message:
+            `EMAIL_SES_TENANTS is on but ${missing.join(' and ')} must be set: a tenant sends ` +
+            'only with a configuration set associated, and tenants are managed with the ' +
+            'identity credential.',
+        })
+      }
+    }
+
     // Exactly one database story per mode. A pooled fleet with a stray
     // DATABASE_URL is the dangerous shape — a missing workspace scope would
     // silently connect somewhere real — so pooled mode refuses to boot with one.
@@ -407,6 +458,8 @@ function buildConfigFromEnv(): unknown {
     emailSesMaxSendRate: env('EMAIL_SES_MAX_SEND_RATE'),
     emailSesIdentityAccessKeyId: env('EMAIL_SES_IDENTITY_ACCESS_KEY_ID'),
     emailSesIdentitySecretAccessKey: env('EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY'),
+    emailReturnPathDomain: env('EMAIL_RETURN_PATH_DOMAIN'),
+    emailSesTenants: env('EMAIL_SES_TENANTS'),
 
     // S3
     s3Endpoint: env('S3_ENDPOINT'),
@@ -646,6 +699,12 @@ export const config = {
   },
   get emailSesIdentitySecretAccessKey() {
     return loadConfig().emailSesIdentitySecretAccessKey
+  },
+  get emailReturnPathDomain() {
+    return loadConfig().emailReturnPathDomain
+  },
+  get emailSesTenants() {
+    return loadConfig().emailSesTenants
   },
 
   // S3

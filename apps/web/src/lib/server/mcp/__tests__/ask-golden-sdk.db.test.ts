@@ -217,6 +217,43 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
       }
     })
   })
+  it('opens Domains for a holder of any permission the page opens to, and no one else', async () => {
+    await fixture.run(async (database) => {
+      const seeded = await seedAskGoldenFixture(database, 'owner')
+      for (const permission of [
+        PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+        PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+        PERMISSIONS.AUTH_MANAGE,
+      ]) {
+        const sdk = await openAskSdkHarness({
+          ...seeded.auth,
+          scopes: ['read:settings'],
+          permissions: new Set([PERMISSIONS.COPILOT_USE, permission]),
+        })
+        try {
+          const result = await sdk.call('navigate_workspace', { destination: 'domains' })
+          expect(result.isError, `${permission}: ${JSON.stringify(result.content)}`).not.toBe(true)
+          expect(parseAskSdkResult(result)).toMatchObject({
+            navigation: { href: '/admin/settings/domains' },
+          })
+        } finally {
+          await sdk.close()
+        }
+      }
+      const none = await openAskSdkHarness({
+        ...seeded.auth,
+        scopes: ['read:settings'],
+        permissions: new Set([PERMISSIONS.COPILOT_USE, PERMISSIONS.SETTINGS_MANAGE]),
+      })
+      try {
+        expect((await none.call('navigate_workspace', { destination: 'domains' })).isError).toBe(
+          true
+        )
+      } finally {
+        await none.close()
+      }
+    })
+  })
   it('keeps invitation authority stricter than viewing the members page', async () => {
     await fixture.run(async (database) => {
       const seeded = await seedAskGoldenFixture(database, 'owner')
