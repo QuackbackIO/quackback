@@ -7,7 +7,7 @@
  *  - the pure host-matching helpers the router/bootstrap layer uses for the
  *    default-host -> custom-domain 301 and for domain-aware canonical URLs.
  */
-import { resolve4, resolve6 } from 'node:dns/promises'
+import { systemResolver } from '@/lib/server/dns/resolver'
 import { normalizeDomain } from '@/lib/server/auth/normalize-domain'
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
@@ -29,16 +29,20 @@ export interface HelpCenterDomainStatus {
   verified: boolean
 }
 
-/** Resolves A then AAAA records; either succeeding counts as "DNS resolves". */
+/**
+ * Resolves A then AAAA records; either succeeding counts as "DNS resolves".
+ * Through the shared resolver, so a nameserver that does not answer costs
+ * seconds, not the system default's retry cycle.
+ */
 async function domainResolves(domain: string): Promise<boolean> {
   try {
-    const addrs = await resolve4(domain)
+    const addrs = await systemResolver.resolve4(domain)
     if (addrs.length > 0) return true
   } catch {
     // fall through to AAAA
   }
   try {
-    const addrs = await resolve6(domain)
+    const addrs = await systemResolver.resolve6(domain)
     return addrs.length > 0
   } catch {
     return false
