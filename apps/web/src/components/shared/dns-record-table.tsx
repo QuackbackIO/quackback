@@ -13,11 +13,19 @@ import { cn } from '@/lib/shared/utils'
 
 export type DnsRecordState = 'found' | 'waiting' | 'problem'
 
+/**
+ * For a table whose names are full hostnames because the zone they sit in is
+ * not known (most callers pass names relative to the domain, `@` for its apex).
+ */
+export const FULL_NAMES_NOTE =
+  'Names are shown in full. If your DNS host adds your domain itself, enter only the part before it.'
+
 export interface DnsRecordRow {
   /** What the record is for, in a word or two. */
   label: string
   /** The record type as shown, such as `CNAME`, `TXT` or `MX 10`. */
   type: string
+  /** Relative to the domain (`@` for its apex), unless the caller says otherwise. */
   name: string
   value: string
   state: DnsRecordState
@@ -58,7 +66,7 @@ export function DnsRecordTable({ records }: { records: DnsRecordRow[] }) {
                   </td>
                   <td className="py-1.5 pr-3">
                     <span className="flex items-start gap-1">
-                      <span className="font-mono break-all">{r.name}</span>
+                      <span className="font-mono whitespace-nowrap">{r.name}</span>
                       <CopyButton
                         value={r.name}
                         variant="ghost"

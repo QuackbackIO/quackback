@@ -62,7 +62,7 @@ export function ssoTxtRecord(
   const record = {
     label: 'Ownership',
     type: 'TXT',
-    name: `_quackback-verify.${domain.name}`,
+    name: '_quackback-verify',
     value: `qb-domain-verify=${domain.verificationToken}`,
   }
   return result && !result.verified
@@ -330,7 +330,9 @@ function DomainRow({
       )}
       {!isVerified && !provenBy && (
         <div className="space-y-1">
-          <p className="text-xs text-muted-foreground">Add this record, then click Verify.</p>
+          <p className="text-xs text-muted-foreground">
+            {`Add this record to ${domain.name}, then click Verify.`}
+          </p>
           <DnsRecordTable records={[ssoTxtRecord(domain, verifyResult)]} />
         </div>
       )}

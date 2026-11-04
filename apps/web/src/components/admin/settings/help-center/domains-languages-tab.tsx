@@ -5,7 +5,11 @@ import { TrashIcon, XCircleIcon } from '@heroicons/react/24/solid'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { DnsRecordTable, type DnsRecordRow } from '@/components/shared/dns-record-table'
+import {
+  DnsRecordTable,
+  FULL_NAMES_NOTE,
+  type DnsRecordRow,
+} from '@/components/shared/dns-record-table'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
@@ -218,11 +222,18 @@ function DomainCard({ domain }: { domain: HelpCenterConfig['domain'] }) {
         )}
 
         {domain.domain && statusQuery.data?.cnameTarget && (
-          <DnsRecordTable
-            records={[
-              helpCenterCnameRecord(domain.domain, statusQuery.data.cnameTarget, statusQuery.data),
-            ]}
-          />
+          <div className="space-y-1">
+            <DnsRecordTable
+              records={[
+                helpCenterCnameRecord(
+                  domain.domain,
+                  statusQuery.data.cnameTarget,
+                  statusQuery.data
+                ),
+              ]}
+            />
+            <p className="text-xs text-muted-foreground">{FULL_NAMES_NOTE}</p>
+          </div>
         )}
 
         <Collapsible>

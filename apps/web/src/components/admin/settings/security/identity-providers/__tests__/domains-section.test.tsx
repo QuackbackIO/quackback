@@ -54,6 +54,9 @@ describe('<DomainsSection> with domains another proof covers', () => {
     // The covered domain's record is not asked for; the other one's still is.
     expect(screen.queryByText(/tok-a/)).not.toBeInTheDocument()
     expect(screen.getAllByText(/tok-b/).length).toBeGreaterThan(0)
+    expect(
+      screen.getByText('Add this record to example.org, then click Verify.')
+    ).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Verify' })).toHaveLength(2)
   })
 
@@ -93,7 +96,7 @@ describe('ssoTxtRecord', () => {
     expect(ssoTxtRecord(pending, null)).toEqual({
       label: 'Ownership',
       type: 'TXT',
-      name: '_quackback-verify.acme.com',
+      name: '_quackback-verify',
       value: 'qb-domain-verify=tok-a',
       state: 'waiting',
     })

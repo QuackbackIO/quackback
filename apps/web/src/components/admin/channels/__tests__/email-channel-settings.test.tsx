@@ -346,6 +346,18 @@ describe('rows on a domain with several addresses', () => {
     const helpRow = row('help@acme.com')
     expect(helpRow.parentElement?.contains(panel)).toBe(true)
   })
+
+  it('lists addresses oldest first after the default row, so the newest sits by the Add form', () => {
+    const older = address('a1', 'help@acme.com', 'support')
+    const newer = address('a2', 'news@acme.com', 'changelog')
+    renderSettings({ addresses: [newer, older], domains: [NOT_FOUND] })
+    const titles = [...document.querySelectorAll('[data-slot="settings-list-row"]')].map(
+      (r) => r.querySelector('.font-medium')?.textContent
+    )
+    expect(titles).toEqual(['notifications@example.com', 'help@acme.com', 'news@acme.com'])
+    // The panel sits directly under the first address on the domain.
+    expect(row('help@acme.com').nextElementSibling).toBe(panels()[0])
+  })
 })
 
 describe('a domain that broke after it was live', () => {
@@ -378,6 +390,9 @@ describe('what happens to replies meanwhile', () => {
     })
     expect(row('help@acme.com').textContent).toContain(SPAM)
     expect(row('help@acme.com').textContent).not.toContain(FALLBACK)
+    // A status sentence wraps rather than being cut off.
+    const meta = within(row('help@acme.com')).getByText((t) => t.includes(SPAM))
+    expect(meta.className).not.toContain('truncate')
   })
 
   it('on a shared server, says replies send from the default address', () => {

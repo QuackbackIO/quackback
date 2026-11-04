@@ -100,6 +100,8 @@ interface SettingsListRowProps {
   title: ReactNode
   /** The muted second line. A row with meta is 52px, without it 44px. */
   meta?: ReactNode
+  /** Let the meta wrap instead of cutting it to one line, for a status sentence. */
+  wrapMeta?: boolean
   /** Only for non-default state (StateBadge). */
   badges?: ReactNode
   trailing?: ReactNode
@@ -121,6 +123,7 @@ export function SettingsListRow({
   grip,
   title,
   meta,
+  wrapMeta = false,
   badges,
   trailing,
   actions,
@@ -149,7 +152,11 @@ export function SettingsListRow({
           <span className="truncate text-sm font-medium">{title}</span>
           {badges}
         </div>
-        {meta && <div className="mt-px truncate text-[13px] text-muted-foreground">{meta}</div>}
+        {meta && (
+          <div className={cn('mt-px text-[13px] text-muted-foreground', !wrapMeta && 'truncate')}>
+            {meta}
+          </div>
+        )}
       </div>
       {trailing && (
         <div

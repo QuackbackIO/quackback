@@ -5,7 +5,11 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { UpgradeNotice } from '@/components/admin/upgrade'
 import { Button } from '@/components/ui/button'
 import { StateBadge } from '@/components/shared/state-badge'
-import { DnsRecordTable, type DnsRecordRow } from '@/components/shared/dns-record-table'
+import {
+  DnsRecordTable,
+  FULL_NAMES_NOTE,
+  type DnsRecordRow,
+} from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 
 export function QuackbackUrlCard(props: {
@@ -208,7 +212,12 @@ export function DomainsCard(props: {
                   </Button>
                 </div>
               </div>
-              {domain.readiness !== 'ready' && <DnsRecordTable records={hostnameRecords(domain)} />}
+              {domain.readiness !== 'ready' && (
+                <div className="space-y-1">
+                  <DnsRecordTable records={hostnameRecords(domain)} />
+                  <p className="text-xs text-muted-foreground">{FULL_NAMES_NOTE}</p>
+                </div>
+              )}
             </li>
           ))}
         </ul>

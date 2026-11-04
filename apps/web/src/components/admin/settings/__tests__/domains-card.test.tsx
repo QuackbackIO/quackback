@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 
 import { DomainsCard } from '../domains-cards'
+import { FULL_NAMES_NOTE } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 
 afterEach(cleanup)
@@ -97,6 +98,8 @@ describe('<DomainsCard>', () => {
       'Waiting: Ownership_quackback-challenge.feedback.example.comTXTproof-1',
     ])
     expect(document.querySelectorAll('[data-slot="dns-record-fix"]')).toHaveLength(0)
+    // The hostname's zone is not known, so names are shown in full and the card says so.
+    expect(screen.getByText(FULL_NAMES_NOTE)).toBeTruthy()
   })
 
   it('explains a failed hostname once, under its last record', () => {

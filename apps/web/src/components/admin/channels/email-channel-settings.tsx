@@ -365,8 +365,9 @@ function SendingAddressesSection({
     const domain = domainOf(a, domains)
     return { a, domain, phase: domain ? domainPhase(domain, now) : ('live' as const) }
   })
-  // The panel and the domain's status line sit under the address that has
-  // been on the domain longest, so adding another one does not move them.
+  // Listed oldest first: the panel and the domain's status line sit under the
+  // address that has been on the domain longest, so adding another one does
+  // not move them, and the newest address sits next to the Add form.
   const firstOnDomain = new Set<string>()
   const seen = new Set<string>()
   const oldestFirst = [...rows].sort((x, y) =>
@@ -410,7 +411,7 @@ function SendingAddressesSection({
           title={defaultFrom ? bareAddress(defaultFrom) : 'Default address'}
           meta={defaultMeta(uncovered)}
         />
-        {rows.map(({ a, domain, phase }) => {
+        {oldestFirst.map(({ a, domain, phase }) => {
           const smtp = a.config.smtp as SmtpConfig | undefined
           const first = firstOnDomain.has(a.id)
           // Always open while the domain needs its records; opened from the menu once live.
@@ -472,6 +473,7 @@ function SendingAddressesSection({
                     pendingMeta(domain, phase, first, moduleLabel(a.module), fallbackNote)) ||
                   moduleLabel(a.module)
                 }
+                wrapMeta={phase !== 'live'}
                 badges={<PhaseBadge phase={phase} />}
                 actions={items}
               />

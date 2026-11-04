@@ -47,3 +47,26 @@ describe('<DnsRecordTable>', () => {
     expect(screen.getByRole('button', { name: 'Copy value for help.acme.com' })).toBeInTheDocument()
   })
 })
+
+describe('<DnsRecordTable> layout', () => {
+  it('keeps a name on one line and lets a long value wrap anywhere', () => {
+    render(
+      <DnsRecordTable
+        records={[
+          {
+            label: 'Signing',
+            type: 'TXT',
+            name: 'qb-20261103._domainkey',
+            value: `v=DKIM1; k=rsa; p=${'A'.repeat(300)}`,
+            state: 'waiting',
+          },
+        ]}
+      />
+    )
+    expect(screen.getByText('qb-20261103._domainkey')).toHaveClass('whitespace-nowrap')
+    expect(screen.getByText('qb-20261103._domainkey')).not.toHaveClass('break-all')
+    expect(screen.getByText(/^v=DKIM1/)).toHaveClass('break-all')
+    expect(screen.getByText('TXT').closest('td')).toHaveClass('whitespace-nowrap')
+    expect(document.querySelector('table')!.parentElement).toHaveClass('overflow-x-auto')
+  })
+})
