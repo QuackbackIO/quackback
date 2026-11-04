@@ -4,13 +4,13 @@ import { join } from 'node:path'
 import { sql } from 'drizzle-orm'
 import { createDb, type Database } from '../client'
 
-// 0308 adds the table of provider accounts matched to teammates. It replays
+// 0310 adds the table of provider accounts matched to teammates. It replays
 // as a no-op, holds one teammate per account and one account per teammate on
 // a connection, and goes with the connection or the teammate it names while a
 // removed creator only blanks the creator. Runs in a rolled-back transaction
 // against the migrated database.
 const MIGRATION = readFileSync(
-  join(__dirname, '../../drizzle/0308_integration_user_mappings.sql'),
+  join(__dirname, '../../drizzle/0310_integration_user_mappings.sql'),
   'utf8'
 ).replaceAll('--> statement-breakpoint', '')
 
@@ -24,14 +24,14 @@ afterAll(async () => {
 
 class Rollback extends Error {}
 
-describe.skipIf(!db)('migration 0308 integration user mappings', () => {
+describe.skipIf(!db)('migration 0310 integration user mappings', () => {
   it('replays, enforces both uniqueness rules and follows its owners on delete', async () => {
     await db!
       .transaction(async (tx) => {
         await tx.execute(sql.raw(MIGRATION))
         const [{ integration }] = (await tx.execute(sql`
           INSERT INTO "integrations" ("id", "integration_type", "status", "config")
-          VALUES (gen_random_uuid(), 'github-0308', 'active', '{}'::jsonb)
+          VALUES (gen_random_uuid(), 'github-0310', 'active', '{}'::jsonb)
           RETURNING "id" AS integration`)) as unknown as { integration: string }[]
         const principals = (await tx.execute(sql`
           INSERT INTO "principal" ("id", "type", "role", "display_name", "created_at")
