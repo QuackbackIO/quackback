@@ -121,6 +121,7 @@ function renderSettings({
   domains = [] as SendingDomainDTO[],
   inboundRoute = null as unknown,
   addressMode = 'verified-domains' as 'any' | 'verified-domains' | 'unavailable',
+  sendingPaused = null as { cause: string | null } | null,
 } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
   client.setQueryData(emailChannelConfigQuery().queryKey, {
@@ -130,6 +131,7 @@ function renderSettings({
     domains,
     addressMode,
     defaultFrom: 'Acme <notifications@example.com>',
+    sendingPaused,
   } as never)
   return render(
     <QueryClientProvider client={client}>
@@ -846,6 +848,30 @@ describe('the add form', () => {
     expect(createAddress).toHaveBeenLastCalledWith(
       { address: 'help@acme.com', module: 'support' },
       expect.anything()
+    )
+  })
+})
+
+describe('a paused workspace', () => {
+  afterEach(cleanup)
+  const LINE = /Sending is paused by the email provider because of bounces or complaints\./
+
+  it('says nothing while mail sends', () => {
+    renderSettings()
+    expect(screen.queryByText(LINE)).toBeNull()
+  })
+
+  it('shows one line with the provider reason when sending is paused', () => {
+    renderSettings({ sendingPaused: { cause: 'Bounce rate above threshold.' } })
+    const line = screen.getByText(LINE)
+    expect(line.textContent).toContain('Bounce rate above threshold.')
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+
+  it('shows the line without a reason when none is kept', () => {
+    renderSettings({ sendingPaused: { cause: null } })
+    expect(screen.getByText(LINE).textContent).toBe(
+      'Sending is paused by the email provider because of bounces or complaints.'
     )
   })
 })

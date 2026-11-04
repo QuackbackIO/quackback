@@ -26,6 +26,7 @@ import {
 } from '@/lib/client/mutations/channel-accounts'
 import type { SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import { DomainSetupPanel } from './domain-setup-panel'
+import { SendingPausedNotice } from './sending-paused-notice'
 import {
   domainPhase,
   failingRecordName,
@@ -77,6 +78,7 @@ export function EmailChannelSettings() {
   const { data } = useQuery(emailChannelConfigQuery())
   return (
     <div className="space-y-6">
+      <SendingPausedNotice paused={data?.sendingPaused ?? null} />
       <InboundRouteSection
         forwardingTarget={inboundTarget(data?.inboundRoute)}
         platformAddress={data?.platformAddress ?? null}
