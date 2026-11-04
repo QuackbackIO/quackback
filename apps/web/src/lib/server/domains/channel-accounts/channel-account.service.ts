@@ -15,6 +15,7 @@ import {
   and,
   or,
   isNull,
+  isNotNull,
   inArray,
   desc,
   sql,
@@ -76,6 +77,7 @@ export async function createSendingDomain(input: {
   owningTeamId: TeamId
   domain: string
   dnsRecords?: SendingDomainDnsRecord[]
+  dkimMode?: EmailSendingDomain['dkimMode']
 }): Promise<EmailSendingDomain> {
   const limit = (await getTierLimits()).maxSendingDomains
   return db.transaction(async (tx) => {
@@ -83,11 +85,8 @@ export async function createSendingDomain(input: {
     await tierEnforce.enforceSendingDomainLimit(limit, tx)
     const [row] = await tx
       .insert(emailSendingDomains)
-      .values({
-        owningTeamId: input.owningTeamId,
-        domain: input.domain.trim().toLowerCase(),
-        dnsRecords: input.dnsRecords ?? [],
-      })
+      // Records and signing mode left out take the column defaults.
+      .values({ ...input, domain: input.domain.trim().toLowerCase() })
       .returning()
     return row
   })
@@ -148,13 +147,17 @@ export class SendingDomainInUseError extends Error {
 }
 
 export async function deleteSendingDomain(id: SendingDomainId): Promise<void> {
-  const [referenced] = await db
-    .select({ id: channelAccounts.id })
-    .from(channelAccounts)
-    .where(and(eq(channelAccounts.sendingDomainId, id), isNull(channelAccounts.deletedAt)))
-    .limit(1)
-  if (referenced) throw new SendingDomainInUseError()
-  await db.delete(emailSendingDomains).where(eq(emailSendingDomains.id, id))
+  const linked = eq(channelAccounts.sendingDomainId, id)
+  await db.transaction(async (tx) => {
+    const live = await tx.$count(channelAccounts, and(linked, isNull(channelAccounts.deletedAt)))
+    if (live > 0) throw new SendingDomainInUseError()
+    // A removed address keeps its link, and the RESTRICT counts it too, so the
+    // link goes before the domain does. Removed rows only: one added since the
+    // count still holds the domain, and the delete then refuses.
+    const removed = and(linked, isNotNull(channelAccounts.deletedAt))
+    await tx.update(channelAccounts).set({ sendingDomainId: null }).where(removed)
+    await tx.delete(emailSendingDomains).where(eq(emailSendingDomains.id, id))
+  })
 }
 
 // ---------------------------------------------------------------------------
