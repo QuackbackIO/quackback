@@ -3,17 +3,17 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   createInboundRouteFn,
   createSendingAddressFn,
-  createSendingDomainFn,
-  verifySendingDomainFn,
+  restartSendingDomainChecksFn,
   deleteSendingDomainFn,
   deleteChannelAccountFn,
   updateInboundTrustFn,
   clearInboundForwardingFn,
   updateSendingAddressSmtpFn,
+  sendTestEmailFn,
 } from '@/lib/server/functions/channel-accounts'
 import { emailChannelKeys } from '@/lib/client/queries/channel-accounts'
 
-function useConfigMutation<A>(fn: (a: A) => Promise<unknown>) {
+function useConfigMutation<A, R = unknown>(fn: (a: A) => Promise<R>) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: fn,
@@ -31,17 +31,20 @@ export const useCreateSendingAddress = () =>
     createSendingAddressFn({ data })
   )
 
-export const useCreateSendingDomain = () =>
-  useConfigMutation((domain: string) => createSendingDomainFn({ data: { domain } }))
-
-export const useVerifySendingDomain = () =>
-  useConfigMutation((id: string) => verifySendingDomainFn({ data: { id } }))
+export const useRestartSendingDomainChecks = () =>
+  useConfigMutation((id: string) => restartSendingDomainChecksFn({ data: { id } }))
 
 export const useDeleteSendingDomain = () =>
   useConfigMutation((id: string) => deleteSendingDomainFn({ data: { id } }))
 
 export const useDeleteChannelAccount = () =>
   useConfigMutation((id: string) => deleteChannelAccountFn({ data: { id } }))
+
+/** Sends a test from a live address to the person asking; changes no config. */
+export const useSendTestEmail = () =>
+  useMutation({
+    mutationFn: (addressId: string) => sendTestEmailFn({ data: { addressId } }),
+  })
 
 export const useUpdateInboundTrust = () =>
   useConfigMutation((inboundTrust: 'strict' | 'lenient') =>

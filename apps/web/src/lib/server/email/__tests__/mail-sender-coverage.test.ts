@@ -36,6 +36,9 @@ const MAIL_FROM_CLASS: Record<string, 'platform' | 'workspace-identity'> = {
   sendPasswordResetEmail: 'platform',
   sendNewSignInEmail: 'platform',
   sendRecoveryCodeUsedEmail: 'platform',
+  // About the workspace's own setup, to a teammate: never part of a customer
+  // thread, and the domain it reports on is the one that just stopped verifying.
+  sendSendingDomainAttentionEmail: 'platform',
   sendMagicLinkEmail: 'platform',
   // The other half of the sign-in request, and it must speak as the same
   // sender: it is the answer to a sign-in attempt, not part of any thread a

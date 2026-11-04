@@ -21,6 +21,8 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
   sendPasswordResetEmail: 'account',
   sendNewSignInEmail: 'account',
   sendRecoveryCodeUsedEmail: 'account',
+  // An operational alert to a teammate's own account address.
+  sendSendingDomainAttentionEmail: 'account',
 
   // Capability over whoever holds the address: mail exactly what was minted.
   sendMagicLinkEmail: 'sealed',
