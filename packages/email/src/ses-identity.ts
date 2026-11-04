@@ -61,6 +61,20 @@ export const SES_IDENTITY_ACTIONS = [
 ] as const
 
 /**
+ * The further IAM actions the same credential calls when the operator isolates
+ * reputation per workspace (`EMAIL_SES_TENANTS`); see `ses-tenant.ts`. Granted
+ * on `tenant/*`, and the two association actions also on the identities and the
+ * configuration set they associate. No tags are set, so no `ses:TagResource`.
+ */
+export const SES_TENANT_ACTIONS = [
+  'ses:CreateTenant',
+  'ses:GetTenant',
+  'ses:CreateTenantResourceAssociation',
+  'ses:DeleteTenantResourceAssociation',
+  'ses:GetReputationEntity',
+] as const
+
+/**
  * A provisioning call refused before it was attempted.
  *
  * Permanent, for the reason every configuration failure in this package is: a
@@ -215,6 +229,15 @@ function configFailure(message: string): SesIdentityConfigError {
 }
 
 function depsFromEnv(): SesIdentityDeps {
+  return sesManagementClient()
+}
+
+/**
+ * The identity credential's client and region, for every call that manages
+ * account resources rather than sending: identities here, tenants in
+ * `ses-tenant.ts`. Refuses out loud when the credential or region is missing.
+ */
+export function sesManagementClient(): { client: SESv2Client; region: string } {
   const credentials = identityCredentials()
   if (!credentials) {
     throw configFailure(
@@ -222,7 +245,8 @@ function depsFromEnv(): SesIdentityDeps {
         'required to verify a sending domain. This is a separate credential from the sending ' +
         `one and needs exactly: ${SES_IDENTITY_ACTIONS.join(', ')}. Do not grant ` +
         'ses:DeleteEmailIdentity: one process able to delete identities can stop every ' +
-        'workspace on this account from sending.'
+        'workspace on this account from sending. With EMAIL_SES_TENANTS it also needs: ' +
+        `${SES_TENANT_ACTIONS.join(', ')}.`
     )
   }
   const region = sesRegion()
