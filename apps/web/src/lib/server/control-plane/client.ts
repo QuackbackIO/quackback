@@ -1,5 +1,9 @@
 import { createHmac } from 'node:crypto'
 import { canonicalPlanId, isPlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
+import type {
+  HostnameProof,
+  HostnameProofSource,
+} from '@/lib/server/domains/domain-proof/hostname-proof'
 import {
   getCurrentWorkspace,
   getWorkspaceSecretKey,
@@ -30,12 +34,16 @@ export type CustomDomainInstruction = {
    * until the proof is seen. A domain goes live only after it is published.
    */
   ownershipProof?: { name: string; value: string } | null
+  /** Set when a zone this workspace already proved stood in for that record. */
+  ownership?: 'proven-zone'
+  ownershipSource?: HostnameProofSource
 }
 
 export async function requestWorkspaceIdentityMutation(input: {
   displayName?: string
   platformLabel?: string
-  customDomain?: { action: CustomDomainAction; hostname: string }
+  /** `proof` goes with `add` and `refresh` only. */
+  customDomain?: { action: CustomDomainAction; hostname: string; proof?: HostnameProof }
 }): Promise<{ projectionToken: string }> {
   const result = await requestWorkspaceControlPlane<{ projectionToken?: unknown }>(
     '/api/v1/internal/identity',

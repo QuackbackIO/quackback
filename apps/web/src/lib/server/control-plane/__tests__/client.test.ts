@@ -21,6 +21,7 @@ import {
   reportTrialActivation,
   reportWorkspaceUsage,
   requestWorkspaceIdentityMutation,
+  fetchWorkspaceCustomDomains,
   createHostedBillingSession,
   normalizeBillingCatalogue,
   startWorkspaceTrial,
@@ -87,6 +88,42 @@ describe('workspace control-plane credential', () => {
     })
     expect(String(init.body)).not.toContain('workspaceId')
     expect(String(init.body)).not.toContain('instanceId')
+  })
+
+  it('sends a proven zone with a custom-domain action exactly as given', async () => {
+    hoisted.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ projectionToken: 'signed-projection' }), { status: 200 })
+    )
+    const proof = {
+      source: 'sso' as const,
+      zone: 'acme.test',
+      record: { name: '_quackback-verify.acme.test', value: 'qb-domain-verify=tok' },
+    }
+    await requestWorkspaceIdentityMutation({
+      customDomain: { action: 'refresh', hostname: 'feedback.acme.test', proof },
+    })
+    const [, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({
+      customDomain: { action: 'refresh', hostname: 'feedback.acme.test', proof },
+    })
+  })
+
+  it('keeps whether the operator accepted a proven zone on each hostname', async () => {
+    const row = {
+      hostname: 'feedback.acme.test',
+      readiness: 'pending',
+      isPrimary: false,
+      updatedAt: '2026-10-01T12:00:00.000Z',
+      cnameTarget: 'edge.example.net',
+      ownershipTxt: null,
+      ownershipProof: null,
+      ownership: 'proven-zone',
+      ownershipSource: 'email-sending',
+    }
+    hoisted.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ customDomains: [row] }), { status: 200 })
+    )
+    await expect(fetchWorkspaceCustomDomains()).resolves.toEqual([row])
   })
 
   it('loads the billing catalogue over GET without a workspace id', async () => {

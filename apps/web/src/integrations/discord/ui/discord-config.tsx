@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowPathIcon, HashtagIcon } from '@heroicons/react/24/solid'
+import { ArrowPathIcon, HashtagIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useUpdateIntegration } from '@/lib/client/mutations'
@@ -155,7 +155,10 @@ export function DiscordConfig({
           loadingChannels={loadingChannels}
           channelError={channelError}
           onRefreshChannels={refreshChannels}
-          renderChannelIcon={() => <HashtagIcon className="h-3.5 w-3.5 text-muted-foreground" />}
+          renderChannelIcon={(channel) => {
+            const Icon = channel?.isPrivate ? LockClosedIcon : HashtagIcon
+            return <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+          }}
         />
       </div>
 

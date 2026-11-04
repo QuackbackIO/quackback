@@ -16,7 +16,8 @@
     "./recipient": "./src/recipient.ts",
     "./sender": "./src/sender.ts",
     "./ses": "./src/ses.ts",
-    "./ses-identity": "./src/ses-identity.ts"
+    "./ses-identity": "./src/ses-identity.ts",
+    "./ses-tenant": "./src/ses-tenant.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1131.0",
