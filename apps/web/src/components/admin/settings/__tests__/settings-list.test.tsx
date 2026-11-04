@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import '@testing-library/jest-dom/vitest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -213,5 +214,18 @@ describe('RowActions', () => {
       </SettingsList>
     )
     expect(screen.getByRole('button', { name: 'Actions for Bug' })).toBeTruthy()
+  })
+})
+
+describe('SettingsListRow meta', () => {
+  it('cuts long meta to one line by default and wraps it when asked', () => {
+    render(
+      <SettingsList>
+        <SettingsListRow title="a" meta="one line" />
+        <SettingsListRow title="b" meta="a whole sentence" wrapMeta />
+      </SettingsList>
+    )
+    expect(screen.getByText('one line')).toHaveClass('truncate')
+    expect(screen.getByText('a whole sentence')).not.toHaveClass('truncate')
   })
 })

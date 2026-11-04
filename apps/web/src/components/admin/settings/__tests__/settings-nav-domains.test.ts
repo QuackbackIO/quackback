@@ -1,44 +1,51 @@
 import { describe, expect, it } from 'vitest'
-import { buildNavSections, isNavModule } from '../settings-nav-sections'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
+import {
+  buildNavSections,
+  isNavModule,
+  navSectionsFor,
+} from '../settings-nav-sections'
 
 const FLAGS = { supportInbox: true, supportTickets: true }
 
-describe('settings nav with cloud identity off', () => {
-  it('is identical to the nav with the Domains row removed', () => {
-    const withoutDomains = buildNavSections(FLAGS, false, false)
-    const withDomains = buildNavSections(FLAGS, false, true)
+const workspaceLabels = (permissions: PermissionKey[]) =>
+  navSectionsFor(buildNavSections(FLAGS), new Set(permissions))
+    .find((s) => s.label === 'Workspace')
+    ?.items.map((item) => item.label) ?? []
 
-    expect(withoutDomains).toEqual(
-      withDomains.map((section) =>
-        section.label === 'Workspace'
-          ? {
-              ...section,
-              items: section.items.filter(
-                (item) => isNavModule(item) || item.to !== '/admin/settings/domains'
-              ),
-            }
-          : section
-      )
+describe('settings nav Domains row', () => {
+  it('is listed on every install, once, next to General', () => {
+    const workspace = buildNavSections(FLAGS).find((s) => s.label === 'Workspace')!
+    const domains = workspace.items.filter(
+      (item) => !isNavModule(item) && item.to === '/admin/settings/domains'
     )
+    expect(domains).toEqual([
+      {
+        label: 'Domains',
+        to: '/admin/settings/domains',
+        anyOf: DOMAINS_PAGE_PERMISSIONS,
+        overview: { owner: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN },
+      },
+    ])
+    const labels = workspace.items.map((item) => item.label)
+    expect(labels.indexOf('Domains')).toBe(labels.indexOf('General') + 1)
   })
 
-  it('defaults to no Domains row', () => {
-    expect(buildNavSections(FLAGS)).toEqual(buildNavSections(FLAGS, false, false))
+  it('opens to a holder of any permission that owns a kind of domain', () => {
+    expect(DOMAINS_PAGE_PERMISSIONS).toEqual([
+      PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+      PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+      PERMISSIONS.AUTH_MANAGE,
+    ])
+    for (const permission of DOMAINS_PAGE_PERMISSIONS) {
+      expect(workspaceLabels([permission]), permission).toContain('Domains')
+    }
   })
 
-  it('adds exactly one Domains row next to General when cloud is on', () => {
-    const workspace = buildNavSections(FLAGS, false, true).find((s) => s.label === 'Workspace')!
-    const added = workspace.items.filter(
-      (item) => !isNavModule(item) && item.to.includes('domains')
-    )
-    expect(added).toHaveLength(1)
-    expect(added[0]).toMatchObject({ label: 'Domains', to: '/admin/settings/domains' })
-    const generalIndex = workspace.items.findIndex(
-      (item) => 'label' in item && item.label === 'General'
-    )
-    const domainsIndex = workspace.items.findIndex(
-      (item) => 'label' in item && item.label === 'Domains'
-    )
-    expect(domainsIndex).toBe(generalIndex + 1)
+  it('is hidden from a viewer who holds none of them', () => {
+    expect(
+      workspaceLabels([PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.HELP_CENTER_MANAGE])
+    ).not.toContain('Domains')
   })
 })

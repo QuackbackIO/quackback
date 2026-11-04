@@ -188,8 +188,8 @@ export const ASK_GOLDEN_CASES: readonly AskGoldenCase[] = [
     profile: 'owner',
     tool: 'navigate_workspace',
     arguments: { destination: 'domains' },
-    expected: 'denied',
-    denialReason: 'unavailable',
+    expected: 'navigation',
+    expectedHref: '/admin/settings/domains',
   },
   {
     id: '19',

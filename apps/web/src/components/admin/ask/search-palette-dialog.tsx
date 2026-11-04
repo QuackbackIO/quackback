@@ -8,7 +8,6 @@ import { AskMessages } from './ask-messages'
 import { usePermissions } from '@/lib/client/use-permissions'
 import {
   useBillingEnabled,
-  useCloudEnabled,
   useFeatureFlags,
   usePrincipalId,
 } from '@/lib/client/hooks/use-root-context'
@@ -37,7 +36,6 @@ function SearchPaletteDialogView({ open, onOpenChange, returnFocus }: SearchPale
   const permissions = usePermissions()
   const featureFlags = useFeatureFlags()
   const billingEnabled = useBillingEnabled()
-  const domainsEnabled = useCloudEnabled()
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   useEffect(() => {
@@ -54,8 +52,8 @@ function SearchPaletteDialogView({ open, onOpenChange, returnFocus }: SearchPale
     staleTime: 30_000,
   })
   const options = useMemo(
-    () => ({ permissions, featureFlags, billingEnabled, domainsEnabled }),
-    [permissions, featureFlags, billingEnabled, domainsEnabled]
+    () => ({ permissions, featureFlags, billingEnabled }),
+    [permissions, featureFlags, billingEnabled]
   )
   const label = (item: { messageId: string; defaultMessage: string }) =>
     intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })

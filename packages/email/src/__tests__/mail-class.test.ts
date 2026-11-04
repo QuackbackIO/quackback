@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { EMAIL_BILLABLE, METERED_EMAIL_TYPES, isEmailBillable } from '../mail-class'
+import {
+  EMAIL_BILLABLE,
+  EMAIL_TENANTED,
+  METERED_EMAIL_TYPES,
+  isEmailBillable,
+  isTenantedEmailType,
+} from '../mail-class'
 
 describe('email meter classes', () => {
   it('meters changelog and status-page subscriber sends only', () => {
@@ -33,5 +39,41 @@ describe('email meter classes', () => {
       expect(isEmailBillable(emailType)).toBe(false)
       expect(METERED_EMAIL_TYPES).not.toContain(emailType)
     }
+  })
+})
+
+describe('provider tenant classes', () => {
+  it('classifies every type the meter classifies, and no other', () => {
+    expect(Object.keys(EMAIL_TENANTED).sort()).toEqual(Object.keys(EMAIL_BILLABLE).sort())
+  })
+
+  it('keeps sign-in, verification, invitation and security mail untenanted', () => {
+    const untenanted = Object.entries(EMAIL_TENANTED)
+      .filter(([, tenanted]) => !tenanted)
+      .map(([type]) => type)
+      .sort()
+    expect(untenanted).toEqual(
+      [
+        'InvitationEmail',
+        'MagicLinkEmail',
+        'NewSignInEmail',
+        'PasswordResetEmail',
+        'PortalInviteEmail',
+        'RecoveryCodeUsedEmail',
+        'SignupNotAllowedEmail',
+        'VerifyAddressEmail',
+      ].sort()
+    )
+  })
+
+  it('tenants workspace mail, a raw send, and a send that names no type', () => {
+    expect(isTenantedEmailType('ConversationReplyEmail')).toBe(true)
+    expect(isTenantedEmailType('ChangelogPublishedEmail')).toBe(true)
+    expect(isTenantedEmailType('RawEmail')).toBe(true)
+    expect(isTenantedEmailType(undefined)).toBe(true)
+  })
+
+  it('sends a type nobody classified untenanted, as before tenants', () => {
+    expect(isTenantedEmailType('SomeNewEmail')).toBe(false)
   })
 })
