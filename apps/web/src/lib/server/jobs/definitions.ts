@@ -322,6 +322,44 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // The automatic check on sending domains being set up, for 72 hours after
+    // each is added or restarted, so a domain goes live within minutes of its
+    // records being published. Returns after one query in a workspace with
+    // nothing pending, which is nearly all of them. Offset off the hour's
+    // first minute, where the hourly and daily passes start, and capped across
+    // the fleet because each pending domain costs DNS lookups and sometimes a
+    // provider call. One attempt: the next tick is the retry.
+    name: 'sending-domain-watch',
+    cron: '7/10 * * * *',
+    fleetConcurrency: 4,
+    maxAttempts: 1,
+    handler: () =>
+      import('@/lib/server/domains/channel-accounts/sending-domain-watch-queue').then(
+        (m) => m.runSendingDomainWatch
+      ),
+  },
+  {
+    // The workspace's mail provider tenant, when the operator isolates sending
+    // reputation per workspace. Hourly, but each tick returns after one row
+    // read unless the workspace has never been reconciled, is not ready, or
+    // was last reconciled a day ago; adding, verifying or removing a sending
+    // domain enqueues one on demand. Capped across the fleet because each run
+    // makes several provider management calls.
+    name: 'ses-tenant-reconcile',
+    cron: '41 * * * *',
+    cronEnabled: () =>
+      import('@/lib/server/domains/channel-accounts/ses-tenant-queue').then((m) =>
+        m.sesTenantReconcileEnabled()
+      ),
+    fleetConcurrency: 2,
+    maxAttempts: 3,
+    retryBackoffMs: 60_000,
+    handler: () =>
+      import('@/lib/server/domains/channel-accounts/ses-tenant-queue').then(
+        (m) => m.runSesTenantReconcile
+      ),
+  },
+  {
     // Whole-table aggregates in every workspace's database, all against the
     // one shared server, so the fleet runs a few at a time rather than all of
     // them inside the hour's first minute.

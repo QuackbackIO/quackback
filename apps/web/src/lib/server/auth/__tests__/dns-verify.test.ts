@@ -1,9 +1,10 @@
 /**
  * Unit tests for the DNS TXT verification helper.
  *
- * Mocks `node:dns/promises` so we can simulate the four reachability
- * states (records / NXDOMAIN / generic failure / timeout) without
- * touching real DNS in CI.
+ * Replaces the shared resolver so the reachability states (records /
+ * NXDOMAIN / generic failure) can be simulated without touching real DNS.
+ * The fake records the name it was asked, so a lookup that went around the
+ * shared resolver, or asked the wrong name, fails here.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -12,11 +13,8 @@ const hoisted = vi.hoisted(() => ({
   mockResolveTxt: vi.fn(),
 }))
 
-vi.mock('node:dns/promises', () => ({
-  resolveTxt: hoisted.mockResolveTxt,
-  // Node builtin mocks need a default export or scoped vitest runs fail to
-  // resolve the module (full-suite runs mask this via import order).
-  default: { resolveTxt: hoisted.mockResolveTxt },
+vi.mock('@/lib/server/dns/resolver', () => ({
+  systemResolver: { resolveTxt: hoisted.mockResolveTxt },
 }))
 
 const { lookupVerificationTxt } = await import('../dns-verify')
@@ -30,6 +28,7 @@ describe('lookupVerificationTxt', () => {
     hoisted.mockResolveTxt.mockResolvedValue([['qb-domain-verify=', 'tok123']])
     const result = await lookupVerificationTxt('_quackback-verify.acme.com')
     expect(result).toEqual({ ok: true, values: ['qb-domain-verify=tok123'] })
+    expect(hoisted.mockResolveTxt.mock.calls).toEqual([['_quackback-verify.acme.com']])
   })
 
   it('returns ok=true with multiple records', async () => {
@@ -68,5 +67,15 @@ describe('lookupVerificationTxt', () => {
     hoisted.mockResolveTxt.mockRejectedValue(new Error('SERVFAIL'))
     const result = await lookupVerificationTxt('_quackback-verify.acme.com')
     expect(result).toEqual({ ok: false, reason: 'lookup-failed' })
+  })
+})
+
+describe('lookupVerificationTxt resolver', () => {
+  it('reads through the resolver it is given', async () => {
+    const given = { resolveTxt: vi.fn(async () => [['qb-domain-verify=x']]) }
+    const result = await lookupVerificationTxt('_quackback-verify.acme.com', given as never)
+    expect(result).toEqual({ ok: true, values: ['qb-domain-verify=x'] })
+    expect(given.resolveTxt).toHaveBeenCalledWith('_quackback-verify.acme.com')
+    expect(hoisted.mockResolveTxt).not.toHaveBeenCalled()
   })
 })

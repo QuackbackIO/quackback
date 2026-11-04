@@ -216,7 +216,9 @@ export function isSendingIdentityPermitted(from: string, ctx: SendingIdentityCon
 }
 
 /** Gather the context from this process and this workspace's database. */
-async function sendingIdentityContext(env: EnvLike = process.env): Promise<SendingIdentityContext> {
+export async function sendingIdentityContext(
+  env: EnvLike = process.env
+): Promise<SendingIdentityContext> {
   // Scoped by the database this runs against, and the guard above is what makes
   // that scoping load-bearing rather than incidental. The domains are handed
   // over as stored: the rule normalises every domain it compares, so doing it

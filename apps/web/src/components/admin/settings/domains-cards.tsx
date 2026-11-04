@@ -4,7 +4,12 @@ import { Label } from '@/components/ui/label'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { UpgradeNotice } from '@/components/admin/upgrade'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { StateBadge } from '@/components/shared/state-badge'
+import {
+  DnsRecordTable,
+  FULL_NAMES_NOTE,
+  type DnsRecordRow,
+} from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 
 export function QuackbackUrlCard(props: {
@@ -65,11 +70,48 @@ function isTxtRecord(value: unknown): value is { name: string; value: string } {
   return typeof record.name === 'string' && typeof record.value === 'string'
 }
 
-const READINESS_LABEL = {
-  pending: 'Waiting for DNS',
-  ready: 'Ready',
-  failed: 'Needs attention',
+const READINESS_STATE = {
+  pending: 'waiting',
+  ready: 'found',
+  failed: 'problem',
 } as const
+
+/**
+ * The records a hostname needs: the CNAME that routes it and, until it is
+ * seen, the TXT that proves this workspace controls it. Readiness is reported
+ * for the hostname as a whole, so every row shares it and a failure is
+ * explained once, under the last row.
+ */
+function hostnameRecords(domain: CustomDomainInstruction): DnsRecordRow[] {
+  const state = READINESS_STATE[domain.readiness]
+  const records: DnsRecordRow[] = [
+    {
+      label: 'Routing',
+      type: 'CNAME',
+      name: domain.hostname,
+      value: domain.cnameTarget,
+      state,
+    },
+  ]
+  if (isTxtRecord(domain.ownershipProof)) {
+    records.push({
+      label: 'Ownership',
+      type: 'TXT',
+      name: domain.ownershipProof.name,
+      value: domain.ownershipProof.value,
+      state,
+    })
+  }
+  records[records.length - 1]!.problem =
+    "We couldn't confirm these records. Check each name and value, then check status."
+  return records
+}
+
+/** No badge when ready; Setting up while pending; Needs attention when failed. */
+function ReadinessBadge({ readiness }: { readiness: CustomDomainInstruction['readiness'] }) {
+  if (readiness === 'ready') return null
+  return <StateBadge state={readiness === 'pending' ? 'setting-up' : 'attention'} />
+}
 
 export function DomainsCard(props: {
   entitled: boolean
@@ -84,7 +126,10 @@ export function DomainsCard(props: {
   onRemove: (hostname: string) => void
 }) {
   return (
-    <SettingsCard title="Custom domain" description="Point a hostname you own at this workspace.">
+    <SettingsCard
+      title="Web addresses"
+      description="Where people reach your portal and help center."
+    >
       {!props.entitled ? (
         <UpgradeNotice entitlement="customDomain" />
       ) : (
@@ -126,21 +171,14 @@ export function DomainsCard(props: {
           {props.domains.map((domain) => (
             <li key={domain.hostname} className="space-y-3 py-4 first:pt-0 last:pb-0">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0 space-y-1">
-                  <p className="truncate text-sm font-medium">{domain.hostname}</p>
-                  <Badge
-                    size="sm"
-                    variant={
-                      domain.readiness === 'ready'
-                        ? 'secondary'
-                        : domain.readiness === 'failed'
-                          ? 'destructive'
-                          : 'outline'
-                    }
-                  >
-                    {domain.isPrimary ? 'Primary · ' : ''}
-                    {READINESS_LABEL[domain.readiness]}
-                  </Badge>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">{domain.hostname}</span>
+                    <ReadinessBadge readiness={domain.readiness} />
+                  </div>
+                  {domain.isPrimary && (
+                    <p className="mt-px text-[13px] text-muted-foreground">Primary</p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -175,20 +213,9 @@ export function DomainsCard(props: {
                 </div>
               </div>
               {domain.readiness !== 'ready' && (
-                <div className="rounded-md bg-muted/30 px-3 py-2 text-[13px]">
-                  <p className="text-muted-foreground">
-                    Add a CNAME from <span className="font-mono">{domain.hostname}</span> to{' '}
-                    <span className="font-mono">{domain.cnameTarget}</span>.
-                  </p>
-                  {isTxtRecord(domain.ownershipProof) && (
-                    <p className="mt-1 text-muted-foreground">
-                      Then add a TXT record at{' '}
-                      <span className="font-mono break-all">{domain.ownershipProof.name}</span> with
-                      the value{' '}
-                      <span className="font-mono break-all">{domain.ownershipProof.value}</span> to
-                      prove you own the domain.
-                    </p>
-                  )}
+                <div className="space-y-1">
+                  <DnsRecordTable records={hostnameRecords(domain)} />
+                  <p className="text-xs text-muted-foreground">{FULL_NAMES_NOTE}</p>
                 </div>
               )}
             </li>

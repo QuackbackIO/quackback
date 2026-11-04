@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 
 import { DomainsCard } from '../domains-cards'
+import { FULL_NAMES_NOTE } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 
 afterEach(cleanup)
@@ -82,9 +83,44 @@ describe('<DomainsCard>', () => {
     expect(screen.queryByText(/TXT record/i)).toBeNull()
   })
 
+  it("lists a pending hostname's records as waiting, with no fix yet", () => {
+    renderCard([
+      {
+        ...base,
+        readiness: 'pending',
+        ownershipTxt: null,
+        ownershipProof: { name: '_quackback-challenge.feedback.example.com', value: 'proof-1' },
+      } as CustomDomainInstruction,
+    ])
+    const rows = [...document.querySelectorAll('[data-slot="dns-record"]')]
+    expect(rows.map((r) => r.textContent)).toEqual([
+      'Waiting: Routingfeedback.example.comCNAMEedge.example.net',
+      'Waiting: Ownership_quackback-challenge.feedback.example.comTXTproof-1',
+    ])
+    expect(document.querySelectorAll('[data-slot="dns-record-fix"]')).toHaveLength(0)
+    // The hostname's zone is not known, so names are shown in full and the card says so.
+    expect(screen.getByText(FULL_NAMES_NOTE)).toBeTruthy()
+  })
+
+  it('explains a failed hostname once, under its last record', () => {
+    renderCard([
+      {
+        ...base,
+        readiness: 'failed',
+        ownershipTxt: null,
+        ownershipProof: { name: '_quackback-challenge.feedback.example.com', value: 'proof-1' },
+      } as CustomDomainInstruction,
+    ])
+    const rows = [...document.querySelectorAll('[data-slot="dns-record"]')]
+    expect(rows.every((r) => r.textContent?.startsWith('Needs a fix:'))).toBe(true)
+    const fixes = document.querySelectorAll('[data-slot="dns-record-fix"]')
+    expect(fixes).toHaveLength(1)
+    expect(rows[1]!.nextElementSibling).toBe(fixes[0])
+  })
+
   it('names no hosting provider in its description', () => {
     renderCard([])
     expect(screen.queryByText(/cloud/i)).toBeNull()
-    expect(screen.getByText('Point a hostname you own at this workspace.')).toBeTruthy()
+    expect(screen.getByText('Where people reach your portal and help center.')).toBeTruthy()
   })
 })

@@ -631,6 +631,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "send behind another workspace's sends by at most the 30s wait cap, never read or alter them.",
   },
   {
+    file: 'apps/web/src/lib/server/dns/resolver.ts',
+    name: 'resolvers',
+    category: 'fleet-wide',
+    reason:
+      'DNS resolvers keyed by try count, each built from fixed options (two second timeout) and the system ' +
+      'nameservers. It holds no answers and no workspace: every lookup is a fresh public DNS ' +
+      'query, so a cross-workspace hit asks the same question of the same nameservers that ' +
+      'either workspace would have built a resolver to ask.',
+  },
+  {
     file: 'packages/email/src/ses-identity.ts',
     name: 'cachedClient',
     category: 'fleet-wide',
@@ -658,6 +668,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Holds a function pointer installed at boot. Each send awaits it, and the function reads ' +
       'live workspace cloud config through the scoped db Proxy, so sharing the pointer is not a ' +
       'cross-workspace cache.',
+  },
+  {
+    file: 'packages/email/src/tenant-hooks.ts',
+    name: 'hooks',
+    category: 'process-lifetime',
+    reason:
+      'Holds two function pointers installed at boot. Each send awaits the tenant lookup, which ' +
+      'derives the tenant name from getCurrentWorkspace() and reads that workspace row through ' +
+      'the scoped db Proxy, so two workspaces in one process get their own tenants. Nothing about ' +
+      'a workspace is kept in here.',
   },
   {
     file: 'packages/email/src/default-from.ts',

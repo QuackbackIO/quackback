@@ -23,10 +23,7 @@ export function EmailTransportCard() {
   const outboundLabel = OUTBOUND_LABEL[data.provider]
 
   return (
-    <SettingsCard
-      title="Transport"
-      description="How conversation emails are sent and received. Configured via environment variables on the server."
-    >
+    <SettingsCard title="Transport" description="How this server sends and receives email.">
       <SettingRows>
         <SettingRow
           label="Outbound email"
@@ -41,6 +38,14 @@ export function EmailTransportCard() {
           control={
             <TransportValue>
               {data.inboundConfigured ? (data.inboundDomain ?? 'Configured') : 'Not configured'}
+            </TransportValue>
+          }
+        />
+        <SettingRow
+          label="Custom sending domains"
+          control={
+            <TransportValue>
+              {data.customDomains === 'available' ? 'Available' : 'Not available'}
             </TransportValue>
           }
         />
