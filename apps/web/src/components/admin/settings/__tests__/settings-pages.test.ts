@@ -63,7 +63,7 @@ describe('settings page registry', () => {
   })
 
   it('names the renamed pages in the nav', () => {
-    const navItems = buildNavSections(ALL_FLAGS, true, true)
+    const navItems = buildNavSections(ALL_FLAGS, true)
       .flatMap((section) => section.items)
       .filter((item) => !('pages' in item))
     expect(navItems.map((item) => item.label)).toEqual(
@@ -82,7 +82,7 @@ describe('settings page registry', () => {
   })
 
   it('is the source of every AI & Automation nav label, and has an icon for each', () => {
-    const section = buildNavSections(ALL_FLAGS, true, true).find(
+    const section = buildNavSections(ALL_FLAGS, true).find(
       (candidate) => candidate.label === 'AI & Automation'
     )!
     expect(section.items).toHaveLength(5)

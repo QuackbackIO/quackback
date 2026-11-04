@@ -2,6 +2,7 @@ import {
   setDefaultFromResolver,
   setEmailLogSink,
   setEmailPoweredByResolver,
+  setSesTenantHooks,
   type EmailLogSinkEntry,
 } from '@quackback/email'
 import type { ConversationId, PostId, TicketId } from '@quackback/ids'
@@ -80,4 +81,18 @@ export function ensureEmailLogSink(): void {
     return shouldShowPoweredBy(await getCloudConfig())
   })
   setDefaultFromResolver(() => getCurrentWorkspace()?.email.from ?? null)
+  // Per-workspace provider tenants. Each lookup returns null without touching
+  // the database when tenants are off or no workspace is in scope.
+  setSesTenantHooks({
+    tenantFor: async (ctx) => {
+      const { tenantForSend } = await import('@/lib/server/domains/channel-accounts/ses-tenant-state')
+      return tenantForSend(ctx)
+    },
+    onTenantPaused: async (tenantName, detail) => {
+      const { recordSesTenantPaused } = await import(
+        '@/lib/server/domains/channel-accounts/ses-tenant-status'
+      )
+      await recordSesTenantPaused(tenantName, detail)
+    },
+  })
 }
