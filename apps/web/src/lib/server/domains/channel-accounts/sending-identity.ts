@@ -48,7 +48,7 @@ import {
   SES_MAIL_FROM_MX_PRIORITY,
   SES_MAIL_FROM_SPF_VALUE,
 } from '@quackback/email/ses-identity'
-import type { SesDomainIdentity } from '@quackback/email/ses-identity'
+import type { SesDomainIdentity, SesIdentityCreation } from '@quackback/email/ses-identity'
 import { sesRegion } from '@quackback/email/ses'
 import { resolveEmailProvider } from '@quackback/email/provider'
 import type { SendingDomainId, TeamId } from '@quackback/ids'
@@ -389,8 +389,9 @@ export function attachedMailFromLabel(
  * them passes — the check is honest and the resource is still overspent. So the
  * row is inserted under a lock that serialises the count against it (see
  * `createSendingDomain`), and the provider call happens after the slot is held.
- * A provider failure then releases the slot by deleting the row, which is why
- * the create is wrapped rather than awaited bare.
+ * A failed create then releases the slot by deleting the row, which is why
+ * the create is wrapped rather than awaited bare. Only the create: once the
+ * identity exists, the row holds the only copy of the key it signs with.
  *
  * ## The MAIL FROM attach is not unconditional
  *
@@ -440,17 +441,29 @@ export async function provisionSendingDomain(input: {
     dkimMode: 'byo',
   })
 
-  let identity: SesDomainIdentity
-  let preexisting = false
+  let created: SesIdentityCreation
   try {
     // An identity that already exists (another workspace's, or a re-add) keeps
     // its key: the provider signs with that, and this row's record still proves
     // this workspace's ownership.
-    const created = await createSesDomainIdentity(domain, undefined, {
+    created = await createSesDomainIdentity(domain, undefined, {
       selector: key.selector,
       privateKey: key.privateKey,
     })
-    preexisting = created.preexisting
+  } catch (err) {
+    // Release the slot. A row whose provider identity was never created promises
+    // records that will never verify and holds a seat against the plan's cap.
+    await deleteSendingDomain(row.id)
+    throw err
+  }
+  const preexisting = created.preexisting
+
+  // From here the identity exists, and one this call created signs with this
+  // row's key, whose public half lives nowhere else. A failed follow-up keeps
+  // the row: the check attaches a missing MAIL FROM once ownership is proved,
+  // and re-reads the identity every time.
+  let identity: SesDomainIdentity = created.identity
+  try {
     if (!preexisting) {
       await putSesMailFromDomain(domain, mailFromDomainFor(domain, mailFromLabel))
     }
@@ -458,10 +471,10 @@ export async function provisionSendingDomain(input: {
     // of what the call we just made implies.
     identity = (await getSesDomainIdentity(domain)) ?? created.identity
   } catch (err) {
-    // Release the slot. A row whose provider identity was never created promises
-    // records that will never verify and holds a seat against the plan's cap.
-    await deleteSendingDomain(row.id)
-    throw err
+    log.warn(
+      { err, domain, sending_domain_id: row.id },
+      'sending domain identity created, but finishing its setup failed; the next check retries'
+    )
   }
 
   // An identity that was already there keeps signing with its own key; this

@@ -857,6 +857,46 @@ describe.skipIf(!fixture.available)('sending-identity (real DB, rolled back)', (
       expect(row.status).toBe('pending')
     })
 
+    it('keeps the row and its key once the identity exists, when attaching the MAIL FROM fails', async () => {
+      // The provider now signs with this row's key, and the row is the only
+      // place its public half lives. Dropping it would leave a key nobody can
+      // publish, and a retry would find the identity already there.
+      const teamId = await seedTeam()
+      putMailFrom.mockRejectedValueOnce(new Error('throttled'))
+
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+      expect(row.dkimMode).toBe('byo')
+      const key = createIdentity.mock.calls[0][1]
+      expect(row.dnsRecords[0]).toMatchObject({
+        host: `${key?.selector}._domainkey`,
+        value: expect.stringMatching(/^v=DKIM1; k=rsa; p=/),
+      })
+      expect((await getSendingDomain(row.id))?.dkimMode).toBe('byo')
+    })
+
+    it('keeps the row when the re-read after creating the identity fails', async () => {
+      const teamId = await seedTeam()
+      getIdentity
+        .mockResolvedValueOnce(null)
+        .mockRejectedValueOnce(new Error('provider unavailable'))
+
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+      expect(row.dkimMode).toBe('byo')
+      expect(await getSendingDomain(row.id)).not.toBeNull()
+    })
+
+    it('attaches the MAIL FROM on a later check when the first attach failed', async () => {
+      const teamId = await seedTeam()
+      putMailFrom.mockRejectedValueOnce(new Error('throttled'))
+      const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
+      putMailFrom.mockClear()
+
+      getIdentity.mockResolvedValue(identity({ dkimStatus: 'PENDING', mailFrom: null }))
+      ownershipResolves.mockResolvedValue(true)
+      await refreshSendingDomain(row.id)
+      expect(putMailFrom).toHaveBeenCalledWith('tenant-a.example', 'qb-bounce.tenant-a.example')
+    })
+
     it('is unlimited when no cap has been written', async () => {
       // The OSS default, and right for a self-hoster who owns the whole
       // provider account. On a fleet the control plane writes the value; a
