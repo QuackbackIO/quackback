@@ -8,8 +8,18 @@
  * the instructions rather than for whoever owns the domain. So the token is
  * matched WHOLE, and a record that merely mentions it is not proof.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { SendingDomainDnsRecord, SendingDomainOwnershipRecord } from '@/lib/server/db'
+
+/**
+ * The bounded resolver every other domain check reads through. With no reader
+ * passed, the check has to ask this one, never an unbounded lookup that can
+ * hold a background job for as long as a silent nameserver keeps it waiting.
+ */
+const boundedTxt = vi.hoisted(() => vi.fn<(host: string) => Promise<string[][]>>())
+vi.mock('@/lib/server/dns/resolver', () => ({
+  systemResolver: { resolveTxt: (host: string) => boundedTxt(host) },
+}))
 import { ownershipRecordSatisfied, verifySendingDomainDns } from '../domain-verification'
 import { generateDkimKey } from '../dkim-key'
 
@@ -195,5 +205,13 @@ describe('verifySendingDomainDns with a row-minted signing key', () => {
         publishesEverything
       )
     ).toBe(false)
+  })
+})
+
+describe('verifySendingDomainDns with no reader passed', () => {
+  it('reads the zone through the bounded system resolver', async () => {
+    boundedTxt.mockResolvedValue([[ownership.value]])
+    expect(await verifySendingDomainDns('tenant-a.example', [ownership])).toBe(true)
+    expect(boundedTxt).toHaveBeenCalledWith('_quackback.tenant-a.example')
   })
 })

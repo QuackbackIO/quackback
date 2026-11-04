@@ -23,10 +23,10 @@
  * below catches the same mistake arriving out of a jsonb column, where no type
  * survives.
  */
-import { resolveTxt } from 'node:dns/promises'
 import type { SendingDomainOwnershipRecord, SendingDomainProofRecord } from '@/lib/server/db'
 import { dkimPublicKeyOf, isKeyRecord } from './dkim-key'
 import { logger } from '@/lib/server/logger'
+import { systemResolver } from '@/lib/server/dns/resolver'
 
 const log = logger.child({
   component: 'sending-domain-verification',
@@ -91,6 +91,9 @@ function isProofRecord(record: {
  */
 export type ZoneReader = (host: string) => Promise<string[][]>
 
+/** One bounded try, like every other background domain check. */
+const readTxt: ZoneReader = (host) => systemResolver.resolveTxt(host)
+
 /**
  * Resolve and check every expected ownership record. A lookup failure (NXDOMAIN,
  * no record yet) counts as unsatisfied, not an error — the owner is still
@@ -104,7 +107,7 @@ export type ZoneReader = (host: string) => Promise<string[][]>
 export async function verifySendingDomainDns(
   domain: string,
   expected: SendingDomainProofRecord[],
-  readZone: ZoneReader = resolveTxt
+  readZone: ZoneReader = readTxt
 ): Promise<boolean> {
   if (expected.length === 0) return false
   // Typed as proof, but read out of a jsonb column where no type survives.
