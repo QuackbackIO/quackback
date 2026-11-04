@@ -33,6 +33,7 @@ const config = (domains: SendingDomainDTO[]): EmailChannelConfigDTO => ({
   platformAddress: null,
   addressMode: 'verified-domains',
   defaultFrom: null,
+  sendingPaused: null,
 })
 
 /** The interval the query asks for with this config cached. */
