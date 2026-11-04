@@ -315,6 +315,8 @@ describe('the real corpus', () => {
     // (settleMaintenanceStart), so a later replay writes zero rows too.
     // 0302 widens the pending-action parent check to allow no parent, once,
     // guarded by its existing definition already reading `<= 1`.
+    // 0305 gives pending sending domains with no check window one; it fills
+    // only NULL windows and leaves none, so a second run writes zero rows.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -342,6 +344,7 @@ describe('the real corpus', () => {
       '0296_validate_workspace_copilot_checks.sql',
       '0298_status_maintenance_started_at.sql',
       '0302_approvals_foundation.sql',
+      '0305_sending_domain_setup.sql',
     ])
   })
 

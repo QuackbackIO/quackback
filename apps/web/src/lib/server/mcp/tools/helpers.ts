@@ -147,7 +147,7 @@ export function requireTeamRole(auth: McpAuthContext): CallToolResult | null {
  * assignment-derived set. A context built without one (a synthetic actor)
  * falls back to its role's preset, as the policy layer's can() does.
  */
-function heldPermissions(auth: McpAuthContext): ReadonlySet<PermissionKey> {
+export function heldPermissions(auth: McpAuthContext): ReadonlySet<PermissionKey> {
   return auth.permissions ?? resolveActorPermissions(auth.role)
 }
 

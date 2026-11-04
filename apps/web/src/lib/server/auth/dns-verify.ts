@@ -1,33 +1,27 @@
-import { resolveTxt } from 'node:dns/promises'
-
-const DNS_TIMEOUT_MS = 5_000
+import { systemResolver, type DnsResolver } from '@/lib/server/dns/resolver'
 
 export type LookupResult =
-  | { ok: true; values: string[] }
-  | { ok: false; reason: 'no-record' | 'lookup-failed' }
+  { ok: true; values: string[] } | { ok: false; reason: 'no-record' | 'lookup-failed' }
 
 /**
  * Resolve TXT records at `name` and return concatenated string values.
  *
  * RFC 1035 splits any TXT value over 255 bytes into multiple chunks, so
- * `resolveTxt` returns `string[][]` — we join the inner array per record
- * before comparing. ENOTFOUND / ENODATA collapse to `no-record`;
- * anything else (timeout, transport failure, malformed response) becomes
+ * `resolveTxt` returns `string[][]`; the inner array is joined per record
+ * before comparing. ENOTFOUND / ENODATA collapse to `no-record`; anything
+ * else (timeout, transport failure, malformed response) becomes
  * `lookup-failed` so the caller can render a retry-friendly message.
  *
- * 5s timeout via `Promise.race` — node's dns API has no per-call
- * timeout. Without it a hung resolver would block the verify endpoint
- * indefinitely.
+ * Read through the shared resolver (one short try by default; a caller a
+ * person is waiting on passes the two-try one), so a hung zone cannot hold
+ * the verify endpoint.
  */
-export async function lookupVerificationTxt(name: string): Promise<LookupResult> {
-  let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+export async function lookupVerificationTxt(
+  name: string,
+  resolver: Pick<DnsResolver, 'resolveTxt'> = systemResolver
+): Promise<LookupResult> {
   try {
-    const records = await Promise.race([
-      resolveTxt(name),
-      new Promise<never>((_, reject) => {
-        timeoutHandle = setTimeout(() => reject(new Error('dns-timeout')), DNS_TIMEOUT_MS)
-      }),
-    ])
+    const records = await resolver.resolveTxt(name)
     const values = records.map((chunks) => chunks.join(''))
     if (values.length === 0) return { ok: false, reason: 'no-record' }
     return { ok: true, values }
@@ -37,7 +31,5 @@ export async function lookupVerificationTxt(name: string): Promise<LookupResult>
       return { ok: false, reason: 'no-record' }
     }
     return { ok: false, reason: 'lookup-failed' }
-  } finally {
-    if (timeoutHandle) clearTimeout(timeoutHandle)
   }
 }

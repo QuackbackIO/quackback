@@ -164,6 +164,12 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
       'It looks like a cooldown watermark but nothing enforces it server side: both resend paths set it without checking it, and no scheduler resends invitations, so a rewind cannot cause an automatic re-send. Meanwhile the admin members list renders it as the "Sent" date and the pending list sorts by it, so stamping it forward would show every pending invite as sent on the restore date and flatten that ordering. Reclassify to settle with restart-window if the cooldown ever moves server side.',
   },
   {
+    column: schema.emailSesTenants.pausedNotifiedAt,
+    policy: 'preserve',
+    reason:
+      'The once-per-pause claim for an in-app notice, not an outbound send. It comes back together with sending_status on the same row, and the hourly reconcile re-reads the live status from the provider: a pause still in force keeps its claim, and a resume re-arms it. Settling it could swallow the notice for a pause that began after the backup. Reclassify if it ever gates an email.',
+  },
+  {
     column: schema.changelogEntries.publishedAt,
     policy: 'preserve',
     reason:
