@@ -147,19 +147,15 @@ export class SendingDomainInUseError extends Error {
 }
 
 export async function deleteSendingDomain(id: SendingDomainId): Promise<void> {
+  const linked = eq(channelAccounts.sendingDomainId, id)
   await db.transaction(async (tx) => {
-    const [referenced] = await tx
-      .select({ id: channelAccounts.id })
-      .from(channelAccounts)
-      .where(and(eq(channelAccounts.sendingDomainId, id), isNull(channelAccounts.deletedAt)))
-      .limit(1)
-    if (referenced) throw new SendingDomainInUseError()
+    const live = await tx.$count(channelAccounts, and(linked, isNull(channelAccounts.deletedAt)))
+    if (live > 0) throw new SendingDomainInUseError()
     // A removed address keeps its link, and the RESTRICT counts it too, so the
-    // link goes before the domain does.
-    await tx
-      .update(channelAccounts)
-      .set({ sendingDomainId: null })
-      .where(and(eq(channelAccounts.sendingDomainId, id), isNotNull(channelAccounts.deletedAt)))
+    // link goes before the domain does. Removed rows only: one added since the
+    // count still holds the domain, and the delete then refuses.
+    const removed = and(linked, isNotNull(channelAccounts.deletedAt))
+    await tx.update(channelAccounts).set({ sendingDomainId: null }).where(removed)
     await tx.delete(emailSendingDomains).where(eq(emailSendingDomains.id, id))
   })
 }
