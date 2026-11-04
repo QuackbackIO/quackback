@@ -8,11 +8,10 @@ import { PERMISSIONS, type PermissionKey } from './permissions'
 /**
  * - `email-sending`: a verified sending domain, proven by its own ownership
  *   record or its own key.
- * - `sso`: a verified single sign-on domain, proven by its TXT record.
  * - `web-address`: an operator-managed hostname that is ready. It proves that
  *   exact hostname and nothing under or above it.
  */
-export type ProvenZoneSource = 'email-sending' | 'sso' | 'web-address'
+export type ProvenZoneSource = 'email-sending' | 'web-address'
 
 /**
  * A source as a viewer may see it: named when they may see what proved it,
@@ -23,7 +22,6 @@ export type ShownProofSource = ProvenZoneSource | 'workspace'
 /** The permission that shows each kind of proof. */
 const SOURCE_PERMISSION: Record<ProvenZoneSource, PermissionKey> = {
   'email-sending': PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
-  sso: PERMISSIONS.AUTH_MANAGE,
   'web-address': PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
 }
 
@@ -36,7 +34,6 @@ export function shownProofSource(
 
 const SOURCE_LABEL: Record<ProvenZoneSource, string> = {
   'email-sending': 'email sending',
-  sso: 'single sign-on',
   'web-address': 'a web address',
 }
 

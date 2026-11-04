@@ -97,9 +97,8 @@ export async function listSignInDomainSummaries(
       .orderBy(asc(ssoVerifiedDomain.name)),
     getProvenZones(),
   ])
-  const others = zones.filter((z) => z.source !== 'sso')
   return rows.map((r) => {
-    const covering = provenZoneCovering(r.name, others)
+    const covering = provenZoneCovering(r.name, zones)
     return {
       id: r.id,
       name: r.name,

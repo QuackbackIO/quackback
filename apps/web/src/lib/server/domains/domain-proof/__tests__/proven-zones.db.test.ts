@@ -156,11 +156,10 @@ describe.skipIf(!fixture.available)('proven zones (real DB, rolled back)', () =>
         expect.arrayContaining([
           { zone: 'acme.com', source: 'email-sending', exact: false },
           { zone: 'signed.example.com', source: 'email-sending', exact: false },
-          { zone: 'example.org', source: 'sso', exact: false },
           { zone: 'feedback.example.net', source: 'web-address', exact: true },
         ])
       )
-      expect(zones).toHaveLength(4)
+      expect(zones).toHaveLength(3)
     })
 
     it('leaves out pending and failed sending rows', async () => {

@@ -11,22 +11,17 @@
  *   keys, or the row's own key for one set up with a key of its own. A
  *   verified row that no longer carries either is left out, since nothing it
  *   holds says the zone is this workspace's;
- * - a verified single sign-on domain, proven by its `_quackback-verify` TXT;
  * - an operator-managed hostname that is ready, which proves that exact
  *   hostname only.
+ *
+ * Single sign-on domains are not a source: every reader asks whether a proof
+ * other than single sign-on covers a domain.
  *
  * Everything is read from this workspace's own database on every call. There
  * is no cache: a module-level one would be shared by every workspace a process
  * serves.
  */
-import {
-  db,
-  emailSendingDomains,
-  eq,
-  isNotNull,
-  settings,
-  ssoVerifiedDomain,
-} from '@/lib/server/db'
+import { db, emailSendingDomains, eq, settings } from '@/lib/server/db'
 import type { SendingDomainDnsRecord, SendingDomainDkimMode } from '@/lib/server/db'
 import type { ProvenZoneSource } from '@/lib/shared/domain-proof'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
@@ -83,7 +78,7 @@ export function isCoveredByProvenZone(name: string, zones: readonly ProvenZone[]
 
 /** Every zone this workspace has proven, with where each proof came from. */
 export async function getProvenZones(): Promise<ProvenZone[]> {
-  const [sending, sso, settingsRows] = await Promise.all([
+  const [sending, settingsRows] = await Promise.all([
     db
       .select({
         domain: emailSendingDomains.domain,
@@ -93,10 +88,6 @@ export async function getProvenZones(): Promise<ProvenZone[]> {
       })
       .from(emailSendingDomains)
       .where(eq(emailSendingDomains.status, 'verified')),
-    db
-      .select({ name: ssoVerifiedDomain.name })
-      .from(ssoVerifiedDomain)
-      .where(isNotNull(ssoVerifiedDomain.verifiedAt)),
     db.select({ cloudIdentity: settings.cloudIdentity }).from(settings).limit(1),
   ])
 
@@ -105,9 +96,6 @@ export async function getProvenZones(): Promise<ProvenZone[]> {
     if (sendingRowProvesZone(row)) {
       zones.push({ zone: toAsciiDomain(row.domain), source: 'email-sending', exact: false })
     }
-  }
-  for (const row of sso) {
-    zones.push({ zone: toAsciiDomain(row.name), source: 'sso', exact: false })
   }
   const identity = parseIdentityProjection(settingsRows[0]?.cloudIdentity)
   for (const hostname of identity?.customDomains ?? []) {
@@ -119,10 +107,9 @@ export async function getProvenZones(): Promise<ProvenZone[]> {
 }
 
 /**
- * The source that proves a single sign-on domain without its own TXT record:
- * any proof other than single sign-on itself. Null when none covers it.
+ * The source that proves a single sign-on domain without its own TXT record.
+ * Null when none covers it.
  */
 export async function ssoDomainProvenBy(name: string): Promise<ProvenZoneSource | null> {
-  const zones = (await getProvenZones()).filter((z) => z.source !== 'sso')
-  return provenZoneCovering(name, zones)?.source ?? null
+  return provenZoneCovering(name, await getProvenZones())?.source ?? null
 }
