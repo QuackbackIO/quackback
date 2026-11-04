@@ -6,10 +6,13 @@
 import { describe, it, expect } from 'vitest'
 import type { SesDomainIdentity } from '@quackback/email/ses-identity'
 import {
+  LEGACY_MAIL_FROM_LABEL,
   MAIL_FROM_LABEL,
   OWNERSHIP_RECORD_HOST,
   OWNERSHIP_VALUE_PREFIX,
   SendingDomainRefusedError,
+  attachedMailFromLabel,
+  customSendingDomainsAvailable,
   domainsOverlap,
   mailFromDomainFor,
   mintOwnershipToken,
@@ -17,6 +20,7 @@ import {
   ownershipRecordsOf,
   sendingDomainDnsRecords,
   sendingDomainStatusFrom,
+  storedReturnPathTarget,
 } from '../sending-identity'
 
 const REGION = 'eu-west-2'
@@ -38,6 +42,7 @@ describe('the records a domain owner has to publish', () => {
       region: REGION,
       ownershipToken: 'tok',
       identity: identity(),
+      mailFromLabel: MAIL_FROM_LABEL,
     })
 
     expect(records.filter((r) => r.purpose === 'ownership')).toEqual([
@@ -85,6 +90,58 @@ describe('the records a domain owner has to publish', () => {
     ])
   })
 
+  it('makes the return path one CNAME when it is given a target', () => {
+    const key = {
+      type: 'TXT' as const,
+      host: 'qb1._domainkey',
+      value: 'v=DKIM1; k=rsa; p=KEY',
+      purpose: 'dkim' as const,
+    }
+    const records = sendingDomainDnsRecords({
+      domain: 'tenant-a.example',
+      region: REGION,
+      identity: identity(),
+      mailFromLabel: MAIL_FROM_LABEL,
+      signingKeys: [key],
+      returnPathTarget: 'ws-abc.bounces.example.net',
+    })
+    expect(records).toEqual([
+      key,
+      {
+        type: 'CNAME',
+        host: MAIL_FROM_LABEL,
+        value: 'ws-abc.bounces.example.net',
+        purpose: 'mail-from',
+      },
+    ])
+    expect(JSON.stringify(records)).not.toContain('amazonses')
+  })
+
+  it('reads the return path target a row was set up with from its stored records', () => {
+    expect(
+      storedReturnPathTarget([
+        { type: 'TXT', host: 'qb1._domainkey', value: 'v=DKIM1; p=K', purpose: 'dkim' },
+        {
+          type: 'CNAME',
+          host: 'qb-bounce',
+          value: 'ws-abc.bounces.example.net',
+          purpose: 'mail-from',
+        },
+      ])
+    ).toBe('ws-abc.bounces.example.net')
+    expect(
+      storedReturnPathTarget(
+        sendingDomainDnsRecords({
+          domain: 'tenant-a.example',
+          region: REGION,
+          ownershipToken: 'tok',
+          identity: identity(),
+          mailFromLabel: MAIL_FROM_LABEL,
+        })
+      )
+    ).toBeNull()
+  })
+
   it('points the DKIM CNAMEs at the zone the provider named, when it names one', () => {
     // Newer regions publish keys somewhere other than the historical
     // dkim.<region> zone, and a CNAME at the wrong zone never resolves.
@@ -93,6 +150,7 @@ describe('the records a domain owner has to publish', () => {
       region: REGION,
       ownershipToken: 'tok',
       identity: identity({ dkimTokens: ['aaa'], signingHostedZone: 'dkim.elsewhere.example' }),
+      mailFromLabel: MAIL_FROM_LABEL,
     })
     expect(records.find((r) => r.purpose === 'dkim')?.value).toBe('aaa.dkim.elsewhere.example')
   })
@@ -105,6 +163,7 @@ describe('the records a domain owner has to publish', () => {
       region: REGION,
       ownershipToken: 'tok',
       identity: identity({ dkimTokens: [] }),
+      mailFromLabel: MAIL_FROM_LABEL,
     })
     expect(records.filter((r) => r.purpose === 'dkim')).toEqual([])
     expect(records).toHaveLength(3)
@@ -121,6 +180,7 @@ describe('the records a domain owner has to publish', () => {
       region: REGION,
       ownershipToken: 'tok',
       identity: identity(),
+      mailFromLabel: MAIL_FROM_LABEL,
     })
     expect(ownershipRecordsOf(records)).toHaveLength(1)
     expect(ownershipRecordsOf([])).toEqual([])
@@ -149,8 +209,28 @@ describe('the records a domain owner has to publish', () => {
     ).toEqual([])
   })
 
-  it('puts the MAIL FROM on a subdomain that receives no mail', () => {
-    expect(mailFromDomainFor('tenant-a.example')).toBe('bounce.tenant-a.example')
+  it('puts the MAIL FROM on the subdomain the row stores', () => {
+    expect(mailFromDomainFor('tenant-a.example', 'bounce')).toBe('bounce.tenant-a.example')
+    expect(mailFromDomainFor('tenant-a.example', 'qb-bounce')).toBe('qb-bounce.tenant-a.example')
+  })
+
+  it('uses qb-bounce for new domains and keeps bounce for existing ones', () => {
+    expect(MAIL_FROM_LABEL).toBe('qb-bounce')
+    expect(LEGACY_MAIL_FROM_LABEL).toBe('bounce')
+  })
+
+  it('composes the MAIL FROM pair under the label it is given', () => {
+    const records = sendingDomainDnsRecords({
+      domain: 'tenant-a.example',
+      region: REGION,
+      ownershipToken: 'tok',
+      identity: identity(),
+      mailFromLabel: LEGACY_MAIL_FROM_LABEL,
+    })
+    expect(records.filter((r) => r.purpose === 'mail-from').map((r) => r.host)).toEqual([
+      'bounce',
+      'bounce',
+    ])
   })
 })
 
@@ -248,6 +328,50 @@ describe('domains that may never be claimed', () => {
   })
 })
 
+describe('the records of a domain signed with its own key', () => {
+  const key = {
+    type: 'TXT' as const,
+    host: 'qb1a2b3c4d._domainkey',
+    value: 'v=DKIM1; k=rsa; p=KEY',
+    purpose: 'dkim' as const,
+  }
+
+  it('is the key and the MAIL FROM pair, with no token and no provider CNAMEs', () => {
+    const records = sendingDomainDnsRecords({
+      domain: 'tenant-a.example',
+      region: REGION,
+      identity: identity(),
+      mailFromLabel: MAIL_FROM_LABEL,
+      signingKeys: [key],
+    })
+    expect(records.map((r) => `${r.type} ${r.host} ${r.purpose}`)).toEqual([
+      'TXT qb1a2b3c4d._domainkey dkim',
+      `MX ${MAIL_FROM_LABEL} mail-from`,
+      `TXT ${MAIL_FROM_LABEL} mail-from`,
+    ])
+  })
+
+  it('needs the provider to sign with a working key, whoever supplied it', () => {
+    // A key that is not yet working (or has stopped) must hold the row back,
+    // so a signing problem always shows rather than hiding behind found records.
+    expect(
+      sendingDomainStatusFrom({
+        identity: identity({ dkimStatus: 'PENDING', verifiedForSending: true }),
+        ownershipProven: true,
+      })
+    ).toBe('pending')
+    expect(sendingDomainStatusFrom({ identity: identity(), ownershipProven: true })).toBe(
+      'verified'
+    )
+    expect(
+      sendingDomainStatusFrom({
+        identity: identity({ verifiedForSending: false }),
+        ownershipProven: true,
+      })
+    ).toBe('pending')
+  })
+})
+
 describe('when a domain counts as verified', () => {
   it('needs the provider AND this workspace’s own proof of ownership', () => {
     // The provider reports a domain verified to every workspace on the shared
@@ -307,5 +431,77 @@ describe('when a domain counts as verified', () => {
         ownershipProven: true,
       })
     ).toBe('pending')
+  })
+})
+
+describe('whether custom sending domains are available on this server', () => {
+  const ses = {
+    EMAIL_SES_ACCESS_KEY_ID: 'AKIASEND',
+    EMAIL_SES_SECRET_ACCESS_KEY: 'send-secret',
+    EMAIL_SES_REGION: REGION,
+    EMAIL_SES_IDENTITY_ACCESS_KEY_ID: 'AKIAIDENT',
+    EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY: 'ident-secret',
+  }
+
+  it('is available with SES sending, the identity credential and a region', () => {
+    expect(customSendingDomainsAvailable(ses)).toBe(true)
+  })
+
+  it('is unavailable without the identity credential', () => {
+    expect(
+      customSendingDomainsAvailable({ ...ses, EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY: '' })
+    ).toBe(false)
+    expect(
+      customSendingDomainsAvailable({ ...ses, EMAIL_SES_IDENTITY_ACCESS_KEY_ID: undefined })
+    ).toBe(false)
+  })
+
+  it('is unavailable without a region', () => {
+    expect(customSendingDomainsAvailable({ ...ses, EMAIL_SES_REGION: ' ' })).toBe(false)
+  })
+
+  it('is unavailable when another provider sends', () => {
+    const smtp = {
+      EMAIL_SMTP_HOST: 'smtp.example.com',
+      EMAIL_SES_REGION: REGION,
+      EMAIL_SES_IDENTITY_ACCESS_KEY_ID: 'AKIAIDENT',
+      EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY: 'ident-secret',
+    }
+    expect(customSendingDomainsAvailable(smtp)).toBe(false)
+  })
+
+  it('is unavailable when the provider configuration conflicts', () => {
+    expect(customSendingDomainsAvailable({ ...ses, EMAIL_SMTP_HOST: 'smtp.example.com' })).toBe(
+      false
+    )
+  })
+})
+
+describe('the MAIL FROM label adopted from an identity', () => {
+  const attached = (domain: string | null) =>
+    identity({ mailFrom: domain ? { domain, status: 'SUCCESS' } : null })
+
+  it('is the single label under the domain', () => {
+    expect(attachedMailFromLabel(attached('bounce.acme.com'), 'acme.com')).toBe('bounce')
+  })
+
+  it('keeps a nested prefix whole, so the records match what is attached', () => {
+    const label = attachedMailFromLabel(attached('Mail.Bounces.acme.com.'), 'acme.com')
+    expect(label).toBe('mail.bounces')
+    expect(mailFromDomainFor('acme.com', label ?? '')).toBe('mail.bounces.acme.com')
+  })
+
+  it('is null when nothing is attached, or the name is not under the domain', () => {
+    expect(attachedMailFromLabel(attached(null), 'acme.com')).toBeNull()
+    expect(attachedMailFromLabel(null, 'acme.com')).toBeNull()
+    expect(attachedMailFromLabel(attached('bounce.other.com'), 'acme.com')).toBeNull()
+    expect(attachedMailFromLabel(attached('bounce.notacme.com'), 'acme.com')).toBeNull()
+  })
+
+  it('is null for a name that is not made of valid DNS labels', () => {
+    expect(attachedMailFromLabel(attached('mail..acme.com'), 'acme.com')).toBeNull()
+    expect(attachedMailFromLabel(attached('-bad.acme.com'), 'acme.com')).toBeNull()
+    expect(attachedMailFromLabel(attached('bad_label.acme.com'), 'acme.com')).toBeNull()
+    expect(attachedMailFromLabel(attached(`${'a'.repeat(64)}.acme.com`), 'acme.com')).toBeNull()
   })
 })
