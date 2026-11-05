@@ -16,7 +16,7 @@ import type {
   SignInDomainSummary,
 } from '@/lib/server/functions/domains-overview'
 
-export const WEB_ADDRESSES_TITLE = 'Web addresses'
+export const WEB_ADDRESSES_TITLE = 'Custom domains'
 export const WEB_ADDRESSES_DESCRIPTION = 'Where people reach your portal and help center.'
 
 /** The help center's own domain, on an install that serves it itself. */
@@ -34,7 +34,7 @@ export function HelpCenterAddressSection({
           leading={<RowIcon icon={GlobeAltIcon} />}
           title={domain.domain}
           meta="Help center"
-          badges={domain.verified ? undefined : <StateBadge state="setting-up" />}
+          badges={domain.verified ? undefined : <StateBadge state="pending" />}
           {...(canOpen
             ? { to: '/admin/settings/help-center', search: { tab: 'domains-languages' } }
             : {})}
@@ -46,7 +46,7 @@ export function HelpCenterAddressSection({
 
 function sendingMeta(domain: SendingDomainSummary): string | undefined {
   const parts = [domain.localParts.join(', ')]
-  if (domain.ownershipProven) parts.push('Ownership proven')
+  if (domain.ownershipProven) parts.push('Ownership verified')
   return parts.filter(Boolean).join(' · ') || undefined
 }
 
@@ -82,8 +82,8 @@ export function EmailSendingSection({
 }
 
 function signInMeta(d: SignInDomainSummary): string | undefined {
-  if (d.verified) return d.provenBy ? verifiedThroughLabel(d.provenBy) : 'Verified'
-  return d.provenBy ? 'Already proven, ready to verify' : undefined
+  if (d.verified) return d.provenBy ? verifiedThroughLabel(d.provenBy) : undefined
+  return d.provenBy ? 'Already verified. Click Verify to use it.' : undefined
 }
 
 export function SignInSection({
@@ -102,7 +102,7 @@ export function SignInSection({
             leading={<RowIcon icon={LockClosedIcon} />}
             title={d.name}
             meta={signInMeta(d)}
-            badges={d.verified ? undefined : <StateBadge state="setting-up" />}
+            badges={d.verified ? undefined : <StateBadge state="pending" />}
             to={canOpen ? '/admin/settings/security/authentication' : undefined}
           />
         ))}

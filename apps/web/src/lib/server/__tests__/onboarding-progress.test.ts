@@ -6,6 +6,12 @@ const AT = '2026-10-03T10:00:00.000Z'
 const EARLIER = '2026-10-01T10:00:00.000Z'
 
 describe('per-person onboarding markers in user metadata', () => {
+  it('reads and writes the GitHub star prompt marker', () => {
+    const written = withOnboardingMark(null, 'githubStarPromptAt', AT)
+    expect(readOnboardingProgress(written)).toEqual({ githubStarPromptAt: AT })
+    expect(withOnboardingMark(written, 'githubStarPromptAt', EARLIER)).toBeNull()
+  })
+
   it('reads the internal key', () => {
     expect(
       readOnboardingProgress(JSON.stringify({ _onboarding: { tourSeenAt: AT, junk: 1 } }))
