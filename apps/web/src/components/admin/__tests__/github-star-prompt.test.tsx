@@ -12,6 +12,7 @@ const hoisted = vi.hoisted(() => ({
   marks: 0,
   failMarks: 0,
   claimed: true,
+  visibleAtClaim: [] as boolean[],
 }))
 
 vi.mock('@/lib/server/functions/github-star-prompt', () => ({
@@ -21,6 +22,9 @@ vi.mock('@/lib/server/functions/github-star-prompt', () => ({
   }),
   markStarPromptShownFn: vi.fn(async () => {
     hoisted.marks += 1
+    hoisted.visibleAtClaim.push(
+      document.body.textContent?.includes('Founder of Quackback') ?? false
+    )
     if (hoisted.failMarks > 0) {
       hoisted.failMarks -= 1
       throw new Error('network')
@@ -127,14 +131,19 @@ describe('the GitHub star card', () => {
     expect(screen.getByText(/Founder of Quackback/)).toBeTruthy()
   })
 
-  it('shows nothing when the claim fails, and tries again on the next ship moment', async () => {
+  it('stays up when the claim request fails, since it has been seen', async () => {
     hoisted.failMarks = 1
     render(wrap(<GithubStarPromptGate />))
     await shipAndWait()
-    expect(screen.queryByText(/Founder of Quackback/)).toBeNull()
-    await shipAndWait()
     expect(screen.getByText(/Founder of Quackback/)).toBeTruthy()
-    expect(hoisted.marks).toBe(2)
+    expect(hoisted.marks).toBe(1)
+  })
+
+  it('is on screen before it is claimed, so leaving mid-request never uses it up unseen', async () => {
+    hoisted.visibleAtClaim = []
+    render(wrap(<GithubStarPromptGate />))
+    await shipAndWait()
+    expect(hoisted.visibleAtClaim).toEqual([true])
   })
 
   it('does not use up the ask when the person leaves before it appears', async () => {
@@ -149,7 +158,7 @@ describe('the GitHub star card', () => {
     expect(hoisted.marks).toBe(0)
   })
 
-  it('stays hidden when another tab already showed it', async () => {
+  it('hides again when another tab already showed it', async () => {
     hoisted.claimed = false
     render(wrap(<GithubStarPromptGate />))
     await shipAndWait()
@@ -184,14 +193,16 @@ describe('the GitHub star row on Home', () => {
 
   it('asks once from Home when no ship moment came', async () => {
     hoisted.state = { stage: 'home', stars: 341 }
+    hoisted.visibleAtClaim = []
     render(wrap(<HomeGithubStarPrompt />))
     expect(await screen.findByText(/Founder of Quackback/)).toBeTruthy()
     expect(hoisted.marks).toBe(1)
+    expect(hoisted.visibleAtClaim).toEqual([true])
     fireEvent.click(screen.getByRole('button', { name: 'No thanks' }))
     expect(screen.queryByText(/Founder of Quackback/)).toBeNull()
   })
 
-  it('stays hidden on Home when another tab already showed it', async () => {
+  it('hides again on Home when another tab already showed it', async () => {
     hoisted.state = { stage: 'home', stars: 341 }
     hoisted.claimed = false
     render(wrap(<HomeGithubStarPrompt />))

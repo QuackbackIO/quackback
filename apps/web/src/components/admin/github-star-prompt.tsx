@@ -73,10 +73,10 @@ function NoThanks({ onClick }: { onClick: () => void }) {
 type Claim = 'claimed' | 'taken' | 'failed'
 
 /**
- * Claim the prompt on the server before showing it: only the first claim for
- * this person wins, so another tab can never show it as well. Once settled
- * either way, the cached answer is cleared so this visit cannot ask again. A
- * failed request shows nothing and leaves the next chance to try again.
+ * Claim the prompt on the server as it appears: only the first claim for this
+ * person wins, so a second tab that raced it hides its copy again. Once
+ * settled either way, the cached answer is cleared so this visit cannot ask
+ * again.
  */
 async function claimPrompt(queryClient: QueryClient): Promise<Claim> {
   try {
@@ -126,10 +126,8 @@ export function GithubStarPromptCard() {
             staleTime: 60 * 60 * 1000,
           })
           if (!next.stage || settled.current || !alive) return
-          const claim = await claimPrompt(queryClient)
-          if (claim === 'failed') return
           settled.current = true
-          if (claim === 'claimed') setState(next)
+          setState(next)
         } catch {
           // Nothing to show; the next ship moment may try again.
         } finally {
@@ -150,6 +148,16 @@ export function GithubStarPromptCard() {
   }, [queryClient])
 
   const close = useCallback(() => setState(null), [])
+
+  // Claimed once it is on screen, so leaving mid-request never uses it up unseen.
+  const claimed = useRef(false)
+  useEffect(() => {
+    if (!state || claimed.current) return
+    claimed.current = true
+    void claimPrompt(queryClient).then((claim) => {
+      if (claim === 'taken') setState(null)
+    })
+  }, [state, queryClient])
 
   useEffect(() => {
     if (!state) return
@@ -215,11 +223,18 @@ export function HomeGithubStarPrompt() {
   useEffect(() => {
     if (claiming.current || data?.stage !== 'home') return
     claiming.current = true
-    const answer = data
+    setShown(data)
+  }, [data])
+
+  // Claimed once it is on screen, so leaving mid-request never uses it up unseen.
+  const claimed = useRef(false)
+  useEffect(() => {
+    if (!shown || claimed.current) return
+    claimed.current = true
     void claimPrompt(queryClient).then((claim) => {
-      if (claim === 'claimed') setShown(answer)
+      if (claim === 'taken') setClosed(true)
     })
-  }, [data, queryClient])
+  }, [shown, queryClient])
 
   if (!shown || closed) return null
   const close = () => setClosed(true)
