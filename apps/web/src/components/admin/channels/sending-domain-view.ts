@@ -40,7 +40,7 @@ export function lastCheckedAt(domain: SendingDomainDTO): Date | null {
 
 const PURPOSE_NAME: Record<string, string> = {
   ownership: 'ownership record',
-  dkim: 'signing record',
+  dkim: 'DKIM record',
   'mail-from': 'return path record',
 }
 
@@ -59,7 +59,7 @@ export function recordTypeLabel(record: Pick<DnsRecordDTO, 'type' | 'priority'>)
 
 const RECORD_LABEL: Record<string, string> = {
   ownership: 'Ownership',
-  dkim: 'Signing',
+  dkim: 'DKIM',
   'mail-from': 'Return path',
 }
 

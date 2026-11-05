@@ -105,7 +105,7 @@ export function DeletePostDialog({
       onOpenChange={onOpenChange}
       title={intl.formatMessage({
         id: 'portal.postDetail.deleteDialog.title',
-        defaultMessage: 'Delete Post',
+        defaultMessage: 'Delete post',
       })}
       description={
         description ??
@@ -132,7 +132,7 @@ export function DeletePostDialog({
               })
             : intl.formatMessage({
                 id: 'portal.postDetail.deleteDialog.confirmLabel',
-                defaultMessage: 'Delete Post',
+                defaultMessage: 'Delete post',
               })
       }
       isPending={isPending || isLoadingLinks || isErrorLinks}

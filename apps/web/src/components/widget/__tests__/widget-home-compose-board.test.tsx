@@ -154,14 +154,14 @@ describe('widget compose board', () => {
     expect(screen.getByText('Posting to')).toBeTruthy()
     expect(screen.getByRole('combobox')).toHaveValue(ideas.id)
     expect(screen.getByRole('option', { name: 'Feature Requests' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Submit' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Post' })).toBeEnabled()
   })
 
   it('adopts the single board after identify and posts to it without a manual pick', async () => {
     const view = renderHome({ boards: [], confirmedBoardSlugs: null })
     typeTitle('Testing.')
     expect(screen.queryByText('Posting to')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Post' })).toBeDisabled()
 
     auth.sessionVersion = 1
     auth.isIdentified = true
@@ -185,7 +185,7 @@ describe('widget compose board', () => {
     expect(screen.getByText('Ada Example')).toBeTruthy()
     expect(screen.queryByText('Choose a board to post')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
     await waitFor(() => expect(createPost).toHaveBeenCalled())
     expect(createPost.mock.calls[0]?.[0]).toMatchObject({
       data: { boardId: ideas.id, title: 'Testing.' },
@@ -205,10 +205,10 @@ describe('widget compose board', () => {
 
     expect(screen.getByText('Posting to')).toBeTruthy()
     expect(screen.getByText('Choose a board to post')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Post' })).toBeDisabled()
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: bugs.id } })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Post' })).toBeEnabled())
     expect(screen.queryByText('Choose a board to post')).toBeNull()
   })
 })

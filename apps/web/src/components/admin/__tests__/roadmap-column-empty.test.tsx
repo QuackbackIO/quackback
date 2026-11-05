@@ -37,15 +37,15 @@ const column = (emptyAction?: React.ReactNode) =>
 
 describe('an empty roadmap column', () => {
   it('names what is missing and carries the action it is given, without a paragraph', () => {
-    const { container } = column(<a href="/admin/feedback">Move an idea onto the roadmap</a>)
-    expect(screen.getByText('No ideas here yet')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Move an idea onto the roadmap' })).toBeTruthy()
+    const { container } = column(<a href="/admin/feedback">Move a post onto the roadmap</a>)
+    expect(screen.getByText('No posts here yet')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Move a post onto the roadmap' })).toBeTruthy()
     expect(container.querySelectorAll('p')).toHaveLength(0)
   })
 
   it('stays a bare title in the other columns', () => {
     column()
-    expect(screen.getByText('No ideas here yet')).toBeTruthy()
+    expect(screen.getByText('No posts here yet')).toBeTruthy()
     expect(screen.queryByRole('link')).toBeNull()
   })
 })
