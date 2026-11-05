@@ -30,6 +30,7 @@ import {
   useWorkspaceSettings,
   useSessionContext,
   useBaseUrl,
+  useGithubStarPrompt,
 } from '@/lib/client/hooks/use-root-context'
 
 // Only Home pays for the chat: its code loads with this chunk.
@@ -74,6 +75,12 @@ export const Route = createFileRoute('/admin/')({
   },
   component: AdminOverviewPage,
 })
+
+const HomeGithubStarPrompt = lazy(() =>
+  import('@/components/admin/github-star-prompt').then((m) => ({
+    default: m.HomeGithubStarPrompt,
+  }))
+)
 
 function AdminOverviewPage() {
   const { launchMessages } = Route.useLoaderData()
@@ -136,7 +143,19 @@ function AdminHome() {
       </Suspense>
     ) : null
   // The tour offer is Home's last block, in the page, so it never covers the plan.
-  const tourOffer = admin || canSeeTeam ? <HomeTourArea member={!admin} /> : null
+  const githubStarPrompt = useGithubStarPrompt()
+  // Self-hosted only: the one-time GitHub star ask, for someone the card never reached.
+  const tourOffer =
+    admin || canSeeTeam ? (
+      <>
+        <HomeTourArea member={!admin} />
+        {githubStarPrompt ? (
+          <Suspense fallback={null}>
+            <HomeGithubStarPrompt />
+          </Suspense>
+        ) : null}
+      </>
+    ) : null
 
   // A review link opens its thread even when new chats are unavailable.
   if (canUseCopilot && (copilotOnHome || copilotThread))

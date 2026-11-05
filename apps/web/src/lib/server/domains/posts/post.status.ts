@@ -105,5 +105,6 @@ export async function changeStatus(
     boardSlug: board.slug,
     previousStatus: previousStatusName,
     newStatus: newStatus.name,
+    newStatusCategory: newStatus.category,
   }
 }

@@ -389,6 +389,8 @@ export interface ChangeStatusResult extends Post {
   boardSlug: string
   previousStatus: string
   newStatus: string
+  /** The new status's category, so the client can tell when something shipped. */
+  newStatusCategory: string
 }
 
 /**

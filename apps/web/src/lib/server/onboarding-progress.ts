@@ -6,9 +6,16 @@ export interface OnboardingProgress {
   /** The viewer chose Not now on the tour offer. */
   tourDismissedAt?: string
   firstWinShownAt?: string
+  /** The one-time GitHub star prompt was shown to this person. */
+  githubStarPromptAt?: string
 }
 
-const PROGRESS_KEYS = ['tourSeenAt', 'tourDismissedAt', 'firstWinShownAt'] as const
+const PROGRESS_KEYS = [
+  'tourSeenAt',
+  'tourDismissedAt',
+  'firstWinShownAt',
+  'githubStarPromptAt',
+] as const
 
 /**
  * Where the markers live in `user.metadata`. Keys starting with `_` are
