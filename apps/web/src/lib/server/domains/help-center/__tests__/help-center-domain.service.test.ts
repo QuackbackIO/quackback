@@ -13,13 +13,12 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 const mockResolve4 = vi.fn()
 const mockResolve6 = vi.fn()
 
-vi.mock('node:dns/promises', () => {
-  const resolve4 = (...args: unknown[]) => mockResolve4(...args)
-  const resolve6 = (...args: unknown[]) => mockResolve6(...args)
-  // node:dns/promises carries a default export; vitest's ESM interop needs it
-  // present on the mock alongside the named exports the service imports.
-  return { default: { resolve4, resolve6 }, resolve4, resolve6 }
-})
+vi.mock('@/lib/server/dns/resolver', () => ({
+  systemResolver: {
+    resolve4: (...args: unknown[]) => mockResolve4(...args),
+    resolve6: (...args: unknown[]) => mockResolve6(...args),
+  },
+}))
 
 const {
   resolveHelpCenterDomainRedirect,
@@ -33,6 +32,9 @@ const verifiedDomain: HelpCenterDomainConfig = {
   domain: 'help.acme.com',
   verifiedAt: '2026-07-01T00:00:00.000Z',
 }
+
+/** A lookup failure as node:dns reports one, with its code. */
+const dnsFailure = (code: string) => Object.assign(new Error(code), { code })
 
 const unverifiedDomain: HelpCenterDomainConfig = {
   domain: 'help.acme.com',
@@ -166,6 +168,17 @@ describe('checkHelpCenterDomainStatus', () => {
 
     const status = await checkHelpCenterDomainStatus('help.acme.com')
     expect(status).toEqual({ dnsResolved: true, instanceReachable: true, verified: true })
+    expect(mockResolve4).toHaveBeenCalledWith('help.acme.com')
+  })
+
+  it('counts an AAAA-only domain as resolving', async () => {
+    mockResolve4.mockRejectedValue(Object.assign(new Error('no data'), { code: 'ENODATA' }))
+    mockResolve6.mockResolvedValue(['2001:db8::1'])
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch
+
+    const status = await checkHelpCenterDomainStatus('help.acme.com')
+    expect(status.dnsResolved).toBe(true)
+    expect(mockResolve6).toHaveBeenCalledWith('help.acme.com')
   })
 
   it('is unverified when DNS fails to resolve', async () => {
@@ -250,8 +263,8 @@ describe('verifyHelpCenterDomain', () => {
 
   it('clears verifiedAt when a previously-verified domain stops answering', async () => {
     mockGetHelpCenterConfig.mockResolvedValue({ domain: verifiedDomain })
-    mockResolve4.mockRejectedValue(new Error('ENOTFOUND'))
-    mockResolve6.mockRejectedValue(new Error('ENOTFOUND'))
+    mockResolve4.mockRejectedValue(dnsFailure('ENOTFOUND'))
+    mockResolve6.mockRejectedValue(dnsFailure('ENOTFOUND'))
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('down')) as unknown as typeof fetch
     mockUpdateHelpCenterConfig.mockImplementation(
       async (input: { domain: HelpCenterDomainConfig }) => ({
@@ -261,6 +274,56 @@ describe('verifyHelpCenterDomain', () => {
 
     const { config, status } = await verifyHelpCenterDomain()
     expect(status.verified).toBe(false)
+    expect(config.verifiedAt).toBeNull()
+  })
+
+  it('keeps verifiedAt when the DNS lookup goes unanswered', async () => {
+    mockGetHelpCenterConfig.mockResolvedValue({ domain: verifiedDomain })
+    mockResolve4.mockRejectedValue(dnsFailure('ETIMEOUT'))
+    mockResolve6.mockRejectedValue(dnsFailure('ETIMEOUT'))
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('down')) as unknown as typeof fetch
+    mockUpdateHelpCenterConfig.mockImplementation(
+      async (input: { domain: HelpCenterDomainConfig }) => ({
+        domain: input.domain,
+      })
+    )
+
+    const { config, status } = await verifyHelpCenterDomain()
+    expect(status.verified).toBe(false)
+    expect(config.verifiedAt).toBe(verifiedDomain.verifiedAt)
+    expect(mockUpdateHelpCenterConfig).not.toHaveBeenCalledWith({
+      domain: { domain: 'help.acme.com', verifiedAt: null },
+    })
+  })
+
+  it('keeps verifiedAt when one lookup fails and the other finds nothing', async () => {
+    // AAAA answering empty says nothing about the A record that went unanswered.
+    mockGetHelpCenterConfig.mockResolvedValue({ domain: verifiedDomain })
+    mockResolve4.mockRejectedValue(dnsFailure('ESERVFAIL'))
+    mockResolve6.mockRejectedValue(dnsFailure('ENODATA'))
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('down')) as unknown as typeof fetch
+    mockUpdateHelpCenterConfig.mockImplementation(
+      async (input: { domain: HelpCenterDomainConfig }) => ({
+        domain: input.domain,
+      })
+    )
+
+    const { config } = await verifyHelpCenterDomain()
+    expect(config.verifiedAt).toBe(verifiedDomain.verifiedAt)
+  })
+
+  it('does not verify a never-verified domain whose lookup goes unanswered', async () => {
+    mockGetHelpCenterConfig.mockResolvedValue({ domain: unverifiedDomain })
+    mockResolve4.mockRejectedValue(dnsFailure('ETIMEOUT'))
+    mockResolve6.mockRejectedValue(dnsFailure('ETIMEOUT'))
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch
+    mockUpdateHelpCenterConfig.mockImplementation(
+      async (input: { domain: HelpCenterDomainConfig }) => ({
+        domain: input.domain,
+      })
+    )
+
+    const { config } = await verifyHelpCenterDomain()
     expect(config.verifiedAt).toBeNull()
   })
 })

@@ -10,8 +10,6 @@ import {
   postStatuses,
   postTagAssignments,
   userSegments,
-  principal,
-  user,
   eq,
   and,
   inArray,
@@ -128,12 +126,15 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
     conditions.push(eq(posts.principalId, authorId))
   } else if (authorEmail) {
     const email = authorEmail.toLowerCase()
+    // Raw names for the inner tables: the relational query builder rewrites
+    // every column object onto the posts alias. Only the outer
+    // ${posts.principalId} should follow it.
     conditions.push(
       sql`exists (
-        select 1 from ${principal}
-        inner join ${user} on ${user.id} = ${principal.userId}
-        where ${principal.id} = ${posts.principalId}
-          and lower(${user.email}) = ${email}
+        select 1 from principal author_principal
+        inner join "user" author_user on author_user.id = author_principal.user_id
+        where author_principal.id = ${posts.principalId}
+          and lower(author_user.email) = ${email}
       )`
     )
   }
@@ -368,8 +369,12 @@ export async function countInboxFilterFacets(
   params: InboxPostListParams
 ): Promise<InboxFilterCounts> {
   const countSql = sql<number>`count(*)::int`
-  const teamRespondedFilter = sql<number>`count(*) filter (where exists (select 1 from post_comments where post_comments.post_id = ${posts.id} and post_comments.is_team_member = true and post_comments.deleted_at is null))::int`
-  const teamUnrespondedFilter = sql<number>`count(*) filter (where not exists (select 1 from post_comments where post_comments.post_id = ${posts.id} and post_comments.is_team_member = true and post_comments.deleted_at is null))::int`
+  // Select-list SQL on a single-table query renders `${posts.id}` as a bare
+  // "id", which the subquery binds to post_comments.id, so the outer column
+  // is written out raw here.
+  const teamResponseExistsInSelect = sql`exists (select 1 from post_comments where post_comments.post_id = posts.id and post_comments.is_team_member = true and post_comments.deleted_at is null)`
+  const teamRespondedFilter = sql<number>`count(*) filter (where ${teamResponseExistsInSelect})::int`
+  const teamUnrespondedFilter = sql<number>`count(*) filter (where not ${teamResponseExistsInSelect})::int`
 
   const [statusRows, boardRows, tagRows, segmentRows, respondedRow, deletedRow] = await Promise.all(
     [

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { PlusIcon, CheckIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/solid'
@@ -36,7 +36,7 @@ type ThreadCache = { conversation: ConversationDTO; messages: unknown[]; hasMore
  * row chips and per-tag badges stay in sync. Reused by the thread header and the
  * detail panel.
  */
-export function ConversationTagsEditor({
+export const ConversationTagsEditor = memo(function ConversationTagsEditor({
   conversationId,
   tags,
 }: {
@@ -315,4 +315,4 @@ export function ConversationTagsEditor({
       </Popover>
     </div>
   )
-}
+})

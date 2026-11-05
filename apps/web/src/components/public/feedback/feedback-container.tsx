@@ -36,6 +36,7 @@ import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation
 import type { PublicPostListItem } from '@/lib/shared/types'
 import {
   sortForSearch,
+  type PublicFeedbackFilters,
   type PublicFeedView,
   type PublicPostFacetCounts,
   type PublicPostSort,
@@ -46,30 +47,31 @@ import type { PostId, PostStatusId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { shownName } from '@/lib/shared/greeting-name'
+import { useFeedHandoff } from '@/components/public/feedback/feed-input-handoff'
 
 const EMPTY_VIEW_MESSAGES: Record<PublicFeedView, MessageDescriptor> = {
   mine: {
     id: 'portal.feedback.list.emptyMine',
-    defaultMessage: "You haven't posted any ideas yet.",
+    defaultMessage: "You haven't created any posts yet.",
   },
   voted: {
     id: 'portal.feedback.list.emptyVoted',
-    defaultMessage: "You haven't voted on any ideas yet.",
+    defaultMessage: "You haven't voted on any posts yet.",
   },
   following: {
     id: 'portal.feedback.list.emptyFollowing',
-    defaultMessage: "You aren't following any ideas yet.",
+    defaultMessage: "You aren't following any posts yet.",
   },
 }
 
 const WIDENED_SEARCH_MESSAGES: Record<WidenedSearch, MessageDescriptor> = {
   most: {
     id: 'portal.feedback.list.searchWidenedMost',
-    defaultMessage: 'No idea has all your words. Showing ideas with most of them.',
+    defaultMessage: 'No post has all your words. Showing posts with most of them.',
   },
   similar: {
     id: 'portal.feedback.list.searchWidenedSimilar',
-    defaultMessage: 'No exact matches. Showing ideas with a similar spelling.',
+    defaultMessage: 'No exact matches. Showing posts with a similar spelling.',
   },
 }
 
@@ -99,6 +101,12 @@ interface FeedbackContainerProps {
   facets?: PublicPostFacetCounts | null
   /** How the server-rendered search was widened, if it was. */
   searchMode?: WidenedSearch
+  /**
+   * The filters `posts` were fetched for. The visitor can change filters while
+   * they load, so these can differ from the current ones by the time they
+   * arrive.
+   */
+  postsFilters: PublicFeedbackFilters
 }
 
 /**
@@ -111,6 +119,30 @@ export function canPostTo(
 ): boolean {
   if (lockedBoardId) return !!boardPermissions?.[lockedBoardId]?.canSubmit
   return Object.values(boardPermissions ?? {}).some((board) => board.canSubmit)
+}
+
+const isEmpty = (value: unknown): boolean =>
+  value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
+
+/**
+ * Whether posts fetched for `postsFor` are the first page for `filters`, so
+ * they can seed the feed. Only the plain feed is seeded: any narrowing filter
+ * on either side makes the feed fetch its own first page.
+ */
+export function postsMatchFilters(
+  postsFor: PublicFeedbackFilters,
+  filters: PublicFeedbackFilters
+): boolean {
+  const narrowing = ['status', 'tagIds', 'minVotes', 'dateFrom', 'responded'] as const
+  if (narrowing.some((key) => !isEmpty(postsFor[key]) || !isEmpty(filters[key]))) return false
+  return (
+    postsFor.board === filters.board &&
+    postsFor.search === filters.search &&
+    (postsFor.sort ?? 'trending') === (filters.sort ?? 'trending') &&
+    postsFor.view === filters.view &&
+    postsFor.owner === filters.owner &&
+    (postsFor.segmentIds ?? []).join() === (filters.segmentIds ?? []).join()
+  )
 }
 
 export function FeedbackContainer({
@@ -131,6 +163,7 @@ export function FeedbackContainer({
   showPoweredBy = true,
   facets,
   searchMode: initialSearchMode,
+  postsFilters,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const router = useRouter()
@@ -203,25 +236,13 @@ export function FeedbackContainer({
     ]
   )
 
-  // Track initial filters from server props to know when to use initialData
-  const initialFiltersRef = useRef({
-    board: currentBoard,
-    search: currentSearch,
-    sort: currentSort,
-    view: activeView,
-  })
-
-  // Only use initialData when current filters match what the server rendered
-  const filtersMatchInitial =
-    mergedFilters.board === initialFiltersRef.current.board &&
-    mergedFilters.search === initialFiltersRef.current.search &&
-    mergedFilters.sort === initialFiltersRef.current.sort &&
-    mergedFilters.view === initialFiltersRef.current.view &&
-    !mergedFilters.status?.length &&
-    !mergedFilters.tagIds?.length &&
-    !mergedFilters.minVotes &&
-    !mergedFilters.dateFrom &&
-    !mergedFilters.responded
+  // Seed the feed with the server's posts only while the filters are still
+  // the ones they were fetched for. Views are ignored for anyone not signed
+  // in, on the server as here.
+  const filtersMatchInitial = postsMatchFilters(
+    { ...postsFilters, view: isRealUser ? postsFilters.view : undefined },
+    mergedFilters
+  )
 
   // Server state - Posts list using TanStack Query
   const {
@@ -348,6 +369,14 @@ export function FeedbackContainer({
   // The composer opened from a search that found nothing, with its words as
   // the title. Signed-out visitors get the composer's own sign-in path.
   const [draft, setDraft] = useState<{ title: string; key: number }>()
+  const handoff = useFeedHandoff()
+  // A title typed (or a click) into the loading feed's composer opens it too.
+  // Taken in an effect: the loading composer hands it over in its cleanup,
+  // which React runs before this mounts.
+  useEffect(() => {
+    const title = handoff?.take('composeTitle')
+    if (title !== undefined) setDraft({ title, key: Date.now() })
+  }, [handoff])
   const canStartIdea =
     !isRealUser || canPostTo(boardPermissions, boardLocked ? boardIdForCreate : undefined)
 
@@ -431,7 +460,7 @@ export function FeedbackContainer({
   }
 
   return (
-    <div className="py-6">
+    <div>
       <div className="flex gap-6 lg:gap-8">
         <div className="flex-1 min-w-0">
           <FeedbackHeader
@@ -466,6 +495,7 @@ export function FeedbackContainer({
               statuses={statuses}
               tags={tags}
               boards={boards}
+              counts={facetCounts}
             />
           </div>
           {facetCounts && (
@@ -473,7 +503,7 @@ export function FeedbackContainer({
               {intl.formatMessage(
                 {
                   id: 'portal.feedback.list.resultCount',
-                  defaultMessage: '{count, plural, one {# idea} other {# ideas}}',
+                  defaultMessage: '{count, plural, one {# post} other {# posts}}',
                 },
                 { count: facetCounts.total }
               )}
@@ -509,7 +539,7 @@ export function FeedbackContainer({
                     {intl.formatMessage(
                       {
                         id: 'portal.feedback.list.noSearchResults',
-                        defaultMessage: 'No ideas match “{query}”.',
+                        defaultMessage: 'No posts match “{query}”.',
                       },
                       { query: activeSearch }
                     )}
@@ -522,7 +552,7 @@ export function FeedbackContainer({
                     >
                       {intl.formatMessage({
                         id: 'portal.feedback.list.postSearchAsIdea',
-                        defaultMessage: 'Post it as a new idea',
+                        defaultMessage: 'Create a post from it',
                       })}
                     </Button>
                   )}
@@ -541,7 +571,7 @@ export function FeedbackContainer({
                   <p className="text-base font-medium text-foreground">
                     {intl.formatMessage({
                       id: 'portal.feedback.list.noPostsYetTitle',
-                      defaultMessage: 'Got an idea? Be the first to share it',
+                      defaultMessage: 'No posts yet. Be the first to post',
                     })}
                   </p>
                   <p className="text-sm text-muted-foreground max-w-sm mx-auto">

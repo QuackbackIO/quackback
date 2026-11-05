@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { CheckIcon } from '@heroicons/react/24/solid'
@@ -36,7 +36,7 @@ interface EndConversationDialogProps {
  * free-text on any reason. Recording the reason powers later resolution-rate
  * reporting.
  */
-export function EndConversationDialog({
+export const EndConversationDialog = memo(function EndConversationDialog({
   conversationId,
   open,
   onOpenChange,
@@ -134,4 +134,4 @@ export function EndConversationDialog({
       </DialogContent>
     </Dialog>
   )
-}
+})

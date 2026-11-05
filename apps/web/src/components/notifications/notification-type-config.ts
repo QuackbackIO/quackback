@@ -129,6 +129,17 @@ export const notificationTypeConfigs: Record<NotificationType, NotificationTypeC
     iconClass: 'text-emerald-600',
     bgClass: 'bg-emerald-600/10',
   },
+  // Already-imported icons, for the same reason as above.
+  sending_domain_live: {
+    icon: CheckCircleIcon,
+    iconClass: 'text-emerald-600',
+    bgClass: 'bg-emerald-600/10',
+  },
+  sending_domain_needs_attention: {
+    icon: BellIcon,
+    iconClass: 'text-amber-600',
+    bgClass: 'bg-amber-600/10',
+  },
 }
 
 export const defaultNotificationTypeConfig: NotificationTypeConfig = {

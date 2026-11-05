@@ -117,6 +117,40 @@ describe('PublicFiltersBar', () => {
     expect(screen.queryByText(/^Board:$/)).not.toBeInTheDocument()
   })
 
+  it('edits the statuses from the chip with the same pills as the panel', () => {
+    const { setFilters } = renderBar({ filters: { sort: 'top', status: ['open'] } })
+    fireEvent.click(screen.getByRole('button', { name: /^Status:/ }))
+    const open = screen.getByRole('button', { name: 'Open', pressed: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Complete', pressed: false }))
+    expect(setFilters).toHaveBeenLastCalledWith({ status: ['open', 'complete'] })
+    fireEvent.click(open)
+    expect(setFilters).toHaveBeenLastCalledWith({ status: undefined })
+  })
+
+  it('sums the picked tags up in one chip whose pills add and remove tags', () => {
+    const { setFilters } = renderBar({ filters: { sort: 'top', tagIds: ['tag_1'] } })
+    expect(screen.getByText(/^Tag:$/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^Tag:/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Frontend', pressed: false }))
+    expect(setFilters).toHaveBeenLastCalledWith({ tagIds: ['tag_1', 'tag_2'] })
+    fireEvent.click(screen.getByRole('button', { name: 'Backend', pressed: true }))
+    expect(setFilters).toHaveBeenLastCalledWith({ tagIds: undefined })
+    cleanup()
+    renderBar({ filters: { sort: 'top', tagIds: ['tag_1', 'tag_2'] } })
+    expect(screen.getAllByText(/^Tags:$/)).toHaveLength(1)
+    expect(screen.getByText('Backend and Frontend')).toBeInTheDocument()
+  })
+
+  it('switches a one-pick filter from its chip, and clears it from the lit pill', () => {
+    const { setFilters } = renderBar({ filters: { sort: 'top', board: 'bugs' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Board:/ }))
+    expect(screen.getByRole('dialog', { name: 'Board' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Feature Requests', pressed: false }))
+    expect(setFilters).toHaveBeenLastCalledWith({ board: 'feature-requests' })
+    fireEvent.click(screen.getByRole('button', { name: 'Bugs', pressed: true }))
+    expect(setFilters).toHaveBeenLastCalledWith({ board: undefined })
+  })
+
   it('renders combined Tags chip when 3+ tags selected', () => {
     const tagsMany: PostTag[] = [
       ...tags,

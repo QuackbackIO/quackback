@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import type { PublicPostSort } from '@/lib/shared/types/filters'
+import { useFeedHandoff } from './feed-input-handoff'
 
 interface FeedbackToolbarProps {
   currentSort: PublicPostSort
@@ -17,6 +18,11 @@ interface FeedbackToolbarProps {
   onSearchChange: (search: string) => void
   /** Optional slot rendered after the search button on the right (typically the Filter button). */
   filterButton?: React.ReactNode
+  /**
+   * Set on the loading feed's toolbar: a search still waiting on its debounce
+   * when it unmounts passes to the loaded feed's toolbar instead of being lost.
+   */
+  handOffSearch?: boolean
 }
 
 const SORT_OPTIONS = [
@@ -53,6 +59,7 @@ export function FeedbackToolbar({
   currentSearch,
   onSearchChange,
   filterButton,
+  handOffSearch = false,
 }: FeedbackToolbarProps): React.ReactElement {
   const intl = useIntl()
   // Best match only applies to a search; without one the feed is trending.
@@ -61,6 +68,14 @@ export function FeedbackToolbar({
   // hook into the portal bundle splits it out of the admin chunk it lives in,
   // costing admin pages an extra request.
   const [searchValue, setSearchValue] = useState(currentSearch ?? '')
+  const handoff = useFeedHandoff()
+  // A search typed while the feed loaded arrives once this toolbar mounts
+  // (React runs the loading toolbar's cleanup, which hands it over, before
+  // this effect); the debounce below then applies it.
+  useEffect(() => {
+    const carried = handoff?.take('search')
+    if (carried !== undefined) setSearchValue(carried)
+  }, [handoff])
   // The last query this field applied. When the URL catches up to it, the
   // field keeps whatever was typed meanwhile; any other change (Clear all,
   // Back) comes from elsewhere and replaces the field.
@@ -84,9 +99,21 @@ export function FeedbackToolbar({
     }, 300)
     return () => clearTimeout(timeoutId)
   }, [searchValue])
+  const searchValueRef = useRef(searchValue)
+  useEffect(() => {
+    searchValueRef.current = searchValue
+  })
+  useEffect(() => {
+    if (!handOffSearch || !handoff) return
+    return () => {
+      if (searchValueRef.current.trim() !== appliedRef.current) {
+        handoff.handOff({ search: searchValueRef.current })
+      }
+    }
+  }, [handOffSearch, handoff])
   const searchLabel = intl.formatMessage({
     id: 'portal.feedback.toolbar.searchLabel',
-    defaultMessage: 'Search ideas',
+    defaultMessage: 'Search posts',
   })
 
   function handleClearSearch(): void {

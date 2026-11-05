@@ -150,6 +150,20 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     group: 'support',
     surfaces: ['admin'],
   },
+  {
+    type: 'sending_domain_live',
+    label: 'Sending domain live',
+    description: 'A sending domain is verified and mail sends from it',
+    group: 'support',
+    surfaces: ['admin'],
+  },
+  {
+    type: 'sending_domain_needs_attention',
+    label: 'Sending domain needs attention',
+    description: 'A sending domain stops verifying and replies use the default address',
+    group: 'support',
+    surfaces: ['admin'],
+  },
   // Changelog
   {
     type: 'changelog_published',

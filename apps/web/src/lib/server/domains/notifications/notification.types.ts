@@ -30,6 +30,8 @@ export type NotificationType =
   | 'comment_mentioned'
   | 'assistant_handed_off'
   | 'approval_requested'
+  | 'sending_domain_live'
+  | 'sending_domain_needs_attention'
 
 /**
  * Input for creating a single notification

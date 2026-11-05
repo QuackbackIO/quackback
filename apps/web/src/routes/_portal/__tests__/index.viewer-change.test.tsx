@@ -80,6 +80,10 @@ vi.mock('@/lib/client/queries/portal', () => ({
   useSeedPortalStatusesCache: () => {},
 }))
 // The feed itself: a draft typed into it shows whether it stayed mounted.
+vi.mock('@/components/public/feedback/portal-feed-skeleton', () => ({
+  PortalFeedSkeleton: () => <div data-testid="feed-skeleton" />,
+}))
+vi.mock('@/components/public/feedback/portal-powered-by', () => ({ PortalPoweredBy: () => null }))
 vi.mock('@/components/public/feedback/feedback-container', () => ({
   FeedbackContainer: ({ posts }: { posts: { id: string }[] }) => {
     const [draft, setDraft] = useState('')

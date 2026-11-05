@@ -18,23 +18,31 @@ import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import type { TeamMember } from '@/lib/shared/types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
-import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
+import { FilterChip } from '@/components/shared/filter-chip'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
-import { PUBLIC_FEED_VIEWS, type PublicFeedView } from '@/lib/shared/types/filters'
 import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
-import { toggleItem } from '@/components/shared/filter-utils'
+import type { PublicPostFacetCounts } from '@/lib/shared/types/filters'
 import { CircleIcon } from '@/components/shared/filter-menu'
 import {
-  VOTE_THRESHOLDS,
   DATE_PRESETS,
   RESPONDED_OPTIONS,
   getDateFromDaysAgo,
   type DatePresetValue,
-  type RespondedValue,
   STATUS_CATEGORY_ORDER,
   STATUS_GROUP_LABELS,
 } from './public-filters-bar-defaults'
-import { FilterPill, MoreButton } from './filter-pill'
+import {
+  BoardPills,
+  DatePills,
+  OwnerPills,
+  RESPONDED_LABELS,
+  ResponsePills,
+  SegmentPills,
+  StatusPills,
+  TagPills,
+  ViewPills,
+  VotePills,
+} from './filter-pill-groups'
 
 interface FilterBarBoard {
   id: string
@@ -53,24 +61,6 @@ const DATE_PRESET_LABELS: Record<DatePresetValue, { id: string; defaultMessage: 
   '7days': { id: 'portal.feedback.filter.date.last7Days', defaultMessage: 'Last 7 days' },
   '30days': { id: 'portal.feedback.filter.date.last30Days', defaultMessage: 'Last 30 days' },
   '90days': { id: 'portal.feedback.filter.date.last90Days', defaultMessage: 'Last 90 days' },
-}
-
-const RESPONDED_LABELS: Record<RespondedValue, { id: string; defaultMessage: string }> = {
-  responded: {
-    id: 'portal.feedback.filter.response.responded',
-    defaultMessage: 'Replied',
-  },
-  unresponded: {
-    id: 'portal.feedback.filter.response.unresponded',
-    defaultMessage: 'Awaiting reply',
-  },
-}
-
-function votesLabel(intl: IntlShape, minVotes: number): string {
-  return intl.formatMessage(
-    { id: 'portal.feedback.filter.votes.min', defaultMessage: '{count}+ votes' },
-    { count: minVotes }
-  )
 }
 
 const CHIP_ICON_BY_TYPE: Record<ChipType, IconComponent> = {
@@ -116,6 +106,8 @@ interface PublicFiltersBarProps {
   statuses: PostStatusEntity[]
   tags: PostTag[]
   boards: FilterBarBoard[]
+  /** The feed's counts, shown on the pills a chip opens. */
+  counts?: PublicPostFacetCounts | null
 }
 
 export function PublicFiltersBar({
@@ -125,6 +117,7 @@ export function PublicFiltersBar({
   statuses,
   tags,
   boards,
+  counts,
 }: PublicFiltersBarProps) {
   const intl = useIntl()
   const { members, segments } = useTeamOnlyFilterOptions()
@@ -137,11 +130,12 @@ export function PublicFiltersBar({
         statuses,
         tags,
         boards,
+        counts,
         members,
         segments,
         intl,
       }),
-    [filters, setFilters, statuses, tags, boards, members, segments, intl]
+    [filters, setFilters, statuses, tags, boards, counts, members, segments, intl]
   )
 
   if (activeChips.length === 0) return null
@@ -184,16 +178,6 @@ interface MoreFiltersProps {
   size?: 'sm' | 'md'
 }
 
-/** Team members listed before the rest fold behind "N more". */
-const OWNERS_SHOWN = 8
-
-/**
- * The panel offers fewer, wider steps than the chips accept, so each group
- * fits one row. A link with another value still applies and shows its chip.
- */
-const PANEL_DATE_PRESETS = DATE_PRESETS.filter((p) => p.daysAgo > 0)
-const PANEL_VOTE_THRESHOLDS = [10, 50, 100] as const
-
 function MoreGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div role="group" aria-label={label}>
@@ -217,12 +201,7 @@ export function PublicMoreFilters({ filters, setFilters, size = 'sm' }: MoreFilt
     [filters.responded, filters.dateFrom, filters.minVotes, filters.owner].filter(Boolean).length +
     (filters.segmentIds?.length ? 1 : 0)
   const [open, setOpen] = useState(onCount > 0)
-  const [allOwnersShown, setAllOwnersShown] = useState(false)
-
-  const pickedDate = DATE_PRESETS.find((p) => getDateFromDaysAgo(p.daysAgo) === filters.dateFrom)
-  const shownMembers = allOwnersShown
-    ? members
-    : members.filter((m, i) => i < OWNERS_SHOWN || m.id === filters.owner)
+  const group = { filters, setFilters, size }
 
   return (
     <div className="px-3 py-1">
@@ -255,18 +234,7 @@ export function PublicMoreFilters({ filters, setFilters, size = 'sm' }: MoreFilt
               defaultMessage: 'Team response',
             })}
           >
-            {RESPONDED_OPTIONS.map(({ value }) => (
-              <FilterPill
-                key={value}
-                size={size}
-                pressed={filters.responded === value}
-                onClick={() =>
-                  setFilters({ responded: filters.responded === value ? undefined : value })
-                }
-              >
-                {intl.formatMessage(RESPONDED_LABELS[value])}
-              </FilterPill>
-            ))}
+            <ResponsePills {...group} />
           </MoreGroup>
           <MoreGroup
             label={intl.formatMessage({
@@ -274,29 +242,7 @@ export function PublicMoreFilters({ filters, setFilters, size = 'sm' }: MoreFilt
               defaultMessage: 'Posted in the last',
             })}
           >
-            {PANEL_DATE_PRESETS.map((preset) => (
-              <FilterPill
-                key={preset.value}
-                size={size}
-                pressed={pickedDate?.value === preset.value}
-                onClick={() =>
-                  setFilters({
-                    dateFrom:
-                      pickedDate?.value === preset.value
-                        ? undefined
-                        : getDateFromDaysAgo(preset.daysAgo),
-                  })
-                }
-              >
-                {intl.formatMessage(
-                  {
-                    id: 'portal.feedback.filter.date.days',
-                    defaultMessage: '{count, plural, one {# day} other {# days}}',
-                  },
-                  { count: preset.daysAgo }
-                )}
-              </FilterPill>
-            ))}
+            <DatePills {...group} />
           </MoreGroup>
           <MoreGroup
             label={intl.formatMessage({
@@ -304,18 +250,7 @@ export function PublicMoreFilters({ filters, setFilters, size = 'sm' }: MoreFilt
               defaultMessage: 'Vote count',
             })}
           >
-            {PANEL_VOTE_THRESHOLDS.map((value) => (
-              <FilterPill
-                key={value}
-                size={size}
-                pressed={filters.minVotes === value}
-                onClick={() =>
-                  setFilters({ minVotes: filters.minVotes === value ? undefined : value })
-                }
-              >
-                {intl.formatNumber(value)}+
-              </FilterPill>
-            ))}
+            <VotePills {...group} />
           </MoreGroup>
           {(members.length > 0 || segments.length > 0) && (
             <div className="space-y-3 rounded-lg bg-amber-50 p-2 dark:bg-amber-500/10">
@@ -332,32 +267,7 @@ export function PublicMoreFilters({ filters, setFilters, size = 'sm' }: MoreFilt
                     defaultMessage: 'Owner',
                   })}
                 >
-                  {[
-                    {
-                      id: 'unassigned',
-                      label: intl.formatMessage({
-                        id: 'portal.feedback.filter.owner.unassigned',
-                        defaultMessage: 'Unassigned',
-                      }),
-                    },
-                    ...shownMembers.map((m) => ({ id: m.id, label: m.name || m.email || m.id })),
-                  ].map(({ id, label }) => (
-                    <FilterPill
-                      key={id}
-                      size={size}
-                      title={label}
-                      pressed={filters.owner === id}
-                      onClick={() => setFilters({ owner: filters.owner === id ? undefined : id })}
-                    >
-                      {label}
-                    </FilterPill>
-                  ))}
-                  {members.length > shownMembers.length && (
-                    <MoreButton
-                      hidden={members.length - shownMembers.length}
-                      onClick={() => setAllOwnersShown(true)}
-                    />
-                  )}
+                  <OwnerPills {...group} members={members} />
                 </MoreGroup>
               )}
               {segments.length > 0 && (
@@ -367,21 +277,7 @@ export function PublicMoreFilters({ filters, setFilters, size = 'sm' }: MoreFilt
                     defaultMessage: 'Segment',
                   })}
                 >
-                  {segments.map((segment) => (
-                    <FilterPill
-                      key={segment.id}
-                      size={size}
-                      color={segment.color}
-                      title={segment.name}
-                      pressed={filters.segmentIds?.includes(segment.id) ?? false}
-                      onClick={() => {
-                        const next = toggleItem(filters.segmentIds, segment.id)
-                        setFilters({ segmentIds: next?.length ? next : undefined })
-                      }}
-                    >
-                      {segment.name}
-                    </FilterPill>
-                  ))}
+                  <SegmentPills {...group} segments={segments} />
                 </MoreGroup>
               )}
             </div>
@@ -399,8 +295,8 @@ interface ActiveChipDescriptor {
   value: string
   valueId: string
   color?: string
-  options?: FilterOption[]
-  onChange?: (newId: string) => void
+  /** The pills that change this filter, opened by clicking the chip. */
+  editor: React.ReactNode
   onRemove: () => void
   /** Team-only chip: amber styling. */
   internal?: boolean
@@ -408,18 +304,37 @@ interface ActiveChipDescriptor {
   tooltip?: string
 }
 
+/** Names up to two picks, then "A, B +n". */
+function summarize(intl: IntlShape, names: string[]): string {
+  return names.length <= 2
+    ? intl.formatList(names, { type: 'conjunction' })
+    : intl.formatMessage(
+        { id: 'portal.feedback.filter.status.summaryMore', defaultMessage: '{names} +{count}' },
+        {
+          names: intl.formatList(names.slice(0, 2), { type: 'unit', style: 'short' }),
+          count: names.length - 2,
+        }
+      )
+}
+
+/**
+ * One chip per applied filter. Clicking a chip opens the same pills the panel
+ * uses for that filter, so it can be changed without leaving the feed.
+ */
 function buildActiveChips(args: {
   filters: PublicFeedbackFilters
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
   statuses: PostStatusEntity[]
   tags: PostTag[]
   boards: FilterBarBoard[]
+  counts?: PublicPostFacetCounts | null
   members: TeamMember[]
   segments: SegmentListItem[]
   intl: IntlShape
 }): ActiveChipDescriptor[] {
-  const { filters, setFilters, statuses, tags, boards, members, segments, intl } = args
+  const { filters, setFilters, statuses, tags, boards, counts, members, segments, intl } = args
   const chips: ActiveChipDescriptor[] = []
+  const group = { filters, setFilters }
 
   // View chip (My ideas, Voted, Following), so the view is never hidden in
   // the panel alone.
@@ -427,7 +342,7 @@ function buildActiveChips(args: {
     const viewLabels = {
       mine: intl.formatMessage({
         id: 'portal.feedback.panel.view.mine',
-        defaultMessage: 'My ideas',
+        defaultMessage: 'My posts',
       }),
       voted: intl.formatMessage({
         id: 'portal.feedback.panel.view.voted',
@@ -447,8 +362,7 @@ function buildActiveChips(args: {
       }),
       value: viewLabels[filters.view],
       valueId: filters.view,
-      options: PUBLIC_FEED_VIEWS.map((view) => ({ id: view, label: viewLabels[view] })),
-      onChange: (view) => setFilters({ view: view as PublicFeedView }),
+      editor: <ViewPills {...group} counts={counts?.views} />,
       onRemove: () => setFilters({ view: undefined }),
     })
   }
@@ -459,7 +373,7 @@ function buildActiveChips(args: {
     const board = boards.find((b) => b.slug === filters.board)
     if (board) {
       chips.push({
-        key: `board-${board.slug}`,
+        key: 'board',
         type: 'board',
         label: intl.formatMessage({
           id: 'portal.feedback.filter.chip.board',
@@ -467,8 +381,7 @@ function buildActiveChips(args: {
         }),
         value: board.name,
         valueId: board.slug,
-        options: boards.map((b) => ({ id: b.slug, label: b.name })),
-        onChange: (newSlug: string) => setFilters({ board: newSlug }),
+        editor: <BoardPills {...group} boards={boards} counts={counts?.boards} />,
         onRemove: () => setFilters({ board: undefined }),
       })
     }
@@ -482,9 +395,9 @@ function buildActiveChips(args: {
     )
     const parts: string[] = []
     for (const category of STATUS_CATEGORY_ORDER) {
-      const group = statuses.filter((s) => (s.category ?? 'active') === category)
-      const inGroup = group.filter((s) => picked.includes(s.slug))
-      if (group.length > 1 && inGroup.length === group.length) {
+      const inCategory = statuses.filter((s) => (s.category ?? 'active') === category)
+      const inGroup = inCategory.filter((s) => picked.includes(s.slug))
+      if (inCategory.length > 1 && inGroup.length === inCategory.length) {
         parts.push(intl.formatMessage(STATUS_GROUP_LABELS[category]))
       } else {
         parts.push(...inGroup.map((s) => s.name))
@@ -503,74 +416,34 @@ function buildActiveChips(args: {
       }),
       value: everything
         ? intl.formatMessage({ id: 'portal.feedback.filter.status.all', defaultMessage: 'All' })
-        : parts.length <= 2
-          ? intl.formatList(parts, { type: 'conjunction' })
-          : intl.formatMessage(
-              {
-                id: 'portal.feedback.filter.status.summaryMore',
-                defaultMessage: '{names} +{count}',
-              },
-              {
-                names: intl.formatList(parts.slice(0, 2), { type: 'unit', style: 'short' }),
-                count: parts.length - 2,
-              }
-            ),
+        : summarize(intl, parts),
       valueId: picked.join(),
+      editor: <StatusPills {...group} statuses={statuses} counts={counts?.statuses} />,
       onRemove: () => setFilters({ status: undefined }),
     })
   }
 
-  // Tags — 1-2 individual, 3+ combined
+  // Tags: one chip naming the picks.
   if (filters.tagIds?.length) {
-    const tagOptions: FilterOption[] = tags.map((t) => ({ id: t.id, label: t.name }))
-    if (filters.tagIds.length <= 2) {
-      for (const id of filters.tagIds) {
-        const tag = tags.find((t) => t.id === id)
-        if (!tag) continue
-        chips.push({
-          key: `tag-${id}`,
-          type: 'tags',
-          label: intl.formatMessage({
-            id: 'portal.feedback.filter.chip.tag',
-            defaultMessage: 'Tag:',
-          }),
-          value: tag.name,
-          valueId: id,
-          options: tagOptions,
-          onChange: (newId) => {
-            const others = filters.tagIds?.filter((t) => t !== id) ?? []
-            setFilters({ tagIds: [...others, newId] })
-          },
-          onRemove: () => {
-            const next = filters.tagIds?.filter((t) => t !== id)
-            setFilters({ tagIds: next?.length ? next : undefined })
-          },
-        })
-      }
-    } else {
-      const names = filters.tagIds
-        .map((id) => tags.find((t) => t.id === id)?.name)
-        .filter((n): n is string => !!n)
-      chips.push({
-        key: 'tags-combined',
-        type: 'tags',
-        label: intl.formatMessage({
-          id: 'portal.feedback.filter.chip.tags',
-          defaultMessage: 'Tags:',
-        }),
-        value: `${names.slice(0, 2).join(', ')} +${names.length - 2}`,
-        valueId: 'combined',
-        onRemove: () => setFilters({ tagIds: undefined }),
-      })
-    }
+    const names = filters.tagIds
+      .map((id) => tags.find((t) => t.id === id)?.name)
+      .filter((n): n is string => !!n)
+    chips.push({
+      key: 'tags',
+      type: 'tags',
+      label:
+        filters.tagIds.length === 1
+          ? intl.formatMessage({ id: 'portal.feedback.filter.chip.tag', defaultMessage: 'Tag:' })
+          : intl.formatMessage({ id: 'portal.feedback.filter.chip.tags', defaultMessage: 'Tags:' }),
+      value: summarize(intl, names),
+      valueId: filters.tagIds.join(),
+      editor: <TagPills {...group} tags={tags} />,
+      onRemove: () => setFilters({ tagIds: undefined }),
+    })
   }
 
   // Vote count
   if (filters.minVotes) {
-    const opts: FilterOption[] = VOTE_THRESHOLDS.map((t) => ({
-      id: String(t.value),
-      label: votesLabel(intl, t.value),
-    }))
     chips.push({
       key: 'minVotes',
       type: 'votes',
@@ -580,18 +453,13 @@ function buildActiveChips(args: {
       }),
       value: `${intl.formatNumber(filters.minVotes)}+`,
       valueId: String(filters.minVotes),
-      options: opts,
-      onChange: (id) => setFilters({ minVotes: parseInt(id, 10) }),
+      editor: <VotePills {...group} />,
       onRemove: () => setFilters({ minVotes: undefined }),
     })
   }
 
   // Created date
   if (filters.dateFrom) {
-    const opts: FilterOption[] = DATE_PRESETS.map((p) => ({
-      id: p.value,
-      label: intl.formatMessage(DATE_PRESET_LABELS[p.value]),
-    }))
     const matched = DATE_PRESETS.find((p) => getDateFromDaysAgo(p.daysAgo) === filters.dateFrom)
     chips.push({
       key: 'dateFrom',
@@ -602,21 +470,13 @@ function buildActiveChips(args: {
       }),
       value: matched ? intl.formatMessage(DATE_PRESET_LABELS[matched.value]) : filters.dateFrom,
       valueId: matched?.value ?? filters.dateFrom,
-      options: opts,
-      onChange: (presetId) => {
-        const preset = DATE_PRESETS.find((p) => p.value === (presetId as DatePresetValue))
-        if (preset) setFilters({ dateFrom: getDateFromDaysAgo(preset.daysAgo) })
-      },
+      editor: <DatePills {...group} />,
       onRemove: () => setFilters({ dateFrom: undefined }),
     })
   }
 
   // Team response
   if (filters.responded) {
-    const opts: FilterOption[] = RESPONDED_OPTIONS.map((o) => ({
-      id: o.value,
-      label: intl.formatMessage(RESPONDED_LABELS[o.value]),
-    }))
     const matched = RESPONDED_OPTIONS.find((o) => o.value === filters.responded)
     chips.push({
       key: 'responded',
@@ -627,8 +487,7 @@ function buildActiveChips(args: {
       }),
       value: matched ? intl.formatMessage(RESPONDED_LABELS[matched.value]) : filters.responded,
       valueId: filters.responded,
-      options: opts,
-      onChange: (id) => setFilters({ responded: id as RespondedValue }),
+      editor: <ResponsePills {...group} />,
       onRemove: () => setFilters({ responded: undefined }),
     })
   }
@@ -644,17 +503,12 @@ function buildActiveChips(args: {
 
   // Owner — single-select; 'unassigned' is a first-class value.
   if (filters.owner && (members.length > 0 || filters.owner === 'unassigned')) {
-    const unassignedLabel = intl.formatMessage({
-      id: 'portal.feedback.filter.owner.unassigned',
-      defaultMessage: 'Unassigned',
-    })
-    const ownerOptions: FilterOption[] = [
-      { id: 'unassigned', label: unassignedLabel },
-      ...members.map((m) => ({ id: m.id, label: m.name || m.email || m.id })),
-    ]
     const ownerValue =
       filters.owner === 'unassigned'
-        ? unassignedLabel
+        ? intl.formatMessage({
+            id: 'portal.feedback.filter.owner.unassigned',
+            defaultMessage: 'Unassigned',
+          })
         : (members.find((m) => m.id === filters.owner)?.name ??
           members.find((m) => m.id === filters.owner)?.email ??
           filters.owner)
@@ -667,45 +521,34 @@ function buildActiveChips(args: {
       }),
       value: ownerValue,
       valueId: filters.owner,
-      options: ownerOptions,
+      editor: <OwnerPills {...group} members={members} />,
       internal: true,
       tooltip: internalTooltip,
-      onChange: (newId) => setFilters({ owner: newId }),
       onRemove: () => setFilters({ owner: undefined }),
     })
   }
 
-  // Segments — one chip per selected id (multi-select), matching tag anatomy.
+  // Segments: one chip naming the picks.
   if (filters.segmentIds?.length && segments.length > 0) {
-    const segmentOptions: FilterOption[] = segments.map((s) => ({
-      id: s.id,
-      label: s.name,
-      color: s.color,
-    }))
-    for (const id of filters.segmentIds) {
-      const segment = segments.find((s) => s.id === id)
-      if (!segment) continue
+    const picked = segments.filter((s) => filters.segmentIds?.includes(s.id))
+    if (picked.length > 0) {
       chips.push({
-        key: `segment-${id}`,
+        key: 'segments',
         type: 'segment',
         label: intl.formatMessage({
           id: 'portal.feedback.filter.chip.segment',
           defaultMessage: 'Segment:',
         }),
-        value: segment.name,
-        valueId: id,
-        color: segment.color,
-        options: segmentOptions,
+        value: summarize(
+          intl,
+          picked.map((s) => s.name)
+        ),
+        valueId: filters.segmentIds.join(),
+        color: picked.length === 1 ? picked[0].color : undefined,
+        editor: <SegmentPills {...group} segments={segments} />,
         internal: true,
         tooltip: internalTooltip,
-        onChange: (newId) => {
-          const others = filters.segmentIds?.filter((s) => s !== id) ?? []
-          setFilters({ segmentIds: [...others, newId] })
-        },
-        onRemove: () => {
-          const next = filters.segmentIds?.filter((s) => s !== id)
-          setFilters({ segmentIds: next?.length ? next : undefined })
-        },
+        onRemove: () => setFilters({ segmentIds: undefined }),
       })
     }
   }

@@ -32,6 +32,7 @@ import { PUBLIC_FEEDBACK_EDITOR_FEATURES } from '@/components/public/feedback/fe
 import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { shownName } from '@/lib/shared/greeting-name'
+import { TITLE_MAX_LENGTH } from './feedback-header'
 
 interface BoardOption {
   id: string
@@ -66,7 +67,6 @@ export interface FeedbackHeaderProps {
 }
 
 /** The server's limits for a new post's title and details (createPublicPostSchema). */
-const TITLE_MAX_LENGTH = 200
 const DETAILS_MAX_LENGTH = 10_000
 
 export function FeedbackHeaderAnimated({
@@ -555,10 +555,10 @@ export function FeedbackHeaderAnimated({
                   {createPost.isPending ? (
                     <FormattedMessage
                       id="portal.feedback.header.submitting"
-                      defaultMessage="Submitting..."
+                      defaultMessage="Posting..."
                     />
                   ) : (
-                    <FormattedMessage id="portal.feedback.header.submit" defaultMessage="Submit" />
+                    <FormattedMessage id="portal.feedback.header.submit" defaultMessage="Post" />
                   )}
                 </Button>
               </div>
@@ -599,7 +599,7 @@ function TitleInput({
       maxLength={TITLE_MAX_LENGTH}
       placeholder={intl.formatMessage({
         id: 'portal.feedback.header.titlePlaceholder',
-        defaultMessage: "What's your idea?",
+        defaultMessage: "What's on your mind?",
       })}
       value={value}
       aria-label={intl.formatMessage({

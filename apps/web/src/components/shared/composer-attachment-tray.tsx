@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { useIntl, type IntlShape } from 'react-intl'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 import { FileBadge } from '@/components/shared/files/file-badge'
@@ -287,7 +288,7 @@ function CapNoticeLine({ item, onRemove }: Omit<TileProps, 'onRetry'>) {
  * gallery — the still-uploading/failed ones have nothing to show yet and are
  * left out.
  */
-export function ComposerAttachmentTray({
+export const ComposerAttachmentTray = memo(function ComposerAttachmentTray({
   items,
   onRemove,
   onRetry,
@@ -336,4 +337,4 @@ export function ComposerAttachmentTray({
       )}
     </div>
   )
-}
+})

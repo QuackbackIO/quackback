@@ -218,6 +218,13 @@ describe('getNotificationTarget', () => {
       ).toEqual({ to: '/admin/approvals' })
   })
 
+  it('routes both sending domain bells to the email channel settings', () => {
+    for (const type of ['sending_domain_live', 'sending_domain_needs_attention'] as const)
+      expect(getNotificationTarget(buildNotification({ type }))).toEqual({
+        to: '/admin/settings/channels/email',
+      })
+  })
+
   it('routes changelog_published with a changelogId to the specific entry', () => {
     const notification = buildNotification({
       type: 'changelog_published',

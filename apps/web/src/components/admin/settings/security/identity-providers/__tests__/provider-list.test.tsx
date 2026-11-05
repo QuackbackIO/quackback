@@ -57,6 +57,7 @@ vi.mock('@/lib/server/functions/sso', () => ({
   setProviderCredentialsFn: vi.fn(),
   addProviderDomainFn: vi.fn(),
   verifyProviderDomainFn: vi.fn(),
+  getSsoDomainProofsFn: vi.fn(async () => ({})),
   fetchDiscoveryScopesFn: vi.fn(async () => ({ scopesSupported: null })),
   setDomainEnforcedFn: vi.fn(),
   removeVerifiedDomainFn: vi.fn(),

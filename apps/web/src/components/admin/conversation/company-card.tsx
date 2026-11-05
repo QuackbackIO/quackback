@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { BuildingOffice2Icon } from '@heroicons/react/24/outline'
@@ -18,7 +18,7 @@ import { conversationPanelQueries } from '@/lib/client/queries/conversation-pane
  * The name links to the companies directory (where companies are edited);
  * "View conversations" deep-links the inbox filtered to this company.
  */
-export function CompanyCard({
+export const CompanyCard = memo(function CompanyCard({
   principalId,
   enabled = true,
 }: {
@@ -130,7 +130,7 @@ export function CompanyCard({
       </Link>
     </div>
   )
-}
+})
 
 /**
  * The unattached-contact qualification form. Committing a name (Save) is what

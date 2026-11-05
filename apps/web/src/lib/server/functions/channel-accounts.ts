@@ -16,10 +16,7 @@ import {
   listChannelAccounts,
   listSendingDomains,
   setInboundForwardingTarget,
-  createSendingAddress,
   deleteSendingDomain,
-  SendingDomainInUseError,
-  softDeleteChannelAccount,
   updateInboundTrust,
   clearInboundForwarding,
   updateSendingAddressSmtp,
@@ -28,62 +25,60 @@ import { platformInboxAddress } from '@/lib/server/domains/conversation/conversa
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import {
   SendingDomainRefusedError,
-  provisionSendingDomain,
-  refreshSendingDomain,
+  restartSendingDomainChecks,
 } from '@/lib/server/domains/channel-accounts/sending-identity'
 import {
-  SendingIdentityRefusedError,
-  assertSendingIdentityPermitted,
-} from '@/lib/server/domains/channel-accounts/outbound-identity'
-import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
+  addSendingAddress,
+  removeSendingAddress,
+  sendTestEmail,
+  sendingAddressMode,
+} from '@/lib/server/domains/channel-accounts/sending-address'
+import {
+  domainActionMessage,
+  isDomainActionRefusal,
+  type DomainAction,
+} from '@/lib/server/domains/channel-accounts/domain-action-message'
+import { sesTenantPausedNotice } from '@/lib/server/domains/channel-accounts/ses-tenant-status'
+import { enqueueSesTenantReconcile } from '@/lib/server/domains/channel-accounts/ses-tenant-queue'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'channel-accounts-fn' })
 
 /**
- * The message a person is allowed to see for a failed sending-domain action.
+ * Run a sending-domain action, replacing its failure with the sentence a person
+ * may read (see `domain-action-message.ts`).
  *
- * Our own refusals are written for the person reading them and name the fix, so
- * they pass through. Everything else is a provider or transport failure whose
- * text is the provider's prose about its own API — it names actions, exception
- * types and services this person did not ask about and cannot act on, and
- * putting it in a toast turns an operator problem into a customer-facing
- * mystery written in a vendor's voice. The detail is not lost: it is already in
- * the server log, which is where the person who can act on it is looking.
+ * The cause is kept even though only the message crosses the wire, and anything
+ * that is not one of our own refusals is logged here with it: the provider's
+ * own text is read in the server log, by the operator who can act on it.
  */
-function domainActionMessage(error: unknown, fallback: string): string {
-  if (
-    error instanceof SendingDomainRefusedError ||
-    error instanceof SendingIdentityRefusedError ||
-    error instanceof SendingDomainInUseError ||
-    error instanceof TierLimitError
-  ) {
-    return error.message
-  }
-  log.error({ err: error }, 'sending domain action failed')
-  return fallback
-}
-
-/** Run a sending-domain action, replacing any non-refusal failure's message. */
-async function withDomainActionMessage<T>(fallback: string, run: () => Promise<T>): Promise<T> {
+async function withDomainActionMessage<T>(action: DomainAction, run: () => Promise<T>): Promise<T> {
   try {
     return await run()
   } catch (error) {
-    // The cause is kept even though only the message crosses the wire: the
-    // server-side log line below the throw is where the provider's own text is
-    // read, and losing the chain there would leave nobody able to answer the
-    // question the toast is deliberately not answering.
-    throw new Error(domainActionMessage(error, fallback), { cause: error })
+    if (!isDomainActionRefusal(error)) {
+      log.error({ err: error, action }, 'sending domain action failed')
+    }
+    throw new Error(domainActionMessage(error, action), { cause: error })
   }
 }
 
+/** What our own lookup last found for a record (see `record-check.ts`). */
+export type DnsRecordCheckDTO = {
+  state: 'found' | 'missing' | 'mismatch' | 'proxied'
+  seen?: string
+  reason?: 'doubled-name' | 'truncated' | 'quoted'
+  checkedAt: string
+}
+
 /** A record to publish, flattened for the wire. `priority` is present on MX only. */
-type DnsRecord = {
+export type DnsRecordDTO = {
   type: string
   host: string
   value: string
   purpose: string
   priority?: number
+  check?: DnsRecordCheckDTO
 }
 
 // createServerFn requires serializable returns; the jsonb config is JSON at
@@ -100,14 +95,49 @@ export interface ChannelAccountDTO {
   inboundTrust: 'strict' | 'lenient'
   sendingDomainId: string | null
   sendingDomain: { domain: string; status: string } | null
+  /** When the account was added, so the page can tell the oldest on a domain. */
+  createdAt: string
+}
+
+/** Pre-flight findings for a domain (see `preflight.ts`). Every field may be absent. */
+export interface SendingDomainPreflightDTO {
+  dnsHost?: 'cloudflare' | 'route53' | 'godaddy' | 'namecheap' | 'google' | 'other'
+  mailFromFree?: boolean
+  dmarc?: { found: boolean; policy?: 'none' | 'quarantine' | 'reject' }
+  checkedAt?: string
 }
 
 export interface SendingDomainDTO {
   id: string
   domain: string
   status: string
-  dnsRecords: DnsRecord[]
+  dnsRecords: DnsRecordDTO[]
   verifiedAt: string | null
+  /** The MAIL FROM subdomain label the records are composed under. */
+  mailFromLabel: string
+  /**
+   * How the domain is signed: `byo` with a key of its own (one TXT, which also
+   * proves ownership), `easy` with the provider's keys (CNAMEs plus the
+   * ownership TXT), `shared` with the key the identity already had (the row's
+   * own key TXT proves ownership only, beside the provider's CNAMEs when that
+   * key is the provider's; when that key is one nobody can publish, the row's
+   * key is the one to publish and the row becomes `byo` once it is found).
+   */
+  dkimMode: 'easy' | 'byo' | 'shared'
+  /**
+   * A `shared` domain whose identity is re-keyed to the row's own key once
+   * that key is found: its key TXT is then the signing record, not ownership
+   * only. Says only that; the key itself never leaves the server.
+   */
+  signingKeyPending?: boolean
+  /**
+   * Until when a pending domain is checked automatically. A pending domain
+   * whose window has passed is "not found after 72 hours"; one with no window yet is still being set up.
+   */
+  autoCheckUntil: string | null
+  /** The last full check, provider included. Each record's `check.checkedAt` is its own lookup. */
+  lastCheckedAt: string | null
+  preflight: SendingDomainPreflightDTO
 }
 
 export interface EmailChannelConfigDTO {
@@ -125,6 +155,28 @@ export interface EmailChannelConfigDTO {
    * slug — in both of which there is no address to name.
    */
   platformAddress: string | null
+  /**
+   * Which addresses the add form accepts (see `sendingAddressMode`): any
+   * address, addresses whose domain can be set up, or only the default.
+   */
+  addressMode: 'any' | 'verified-domains' | 'unavailable'
+  /** The address mail sends from when no sending address is live, or null when none is set. */
+  defaultFrom: string | null
+  /**
+   * Set when the email provider has paused this workspace's sending, with the
+   * provider's reason when it is short. Null while mail sends.
+   */
+  sendingPaused: { cause: string | null } | null
+}
+
+/** This install's default From, or null when it has none configured. */
+async function defaultFromAddress(): Promise<string | null> {
+  const { getEmailFrom } = await import('@quackback/email')
+  try {
+    return getEmailFrom()
+  } catch {
+    return null
+  }
 }
 
 const toAccount = (a: ChannelAccount, domains: EmailSendingDomain[] = []): ChannelAccountDTO => {
@@ -140,6 +192,7 @@ const toAccount = (a: ChannelAccount, domains: EmailSendingDomain[] = []): Chann
     inboundTrust: a.inboundTrust,
     sendingDomainId: a.sendingDomainId,
     sendingDomain: domain ? { domain: domain.domain, status: domain.status } : null,
+    createdAt: a.createdAt.toISOString(),
   }
 }
 
@@ -151,6 +204,12 @@ const toDomain = (d: EmailSendingDomain): SendingDomainDTO => ({
   // and the wire shape says the same thing with an optional field.
   dnsRecords: (d.dnsRecords ?? []).map((r) => ({ ...r })),
   verifiedAt: d.verifiedAt ? d.verifiedAt.toISOString() : null,
+  mailFromLabel: d.mailFromLabel,
+  dkimMode: d.dkimMode,
+  signingKeyPending: d.pendingSigningKey != null,
+  autoCheckUntil: d.autoCheckUntil ? d.autoCheckUntil.toISOString() : null,
+  lastCheckedAt: d.lastCheckedAt ? d.lastCheckedAt.toISOString() : null,
+  preflight: { ...d.preflight },
 })
 
 async function requireDefaultTeam(): Promise<TeamId> {
@@ -163,9 +222,20 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
   async (): Promise<EmailChannelConfigDTO> => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
     const platformAddress = platformInboxAddress(currentMailSlug())
+    const defaultFrom = await defaultFromAddress()
+    const addressMode = await sendingAddressMode()
+    const sendingPaused = await sesTenantPausedNotice()
     const teamId = await defaultTeamId()
     if (!teamId) {
-      return { inboundRoute: null, sendingAddresses: [], domains: [], platformAddress }
+      return {
+        inboundRoute: null,
+        sendingAddresses: [],
+        domains: [],
+        platformAddress,
+        addressMode,
+        defaultFrom,
+        sendingPaused,
+      }
     }
     const [inbound, accounts, domains] = await Promise.all([
       getInboundRoute(teamId),
@@ -179,6 +249,9 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
         .map((a) => toAccount(a, domains)),
       domains: domains.map(toDomain),
       platformAddress,
+      addressMode,
+      defaultFrom,
+      sendingPaused,
     }
   }
 )
@@ -209,53 +282,32 @@ export const createSendingAddressFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
     const teamId = await requireDefaultTeam()
-    // Refused here rather than at the send: the mail provider will sign for any
-    // identity verified on the account this workspace shares with every other
-    // one, so a sending address on a domain this workspace never proved it owns
-    // is an impersonation waiting for its first reply. The send path guards this
-    // too, and this is where a person is present to read the reason.
-    await assertSendingIdentityPermitted(data.address.trim().toLowerCase())
-    // Re-adding an address this workspace already sends from moves it; only one
-    // already serving as the inbound route is refused, and that refusal reaches
-    // this person as its own sentence, like the identity one above it.
-    return toAccount(
-      await createSendingAddress({
-        owningTeamId: teamId,
-        address: data.address,
-        module: data.module,
-      })
+    // An address on a domain this workspace has not verified brings that
+    // domain with it and sends from the default until the domain is live; the
+    // send guard reads the domain, so a pending address claims nothing. See
+    // `sending-address.ts`.
+    return withDomainActionMessage('address', async () =>
+      toAccount(
+        await addSendingAddress({
+          owningTeamId: teamId,
+          address: data.address,
+          module: data.module,
+        })
+      )
     )
   })
 
-export const createSendingDomainFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ domain: z.string().min(3) }))
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
-    const teamId = await requireDefaultTeam()
-    // Creates the provider identity, attaches the custom MAIL FROM, and stores
-    // the records the domain's owner has to publish — including the ownership
-    // token that is the only thing tying this domain to this workspace.
-    return withDomainActionMessage('Could not add the domain. Check the server logs.', async () =>
-      toDomain(await provisionSendingDomain({ owningTeamId: teamId, domain: data.domain }))
-    )
-  })
-
-export const verifySendingDomainFn = createServerFn({ method: 'POST' })
+export const restartSendingDomainChecksFn = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
-    // Both authorities, re-asked: the provider for whether it will sign, and our
-    // own lookup for whether this workspace owns the zone. A domain another
-    // workspace verified reads back as verified from the provider, so its answer
-    // alone is never enough. See sending-identity.ts.
-    return withDomainActionMessage(
-      'Could not check the records. Check the server logs.',
-      async () => {
-        const refreshed = await refreshSendingDomain(data.id as SendingDomainId)
-        if (!refreshed) throw new SendingDomainRefusedError('That sending domain no longer exists.')
-        return toDomain(refreshed)
-      }
-    )
+    // "Verify": a fresh 72 hour window of automatic checks, and one check
+    // now, for a domain whose window ran out before its records appeared.
+    return withDomainActionMessage('verify', async () => {
+      const refreshed = await restartSendingDomainChecks(data.id as SendingDomainId)
+      if (!refreshed) throw new SendingDomainRefusedError('That sending domain no longer exists.')
+      return toDomain(refreshed)
+    })
   })
 
 export const deleteSendingDomainFn = createServerFn({ method: 'POST' })
@@ -265,12 +317,13 @@ export const deleteSendingDomainFn = createServerFn({ method: 'POST' })
     // Removes our row and the plan slot it held. The identity on the shared
     // provider account is deliberately left for an operator to reap; see
     // `deleteSendingDomain` for why nothing here is allowed to delete one.
-    await withDomainActionMessage(
-      'Could not remove the domain. Check the server logs.',
-      async () => {
-        await deleteSendingDomain(data.id as SendingDomainId)
-      }
-    )
+    await withDomainActionMessage('remove', async () => {
+      await deleteSendingDomain(data.id as SendingDomainId)
+    })
+    // Releases the domain's identity from the workspace's provider tenant,
+    // unless another row here still uses it. Off the request path; a no-op
+    // when tenants are off.
+    await enqueueSesTenantReconcile('sending-domain-removed')
     return { id: data.id }
   })
 
@@ -319,8 +372,21 @@ export const deleteChannelAccountFn = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
-    await softDeleteChannelAccount(data.id as ChannelAccountId)
-    return { id: data.id }
+    // The domain the last address on it was using, so the page can offer to
+    // remove that too and free its plan slot.
+    const { lastOnDomain } = await removeSendingAddress(data.id as ChannelAccountId)
+    return { id: data.id, lastOnDomain }
+  })
+
+export const sendTestEmailFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ addressId: z.string() }))
+  .handler(async ({ data }) => {
+    const { user } = await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    // To the person asking and nobody else: the recipient is their own
+    // account address, never something the request names.
+    return withDomainActionMessage('test', () =>
+      sendTestEmail({ addressId: data.addressId as ChannelAccountId, userId: user.id })
+    )
   })
 
 export const listRecentEmailLogFn = createServerFn({ method: 'GET' }).handler(async () => {

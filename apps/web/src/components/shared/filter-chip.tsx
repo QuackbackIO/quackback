@@ -32,6 +32,11 @@ interface FilterChipProps {
   /** Dropdown options (renders a popover when provided with onChange) */
   options?: FilterOption[]
   /**
+   * Edits the filter in place: clicking the chip opens this instead of the
+   * options list, and it stays open while the viewer changes the filter.
+   */
+  editor?: React.ReactNode
+  /**
    * Marks the chip as an internal / team-only filter: amber-accented styling
    * plus (when `tooltip` is set) a hover tooltip. Customers never see these.
    */
@@ -49,6 +54,7 @@ export function FilterChip({
   onRemove,
   onChange,
   options,
+  editor,
   internal = false,
   tooltip,
 }: FilterChipProps) {
@@ -106,7 +112,25 @@ export function FilterChip({
             : 'bg-muted/60 border border-border/30 hover:border-border/50'
       )}
     >
-      {hasOptions ? (
+      {editor ? (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 hover:opacity-70 transition-opacity"
+            >
+              {chipContent}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="start"
+            aria-label={label.replace(/:$/, '')}
+            className="w-[340px] max-w-[calc(100vw-2rem)] rounded-xl p-3.5"
+          >
+            <div className="flex max-h-[60vh] flex-wrap gap-1.5 overflow-y-auto">{editor}</div>
+          </PopoverContent>
+        </Popover>
+      ) : hasOptions ? (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <button

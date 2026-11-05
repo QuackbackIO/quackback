@@ -7,7 +7,7 @@
  * targeting (channel/audience/send-window/frequency-cap) entirely: those are
  * trigger-time guards, and this is a human choosing to run the workflow now.
  */
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { PlayIcon } from '@heroicons/react/24/solid'
@@ -33,7 +33,7 @@ const FAILURE_TOASTS: Record<'locked' | 'nothing_to_do' | 'not_live', string> = 
   not_live: 'This workflow is no longer live.',
 }
 
-export function WorkflowRunPicker({
+export const WorkflowRunPicker = memo(function WorkflowRunPicker({
   conversationId,
   onApplied,
   disabled,
@@ -110,4 +110,4 @@ export function WorkflowRunPicker({
       </PopoverContent>
     </Popover>
   )
-}
+})

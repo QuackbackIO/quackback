@@ -10,7 +10,20 @@ const FeedbackHeaderAnimated = lazy(() =>
   import('./feedback-header-animated').then((m) => ({ default: m.FeedbackHeaderAnimated }))
 )
 
-function FeedbackHeaderFallback() {
+/** The longest title the composer takes; the loading composer holds to it too. */
+export const TITLE_MAX_LENGTH = 200
+
+interface FallbackProps {
+  /**
+   * Makes the shell typeable (the loading feed's composer): the title and a
+   * click are kept and handed to the real composer once it loads.
+   */
+  title?: string
+  onTitleChange?: (title: string) => void
+  onFocus?: () => void
+}
+
+export function FeedbackHeaderFallback({ title, onTitleChange, onFocus }: FallbackProps = {}) {
   const intl = useIntl()
   return (
     <div className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden">
@@ -22,9 +35,13 @@ function FeedbackHeaderFallback() {
           type="text"
           placeholder={intl.formatMessage({
             id: 'portal.feedback.header.titlePlaceholder',
-            defaultMessage: "What's your idea?",
+            defaultMessage: "What's on your mind?",
           })}
-          readOnly
+          readOnly={!onTitleChange}
+          maxLength={TITLE_MAX_LENGTH}
+          value={onTitleChange ? title : undefined}
+          onChange={onTitleChange && ((event) => onTitleChange(event.target.value))}
+          onFocus={onFocus}
           aria-label={intl.formatMessage({
             id: 'portal.feedback.header.titleLabel',
             defaultMessage: 'Feedback title',

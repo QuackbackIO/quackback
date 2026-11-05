@@ -5,8 +5,8 @@ import type { PublicFeedView } from '@/lib/shared/types/filters'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import type { PublicPostFacetCounts } from '@/lib/shared/types/filters'
-import { STATUS_CATEGORY_ORDER } from './public-filters-bar-defaults'
-import { FilterPill, MoreButton } from './filter-pill'
+import { MoreButton } from './filter-pill'
+import { StatusPills, TagPills } from './filter-pill-groups'
 
 interface PanelBoard {
   id: string
@@ -34,14 +34,14 @@ interface PortalFilterPanelProps {
 const BOARDS_SHOWN = 6
 const TAGS_SHOWN = 8
 
-const VIEW_LABELS: Record<'all' | PublicFeedView, MessageDescriptor> = {
-  all: { id: 'portal.feedback.panel.view.all', defaultMessage: 'All ideas' },
-  mine: { id: 'portal.feedback.panel.view.mine', defaultMessage: 'My ideas' },
+export const VIEW_LABELS: Record<'all' | PublicFeedView, MessageDescriptor> = {
+  all: { id: 'portal.feedback.panel.view.all', defaultMessage: 'All posts' },
+  mine: { id: 'portal.feedback.panel.view.mine', defaultMessage: 'My posts' },
   voted: { id: 'portal.feedback.panel.view.voted', defaultMessage: 'Voted' },
   following: { id: 'portal.feedback.panel.view.following', defaultMessage: 'Following' },
 }
 
-const rowClass = (active: boolean) =>
+export const rowClass = (active: boolean) =>
   cn(
     'flex w-full max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-start text-sm transition-colors',
     active
@@ -60,7 +60,7 @@ function Count({ value }: { value: number | undefined }) {
   )
 }
 
-function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
+export function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
   const headingId = useId()
   return (
     <div role="group" aria-labelledby={headingId} className="px-3 py-3">
@@ -94,28 +94,10 @@ export function PortalFilterPanel({
   const intl = useIntl()
   const [allBoardsShown, setAllBoardsShown] = useState(false)
   const [allTagsShown, setAllTagsShown] = useState(false)
-  const pillSize = layout === 'sheet' ? 'md' : 'sm'
-  const countText = (value: number | undefined) => (value ? intl.formatNumber(value) : undefined)
-
-  // A lit pill is a status the visitor picked. With none lit the feed shows
-  // its default scope (the active statuses, or all of them while searching
-  // or in a view), so the first pick narrows to that status and later picks
-  // add to it. The URL may name statuses by slug or (older links) by id.
-  const picked =
-    filters.status?.map((value) => statuses.find((s) => s.id === value)?.slug ?? value) ?? []
-
-  function toggleStatus(slug: string): void {
-    const next = picked.includes(slug) ? picked.filter((s) => s !== slug) : [...picked, slug]
-    const ordered = statuses.map((s) => s.slug).filter((s) => next.includes(s))
-    setFilters({ status: ordered.length > 0 ? ordered : undefined })
-  }
-
-  function toggleTag(tagId: string): void {
-    const current = filters.tagIds ?? []
-    const next = current.includes(tagId)
-      ? current.filter((id) => id !== tagId)
-      : [...current, tagId]
-    setFilters({ tagIds: next.length > 0 ? next : undefined })
+  const group = {
+    filters,
+    setFilters,
+    size: layout === 'sheet' ? ('md' as const) : ('sm' as const),
   }
 
   const showSection = showViews && (
@@ -189,9 +171,6 @@ export function PortalFilterPanel({
     </PanelSection>
   )
 
-  const orderedStatuses = STATUS_CATEGORY_ORDER.flatMap((category) =>
-    statuses.filter((s) => (s.category ?? 'active') === category)
-  )
   const statusSection = (
     <PanelSection
       key="status"
@@ -201,19 +180,7 @@ export function PortalFilterPanel({
       })}
     >
       <div className="flex flex-wrap gap-1.5 px-1">
-        {orderedStatuses.map((status) => (
-          <FilterPill
-            key={status.id}
-            pressed={picked.includes(status.slug)}
-            onClick={() => toggleStatus(status.slug)}
-            color={status.color}
-            count={countText(counts?.statuses[status.slug])}
-            size={pillSize}
-            title={status.name}
-          >
-            {status.name}
-          </FilterPill>
-        ))}
+        <StatusPills {...group} statuses={statuses} counts={counts?.statuses} />
       </div>
     </PanelSection>
   )
@@ -230,19 +197,7 @@ export function PortalFilterPanel({
       title={intl.formatMessage({ id: 'portal.postDetail.metadata.tags', defaultMessage: 'Tags' })}
     >
       <div className="flex flex-wrap gap-1.5 px-1">
-        {shownTags.map((tag) => (
-          <FilterPill
-            key={tag.id}
-            pressed={filters.tagIds?.includes(tag.id) ?? false}
-            onClick={() => toggleTag(tag.id)}
-            color={tag.color}
-            dot="square"
-            size={pillSize}
-            title={tag.name}
-          >
-            {tag.name}
-          </FilterPill>
-        ))}
+        <TagPills {...group} tags={shownTags} />
         {usableTags.length > shownTags.length && (
           <MoreButton
             hidden={usableTags.length - shownTags.length}

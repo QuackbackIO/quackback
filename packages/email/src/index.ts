@@ -17,7 +17,8 @@ import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
-import { applyDisplayName, sendViaSes } from './ses'
+import { applyDisplayName, sendViaSes, SesTenantPausedError } from './ses'
+import { reportSesTenantPaused, resolveSesTenant } from './tenant-hooks'
 import { sendViaResend } from './resend'
 import { listUnsubscribeHeaders } from './list-unsubscribe'
 import { currentEmailIdempotencyKey } from './idempotency'
@@ -65,6 +66,10 @@ import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { FeedbackLinkedEmail } from './templates/feedback-linked'
 import { PasswordResetEmail } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
+import {
+  SendingDomainAttentionEmail,
+  type SendingDomainAttentionProblem,
+} from './templates/sending-domain-attention'
 import { NewSignInEmail } from './templates/new-sign-in'
 import { StatusIncidentPublishedEmail } from './templates/status-incident-published'
 import type { IncidentImpact } from './templates/status-incident-published'
@@ -72,6 +77,9 @@ import { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-
 import { CsatRequestEmail } from './templates/csat-request'
 import { VerifyAddressEmail } from './templates/verify-address'
 export { setEmailPoweredByResolver } from './powered-by'
+export { setSesTenantHooks } from './tenant-hooks'
+export type { SesTenantHooks, SesTenantSendContext } from './tenant-hooks'
+export { SesTenantPausedError } from './ses'
 export { setDefaultFromResolver, resetDefaultFromResolver } from './default-from'
 import { createElement } from 'react'
 import { EmailPoweredByProvider, resolveEmailPoweredBy } from './powered-by'
@@ -412,8 +420,13 @@ async function dispatch(
     // threading. What is lost is our ability to CHOOSE the id; the Message-ID
     // route home survives because the caller records the assigned one instead
     // of the minted one.
+    //
+    // The tenant is asked for here and nowhere else: only this provider has
+    // them, and auth mail never reaches the app's resolver (see tenant-hooks).
+    const tenantName = await resolveSesTenant({ emailType, from })
     const result = await sendViaSes({
       from,
+      ...(tenantName ? { tenantName } : {}),
       to: options.to,
       subject: options.subject,
       ...(html !== undefined ? { html } : {}),
@@ -423,6 +436,11 @@ async function dispatch(
       ...(options.attachments && options.attachments.length > 0
         ? { attachments: options.attachments }
         : {}),
+    }).catch(async (error: unknown) => {
+      if (error instanceof SesTenantPausedError) {
+        await reportSesTenantPaused(error.tenantName, error.detail)
+      }
+      throw error
     })
     // The id as the provider reported it, which is what its delivery events and
     // the threading map both name the message by. A raw inbound header quotes
@@ -930,6 +948,37 @@ export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<E
     }),
     emailType: 'NewSignInEmail',
     preview: { occurredAt },
+  })
+}
+
+// ============================================================================
+// Sending domain needs attention
+// ============================================================================
+
+interface SendSendingDomainAttentionParams {
+  to: SecureRecipient
+  domain: string
+  record?: SendingDomainAttentionProblem | null
+  settingsUrl?: string | null
+  workspaceName?: string
+  logoUrl?: string
+}
+
+/**
+ * To a person who manages email channels, when a verified sending domain stops
+ * verifying and replies fall back to the default address.
+ */
+export async function sendSendingDomainAttentionEmail(
+  params: SendSendingDomainAttentionParams
+): Promise<EmailResult> {
+  const { to, domain, record, settingsUrl, workspaceName, logoUrl } = params
+  log.debug('sending sending-domain attention alert')
+  return sendEmail({
+    to,
+    subject: `Sending from ${domain} needs attention`,
+    react: SendingDomainAttentionEmail({ domain, record, settingsUrl, workspaceName, logoUrl }),
+    emailType: 'SendingDomainAttentionEmail',
+    preview: { domain },
   })
 }
 
@@ -1824,6 +1873,14 @@ export { ChangelogPublishedEmail } from './templates/changelog-published'
 export { FeedbackLinkedEmail } from './templates/feedback-linked'
 export { PasswordResetEmail } from './templates/password-reset'
 export { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
+export {
+  SendingDomainAttentionEmail,
+  sendingDomainProblem,
+} from './templates/sending-domain-attention'
+export type {
+  SendingDomainAttentionRecord,
+  SendingDomainAttentionProblem,
+} from './templates/sending-domain-attention'
 export { NewSignInEmail } from './templates/new-sign-in'
 export { StatusIncidentPublishedEmail } from './templates/status-incident-published'
 export type { IncidentImpact } from './templates/status-incident-published'

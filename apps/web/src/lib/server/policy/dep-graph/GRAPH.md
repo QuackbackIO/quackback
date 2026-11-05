@@ -58,8 +58,8 @@ Edges (28):
 
 ## 3. Server domains (lib/server/domains)
 
-Nodes (54): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (143):
+Nodes (55): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, domain-proof, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
+Edges (147):
 
 - activity -> principals
 - admin-overview -> changelog
@@ -101,7 +101,9 @@ Edges (143):
 - changelog -> embeddings
 - changelog -> settings
 - channel-accounts -> conversation
+- channel-accounts -> notifications
 - channel-accounts -> settings
+- channel-accounts -> subscriptions
 - channels -> channel-accounts
 - channels -> conversation
 - comments -> activity
@@ -130,6 +132,8 @@ Edges (143):
 - conversation-attributes -> conversation
 - conversation-attributes -> settings
 - conversation-attributes -> workflows
+- domain-proof -> channel-accounts
+- domain-proof -> settings
 - embeddings -> ai
 - embeddings -> merge-suggestions
 - export -> companies

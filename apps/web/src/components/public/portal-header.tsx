@@ -1,8 +1,8 @@
 import { nameInitial } from '@/lib/shared/utils/initial'
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
-import type { PortalNavItem } from './portal-header-nav'
+import { isHelpPath, isTabActive, type PortalNavItem } from './portal-header-nav'
 import { usePortalNavItems } from './use-portal-nav-items'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useIntl, FormattedMessage } from 'react-intl'
@@ -69,6 +69,7 @@ export function PortalHeader({
 }: PortalHeaderProps) {
   const intl = useIntl()
   const router = useRouter()
+  const headerRef = useStickyHeaderHeight()
   const queryClient = useQueryClient()
   // Each part is selected: the route context is a new object after every
   // navigation, while these stay the same until the viewer or workspace
@@ -284,7 +285,10 @@ export function PortalHeader({
   // Two-row layout: Logo + Auth on top, Navigation below
   return (
     // A banner landmark, so the logo and account controls sit in one.
-    <header className="portal-header w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm">
+    <header
+      ref={headerRef}
+      className="portal-header sticky top-0 z-40 w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm"
+    >
       {/* Row 1: Logo + Name + Auth */}
       <div>
         <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
@@ -325,14 +329,6 @@ export function PortalHeader({
       </div>
     </header>
   )
-}
-
-const isHelpPath = (pathname: string) => pathname === '/hc' || pathname.startsWith('/hc/')
-
-function isTabActive(to: string, pathname: string): boolean {
-  if (to === '/') return pathname === '/' || /^\/[^/]+\/posts\//.test(pathname)
-  if (to === '/hc') return isHelpPath(pathname)
-  return pathname.startsWith(to)
 }
 
 const navItemClass = (isActive: boolean) =>
@@ -441,18 +437,42 @@ const NavTab = memo(
     prev.item.defaultMessage === next.item.defaultMessage
 )
 
+/**
+ * The header sticks to the top of the page. Its height (the logo, the tabs and
+ * any custom CSS set it) is published as --portal-header-height, so what else
+ * sticks sits below it and anchor jumps land clear of it.
+ */
+function useStickyHeaderHeight() {
+  const ref = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const header = ref.current
+    if (!header) return
+    const root = document.documentElement
+    const publish = () =>
+      root.style.setProperty('--portal-header-height', `${header.offsetHeight}px`)
+    publish()
+    const observer = new ResizeObserver(publish)
+    observer.observe(header)
+    return () => {
+      observer.disconnect()
+      root.style.removeProperty('--portal-header-height')
+    }
+  }, [])
+  return ref
+}
+
 /** Compact theme toggle dropdown for the header. */
 function ThemeToggle() {
   const intl = useIntl()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
-  // Avoid hydration mismatch for theme toggle
+  // The saved choice is only known in the browser. Until then the button
+  // shows System, the default, so the header is complete on first paint and
+  // nothing shifts when the stored theme is read.
   useEffect(() => {
     setMounted(true)
   }, [])
-
-  if (!mounted) return null
 
   const themeOptions = [
     {
@@ -472,7 +492,7 @@ function ThemeToggle() {
     },
   ] as const
 
-  const currentTheme = themeOptions.find((t) => t.value === theme) ?? themeOptions[0]
+  const currentTheme = (mounted && themeOptions.find((t) => t.value === theme)) || themeOptions[0]
   const CurrentIcon = currentTheme.icon
 
   return (
@@ -493,7 +513,7 @@ function ThemeToggle() {
           <DropdownMenuItem
             key={t.value}
             onClick={() => setTheme(t.value)}
-            className={cn(theme === t.value && 'bg-accent')}
+            className={cn(mounted && theme === t.value && 'bg-accent')}
           >
             <t.icon className="me-2 h-4 w-4" />
             {t.label}

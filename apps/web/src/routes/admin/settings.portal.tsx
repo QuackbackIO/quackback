@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { ClientOnly, createFileRoute, useBlocker, useRouter } from '@tanstack/react-router'
@@ -44,11 +44,13 @@ import { loadBrandingFont } from '@/lib/shared/theme'
 import {
   useBrandingState,
   FONT_OPTIONS,
+  type BrandingState,
 } from '@/components/admin/settings/branding/use-branding-state'
 import type { ThemeConfig } from '@/lib/shared/theme'
 import { primaryPresetIds, themePresets } from '@/lib/shared/theme/presets'
 import { useUpdatePortalConfig } from '@/lib/client/mutations/settings'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useStableCallback } from '@/lib/client/hooks/use-stable-callback'
 import { UpgradeModal } from '@/components/admin/upgrade'
 import {
   describePlanRefusal,
@@ -158,7 +160,7 @@ function PortalPage() {
     enableBeforeUnload: () => isDirty,
   })
 
-  async function handleSave() {
+  const handleSave = useStableCallback(async () => {
     // Links with a typed-but-invalid URL would silently vanish from the
     // portal nav, so surface it instead of saving.
     const brokenLink = navItems.find(
@@ -201,14 +203,14 @@ function PortalPage() {
     } finally {
       setSaving(false)
     }
-  }
+  })
 
-  function handleDiscard() {
+  const handleDiscard = useStableCallback(() => {
     state.setCssText(themeBaseline.current.css)
     state.setThemeMode(themeBaseline.current.mode)
     setWelcomeBody(JSON.parse(welcomeBaseline.current) as TiptapContent)
     setNavItems(JSON.parse(navBaseline.current) as PortalNavItemConfig[])
-  }
+  })
 
   // ============================================
   // Preview wiring
@@ -236,6 +238,8 @@ function PortalPage() {
     ) as ReadonlySet<string>
   }, [settings, session])
 
+  const resetNavItems = useCallback(() => setNavItems(seedNavEditorItems(null)), [])
+
   // Structural drafts pushed into the preview iframe (postMessage, no reload).
   const previewDraft = useMemo<PortalPreviewDraft>(
     () => ({
@@ -260,100 +264,19 @@ function PortalPage() {
             title="Appearance"
             description="Theme, color palette and typography, also applied to the embedded widget."
           >
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-[13px] font-medium">Theme mode</Label>
-                <ThemeModeTiles value={state.themeMode} onChange={state.setThemeMode} />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[13px] font-medium">Preset</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {primaryPresetIds.map((presetId) => {
-                    const preset = themePresets[presetId]
-                    if (!preset) return null
-                    const isActive = state.activePresetId === presetId
-                    return (
-                      <button
-                        key={presetId}
-                        onClick={() => state.setPreset(presetId)}
-                        className={cn(
-                          'flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-lg border text-center text-xs font-medium transition-colors min-w-0',
-                          isActive
-                            ? 'border-primary bg-primary/5 ring-1 ring-primary text-foreground'
-                            : 'border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted/50'
-                        )}
-                      >
-                        <div
-                          className="h-5 w-5 rounded-full border border-border/50"
-                          style={{ backgroundColor: preset.color }}
-                        />
-                        <span className="w-full truncate">{preset.name}</span>
-                        <span className="w-full text-xs text-muted-foreground leading-tight">
-                          {preset.description}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[13px] font-medium">Font</Label>
-                <Select
-                  value={state.currentFontId}
-                  onValueChange={(id) => {
-                    const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
-                    if (selectedFont) state.setFont(selectedFont.value)
-                  }}
-                  onOpenChange={(open) => {
-                    // Every option previews its own name in its own font, all
-                    // rendered at once. Load every family the first time the
-                    // menu opens rather than trying to lazily match hover.
-                    if (open) {
-                      for (const f of FONT_OPTIONS) loadBrandingFont(f.id)
-                    }
-                  }}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue>
-                      <span style={{ fontFamily: state.font }}>
-                        {FONT_OPTIONS.find((f) => f.id === state.currentFontId)?.name ||
-                          'Select font'}
-                      </span>
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    <FontSelectGroup category="Sans Serif" />
-                    <FontSelectGroup category="Serif" />
-                    <FontSelectGroup category="Monospace" />
-                    <FontSelectGroup category="System" />
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[13px] font-medium">Corner roundness</Label>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground w-12">Sharp</span>
-                  <Slider
-                    value={[state.radius * 100]}
-                    onValueChange={([v]) => state.setRadius(v / 100)}
-                    min={0}
-                    max={100}
-                    step={5}
-                    className="flex-1"
-                  />
-                  <span className="text-xs text-muted-foreground w-12 text-right">Round</span>
-                  <div
-                    className="h-6 w-6 bg-primary shrink-0"
-                    style={{ borderRadius: `${state.radius}rem` }}
-                  />
-                </div>
-              </div>
-
-              <AdvancedCssPanel value={state.cssText} onChange={state.setCssText} />
-            </div>
+            <AppearanceSettings
+              themeMode={state.themeMode}
+              setThemeMode={state.setThemeMode}
+              activePresetId={state.activePresetId}
+              setPreset={state.setPreset}
+              font={state.font}
+              currentFontId={state.currentFontId}
+              setFont={state.setFont}
+              radius={state.radius}
+              setRadius={state.setRadius}
+              cssText={state.cssText}
+              setCssText={state.setCssText}
+            />
           </SettingsCard>
 
           <SettingsCard
@@ -364,7 +287,7 @@ function PortalPage() {
               items={navItems}
               onChange={setNavItems}
               gatedTypes={gatedTypes}
-              onReset={() => setNavItems(seedNavEditorItems(null))}
+              onReset={resetNavItems}
             />
             <p className="mt-3 text-xs text-muted-foreground">
               Renamed tabs show your text in every language; untouched labels stay translated.
@@ -384,36 +307,13 @@ function PortalPage() {
           <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
             <span className="text-sm font-medium whitespace-nowrap">Live preview</span>
             <div className="ms-auto flex flex-wrap items-center gap-1.5">
-              <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
-                <PreviewToggleButton
-                  active={state.previewMode === 'light'}
-                  disabled={state.previewModeDisabled === 'light'}
-                  onClick={() => state.setPreviewMode('light')}
-                  label="Light"
-                />
-                <PreviewToggleButton
-                  active={state.previewMode === 'dark'}
-                  disabled={state.previewModeDisabled === 'dark'}
-                  onClick={() => state.setPreviewMode('dark')}
-                  label="Dark"
-                />
-              </div>
-              <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
-                <PreviewToggleButton
-                  active={viewport === 'desktop'}
-                  onClick={() => setViewport('desktop')}
-                  icon={ComputerDesktopIcon}
-                  label="Desktop"
-                  iconOnly
-                />
-                <PreviewToggleButton
-                  active={viewport === 'mobile'}
-                  onClick={() => setViewport('mobile')}
-                  icon={DevicePhoneMobileIcon}
-                  label="Mobile"
-                  iconOnly
-                />
-              </div>
+              <PreviewControls
+                previewMode={state.previewMode}
+                previewModeDisabled={state.previewModeDisabled}
+                setPreviewMode={state.setPreviewMode}
+                viewport={viewport}
+                setViewport={setViewport}
+              />
               <Button variant="outline" size="sm" asChild className="whitespace-nowrap">
                 <a href="/" target="_blank" rel="noopener noreferrer">
                   Open portal
@@ -452,6 +352,184 @@ function PortalPage() {
     </SettingsPage>
   )
 }
+
+type AppearanceSettingsProps = Pick<
+  BrandingState,
+  | 'themeMode'
+  | 'setThemeMode'
+  | 'activePresetId'
+  | 'setPreset'
+  | 'font'
+  | 'currentFontId'
+  | 'setFont'
+  | 'radius'
+  | 'setRadius'
+  | 'cssText'
+  | 'setCssText'
+>
+
+/**
+ * The theme controls, apart from the page so typing in the welcome message or
+ * editing the nav does not render them again.
+ */
+const AppearanceSettings = memo(function AppearanceSettings({
+  themeMode,
+  setThemeMode,
+  activePresetId,
+  setPreset,
+  font,
+  currentFontId,
+  setFont,
+  radius,
+  setRadius,
+  cssText,
+  setCssText,
+}: AppearanceSettingsProps) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label className="text-[13px] font-medium">Theme mode</Label>
+        <ThemeModeTiles value={themeMode} onChange={setThemeMode} />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-[13px] font-medium">Preset</Label>
+        <div className="grid grid-cols-3 gap-2">
+          {primaryPresetIds.map((presetId) => {
+            const preset = themePresets[presetId]
+            if (!preset) return null
+            const isActive = activePresetId === presetId
+            return (
+              <button
+                key={presetId}
+                onClick={() => setPreset(presetId)}
+                className={cn(
+                  'flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-lg border text-center text-xs font-medium transition-colors min-w-0',
+                  isActive
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary text-foreground'
+                    : 'border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted/50'
+                )}
+              >
+                <div
+                  className="h-5 w-5 rounded-full border border-border/50"
+                  style={{ backgroundColor: preset.color }}
+                />
+                <span className="w-full truncate">{preset.name}</span>
+                <span className="w-full text-xs text-muted-foreground leading-tight">
+                  {preset.description}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-[13px] font-medium">Font</Label>
+        <Select
+          value={currentFontId}
+          onValueChange={(id) => {
+            const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
+            if (selectedFont) setFont(selectedFont.value)
+          }}
+          onOpenChange={(open) => {
+            // Every option previews its own name in its own font, all
+            // rendered at once. Load every family the first time the
+            // menu opens rather than trying to lazily match hover.
+            if (open) {
+              for (const f of FONT_OPTIONS) loadBrandingFont(f.id)
+            }
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue>
+              <span style={{ fontFamily: font }}>
+                {FONT_OPTIONS.find((f) => f.id === currentFontId)?.name || 'Select font'}
+              </span>
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent className="max-h-[300px]">
+            <FontSelectGroup category="Sans Serif" />
+            <FontSelectGroup category="Serif" />
+            <FontSelectGroup category="Monospace" />
+            <FontSelectGroup category="System" />
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-[13px] font-medium">Corner roundness</Label>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground w-12">Sharp</span>
+          <Slider
+            value={[radius * 100]}
+            onValueChange={([v]) => setRadius(v / 100)}
+            min={0}
+            max={100}
+            step={5}
+            className="flex-1"
+          />
+          <span className="text-xs text-muted-foreground w-12 text-right">Round</span>
+          <div className="h-6 w-6 bg-primary shrink-0" style={{ borderRadius: `${radius}rem` }} />
+        </div>
+      </div>
+
+      <AdvancedCssPanel value={cssText} onChange={setCssText} />
+    </div>
+  )
+})
+
+type PreviewControlsProps = Pick<
+  BrandingState,
+  'previewMode' | 'previewModeDisabled' | 'setPreviewMode'
+> & {
+  viewport: 'desktop' | 'mobile'
+  setViewport: (viewport: 'desktop' | 'mobile') => void
+}
+
+/** The preview's light/dark and desktop/mobile toggles. */
+const PreviewControls = memo(function PreviewControls({
+  previewMode,
+  previewModeDisabled,
+  setPreviewMode,
+  viewport,
+  setViewport,
+}: PreviewControlsProps) {
+  return (
+    <>
+      <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+        <PreviewToggleButton
+          active={previewMode === 'light'}
+          disabled={previewModeDisabled === 'light'}
+          onClick={() => setPreviewMode('light')}
+          label="Light"
+        />
+        <PreviewToggleButton
+          active={previewMode === 'dark'}
+          disabled={previewModeDisabled === 'dark'}
+          onClick={() => setPreviewMode('dark')}
+          label="Dark"
+        />
+      </div>
+      <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+        <PreviewToggleButton
+          active={viewport === 'desktop'}
+          onClick={() => setViewport('desktop')}
+          icon={ComputerDesktopIcon}
+          label="Desktop"
+          iconOnly
+        />
+        <PreviewToggleButton
+          active={viewport === 'mobile'}
+          onClick={() => setViewport('mobile')}
+          icon={DevicePhoneMobileIcon}
+          label="Mobile"
+          iconOnly
+        />
+      </div>
+    </>
+  )
+})
 
 /** Isolated so the rich-text editor's heavy deps don't re-render the page. */
 function WelcomeBodyEditor({

@@ -39,7 +39,10 @@ export function WidgetSigningSecret({ secret }: { secret: string }) {
         Verifies the identity of signed-in users. Keep it private and server-side only.
       </p>
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-2">
-        <code className="min-w-0 flex-1 truncate font-mono text-xs" data-testid="signing-secret">
+        <code
+          className="ph-mask min-w-0 flex-1 truncate font-mono text-xs"
+          data-testid="signing-secret"
+        >
           {revealed ? secret : maskSigningSecret(secret)}
         </code>
         <div className="flex shrink-0 flex-wrap gap-1.5">

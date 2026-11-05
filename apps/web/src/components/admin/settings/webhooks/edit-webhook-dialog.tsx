@@ -178,7 +178,9 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
                 {newSecret ? (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 rounded-lg bg-success/10 border border-success/20 p-3">
-                      <code className="flex-1 text-sm font-mono break-all">{newSecret}</code>
+                      <code className="ph-mask flex-1 text-sm font-mono break-all">
+                        {newSecret}
+                      </code>
                       <CopyButton
                         value={newSecret}
                         variant="ghost"

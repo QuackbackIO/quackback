@@ -13,6 +13,7 @@
  * reach a customer-facing composer.
  */
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -280,7 +281,7 @@ function insertableTurn(turn: CopilotTurn): boolean {
   return turn.finalized && turn.answerType === 'draft_reply' && !turn.internalSourced
 }
 
-export function CopilotPanel({
+export const CopilotPanel = memo(function CopilotPanel({
   item,
   onInsert,
   askInputRef,
@@ -611,7 +612,7 @@ export function CopilotPanel({
       />
     </div>
   )
-}
+})
 
 function CopilotEmptyState({
   assistantName,

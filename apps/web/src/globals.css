@@ -473,6 +473,10 @@
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+  /* Anchor jumps and scrollIntoView land below the portal's sticky header. */
+  html {
+    scroll-padding-top: calc(var(--portal-header-height, 0px) + 1rem);
+  }
 }
 
 /* Interactive elements — pointer cursor for native controls.

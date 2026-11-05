@@ -14,19 +14,18 @@ import { cn } from '@/lib/shared/utils'
  * instead of document.body. This keeps the popover inside react-remove-scroll's
  * boundary so wheel events work on scrollable content inside the popover.
  *
- * The container is a ref, read by the portal when the popover opens: finding
- * it as state rendered every popover in a dialog a second time on mount.
+ * The container and the anchor are refs, read when the popover opens: finding
+ * either as state rendered every popover a second time on mount.
  */
 const PortalContainerContext = React.createContext<{
   containerRef: React.RefObject<HTMLElement | null>
   setTriggerEl: (el: HTMLElement | null) => void
-  anchor: HTMLElement | null
-  setAnchor: (el: HTMLElement | null) => void
-}>({ containerRef: { current: null }, setTriggerEl: () => {}, anchor: null, setAnchor: () => {} })
+  anchorRef: React.RefObject<HTMLElement | null>
+}>({ containerRef: { current: null }, setTriggerEl: () => {}, anchorRef: { current: null } })
 
 function Popover({ open, defaultOpen, onOpenChange, ...props }: PopoverPrimitive.Root.Props) {
   const containerRef = React.useRef<HTMLElement | null>(null)
-  const [anchor, setAnchor] = React.useState<HTMLElement | null>(null)
+  const anchorRef = React.useRef<HTMLElement | null>(null)
   const opened = useOverlayOpenedRoot(open, defaultOpen, onOpenChange)
 
   const setTriggerEl = React.useCallback((el: HTMLElement | null) => {
@@ -34,10 +33,7 @@ function Popover({ open, defaultOpen, onOpenChange, ...props }: PopoverPrimitive
     containerRef.current = el.closest<HTMLElement>('[data-slot="dialog-content"]')
   }, [])
 
-  const ctx = React.useMemo(
-    () => ({ containerRef, setTriggerEl, anchor, setAnchor }),
-    [setTriggerEl, anchor]
-  )
+  const ctx = React.useMemo(() => ({ containerRef, setTriggerEl, anchorRef }), [setTriggerEl])
 
   return (
     <PortalContainerContext.Provider value={ctx}>
@@ -91,11 +87,11 @@ function PopoverAnchor({
   className,
   ...props
 }: React.ComponentProps<'div'> & { asChild?: boolean }) {
-  const { setAnchor, setTriggerEl } = React.useContext(PortalContainerContext)
+  const { anchorRef, setTriggerEl } = React.useContext(PortalContainerContext)
   const composed = asChildRender(asChild, children)
 
   const setRefs = (node: HTMLElement | null) => {
-    setAnchor(node)
+    anchorRef.current = node
     setTriggerEl(node)
   }
 
@@ -133,7 +129,7 @@ function PopoverContent({
   Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'> & {
     container?: HTMLElement | null
   }) {
-  const { containerRef, anchor } = React.useContext(PortalContainerContext)
+  const { containerRef, anchorRef } = React.useContext(PortalContainerContext)
   const portalContainer = containerProp ?? containerRef
 
   // Nothing to portal until the popover first opens.
@@ -146,7 +142,8 @@ function PopoverContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        anchor={anchor ?? undefined}
+        // An empty ref positions against the trigger, as no anchor does.
+        anchor={anchorRef}
         className="isolate z-50"
       >
         <PopoverPrimitive.Popup

@@ -51,7 +51,7 @@ export function SecretRevealDialog({
           <div className="space-y-2">
             <label className="text-sm font-medium">{secretLabel}</label>
             <div className="flex items-center gap-2">
-              <code className="flex-1 rounded-lg bg-muted px-3 py-2.5 font-mono text-sm break-all">
+              <code className="ph-mask flex-1 rounded-lg bg-muted px-3 py-2.5 font-mono text-sm break-all">
                 {secretValue}
               </code>
               <CopyButton value={secretValue ?? ''} aria-label="Copy to clipboard" />
