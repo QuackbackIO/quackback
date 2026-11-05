@@ -704,7 +704,7 @@
     },
     "sweep:doc:admin:/admin/settings/notifications": {
       "dbQueries": 7,
-      "htmlKB": 82.2
+      "htmlKB": 86.4
     },
     "sweep:ui:admin:/admin/settings/notifications": {
       "dbQueries": 7,
