@@ -20,7 +20,11 @@ const boundedTxt = vi.hoisted(() => vi.fn<(host: string) => Promise<string[][]>>
 vi.mock('@/lib/server/dns/resolver', () => ({
   systemResolver: { resolveTxt: (host: string) => boundedTxt(host) },
 }))
-import { ownershipRecordSatisfied, verifySendingDomainDns } from '../domain-verification'
+import {
+  checkSendingDomainOwnership,
+  ownershipRecordSatisfied,
+  verifySendingDomainDns,
+} from '../domain-verification'
 import { generateDkimKey } from '../dkim-key'
 
 /**
@@ -213,5 +217,61 @@ describe('verifySendingDomainDns with no reader passed', () => {
     boundedTxt.mockResolvedValue([[ownership.value]])
     expect(await verifySendingDomainDns('tenant-a.example', [ownership])).toBe(true)
     expect(boundedTxt).toHaveBeenCalledWith('_quackback.tenant-a.example')
+  })
+})
+
+describe('checkSendingDomainOwnership tells a missing record from an unanswered lookup', () => {
+  const failing = (code: string) => async (): Promise<string[][]> => {
+    throw Object.assign(new Error(code), { code })
+  }
+
+  it('is proven when the record is published', async () => {
+    const zone = async (host: string) =>
+      host === '_quackback.acme.com' ? [[ownership.value]] : failing('ENODATA')()
+    expect(await checkSendingDomainOwnership('acme.com', [ownership], zone)).toBe('proven')
+  })
+
+  it('is absent when the name answers with other records, or with nothing', async () => {
+    expect(
+      await checkSendingDomainOwnership('acme.com', [ownership], async () => [['v=spf1 -all']])
+    ).toBe('absent')
+    expect(await checkSendingDomainOwnership('acme.com', [ownership], failing('ENODATA'))).toBe(
+      'absent'
+    )
+    expect(await checkSendingDomainOwnership('acme.com', [ownership], failing('ENOTFOUND'))).toBe(
+      'absent'
+    )
+  })
+
+  it('is unknown when the nameserver times out, fails or refuses', async () => {
+    for (const code of ['ETIMEOUT', 'ESERVFAIL', 'ECONNREFUSED', 'EREFUSED', 'ECANCELLED']) {
+      expect(await checkSendingDomainOwnership('acme.com', [ownership], failing(code))).toBe(
+        'unknown'
+      )
+    }
+  })
+
+  it('is absent when one record is missing, even if another could not be read', async () => {
+    const keyA = generateDkimKey().record
+    const zone = async (host: string): Promise<string[][]> =>
+      host === '_quackback.acme.com' ? failing('ETIMEOUT')() : failing('ENODATA')()
+    expect(await checkSendingDomainOwnership('acme.com', [ownership, keyA], zone)).toBe('absent')
+  })
+
+  it('never proves on an unanswered lookup, through the boolean check either', async () => {
+    expect(await verifySendingDomainDns('acme.com', [ownership], failing('ETIMEOUT'))).toBe(false)
+  })
+
+  it('refuses an empty or non-ownership expectation as absent, not unknown', async () => {
+    expect(await checkSendingDomainOwnership('acme.com', [], failing('ETIMEOUT'))).toBe('absent')
+    expect(
+      await checkSendingDomainOwnership(
+        'acme.com',
+        [
+          { type: 'TXT', host: '@', value: 'v=spf1 -all', purpose: 'spf' },
+        ] as unknown as SendingDomainOwnershipRecord[],
+        failing('ETIMEOUT')
+      )
+    ).toBe('absent')
   })
 })

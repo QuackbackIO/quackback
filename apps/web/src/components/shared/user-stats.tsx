@@ -53,7 +53,7 @@ export function UserStatsBar({ compact, className, headers, fetchStats }: UserSt
     <div className={cn('grid grid-cols-3 gap-1', className)}>
       <StatItem
         value={data?.ideas}
-        label={intl.formatMessage({ id: 'common.userStats.ideas', defaultMessage: 'Ideas' })}
+        label={intl.formatMessage({ id: 'common.userStats.ideas', defaultMessage: 'Posts' })}
         compact={compact}
       />
       <StatItem

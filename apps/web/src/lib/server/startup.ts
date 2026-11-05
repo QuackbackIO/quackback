@@ -116,6 +116,14 @@ export function logStartupBanner(): void {
 
   logUnusedRedisUrl(log)
 
+  // Self-hosted first boot only: one line pointing at the repo, while setup is
+  // unfinished, so it shows during the first `docker compose up` and never again.
+  if (!config.isPooledTenancy) {
+    import('@/lib/server/github-star-prompt')
+      .then(({ logFirstBootStarLine }) => logFirstBootStarLine(log))
+      .catch((err) => log.debug({ err }, 'first boot star line skipped'))
+  }
+
   // One-shot override: run a named fleet job and exit. The live fleet does
   // not use this — hourly and daily sweeps run on the always-on worker — but
   // a container that should do one pass and stop still needs a way to say so.

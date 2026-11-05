@@ -38,7 +38,7 @@ describe('the launch path', () => {
     expect(path.step).toBe(2)
     expect(ids(path.steps)).toEqual(['distribute-feedback', 'first-win'])
     expect(path.steps[0].title).toBe('Share your board link')
-    expect(path.steps[1].title).toBe('A customer posts an idea')
+    expect(path.steps[1].title).toBe('A customer creates a post')
     expect(path.next?.id).toBe('distribute-feedback')
   })
 
@@ -122,7 +122,7 @@ describe('the launch path', () => {
     const path = launchPath({ ...base, goals: ['product_feedback'], feedbackPrivate: true })
     expect(path.goal).toBe('private')
     expect(path.steps[0].id).toBe('invite-team')
-    expect(path.steps[1].title).toBe('A teammate posts an idea')
+    expect(path.steps[1].title).toBe('A teammate creates a post')
   })
 
   it('puts every other step under later, never the path or what setup did', () => {

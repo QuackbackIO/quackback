@@ -301,7 +301,7 @@ export const restartSendingDomainChecksFn = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
-    // "Check again": a fresh 72 hour window of automatic checks, and one check
+    // "Verify": a fresh 72 hour window of automatic checks, and one check
     // now, for a domain whose window ran out before its records appeared.
     return withDomainActionMessage('verify', async () => {
       const refreshed = await restartSendingDomainChecks(data.id as SendingDomainId)
