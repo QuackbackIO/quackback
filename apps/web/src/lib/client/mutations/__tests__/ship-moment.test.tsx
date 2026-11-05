@@ -10,11 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PostId, PostStatusId } from '@quackback/ids'
 import { onShipMoment } from '@/lib/client/ship-moment'
 
-const hoisted = vi.hoisted(() => ({ category: 'complete' }))
+const hoisted = vi.hoisted(() => ({ entered: true }))
 
 vi.mock('@/lib/server/functions/posts', async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  changePostStatusFn: vi.fn(async () => ({ id: 'post_x', newStatusCategory: hoisted.category })),
+  changePostStatusFn: vi.fn(async () => ({ id: 'post_x', enteredComplete: hoisted.entered })),
 }))
 
 vi.mock('@/lib/server/functions/changelog', () => ({
@@ -45,12 +45,12 @@ describe('ship moments', () => {
   })
   afterEach(() => stop())
 
-  it('fires when a post moves to a complete status, and not for other statuses', async () => {
+  it('fires when a post moves into a complete status, and not for other changes', async () => {
     const { result } = renderHook(() => useChangePostStatusId(), { wrapper })
-    hoisted.category = 'active'
+    hoisted.entered = false
     await act(() => result.current.mutateAsync({ postId: POST, statusId: STATUS }))
     expect(moments).toBe(0)
-    hoisted.category = 'complete'
+    hoisted.entered = true
     await act(() => result.current.mutateAsync({ postId: POST, statusId: STATUS }))
     expect(moments).toBe(1)
   })

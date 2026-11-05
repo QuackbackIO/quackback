@@ -389,8 +389,8 @@ export interface ChangeStatusResult extends Post {
   boardSlug: string
   previousStatus: string
   newStatus: string
-  /** The new status's category, so the client can tell when something shipped. */
-  newStatusCategory: string
+  /** The post moved into a complete status from one that was not: something shipped. */
+  enteredComplete: boolean
 }
 
 /**

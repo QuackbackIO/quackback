@@ -179,7 +179,7 @@ export function useChangePostStatusId() {
         old ? { ...old, statusId } : old
       )
       updatePostInLists(queryClient, postId, (post) => ({ ...post, statusId }))
-      if (data.newStatusCategory === 'complete') announceShipMoment()
+      if (data.enteredComplete) announceShipMoment()
     },
     onSettled: (_data, _error, { postId, statusId }, context) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
