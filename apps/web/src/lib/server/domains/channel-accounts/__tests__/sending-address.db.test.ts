@@ -56,18 +56,17 @@ vi.mock('@/lib/server/dns/resolver', () => {
   const none = async () => {
     throw Object.assign(new Error('ENODATA'), { code: 'ENODATA' })
   }
-  return {
-    systemResolver: {
-      resolveTxt: none,
-      resolveCname: none,
-      resolveMx: none,
-      resolve4: none,
-      resolveNs: async () => {
-        await duringPreflight()
-        return none()
-      },
+  const resolver = {
+    resolveTxt: none,
+    resolveCname: none,
+    resolveMx: none,
+    resolve4: none,
+    resolveNs: async () => {
+      await duringPreflight()
+      return none()
     },
   }
+  return { systemResolver: resolver, interactiveResolver: resolver }
 })
 
 /**

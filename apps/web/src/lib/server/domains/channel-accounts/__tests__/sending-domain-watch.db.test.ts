@@ -1,5 +1,5 @@
 /**
- * The automatic check on domains being set up, the "Check again" restart, and
+ * The automatic check on domains being set up, the "Verify" restart, and
  * the notifications a status change sends, against a real database, a fake
  * provider and a fake zone.
  *
@@ -45,19 +45,20 @@ vi.mock('@quackback/email/ses-identity', async (importOriginal) => ({
 
 /** Ownership answers from the zone too: the token has to be published at `_quackback`. */
 vi.mock('../domain-verification', () => ({
-  verifySendingDomainDns: async (
+  checkSendingDomainOwnership: async (
     domain: string,
     expected: { host: string; value: string; type: string; purpose: string }[]
   ) => {
-    if (expected.length === 0) return false
+    if (expected.length === 0) return 'absent'
     // The real checker's rule: only a row's own proof record counts (its
     // token, or its signing key), matched against what the zone publishes.
-    return expected.every(
+    const proven = expected.every(
       (r) =>
         r.type === 'TXT' &&
         (r.purpose === 'ownership' || (r.purpose === 'dkim' && r.value.includes('p='))) &&
         (zone.get(`${r.host}.${domain}`)?.TXT ?? []).some((v) => v.join('') === r.value)
     )
+    return proven ? 'proven' : 'absent'
   },
 }))
 
@@ -79,15 +80,14 @@ vi.mock('@/lib/server/dns/resolver', () => {
     }
     return value as NonNullable<ZoneEntry[K]>
   }
-  return {
-    systemResolver: {
-      resolveTxt: (host: string) => read(host, 'TXT'),
-      resolveCname: (host: string) => read(host, 'CNAME'),
-      resolveMx: (host: string) => read(host, 'MX'),
-      resolve4: (host: string) => read(host, 'A'),
-      resolveNs: (host: string) => read(host, 'NS'),
-    },
+  const resolver = {
+    resolveTxt: (host: string) => read(host, 'TXT'),
+    resolveCname: (host: string) => read(host, 'CNAME'),
+    resolveMx: (host: string) => read(host, 'MX'),
+    resolve4: (host: string) => read(host, 'A'),
+    resolveNs: (host: string) => read(host, 'NS'),
   }
+  return { systemResolver: resolver, interactiveResolver: resolver }
 })
 
 const sentAttention = vi.fn()
@@ -336,7 +336,7 @@ describe.skipIf(!fixture.available)('sending-domain watch (real DB, rolled back)
       expect(await bellsFor([admin], 'sending_domain_live')).toHaveLength(1)
     })
     it('rings the live bell once when two checks see the domain go live together', async () => {
-      // The watch job and a person's Check again, at the same moment: both
+      // The watch job and a person's Verify, at the same moment: both
       // read the row as pending and both find it verified.
       const admin = await seedPerson('admin')
       const row = await provisionSendingDomain({ owningTeamId: teamId, domain: 'a.example' })

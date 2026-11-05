@@ -222,7 +222,7 @@ describe('widget home title', () => {
     expect(similarSearches()).toHaveLength(0)
 
     expect(await screen.findByText('Dark theme')).toBeTruthy()
-    expect(screen.getByText('Similar ideas')).toBeTruthy()
+    expect(screen.getByText('Similar posts')).toBeTruthy()
     const searches = similarSearches()
     expect(searches).toHaveLength(1)
     expect(searches[0]!.url.searchParams.get('q')).toBe('Dark mode')
@@ -272,7 +272,7 @@ describe('widget home title', () => {
     renderHome()
     typeTitle('  ')
     await screen.findByTestId('editor')
-    const submit = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Submit' })
+    const submit = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Post' })
     expect(submit().disabled).toBe(true)
 
     typeTitle('  x')
@@ -301,7 +301,7 @@ describe('widget home post composer', () => {
     await screen.findByTestId('editor')
     typeDetails('Please add it')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
     expect(createPost.mock.calls[0]![0]).toMatchObject({
@@ -318,7 +318,7 @@ describe('widget home post composer', () => {
     await screen.findByTestId('editor')
     expect(editor.value).toEqual(paragraph('From the host'))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
     expect(createPost.mock.calls[0]![0]).toMatchObject({

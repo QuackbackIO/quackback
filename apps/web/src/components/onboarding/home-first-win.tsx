@@ -12,9 +12,9 @@ export const HOME_PLAN_DONE_HEADING_ID = 'home-plan-done'
 
 /** What the first win means for the goal, said as the outcome. */
 const TITLE = {
-  idea: { id: 'onboarding.win.title.idea', defaultMessage: 'Your first customer idea is in' },
+  idea: { id: 'onboarding.win.title.idea', defaultMessage: 'Your first customer post is in' },
   vote: { id: 'onboarding.win.title.vote', defaultMessage: 'Your first customer vote is in' },
-  teamIdea: { id: 'onboarding.win.title.teamIdea', defaultMessage: 'Your team’s first idea is in' },
+  teamIdea: { id: 'onboarding.win.title.teamIdea', defaultMessage: 'Your team’s first post is in' },
   conversation: {
     id: 'onboarding.win.title.conversation',
     defaultMessage: 'Your first conversation',
@@ -34,9 +34,9 @@ export function winTitleMessage(summary: FirstWinSummary | null) {
 }
 
 const VIEW = {
-  idea: { id: 'onboarding.win.view.idea', defaultMessage: 'View idea' },
-  vote: { id: 'onboarding.win.view.idea', defaultMessage: 'View idea' },
-  teamIdea: { id: 'onboarding.win.view.idea', defaultMessage: 'View idea' },
+  idea: { id: 'onboarding.win.view.idea', defaultMessage: 'View post' },
+  vote: { id: 'onboarding.win.view.idea', defaultMessage: 'View post' },
+  teamIdea: { id: 'onboarding.win.view.idea', defaultMessage: 'View post' },
   conversation: { id: 'onboarding.win.view.conversation', defaultMessage: 'View conversation' },
   helpful: { id: 'onboarding.win.view.article', defaultMessage: 'See article' },
   subscriber: { id: 'onboarding.win.view.subscribers', defaultMessage: 'See subscribers' },

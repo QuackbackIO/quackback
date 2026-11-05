@@ -95,7 +95,7 @@ describe('add people rules', () => {
 
   it('words the success toast', () => {
     expect(successMessage([{ name: 'Maya Chen' }], [], member)).toBe(
-      'Maya Chen is now a Member. Their ideas, votes and comments stay with them.'
+      'Maya Chen is now a Member. Their posts, votes and comments stay with them.'
     )
     expect(successMessage([], [{ email: 'a@acme.example' }], member)).toBe(
       'Invitation sent to a@acme.example.'
@@ -107,7 +107,7 @@ describe('add people rules', () => {
         { role: 'admin', label: 'Admin' }
       )
     ).toBe(
-      'A and B are now Admins. Their ideas, votes and comments stay with them. Invitations sent to 2 people.'
+      'A and B are now Admins. Their posts, votes and comments stay with them. Invitations sent to 2 people.'
     )
   })
 
