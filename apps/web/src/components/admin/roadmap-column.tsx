@@ -101,7 +101,7 @@ export const RoadmapColumn = memo(function RoadmapColumn({
             icon={InboxIcon}
             title={intl.formatMessage({
               id: 'admin.empty.roadmap.title',
-              defaultMessage: 'No ideas here yet',
+              defaultMessage: 'No posts here yet',
             })}
             action={emptyAction}
             className="py-8"

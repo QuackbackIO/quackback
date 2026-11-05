@@ -555,10 +555,10 @@ export function FeedbackHeaderAnimated({
                   {createPost.isPending ? (
                     <FormattedMessage
                       id="portal.feedback.header.submitting"
-                      defaultMessage="Submitting..."
+                      defaultMessage="Posting..."
                     />
                   ) : (
-                    <FormattedMessage id="portal.feedback.header.submit" defaultMessage="Submit" />
+                    <FormattedMessage id="portal.feedback.header.submit" defaultMessage="Post" />
                   )}
                 </Button>
               </div>
@@ -599,7 +599,7 @@ function TitleInput({
       maxLength={TITLE_MAX_LENGTH}
       placeholder={intl.formatMessage({
         id: 'portal.feedback.header.titlePlaceholder',
-        defaultMessage: "What's your idea?",
+        defaultMessage: "What's on your mind?",
       })}
       value={value}
       aria-label={intl.formatMessage({

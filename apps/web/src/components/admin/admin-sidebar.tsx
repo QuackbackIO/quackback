@@ -62,6 +62,7 @@ import { ENTITY_ICONS } from '@/components/admin/entity-icon'
 import {
   useBillingEnabled,
   useCloudEnabled,
+  useGithubStarPrompt,
   useSessionContext,
   useUserRole,
   useWorkspaceSettings,
@@ -115,6 +116,15 @@ function ApprovalsIcon({ className }: { className?: string }) {
         d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm4.3-10.4-4.6 6.2-3.2-3.1 1.1-1.1 1.9 1.8 3.5-4.7 1.3.9Z"
         clipRule="evenodd"
       />
+    </svg>
+  )
+}
+
+/** Drawn here for the same reason: Help's GitHub link must not pull in a shared icon file. */
+function GitHubStarIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
+      <path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z" />
     </svg>
   )
 }
@@ -341,6 +351,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   const settings = useWorkspaceSettings()
   const billingEnabled = useBillingEnabled()
   const cloudEnabled = useCloudEnabled()
+  const githubStarPrompt = useGithubStarPrompt()
   const permissions = usePermissions()
 
   const flags = settings?.featureFlags as FeatureFlags | undefined
@@ -582,6 +593,21 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                       <FormattedMessage id="admin.help.whatsNew" defaultMessage="What's new" />
                     </a>
                   </DropdownMenuItem>
+                  {githubStarPrompt ? (
+                    <DropdownMenuItem asChild>
+                      <a
+                        href="https://github.com/QuackbackIO/quackback"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <GitHubStarIcon className="mr-2 h-4 w-4" />
+                        <FormattedMessage
+                          id="admin.starPrompt.star"
+                          defaultMessage="Star on GitHub"
+                        />
+                      </a>
+                    </DropdownMenuItem>
+                  ) : null}
                   <DropdownMenuSeparator />
                   <div className="px-2 py-1.5 flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground/60">v{__APP_VERSION__}</span>
@@ -783,6 +809,17 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                 <DocumentTextIcon className="h-5 w-5" />
                 <FormattedMessage id="admin.help.whatsNew" defaultMessage="What's new" />
               </a>
+              {githubStarPrompt ? (
+                <a
+                  href="https://github.com/QuackbackIO/quackback"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
+                >
+                  <GitHubStarIcon className="h-5 w-5" />
+                  <FormattedMessage id="admin.starPrompt.star" defaultMessage="Star on GitHub" />
+                </a>
+              ) : null}
               {cloudEnabled && (
                 <button
                   type="button"

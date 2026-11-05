@@ -26,7 +26,7 @@ test.describe('Admin Widget Settings', () => {
   })
 
   test('shows Feedback tab label with description', async ({ page }) => {
-    await expect(page.getByText('Search, vote and submit ideas')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Search, vote and create posts')).toBeVisible({ timeout: 10000 })
   })
 
   test('shows Changelog tab label with description', async ({ page }) => {

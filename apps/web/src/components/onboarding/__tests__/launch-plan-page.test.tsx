@@ -134,7 +134,7 @@ describe('Launch plan page', () => {
 
   it('says the first win completes itself and offers no skip on the path', () => {
     mount()
-    const win = row('A customer posts an idea')
+    const win = row('A customer creates a post')
     expect(within(win).getByText('Marked done when it happens')).toBeVisible()
     expect(within(win).queryByRole('button')).toBeNull()
     expect(within(row('Share your board link')).queryByRole('button', { name: /^Skip/ })).toBeNull()
@@ -200,7 +200,7 @@ describe('Launch plan page', () => {
     }
     mount()
     expect(screen.getByText('Step 3 of 3')).toBeVisible()
-    expect(within(row('A customer posts an idea')).getByText('Next')).toBeVisible()
+    expect(within(row('A customer creates a post')).getByText('Next')).toBeVisible()
   })
 
   it('falls back to the feedback path when the primary module is turned off', () => {

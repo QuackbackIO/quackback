@@ -252,7 +252,7 @@ describe('feedback header title', () => {
 
     typeTitleByKey('Light mode')
     await screen.findByTestId('editor')
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
     expect(createPost.mock.calls[0]![0]).toMatchObject({ title: 'Light mode' })
@@ -264,7 +264,7 @@ describe('feedback header title', () => {
     await screen.findByTestId('editor')
     typeTitle('   ')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     expect(await screen.findByText('Please add a title')).toBeTruthy()
     expect(createPost).not.toHaveBeenCalled()
@@ -288,7 +288,7 @@ describe('feedback header post composer', () => {
     await screen.findByTestId('editor')
     typeDetails('Please add it')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
     expect(createPost.mock.calls[0]![0]).toEqual({
@@ -308,7 +308,7 @@ describe('feedback header post composer', () => {
 
     typeTitle('Light mode')
     await screen.findByTestId('editor')
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
     expect(createPost.mock.calls[0]![0]).toStrictEqual({
@@ -321,7 +321,7 @@ describe('feedback header post composer', () => {
   it('posts a title on its own, before the details editor mounts, as a payload the server accepts', async () => {
     renderHeader()
     typeTitle('Dark mode')
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
     const payload = createPost.mock.calls[0]![0]
@@ -352,7 +352,7 @@ describe('feedback header post composer', () => {
         markdown: () => long,
       })
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     expect(await screen.findByText('Keep the details under 10,000 characters.')).toBeTruthy()
     expect(createPost).not.toHaveBeenCalled()
@@ -365,7 +365,7 @@ describe('feedback header post composer', () => {
     renderHeader()
     typeTitle('Dark mode')
     await screen.findByTestId('editor')
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     expect(
       await screen.findByText('Could not submit your feedback. Please try again.')
