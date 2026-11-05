@@ -87,6 +87,7 @@ import { conversationToDTO, translationStateFrom } from './conversation.query'
 import { publishConversationUpdate } from '@/lib/server/realtime/conversation-channels'
 import { isTestCustomer } from '@/lib/server/test-data'
 import { logger } from '@/lib/server/logger'
+import { AI_CHAT_OPTIONS } from '@/lib/server/domains/ai/chat-options'
 
 export { translationStateFrom }
 
@@ -234,6 +235,7 @@ async function callInboxTranslationModel<T>(
     metadata: { stage, ...metadata },
   })
   const result = await chat({
+    ...AI_CHAT_OPTIONS,
     adapter: openaiCompatibleText(model, {
       baseURL: config.openaiBaseUrl!,
       apiKey: config.openaiApiKey!,

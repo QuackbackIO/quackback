@@ -21,6 +21,7 @@ import { z } from 'zod'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { stripCodeFences, structuredOutputProviderOptions } from './config'
+import { AI_CHAT_OPTIONS } from '@/lib/server/domains/ai/chat-options'
 
 const log = logger.child({ component: 'ai-structured-chat' })
 
@@ -111,6 +112,7 @@ export async function structuredChat<S extends z.ZodType>(
   if (!level) {
     try {
       return (await chat({
+        ...AI_CHAT_OPTIONS,
         ...common,
         systemPrompts: input.systemPrompts,
         outputSchema: input.schema,
@@ -129,6 +131,7 @@ export async function structuredChat<S extends z.ZodType>(
 
   const promptOnly = (lvl: FallbackLevel) =>
     chat({
+      ...AI_CHAT_OPTIONS,
       ...common,
       systemPrompts: [...input.systemPrompts, describeSchema(input.schema)],
       modelOptions: {
