@@ -84,6 +84,10 @@ export function knowledgeSearchToolName(ctx: Pick<AssistantToolContext, 'role' |
 
 const PENDING_APPROVAL_NOTE =
   'A teammate must approve this action; tell the customer it has been requested.'
+// A customer conversation is handed to the team once the turn ends with a
+// filed proposal (see assistant.orchestrator.ts), so Quinn says who picks it up.
+const PENDING_HANDOFF_NOTE =
+  'A teammate must confirm this action, and this conversation is being passed to the team. Tell the customer it has been requested and a teammate will pick it up.'
 const CONNECTOR_ALLOW_NOTE =
   'The teammate sees an Allow or Skip card for this call. Say what you want to look up and stop; nothing was fetched yet.'
 const DENIED_NOTE = 'This action is not permitted for the assistant.'
@@ -297,7 +301,12 @@ async function runWithPipeline(
     ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'proposed' })
     return {
       status: 'pending_approval',
-      note: spec.connector && isHomeTurn(ctx) ? CONNECTOR_ALLOW_NOTE : PENDING_APPROVAL_NOTE,
+      note:
+        spec.connector && isHomeTurn(ctx)
+          ? CONNECTOR_ALLOW_NOTE
+          : ctx.role === 'customer_support' && 'conversationId' in parent
+            ? PENDING_HANDOFF_NOTE
+            : PENDING_APPROVAL_NOTE,
     }
   }
 
