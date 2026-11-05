@@ -396,7 +396,7 @@ export function TabsCard({
           <TabRow
             id="tab-feedback"
             label="Feedback"
-            description="Search, vote and submit ideas"
+            description="Search, vote and create posts"
             checked={tabs.feedback}
             disabled={isBusy || lockFeedbackOff}
             disabledHint={bothContentProductsOn ? pairLockHint('Changelog') : lastSectionHint}

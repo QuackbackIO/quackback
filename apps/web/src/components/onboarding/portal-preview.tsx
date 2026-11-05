@@ -100,7 +100,7 @@ export function PortalPreview({
         {variant === 'example'
           ? intl.formatMessage({
               id: 'onboarding.preview.exampleDescription',
-              defaultMessage: 'An example portal with sample ideas.',
+              defaultMessage: 'An example portal with sample posts.',
             })
           : name
             ? intl.formatMessage(
@@ -197,7 +197,7 @@ function ExampleBoard({ name }: { name: string }) {
       <div className="flex h-[42px] items-center rounded-[10px] border border-zinc-200 bg-white px-3.5 text-sm text-zinc-500">
         {intl.formatMessage({
           id: 'onboarding.preview.shareIdea',
-          defaultMessage: 'Share an idea…',
+          defaultMessage: 'Create a post…',
         })}
       </div>
       {IDEAS.map((idea) => (
@@ -232,14 +232,14 @@ function EmptyBoard({ name }: { name: string }) {
         </span>
         {intl.formatMessage({
           id: 'onboarding.preview.composer',
-          defaultMessage: 'What’s your idea?',
+          defaultMessage: 'What’s on your mind?',
         })}
       </div>
       <div className="flex flex-col items-center gap-1 px-4 py-7 text-center">
         <p className="text-[15px] font-semibold">
           {intl.formatMessage({
             id: 'onboarding.preview.emptyTitle',
-            defaultMessage: 'Got an idea? Be the first to share it',
+            defaultMessage: 'No posts yet. Be the first to post',
           })}
         </p>
         <p className="text-[13px] text-zinc-500">

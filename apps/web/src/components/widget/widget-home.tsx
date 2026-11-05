@@ -30,7 +30,7 @@ function WidgetHomeFallback() {
                 })}
                 placeholder={intl.formatMessage({
                   id: 'widget.home.input.placeholder',
-                  defaultMessage: "What's your idea?",
+                  defaultMessage: "What's on your mind?",
                 })}
                 className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50"
               />
