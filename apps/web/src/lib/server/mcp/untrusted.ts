@@ -307,7 +307,6 @@ export const UNTRUSTED_TOOL_FIELDS = {
   // Taken from the Origin or Referer of whichever page loaded the widget.
   widget_install_status: ['originHost'],
   get_settings: NONE,
-  propose_settings_change: NONE,
   update_settings: NONE,
   navigate_workspace: NONE,
 } satisfies Record<string, UntrustedSpec>

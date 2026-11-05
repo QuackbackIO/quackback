@@ -27,7 +27,7 @@
  *                    unlink_ticket
  * - files.ts         upload_file
  * - widget.ts        widget_install_status
- * - settings.ts      get_settings, propose_settings_change
+ * - settings.ts      get_settings, update_settings
  * - navigation.ts    navigate_workspace
  */
 

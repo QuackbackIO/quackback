@@ -7,7 +7,6 @@ import { registerPath, createItemResponseSchema, asSchema } from '../openapi'
 import { errorResponses } from './errors'
 import {
   SETTINGS_AREAS,
-  SETTINGS_RISKS,
   lockedFieldSchema,
   settingsAnyAreaPatchSchema,
   settingsChangeEntrySchema,
@@ -31,7 +30,6 @@ const AreaSummarySchema = z
     id: AreaIdSchema,
     title: z.string(),
     description: z.string(),
-    risk: z.enum(SETTINGS_RISKS),
     revision: RevisionSchema,
     locked: z.array(lockedFieldSchema),
     gates: GatesSchema,
@@ -66,7 +64,6 @@ const ChangeResultSchema = z
     status: z.enum(['applied', 'dry_run', 'noop']),
     receipt: ReceiptSchema.optional().meta({ description: 'Present when `status` is `applied`.' }),
     area: AreaIdSchema.optional(),
-    risk: z.enum(SETTINGS_RISKS).optional(),
     revision: RevisionSchema.optional(),
     changes: z.array(settingsChangeEntrySchema).optional(),
   })
@@ -78,7 +75,7 @@ const ChangeResultSchema = z
 const UndoResultSchema = z
   .object({
     id: z.string(),
-    area: AreaIdSchema.nullable(),
+    area: AreaIdSchema,
     undone: z.literal(true),
     undoneAt: z.string().meta({ format: 'date-time' }),
   })
@@ -180,7 +177,7 @@ registerPath('/settings/receipts/{receiptId}/undo', {
     tags: ['Settings'],
     summary: 'Undo a settings change',
     description:
-      'Restores what a receipt recorded while the values have not moved since (409 otherwise). A receipt is the id returned by an applied change, or the id of a settings card a person applied in the app. Requires the write:settings scope.',
+      'Restores what a receipt recorded while the values have not moved since (409 otherwise). A receipt is the id returned by an applied change. Requires the write:settings scope.',
     parameters: [
       {
         name: 'receiptId',

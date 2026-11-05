@@ -19,7 +19,6 @@ import { toolPermissions } from './tool-permissions'
  */
 import { createHash } from 'node:crypto'
 import { toolDefinition } from '@tanstack/ai'
-import { DomainException } from '@/lib/shared/errors'
 import { can } from '@/lib/server/policy/authorize'
 import { logger } from '@/lib/server/logger'
 import { assistantAttribution, runWithAuditAttribution } from '@/lib/server/audit/attribution'
@@ -242,50 +241,6 @@ async function runWithPipeline(
     // conversation must never let Quinn act in it (policy says preview).
     ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'simulated' })
     return { simulated: true, summary: spec.summarize(args, ctx) }
-  }
-
-  if (mode === 'propose' && spec.name === 'propose_settings_change' && isHomeTurn(ctx)) {
-    const { enqueueWorkspaceSettingsProposal } =
-      await import('./workspace-settings-actions.service')
-    const { settingsProposalInputSchema } =
-      await import('@/lib/shared/assistant/settings-proposals')
-    let pending: Awaited<ReturnType<typeof enqueueWorkspaceSettingsProposal>>
-    try {
-      pending = await enqueueWorkspaceSettingsProposal(
-        ctx.actor,
-        settingsProposalInputSchema.parse(args).changes,
-        ctx.workspaceThreadKey!,
-        ctx.latestCustomerMessageId ?? undefined,
-        assistantRequester(ctx)
-      )
-    } catch (error) {
-      if (!(error instanceof DomainException)) throw error
-      ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'failed' })
-      return { status: 'denied', note: error.message }
-    }
-    // A combined card replaces the one it absorbed, which is never edited.
-    ctx.ledger.proposedActions = ctx.ledger.proposedActions.filter(
-      (action) => action.id !== pending.id && action.id !== pending.supersededId
-    )
-    ctx.ledger.proposedActions.push({
-      id: pending.id,
-      toolName: pending.toolName,
-      summary: pending.summary,
-      label: spec.label,
-      ...(pending.argsDigest ? { contentHash: pending.argsDigest } : {}),
-    })
-    ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'proposed' })
-    return {
-      status: 'pending_approval',
-      note: [
-        PENDING_APPROVAL_NOTE,
-        RETRIEVED_CONTENT_NOTE,
-        JSON.stringify({
-          proposal: pending.args,
-          preparationNotes: pending.preparationNotes ?? [],
-        }),
-      ].join('\n'),
-    }
   }
 
   if (mode === 'propose') {

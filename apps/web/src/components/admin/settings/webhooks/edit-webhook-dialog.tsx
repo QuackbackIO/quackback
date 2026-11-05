@@ -31,6 +31,12 @@ interface EditWebhookDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
+/** Drops event ids no longer offered, so a removed event never blocks saving. */
+function knownEvents(events: string[]): string[] {
+  const known = new Set<string>(WEBHOOK_EVENTS)
+  return events.filter((event) => known.has(event))
+}
+
 export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDialogProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -38,7 +44,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
 
   // Form state
   const [url, setUrl] = useState(webhook.url)
-  const [selectedEvents, setSelectedEvents] = useState<string[]>(webhook.events)
+  const [selectedEvents, setSelectedEvents] = useState<string[]>(() => knownEvents(webhook.events))
   const [isEnabled, setIsEnabled] = useState(webhook.status === 'active')
   const [error, setError] = useState<string | null>(null)
 
@@ -49,7 +55,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
   // Reset form when webhook changes
   useEffect(() => {
     setUrl(webhook.url)
-    setSelectedEvents(webhook.events)
+    setSelectedEvents(knownEvents(webhook.events))
     setIsEnabled(webhook.status === 'active')
     setError(null)
     setNewSecret(null)

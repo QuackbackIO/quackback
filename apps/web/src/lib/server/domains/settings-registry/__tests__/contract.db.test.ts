@@ -23,7 +23,6 @@ vi.mock('@/lib/server/domains/settings/settings.helpers', async (original) => ({
   invalidateSettingsCache: async () => undefined,
 }))
 
-import { applyWorkspaceSettingsProposal } from '@/lib/server/domains/assistant/workspace-settings-actions.service'
 import {
   SETTINGS_REGISTRY,
   changeSettingsArea,
@@ -101,22 +100,19 @@ describe('every settings area keeps one contract', () => {
       const read = await readSettingsArea(actor, area)
       expect(entry.readSchema.safeParse(read.value).success).toBe(true)
       expect(read.revision).toMatch(/^[0-9a-f]{32}$/)
-      expect(read.risk).toBe(entry.risk)
       expect(read.locked).toEqual([])
       expect(read.gates).toEqual({ permission: entry.permission })
       expect(read.secrets).toEqual({})
       const listed = (await listSettingsAreas(actor)).find((a) => a.id === area)
-      expect(listed).toMatchObject({ risk: entry.risk, revision: read.revision })
+      expect(listed).toMatchObject({ revision: read.revision })
     })
 
     it('previews a change without writing it', async () => {
       const read = await readSettingsArea(actor, area)
       const patch = PATCHES[area](read.value)
       const result = await changeSettingsArea(caller, area, { patch, dryRun: true })
-      expect(result).toMatchObject({
-        status: 'dry_run',
-        preview: { area, risk: entry.risk },
-      })
+      expect(result).toMatchObject({ status: 'dry_run', preview: { area } })
+      expect(result.status === 'dry_run' && 'risk' in result.preview).toBe(false)
       expect(result.status === 'dry_run' && result.preview.changes.length).toBeGreaterThan(0)
       expect((await readSettingsArea(actor, area)).revision).toBe(read.revision)
     })
@@ -151,30 +147,6 @@ describe('every settings area keeps one contract', () => {
       await expect(undoSettingsReceipt(caller, result.receipt.id)).rejects.toMatchObject({
         code: 'SETTINGS_UNDO_UNAVAILABLE',
       })
-    })
-
-    it('undoes a change a person applied from a settings card', async () => {
-      const read = await readSettingsArea(actor, area)
-      const changed = CHANGED[area]
-      const { enqueueWorkspaceSettingsProposal } =
-        await import('@/lib/server/domains/assistant/workspace-settings-actions.service')
-      const card = await enqueueWorkspaceSettingsProposal(actor, [
-        { area, patch: PATCHES[area](read.value) } as never,
-      ])
-      const ids = (card.args.changes as { id: string }[]).map((c) => c.id)
-      await applyWorkspaceSettingsProposal(actor, card.id as never, ids, {
-        contentHash: card.argsDigest!,
-      })
-      expect((await readSettingsArea(actor, area)).value[changed]).not.toEqual(read.value[changed])
-
-      const undone = await undoSettingsReceipt(caller, card.id)
-      expect(undone).toMatchObject({ status: 'undone', result: { area } })
-      expect((await readSettingsArea(actor, area)).revision).toBe(read.revision)
-      const [undoneEvent] = await testDb
-        .select()
-        .from(auditLog)
-        .where(eq(auditLog.eventType, 'settings.undone'))
-      expect(undoneEvent.metadata).toMatchObject({ area })
     })
 
     it('refuses a stale revision and applies nothing', async () => {

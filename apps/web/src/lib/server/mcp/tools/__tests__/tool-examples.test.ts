@@ -12,7 +12,6 @@ vi.mock('@/lib/server/domains/settings/cloud/cloud.service', () => ({
 import { registerSettingsTools } from '../settings'
 import { registerNavigationTools } from '../navigation'
 import { WORKSPACE_WEB_PROMPT } from '@/lib/server/domains/assistant/workspace-prompt'
-import { settingsProposalInputSchema } from '@/lib/shared/assistant/settings-proposals'
 import type { McpAuthContext } from '../../types'
 
 /** Every JSON object written into a piece of model-facing text. */
@@ -61,16 +60,24 @@ describe('model-facing tool examples', () => {
     }
   )
 
-  it('Home prompt proposal examples parse with the proposal schema', () => {
-    const proposals = jsonExamples(WORKSPACE_WEB_PROMPT).filter(
-      (example) => typeof example === 'object' && example !== null && 'changes' in example
+  it('Home prompt tool examples parse with their tool schemas', () => {
+    const tools = new Map(registered().map((tool) => [tool.name, z.object(tool.schema)]))
+    const calls = jsonExamples(WORKSPACE_WEB_PROMPT).filter(
+      (example) =>
+        typeof example === 'object' &&
+        example !== null &&
+        ('destination' in example || 'area' in example)
     )
-    expect(proposals.length).toBeGreaterThan(0)
-    for (const proposal of proposals) settingsProposalInputSchema.parse(proposal)
+    expect(calls.length).toBeGreaterThan(0)
+    for (const call of calls)
+      tools
+        .get('destination' in (call as object) ? 'navigate_workspace' : 'get_settings')!
+        .parse(call)
   })
 
   it('finds a broken example', () => {
-    const [example] = jsonExamples('Example: {"changes":[{"area":"billing","patch":{}}]}')
-    expect(settingsProposalInputSchema.safeParse(example).success).toBe(false)
+    const [example] = jsonExamples('Example: {"destination":"billing_portal"}')
+    const navigation = registered().find((tool) => tool.name === 'navigate_workspace')!
+    expect(z.object(navigation.schema).safeParse(example).success).toBe(false)
   })
 })

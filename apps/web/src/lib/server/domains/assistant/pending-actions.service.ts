@@ -35,9 +35,9 @@ import { logger } from '@/lib/server/logger'
 import type { AssistantRole } from '@/lib/shared/assistant/config'
 import {
   approvalContentDigest,
-  approvalRiskOf,
   normalizeDecisionReason,
   requesterColumns,
+  DEFAULT_APPROVAL_RISK,
   type ApprovalRequester,
 } from './approvals.service'
 
@@ -114,8 +114,7 @@ export async function proposePendingAction(
         originRole: input.originRole ?? 'customer_support',
         expiresAt,
         idempotencyKey: input.idempotencyKey ?? null,
-        risk:
-          input.risk ?? approvalRiskOf({ risk: null, toolName: input.toolName, args: input.args }),
+        risk: input.risk ?? DEFAULT_APPROVAL_RISK,
         argsDigest: approvalContentDigest(input.args),
         ...requesterColumns(input.requester),
       })

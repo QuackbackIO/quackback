@@ -271,26 +271,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     [PERMISSIONS.COPILOT_USE],
     'human team member with Copilot permission must own the requested thread'
   ),
-  'lib/server/functions/workspace-copilot.ts::applyWorkspaceSettingsProposalFn': DYNAMIC_PERMISSION(
-    [
-      PERMISSIONS.COPILOT_USE,
-      PERMISSIONS.SETTINGS_MANAGE,
-      PERMISSIONS.SETTINGS_BRANDING,
-      PERMISSIONS.OFFICE_HOURS_MANAGE,
-      PERMISSIONS.CHANGELOG_MANAGE,
-    ],
-    'any person holding every current permission the request needs may approve it; never the credential that filed it'
-  ),
-  'lib/server/functions/workspace-copilot.ts::undoWorkspaceSettingsProposalFn': DYNAMIC_PERMISSION(
-    [
-      PERMISSIONS.COPILOT_USE,
-      PERMISSIONS.SETTINGS_MANAGE,
-      PERMISSIONS.SETTINGS_BRANDING,
-      PERMISSIONS.OFFICE_HOURS_MANAGE,
-      PERMISSIONS.CHANGELOG_MANAGE,
-    ],
-    'any person holding every current permission required to restore the applied changes'
-  ),
   // Anyone signed in acts only on their OWN address here: the principal comes
   // from the session, never from the request, so there is no object whose
   // visibility could be checked and no permission that would mean anything.

@@ -19,7 +19,6 @@ import type {
   SettingsArea,
   SettingsChangeEntry,
   SettingsReceipt,
-  SettingsRisk,
 } from '@/lib/shared/settings-registry'
 import { recordAuditEventInTransaction } from '@/lib/server/audit/log'
 import {
@@ -28,7 +27,6 @@ import {
 } from '@/lib/server/domains/settings/settings.helpers'
 import { requireAreaPermission } from '@/lib/server/domains/assistant/settings-proposals.areas'
 import { prepareSettingsChanges } from '@/lib/server/domains/assistant/settings-proposals.service'
-import { settingsProposalRisk } from '@/lib/server/domains/assistant/approval-policy'
 import {
   getSettingsArea,
   parseAreaPatch,
@@ -52,7 +50,6 @@ export interface SettingsAreaSummary {
   id: SettingsArea
   title: string
   description: string
-  risk: SettingsRisk
   revision: string
   locked: LockedField[]
   gates: SettingsGates
@@ -73,14 +70,13 @@ function summaryOf(entry: SettingsAreaEntry, row: Awaited<ReturnType<typeof requ
     id: entry.id,
     title: entry.title,
     description: entry.description,
-    risk: entry.risk,
     revision: entry.revision(row),
     locked: entry.lockedFields(row),
     gates: gatesOf(entry),
   }
 }
 
-/** The areas the actor may read, with each one's risk, revision and gates. */
+/** The areas the actor may read, with each one's revision and gates. */
 export async function listSettingsAreas(actor: Actor): Promise<SettingsAreaSummary[]> {
   const row = await requireSettings(db)
   const held = actor.principalId ? await heldPermissions(actor) : new Set<string>()
@@ -126,7 +122,6 @@ export interface ChangeSettingsInput {
 
 export interface SettingsPreview {
   area: SettingsArea
-  risk: SettingsRisk
   revision: string
   changes: SettingsChangeEntry[]
 }
@@ -221,15 +216,11 @@ export async function changeSettingsArea(
   } catch (error) {
     if ((error as { code?: string }).code !== 'SETTINGS_ALREADY_MATCH') throw error
   }
-  // The diff decides the tier, so a bulk change is medium on every surface.
-  const risk: SettingsRisk = proposal ? settingsProposalRisk(proposal) : entry.risk
-
   if (input.dryRun) {
     return {
       status: 'dry_run',
       preview: {
         area: entry.id,
-        risk,
         revision,
         changes:
           proposal?.changes.map(({ path, before, after }) => ({ path, before, after })) ?? [],
@@ -270,7 +261,6 @@ async function applyLocked(
       after: outcome.receipt.changes.map((change) => ({ id: change.id, value: change.after })),
       metadata: {
         area: entry.id,
-        risk: entry.risk,
         revision,
         principalId: actor.principalId,
         receipt: outcome.receipt,

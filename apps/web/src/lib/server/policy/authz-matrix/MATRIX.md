@@ -101,7 +101,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 755 surfaces
+### Server functions (`requireAuth`) — 753 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -857,8 +857,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workspace-copilot.ts`::listWorkspaceCopilotThreadsFn | DYNAMIC (copilot.use) |
 | `lib/server/functions/workspace-copilot.ts`::createWorkspaceCopilotThreadFn | DYNAMIC (copilot.use) |
 | `lib/server/functions/workspace-copilot.ts`::getWorkspaceCopilotThreadFn | DYNAMIC (copilot.use) |
-| `lib/server/functions/workspace-copilot.ts`::applyWorkspaceSettingsProposalFn | DYNAMIC (copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage) |
-| `lib/server/functions/workspace-copilot.ts`::undoWorkspaceSettingsProposalFn | DYNAMIC (copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
 ### Public REST API (`withApiKeyAuth`) — 131 surfaces
@@ -1018,7 +1016,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-44 tools. "Team" = requires an admin/member role in addition to the scope.
+43 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
@@ -1045,7 +1043,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | manage_category | write:article | ✓ |
 | merge_post | write:feedback | ✓ |
 | navigate_workspace | read:article, read:chat, read:feedback, read:settings | ✓ |
-| propose_settings_change | write:settings | ✓ |
 | proxy_vote | write:feedback | ✓ |
 | react_to_comment | write:feedback | · |
 | reply_to_conversation | write:chat | ✓ |
@@ -1079,7 +1076,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-228 of 1099 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+228 of 1097 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

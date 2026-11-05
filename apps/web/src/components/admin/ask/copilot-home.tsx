@@ -34,7 +34,6 @@ import { ChatComposer } from './chat-composer'
 import { ConnectorCallCard } from './connector-call-card'
 import { useSearchPalette, useSearchShortcutLabel } from './search-palette'
 import { WorkspaceAssistantMessage } from './workspace-assistant-message'
-import { WorkspaceSettingsProposalCard } from './workspace-settings-proposal-card'
 import { HomeColumn, HomeHeaderSpace } from '../home-frame'
 
 type DraftTurn = {
@@ -411,9 +410,7 @@ function CopilotThread({
     final ? (
       <>
         {final.proposedActions.map((action) =>
-          action.toolName === 'propose_settings_change' ? (
-            <WorkspaceSettingsProposalCard key={action.id} action={action} />
-          ) : action.connector ? (
+          action.connector ? (
             <ConnectorCallCard
               key={action.id}
               action={{ ...action, connector: action.connector }}

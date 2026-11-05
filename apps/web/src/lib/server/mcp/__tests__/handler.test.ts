@@ -737,7 +737,7 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('get_settings')
       expect(toolNames).toContain('update_settings')
       expect(toolNames).toContain('navigate_workspace')
-      // A settings card is the in-app assistant's; an outside client changes settings directly.
+      // Settings change directly through update_settings; no tool files a settings card.
       expect(toolNames).not.toContain('propose_settings_change')
       expect(toolNames).toHaveLength(43)
     })
