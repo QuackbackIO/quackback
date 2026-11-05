@@ -21,9 +21,12 @@ export const getStarPromptFn = createServerFn({ method: 'GET' }).handler(
   }
 )
 
-/** The prompt was shown: it never shows to this person again, whatever they choose. */
+/**
+ * Claim the prompt before showing it. The marker is set under a row lock and
+ * only the first claim wins, so two tabs can never both show it. After this
+ * it never shows to this person again, whatever they choose.
+ */
 export const markStarPromptShownFn = createServerFn({ method: 'POST' }).handler(async () => {
   const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
-  await markOnboardingProgress(auth.user.id as UserId, 'githubStarPromptAt')
-  return { ok: true }
+  return { claimed: await markOnboardingProgress(auth.user.id as UserId, 'githubStarPromptAt') }
 })

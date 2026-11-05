@@ -70,22 +70,22 @@ function NoThanks({ onClick }: { onClick: () => void }) {
   )
 }
 
-const RECORD_RETRY_MS = 3000
-const RECORD_ATTEMPTS = 3
+type Claim = 'claimed' | 'taken' | 'failed'
 
 /**
- * The prompt is on screen: it must never show to this person again. The
- * cached answer is cleared at once, so this visit cannot show it twice, and
- * the server write is retried, so a dropped request does not ask them again.
+ * Claim the prompt on the server before showing it: only the first claim for
+ * this person wins, so another tab can never show it as well. Once settled
+ * either way, the cached answer is cleared so this visit cannot ask again. A
+ * failed request shows nothing and leaves the next chance to try again.
  */
-function recordShown(queryClient: QueryClient) {
-  queryClient.setQueryData<StarPromptState>(STAR_PROMPT_QUERY_KEY, { stage: null, stars: null })
-  const attempt = (left: number) => {
-    markStarPromptShownFn().catch(() => {
-      if (left > 1) window.setTimeout(() => attempt(left - 1), RECORD_RETRY_MS)
-    })
+async function claimPrompt(queryClient: QueryClient): Promise<Claim> {
+  try {
+    const { claimed } = await markStarPromptShownFn()
+    queryClient.setQueryData<StarPromptState>(STAR_PROMPT_QUERY_KEY, { stage: null, stars: null })
+    return claimed ? 'claimed' : 'taken'
+  } catch {
+    return 'failed'
   }
-  attempt(RECORD_ATTEMPTS)
 }
 
 function dialogOpen(): boolean {
@@ -122,9 +122,10 @@ export function GithubStarPromptCard() {
             staleTime: 60 * 60 * 1000,
           })
           if (!next.stage || settled.current) return
+          const claim = await claimPrompt(queryClient)
+          if (claim === 'failed') return
           settled.current = true
-          setState(next)
-          recordShown(queryClient)
+          if (claim === 'claimed') setState(next)
         } catch {
           // Nothing to show; the next ship moment may try again.
         } finally {
@@ -197,14 +198,18 @@ export function HomeGithubStarPrompt() {
     staleTime: 60 * 60 * 1000,
   })
   const [closed, setClosed] = useState(false)
-  // Held for this mount: recording clears the cached answer, which would otherwise hide the row at once.
+  // Held for this mount: claiming clears the cached answer, which would otherwise hide the row at once.
   const [shown, setShown] = useState<StarPromptState | null>(null)
+  const claiming = useRef(false)
 
   useEffect(() => {
-    if (shown || data?.stage !== 'home') return
-    setShown(data)
-    recordShown(queryClient)
-  }, [data, shown, queryClient])
+    if (claiming.current || data?.stage !== 'home') return
+    claiming.current = true
+    const answer = data
+    void claimPrompt(queryClient).then((claim) => {
+      if (claim === 'claimed') setShown(answer)
+    })
+  }, [data, queryClient])
 
   if (!shown || closed) return null
   const close = () => setClosed(true)

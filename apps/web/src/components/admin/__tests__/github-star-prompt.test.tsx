@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'react-intl'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,6 +11,7 @@ const hoisted = vi.hoisted(() => ({
   reads: 0,
   marks: 0,
   failMarks: 0,
+  claimed: true,
 }))
 
 vi.mock('@/lib/server/functions/github-star-prompt', () => ({
@@ -24,7 +25,7 @@ vi.mock('@/lib/server/functions/github-star-prompt', () => ({
       hoisted.failMarks -= 1
       throw new Error('network')
     }
-    return { ok: true }
+    return { claimed: hoisted.claimed }
   }),
 }))
 
@@ -60,6 +61,7 @@ describe('the GitHub star card', () => {
     hoisted.reads = 0
     hoisted.marks = 0
     hoisted.failMarks = 0
+    hoisted.claimed = true
   })
   afterEach(() => {
     vi.useRealTimers()
@@ -125,13 +127,23 @@ describe('the GitHub star card', () => {
     expect(screen.getByText(/Founder of Quackback/)).toBeTruthy()
   })
 
-  it('tries again when recording that it was shown fails', async () => {
+  it('shows nothing when the claim fails, and tries again on the next ship moment', async () => {
     hoisted.failMarks = 1
     render(wrap(<GithubStarPromptGate />))
     await shipAndWait()
-    expect(hoisted.marks).toBe(1)
-    await act(() => vi.advanceTimersByTimeAsync(5000))
+    expect(screen.queryByText(/Founder of Quackback/)).toBeNull()
+    await shipAndWait()
+    expect(screen.getByText(/Founder of Quackback/)).toBeTruthy()
     expect(hoisted.marks).toBe(2)
+  })
+
+  it('stays hidden when another tab already showed it', async () => {
+    hoisted.claimed = false
+    render(wrap(<GithubStarPromptGate />))
+    await shipAndWait()
+    expect(screen.queryByText(/Founder of Quackback/)).toBeNull()
+    await shipAndWait()
+    expect(hoisted.marks).toBe(1)
   })
 
   it('shows without a count when GitHub could not be reached', async () => {
@@ -146,6 +158,8 @@ describe('the GitHub star row on Home', () => {
   beforeEach(() => {
     hoisted.reads = 0
     hoisted.marks = 0
+    hoisted.failMarks = 0
+    hoisted.claimed = true
   })
 
   it('shows only once the card has had its chance', async () => {
@@ -162,6 +176,15 @@ describe('the GitHub star row on Home', () => {
     expect(await screen.findByText(/Founder of Quackback/)).toBeTruthy()
     expect(hoisted.marks).toBe(1)
     fireEvent.click(screen.getByRole('button', { name: 'No thanks' }))
+    expect(screen.queryByText(/Founder of Quackback/)).toBeNull()
+  })
+
+  it('stays hidden on Home when another tab already showed it', async () => {
+    hoisted.state = { stage: 'home', stars: 341 }
+    hoisted.claimed = false
+    render(wrap(<HomeGithubStarPrompt />))
+    await waitFor(() => expect(hoisted.marks).toBe(1))
+    await act(async () => {})
     expect(screen.queryByText(/Founder of Quackback/)).toBeNull()
   })
 

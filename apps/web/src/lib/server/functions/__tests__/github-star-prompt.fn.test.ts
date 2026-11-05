@@ -16,6 +16,7 @@ const hoisted = vi.hoisted(() => ({
   stage: null as 'card' | 'home' | null,
   stars: 341 as number | null,
   marks: [] as { userId: string; key: string }[],
+  alreadyMarked: false,
   starReads: 0,
 }))
 
@@ -42,7 +43,7 @@ vi.mock('@/lib/server/github-star-count', () => ({
 vi.mock('@/lib/server/onboarding-progress', () => ({
   markOnboardingProgress: async (userId: string, key: string) => {
     hoisted.marks.push({ userId, key })
-    return true
+    return !hoisted.alreadyMarked
   },
 }))
 
@@ -54,6 +55,7 @@ describe('star prompt server functions', () => {
     hoisted.stage = null
     hoisted.marks = []
     hoisted.starReads = 0
+    hoisted.alreadyMarked = false
   })
 
   it('is for team members only', async () => {
@@ -72,8 +74,10 @@ describe('star prompt server functions', () => {
     expect(await getStarPromptFn()).toEqual({ stage: 'card', stars: 341 })
   })
 
-  it('records that this person was asked', async () => {
-    await markStarPromptShownFn()
+  it('claims the prompt for this person, and says when another tab got there first', async () => {
+    expect(await markStarPromptShownFn()).toEqual({ claimed: true })
     expect(hoisted.marks).toEqual([{ userId: 'user_caller', key: 'githubStarPromptAt' }])
+    hoisted.alreadyMarked = true
+    expect(await markStarPromptShownFn()).toEqual({ claimed: false })
   })
 })
