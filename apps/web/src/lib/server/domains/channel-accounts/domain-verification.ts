@@ -27,6 +27,7 @@ import type { SendingDomainOwnershipRecord, SendingDomainProofRecord } from '@/l
 import { dkimPublicKeyOf, isKeyRecord } from './dkim-key'
 import { logger } from '@/lib/server/logger'
 import { systemResolver } from '@/lib/server/dns/resolver'
+import { isNoAnswer } from '@/lib/server/dns/lookup-outcome'
 
 const log = logger.child({
   component: 'sending-domain-verification',
@@ -95,8 +96,22 @@ export type ZoneReader = (host: string) => Promise<string[][]>
 const readTxt: ZoneReader = (host) => systemResolver.resolveTxt(host)
 
 /**
- * Resolve and check every expected ownership record. A lookup failure (NXDOMAIN,
- * no record yet) counts as unsatisfied, not an error — the owner is still
+ * What a check of the zone found:
+ *
+ * - `proven`: every record was read and carries this row's value;
+ * - `absent`: the zone answered and at least one record is not there (not
+ *   published, NXDOMAIN, or another value), or nothing could prove it at all;
+ * - `unknown`: no record was found missing, but a lookup went unanswered
+ *   (timeout, server failure, refusal), so the zone has not said either way.
+ *
+ * Only `absent` is evidence that ownership was lost. A caller holding an
+ * earlier proof keeps it through `unknown` and lets the next check decide.
+ */
+export type OwnershipAnswer = 'proven' | 'absent' | 'unknown'
+
+/**
+ * Resolve and check every expected ownership record. A name that answers with
+ * nothing counts as unsatisfied, not an error: the owner may still be
  * propagating DNS. An empty expectation is never satisfied: nothing published
  * proves nothing.
  *
@@ -104,12 +119,12 @@ const readTxt: ZoneReader = (host) => systemResolver.resolveTxt(host)
  * loudly, because the only way one gets here is a caller that has confused the
  * records a domain owner publishes for us with the record that identifies THEM.
  */
-export async function verifySendingDomainDns(
+export async function checkSendingDomainOwnership(
   domain: string,
   expected: SendingDomainProofRecord[],
   readZone: ZoneReader = readTxt
-): Promise<boolean> {
-  if (expected.length === 0) return false
+): Promise<OwnershipAnswer> {
+  if (expected.length === 0) return 'absent'
   // Typed as proof, but read out of a jsonb column where no type survives.
   const notOwnership = (expected as { type: string; purpose: string; value: string }[]).filter(
     (r) => !isProofRecord(r)
@@ -119,21 +134,37 @@ export async function verifySendingDomainDns(
       { domain, purposes: notOwnership.map((r) => `${r.type}/${r.purpose}`) },
       'refusing to treat a non-ownership record as proof of domain ownership'
     )
-    return false
+    return 'absent'
   }
+  let unanswered = false
   for (const record of expected) {
+    let resolved: string[]
     try {
       // A long TXT arrives split into 255-byte chunks; joined, it is the value
       // the domain owner typed.
-      const resolved = (await readZone(hostFor(record, domain))).map((chunks) => chunks.join(''))
-      const satisfied =
-        record.purpose === 'dkim'
-          ? keyRecordSatisfied(resolved, record)
-          : ownershipRecordSatisfied(resolved, record)
-      if (!satisfied) return false
-    } catch {
-      return false
+      resolved = (await readZone(hostFor(record, domain))).map((chunks) => chunks.join(''))
+    } catch (err) {
+      if (!isNoAnswer(err)) {
+        // Keep reading: a record the zone does answer for can still settle it.
+        unanswered = true
+        continue
+      }
+      resolved = []
     }
+    const satisfied =
+      record.purpose === 'dkim'
+        ? keyRecordSatisfied(resolved, record)
+        : ownershipRecordSatisfied(resolved, record)
+    if (!satisfied) return 'absent'
   }
-  return true
+  return unanswered ? 'unknown' : 'proven'
+}
+
+/** Whether ownership is proven now: {@link checkSendingDomainOwnership} as a yes or no. */
+export async function verifySendingDomainDns(
+  domain: string,
+  expected: SendingDomainProofRecord[],
+  readZone: ZoneReader = readTxt
+): Promise<boolean> {
+  return (await checkSendingDomainOwnership(domain, expected, readZone)) === 'proven'
 }

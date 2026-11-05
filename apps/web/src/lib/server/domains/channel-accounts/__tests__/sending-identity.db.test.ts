@@ -81,17 +81,17 @@ vi.mock('@quackback/email/ses-identity', async (importOriginal) => ({
 const checkedRecords = vi.fn<(domain: string, expected: SendingDomainDnsRecord[]) => void>()
 const ownershipResolves = vi.fn<() => Promise<boolean>>()
 vi.mock('../domain-verification', () => ({
-  verifySendingDomainDns: async (domain: string, expected: SendingDomainDnsRecord[]) => {
+  checkSendingDomainOwnership: async (domain: string, expected: SendingDomainDnsRecord[]) => {
     checkedRecords(domain, expected)
     // Modelled on the real checker, which refuses anything that is not an
-    // ownership record and never returns true for an empty expectation. Both
-    // are the behaviours a caller could break silently, so the fake keeps them.
-    if (expected.length === 0) return false
+    // ownership record and never proves an empty expectation. Both are the
+    // behaviours a caller could break silently, so the fake keeps them.
+    if (expected.length === 0) return 'absent'
     const isProof = (r: SendingDomainDnsRecord) =>
       r.type === 'TXT' &&
       (r.purpose === 'ownership' || (r.purpose === 'dkim' && r.value.includes('p=')))
-    if (!expected.every(isProof)) return false
-    return ownershipResolves()
+    if (!expected.every(isProof)) return 'absent'
+    return (await ownershipResolves()) ? 'proven' : 'absent'
   },
   ownershipRecordSatisfied: () => false,
 }))
@@ -119,15 +119,14 @@ vi.mock('@/lib/server/dns/resolver', () => {
     }
     return value as NonNullable<ZoneEntry[K]>
   }
-  return {
-    systemResolver: {
-      resolveTxt: (host: string) => read(host, 'TXT'),
-      resolveCname: (host: string) => read(host, 'CNAME'),
-      resolveMx: (host: string) => read(host, 'MX'),
-      resolve4: (host: string) => read(host, 'A'),
-      resolveNs: (host: string) => read(host, 'NS'),
-    },
+  const resolver = {
+    resolveTxt: (host: string) => read(host, 'TXT'),
+    resolveCname: (host: string) => read(host, 'CNAME'),
+    resolveMx: (host: string) => read(host, 'MX'),
+    resolve4: (host: string) => read(host, 'A'),
+    resolveNs: (host: string) => read(host, 'NS'),
   }
+  return { systemResolver: resolver, interactiveResolver: resolver }
 })
 
 /** Publish records into the zone exactly as a domain owner following them would. */

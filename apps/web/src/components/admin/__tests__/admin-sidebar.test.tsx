@@ -123,6 +123,7 @@ function renderSidebar(
     name?: string
     permissions?: string[]
     cloudEnabled?: boolean
+    githubStarPrompt?: boolean
     planNotice?: import('@/lib/server/domains/settings/tier-limits.types').PlanNotice
     locale?: string
     messages?: Record<string, string>
@@ -133,6 +134,7 @@ function renderSidebar(
     permissions: opts.permissions ?? (userRole === 'admin' ? ALL_PERMISSIONS : []),
     session: { user: { id: 'user_1', name: 'Test', email: 'test@example.com', image: null } },
     cloudEnabled: opts.cloudEnabled ?? false,
+    githubStarPrompt: opts.githubStarPrompt ?? false,
     settings: {
       featureFlags: opts.flags ?? {},
       brandingData: opts.name ? { name: opts.name } : undefined,
@@ -492,6 +494,20 @@ describe('AdminSidebar: help and the phone menu', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Help' }))
     expect(await screen.findByRole('menuitem', { name: 'Documentation' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: 'Contact us' })).toBeNull()
+  })
+
+  it('links to the GitHub repo from Help only where the star prompt is allowed', async () => {
+    renderSidebar('admin', { githubStarPrompt: true })
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Help' }))
+    const link = await screen.findByRole('menuitem', { name: 'Star on GitHub' })
+    expect(link.getAttribute('href')).toBe('https://github.com/QuackbackIO/quackback')
+  })
+
+  it('has no GitHub link on Cloud or when switched off', async () => {
+    renderSidebar('admin', { cloudEnabled: true, githubStarPrompt: false })
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Help' }))
+    expect(await screen.findByRole('menuitem', { name: 'Documentation' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Star on GitHub' })).toBeNull()
   })
 
   it('offers the Launch plan beside the tour while a step is open, and only then', async () => {

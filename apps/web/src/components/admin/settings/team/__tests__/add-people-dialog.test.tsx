@@ -442,7 +442,7 @@ describe('AddPeopleDialog', () => {
     })
     const [message, options] = fns.toastSuccess.mock.calls[0]
     expect(message).toBe(
-      'Maya Chen is now a Member. Their ideas, votes and comments stay with them.'
+      'Maya Chen is now a Member. Their posts, votes and comments stay with them.'
     )
     expect(options.action.label).toBe('Undo')
 
