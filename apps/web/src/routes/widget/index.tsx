@@ -1200,7 +1200,7 @@ function SuccessView({
           <p className="text-[11px] text-muted-foreground">
             <FormattedMessage
               id="widget.success.subtitle"
-              defaultMessage="Your idea has been submitted."
+              defaultMessage="Your post has been submitted."
             />
           </p>
         </div>
@@ -1255,7 +1255,7 @@ function SuccessView({
           className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-foreground bg-muted/30 hover:bg-muted/50 rounded-lg border border-border/50 transition-colors"
         >
           <ArrowLeftIcon className="w-3.5 h-3.5 rtl:rotate-180" />
-          <FormattedMessage id="widget.success.backToIdeas" defaultMessage="Back to ideas" />
+          <FormattedMessage id="widget.success.backToIdeas" defaultMessage="Back to posts" />
         </button>
       </div>
     </div>

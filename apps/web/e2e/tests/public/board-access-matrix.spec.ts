@@ -132,7 +132,7 @@ test.describe('view tier — board-list visibility', () => {
 async function composerState(page: Page, boardSlug: string) {
   await page.goto(`/?board=${boardSlug}`)
   await page.waitForLoadState('networkidle')
-  const composer = page.getByPlaceholder(/what'?s your idea/i).first()
+  const composer = page.getByPlaceholder(/what'?s on your mind/i).first()
   await composer.click()
   await composer.fill(`E2E access probe ${Date.now()}`)
   await page.waitForTimeout(400)
@@ -293,7 +293,7 @@ test.describe('vote tier — vote affordance + gating', () => {
 async function submitFeedback(page: Page, boardSlug: string, title: string) {
   await page.goto(`/?board=${boardSlug}`)
   await page.waitForLoadState('networkidle')
-  const composer = page.getByPlaceholder(/what'?s your idea/i).first()
+  const composer = page.getByPlaceholder(/what'?s on your mind/i).first()
   await composer.click()
   await composer.fill(title)
   const submit = page.getByRole('button', { name: /^submit/i }).first()

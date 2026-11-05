@@ -40,8 +40,8 @@ function show(summary: FirstWinSummary | null) {
 describe('the first win', () => {
   it('leads with the outcome, then who it was and their idea in their words', () => {
     show(idea)
-    const card = screen.getByRole('region', { name: 'Your first customer idea is in' })
-    const heading = within(card).getByRole('heading', { name: 'Your first customer idea is in' })
+    const card = screen.getByRole('region', { name: 'Your first customer post is in' })
+    const heading = within(card).getByRole('heading', { name: 'Your first customer post is in' })
     // Focus can land on it when the win arrives while someone is on Home.
     expect(heading).toHaveAttribute('tabindex', '-1')
     expect(card).toHaveTextContent('Ana Silva from northwind.example · 1 vote')
@@ -49,10 +49,10 @@ describe('the first win', () => {
     expect(card.querySelector('blockquote')?.textContent).toBe('Export ideas to CSV')
   })
 
-  it('has View idea as its one filled button, and a quiet Dismiss', () => {
+  it('has View post as its one filled button, and a quiet Dismiss', () => {
     show(idea)
-    const card = screen.getByRole('region', { name: 'Your first customer idea is in' })
-    const view = within(card).getByRole('link', { name: 'View idea' })
+    const card = screen.getByRole('region', { name: 'Your first customer post is in' })
+    const view = within(card).getByRole('link', { name: 'View post' })
     expect(view).toHaveAttribute('href', '/admin/feedback?post=post_1')
     expect(view.className).toContain('bg-primary')
     const dismiss = within(card).getByRole('button', { name: 'Dismiss' })
@@ -61,7 +61,7 @@ describe('the first win', () => {
 
   it('names an anonymous visitor plainly, so a generated name never reads as a person', () => {
     show({ ...idea, name: 'Wild Otter', domain: null, visitor: true, votes: 0 })
-    const card = screen.getByRole('region', { name: 'Your first customer idea is in' })
+    const card = screen.getByRole('region', { name: 'Your first customer post is in' })
     expect(card).toHaveTextContent('Wild Otter (an anonymous visitor)')
     // No initials, which would make the handle look like someone's name.
     expect(within(card).queryByText('WO')).toBeNull()
@@ -74,7 +74,7 @@ describe('the first win', () => {
   it('says what the goal reached, for each kind of first win', () => {
     const titles: Array<[FirstWinSummary['kind'], string]> = [
       ['vote', 'Your first customer vote is in'],
-      ['teamIdea', 'Your team’s first idea is in'],
+      ['teamIdea', 'Your team’s first post is in'],
       ['conversation', 'Your first conversation'],
       ['helpful', 'A customer found your article helpful'],
       ['subscriber', 'Your first subscriber'],

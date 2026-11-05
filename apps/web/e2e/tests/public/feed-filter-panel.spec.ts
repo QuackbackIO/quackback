@@ -52,7 +52,7 @@ test.describe('Portal feed filter panel', () => {
       .getByRole('group', { name: 'Status', exact: true })
       .getByRole('button', { name: /^Open/ })
     await expect(open).toHaveText(/\d$/)
-    await page.getByRole('searchbox', { name: 'Search ideas' }).fill('xyzzy_no_such_idea')
+    await page.getByRole('searchbox', { name: 'Search posts' }).fill('xyzzy_no_such_idea')
     await expect(page).toHaveURL(/[?&]search=/, { timeout: 5000 })
     // A pill with no posts shows no number.
     await expect(open).not.toHaveText(/\d$/, { timeout: 5000 })

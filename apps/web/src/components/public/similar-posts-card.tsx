@@ -63,7 +63,7 @@ export const SimilarPostsCard = memo(function SimilarPostsCard({
               <LightBulbIcon className="h-3.5 w-3.5 text-muted-foreground/60" />
               {intl.formatMessage({
                 id: 'portal.feedback.similarPosts.heading',
-                defaultMessage: 'Similar ideas',
+                defaultMessage: 'Similar posts',
               })}
             </p>
             <div className="space-y-1.5">
