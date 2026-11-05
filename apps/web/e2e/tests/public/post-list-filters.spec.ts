@@ -49,8 +49,8 @@ test.describe('Public Post List — chip filters', () => {
     await page.getByRole('link', { name: 'Feedback' }).first().click()
 
     await expect(page.getByTestId('portal-feed-skeleton')).toBeVisible()
-    await expect(page.getByPlaceholder("What's your idea?")).toBeVisible()
-    await expect(page.getByRole('searchbox', { name: 'Search ideas' })).toBeVisible()
+    await expect(page.getByPlaceholder("What's on your mind?")).toBeVisible()
+    await expect(page.getByRole('searchbox', { name: 'Search posts' })).toBeVisible()
     await page.getByRole('button', { name: 'Top', exact: true }).click()
     await expect(page).toHaveURL(/[?&]sort=top/)
     await expect(page.getByRole('button', { name: 'All boards' })).toHaveAttribute(
@@ -75,14 +75,14 @@ test.describe('Public Post List — chip filters', () => {
     await page.getByRole('link', { name: 'Feedback' }).first().click()
     await expect(page.getByTestId('portal-feed-skeleton')).toBeVisible()
 
-    await page.getByRole('searchbox', { name: 'Search ideas' }).fill('zap')
-    await page.getByPlaceholder("What's your idea?").fill('Dark mode')
+    await page.getByRole('searchbox', { name: 'Search posts' }).fill('zap')
+    await page.getByPlaceholder("What's on your mind?").fill('Dark mode')
     // The feed arrives before the search's pause runs out.
     release()
 
     await expect(page).toHaveURL(/[?&]search=zap/, { timeout: 5000 })
-    await expect(page.getByRole('searchbox', { name: 'Search ideas' })).toHaveValue('zap')
-    await expect(page.getByPlaceholder("What's your idea?")).toHaveValue('Dark mode')
+    await expect(page.getByRole('searchbox', { name: 'Search posts' })).toHaveValue('zap')
+    await expect(page.getByPlaceholder("What's on your mind?")).toHaveValue('Dark mode')
   })
 
   test('Clear all wipes filters', async ({ page }) => {
@@ -108,7 +108,7 @@ test.describe('Public Post List — chip filters', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.getByRole('searchbox', { name: 'Search ideas' }).fill(title)
+    await page.getByRole('searchbox', { name: 'Search posts' }).fill(title)
 
     await expect(page).toHaveURL(/[?&]search=/, { timeout: 5000 })
     await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible()

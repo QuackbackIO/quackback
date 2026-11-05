@@ -18,12 +18,10 @@
  */
 import type { SendingDomainDnsRecord, SendingDomainRecordCheck } from '@/lib/server/db'
 import type { DnsResolver } from '@/lib/server/dns/resolver'
+import { isNoAnswer } from '@/lib/server/dns/lookup-outcome'
 import { dkimPublicKeyOf, isKeyRecord } from './dkim-key'
 
 export type { DnsResolver } from '@/lib/server/dns/resolver'
-
-/** Lookup failures that mean "nothing is published here", not "we could not ask". */
-const NO_ANSWER = new Set(['ENODATA', 'ENOTFOUND', 'NOTFOUND', 'ENONAME'])
 
 /** Thrown inside a check when the resolver could not answer at all. */
 class LookupFailed extends Error {}
@@ -33,9 +31,8 @@ async function answer<T>(lookup: () => Promise<T[]>): Promise<T[]> {
   try {
     return await lookup()
   } catch (err) {
-    const code = (err as { code?: unknown })?.code
-    if (typeof code === 'string' && NO_ANSWER.has(code)) return []
-    throw new LookupFailed(String(code ?? 'lookup failed'))
+    if (isNoAnswer(err)) return []
+    throw new LookupFailed(String((err as { code?: unknown })?.code ?? 'lookup failed'))
   }
 }
 

@@ -35,8 +35,8 @@ const BOARDS_SHOWN = 6
 const TAGS_SHOWN = 8
 
 export const VIEW_LABELS: Record<'all' | PublicFeedView, MessageDescriptor> = {
-  all: { id: 'portal.feedback.panel.view.all', defaultMessage: 'All ideas' },
-  mine: { id: 'portal.feedback.panel.view.mine', defaultMessage: 'My ideas' },
+  all: { id: 'portal.feedback.panel.view.all', defaultMessage: 'All posts' },
+  mine: { id: 'portal.feedback.panel.view.mine', defaultMessage: 'My posts' },
   voted: { id: 'portal.feedback.panel.view.voted', defaultMessage: 'Voted' },
   following: { id: 'portal.feedback.panel.view.following', defaultMessage: 'Following' },
 }

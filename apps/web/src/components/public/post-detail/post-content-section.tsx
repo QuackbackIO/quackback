@@ -188,7 +188,7 @@ export function PostContentSection({
             onChange={(e) => setEditTitle(e.target.value)}
             placeholder={intl.formatMessage({
               id: 'portal.postDetail.edit.titlePlaceholder',
-              defaultMessage: "What's your idea?",
+              defaultMessage: 'Title',
             })}
             maxLength={200}
             autoFocus

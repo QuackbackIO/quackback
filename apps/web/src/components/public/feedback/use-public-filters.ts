@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Route } from '@/routes/_portal/index'
-import { useMemo, useCallback, useRef, useSyncExternalStore } from 'react'
+import { useMemo, useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 
 export type { PublicFeedbackFilters }
@@ -34,24 +34,28 @@ export function usePublicFilters() {
 
   const lastRouterSearchRef = useRef(routerSearch)
 
-  // Clear optimistic state when ANY tracked field changes (navigation completed)
-  if (
-    optimistic &&
-    (lastRouterSearchRef.current.board !== routerSearch.board ||
-      lastRouterSearchRef.current.sort !== routerSearch.sort ||
-      lastRouterSearchRef.current.search !== routerSearch.search ||
-      lastRouterSearchRef.current.minVotes !== routerSearch.minVotes ||
-      lastRouterSearchRef.current.dateFrom !== routerSearch.dateFrom ||
-      lastRouterSearchRef.current.responded !== routerSearch.responded ||
-      lastRouterSearchRef.current.owner !== routerSearch.owner ||
-      lastRouterSearchRef.current.view !== routerSearch.view ||
-      lastRouterSearchRef.current.status?.join() !== routerSearch.status?.join() ||
-      lastRouterSearchRef.current.tagIds?.join() !== routerSearch.tagIds?.join() ||
-      lastRouterSearchRef.current.segmentIds?.join() !== routerSearch.segmentIds?.join())
-  ) {
-    setOptimistic(null)
-  }
-  lastRouterSearchRef.current = routerSearch
+  // Clear optimistic state when ANY tracked field changes (navigation completed).
+  // This must run after render: setOptimistic notifies useSyncExternalStore
+  // subscribers, and notifying them while FeedbackContainer is rendering causes
+  // React's "Cannot update a component while rendering" warning.
+  useEffect(() => {
+    const previous = lastRouterSearchRef.current
+    const changed =
+      previous.board !== routerSearch.board ||
+      previous.sort !== routerSearch.sort ||
+      previous.search !== routerSearch.search ||
+      previous.minVotes !== routerSearch.minVotes ||
+      previous.dateFrom !== routerSearch.dateFrom ||
+      previous.responded !== routerSearch.responded ||
+      previous.owner !== routerSearch.owner ||
+      previous.view !== routerSearch.view ||
+      previous.status?.join() !== routerSearch.status?.join() ||
+      previous.tagIds?.join() !== routerSearch.tagIds?.join() ||
+      previous.segmentIds?.join() !== routerSearch.segmentIds?.join()
+
+    if (optimistic && changed) setOptimistic(null)
+    lastRouterSearchRef.current = routerSearch
+  }, [optimistic, routerSearch])
 
   const filters: PublicFeedbackFilters = useMemo(() => {
     if (optimistic) return optimistic

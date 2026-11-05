@@ -66,7 +66,7 @@ describe('portal preview', () => {
 
     renderPreview({ name: 'Fernhill', goals: ['product_feedback'] })
     expect(screen.queryByText('Dark mode')).toBeNull()
-    expect(screen.getByText('Got an idea? Be the first to share it')).toBeInTheDocument()
+    expect(screen.getByText('No posts yet. Be the first to post')).toBeInTheDocument()
   })
 
   // On the ready step the portal is live, so the preview shows it as it is:
@@ -86,7 +86,7 @@ describe('portal preview', () => {
       'Support',
       'Status',
     ])
-    expect(screen.getByText('Got an idea? Be the first to share it')).toBeInTheDocument()
+    expect(screen.getByText('No posts yet. Be the first to post')).toBeInTheDocument()
     expect(screen.getByText('The Fernhill team reads every request.')).toBeInTheDocument()
     expect(screen.queryByText('Dark mode')).toBeNull()
     // The live portal has no Messenger launcher, so neither does its preview.

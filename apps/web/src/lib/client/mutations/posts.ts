@@ -174,11 +174,12 @@ export function useChangePostStatusId() {
     onError: (_err, { postId }, context) => {
       rollbackDetailAndLists(queryClient, postId, context)
     },
-    onSuccess: (_data, { postId, statusId }) => {
+    onSuccess: (data, { postId, statusId }) => {
       queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), (old) =>
         old ? { ...old, statusId } : old
       )
       updatePostInLists(queryClient, postId, (post) => ({ ...post, statusId }))
+      if (data.enteredComplete) announceShipMoment()
     },
     onSettled: (_data, _error, { postId, statusId }, context) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
@@ -684,4 +685,13 @@ export function useToggleCommentsLock() {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
     },
   })
+}
+
+/**
+ * A ship moment, for the one-time GitHub star prompt (see lib/client/ship-moment.ts,
+ * whose event name this repeats). Dispatched inline so these mutations, which
+ * portal pages load too, pull in no extra module.
+ */
+function announceShipMoment(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('quackback:ship-moment'))
 }

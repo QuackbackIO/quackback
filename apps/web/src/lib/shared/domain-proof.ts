@@ -45,15 +45,15 @@ const SOURCE_LABEL: Record<ProvenZoneSource, string> = {
 /** "Verified through email sending" and the like. */
 export function verifiedThroughLabel(source: ShownProofSource): string {
   return source === 'workspace'
-    ? 'Verified, already proven by this workspace'
+    ? 'Verified by this workspace'
     : `Verified through ${SOURCE_LABEL[source]}`
 }
 
-/** For a pending domain another proof covers: "Already proven through email sending". */
+/** For a pending domain another proof covers: "Already verified through email sending". */
 export function pendingProvenLabel(source: ShownProofSource): string {
   return source === 'workspace'
-    ? 'Already proven by this workspace'
-    : `Already proven through ${SOURCE_LABEL[source]}`
+    ? 'Already verified by this workspace'
+    : `Already verified through ${SOURCE_LABEL[source]}`
 }
 
 /** The label a single sign-on domain's verification TXT is published under. */

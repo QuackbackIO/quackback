@@ -99,7 +99,7 @@ function AccountFrame({
           caption={
             <FormattedMessage
               id="onboarding.account.previewCaption"
-              defaultMessage="An example of your portal, where customers share ideas, vote and follow what you ship."
+              defaultMessage="An example of your portal, where customers post feedback, vote and follow what you ship."
             />
           }
         >

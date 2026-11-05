@@ -12,6 +12,14 @@ import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import type { ChangeStatusResult } from './post.types'
 
 /**
+ * Whether a status change ships something: a move into a complete status from
+ * one that is not. Moving between complete statuses is housekeeping.
+ */
+export function entersComplete(previousCategory: string | null, nextCategory: string): boolean {
+  return nextCategory === 'complete' && previousCategory !== 'complete'
+}
+
+/**
  * Change the status of a post
  *
  * Validates that:
@@ -105,5 +113,6 @@ export async function changeStatus(
     boardSlug: board.slug,
     previousStatus: previousStatusName,
     newStatus: newStatus.name,
+    enteredComplete: entersComplete(prevStatus?.category ?? null, newStatus.category),
   }
 }
