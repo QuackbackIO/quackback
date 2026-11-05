@@ -42,6 +42,7 @@ describe('SendingDomainAttentionEmail', () => {
     expect(text).toContain('Sending from acme.com needs attention')
     expect(text).toContain('The return path record (MX qb-bounce.acme.com) is missing.')
     expect(text).toContain('Replies send from the default address until it is fixed.')
+    expect(text).toContain('to see every record and verify.')
   })
 
   it('says what was found instead when the value is wrong', async () => {
@@ -64,7 +65,7 @@ describe('SendingDomainAttentionEmail', () => {
     )
   })
 
-  it('names a proxied signing record', async () => {
+  it('names a proxied DKIM record', async () => {
     const text = visibleText(
       await render(
         SendingDomainAttentionEmail({
@@ -79,7 +80,7 @@ describe('SendingDomainAttentionEmail', () => {
       )
     )
     expect(text).toContain(
-      'The signing (DKIM) record (CNAME tok._domainkey.acme.com) is proxied. Turn off any proxy for it.'
+      'The DKIM record (CNAME tok._domainkey.acme.com) is proxied. Turn off any proxy for it.'
     )
   })
 
@@ -104,14 +105,8 @@ describe('SendingDomainAttentionEmail', () => {
   })
 
   it.each([
-    [
-      'truncated',
-      'The signing (DKIM) record (TXT qb1._domainkey.acme.com) was cut short by your DNS host.',
-    ],
-    [
-      'quoted',
-      'The signing (DKIM) record (TXT qb1._domainkey.acme.com) has quote marks saved in its value.',
-    ],
+    ['truncated', 'The DKIM record (TXT qb1._domainkey.acme.com) was cut short by your DNS host.'],
+    ['quoted', 'The DKIM record (TXT qb1._domainkey.acme.com) has quote marks saved in its value.'],
   ] as const)('names a value the DNS host mangled (%s)', async (reason, sentence) => {
     const text = visibleText(
       await render(

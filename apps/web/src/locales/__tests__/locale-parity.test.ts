@@ -218,6 +218,7 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Workflows',
     'Zoom',
     'via {workflowName}',
+    '{count, plural, one {# post} other {# posts}}',
   ],
   'zh-cn': [],
   'zh-tw': [],
@@ -280,6 +281,7 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Zoom',
     'single sign-on',
     'via {workflowName}',
+    '{count, plural, one {# post} other {# posts}}',
     '{pct}% uptime',
   ],
   pl: [

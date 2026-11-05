@@ -12,6 +12,7 @@ import {
 } from '@/components/shared/dns-record-table'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import { pendingProvenLabel, type ShownProofSource } from '@/lib/shared/domain-proof'
+import { WEB_ADDRESSES_TITLE } from './domains-overview'
 
 /** A hostname, with the proof that covers it when this workspace already holds one. */
 type HostnameRow = CustomDomainInstruction & { provenBy?: ShownProofSource | null }
@@ -108,14 +109,14 @@ function hostnameRecords(domain: HostnameRow): DnsRecordRow[] {
     })
   }
   records[records.length - 1]!.problem =
-    "We couldn't confirm these records. Check each name and value, then check status."
+    "We couldn't confirm these records. Check each name and value, then verify."
   return records
 }
 
-/** No badge when ready; Setting up while pending; Needs attention when failed. */
+/** No badge when ready; Pending while waiting; Needs attention when failed. */
 function ReadinessBadge({ readiness }: { readiness: CustomDomainInstruction['readiness'] }) {
   if (readiness === 'ready') return null
-  return <StateBadge state={readiness === 'pending' ? 'setting-up' : 'attention'} />
+  return <StateBadge state={readiness === 'pending' ? 'pending' : 'attention'} />
 }
 
 export function DomainsCard(props: {
@@ -132,7 +133,7 @@ export function DomainsCard(props: {
 }) {
   return (
     <SettingsCard
-      title="Web addresses"
+      title={WEB_ADDRESSES_TITLE}
       description="Where people reach your portal and help center."
     >
       {!props.entitled ? (
@@ -147,7 +148,7 @@ export function DomainsCard(props: {
         >
           <div className="space-y-1.5">
             <Label htmlFor="custom-hostname" className="text-xs text-muted-foreground">
-              Hostname
+              Domain
             </Label>
             <Input
               id="custom-hostname"
@@ -193,7 +194,7 @@ export function DomainsCard(props: {
                     disabled={props.pending}
                     onClick={() => props.onRefresh(domain.hostname)}
                   >
-                    Check status
+                    Verify
                   </Button>
                   {domain.readiness === 'ready' && !domain.isPrimary && (
                     <Button

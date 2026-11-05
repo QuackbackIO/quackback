@@ -91,16 +91,15 @@ vi.mock('@/lib/server/dns/resolver', () => {
     }
     return value as NonNullable<ZoneEntry[K]>
   }
-  return {
-    systemResolver: {
-      resolveTxt: (host: string) => read(host, 'TXT'),
-      resolveCname: (host: string) => read(host, 'CNAME'),
-      resolveMx: (host: string) => read(host, 'MX'),
-      resolve4: (host: string) => read(host, 'A'),
-      resolve6: (host: string) => read(host, 'AAAA'),
-      resolveNs: (host: string) => read(host, 'NS'),
-    },
+  const resolver = {
+    resolveTxt: (host: string) => read(host, 'TXT'),
+    resolveCname: (host: string) => read(host, 'CNAME'),
+    resolveMx: (host: string) => read(host, 'MX'),
+    resolve4: (host: string) => read(host, 'A'),
+    resolve6: (host: string) => read(host, 'AAAA'),
+    resolveNs: (host: string) => read(host, 'NS'),
   }
+  return { systemResolver: resolver, interactiveResolver: resolver }
 })
 
 /** Publish records into the zone exactly as a domain owner following them would. */
