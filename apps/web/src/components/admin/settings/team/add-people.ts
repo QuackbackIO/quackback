@@ -149,7 +149,7 @@ export function successMessage(
   else if (added.length > 1) {
     parts.push(`${joinNames(added.map((a) => a.name))} are now ${role.label}s.`)
   }
-  if (added.length > 0) parts.push('Their ideas, votes and comments stay with them.')
+  if (added.length > 0) parts.push('Their posts, votes and comments stay with them.')
   if (invited.length === 1) parts.push(`Invitation sent to ${invited[0].email}.`)
   else if (invited.length > 1) parts.push(`Invitations sent to ${peopleCount(invited.length)}.`)
   return parts.join(' ')
