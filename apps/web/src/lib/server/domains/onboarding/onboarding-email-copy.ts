@@ -102,7 +102,7 @@ const SHARE_LABEL: Record<ShareKind, MessageDescriptor> = {
 const WAITING: Record<ShareKind | 'support', MessageDescriptor> = {
   feedback: {
     id: 'email.onboarding.nudge.waiting.feedback',
-    defaultMessage: 'Nobody outside your team has posted an idea yet.',
+    defaultMessage: 'Nobody outside your team has posted yet.',
   },
   helpCenter: {
     id: 'email.onboarding.nudge.waiting.helpCenter',
@@ -165,7 +165,7 @@ export async function readyEmailCopy(
     paragraphs.push(
       intl.formatMessage({
         id: 'email.onboarding.ready.shareStep',
-        defaultMessage: 'One step gets you to your first customer idea: share the link.',
+        defaultMessage: 'One step gets you to your first customer post: share the link.',
       })
     )
   } else if (input.nextStep) {

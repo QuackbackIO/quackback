@@ -34,10 +34,10 @@ describe('shownProofSource', () => {
 describe('labels', () => {
   it('reads naturally for a named and a generic source', () => {
     expect(verifiedThroughLabel('email-sending')).toBe('Verified through email sending')
-    expect(verifiedThroughLabel('workspace')).toBe('Verified, already proven by this workspace')
-    expect(pendingProvenLabel('email-sending')).toBe('Already proven through email sending')
-    expect(pendingProvenLabel('workspace')).toBe('Already proven by this workspace')
-    expect(pendingProvenLabel('sso')).toBe('Already proven through single sign-on')
+    expect(verifiedThroughLabel('workspace')).toBe('Verified by this workspace')
+    expect(pendingProvenLabel('email-sending')).toBe('Already verified through email sending')
+    expect(pendingProvenLabel('workspace')).toBe('Already verified by this workspace')
+    expect(pendingProvenLabel('sso')).toBe('Already verified through single sign-on')
   })
 })
 

@@ -204,32 +204,32 @@ describe('address rows', () => {
     renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [LIVE] })
     const r = row('help@acme.com')
     expect(r.textContent).toContain('Support')
-    expect(within(r).queryByText('Setting up')).toBeNull()
+    expect(within(r).queryByText('Pending')).toBeNull()
     expect(within(r).queryByText('Needs attention')).toBeNull()
     expect(panels()).toHaveLength(0)
   })
 
-  it('marks a pending address Setting up and shows the setup panel under it', () => {
+  it('marks a pending address Pending and shows the setup panel under it', () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com', 'support')],
       domains: [domain({ dnsRecords: records({ ownership: found }) })],
     })
     const r = row('help@acme.com')
-    expect(within(r).getByText('Setting up').getAttribute('data-slot')).toBe('badge')
+    expect(within(r).getByText('Pending').getAttribute('data-slot')).toBe('badge')
     expect(within(r).queryByText('Needs attention')).toBeNull()
     expect(screen.getByText('Set up acme.com')).toBeTruthy()
     const footer = screen.getByText("Checking automatically. We'll let you know when it's live.")
     expect(footer.getAttribute('title')).toBe('Last checked less than a minute ago')
-    expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Verify' })).toBeNull()
   })
 
-  it('treats a pending domain with no check window yet as setting up', () => {
+  it('treats a pending domain with no check window yet as pending', () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com', 'support')],
       domains: [domain({ autoCheckUntil: null })],
     })
     const r = row('help@acme.com')
-    expect(within(r).getByText('Setting up')).toBeTruthy()
+    expect(within(r).getByText('Pending')).toBeTruthy()
     expect(within(r).queryByText('Needs attention')).toBeNull()
   })
 
@@ -243,22 +243,22 @@ describe('address rows', () => {
     })
     expect(panels()).toHaveLength(1)
     expect(row('news@acme.com').textContent).toContain('Waiting for acme.com')
-    expect(within(row('news@acme.com')).getByText('Setting up')).toBeTruthy()
+    expect(within(row('news@acme.com')).getByText('Pending')).toBeTruthy()
   })
 
-  it('flags records not found after 72 hours and offers Check again', () => {
+  it('flags records not found after 72 hours and offers Verify', () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com', 'support')],
       domains: [NOT_FOUND],
     })
     const r = row('help@acme.com')
     expect(within(r).getByText('Needs attention')).toBeTruthy()
-    expect(within(r).queryByText('Setting up')).toBeNull()
+    expect(within(r).queryByText('Pending')).toBeNull()
     expect(r.textContent).toContain(
       'Records not found after 72 hours. Replies send from the default address.'
     )
     expect(screen.getByText("We couldn't find these records yet.")).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify' }))
     expect(restartChecks).toHaveBeenCalledWith('dom_1', expect.anything())
   })
 
@@ -334,7 +334,7 @@ describe('rows on a domain with several addresses', () => {
     const newer = address('a2', 'news@acme.com', 'changelog')
     renderSettings({ addresses: [newer, older], domains: [domain()] })
     expect(row('news@acme.com').textContent).toContain('Changelog · Waiting for acme.com')
-    expect(within(row('news@acme.com')).getByText('Setting up')).toBeTruthy()
+    expect(within(row('news@acme.com')).getByText('Pending')).toBeTruthy()
   })
 
   it('attaches the panel to the address that has been on the domain longest', () => {
@@ -409,14 +409,14 @@ describe('domains no address uses', () => {
     renderSettings({ domains: [domain()] })
     const r = row('acme.com')
     expect(r.textContent).toContain('No address uses this domain')
-    expect(within(r).getByText('Setting up')).toBeTruthy()
+    expect(within(r).getByText('Pending')).toBeTruthy()
     expect(panels()).toHaveLength(1)
   })
 
   it('shows a live one quietly, with its records in the menu', async () => {
     renderSettings({ domains: [LIVE] })
     const r = row('acme.com')
-    expect(within(r).queryByText('Setting up')).toBeNull()
+    expect(within(r).queryByText('Pending')).toBeNull()
     expect(within(r).queryByText('Needs attention')).toBeNull()
     expect(panels()).toHaveLength(0)
     const user = await openMenu('acme.com')
@@ -480,7 +480,7 @@ describe('the two signing modes', () => {
       ] as SendingDomainDTO['dnsRecords'],
     })
     renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [byo] })
-    expect(labels()).toEqual(['Signing', 'Return path', 'Return path'])
+    expect(labels()).toEqual(['DKIM', 'Return path', 'Return path'])
     fireEvent.click(screen.getByRole('button', { name: 'Copy instructions' }))
     await waitFor(() => expect(clipboard).toHaveBeenCalled())
     const lines = clipboard.mock.calls[0][0].split('\n').filter((l) => /^(TXT|MX)/.test(l))
@@ -510,14 +510,7 @@ describe('the two signing modes', () => {
       ] as SendingDomainDTO['dnsRecords'],
     })
     renderSettings({ addresses: [address('a1', 'help@acme.com', 'support')], domains: [easy] })
-    expect(labels()).toEqual([
-      'Ownership',
-      'Signing',
-      'Signing',
-      'Signing',
-      'Return path',
-      'Return path',
-    ])
+    expect(labels()).toEqual(['Ownership', 'DKIM', 'DKIM', 'DKIM', 'Return path', 'Return path'])
   })
 })
 
@@ -549,7 +542,7 @@ describe('a domain whose identity already had a key (shared)', () => {
     )
   const MUTED = 'Signing uses a key already set up for acme.com.'
 
-  it('labels its own key Ownership and the provider CNAMEs Signing', () => {
+  it('labels its own key Ownership and the provider CNAMEs DKIM', () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com', 'support')],
       domains: [
@@ -568,7 +561,7 @@ describe('a domain whose identity already had a key (shared)', () => {
         }),
       ],
     })
-    expect(labels()).toEqual(['Ownership', 'Signing', 'Return path', 'Return path'])
+    expect(labels()).toEqual(['Ownership', 'DKIM', 'Return path', 'Return path'])
     expect(screen.queryByText(MUTED)).toBeNull()
   })
 
@@ -586,7 +579,7 @@ describe('a domain whose identity already had a key (shared)', () => {
     expect(screen.getByText(MUTED)).toBeTruthy()
   })
 
-  it('labels its own key Signing while the identity waits to be re-keyed to it', () => {
+  it('labels its own key DKIM while the identity waits to be re-keyed to it', () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com', 'support')],
       domains: [
@@ -597,7 +590,7 @@ describe('a domain whose identity already had a key (shared)', () => {
         }),
       ],
     })
-    expect(labels()).toEqual(['Signing', 'Return path', 'Return path'])
+    expect(labels()).toEqual(['DKIM', 'Return path', 'Return path'])
     expect(screen.queryByText(MUTED)).toBeNull()
   })
 
@@ -651,7 +644,7 @@ describe('the record table', () => {
     })
     const rows = document.querySelectorAll('[data-slot="dns-record"]')
     expect(rows[0].textContent).toContain('Found: Ownership')
-    expect(rows[1].textContent).toContain('Needs a fix: Signing')
+    expect(rows[1].textContent).toContain('Needs a fix: DKIM')
     expect(rows[2].textContent).toContain('Needs a fix: Return path')
     expect(screen.getByText('MX 10')).toBeTruthy()
     expect(
@@ -673,7 +666,7 @@ describe('the record table', () => {
       domains: [domain({ dnsRecords: records({ ownership: found, dkim: missing, mx: missing }) })],
     })
     expect(document.querySelectorAll('[data-slot="dns-record"]')[1].textContent).toContain(
-      'Waiting: Signing'
+      'Waiting: DKIM'
     )
     expect(document.querySelectorAll('[data-slot="dns-record-fix"]')).toHaveLength(0)
   })

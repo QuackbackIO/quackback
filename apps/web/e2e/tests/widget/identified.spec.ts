@@ -68,7 +68,7 @@ test.describe('Identified widget harness', { tag: '@smoke' }, () => {
       await boardPicker.click()
       await widget.getByRole('option').first().click()
     }
-    const submit = widget.getByRole('button', { name: 'Submit', exact: true })
+    const submit = widget.getByRole('button', { name: 'Post', exact: true })
     await expect(submit).toBeEnabled({ timeout: 10000 })
     await submit.click()
     await expect(widget.getByText(idea).first()).toBeVisible({ timeout: 15000 })
@@ -77,7 +77,7 @@ test.describe('Identified widget harness', { tag: '@smoke' }, () => {
   test('customer user menu loads engagement stats', async ({ page }) => {
     const widget = await openIdentified(page, 'customer')
     await widget.getByRole('button', { name: 'User menu' }).click()
-    await expect(widget.getByText('Ideas', { exact: true })).toBeVisible({ timeout: 10000 })
+    await expect(widget.getByText('Posts', { exact: true })).toBeVisible({ timeout: 10000 })
     await expect(widget.getByText('Votes', { exact: true })).toBeVisible()
     await expect(widget.getByText('Comments', { exact: true })).toBeVisible()
   })

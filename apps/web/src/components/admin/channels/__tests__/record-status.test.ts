@@ -53,6 +53,17 @@ describe('recordStatus for a mangled signing key', () => {
   })
 })
 
+describe('a DKIM key record', () => {
+  it('is labelled and named DKIM', () => {
+    expect(recordLabel(key(undefined), 'byo')).toBe('DKIM')
+    const domain = {
+      domain: 'acme.com',
+      dnsRecords: [key({ state: 'missing', checkedAt: CHECKED })],
+    } as SendingDomainDTO
+    expect(failingRecordName(domain)).toBe('DKIM record')
+  })
+})
+
 describe('a return path that is one CNAME', () => {
   const returnPath = (check?: DnsRecordDTO['check']): DnsRecordDTO => ({
     type: 'CNAME',

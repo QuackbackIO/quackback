@@ -26,7 +26,7 @@ describe('<DnsRecordTable>', () => {
             problem: 'Replace it with the value above.',
           },
           {
-            label: 'Signing',
+            label: 'DKIM',
             type: 'TXT',
             name: 'qb._domainkey',
             value: 'v=DKIM1; p=xyz',
@@ -40,7 +40,7 @@ describe('<DnsRecordTable>', () => {
     expect([...rows].map((r) => r.textContent)).toEqual([
       'Found: Routinghelp.acme.comCNAMEapp.example.com',
       'Needs a fix: Ownership_quackback-verify.acme.comTXTqb-domain-verify=abc',
-      'Waiting: Signingqb._domainkeyTXTv=DKIM1; p=xyz',
+      'Waiting: DKIMqb._domainkeyTXTv=DKIM1; p=xyz',
     ])
     const fixes = document.querySelectorAll('[data-slot="dns-record-fix"]')
     expect([...fixes].map((r) => r.textContent)).toEqual(['Replace it with the value above.'])
@@ -54,7 +54,7 @@ describe('<DnsRecordTable> layout', () => {
       <DnsRecordTable
         records={[
           {
-            label: 'Signing',
+            label: 'DKIM',
             type: 'TXT',
             name: 'qb-20261103._domainkey',
             value: `v=DKIM1; k=rsa; p=${'A'.repeat(300)}`,
@@ -88,7 +88,7 @@ describe('<DnsRecordTable> a value longer than one TXT string', () => {
     render(
       <DnsRecordTable
         records={[
-          { label: 'Signing', type: 'TXT', name: 'qb1._domainkey', value: LONG, state: 'waiting' },
+          { label: 'DKIM', type: 'TXT', name: 'qb1._domainkey', value: LONG, state: 'waiting' },
           {
             label: 'Return path',
             type: 'TXT',
