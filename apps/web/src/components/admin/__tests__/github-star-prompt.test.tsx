@@ -10,6 +10,7 @@ const hoisted = vi.hoisted(() => ({
   state: { stage: 'card' as 'card' | 'home' | null, stars: 341 as number | null },
   reads: 0,
   marks: 0,
+  failMarks: 0,
 }))
 
 vi.mock('@/lib/server/functions/github-star-prompt', () => ({
@@ -19,6 +20,10 @@ vi.mock('@/lib/server/functions/github-star-prompt', () => ({
   }),
   markStarPromptShownFn: vi.fn(async () => {
     hoisted.marks += 1
+    if (hoisted.failMarks > 0) {
+      hoisted.failMarks -= 1
+      throw new Error('network')
+    }
     return { ok: true }
   }),
 }))
@@ -26,8 +31,10 @@ vi.mock('@/lib/server/functions/github-star-prompt', () => ({
 const { HomeGithubStarPrompt } = await import('../github-star-prompt')
 const { GithubStarPromptGate } = await import('../github-star-prompt-gate')
 
-function wrap(children: ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function wrap(
+  children: ReactNode,
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+) {
   return (
     <QueryClientProvider client={client}>
       <IntlProvider locale="en" onError={() => {}}>
@@ -52,6 +59,7 @@ describe('the GitHub star card', () => {
     hoisted.state = { stage: 'card', stars: 341 }
     hoisted.reads = 0
     hoisted.marks = 0
+    hoisted.failMarks = 0
   })
   afterEach(() => {
     vi.useRealTimers()
@@ -117,6 +125,15 @@ describe('the GitHub star card', () => {
     expect(screen.getByText(/Founder of Quackback/)).toBeTruthy()
   })
 
+  it('tries again when recording that it was shown fails', async () => {
+    hoisted.failMarks = 1
+    render(wrap(<GithubStarPromptGate />))
+    await shipAndWait()
+    expect(hoisted.marks).toBe(1)
+    await act(() => vi.advanceTimersByTimeAsync(5000))
+    expect(hoisted.marks).toBe(2)
+  })
+
   it('shows without a count when GitHub could not be reached', async () => {
     hoisted.state = { stage: 'card', stars: null }
     render(wrap(<GithubStarPromptGate />))
@@ -145,6 +162,17 @@ describe('the GitHub star row on Home', () => {
     expect(await screen.findByText(/Founder of Quackback/)).toBeTruthy()
     expect(hoisted.marks).toBe(1)
     fireEvent.click(screen.getByRole('button', { name: 'No thanks' }))
+    expect(screen.queryByText(/Founder of Quackback/)).toBeNull()
+  })
+
+  it('does not come back when Home is opened again in the same visit', async () => {
+    hoisted.state = { stage: 'home', stars: 341 }
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const first = render(wrap(<HomeGithubStarPrompt />, client))
+    expect(await screen.findByText(/Founder of Quackback/)).toBeTruthy()
+    first.unmount()
+    render(wrap(<HomeGithubStarPrompt />, client))
+    await act(async () => {})
     expect(screen.queryByText(/Founder of Quackback/)).toBeNull()
   })
 })

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -70,6 +70,24 @@ function NoThanks({ onClick }: { onClick: () => void }) {
   )
 }
 
+const RECORD_RETRY_MS = 3000
+const RECORD_ATTEMPTS = 3
+
+/**
+ * The prompt is on screen: it must never show to this person again. The
+ * cached answer is cleared at once, so this visit cannot show it twice, and
+ * the server write is retried, so a dropped request does not ask them again.
+ */
+function recordShown(queryClient: QueryClient) {
+  queryClient.setQueryData<StarPromptState>(STAR_PROMPT_QUERY_KEY, { stage: null, stars: null })
+  const attempt = (left: number) => {
+    markStarPromptShownFn().catch(() => {
+      if (left > 1) window.setTimeout(() => attempt(left - 1), RECORD_RETRY_MS)
+    })
+  }
+  attempt(RECORD_ATTEMPTS)
+}
+
 function dialogOpen(): boolean {
   return document.querySelector('[role="dialog"], [role="alertdialog"]') !== null
 }
@@ -106,7 +124,7 @@ export function GithubStarPromptCard() {
           if (!next.stage || settled.current) return
           settled.current = true
           setState(next)
-          void markStarPromptShownFn()
+          recordShown(queryClient)
         } catch {
           // Nothing to show; the next ship moment may try again.
         } finally {
@@ -172,22 +190,23 @@ export function GithubStarPromptCard() {
  * reached: their gates have been open for a month without a ship moment.
  */
 export function HomeGithubStarPrompt() {
+  const queryClient = useQueryClient()
   const { data } = useQuery({
     queryKey: STAR_PROMPT_QUERY_KEY,
     queryFn: () => getStarPromptFn(),
     staleTime: 60 * 60 * 1000,
   })
   const [closed, setClosed] = useState(false)
-  const marked = useRef(false)
-  const showing = data?.stage === 'home' && !closed
+  // Held for this mount: recording clears the cached answer, which would otherwise hide the row at once.
+  const [shown, setShown] = useState<StarPromptState | null>(null)
 
   useEffect(() => {
-    if (!showing || marked.current) return
-    marked.current = true
-    void markStarPromptShownFn()
-  }, [showing])
+    if (shown || data?.stage !== 'home') return
+    setShown(data)
+    recordShown(queryClient)
+  }, [data, shown, queryClient])
 
-  if (!showing) return null
+  if (!shown || closed) return null
   const close = () => setClosed(true)
   return (
     <section
@@ -205,7 +224,7 @@ export function HomeGithubStarPrompt() {
       </div>
       <div className="flex items-center gap-2">
         <NoThanks onClick={close} />
-        <StarButton stars={data.stars} onClick={close} />
+        <StarButton stars={shown.stars} onClick={close} />
       </div>
     </section>
   )
