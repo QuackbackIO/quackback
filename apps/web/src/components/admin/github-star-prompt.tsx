@@ -107,12 +107,16 @@ export function GithubStarPromptCard() {
   const pending = useRef(false)
 
   useEffect(() => {
+    // Leaving before the card appears cancels it, so the one ask is never used up unseen.
+    let alive = true
+    let timer: number | undefined
     const attempt = () => {
       if (settled.current || pending.current) return
       pending.current = true
       const show = async () => {
+        if (!alive) return
         if (dialogOpen()) {
-          window.setTimeout(show, DIALOG_POLL_MS)
+          timer = window.setTimeout(show, DIALOG_POLL_MS)
           return
         }
         try {
@@ -121,7 +125,7 @@ export function GithubStarPromptCard() {
             queryFn: () => getStarPromptFn(),
             staleTime: 60 * 60 * 1000,
           })
-          if (!next.stage || settled.current) return
+          if (!next.stage || settled.current || !alive) return
           const claim = await claimPrompt(queryClient)
           if (claim === 'failed') return
           settled.current = true
@@ -132,11 +136,17 @@ export function GithubStarPromptCard() {
           pending.current = false
         }
       }
-      window.setTimeout(show, SHOW_AFTER_MS)
+      timer = window.setTimeout(show, SHOW_AFTER_MS)
     }
     // The gate mounts this card because something just shipped.
     attempt()
-    return onShipMoment(attempt)
+    const stopListening = onShipMoment(attempt)
+    return () => {
+      alive = false
+      window.clearTimeout(timer)
+      pending.current = false
+      stopListening()
+    }
   }, [queryClient])
 
   const close = useCallback(() => setState(null), [])

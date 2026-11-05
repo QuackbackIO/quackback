@@ -137,6 +137,18 @@ describe('the GitHub star card', () => {
     expect(hoisted.marks).toBe(2)
   })
 
+  it('does not use up the ask when the person leaves before it appears', async () => {
+    const view = render(wrap(<GithubStarPromptGate />))
+    await act(async () => {
+      announceShipMoment()
+    })
+    for (let i = 0; i < 5; i++) await act(() => vi.advanceTimersByTimeAsync(10))
+    view.unmount()
+    await act(() => vi.advanceTimersByTimeAsync(5000))
+    expect(hoisted.reads).toBe(0)
+    expect(hoisted.marks).toBe(0)
+  })
+
   it('stays hidden when another tab already showed it', async () => {
     hoisted.claimed = false
     render(wrap(<GithubStarPromptGate />))
