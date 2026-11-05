@@ -77,7 +77,7 @@ test.describe('Identified widget harness', { tag: '@smoke' }, () => {
   test('customer user menu loads engagement stats', async ({ page }) => {
     const widget = await openIdentified(page, 'customer')
     await widget.getByRole('button', { name: 'User menu' }).click()
-    await expect(widget.getByText('Ideas', { exact: true })).toBeVisible({ timeout: 10000 })
+    await expect(widget.getByText('Posts', { exact: true })).toBeVisible({ timeout: 10000 })
     await expect(widget.getByText('Votes', { exact: true })).toBeVisible()
     await expect(widget.getByText('Comments', { exact: true })).toBeVisible()
   })
