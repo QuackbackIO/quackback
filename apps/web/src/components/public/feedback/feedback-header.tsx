@@ -35,7 +35,7 @@ export function FeedbackHeaderFallback({ title, onTitleChange, onFocus }: Fallba
           type="text"
           placeholder={intl.formatMessage({
             id: 'portal.feedback.header.titlePlaceholder',
-            defaultMessage: "What's your idea?",
+            defaultMessage: "What's on your mind?",
           })}
           readOnly={!onTitleChange}
           maxLength={TITLE_MAX_LENGTH}

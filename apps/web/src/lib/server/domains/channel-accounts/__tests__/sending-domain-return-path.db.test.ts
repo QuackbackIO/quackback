@@ -38,11 +38,11 @@ vi.mock('@quackback/email/ses-identity', async (importOriginal) => ({
 /** Ownership, decided here; the records it is asked about must be proof records. */
 const ownershipResolves = vi.fn<() => Promise<boolean>>()
 vi.mock('../domain-verification', () => ({
-  verifySendingDomainDns: async (_domain: string, expected: SendingDomainDnsRecord[]) => {
+  checkSendingDomainOwnership: async (_domain: string, expected: SendingDomainDnsRecord[]) => {
     const isProof = (r: SendingDomainDnsRecord) =>
       r.type === 'TXT' && r.purpose === 'dkim' && r.value.includes('p=')
-    if (expected.length === 0 || !expected.every(isProof)) return false
-    return ownershipResolves()
+    if (expected.length === 0 || !expected.every(isProof)) return 'absent'
+    return (await ownershipResolves()) ? 'proven' : 'absent'
   },
   ownershipRecordSatisfied: () => false,
 }))
@@ -65,16 +65,15 @@ vi.mock('@/lib/server/dns/resolver', () => {
     }
     return value as NonNullable<ZoneEntry[K]>
   }
-  return {
-    systemResolver: {
-      resolveTxt: (host: string) => read(host, 'TXT'),
-      resolveCname: (host: string) => read(host, 'CNAME'),
-      resolveMx: (host: string) => read(host, 'MX'),
-      resolve4: (host: string) => read(host, 'A'),
-      resolve6: (host: string) => read(host, 'AAAA'),
-      resolveNs: (host: string) => read(host, 'NS'),
-    },
+  const resolver = {
+    resolveTxt: (host: string) => read(host, 'TXT'),
+    resolveCname: (host: string) => read(host, 'CNAME'),
+    resolveMx: (host: string) => read(host, 'MX'),
+    resolve4: (host: string) => read(host, 'A'),
+    resolve6: (host: string) => read(host, 'AAAA'),
+    resolveNs: (host: string) => read(host, 'NS'),
   }
+  return { systemResolver: resolver, interactiveResolver: resolver }
 })
 
 /** Publish records into the zone exactly as a domain owner following them would. */

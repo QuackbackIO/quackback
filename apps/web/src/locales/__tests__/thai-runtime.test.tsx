@@ -15,7 +15,7 @@ describe('Thai locale runtime wiring', () => {
     ])
     expect(th['portal.header.nav.roadmap']).toBe('แผนพัฒนา')
     expect(th['portal.header.nav.roadmap']).not.toBe(en['portal.header.nav.roadmap'])
-    expect(widget['widget.home.form.submit']).toBe('ส่ง')
+    expect(widget['widget.home.form.submit']).toBe('โพสต์')
     expect(widget['helpAskAi.sources']).toBe('แหล่งข้อมูล')
     expect(htmlLangDir('th')).toEqual({ lang: 'th', dir: 'ltr' })
   })

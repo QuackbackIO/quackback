@@ -446,7 +446,7 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
     // Boards can take ideas without an account, so cap how many one address
     // can post in an hour, across every anonymous identity it mints.
     if (!actor.testFeedback?.canSubmit && !(await reserveAnonPostSlot(clientIp()))) {
-      throw new Error('Too many ideas, please try again later')
+      throw new Error('Too many posts, please try again later')
     }
   } else if (!principalRecord) {
     throw new Error('You must be a member to submit feedback.')

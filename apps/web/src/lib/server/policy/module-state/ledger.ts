@@ -560,6 +560,14 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the constructor and no request attaches per-caller headers.',
   },
   {
+    file: 'apps/web/src/lib/server/github-star-count.ts',
+    name: 'readStarCount',
+    category: 'fleet-wide',
+    reason:
+      "The public repo's star count and its backoff, shown on the star prompt's button. It is the " +
+      'same number for every workspace, so a cross-workspace hit returns the right answer.',
+  },
+  {
     file: 'apps/web/src/lib/server/functions/version.ts',
     name: 'lastFailureAt',
     category: 'fleet-wide',
