@@ -110,9 +110,10 @@ interface S3Transport {
 export interface S3FixtureModule {
   S3Client: new (config: S3ConstructorConfig) => S3Transport
 }
+const SCOPED_LOGO_KEY = /^w\/workspace_[a-z0-9]+\/logos\/[a-f0-9]{64}\.png$/
 export function brandingS3Client(state: BrandingTransportState, actual: S3FixtureModule) {
   return class {
-    private real: S3Transport | null
+    readonly real: S3Transport | null
     constructor(config: S3ConstructorConfig) {
       if (!config.credentials.accessKeyId || !config.credentials.secretAccessKey)
         throw new Error('Missing scoped storage credentials')
@@ -120,7 +121,7 @@ export function brandingS3Client(state: BrandingTransportState, actual: S3Fixtur
     }
     async send(command: ObjectCommand): Promise<unknown> {
       const { Bucket, Key, Body, ContentType, Range } = command.input
-      if (!Bucket || !/^w\/workspace_[a-z0-9]+\/logos\/[a-f0-9]{64}\.png$/.test(Key))
+      if (!Bucket || !SCOPED_LOGO_KEY.test(Key))
         throw new Error('Expected scoped verified logo key')
       const identity = Bucket + ':' + Key
       if (this.real) {
@@ -163,5 +164,49 @@ export function brandingS3Client(state: BrandingTransportState, actual: S3Fixtur
     destroy() {
       this.real?.destroy()
     }
+  }
+}
+/** Where a presigned fixture read points; never resolvable, so a leak fails loudly. */
+const FIXTURE_STORAGE_ORIGIN = 'https://storage.fixture.invalid'
+export interface PresignerFixtureModule {
+  getSignedUrl(client: unknown, command: ObjectCommand, options?: unknown): Promise<string>
+}
+/**
+ * Reads presign their GET and fetch the bytes natively rather than sending the
+ * command, so the presigner is the read path's half of {@link brandingS3Client}.
+ */
+export function brandingPresigner(state: BrandingTransportState, actual: PresignerFixtureModule) {
+  return {
+    ...actual,
+    getSignedUrl: async (
+      client: { real: S3Transport | null },
+      command: ObjectCommand,
+      options?: unknown
+    ) => {
+      const { Bucket, Key } = command.input
+      if (!Bucket || !SCOPED_LOGO_KEY.test(Key))
+        throw new Error('Expected scoped verified logo key')
+      if (client.real) return actual.getSignedUrl(client.real, command, options)
+      if (!command.constructor.name.includes('GetObject'))
+        throw new Error('Unknown presigned command')
+      return FIXTURE_STORAGE_ORIGIN + '/' + encodeURIComponent(Bucket + ':' + Key)
+    },
+  }
+}
+/** The fetch half: answers presigned fixture reads, passes everything else through. */
+export function brandingStorageFetch(state: BrandingTransportState, realFetch: typeof fetch) {
+  return async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const url = input instanceof Request ? input.url : String(input)
+    if (!url.startsWith(FIXTURE_STORAGE_ORIGIN + '/')) return realFetch(input, init)
+    const identity = decodeURIComponent(url.slice(FIXTURE_STORAGE_ORIGIN.length + 1))
+    const range = new Headers(init?.headers).get('range') ?? undefined
+    const object = state.objects.get(identity)
+    if (!object || (range !== undefined && range !== 'bytes=0-0'))
+      throw new Error('Unknown scoped logo or range')
+    const bytes = range ? object.bytes.subarray(0, 1) : object.bytes
+    return new Response(new Uint8Array(bytes), {
+      status: range ? 206 : 200,
+      headers: { 'content-type': object.mime, 'content-length': String(bytes.length) },
+    })
   }
 }

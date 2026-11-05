@@ -528,6 +528,14 @@ export interface WorkspaceStorage {
   remove(key: string): Promise<void>
 }
 
+/** Lifetime of the presigned URL behind a single proxied read. */
+const PROXY_READ_PRESIGN_SECONDS = 300
+
+/** An error carrying the `name` and `$metadata.httpStatusCode` an SDK error would. */
+function s3ReadError(message: string, name: string, httpStatusCode: number): Error {
+  return Object.assign(new Error(message), { name, $metadata: { httpStatusCode } })
+}
+
 /**
  * A client bound to one workspace and to one set of connection parameters.
  *
@@ -606,22 +614,45 @@ function workspaceStorage(selfReportedWorkspaceId: WorkspaceId): WorkspaceStorag
       const Key = objectName(key)
       const client = await getS3Client(connection)
       const { GetObjectCommand } = await getS3Module()
-      const response = (await client.send(
-        new GetObjectCommand({ Bucket: connection.bucket, Key, ...(range ? { Range: range } : {}) })
-      )) as {
-        Body?: { transformToWebStream(): ReadableStream<Uint8Array> }
-        ContentType?: string
-        ContentLength?: number
-        ContentRange?: string
-        AcceptRanges?: string
+      const { getSignedUrl } = await getPresignerModule()
+      // Read through a short-lived presigned URL and the runtime's native
+      // `fetch` rather than `client.send(GetObjectCommand)`. The SDK streams
+      // GetObject bodies over `node:https`, and Bun's compat layer for that
+      // stream can stop emitting `data`/`end` after enough requests
+      // (oven-sh/bun#26066): the proxy then hangs until the server's idle
+      // timeout, and every later read of any object above a few tens of KB
+      // fails the same way until the process restarts. Presigning is pure
+      // computation; only the byte transfer changes transport. `Range` stays a
+      // plain request header, which S3 accepts unsigned on a presigned URL.
+      const url = await getSignedUrl(
+        client,
+        new GetObjectCommand({ Bucket: connection.bucket, Key }),
+        { expiresIn: PROXY_READ_PRESIGN_SECONDS }
+      )
+      const response = await fetch(url, range ? { headers: { Range: range } } : undefined)
+      if (!response.ok || !response.body) {
+        await response.body?.cancel().catch(() => {})
+        // Shaped like the SDK's errors, so callers that tell "missing" and
+        // "unsatisfiable range" apart by `name` / `$metadata` keep doing so.
+        if (response.status === 404) {
+          throw s3ReadError(`S3 object not found: ${key}`, 'NoSuchKey', 404)
+        }
+        if (response.status === 416) {
+          throw s3ReadError(`S3 range not satisfiable: ${key}`, 'InvalidRange', 416)
+        }
+        throw s3ReadError(
+          `S3 GetObject failed for ${key}: HTTP ${response.status}`,
+          'S3ReadError',
+          response.status
+        )
       }
-      if (!response.Body) throw new Error(`S3 object not found: ${key}`)
+      const contentLength = response.headers.get('content-length')
       return {
-        body: response.Body.transformToWebStream(),
-        contentType: response.ContentType || 'application/octet-stream',
-        contentLength: response.ContentLength,
-        contentRange: response.ContentRange,
-        acceptRanges: response.AcceptRanges,
+        body: response.body,
+        contentType: response.headers.get('content-type') || 'application/octet-stream',
+        contentLength: contentLength === null ? undefined : Number(contentLength),
+        contentRange: response.headers.get('content-range') ?? undefined,
+        acceptRanges: response.headers.get('accept-ranges') ?? undefined,
       }
     },
 
