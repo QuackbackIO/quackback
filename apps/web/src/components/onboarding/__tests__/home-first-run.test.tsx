@@ -210,10 +210,10 @@ describe('Home first-run cards', () => {
       },
     })
     mount()
-    const card = await screen.findByRole('region', { name: 'Your first customer idea is in' })
+    const card = await screen.findByRole('region', { name: 'Your first customer post is in' })
     expect(card).toHaveTextContent('Ana from northwind.com · 1 vote')
     expect(card).toHaveTextContent('Export to CSV')
-    expect(within(card).getByRole('link', { name: 'View idea' })).toHaveAttribute(
+    expect(within(card).getByRole('link', { name: 'View post' })).toHaveAttribute(
       'href',
       '/admin/feedback?post=post_1'
     )
@@ -314,9 +314,9 @@ describe('Home changing in place', () => {
     const copy = await screen.findByRole('button', { name: 'Copy board link' })
     copy.focus()
     fireEvent.click(copy)
-    const next = await screen.findByRole('heading', { name: 'A customer posts an idea' })
+    const next = await screen.findByRole('heading', { name: 'A customer creates a post' })
     await waitFor(() => expect(document.activeElement).toBe(next))
-    expect(politeText()).toBe('Share your board link done. Next: A customer posts an idea')
+    expect(politeText()).toBe('Share your board link done. Next: A customer creates a post')
   })
 
   it('moves focus to the first win when it arrives while focus is in the plan', async () => {
@@ -337,9 +337,9 @@ describe('Home changing in place', () => {
     ;(await screen.findByRole('button', { name: 'Copy board link' })).focus()
     hoisted.status = feedback({ hasFirstWin: true })
     await client.invalidateQueries({ queryKey: ['admin', 'onboarding'] })
-    const win = await screen.findByRole('heading', { name: 'Your first customer idea is in' })
+    const win = await screen.findByRole('heading', { name: 'Your first customer post is in' })
     await waitFor(() => expect(document.activeElement).toBe(win))
-    expect(politeText()).toBe('Your first customer idea is in')
+    expect(politeText()).toBe('Your first customer post is in')
   })
 
   it('moves focus to the plan row after Dismiss, and says what is left', async () => {

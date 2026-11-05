@@ -376,7 +376,7 @@ describe('createPublicPostFn anonymous feature flag', () => {
     mockReserveAnonPostSlot.mockImplementation(async (ip: string) => ip !== '203.0.113.5')
 
     await expect(createPublicPostHandler({ data: POST_DATA })).rejects.toThrow(
-      'Too many ideas, please try again later'
+      'Too many posts, please try again later'
     )
     expect(mockReserveAnonPostSlot).toHaveBeenCalledWith('203.0.113.5')
     expect(mockCreatePost).not.toHaveBeenCalled()
