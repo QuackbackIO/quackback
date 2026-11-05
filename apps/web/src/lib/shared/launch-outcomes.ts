@@ -7,8 +7,8 @@ import type { MessageDescriptor } from 'react-intl'
 import type { LaunchTask } from './launch-checklist'
 
 const OUTCOMES: Record<string, string> = {
-  'create-board': 'Where customers share ideas',
-  'create-board.private': 'Where your team shares ideas',
+  'create-board': 'Where customers post feedback',
+  'create-board.private': 'Where your team posts feedback',
   'distribute-feedback': 'Customers find your board',
   'publish-changelog': 'Customers see what shipped',
   'connect-messenger': 'Customers reach you from your site',
@@ -19,9 +19,9 @@ const OUTCOMES: Record<string, string> = {
   'invite-team': 'Share the work with teammates',
   'customize-branding': 'Your portal looks like you',
   'connect-integration': 'Feedback flows into your tools',
-  'first-win.feedback': 'Your first idea arrives',
+  'first-win.feedback': 'Your first post arrives',
   'first-win.support': 'A customer starts a conversation',
-  'first-win.private': 'Your team starts sharing ideas',
+  'first-win.private': 'Your team starts posting',
   'first-win.helpCenter': 'Your first reader is helped',
   'first-win.status': 'Your first subscriber hears from you',
 }
@@ -38,10 +38,10 @@ export function launchTaskOutcome(task: LaunchTask): MessageDescriptor | null {
  * on a goal's path have one: Home never leads with anything else.
  */
 const WHY: Record<string, string> = {
-  'create-board': 'Give customers a place to post and vote on ideas.',
+  'create-board': 'Give customers a place to post and vote on feedback.',
   'distribute-feedback':
-    'Customers post and vote on ideas there. Paste it wherever they already talk to you.',
-  'invite-team': 'Only teammates can see this board. Bring them in so ideas start flowing.',
+    'Customers post and vote on feedback there. Paste it wherever they already talk to you.',
+  'invite-team': 'Only teammates can see this board. Bring them in so posts start coming in.',
   'connect-messenger':
     'Customers reach you from any page. Paste one snippet, or send it to whoever runs your site.',
   'help-article': 'Write the answer customers ask for most, then publish it.',
@@ -49,7 +49,7 @@ const WHY: Record<string, string> = {
     'Customers subscribe to hear about incidents. Link it from your footer or docs.',
   'first-win.feedback':
     'This ticks itself when someone outside your team posts or votes. Your own tests never count.',
-  'first-win.private': 'This ticks itself when a teammate posts the first idea.',
+  'first-win.private': 'This ticks itself when a teammate creates the first post.',
   'first-win.support':
     'This ticks itself when someone outside your team writes in. Your own tests never count.',
   'first-win.helpCenter':

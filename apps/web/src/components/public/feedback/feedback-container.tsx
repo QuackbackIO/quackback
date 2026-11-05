@@ -52,26 +52,26 @@ import { useFeedHandoff } from '@/components/public/feedback/feed-input-handoff'
 const EMPTY_VIEW_MESSAGES: Record<PublicFeedView, MessageDescriptor> = {
   mine: {
     id: 'portal.feedback.list.emptyMine',
-    defaultMessage: "You haven't posted any ideas yet.",
+    defaultMessage: "You haven't created any posts yet.",
   },
   voted: {
     id: 'portal.feedback.list.emptyVoted',
-    defaultMessage: "You haven't voted on any ideas yet.",
+    defaultMessage: "You haven't voted on any posts yet.",
   },
   following: {
     id: 'portal.feedback.list.emptyFollowing',
-    defaultMessage: "You aren't following any ideas yet.",
+    defaultMessage: "You aren't following any posts yet.",
   },
 }
 
 const WIDENED_SEARCH_MESSAGES: Record<WidenedSearch, MessageDescriptor> = {
   most: {
     id: 'portal.feedback.list.searchWidenedMost',
-    defaultMessage: 'No idea has all your words. Showing ideas with most of them.',
+    defaultMessage: 'No post has all your words. Showing posts with most of them.',
   },
   similar: {
     id: 'portal.feedback.list.searchWidenedSimilar',
-    defaultMessage: 'No exact matches. Showing ideas with a similar spelling.',
+    defaultMessage: 'No exact matches. Showing posts with a similar spelling.',
   },
 }
 
@@ -503,7 +503,7 @@ export function FeedbackContainer({
               {intl.formatMessage(
                 {
                   id: 'portal.feedback.list.resultCount',
-                  defaultMessage: '{count, plural, one {# idea} other {# ideas}}',
+                  defaultMessage: '{count, plural, one {# post} other {# posts}}',
                 },
                 { count: facetCounts.total }
               )}
@@ -539,7 +539,7 @@ export function FeedbackContainer({
                     {intl.formatMessage(
                       {
                         id: 'portal.feedback.list.noSearchResults',
-                        defaultMessage: 'No ideas match “{query}”.',
+                        defaultMessage: 'No posts match “{query}”.',
                       },
                       { query: activeSearch }
                     )}
@@ -552,7 +552,7 @@ export function FeedbackContainer({
                     >
                       {intl.formatMessage({
                         id: 'portal.feedback.list.postSearchAsIdea',
-                        defaultMessage: 'Post it as a new idea',
+                        defaultMessage: 'Create a post from it',
                       })}
                     </Button>
                   )}
@@ -571,7 +571,7 @@ export function FeedbackContainer({
                   <p className="text-base font-medium text-foreground">
                     {intl.formatMessage({
                       id: 'portal.feedback.list.noPostsYetTitle',
-                      defaultMessage: 'Got an idea? Be the first to share it',
+                      defaultMessage: 'No posts yet. Be the first to post',
                     })}
                   </p>
                   <p className="text-sm text-muted-foreground max-w-sm mx-auto">

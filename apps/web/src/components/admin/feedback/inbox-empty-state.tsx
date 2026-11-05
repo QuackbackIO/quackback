@@ -41,7 +41,7 @@ export function InboxEmptyState({ type, onClearFilters }: InboxEmptyStateProps) 
           icon={SparklesIcon}
           title={intl.formatMessage({
             id: 'onboarding.feedback.empty',
-            defaultMessage: 'No ideas yet',
+            defaultMessage: 'No posts yet',
           })}
           action={
             <div className="flex flex-wrap justify-center gap-2">

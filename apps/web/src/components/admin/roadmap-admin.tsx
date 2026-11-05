@@ -188,7 +188,7 @@ export function RoadmapAdmin() {
       <Link to="/admin/feedback">
         <FormattedMessage
           id="admin.empty.roadmap.action"
-          defaultMessage="Move an idea onto the roadmap"
+          defaultMessage="Move a post onto the roadmap"
         />
       </Link>
     </Button>

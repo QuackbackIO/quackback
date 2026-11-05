@@ -29,7 +29,7 @@ describe('FeedbackToolbar search', () => {
 
   it('shows the current search in a visible field', () => {
     renderToolbar({ currentSearch: 'widget' })
-    expect(screen.getByRole('searchbox', { name: 'Search ideas' })).toHaveProperty(
+    expect(screen.getByRole('searchbox', { name: 'Search posts' })).toHaveProperty(
       'value',
       'widget'
     )

@@ -3,17 +3,17 @@ import { test, expect } from '@playwright/test'
 // Runs signed in (the admin storage state), so the portal treats the viewer as
 // a real user and offers the Show views.
 test.describe('Portal feed views for a signed-in viewer', () => {
-  test('My ideas, Voted and Following narrow the feed', async ({ page }) => {
+  test('My posts, Voted and Following narrow the feed', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
     const show = page.getByRole('group', { name: 'Show' })
-    await expect(show.getByRole('button', { name: /All ideas/ })).toHaveAttribute(
+    await expect(show.getByRole('button', { name: /All posts/ })).toHaveAttribute(
       'aria-pressed',
       'true'
     )
 
     for (const [label, view] of [
-      ['My ideas', 'mine'],
+      ['My posts', 'mine'],
       ['Voted', 'voted'],
       ['Following', 'following'],
     ] as const) {
@@ -31,7 +31,7 @@ test.describe('Portal feed views for a signed-in viewer', () => {
       }
     }
 
-    await show.getByRole('button', { name: /All ideas/ }).click()
+    await show.getByRole('button', { name: /All posts/ }).click()
     await expect(page).not.toHaveURL(/[?&]view=/)
   })
 })
