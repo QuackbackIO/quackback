@@ -666,6 +666,8 @@ describe('runAssistantTurnForConversation hand-off on a filed proposal', () => {
 
     expect(assistantMock.recordHandoff).not.toHaveBeenCalled()
     expect(insertedMessages.map((m) => m.content)).not.toContain('Connecting you to the team')
+    // The new proposal still waits on the team, so the conversation keeps waiting.
+    expect(updateSets[0].waitingSince).toBeInstanceOf(Date)
   })
 
   it('leaves a turn that proposed nothing alone', async () => {

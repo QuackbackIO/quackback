@@ -403,7 +403,8 @@ export async function runAssistantTurnForConversation(
       url: c.url,
     }))
     await appendAssistantReply(conversationId, result.text, author, {
-      waiting: handsOff,
+      // A filed proposal waits on the team even when no new handoff is needed.
+      waiting: handsOff || result.proposedActions.length > 0,
       citations: persistedCitations,
     })
 
