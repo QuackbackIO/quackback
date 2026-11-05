@@ -76,8 +76,7 @@ export async function sweepFiledSpamConversations(opts?: {
   let deleted = 0
   for (;;) {
     const result = await db.execute(sql`
-      DELETE FROM conversations
-      WHERE id IN (
+      WITH doomed AS (
         SELECT id FROM conversations
         WHERE status = 'closed'
           AND end_reason = 'spam'
@@ -86,7 +85,18 @@ export async function sweepFiledSpamConversations(opts?: {
           AND resolved_at IS NOT NULL
           AND resolved_at < ${cutoffIso}::timestamptz
         LIMIT ${batchSize}
+      ),
+      deleted_pair_tickets AS (
+        DELETE FROM tickets
+        WHERE id IN (
+          SELECT tc.ticket_id
+          FROM ticket_conversations tc
+          WHERE tc.conversation_id IN (SELECT id FROM doomed)
+            AND tc.ticket_type = 'customer'
+        )
       )
+      DELETE FROM conversations
+      WHERE id IN (SELECT id FROM doomed)
       RETURNING id
     `)
     const batch = getExecuteRows<{ id: string }>(result).length

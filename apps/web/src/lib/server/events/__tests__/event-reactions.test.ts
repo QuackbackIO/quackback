@@ -41,6 +41,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 const reactions = vi.hoisted(() => ({
   recordSlaFromEvent: vi.fn(async (_event: unknown) => {}),
   autoReopenPairTicketFromEvent: vi.fn(async (_event: unknown) => {}),
+  autoResolvePairTicketFromEvent: vi.fn(async (_event: unknown) => {}),
   confirmResolutionFromCsat: vi.fn(
     async (_conversationId: unknown, _rating: unknown, _submittedAt: unknown) => {}
   ),
@@ -55,6 +56,7 @@ vi.mock('@/lib/server/domains/sla/sla.event-hooks', () => ({
 }))
 vi.mock('@/lib/server/domains/tickets/ticket.event-hooks', () => ({
   autoReopenPairTicketFromEvent: reactions.autoReopenPairTicketFromEvent,
+  autoResolvePairTicketFromEvent: reactions.autoResolvePairTicketFromEvent,
 }))
 vi.mock('@/lib/server/domains/assistant/assistant.involvement', async (importOriginal) => ({
   ...(await importOriginal<
@@ -563,6 +565,7 @@ describe.skipIf(!fixture.available)('event reactions (real DB, rolled back)', ()
       queues: [EVENT_REACTIONS_QUEUE, EVENT_SUMMARIES_QUEUE],
       expected: {
         recordSlaFromEvent: slaSaw('conversation.status_changed'),
+        autoResolvePairTicketFromEvent: slaSaw('conversation.status_changed'),
         summarizeConversationOnClose: summaryOf,
       },
     },

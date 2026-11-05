@@ -37,7 +37,16 @@ vi.mock('../conversation.query', async (importOriginal) => ({
 }))
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { conversations, conversationMessages, principal, user, eq } from '@/lib/server/db'
+import {
+  conversations,
+  conversationMessages,
+  principal,
+  ticketConversations,
+  tickets,
+  ticketStatuses,
+  user,
+  eq,
+} from '@/lib/server/db'
 import {
   endConversation,
   restoreConversationFromSpam,
@@ -152,7 +161,7 @@ describe.skipIf(!fixture.available)('spam lifecycle', () => {
     await expect(restoreConversationFromSpam(id, agentActor())).rejects.toThrow()
   })
 
-  it('delete-forever removes a spam-ended conversation and its cascaded children', async () => {
+  it('delete-forever removes a spam-ended conversation, its paired customer ticket, and its cascaded children', async () => {
     const id = await seedConversation()
     await testDb.insert(conversationMessages).values({
       conversationId: id,
@@ -160,12 +169,39 @@ describe.skipIf(!fixture.available)('spam lifecycle', () => {
       senderType: 'visitor',
       content: 'buy my stuff',
     })
+    const [statusRow] = await testDb
+      .insert(ticketStatuses)
+      .values({
+        name: 'New',
+        slug: `spam_pair_${Date.now().toString(36)}`,
+        category: 'open',
+        publicStage: 'received',
+      })
+      .returning({ id: ticketStatuses.id })
+    const [pairedTicket] = await testDb
+      .insert(tickets)
+      .values({
+        title: 'buy my stuff',
+        statusId: statusRow.id,
+        type: 'customer',
+        requesterPrincipalId: visitorPrincipalId,
+      })
+      .returning({ id: tickets.id })
+    await testDb.insert(ticketConversations).values({
+      ticketId: pairedTicket.id,
+      conversationId: id,
+      ticketType: 'customer',
+    })
     await endConversation(id, 'spam', null, agentActor())
 
     await deleteConversationPermanently(id, agentActor())
 
     const stored = await testDb.query.conversations.findFirst({ where: eq(conversations.id, id) })
     expect(stored).toBeUndefined()
+    const storedTicket = await testDb.query.tickets.findFirst({
+      where: eq(tickets.id, pairedTicket.id),
+    })
+    expect(storedTicket).toBeUndefined()
     const messages = await testDb
       .select({ id: conversationMessages.id })
       .from(conversationMessages)

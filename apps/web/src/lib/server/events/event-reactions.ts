@@ -52,6 +52,8 @@ export const EVENT_REACTIONS = {
     // A visitor message on a conversation paired with a customer ticket
     // reopens that ticket.
     'pair-ticket-reopen': ['message.created'],
+    // Closing a conversation paired with a customer ticket resolves that ticket.
+    'pair-ticket-resolve': ['conversation.status_changed'],
     // Confirm the assistant's resolution off a positive first CSAT rating.
     'assistant-csat-confirm': ['conversation.csat_submitted'],
   },
