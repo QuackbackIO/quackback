@@ -68,7 +68,7 @@ export function DomainSetupPanel({
         </span>
         {(phase === 'not-found' || phase === 'attention') && (
           <Button size="sm" variant="outline" disabled={checking} onClick={onCheckAgain}>
-            Check again
+            Verify
           </Button>
         )}
         {phase !== 'live' && <CopyInstructionsButton domain={domain} />}

@@ -92,8 +92,8 @@ test.describe('Public Post Submission', () => {
   })
 
   test('can open submit post form', async () => {
-    // Find and click the "What's your idea?" input to expand the form
-    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    // Find and click the "What's on your mind?" input to expand the form
+    const createPostInput = globalPage.getByPlaceholder("What's on your mind?")
     await expect(createPostInput).toBeVisible({ timeout: 10000 })
     await createPostInput.click()
 
@@ -104,7 +104,7 @@ test.describe('Public Post Submission', () => {
 
   test('form has correct placeholder text', async () => {
     // Expand the form by clicking the input
-    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    const createPostInput = globalPage.getByPlaceholder("What's on your mind?")
     await createPostInput.click()
 
     // Verify title placeholder is visible
@@ -117,7 +117,7 @@ test.describe('Public Post Submission', () => {
   })
 
   test('can format feedback details as headings', async () => {
-    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    const createPostInput = globalPage.getByPlaceholder("What's on your mind?")
     await createPostInput.click()
 
     const editor = globalPage.locator('.tiptap')
@@ -131,7 +131,7 @@ test.describe('Public Post Submission', () => {
 
   test('can close form with Cancel button', async () => {
     // Expand the form
-    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    const createPostInput = globalPage.getByPlaceholder("What's on your mind?")
     await createPostInput.click()
 
     // Wait for form to expand
@@ -148,7 +148,7 @@ test.describe('Public Post Submission', () => {
 
   test('can close form with Escape key', async () => {
     // Expand the form
-    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    const createPostInput = globalPage.getByPlaceholder("What's on your mind?")
     await createPostInput.click()
 
     // Wait for form to expand
@@ -164,7 +164,7 @@ test.describe('Public Post Submission', () => {
 
   test('form resets on close and reopen via Escape', async () => {
     // Expand the form
-    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    const createPostInput = globalPage.getByPlaceholder("What's on your mind?")
     await createPostInput.click()
 
     // Fill in some data
@@ -193,20 +193,20 @@ test.describe('Public Post Submission', () => {
 
   test('title input is auto-focused on open', async () => {
     // Open the dialog
-    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    const createPostInput = globalPage.getByPlaceholder("What's on your mind?")
     await createPostInput.click()
 
     // Wait for dialog to open
     await globalPage.waitForTimeout(500) // Small delay for focus to settle
 
     // Title input should have focus
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
+    const titleInput = globalPage.getByPlaceholder("What's on your mind?")
     await expect(titleInput).toBeFocused({ timeout: 5000 })
   })
 
   test('shows error when submitting without title', async () => {
     // Open the dialog
-    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    const createPostInput = globalPage.getByPlaceholder("What's on your mind?")
     await createPostInput.click()
 
     // Wait for dialog to open
@@ -225,11 +225,11 @@ test.describe('Public Post Submission', () => {
 
   test('shows error when submitting without description', async () => {
     // Open the dialog
-    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    const createPostInput = globalPage.getByPlaceholder("What's on your mind?")
     await createPostInput.click()
 
     // Wait for dialog to open
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
+    const titleInput = globalPage.getByPlaceholder("What's on your mind?")
     const editor = globalPage.locator('.tiptap')
     await expect(editor).toBeVisible({ timeout: 5000 })
 
@@ -248,11 +248,11 @@ test.describe('Public Post Submission', () => {
 
   test('can submit a basic post', async () => {
     // Open the dialog
-    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    const createPostInput = globalPage.getByPlaceholder("What's on your mind?")
     await createPostInput.click()
 
     // Wait for dialog to open
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
+    const titleInput = globalPage.getByPlaceholder("What's on your mind?")
     const editor = globalPage.locator('.tiptap')
     await expect(editor).toBeVisible({ timeout: 5000 })
 
@@ -281,11 +281,11 @@ test.describe('Public Post Submission', () => {
     const uniqueTitle = `E2E Test Post ${Date.now()}`
 
     // Open the dialog
-    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    const createPostInput = globalPage.getByPlaceholder("What's on your mind?")
     await createPostInput.click()
 
     // Wait for dialog to open
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
+    const titleInput = globalPage.getByPlaceholder("What's on your mind?")
     const editor = globalPage.locator('.tiptap')
     await expect(editor).toBeVisible({ timeout: 5000 })
 
@@ -319,8 +319,8 @@ test.describe('Board Selector', () => {
 
   test('board selector is visible in dialog header', async () => {
     // Open the dialog
-    await globalPage.getByPlaceholder("What's your idea?").click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    await expect(globalPage.getByPlaceholder("What's on your mind?")).toBeVisible({ timeout: 5000 })
 
     // Board selector should be visible (look for the select trigger)
     const boardSelector = globalPage.locator('[role="combobox"]')
@@ -329,8 +329,8 @@ test.describe('Board Selector', () => {
 
   test('board selector shows default board name', async () => {
     // Open the dialog
-    await globalPage.getByPlaceholder("What's your idea?").click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    await expect(globalPage.getByPlaceholder("What's on your mind?")).toBeVisible({ timeout: 5000 })
 
     // Board selector should show a board name (not just "Select board")
     const boardSelector = globalPage.locator('[role="combobox"]')
@@ -339,8 +339,8 @@ test.describe('Board Selector', () => {
 
   test('can open board selector dropdown', async () => {
     // Open the dialog
-    await globalPage.getByPlaceholder("What's your idea?").click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    await expect(globalPage.getByPlaceholder("What's on your mind?")).toBeVisible({ timeout: 5000 })
 
     // Click the board selector to open dropdown
     const boardSelector = globalPage.locator('[role="combobox"]')
@@ -353,8 +353,8 @@ test.describe('Board Selector', () => {
 
   test('can select a different board', async () => {
     // Open the dialog
-    await globalPage.getByPlaceholder("What's your idea?").click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    await expect(globalPage.getByPlaceholder("What's on your mind?")).toBeVisible({ timeout: 5000 })
 
     // Get initial board name
     const boardSelector = globalPage.locator('[role="combobox"]')
@@ -396,7 +396,7 @@ test.describe('Board Selector', () => {
     await expect(postCards.first()).toBeVisible({ timeout: 15000 })
 
     // Open the form
-    await globalPage.getByPlaceholder("What's your idea?").click()
+    await globalPage.getByPlaceholder("What's on your mind?").click()
     const editor = globalPage.locator('.tiptap')
     await expect(editor).toBeVisible({ timeout: 10000 })
 
@@ -414,8 +414,8 @@ test.describe('Board Selector', () => {
     const uniqueTitle = `Different Board Post ${Date.now()}`
 
     // Open the dialog
-    await globalPage.getByPlaceholder("What's your idea?").click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    await expect(globalPage.getByPlaceholder("What's on your mind?")).toBeVisible({ timeout: 5000 })
 
     // Change board selection
     const boardSelector = globalPage.locator('[role="combobox"]')
@@ -434,7 +434,7 @@ test.describe('Board Selector', () => {
     }
 
     // Fill in the form
-    await globalPage.getByPlaceholder("What's your idea?").fill(uniqueTitle)
+    await globalPage.getByPlaceholder("What's on your mind?").fill(uniqueTitle)
 
     const editor = globalPage.locator('.tiptap')
     await editor.click()
@@ -461,8 +461,8 @@ test.describe('Board Selector', () => {
 
   test('board selection persists after typing content', async () => {
     // Open the dialog
-    await globalPage.getByPlaceholder("What's your idea?").click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    await expect(globalPage.getByPlaceholder("What's on your mind?")).toBeVisible({ timeout: 5000 })
 
     // Change board selection
     const boardSelector = globalPage.locator('[role="combobox"]')
@@ -477,7 +477,7 @@ test.describe('Board Selector', () => {
     await firstOption.click()
 
     // Type content
-    await globalPage.getByPlaceholder("What's your idea?").fill('Test title')
+    await globalPage.getByPlaceholder("What's on your mind?").fill('Test title')
     const editor = globalPage.locator('.tiptap')
     await editor.click()
     await globalPage.keyboard.type('Test content')
@@ -488,7 +488,7 @@ test.describe('Board Selector', () => {
 
   test('board selection resets when dialog is closed and reopened', async () => {
     // Open the form
-    await globalPage.getByPlaceholder("What's your idea?").click()
+    await globalPage.getByPlaceholder("What's on your mind?").click()
     const editor = globalPage.locator('.tiptap')
     await expect(editor).toBeVisible({ timeout: 5000 })
 
@@ -523,7 +523,7 @@ test.describe('Board Selector', () => {
     })
 
     // Reopen form
-    await globalPage.getByPlaceholder("What's your idea?").click()
+    await globalPage.getByPlaceholder("What's on your mind?").click()
     await expect(editor).toBeVisible({ timeout: 5000 })
 
     // Board should be reset to initial/default
@@ -532,8 +532,8 @@ test.describe('Board Selector', () => {
 
   test('shows "Posting to" label before board selector', async () => {
     // Open the dialog
-    await globalPage.getByPlaceholder("What's your idea?").click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    await expect(globalPage.getByPlaceholder("What's on your mind?")).toBeVisible({ timeout: 5000 })
 
     // "Posting to" label should be visible
     await expect(globalPage.getByText('Posting to')).toBeVisible()
@@ -543,7 +543,7 @@ test.describe('Board Selector', () => {
     const editor = globalPage.locator('.tiptap')
 
     // Start with no filter - open form and note default board
-    await globalPage.getByPlaceholder("What's your idea?").click()
+    await globalPage.getByPlaceholder("What's on your mind?").click()
     await expect(editor).toBeVisible({ timeout: 5000 })
 
     // Close form
@@ -559,7 +559,7 @@ test.describe('Board Selector', () => {
       await globalPage.waitForLoadState('networkidle')
 
       // Open form again
-      await globalPage.getByPlaceholder("What's your idea?").click()
+      await globalPage.getByPlaceholder("What's on your mind?").click()
       await expect(editor).toBeVisible({ timeout: 5000 })
 
       const postingTo = globalPage.getByLabel(/Posting to Bug Reports/i)
@@ -578,7 +578,7 @@ test.describe('Board Selector', () => {
       await globalPage.waitForLoadState('networkidle')
 
       // Open form - should post to Feature Requests with no switcher
-      await globalPage.getByPlaceholder("What's your idea?").click()
+      await globalPage.getByPlaceholder("What's on your mind?").click()
       await expect(editor).toBeVisible({ timeout: 5000 })
       const featuresPosting = globalPage.getByLabel(/Posting to Feature Requests/i)
       await expect(featuresPosting).toBeVisible()
@@ -598,7 +598,7 @@ test.describe('Board Selector', () => {
       await globalPage.waitForLoadState('networkidle')
 
       // Open form - should post to Bug Reports with no switcher
-      await globalPage.getByPlaceholder("What's your idea?").click()
+      await globalPage.getByPlaceholder("What's on your mind?").click()
       await expect(editor).toBeVisible({ timeout: 5000 })
       const bugsPosting = globalPage.getByLabel(/Posting to Bug Reports/i)
       await expect(bugsPosting).toBeVisible()
@@ -616,7 +616,7 @@ test.describe('Board Selector', () => {
     await globalPage.waitForLoadState('networkidle')
 
     // Open form - should default to first board (not filtered)
-    await globalPage.getByPlaceholder("What's your idea?").click()
+    await globalPage.getByPlaceholder("What's on your mind?").click()
     await expect(editor).toBeVisible({ timeout: 5000 })
 
     // Home keeps the board switcher
@@ -645,8 +645,10 @@ test.describe('Board Selector', () => {
       await globalPage.waitForLoadState('networkidle')
 
       // Open dialog
-      await globalPage.getByPlaceholder("What's your idea?").click()
-      await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+      await globalPage.getByPlaceholder("What's on your mind?").click()
+      await expect(globalPage.getByPlaceholder("What's on your mind?")).toBeVisible({
+        timeout: 5000,
+      })
 
       // Board selector should show the clicked board's name
       // Extract just the board name (remove any count badges)
@@ -669,8 +671,8 @@ test.describe('Rich Text Editor', () => {
     await globalPage.waitForLoadState('networkidle')
 
     // Open the dialog for all tests
-    await globalPage.getByPlaceholder("What's your idea?").click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    await expect(globalPage.getByPlaceholder("What's on your mind?")).toBeVisible({ timeout: 5000 })
   })
 
   test('can type plain text in editor', async () => {
@@ -832,12 +834,12 @@ test.describe('Submission States and Integration', () => {
     await globalPage.waitForLoadState('networkidle')
   })
 
-  test('Submit button shows "Submit" initially', async () => {
-    await globalPage.getByPlaceholder("What's your idea?").click()
-    await expect(globalPage.getByPlaceholder("What's your idea?")).toBeVisible({ timeout: 5000 })
+  test('Submit button shows "Post" initially', async () => {
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    await expect(globalPage.getByPlaceholder("What's on your mind?")).toBeVisible({ timeout: 5000 })
 
     const submitButton = globalPage.getByRole('button', { name: /^submit$/i })
-    await expect(submitButton).toHaveText('Submit')
+    await expect(submitButton).toHaveText('Post')
   })
 
   test('can submit with Cmd+Enter keyboard shortcut', async () => {
@@ -847,8 +849,8 @@ test.describe('Submission States and Integration', () => {
 
     const uniqueTitle = `Keyboard Submit Test ${Date.now()}`
 
-    await globalPage.getByPlaceholder("What's your idea?").click()
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    const titleInput = globalPage.getByPlaceholder("What's on your mind?")
     const editor = globalPage.locator('.tiptap')
     await expect(editor).toBeVisible({ timeout: 5000 })
 
@@ -875,7 +877,7 @@ test.describe('Submission States and Integration', () => {
     await globalPage.waitForLoadState('networkidle')
 
     // Submit form input should be visible
-    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    const createPostInput = globalPage.getByPlaceholder("What's on your mind?")
     await expect(createPostInput).toBeVisible({ timeout: 10000 })
   })
 
@@ -896,8 +898,8 @@ test.describe('Submission States and Integration', () => {
 
     const uniqueTitle = `Feature Requests Board Post ${Date.now()}`
 
-    await globalPage.getByPlaceholder("What's your idea?").click()
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    const titleInput = globalPage.getByPlaceholder("What's on your mind?")
     const editor = globalPage.locator('.tiptap')
     await expect(editor).toBeVisible({ timeout: 5000 })
 
@@ -930,8 +932,8 @@ test.describe('Submission States and Integration', () => {
 
     const uniqueTitle = `Author Test Post ${Date.now()}`
 
-    await globalPage.getByPlaceholder("What's your idea?").click()
-    const titleInput = globalPage.getByPlaceholder("What's your idea?")
+    await globalPage.getByPlaceholder("What's on your mind?").click()
+    const titleInput = globalPage.getByPlaceholder("What's on your mind?")
     const editor = globalPage.locator('.tiptap')
     await expect(editor).toBeVisible({ timeout: 5000 })
 

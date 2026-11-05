@@ -65,7 +65,7 @@ it('names the first win and summary for private team feedback, including legacy 
       features: { ...status.features!, supportInbox: false, helpCenter: false, statusPage: false },
     }
     const tasks = buildLaunchTasks(privateStatus)
-    expect(tasks.find((task) => task.id === 'first-win')?.title).toBe('A teammate posts an idea')
+    expect(tasks.find((task) => task.id === 'first-win')?.title).toBe('A teammate creates a post')
     expect(tasks.find((task) => task.id === 'create-board')?.title).toBe(
       'Create a private team board'
     )

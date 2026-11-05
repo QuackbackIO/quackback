@@ -22,7 +22,8 @@ export function useCreateChangelog() {
 
   return useMutation({
     mutationFn: (input: CreateChangelogInput) => createChangelogFn({ data: input }),
-    onSuccess: () => {
+    onSuccess: (_data, input) => {
+      if (input.publishState.type === 'published') announceShipMoment()
       // Invalidate all changelog lists to refetch with new entry
       queryClient.invalidateQueries({ queryKey: changelogKeys.lists() })
       // Also invalidate public lists in case it was published
@@ -39,7 +40,11 @@ export function useUpdateChangelog() {
 
   return useMutation({
     mutationFn: (input: UpdateChangelogInput) => updateChangelogFn({ data: input }),
-    onSuccess: (data) => {
+    onSuccess: (data, input) => {
+      // A save of an entry already out carries its publish date; a first publish does not.
+      if (input.publishState?.type === 'published' && !input.publishState.publishAt) {
+        announceShipMoment()
+      }
       const id = data.id as ChangelogId
       // Update the detail cache with new data
       queryClient.setQueryData(changelogKeys.detail(id), data)
@@ -68,4 +73,13 @@ export function useDeleteChangelog() {
       queryClient.invalidateQueries({ queryKey: changelogKeys.public() })
     },
   })
+}
+
+/**
+ * A ship moment, for the one-time GitHub star prompt (see lib/client/ship-moment.ts,
+ * whose event name this repeats). Dispatched inline so these mutations, which
+ * portal pages load too, pull in no extra module.
+ */
+function announceShipMoment(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('quackback:ship-moment'))
 }
