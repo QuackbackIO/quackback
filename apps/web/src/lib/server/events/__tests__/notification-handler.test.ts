@@ -696,6 +696,26 @@ describe('notificationHook — assistant.handed_off', () => {
       }),
     ])
   })
+
+  it('shows a known hand-off reason by its label, not its id', async () => {
+    const event = {
+      id: 'evt-handoff-2',
+      type: 'assistant.handed_off',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'service', principalId: 'principal_quinn', displayName: 'Quinn' },
+      data: { conversationId: 'conversation_1', reason: 'awaiting_confirmation' },
+    } as EventData
+
+    const target: NotificationTarget = { principalIds: ['principal_agent' as never] }
+    const config = { conversationId: 'conversation_1', reason: 'awaiting_confirmation' }
+
+    await notificationHook.run(event, target, config)
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        body: 'AI agent is waiting for a teammate to confirm an action',
+      }),
+    ])
+  })
 })
 
 // WO-3 slice 3 (ported characterization): replaces the deleted direct

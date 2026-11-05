@@ -204,7 +204,7 @@ async function surfacePendingActionNote(row: AssistantPendingAction): Promise<vo
     if (row.ticketId) {
       await addTicketNote(quinnActor(assistant.id), {
         ticketId: row.ticketId,
-        content: `Requested approval: ${row.summary}`,
+        content: `Waiting for a teammate to confirm: ${row.summary}`,
       })
     }
   } catch (err) {
