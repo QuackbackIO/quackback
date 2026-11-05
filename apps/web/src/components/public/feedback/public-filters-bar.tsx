@@ -342,7 +342,7 @@ function buildActiveChips(args: {
     const viewLabels = {
       mine: intl.formatMessage({
         id: 'portal.feedback.panel.view.mine',
-        defaultMessage: 'My ideas',
+        defaultMessage: 'My posts',
       }),
       voted: intl.formatMessage({
         id: 'portal.feedback.panel.view.voted',

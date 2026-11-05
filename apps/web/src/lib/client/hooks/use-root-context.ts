@@ -30,6 +30,11 @@ export function useBillingEnabled(): boolean {
   return useRouteContext({ from: '__root__', select: (context) => !!context.billingEnabled })
 }
 
+/** Self-hosted, not the Cloud fleet, not switched off: the GitHub star prompt may show. */
+export function useGithubStarPrompt(): boolean {
+  return useRouteContext({ from: '__root__', select: (context) => !!context.githubStarPrompt })
+}
+
 export function useCloudEnabled(): boolean {
   return useRouteContext({ from: '__root__', select: (context) => !!context.cloudEnabled })
 }

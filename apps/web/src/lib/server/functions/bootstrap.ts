@@ -9,6 +9,7 @@ import {
 } from '@/lib/shared/theme'
 import { getUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
 import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
+import { starPromptAllowedHere } from '@/lib/server/github-star-prompt'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import {
   getSetupState,
@@ -83,6 +84,11 @@ export interface BootstrapData {
    * Gates the Settings Domains row. False on every self-hosted install.
    */
   cloudEnabled: boolean
+  /**
+   * Whether the one-time GitHub star prompt and the Help menu's GitHub link may
+   * show: self-hosted only, never on the Cloud fleet, and not switched off.
+   */
+  githubStarPrompt: boolean
   /**
    * Browser product analytics for the admin app, present only when the
    * operator set `POSTHOG_KEY`. `workspaceId` is the opaque group key the
@@ -305,6 +311,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     updateBannerDismissedVersion,
     billingEnabled: cloud.enabled && (cloud.canUpgrade || cloud.canManageBilling),
     cloudEnabled: cloud.enabled,
+    githubStarPrompt: starPromptAllowedHere(cloud.enabled),
     productAnalytics: config.productAnalytics
       ? {
           key: config.productAnalytics.key,

@@ -49,7 +49,7 @@ test.describe('Post @-mention happy path', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const createPostInput = page.getByPlaceholder("What's your idea?")
+    const createPostInput = page.getByPlaceholder("What's on your mind?")
     await expect(createPostInput).toBeVisible({ timeout: 15000 })
     await createPostInput.click()
 
