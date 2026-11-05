@@ -169,7 +169,7 @@ describe('guided tour', () => {
     const start = await startTour()
 
     expect(dialog()).toHaveTextContent(
-      'Feedback. Ideas from customers land here. Share the board link to get the first one.'
+      'Feedback. Posts from customers land here. Share the board link to get the first one.'
     )
     expect(dialog()).toHaveTextContent('1 of 4')
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()

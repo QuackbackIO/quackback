@@ -389,6 +389,8 @@ export interface ChangeStatusResult extends Post {
   boardSlug: string
   previousStatus: string
   newStatus: string
+  /** The post moved into a complete status from one that was not: something shipped. */
+  enteredComplete: boolean
 }
 
 /**

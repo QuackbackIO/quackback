@@ -168,14 +168,14 @@ export const FIRST_WIN_NOUN: Record<OnboardingOutcome, string> = {
   product_feedback: 'customer post or vote',
   customer_support: 'customer conversation',
   help_center: 'helpful vote from a visitor',
-  internal: 'idea from a teammate',
+  internal: 'post from a teammate',
   status_page: 'subscriber',
 }
 
 /** The first win names what it is for the primary goal. */
 const FIRST_WIN_WORDING: Record<OnboardingOutcome, { variant: string; title: string }> = {
-  product_feedback: { variant: 'feedback', title: 'A customer posts an idea' },
-  internal: { variant: 'private', title: 'A teammate posts an idea' },
+  product_feedback: { variant: 'feedback', title: 'A customer creates a post' },
+  internal: { variant: 'private', title: 'A teammate creates a post' },
   customer_support: { variant: 'support', title: 'A customer starts a conversation' },
   help_center: { variant: 'helpCenter', title: 'A customer finds it helpful' },
   status_page: { variant: 'status', title: 'A customer subscribes' },
@@ -302,8 +302,8 @@ function buildOutcomeTasks(
     title: outcome === 'internal' ? 'Create a private team board' : 'Create a feedback board',
     description:
       outcome === 'internal'
-        ? 'Give teammates a private place to share ideas.'
-        : 'Give customers a place to submit and vote on ideas.',
+        ? 'Give teammates a private place to post feedback.'
+        : 'Give customers a place to post and vote on feedback.',
     completed: status.hasBoards,
     canAct: permissions.boardManage,
     ...(boardCapacityBlocked

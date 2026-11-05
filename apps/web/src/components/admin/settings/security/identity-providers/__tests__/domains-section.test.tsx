@@ -49,7 +49,7 @@ describe('<DomainsSection> with domains another proof covers', () => {
     })
 
     expect(
-      await screen.findByText('Already proven through email sending. Click Verify to use it.')
+      await screen.findByText('Already verified through email sending. Click Verify to use it.')
     ).toBeInTheDocument()
     // The covered domain's record is not asked for; the other one's still is.
     expect(screen.queryByText(/tok-a/)).not.toBeInTheDocument()
@@ -67,9 +67,9 @@ describe('<DomainsSection> with domains another proof covers', () => {
     })
 
     expect(
-      await screen.findByText('Already proven by this workspace. Click Verify to use it.')
+      await screen.findByText('Already verified by this workspace. Click Verify to use it.')
     ).toBeInTheDocument()
-    expect(screen.getByText('Verified, already proven by this workspace')).toBeInTheDocument()
+    expect(screen.getByText('Verified by this workspace')).toBeInTheDocument()
     expect(screen.queryByText(/email sending/)).not.toBeInTheDocument()
   })
 
@@ -78,13 +78,20 @@ describe('<DomainsSection> with domains another proof covers', () => {
     expect(screen.getByPlaceholderText('example.com')).toBeInTheDocument()
   })
 
-  it('says where a covered verified domain was proven', async () => {
+  it('says where a covered verified domain was verified, and nothing for a plain one', async () => {
     renderSection([domain('a', 'acme.com', true), domain('b', 'example.org', true)], {
       domain_a: 'email-sending',
     })
 
     expect(await screen.findByText('Verified through email sending')).toBeInTheDocument()
-    expect(screen.getByText('Verified')).toBeInTheDocument()
+    expect(screen.queryByText('Verified')).not.toBeInTheDocument()
+  })
+
+  it('says Pending for a domain still waiting for its record', async () => {
+    renderSection([domain('a', 'acme.com', false)], {})
+
+    expect(await screen.findByText('Pending')).toBeInTheDocument()
+    expect(screen.queryByText('Pending verification')).not.toBeInTheDocument()
   })
 })
 

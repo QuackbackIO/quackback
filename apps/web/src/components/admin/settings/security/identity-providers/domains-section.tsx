@@ -276,11 +276,7 @@ function DomainRow({
           )}
           <span className="truncate text-sm font-medium">{domain.name}</span>
           <span className="text-sm text-muted-foreground">
-            {isVerified
-              ? provenBy
-                ? verifiedThroughLabel(provenBy)
-                : 'Verified'
-              : 'Pending verification'}
+            {isVerified ? (provenBy ? verifiedThroughLabel(provenBy) : null) : 'Pending'}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-3">
