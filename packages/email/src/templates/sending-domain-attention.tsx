@@ -33,7 +33,7 @@ export interface SendingDomainAttentionEmailProps {
 
 const PURPOSE_LABEL: Record<SendingDomainAttentionRecord['purpose'], string> = {
   ownership: 'ownership record',
-  dkim: 'signing (DKIM) record',
+  dkim: 'DKIM record',
   'mail-from': 'return path record',
 }
 
@@ -79,7 +79,7 @@ export function SendingDomainAttentionEmail({
           <Link href={settingsUrl} style={utils.link}>
             Open email settings
           </Link>{' '}
-          to see every record and check again.
+          to see every record and verify.
         </Text>
       ) : null}
       <TransactionalFooter>

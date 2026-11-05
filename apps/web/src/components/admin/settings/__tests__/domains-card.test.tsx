@@ -55,7 +55,7 @@ describe('<DomainsCard>', () => {
     expect(screen.getByText('proof-token-1')).toBeTruthy()
   })
 
-  it('asks for no TXT record once ownership is proven', () => {
+  it('asks for no TXT record once ownership is verified', () => {
     renderCard([
       {
         ...base,
@@ -129,19 +129,19 @@ describe('<DomainsCard>', () => {
     provenBy,
   })
 
-  it('shows a covered hostname as already proven in place of the challenge record', () => {
+  it('shows a covered hostname as already verified in place of the challenge record', () => {
     renderCard([challenged('email-sending')])
     const rows = [...document.querySelectorAll('[data-slot="dns-record"]')]
     expect(rows.map((r) => r.textContent)).toEqual([
       'Waiting: Routingfeedback.example.comCNAMEedge.example.net',
     ])
     expect(screen.queryByText('proof-1')).toBeNull()
-    expect(screen.getByText('Already proven through email sending')).toBeTruthy()
+    expect(screen.getByText('Already verified through email sending')).toBeTruthy()
   })
 
   it('says only that the workspace proved it when the viewer may not see the source', () => {
     renderCard([challenged('workspace')])
-    expect(screen.getByText('Already proven by this workspace')).toBeTruthy()
+    expect(screen.getByText('Already verified by this workspace')).toBeTruthy()
     expect(screen.queryByText(/email sending|single sign-on/)).toBeNull()
     expect(screen.queryByText('proof-1')).toBeNull()
   })
@@ -149,7 +149,27 @@ describe('<DomainsCard>', () => {
   it('asks for the challenge record as before when nothing covers the hostname', () => {
     renderCard([challenged(null)])
     expect(screen.getByText('proof-1')).toBeTruthy()
-    expect(screen.queryByText(/Already proven/)).toBeNull()
+    expect(screen.queryByText(/Already verified/)).toBeNull()
+  })
+
+  it('calls the card Custom domains, the field Domain and the re-check Verify', () => {
+    renderCard([challenged(null)])
+    expect(screen.getByText('Custom domains')).toBeTruthy()
+    expect(screen.getByLabelText('Domain')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Verify' })).toBeTruthy()
+    expect(screen.queryByText('Web addresses')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull()
+  })
+
+  it('says Pending while waiting and tells a failed domain to verify again', () => {
+    renderCard([challenged(null)])
+    expect(screen.getByText('Pending')).toBeTruthy()
+    cleanup()
+    renderCard([{ ...challenged(null), readiness: 'failed' }])
+    expect(screen.getByText('Needs attention')).toBeTruthy()
+    expect(
+      screen.getByText("We couldn't confirm these records. Check each name and value, then verify.")
+    ).toBeTruthy()
   })
 
   it('names no hosting provider in its description', () => {
