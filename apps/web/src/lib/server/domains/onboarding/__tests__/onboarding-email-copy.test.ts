@@ -55,7 +55,7 @@ describe('readyEmailCopy', () => {
     expect(copy.dir).toBe('ltr')
     expect(copy.paragraphs).toEqual([
       'Your board is live at acme.quackback.test.',
-      'One step gets you to your first customer idea: share the link.',
+      'One step gets you to your first customer post: share the link.',
       'You are on a 14-day Pro trial. No card needed, and Acme moves to Free if you do nothing.',
     ])
     expect(copy.share).toEqual({

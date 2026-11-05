@@ -52,8 +52,8 @@ describe('launch task labels', () => {
   })
 
   it.each([
-    [['product_feedback'], false, 'A customer posts an idea'],
-    [['product_feedback'], true, 'A teammate posts an idea'],
+    [['product_feedback'], false, 'A customer creates a post'],
+    [['product_feedback'], true, 'A teammate creates a post'],
     [['customer_support', 'product_feedback'], false, 'A customer starts a conversation'],
     [['help_center'], false, 'A customer finds it helpful'],
     [['status_page', 'help_center'], false, 'A customer subscribes'],

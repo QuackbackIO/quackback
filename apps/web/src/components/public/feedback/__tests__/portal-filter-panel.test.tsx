@@ -58,10 +58,10 @@ describe('PortalFilterPanel', () => {
   it('shows views with counts for a signed-in viewer and switches between them', () => {
     const { setFilters } = renderPanel()
     const show = section('Show')
-    expect(within(show).getByRole('button', { name: /My ideas\s*2/ })).toBeInTheDocument()
+    expect(within(show).getByRole('button', { name: /My posts\s*2/ })).toBeInTheDocument()
     fireEvent.click(within(show).getByRole('button', { name: /Following/ }))
     expect(setFilters).toHaveBeenCalledWith({ view: 'following' })
-    fireEvent.click(within(show).getByRole('button', { name: /All ideas/ }))
+    fireEvent.click(within(show).getByRole('button', { name: /All posts/ }))
     expect(setFilters).toHaveBeenCalledWith({ view: undefined })
   })
 

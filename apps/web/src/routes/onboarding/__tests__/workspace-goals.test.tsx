@@ -284,7 +284,7 @@ describe('self-hosted ready step', () => {
   it('previews the portal as it really is: empty, with its real tabs', async () => {
     await finishSetup(['product_feedback'])
 
-    expect(screen.getByText('Got an idea? Be the first to share it')).toBeInTheDocument()
+    expect(screen.getByText('No posts yet. Be the first to post')).toBeInTheDocument()
     expect(screen.getByText('The Acme team reads every request.')).toBeInTheDocument()
     expect(screen.queryByText('Dark mode')).toBeNull()
     expect(screen.getByText(/Your portal is live at/)).toBeInTheDocument()

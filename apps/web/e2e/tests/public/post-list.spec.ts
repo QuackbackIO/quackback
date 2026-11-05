@@ -1241,7 +1241,7 @@ test.describe('Post List - Search Accuracy', () => {
     // Use a search term that exists in the seed post titles
     const searchTerm = 'dark mode'
 
-    const searchInput = page.getByRole('searchbox', { name: 'Search ideas' })
+    const searchInput = page.getByRole('searchbox', { name: 'Search posts' })
     await searchInput.fill(searchTerm)
     await searchInput.press('Enter')
 
@@ -1311,7 +1311,7 @@ test.describe('Post List - Search Accuracy', () => {
     // Search for a string that will never match real post titles
     const impossibleTerm = 'xyzzy_no_such_post_zqwerty_99999'
 
-    const searchInput = page.getByRole('searchbox', { name: 'Search ideas' })
+    const searchInput = page.getByRole('searchbox', { name: 'Search posts' })
     await searchInput.fill(impossibleTerm)
     await searchInput.press('Enter')
 
@@ -1320,7 +1320,7 @@ test.describe('Post List - Search Accuracy', () => {
     await page.waitForTimeout(500)
 
     // Should show the specific "no match" message rather than just a blank list
-    const noMatchMsg = page.getByText(`No ideas match “${impossibleTerm}”.`)
+    const noMatchMsg = page.getByText(`No posts match “${impossibleTerm}”.`)
     await expect(noMatchMsg).toBeVisible({ timeout: 5000 })
 
     // And there should be no post cards
