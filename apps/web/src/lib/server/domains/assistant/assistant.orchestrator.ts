@@ -362,12 +362,23 @@ export async function runAssistantTurnForConversation(
       throw new InternalSourcedReplyError()
     }
 
+    // A filed proposal ("ask first" write tool) waits on a teammate, so the
+    // conversation goes to the team the same way a model-led handoff does.
+    // The model's own handoff wins when it chose one (one handoff only), and a
+    // conversation Quinn already handed off (a workflow-step re-engagement) is
+    // left with the team it already has.
+    const proposalHandoff =
+      result.escalation?.mode !== 'handoff' &&
+      result.proposedActions.length > 0 &&
+      latest?.status !== 'handed_off'
+    const handsOff = result.escalation?.mode === 'handoff' || proposalHandoff
+
     // A substantive answer or escalation engages Quinn and needs an
     // involvement. A standalone inability reply does not open an involvement
     // that could otherwise sit active forever with no answer clock.
     const involvement =
       active ??
-      (result.status === 'answered' || result.escalation
+      (result.status === 'answered' || result.escalation || proposalHandoff
         ? await openInvolvement({ conversationId, triggeredBy: 'first_touch' })
         : null)
 
@@ -392,7 +403,8 @@ export async function runAssistantTurnForConversation(
       url: c.url,
     }))
     await appendAssistantReply(conversationId, result.text, author, {
-      waiting: result.escalation?.mode === 'handoff',
+      // A filed proposal waits on the team even when no new handoff is needed.
+      waiting: handsOff || result.proposedActions.length > 0,
       citations: persistedCitations,
     })
 
@@ -409,6 +421,22 @@ export async function runAssistantTurnForConversation(
         result.escalation.reason,
         author,
         result.escalation
+      )
+      return
+    }
+
+    if (proposalHandoff) {
+      if (!involvement) {
+        throw new Error('assistant proposal handoff requires an involvement')
+      }
+      // The confirm card stays in the thread; routing puts it in front of the
+      // teammate who decides it.
+      await escalateToHuman(
+        conversationId,
+        involvement.id,
+        'awaiting_confirmation',
+        author,
+        proposalHandoffNote(result.proposedActions)
       )
       return
     }
@@ -494,8 +522,23 @@ async function runAssistantFailureFloor(
   })
 }
 
+/** The teammate-facing handoff note for a turn that filed actions to confirm. */
+function proposalHandoffNote(proposed: readonly { summary: string }[]) {
+  const summaries = proposed.map((p) => p.summary.trim().replace(/[.!?]+$/u, ''))
+  return {
+    reason: 'awaiting_confirmation',
+    customerNeed:
+      summaries.length === 1
+        ? `a teammate to confirm this action: ${summaries[0]}`
+        : `a teammate to confirm these actions: ${summaries.join('; ')}`,
+    attempted: [],
+    recommendedNextStep: 'Confirm or decline the action card in this conversation',
+  }
+}
+
 /**
- * Terminal escalation shared by the model-led handoff and the failure floor.
+ * Terminal escalation shared by the model-led handoff, the proposal handoff
+ * and the failure floor.
  * recordHandoff is the compare-and-set gate: when it loses (a concurrent turn
  * already ended the involvement), every conversation-side effect is skipped,
  * so the customer can never see a second "Connecting you to the team".

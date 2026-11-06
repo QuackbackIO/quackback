@@ -131,19 +131,27 @@ export const assistantPendingActions = pgTable(
     // The person whose authority the request borrows. FK declared below with
     // a short name: the generated one overflows Postgres's identifier limit.
     onBehalfOfPrincipalId: typeIdColumnNullable('principal')('on_behalf_of_principal_id'),
+    // Unused: nothing writes or reads this column. Due to be dropped.
     requestedVia: text('requested_via', { enum: APPROVAL_REQUEST_CHANNELS }),
     // The credential that filed it (an API key id or an OAuth client id). A
     // decision can never arrive through it.
     credentialId: text('credential_id'),
     clientName: text('client_name'),
+    // Unused: no longer written (new rows leave it NULL) and nothing reads it. Due to be dropped.
     risk: text('risk', { enum: APPROVAL_RISKS }),
     // The digest of the exact operation proposed; a decision binds to it.
     argsDigest: text('args_digest'),
+    // Unused: nothing writes or reads this column. Due to be dropped.
     contractDigest: text('contract_digest'),
+    // Unused: nothing writes or reads this column. Due to be dropped.
     decidedVia: text('decided_via', { enum: APPROVAL_DECISION_CHANNELS }),
+    // Unused: nothing writes or reads this column. Due to be dropped.
     decisionReason: text('decision_reason'),
+    // Unused: nothing writes or reads this column. Due to be dropped.
     executionState: text('execution_state', { enum: APPROVAL_EXECUTION_STATES }),
+    // Unused: nothing writes or reads this column. Due to be dropped.
     executionJobId: text('execution_job_id'),
+    // Unused: nothing writes or reads this column. Due to be dropped.
     executionError: text('execution_error'),
     // Why a request stopped being decidable without a decision, such as
     // `superseded:merged`.

@@ -6,18 +6,7 @@
  * callers can never both "win" the same transition, and an UPDATE that
  * matches no row simply returns null instead of throwing.
  */
-import {
-  db,
-  eq,
-  and,
-  lt,
-  gt,
-  desc,
-  assistantPendingActions,
-  type ApprovalDecisionChannel,
-  type ApprovalRisk,
-  type Transaction,
-} from '@/lib/server/db'
+import { db, eq, and, lt, gt, desc, assistantPendingActions } from '@/lib/server/db'
 import type {
   AssistantPendingActionId,
   AssistantInvolvementId,
@@ -34,19 +23,11 @@ import { quinnActor } from './assistant.actor'
 import { addTicketNote } from '@/lib/server/domains/tickets/ticket-message.service'
 import { logger } from '@/lib/server/logger'
 import type { AssistantRole } from '@/lib/shared/assistant/config'
-import { emit } from '@/lib/server/events/emit'
 import {
-  approvalApplied,
-  approvalDecided,
-  approvalRequested,
-} from '@/lib/server/events/catalogue/approval'
-import {
-  approvalContentDigest,
-  approvalRiskOf,
-  normalizeDecisionReason,
+  pendingActionContentDigest,
   requesterColumns,
-  type ApprovalRequester,
-} from './approvals.service'
+  type PendingActionRequester,
+} from './pending-action-decisions'
 
 const log = logger.child({ component: 'assistant-pending-actions' })
 
@@ -56,16 +37,15 @@ export type AssistantPendingAction = typeof assistantPendingActions.$inferSelect
 const DEFAULT_TTL_HOURS = 24
 
 /**
- * A pending action's polymorphic parent (unified inbox §3.3): at most one of
- * conversation, ticket or workspace thread, mirroring the DB's own
- * `num_nonnulls(...) <= 1` CHECK on `assistant_pending_actions`. A request
- * with none (an API caller's) is decided from the approvals queue.
+ * A pending action's polymorphic parent (unified inbox §3.3): exactly one of
+ * conversation, ticket or workspace thread, where the card is decided. The
+ * DB's own `num_nonnulls(...) <= 1` CHECK on `assistant_pending_actions` also
+ * admits none, which no caller files.
  */
 export type ProposePendingActionParent =
   | { workspaceThreadKey: string; conversationId?: undefined; ticketId?: undefined }
   | { conversationId: ConversationId; ticketId?: undefined; workspaceThreadKey?: undefined }
   | { ticketId: TicketId; conversationId?: undefined; workspaceThreadKey?: undefined }
-  | { conversationId?: undefined; ticketId?: undefined; workspaceThreadKey?: undefined }
 
 export type ProposePendingActionInput = ProposePendingActionParent & {
   involvementId?: AssistantInvolvementId
@@ -75,9 +55,7 @@ export type ProposePendingActionInput = ProposePendingActionParent & {
   originRole?: AssistantRole
   ttlHours?: number
   /** Who filed the request; it can never decide it. */
-  requester?: ApprovalRequester
-  /** The tier the server set for this operation; read off the content when absent. */
-  risk?: ApprovalRisk
+  requester?: PendingActionRequester
   /**
    * A stable per-turn key, same shape as `assistant_tool_calls.idempotency_key`
    * (assistant.tools.ts's `resolveIdempotencyKey`:
@@ -122,14 +100,11 @@ export async function proposePendingAction(
         originRole: input.originRole ?? 'customer_support',
         expiresAt,
         idempotencyKey: input.idempotencyKey ?? null,
-        risk:
-          input.risk ?? approvalRiskOf({ risk: null, toolName: input.toolName, args: input.args }),
-        argsDigest: approvalContentDigest(input.args),
+        argsDigest: pendingActionContentDigest(input.args),
         ...requesterColumns(input.requester),
       })
       .onConflictDoNothing()
       .returning()
-    if (inserted) await emitApprovalRequested(tx, inserted)
     return inserted
   })
   if (row) {
@@ -184,12 +159,12 @@ export async function getPendingActionByIdempotencyKey(
  * Announce a fresh proposal in the item's thread so the team sees it without
  * polling. Best-effort: a note failure (or Quinn not yet provisioned) must
  * never fail the proposal itself, since the pending action row is already the
- * source of truth an agent can act on from the approval queue.
+ * source of truth an agent can act on from the pending action card.
  *
  * Conversation-scoped rows get the rich card note (`appendAssistantPendingActionNote`,
- * with the structured `assistantPendingAction` metadata the approval-queue UI
+ * with the structured `assistantPendingAction` metadata the card UI
  * renders as a card). Ticket-scoped rows (unified inbox §3.3) get a plain
- * internal ticket note instead — there is no ticket-scoped approval-queue card
+ * internal ticket note instead — there is no ticket-scoped pending action card
  * UI yet (see functions/assistant-actions.ts's `AssistantPendingActionDTO`
  * comment), so this only needs to make the proposal visible in the thread, not
  * render a card. Posted as Quinn (`quinnActor`), which needs `ticket.note` —
@@ -214,7 +189,7 @@ async function surfacePendingActionNote(row: AssistantPendingAction): Promise<vo
     if (row.ticketId) {
       await addTicketNote(quinnActor(assistant.id), {
         ticketId: row.ticketId,
-        content: `Requested approval: ${row.summary}`,
+        content: `Waiting for a teammate to confirm: ${row.summary}`,
       })
     }
   } catch (err) {
@@ -235,11 +210,8 @@ export async function getPendingActionById(
   return row ?? null
 }
 
-/** How a decision was made, recorded beside it. */
+/** What a decision carries. */
 export interface PendingActionDecisionOptions {
-  via?: ApprovalDecisionChannel
-  /** Why, for a rejection. Ignored for an approval. */
-  reason?: string | null
   /**
    * The content digest the decision names. The decision only lands on a row
    * whose stored digest is that one, so it can never approve content it was
@@ -252,8 +224,7 @@ export interface PendingActionDecisionOptions {
  * Move a proposal to approved/rejected. Only a still-`proposed`,
  * not-yet-expired action is decidable; returns null otherwise (already
  * decided, the sweep beat this call to expiring it, or the content is not
- * what the decision names). The decision and its `approval.decided` event
- * commit together.
+ * what the decision names).
  */
 export async function decidePendingAction(
   id: AssistantPendingActionId,
@@ -269,8 +240,6 @@ export async function decidePendingAction(
         status: decision,
         decidedById,
         decidedAt: new Date(),
-        decidedVia: options.via ?? 'app',
-        decisionReason: decision === 'rejected' ? normalizeDecisionReason(options.reason) : null,
       })
       .where(
         and(
@@ -281,19 +250,7 @@ export async function decidePendingAction(
         )
       )
       .returning()
-    if (!row) return null
-    await emit(tx, approvalDecided, {
-      entityId: row.id,
-      actor: { type: 'user', id: decidedById },
-      payload: {
-        ...approvalRef(row),
-        decision,
-        decidedById,
-        decidedVia: row.decidedVia ?? 'app',
-        reason: row.decisionReason,
-      },
-    })
-    return row
+    return row ?? null
   })
 }
 
@@ -311,56 +268,12 @@ async function settleApprovedAction(
         status,
         executedAt: new Date(),
         result,
-        executionState: status === 'executed' ? 'succeeded' : 'failed',
-        executionError:
-          status === 'failed' && typeof result?.error === 'string' ? result.error : null,
       })
       .where(
         and(eq(assistantPendingActions.id, id), eq(assistantPendingActions.status, 'approved'))
       )
       .returning()
-    if (row?.status === 'executed') {
-      await emit(tx, approvalApplied, {
-        entityId: row.id,
-        actor: row.decidedById ? { type: 'user', id: row.decidedById } : { type: 'system' },
-        payload: { ...approvalRef(row), appliedById: row.decidedById },
-      })
-    }
     return row ?? null
-  })
-}
-
-/** What every approval event says about its request. */
-function approvalRef(row: AssistantPendingAction) {
-  return {
-    approvalId: row.id,
-    toolName: row.toolName,
-    summary: row.summary,
-    risk: approvalRiskOf(row),
-  }
-}
-
-/** Announce a new request on the event spine, in the transaction that filed it. */
-export async function emitApprovalRequested(
-  tx: Transaction,
-  row: AssistantPendingAction
-): Promise<void> {
-  const requester = row.requestedById ?? row.onBehalfOfPrincipalId
-  await emit(tx, approvalRequested, {
-    entityId: row.id,
-    // An agent or key that asked is a service; a person, or a credential acting
-    // as them with no principal of its own, is that person.
-    actor: requester
-      ? { type: row.requestedById && row.requestedVia !== 'ui' ? 'service' : 'user', id: requester }
-      : { type: 'system' },
-    payload: {
-      ...approvalRef(row),
-      requestedVia: row.requestedVia ?? 'assistant',
-      clientName: row.clientName,
-      conversationId: row.conversationId,
-      ticketId: row.ticketId,
-      expiresAt: row.expiresAt.toISOString(),
-    },
   })
 }
 
