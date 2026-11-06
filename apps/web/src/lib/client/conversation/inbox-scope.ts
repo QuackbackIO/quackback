@@ -25,6 +25,7 @@ import {
   explicitConversationSort,
 } from '@/lib/shared/conversation/views'
 import type { TicketType, TicketStage } from '@/lib/shared/db-types'
+import type { TicketDueFilter } from '@/lib/shared/ticket-due'
 import {
   facetToConversationStatus,
   isInboxTriageFacet,
@@ -53,6 +54,8 @@ export type InboxView =
   | 'tickets_customer'
   | 'tickets_back_office'
   | 'tickets_tracker'
+  // The tickets the caller watches, across every type.
+  | 'tickets_watching'
 
 /** Every InboxView. A Record so a view added to the union must be listed. */
 const INBOX_VIEWS: Record<InboxView, true> = {
@@ -69,6 +72,7 @@ const INBOX_VIEWS: Record<InboxView, true> = {
   tickets_customer: true,
   tickets_back_office: true,
   tickets_tracker: true,
+  tickets_watching: true,
 }
 
 /**
@@ -82,8 +86,12 @@ export function isInboxView(v: unknown): v is InboxView {
 }
 
 type TicketInboxView =
-  'tickets_all' | 'tickets_customer' | 'tickets_back_office' | 'tickets_tracker'
-type TypedTicketInboxView = Exclude<TicketInboxView, 'tickets_all'>
+  | 'tickets_all'
+  | 'tickets_customer'
+  | 'tickets_back_office'
+  | 'tickets_tracker'
+  | 'tickets_watching'
+type TypedTicketInboxView = Exclude<TicketInboxView, 'tickets_all' | 'tickets_watching'>
 
 const TICKET_VIEW_TYPE: Record<TypedTicketInboxView, TicketType> = {
   tickets_customer: 'customer',
@@ -97,12 +105,20 @@ export function isTicketInboxView(view: InboxView): view is TicketInboxView {
     view === 'tickets_all' ||
     view === 'tickets_customer' ||
     view === 'tickets_back_office' ||
-    view === 'tickets_tracker'
+    view === 'tickets_tracker' ||
+    view === 'tickets_watching'
   )
 }
 
 /** The ticket `type` a type-specific Tickets-section view scopes to. */
 export function ticketTypeForView(view: TypedTicketInboxView): TicketType {
+  return TICKET_VIEW_TYPE[view]
+}
+
+/** The ticket category a Tickets-section view scopes to, or undefined for the
+ *  scopes that span every type (All tickets, Watching). */
+export function ticketCategoryForView(view: TicketInboxView): TicketType | undefined {
+  if (view === 'tickets_all' || view === 'tickets_watching') return undefined
   return TICKET_VIEW_TYPE[view]
 }
 
@@ -180,6 +196,9 @@ export interface InboxSearch {
   /** The tickets-branch registry-type dropdown (convergence Phase 4): a
    *  `ticket_type` TypeID. Only applied on the Tickets-section scopes. */
   ttype?: string
+  /** The Due date filter (overdue / due within 24 hours / no due date). Only
+   *  applied on the unified list, where tickets can appear. */
+  due?: TicketDueFilter
   /** Inbox ordering; omitted = the list's implicit default ('relevance' while
    *  `q` is set, 'recent' otherwise). */
   sort?: ConversationSort
@@ -354,8 +373,9 @@ export function facetToStatusFilter(facet: InboxTriageFacet): StatusFilter {
  *  accepts. `waiting`/`sla` are conversation-only sorts with no ticket-row
  *  equivalent (§3.1 documents they'd rank ticket rows by activity) — the
  *  endpoint's zod schema simply rejects them today, so the client must clamp
- *  rather than forward and 400. */
-const INBOX_UNIFIED_SORTS = new Set(['recent', 'oldest', 'created', 'priority', 'relevance'])
+ *  rather than forward and 400. `due` works on both: a ticket row by its own
+ *  due date, a conversation row by its linked customer ticket's. */
+const INBOX_UNIFIED_SORTS = new Set(['recent', 'oldest', 'created', 'priority', 'due', 'relevance'])
 
 export interface InboxListParams {
   facet: InboxTriageFacet
@@ -370,12 +390,17 @@ export interface InboxListParams {
   /** Convergence alias semantics: the conversation branch lists only pair
    *  conversations (the Tickets-section customer-category scopes). */
   linkedPairsOnly?: boolean
+  /** The Watching scope: only what the caller watches. */
+  watching?: boolean
   priority?: ConversationPriority
   search?: string
   assignee?: string
   teamId?: string
   companyId?: string
-  sort?: 'recent' | 'oldest' | 'created' | 'priority' | 'relevance'
+  /** The Due date filter: the ticket branch filters its rows, the
+   *  conversation branch filters through the linked customer ticket. */
+  due?: TicketDueFilter
+  sort?: 'recent' | 'oldest' | 'created' | 'priority' | 'due' | 'relevance'
   channel?: Channel
 }
 
@@ -424,7 +449,10 @@ export function buildInboxListParams(
   /** The tickets-branch registry-type dropdown (Phase 4); only meaningful on
    *  the Tickets-section scopes, ignored elsewhere. */
   ticketTypeId?: string,
-  channel?: Channel
+  channel?: Channel,
+  /** The Due date filter chip. A custom view ignores it and applies its own
+   *  `ticket_due` rule instead (the view owns everything it filters on). */
+  due?: TicketDueFilter
 ): InboxListParams {
   const priority = priorityFilter === 'all' ? undefined : priorityFilter
   const searchParam = search || undefined
@@ -447,6 +475,7 @@ export function buildInboxListParams(
       priority: view.priority,
       search: searchParam,
       companyId: company,
+      ...(view.due ? { due: view.due } : {}),
       sort: sortParam,
       ...(channel ? { channel } : {}),
     }
@@ -456,6 +485,24 @@ export function buildInboxListParams(
       facet,
       kinds: ['conversation'],
       teamId: nav.teamId,
+      priority,
+      search: searchParam,
+      companyId: company,
+      ...(due ? { due } : {}),
+      sort: sortParam,
+      ...(channel ? { channel } : {}),
+    }
+  }
+  if (nav.kind === 'view' && nav.view === 'tickets_watching') {
+    // Every type the caller watches. A watched pair lists as its conversation
+    // row (the conversation branch narrowed to pairs), a standalone ticket as
+    // its own row, exactly as under the other customer-category scopes.
+    return {
+      facet,
+      kinds: ['conversation', 'ticket'],
+      ticketTypeId: ticketTypeId || undefined,
+      linkedPairsOnly: true,
+      watching: true,
       priority,
       search: searchParam,
       companyId: company,
@@ -474,12 +521,13 @@ export function buildInboxListParams(
     return {
       facet,
       kinds: customerCategory ? ['conversation', 'ticket'] : ['ticket'],
-      ticketType: nav.view === 'tickets_all' ? undefined : ticketTypeForView(nav.view),
+      ticketType: ticketCategoryForView(nav.view),
       ticketTypeId: ticketTypeId || undefined,
       linkedPairsOnly: customerCategory || undefined,
       priority,
       search: searchParam,
       companyId: company,
+      ...(due ? { due } : {}),
       sort: sortParam,
       ...(channel ? { channel } : {}),
     }
@@ -491,6 +539,7 @@ export function buildInboxListParams(
       priority,
       search: searchParam,
       companyId: company,
+      ...(due ? { due } : {}),
       sort: sortParam,
       ...(channel ? { channel } : {}),
     }
@@ -509,6 +558,7 @@ export function buildInboxListParams(
     priority,
     search: searchParam,
     companyId: company,
+    ...(due ? { due } : {}),
     sort: sortParam,
     ...(channel ? { channel } : {}),
   }

@@ -155,6 +155,12 @@ export const Route = createFileRoute('/api/chat/stream')({
         // Resolve which channel(s) to subscribe to, authorizing FIRST.
         const channels: string[] = []
         let backfillConversationId: ConversationId | null = null
+        // Set when the caller follows a shared ticket thread as a participant
+        // (not its visitor or a teammate): their access is re-checked each beat.
+        let sharedThreadAccess: {
+          conversation: { id: ConversationId; visitorPrincipalId: PrincipalId }
+          actor: typeof actor
+        } | null = null
 
         if (scope === 'inbox') {
           if (!isTeamMember(effectiveRole)) {
@@ -183,9 +189,18 @@ export const Route = createFileRoute('/api/chat/stream')({
           const conversation = await db.query.conversations.findFirst({
             where: eq(conversations.id, conversationId),
           })
-          if (!conversation || !canViewConversation(actor, conversation).allowed) {
-            // Never leak existence to a non-owner.
-            return new Response('Not found', { status: 404 })
+          if (!conversation) return new Response('Not found', { status: 404 })
+          if (!canViewConversation(actor, conversation).allowed) {
+            // A customer the paired ticket was shared with may follow the
+            // thread too; their access is re-checked on every heartbeat, so
+            // taking them off the ticket closes a stream they already hold.
+            const { isSharedTicketParticipant } =
+              await import('@/lib/server/domains/conversation/conversation.service')
+            if (!(await isSharedTicketParticipant(conversation, actor))) {
+              // Never leak existence to a non-owner.
+              return new Response('Not found', { status: 404 })
+            }
+            sharedThreadAccess = { conversation, actor }
           }
           channels.push(conversationChannel(conversationId))
           backfillConversationId = conversationId
@@ -448,6 +463,20 @@ export const Route = createFileRoute('/api/chat/stream')({
               },
               onAlive: () => {
                 void withLivePool(() => refreshPresence(me.principalId, streamId, isAgentStream))
+                if (sharedThreadAccess) {
+                  const { conversation, actor } = sharedThreadAccess
+                  void withLivePool(async () => {
+                    const { isSharedTicketParticipant } =
+                      await import('@/lib/server/domains/conversation/conversation.service')
+                    if (!(await isSharedTicketParticipant(conversation, actor))) {
+                      log.info(
+                        { stream_id: streamId },
+                        'shared ticket access ended, closing stream'
+                      )
+                      await cleanup()
+                    }
+                  })
+                }
               },
               onTimeout: () => {
                 log.info({ stream_id: streamId }, 'chat stream heartbeat timed out — tearing down')
