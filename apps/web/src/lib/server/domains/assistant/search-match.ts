@@ -49,7 +49,8 @@ export function titleContains(text: string, column: SQL): SQL | null {
  * A record is a candidate when its text matches the tsquery or its title
  * contains the query (so `fund` finds "Refund policy", and a title of stop
  * words is still found by its words). textScore is ts_rank normalised into
- * 0 to under 1 for a full-text match, else 0. Null when neither can match.
+ * 0 to under 1; effectively 0 for a title-only candidate. Null when neither
+ * can match.
  */
 export function textOrTitle(
   text: string,
@@ -62,7 +63,9 @@ export function textOrTitle(
   if (!fts) return contains ? { where: contains, textScore: sql`0` } : null
   return {
     where: contains ? sql`(${fts} or ${contains})` : fts,
-    textScore: sql`(case when ${fts} then ts_rank(${vector}, ${tsq}, 32) else 0 end)`,
+    // No match-check guard: ts_rank is 0 (or ~1e-20 for a partial AND) on a
+    // title-only candidate, and a guard would evaluate the vector once more.
+    textScore: sql`ts_rank(${vector}, ${tsq}, 32)`,
   }
 }
 
