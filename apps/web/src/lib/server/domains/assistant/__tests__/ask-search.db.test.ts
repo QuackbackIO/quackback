@@ -40,7 +40,7 @@ vi.mock('@/lib/server/domains/ai/models', async (original) => ({
 }))
 
 import { searchWorkspace } from '../ask-search'
-import { clearSemanticSearchCache } from '../workspace-semantic-search'
+import { clearSemanticSearchCache, searchWorkspaceSemantically } from '../workspace-semantic-search'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -420,6 +420,95 @@ describe.skipIf(!fixture.available)('workspace search (real DB)', () => {
     expect(last.results).toHaveLength(2)
   })
 
+  /**
+   * One record per titled kind, titled `title`, matched through its title
+   * alone (no body, no messages). Returns the ids by kind.
+   */
+  async function seedTitled(title: string, updatedAt: Date | null = new Date()) {
+    const board = createId('board')
+    await testDb.insert(boards).values({ id: board, slug: `t-${createId('board')}`, name: 'B' })
+    const category = createId('kb_category')
+    await testDb
+      .insert(helpCenterCategories)
+      .values({ id: category, slug: `t-${createId('kb_category')}`, name: 'C', isPublic: true })
+    const [status] = await testDb
+      .insert(ticketStatuses)
+      .values({ name: 'Open', slug: createId('ticket_status') })
+      .returning()
+    const made = {
+      post: createId('post'),
+      article: createId('kb_article'),
+      changelog: createId('changelog'),
+      conversation: createId('conversation'),
+      ticket: createId('ticket'),
+    }
+    await testDb
+      .insert(posts)
+      .values({ id: made.post, boardId: board, title, content: '', principalId: ids.contact })
+    await testDb.insert(helpCenterArticles).values({
+      id: made.article,
+      categoryId: category,
+      slug: `t-${createId('kb_article')}`,
+      title,
+      content: '',
+      principalId: ids.admin,
+      publishedAt: new Date(Date.now() - 60_000),
+    })
+    await testDb.insert(changelogEntries).values({
+      id: made.changelog,
+      title,
+      content: '',
+      publishedAt: new Date(Date.now() - 60_000),
+    })
+    await testDb.insert(conversations).values({
+      id: made.conversation,
+      visitorPrincipalId: ids.contact,
+      channel: 'messenger',
+      subject: title,
+      updatedAt,
+    })
+    await testDb.insert(tickets).values({
+      id: made.ticket,
+      title,
+      statusId: status.id,
+      requesterPrincipalId: ids.contact,
+    })
+    return made
+  }
+
+  it('finds a title that contains the query inside a word, for every titled kind', async () => {
+    // Like "fund" inside "Refund": the full-text prefix match cannot see it.
+    const inner = `fq${word}`
+    const made = await seedTitled(`Re${inner}d policy`)
+    const { results } = await search(admin, {}, inner)
+    for (const [kind, id] of Object.entries(made)) {
+      const hit = results.find((result) => result.id === id)
+      expect(hit, kind).toMatchObject({ kind })
+      expect(Math.floor(hit!.score), kind).toBe(1)
+    }
+  })
+
+  it('finds a title made only of stop words, for every titled kind', async () => {
+    const made = await seedTitled('Which is it')
+    const { results } = await search(admin, {}, 'which is it')
+    const found = results.map((result) => result.id)
+    for (const [kind, id] of Object.entries(made)) expect(found, kind).toContain(id)
+    expect(Math.floor(results.find((result) => result.id === made.post)!.score)).toBe(3)
+  })
+
+  it('keeps a dated record over undated ones at the per-kind limit (missing time sorts oldest)', async () => {
+    const subject = `nl${word}`
+    const undated = [
+      (await seedTitled(subject, null)).conversation,
+      (await seedTitled(subject, null)).conversation,
+    ]
+    const dated = (await seedTitled(subject, new Date())).conversation
+    // limit 1 asks each kind for 2 rows; all three tie on score.
+    const { results } = await search(admin, { kind: 'conversation', limit: 1 }, subject)
+    expect(results.map((result) => result.id)).toEqual([dated])
+    expect(undated).not.toContain(results[0].id)
+  })
+
   describe('matches by meaning', () => {
     beforeEach(async () => {
       embedding.model.mockReturnValue('test-search-model')
@@ -476,6 +565,30 @@ describe.skipIf(!fixture.available)('workspace search (real DB)', () => {
       embedding.generate.mockRejectedValue(new Error('provider down'))
       const { results } = await search(admin, { semantic: true, kind: 'post' })
       expect(results.map((result) => result.id)).toContain(seeded['post.exact'])
+    })
+
+    it('keeps a title match past closer body-only matches at the per-kind limit', async () => {
+      // Every seeded post is similarity 1 with no title match; this one is
+      // similarity 0.6 but its title contains the query, so it scores 1.6.
+      const inner = `sq${word}`
+      const titled = createId('post')
+      const [{ boardId }] = await testDb
+        .select({ boardId: posts.boardId })
+        .from(posts)
+        .where(inArray(posts.id, [seeded['post.exact'] as never]))
+      const near = Array.from({ length: 1536 }, (_, i) => (i === 0 ? 0.6 : i === 1 ? 0.8 : 0))
+      await testDb.insert(posts).values({
+        id: titled,
+        boardId,
+        title: `About ${inner}`,
+        content: '',
+        principalId: ids.contact,
+        embedding: sql`${JSON.stringify(near)}::vector` as never,
+        embeddingModel: 'test-search-model',
+      })
+      const rows = await searchWorkspaceSemantically(inner, admin, ['post'], 1)
+      expect(rows.map((row) => row.id)).toEqual([titled])
+      expect(rows[0].score).toBeCloseTo(1.6, 5)
     })
 
     it('never asks for an embedding unless the results page wants meaning', async () => {

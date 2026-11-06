@@ -222,6 +222,8 @@ export const tickets = pgTable(
     // planner proves the index applies.
     // Workspace search by title (0309); same expression as ticketFtsMatch.
     index('tickets_title_search_idx').using('gin', sql`to_tsvector('english', ${table.title})`),
+    // Workspace search: a title containing the query anywhere inside (0309).
+    index('tickets_title_trgm_idx').using('gin', table.title.op('gin_trgm_ops')),
     index('tickets_sla_unsettled_idx')
       .on(table.id)
       .where(

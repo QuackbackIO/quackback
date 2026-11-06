@@ -208,6 +208,8 @@ export const conversations = pgTable(
       'gin',
       sql`to_tsvector('english', coalesce(${table.subject}, ''))`
     ),
+    // Workspace search: a subject containing the query anywhere inside (0309).
+    index('conversations_subject_trgm_idx').using('gin', table.subject.op('gin_trgm_ops')),
     index('conversations_spam_resolved_at_idx')
       .on(table.resolvedAt)
       .where(sql`status = 'closed' AND end_reason = 'spam'`),

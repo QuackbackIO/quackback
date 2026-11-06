@@ -14,6 +14,12 @@
  *   meaning similarity (cosine) of a semantic match. People and companies
  *   have no body text, so theirs is 0.
  *
+ * A record is a candidate when its text matches the query (full text, or
+ * meaning on the results page) or its title contains the query, so `fund`
+ * finds "Refund policy" and a title of stop words is still found. The
+ * contains-match needs 3 characters or more (trigram indexes cannot narrow
+ * a shorter pattern); full text still works for 2-character queries.
+ *
  * So a title that matches the query always outranks a body-only match, and
  * text relevance orders results within a tier. Ties go to the most recently
  * updated record, then kind and id, so pages never repeat or skip a row.

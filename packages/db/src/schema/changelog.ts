@@ -71,6 +71,8 @@ export const changelogEntries = pgTable(
       'gin',
       sql`to_tsvector('english', coalesce(${table.title}, '') || ' ' || coalesce(${table.content}, ''))`
     ),
+    // Workspace search: a title containing the query anywhere inside (0309).
+    index('changelog_entries_title_trgm_idx').using('gin', table.title.op('gin_trgm_ops')),
     index('changelog_embedding_hnsw_idx')
       .using('hnsw', sql`${table.embedding} vector_cosine_ops`)
       .where(sql`${table.embedding} IS NOT NULL`),

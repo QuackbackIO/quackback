@@ -64,6 +64,7 @@ import {
   type SearchPage,
   type SearchResult,
 } from '@/lib/shared/assistant/ask-search'
+import { MIN_CONTAINS_LENGTH, bestFirst, likeText, textOrTitle, titleTier } from './search-match'
 
 /** What one kind's query needs: the query text, its tsquery and how many rows to keep. */
 export interface KindSearch {
@@ -81,32 +82,6 @@ interface Row {
   updatedAt: Date | null
   score: number
   href?: string
-}
-
-/** `like` pattern text with its wildcards taken literally. */
-function likeText(text: string): string {
-  return text.replace(/[\\%_]/g, (char) => `\\${char}`)
-}
-
-/**
- * titleTier for one or more title columns: 3 the same as the query, 2 starts
- * with it, 1 contains it, 0 otherwise (case ignored); the best column wins.
- */
-export function titleTier(text: string, ...columns: SQL[]): SQL<number> {
-  const lower = text.toLowerCase()
-  const prefix = `${likeText(lower)}%`
-  const contains = `%${likeText(lower)}%`
-  const tiers = columns.map(
-    (column) => sql`(case when lower(${column}) = ${lower} then 3
-      when lower(${column}) like ${prefix} then 2
-      when lower(${column}) like ${contains} then 1 else 0 end)`
-  )
-  return sql<number>`greatest(${sql.join(tiers, sql`, `)}, 0)`
-}
-
-/** textScore for full-text kinds: ts_rank normalised into 0 to under 1. */
-function textRank(vector: SQL, tsq: SQL): SQL {
-  return sql`ts_rank(${vector}, ${tsq}, 32)`
 }
 
 /** The changelog's searched text. Kept identical to listChangelogs and changelog_entries_search_idx. */
@@ -163,8 +138,9 @@ export const SEARCH_HREF: Record<Exclude<SearchKind, 'article'>, (id: string) =>
 }
 
 async function searchPosts({ text, tsq, depth, actor }: KindSearch): Promise<Row[]> {
-  if (!tsq) return []
-  const score = sql<number>`${titleTier(text, sql`${posts.title}`)} + ${textRank(sql`${posts.searchVector}`, tsq)}`
+  const match = textOrTitle(text, tsq, sql`${posts.searchVector}`, sql`${posts.title}`)
+  if (!match) return []
+  const score = sql<number>`${titleTier(text, sql`${posts.title}`)} + ${match.textScore}`
   return db
     .select({
       id: posts.id,
@@ -175,15 +151,21 @@ async function searchPosts({ text, tsq, depth, actor }: KindSearch): Promise<Row
     })
     .from(posts)
     .innerJoin(boards, eq(boards.id, posts.boardId))
-    .where(and(postSearchScope(actor), sql`${posts.searchVector} @@ ${tsq}`))
-    .orderBy(sql`${score} desc`, sql`${posts.updatedAt} desc`, posts.id)
+    .where(and(postSearchScope(actor), match.where))
+    .orderBy(...bestFirst(score, sql`${posts.updatedAt}`, sql`${posts.id}`))
     .limit(depth)
 }
 
 async function searchArticles({ text, tsq, depth, actor }: KindSearch): Promise<Row[]> {
-  if (!tsq) return []
+  const match = textOrTitle(
+    text,
+    tsq,
+    sql`${helpCenterArticles.searchVector}`,
+    sql`${helpCenterArticles.title}`
+  )
+  if (!match) return []
   const { manager, conditions } = articleSearchScope(actor)
-  const score = sql<number>`${titleTier(text, sql`${helpCenterArticles.title}`)} + ${textRank(sql`${helpCenterArticles.searchVector}`, tsq)}`
+  const score = sql<number>`${titleTier(text, sql`${helpCenterArticles.title}`)} + ${match.textScore}`
   const rows = await db
     .select({
       id: helpCenterArticles.id,
@@ -196,15 +178,18 @@ async function searchArticles({ text, tsq, depth, actor }: KindSearch): Promise<
     })
     .from(helpCenterArticles)
     .innerJoin(helpCenterCategories, eq(helpCenterCategories.id, helpCenterArticles.categoryId))
-    .where(and(...conditions, sql`${helpCenterArticles.searchVector} @@ ${tsq}`))
-    .orderBy(sql`${score} desc`, sql`${helpCenterArticles.updatedAt} desc`, helpCenterArticles.id)
+    .where(and(...conditions, match.where))
+    .orderBy(
+      ...bestFirst(score, sql`${helpCenterArticles.updatedAt}`, sql`${helpCenterArticles.id}`)
+    )
     .limit(depth)
   return rows.map((row) => ({ ...row, href: articleHref(manager, row) }))
 }
 
 async function searchChangelog({ text, tsq, depth, actor }: KindSearch): Promise<Row[]> {
-  if (!tsq) return []
-  const score = sql<number>`${titleTier(text, sql`${changelogEntries.title}`)} + ${textRank(changelogVector, tsq)}`
+  const match = textOrTitle(text, tsq, changelogVector, sql`${changelogEntries.title}`)
+  if (!match) return []
+  const score = sql<number>`${titleTier(text, sql`${changelogEntries.title}`)} + ${match.textScore}`
   return db
     .select({
       id: changelogEntries.id,
@@ -214,8 +199,8 @@ async function searchChangelog({ text, tsq, depth, actor }: KindSearch): Promise
       score,
     })
     .from(changelogEntries)
-    .where(and(changelogSearchScope(actor), sql`${changelogVector} @@ ${tsq}`))
-    .orderBy(sql`${score} desc`, sql`${changelogEntries.updatedAt} desc`, changelogEntries.id)
+    .where(and(changelogSearchScope(actor), match.where))
+    .orderBy(...bestFirst(score, sql`${changelogEntries.updatedAt}`, sql`${changelogEntries.id}`))
     .limit(depth)
 }
 
@@ -224,9 +209,22 @@ async function searchChangelog({ text, tsq, depth, actor }: KindSearch): Promise
  * index whatever the number of candidates: each parent's best live message
  * (internal notes too, as in the inbox), unioned with the parent's own title
  * match, as `search_match(id, rank, message_id)`. `parent` is the message's
- * parent id; `titles` selects (id, rank) of parents whose title matches.
+ * parent id; `table` and `alias` name the parent table, whose `title` column
+ * is matched by textOrTitle. Null when the query can match nothing.
  */
-function messageAndTitleMatches(parent: SQL, messages: SQL, titles: SQL, tsq: SQL): SQL {
+function messageAndTitleMatches(
+  { text, tsq }: KindSearch,
+  parent: SQL,
+  messages: SQL,
+  table: SQL,
+  title: SQL,
+  vector: SQL
+): SQL | null {
+  const titleMatch = textOrTitle(text, tsq, vector, title)
+  if (!titleMatch) return null
+  const titles = sql`select title_match.id, ${titleMatch.textScore} as rank, null::uuid as message_id
+    from ${table} where ${titleMatch.where}`
+  if (!tsq) return sql`(${titles}) search_match`
   const rank = sql`ts_rank(cm.search_vector, ${tsq}, 32)`
   return sql`(select id, max(rank) as rank,
       (array_agg(message_id) filter (where message_id is not null))[1] as message_id
@@ -236,7 +234,7 @@ function messageAndTitleMatches(parent: SQL, messages: SQL, titles: SQL, tsq: SQ
       where cm.deleted_at is null and cm.search_vector @@ ${tsq} and ${parent} is not null
       order by ${parent}, ${rank} desc, cm.created_at desc)
       union all
-      select title_match.id, title_match.rank, null::uuid from (${titles}) title_match
+      ${titles}
     ) found
     group by id) search_match`
 }
@@ -246,16 +244,17 @@ const matchedMessage = sql<string | null>`(select left(matched.content, 2000)
   from conversation_messages matched where matched.id = search_match.message_id)`
 
 /** Conversations whose subject or any live message matches. */
-async function searchConversations({ text, tsq, depth, actor }: KindSearch): Promise<Row[]> {
-  if (!tsq) return []
+async function searchConversations(search: KindSearch): Promise<Row[]> {
+  const { text, depth, actor } = search
   const matches = messageAndTitleMatches(
+    search,
     sql`cm.conversation_id`,
     sql`conversation_messages cm`,
-    sql`select subject_row.id, ts_rank(to_tsvector('english', coalesce(subject_row.subject, '')), ${tsq}, 32) as rank
-      from conversations subject_row
-      where to_tsvector('english', coalesce(subject_row.subject, '')) @@ ${tsq}`,
-    tsq
+    sql`conversations title_match`,
+    sql`title_match.subject`,
+    sql`to_tsvector('english', coalesce(title_match.subject, ''))`
   )
+  if (!matches) return []
   const score = sql<number>`${titleTier(text, sql`${conversations.subject}`)} + search_match.rank`
   return db
     .select({
@@ -269,7 +268,7 @@ async function searchConversations({ text, tsq, depth, actor }: KindSearch): Pro
     .innerJoin(matches, sql`search_match.id = ${conversations.id}`)
     .leftJoin(principal, eq(principal.id, conversations.visitorPrincipalId))
     .where(conversationFilter(actor))
-    .orderBy(sql`${score} desc`, sql`${conversations.updatedAt} desc`, conversations.id)
+    .orderBy(...bestFirst(score, sql`${conversations.updatedAt}`, sql`${conversations.id}`))
     .limit(depth)
 }
 
@@ -278,17 +277,18 @@ async function searchConversations({ text, tsq, depth, actor }: KindSearch): Pro
  * message hangs off the ticket, or off its paired customer conversation (as
  * in ticketFtsMatch, but found from the indexes rather than ticket by ticket).
  */
-async function searchTickets({ text, tsq, depth, actor }: KindSearch): Promise<Row[]> {
-  if (!tsq) return []
+async function searchTickets(search: KindSearch): Promise<Row[]> {
+  const { text, depth, actor } = search
   const matches = messageAndTitleMatches(
+    search,
     sql`coalesce(cm.ticket_id, tc.ticket_id)`,
     sql`conversation_messages cm left join ticket_conversations tc
       on tc.conversation_id = cm.conversation_id and tc.ticket_type = 'customer'`,
-    sql`select title_row.id, ts_rank(to_tsvector('english', title_row.title), ${tsq}, 32) as rank
-      from tickets title_row
-      where to_tsvector('english', title_row.title) @@ ${tsq}`,
-    tsq
+    sql`tickets title_match`,
+    sql`title_match.title`,
+    sql`to_tsvector('english', title_match.title)`
   )
+  if (!matches) return []
   const score = sql<number>`${titleTier(text, sql`${tickets.title}`)} + search_match.rank`
   return db
     .select({
@@ -301,16 +301,9 @@ async function searchTickets({ text, tsq, depth, actor }: KindSearch): Promise<R
     .from(tickets)
     .innerJoin(matches, sql`search_match.id = ${tickets.id}`)
     .where(ticketFilter(actor))
-    .orderBy(sql`${score} desc`, sql`${tickets.updatedAt} desc`, tickets.id)
+    .orderBy(...bestFirst(score, sql`${tickets.updatedAt}`, sql`${tickets.id}`))
     .limit(depth)
 }
-
-/**
- * Names, emails and domains match anywhere inside, served by trigram
- * indexes. A trigram index cannot narrow a pattern shorter than three
- * characters, so shorter queries skip these kinds rather than scan them.
- */
-const MIN_NAME_SEARCH_LENGTH = 3
 
 /**
  * Identified people by name, display name or email: contacts (portal users)
@@ -318,7 +311,8 @@ const MIN_NAME_SEARCH_LENGTH = 3
  */
 function searchPrincipals(team: boolean) {
   return async ({ text, depth }: KindSearch): Promise<Row[]> => {
-    if (text.length < MIN_NAME_SEARCH_LENGTH) return []
+    // Names, emails and domains match only by containing the query.
+    if (text.length < MIN_CONTAINS_LENGTH) return []
     const contains = `%${likeText(text)}%`
     const name = sql`coalesce(${principal.displayName}, ${user.name})`
     const score = sql<number>`${titleTier(text, sql`${principal.displayName}`, sql`${user.name}`, sql`${user.email}`)}`
@@ -347,13 +341,13 @@ function searchPrincipals(team: boolean) {
           )`
         )
       )
-      .orderBy(sql`${score} desc`, sql`${user.updatedAt} desc`, principal.id)
+      .orderBy(...bestFirst(score, sql`${user.updatedAt}`, sql`${principal.id}`))
       .limit(depth)
   }
 }
 
 async function searchCompanies({ text, depth }: KindSearch): Promise<Row[]> {
-  if (text.length < MIN_NAME_SEARCH_LENGTH) return []
+  if (text.length < MIN_CONTAINS_LENGTH) return []
   const contains = `%${likeText(text)}%`
   const score = sql<number>`${titleTier(text, sql`${companies.name}`, sql`${companies.domain}`)}`
   return db
@@ -366,7 +360,7 @@ async function searchCompanies({ text, depth }: KindSearch): Promise<Row[]> {
     })
     .from(companies)
     .where(sql`(${companies.name} ilike ${contains} or ${companies.domain} ilike ${contains})`)
-    .orderBy(sql`${score} desc`, sql`${companies.updatedAt} desc`, companies.id)
+    .orderBy(...bestFirst(score, sql`${companies.updatedAt}`, sql`${companies.id}`))
     .limit(depth)
 }
 

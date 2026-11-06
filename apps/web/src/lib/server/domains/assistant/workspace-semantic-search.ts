@@ -38,9 +38,9 @@ import {
   articleSearchScope,
   changelogSearchScope,
   postSearchScope,
-  titleTier,
   toSearchResult,
 } from './ask-search'
+import { bestFirst, titleContains, titleTier } from './search-match'
 
 const log = logger.child({ module: 'workspace-semantic-search' })
 
@@ -144,106 +144,180 @@ function closeness(column: SQL, modelColumn: SQL, { vector, model }: SemanticSea
   }
 }
 
+/** One kind's query: the rows matching `where`, scored `score`, in `orderBy`, at most depth. */
+type KindQuery<R extends SemanticRow> = (
+  where: SQL,
+  score: SQL<number>,
+  orderBy: SQL[]
+) => Promise<R[]>
+
+/** Best first, as compareSearchResults: score, newest (no time sorts oldest), then id. */
+function byRank(a: SemanticRow, b: SemanticRow): number {
+  return (
+    Number(b.score) - Number(a.score) ||
+    (b.updatedAt?.getTime() ?? -Infinity) - (a.updatedAt?.getTime() ?? -Infinity) ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  )
+}
+
+/**
+ * The kind's best `depth` rows by score = titleTier + similarity, from two
+ * index-served candidate sets: the nearest rows by distance (HNSW), and the
+ * rows whose title contains the query (trigram), best score first. Every row
+ * that belongs in the top `depth` is in one of them: a title match is in the
+ * second, and a row with no title match scores its similarity alone, so
+ * anything above it is also in the top `depth` and it is among the nearest.
+ */
+async function bestByScore<R extends SemanticRow>(
+  search: SemanticSearch,
+  vector: SQL,
+  model: SQL,
+  columns: { title: SQL; updatedAt: SQL; id: SQL },
+  query: KindQuery<R>
+): Promise<R[]> {
+  const near = closeness(vector, model, search)
+  const score = sql<number>`${titleTier(search.text, columns.title)} + ${near.similarity}`
+  const contains = titleContains(search.text, columns.title)
+  const [nearest, titled] = await Promise.all([
+    query(near.where, score, [near.order, columns.id]),
+    contains
+      ? query(and(near.where, contains)!, score, bestFirst(score, columns.updatedAt, columns.id))
+      : Promise.resolve([]),
+  ])
+  const byId = new Map<string, R>()
+  for (const row of [...titled, ...nearest]) if (!byId.has(row.id)) byId.set(row.id, row)
+  return [...byId.values()].sort(byRank).slice(0, search.depth)
+}
+
 const SEMANTIC_SEARCHERS: Partial<
   Record<SearchKind, (search: SemanticSearch) => Promise<SemanticRow[]>>
 > = {
-  post: async (search) => {
-    const near = closeness(sql`${posts.embedding}`, sql`${posts.embeddingModel}`, search)
-    return db
-      .select({
-        id: posts.id,
-        title: posts.title,
-        content: sql<string>`left(${posts.content}, 2000)`,
-        updatedAt: posts.updatedAt,
-        score: sql<number>`${titleTier(search.text, sql`${posts.title}`)} + ${near.similarity}`,
-      })
-      .from(posts)
-      .innerJoin(boards, eq(boards.id, posts.boardId))
-      .where(and(postSearchScope(search.actor), near.where))
-      .orderBy(near.order, posts.id)
-      .limit(search.depth)
-  },
+  post: (search) =>
+    bestByScore(
+      search,
+      sql`${posts.embedding}`,
+      sql`${posts.embeddingModel}`,
+      { title: sql`${posts.title}`, updatedAt: sql`${posts.updatedAt}`, id: sql`${posts.id}` },
+      (where, score, orderBy) =>
+        db
+          .select({
+            id: posts.id,
+            title: posts.title,
+            content: sql<string>`left(${posts.content}, 2000)`,
+            updatedAt: posts.updatedAt,
+            score,
+          })
+          .from(posts)
+          .innerJoin(boards, eq(boards.id, posts.boardId))
+          .where(and(postSearchScope(search.actor), where))
+          .orderBy(...orderBy)
+          .limit(search.depth)
+    ),
   article: async (search) => {
     const { manager, conditions } = articleSearchScope(search.actor)
-    const near = closeness(
+    const rows = await bestByScore(
+      search,
       sql`${helpCenterArticles.embedding}`,
       sql`${helpCenterArticles.embeddingModel}`,
-      search
+      {
+        title: sql`${helpCenterArticles.title}`,
+        updatedAt: sql`${helpCenterArticles.updatedAt}`,
+        id: sql`${helpCenterArticles.id}`,
+      },
+      (where, score, orderBy) =>
+        db
+          .select({
+            id: helpCenterArticles.id,
+            urlId: helpCenterArticles.urlId,
+            slug: helpCenterArticles.slug,
+            title: helpCenterArticles.title,
+            content: sql<string>`left(${helpCenterArticles.content}, 2000)`,
+            updatedAt: helpCenterArticles.updatedAt,
+            score,
+          })
+          .from(helpCenterArticles)
+          .innerJoin(
+            helpCenterCategories,
+            eq(helpCenterCategories.id, helpCenterArticles.categoryId)
+          )
+          .where(and(...conditions, where))
+          .orderBy(...orderBy)
+          .limit(search.depth)
     )
-    const rows = await db
-      .select({
-        id: helpCenterArticles.id,
-        urlId: helpCenterArticles.urlId,
-        slug: helpCenterArticles.slug,
-        title: helpCenterArticles.title,
-        content: sql<string>`left(${helpCenterArticles.content}, 2000)`,
-        updatedAt: helpCenterArticles.updatedAt,
-        score: sql<number>`${titleTier(search.text, sql`${helpCenterArticles.title}`)} + ${near.similarity}`,
-      })
-      .from(helpCenterArticles)
-      .innerJoin(helpCenterCategories, eq(helpCenterCategories.id, helpCenterArticles.categoryId))
-      .where(and(...conditions, near.where))
-      .orderBy(near.order, helpCenterArticles.id)
-      .limit(search.depth)
     return rows.map((row) => ({ ...row, href: articleHref(manager, row) }))
   },
-  changelog: async (search) => {
-    const near = closeness(
+  changelog: (search) =>
+    bestByScore(
+      search,
       sql`${changelogEntries.embedding}`,
       sql`${changelogEntries.embeddingModel}`,
-      search
-    )
-    return db
-      .select({
-        id: changelogEntries.id,
-        title: changelogEntries.title,
-        content: sql<string>`left(${changelogEntries.content}, 2000)`,
-        updatedAt: changelogEntries.updatedAt,
-        score: sql<number>`${titleTier(search.text, sql`${changelogEntries.title}`)} + ${near.similarity}`,
-      })
-      .from(changelogEntries)
-      .where(and(changelogSearchScope(search.actor), near.where))
-      .orderBy(near.order, changelogEntries.id)
-      .limit(search.depth)
-  },
-  conversation: async (search) => {
-    const near = closeness(
+      {
+        title: sql`${changelogEntries.title}`,
+        updatedAt: sql`${changelogEntries.updatedAt}`,
+        id: sql`${changelogEntries.id}`,
+      },
+      (where, score, orderBy) =>
+        db
+          .select({
+            id: changelogEntries.id,
+            title: changelogEntries.title,
+            content: sql<string>`left(${changelogEntries.content}, 2000)`,
+            updatedAt: changelogEntries.updatedAt,
+            score,
+          })
+          .from(changelogEntries)
+          .where(and(changelogSearchScope(search.actor), where))
+          .orderBy(...orderBy)
+          .limit(search.depth)
+    ),
+  conversation: (search) =>
+    bestByScore(
+      search,
       sql`${conversationSummaries.embedding}`,
       sql`${conversationSummaries.embeddingModel}`,
-      search
-    )
-    return db
-      .select({
-        id: conversations.id,
-        title: conversations.subject,
-        content: conversationSummaries.summary,
-        updatedAt: conversations.updatedAt,
-        score: sql<number>`${titleTier(search.text, sql`${conversations.subject}`)} + ${near.similarity}`,
-      })
-      .from(conversationSummaries)
-      .innerJoin(conversations, eq(conversations.id, conversationSummaries.conversationId))
-      .where(and(conversationFilter(search.actor), near.where))
-      .orderBy(near.order, conversations.id)
-      .limit(search.depth)
-  },
-  ticket: async (search) => {
-    const near = closeness(
+      {
+        title: sql`${conversations.subject}`,
+        updatedAt: sql`${conversations.updatedAt}`,
+        id: sql`${conversations.id}`,
+      },
+      (where, score, orderBy) =>
+        db
+          .select({
+            id: conversations.id,
+            title: conversations.subject,
+            content: conversationSummaries.summary,
+            updatedAt: conversations.updatedAt,
+            score,
+          })
+          .from(conversationSummaries)
+          .innerJoin(conversations, eq(conversations.id, conversationSummaries.conversationId))
+          .where(and(conversationFilter(search.actor), where))
+          .orderBy(...orderBy)
+          .limit(search.depth)
+    ),
+  ticket: (search) =>
+    bestByScore(
+      search,
       sql`${ticketSummaries.embedding}`,
       sql`${ticketSummaries.embeddingModel}`,
-      search
-    )
-    return db
-      .select({
-        id: tickets.id,
-        title: tickets.title,
-        content: ticketSummaries.summary,
-        updatedAt: tickets.updatedAt,
-        score: sql<number>`${titleTier(search.text, sql`${tickets.title}`)} + ${near.similarity}`,
-      })
-      .from(ticketSummaries)
-      .innerJoin(tickets, eq(tickets.id, ticketSummaries.ticketId))
-      .where(and(ticketFilter(search.actor), near.where))
-      .orderBy(near.order, tickets.id)
-      .limit(search.depth)
-  },
+      {
+        title: sql`${tickets.title}`,
+        updatedAt: sql`${tickets.updatedAt}`,
+        id: sql`${tickets.id}`,
+      },
+      (where, score, orderBy) =>
+        db
+          .select({
+            id: tickets.id,
+            title: tickets.title,
+            content: ticketSummaries.summary,
+            updatedAt: tickets.updatedAt,
+            score,
+          })
+          .from(ticketSummaries)
+          .innerJoin(tickets, eq(tickets.id, ticketSummaries.ticketId))
+          .where(and(ticketFilter(search.actor), where))
+          .orderBy(...orderBy)
+          .limit(search.depth)
+    ),
 }
