@@ -98,8 +98,10 @@ vi.mock('@/lib/server/domains/settings/settings.support', () => ({
 vi.mock('@/lib/server/functions/portal-access', () => ({
   resolvePortalAccessForRequest: (...a: unknown[]) => mockPortalAccess(...a),
 }))
+const mockIsSharedTicketParticipant = vi.fn(async (..._a: unknown[]) => false)
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   requeueUnansweredOnAgentOffline: vi.fn(),
+  isSharedTicketParticipant: (...a: unknown[]) => mockIsSharedTicketParticipant(...a),
 }))
 const mockAcquireSlot = vi.fn()
 vi.mock('@/lib/server/realtime/stream-connection-limit', () => ({
@@ -284,6 +286,19 @@ describe('GET /api/chat/stream - conversationId scope', () => {
     mockCanView.mockReturnValue({ allowed: false })
     const res = await GET({ request: req('?conversationId=conversation_1&token=t') })
     expect(res.status).toBe(404)
+  })
+
+  it('lets a customer the paired ticket was shared with follow the thread', async () => {
+    tokenPrincipal('user')
+    mockConversationFindFirst.mockResolvedValue({
+      id: 'conversation_1',
+      visitorPrincipalId: 'principal_requester',
+    })
+    mockCanView.mockReturnValue({ allowed: false })
+    mockIsSharedTicketParticipant.mockResolvedValueOnce(true)
+    const res = await GET({ request: req('?conversationId=conversation_1&token=t') })
+    expect(mockIsSharedTicketParticipant).toHaveBeenCalled()
+    expect(res.status).not.toBe(404)
   })
 
   it('re-gates a cookie-authed (non-team) visitor on portal access: denied -> 404', async () => {
@@ -579,6 +594,46 @@ describe('GET /api/chat/stream - abandoned heartbeat timeout', () => {
       }
       expect(mockRefreshPresence).toHaveBeenCalled()
       expect(mockClearPresence).not.toHaveBeenCalled()
+    } finally {
+      await reader.current?.cancel().catch(() => {})
+      vi.useRealTimers()
+    }
+  })
+
+  it("closes a shared ticket participant's stream once they lose the thread", async () => {
+    vi.useFakeTimers()
+    const reader = { current: null as ReadableStreamDefaultReader<Uint8Array> | null }
+    try {
+      tokenPrincipal('user')
+      mockConversationFindFirst.mockResolvedValue({
+        id: 'conversation_1',
+        visitorPrincipalId: 'principal_requester',
+      })
+      mockCanView.mockReturnValue({ allowed: false })
+      const unsub = vi.fn(async () => {})
+      mockSubscribe.mockResolvedValue(unsub)
+      // Shared when the stream opens; taken off the ticket before the first beat.
+      mockIsSharedTicketParticipant.mockResolvedValueOnce(true).mockResolvedValue(false)
+      const res = await GET({ request: req('?conversationId=conversation_1&token=t') })
+      expect(res.status).toBe(200)
+      await vi.advanceTimersByTimeAsync(0)
+
+      reader.current = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let opened = ''
+      while (!opened.includes(': connected')) {
+        const { value, done } = await reader.current.read()
+        if (done) break
+        opened += decoder.decode(value)
+      }
+      expect(unsub).not.toHaveBeenCalled()
+      for (let t = 0; t < SSE_HEARTBEAT_INTERVAL_MS; t += SSE_STREAM_KEEPALIVE_MS) {
+        await vi.advanceTimersByTimeAsync(SSE_STREAM_KEEPALIVE_MS)
+        await reader.current.read()
+      }
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockIsSharedTicketParticipant).toHaveBeenCalledTimes(2)
+      expect(unsub).toHaveBeenCalled()
     } finally {
       await reader.current?.cancel().catch(() => {})
       vi.useRealTimers()

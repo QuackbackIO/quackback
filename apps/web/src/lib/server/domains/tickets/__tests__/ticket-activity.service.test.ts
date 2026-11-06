@@ -3,7 +3,8 @@
  * (newest-first, actor-name resolution, System rows), and every instrumented
  * writer in ticket.service — created, status_changed (including the
  * customer-silent internal churn), assigned (principal + team, with the
- * no-op gate), priority_changed, the requester-reply reopen, and soft delete.
+ * no-op gate), priority_changed, title.changed, the requester-reply reopen, and
+ * soft delete.
  * Runs inside the db-test-fixture rollback transaction.
  *
  * Every actor here is backed by a real principal row: activity inserts carry
@@ -37,6 +38,8 @@ const webhooks = vi.hoisted(() => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
+  emitTicketUpdated: vi.fn().mockResolvedValue(undefined),
+  emitTicketPriorityChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketReplied: vi.fn().mockResolvedValue(undefined),
   emitTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
 }))
@@ -56,6 +59,7 @@ import {
   setTicketStatus,
   assignTicket,
   setTicketPriority,
+  setTicketTitle,
   softDeleteTicket,
   autoReopenOnRequesterReply,
 } from '../ticket.service'
@@ -335,6 +339,22 @@ describe.skipIf(!fixture.available)('ticket-activity.service (real DB, rolled ba
       expect(changes).toHaveLength(1)
       expect(changes[0].metadata).toEqual({ from: 'none', to: 'urgent' })
       expect(changes[0].principalId).toBe(actor.principalId)
+    })
+
+    it('setTicketTitle records title.changed with both titles; a no-op rename records nothing', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = await backedAdminActor()
+      const created = await createTicket({ type: 'customer', title: 'Old name' }, actor)
+
+      await setTicketTitle(created.id, 'New name', actor)
+      await setTicketTitle(created.id, 'New name', actor)
+
+      const rows = await rawActivity(created.id)
+      const renames = rows.filter((r) => r.type === 'title.changed')
+      expect(renames).toHaveLength(1)
+      expect(renames[0].metadata).toEqual({ from: 'Old name', to: 'New name' })
+      expect(renames[0].principalId).toBe(actor.principalId)
     })
 
     it('autoReopenOnRequesterReply records a distinct ticket.reopened event', async () => {
