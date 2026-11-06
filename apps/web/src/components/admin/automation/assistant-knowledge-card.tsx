@@ -97,19 +97,6 @@ const SOURCE_META = {
   }
 >
 
-// On Home, Copilot's conversation sources span every conversation the
-// teammate can see rather than the open one.
-const COPILOT_DESCRIPTIONS: Partial<Record<string, { id: string; defaultMessage: string }>> = {
-  pastConversations: {
-    id: 'automation.knowledge.source.pastConversations.copilotDescription',
-    defaultMessage: 'Earlier conversations with the same customer. On Home, any you can see.',
-  },
-  internalNotes: {
-    id: 'automation.knowledge.source.internalNotes.copilotDescription',
-    defaultMessage: 'Private teammate notes. On Home, any you can see. Never used in drafts.',
-  },
-}
-
 const AGENT_POSTS_DESCRIPTION = {
   id: 'automation.knowledge.source.posts.agentDescription',
   defaultMessage: 'Public feedback boards only, cited as customer feedback.',
@@ -291,7 +278,6 @@ export function AgentKnowledgeCard() {
 }
 
 export function CopilotKnowledgeCard() {
-  const intl = useIntl()
   const settingsQuery = useQuery(assistantQueries.settings())
   const queryClient = useQueryClient()
   const saveQueued = useAssistantSave()
@@ -314,7 +300,6 @@ export function CopilotKnowledgeCard() {
     source,
     enabled: knowledge[source],
     managed: isAssistantFieldManaged(managedPaths, `agents.copilot.knowledge.${source}`),
-    descriptionOverride: COPILOT_DESCRIPTIONS[source],
   }))
 
   async function toggle(source: string, next: boolean) {
@@ -346,14 +331,6 @@ export function CopilotKnowledgeCard() {
   }
 
   return (
-    <KnowledgeCard
-      rows={rows}
-      busy={update.isPending}
-      onToggle={(s, n) => void toggle(s, n)}
-      description={intl.formatMessage({
-        id: 'automation.knowledge.copilotHome',
-        defaultMessage: "Home uses these too, with Copilot's connectors.",
-      })}
-    />
+    <KnowledgeCard rows={rows} busy={update.isPending} onToggle={(s, n) => void toggle(s, n)} />
   )
 }

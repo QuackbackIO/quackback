@@ -15,7 +15,6 @@ import { ALL_PERMISSIONS, PERMISSIONS } from '@/lib/shared/permissions'
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
 import { API_KEY_SCOPES } from '@/lib/shared/api-key-scopes'
 import type { McpAuthContext } from '@/lib/server/mcp/types'
-import { createWorkspaceThread } from '@/lib/server/domains/assistant/workspace-threads.service'
 
 export async function seedAskGoldenFixture(
   db: Database,
@@ -76,7 +75,6 @@ export async function seedAskGoldenFixture(
         supportTickets: modulesEnabled,
         helpCenter: modulesEnabled,
         statusPage: modulesEnabled,
-        copilotHome: true,
       }),
       widgetConfig: JSON.stringify({ messenger: { enabled: false, welcomeMessage: 'Welcome' } }),
       brandingConfig: JSON.stringify({ light: { primary: '#121212' } }),
@@ -85,7 +83,6 @@ export async function seedAskGoldenFixture(
       assistantConfig: structuredClone(DEFAULT_ASSISTANT_CONFIG),
     })
     .returning()
-  const thread = await createWorkspaceThread(actor, 'Acme')
   const auth: McpAuthContext = {
     principalId: id,
     userId,
@@ -94,8 +91,7 @@ export async function seedAskGoldenFixture(
     name: 'Acme',
     authMethod: 'oauth',
     scopes: [...API_KEY_SCOPES],
-    workspaceThreadKey: thread.key,
     permissions: actor.permissions,
   }
-  return { actor, auth, workspace, thread }
+  return { actor, auth, workspace }
 }

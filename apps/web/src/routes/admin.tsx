@@ -20,7 +20,6 @@ import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
 import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
-import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import type { requireWorkspaceRole } from '@/lib/server/functions/workspace-utils'
@@ -28,6 +27,7 @@ import {
   useGithubStarPrompt,
   useFeatureFlag,
   useProductEnabled,
+  useHasPermission,
 } from '@/lib/client/hooks/use-root-context'
 import { useToasterLocale } from '@/components/ui/use-toaster-locale'
 
@@ -304,18 +304,11 @@ function AdminContent({
   | 'currentUser'
 >) {
   const githubStarPrompt = useGithubStarPrompt()
-  // An open Home chat sits above the corner launcher's spot; the launcher steps aside.
-  const canUseCopilot = useHasPermission(PERMISSIONS.COPILOT_USE)
-  const chatOpen = useRouterState({
-    select: (state) =>
-      /^\/admin\/?$/.test(state.location.pathname) &&
-      typeof (state.location.search as { copilotThread?: unknown }).copilotThread === 'string',
-  })
   return (
     <>
       {/* In the launch window the corner launcher stays hidden (it reads like the
           workspace's own Messenger); Help, Contact us opens it. */}
-      <CloudQuackbackWidget launcherHidden={inLaunchWindow || (canUseCopilot && chatOpen)} />
+      <CloudQuackbackWidget launcherHidden={inLaunchWindow} />
       <AdminWorkspaceFrame
         sidebar={
           initialUserData && (

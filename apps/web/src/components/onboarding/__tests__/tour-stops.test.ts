@@ -47,15 +47,11 @@ describe('resolveTourStops', () => {
   })
 
   it('never spotlights the whole sidebar', () => {
-    for (const copilotOnHome of [true, false]) {
-      expect(ids(resolveTourStops(context({ copilotOnHome })))).not.toContain('products')
-    }
+    expect(ids(resolveTourStops(context()))).not.toContain('products')
   })
 
   it('keeps at most five stops, the goal module first, and no Home stop', () => {
-    const stops = resolveTourStops(
-      context({ copilotOnHome: true, goals: ['status_page'], modules: allOn })
-    )
+    const stops = resolveTourStops(context({ goals: ['status_page'], modules: allOn }))
     expect(stops.length).toBe(MAX_TOUR_STOPS)
     expect(MAX_TOUR_STOPS).toBe(5)
     expect(ids(stops)).toEqual(['status', 'feedback', 'support', 'view-portal', 'search'])
@@ -123,9 +119,7 @@ describe('resolveTourStops', () => {
   })
 
   it('has no stops on a phone, where the sidebar is behind the menu', () => {
-    expect(
-      resolveTourStops(context({ narrow: true, copilotOnHome: true, modules: allOn }))
-    ).toEqual([])
+    expect(resolveTourStops(context({ narrow: true, modules: allOn }))).toEqual([])
   })
 })
 

@@ -339,7 +339,7 @@ describe('Copilot and search strings', () => {
     expect(Object.keys(seeded).filter(isAskMessage)).toEqual([])
     // The sidebar Search row renders on every admin page.
     expect(seeded['ask.search.row']).toBe(all['ask.search.row'])
-    expect(ask['ask.chat.newChat']).toBe(all['ask.chat.newChat'])
+    expect(ask['ask.composer.jumpTo']).toBe(all['ask.composer.jumpTo'])
     expect(ask['ask.destination.settings_portal']).toBe(all['ask.destination.settings_portal'])
     expect(Object.keys(ask).every(isAskMessage)).toBe(true)
   })
