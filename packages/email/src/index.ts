@@ -1336,6 +1336,8 @@ export interface SendTicketEventEmailParams {
   logoUrl?: string
   /** Per-team sending address override; absent = branded EMAIL_FROM. */
   from?: SendingIdentity
+  /** Display name for the From header, applied to `from` or to EMAIL_FROM. */
+  fromDisplayName?: string
   /** Per-ticket inbound reply address (reply-by-email); absent = no Reply-To. */
   replyTo?: string
   messageId?: string
@@ -1465,6 +1467,7 @@ export async function sendTicketEventEmail(
       logoUrl: params.logoUrl,
     }),
     from: params.from,
+    fromDisplayName: params.fromDisplayName,
     replyTo: params.replyTo,
     messageId: params.messageId,
     inReplyTo: params.inReplyTo,

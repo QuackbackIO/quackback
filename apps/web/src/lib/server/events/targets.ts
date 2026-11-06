@@ -1311,27 +1311,37 @@ function baseTicketConfig(params: BaseTicketConfigParams): Record<string, unknow
 }
 
 /**
- * Requester-facing config: per-team From (resolveSendingAddress) and, when an
- * inbound-capable email channel is configured, a signed per-ticket Reply-To for
- * reply-by-email (D8/D9). Both are null-safe — absent means branded EMAIL_FROM
- * and a portal-only footer.
+ * Requester-facing config: the ticket's From (resolveTicketFrom: the linked
+ * conversation's thread sender, else the team's address) under the workspace
+ * name, and, when an inbound-capable email channel is configured, a signed
+ * per-ticket Reply-To for reply-by-email (D8/D9). Both are null-safe: absent
+ * means branded EMAIL_FROM and a portal-only footer.
+ *
+ * The name travels as its own field rather than inside `from`, so it survives
+ * the send-time re-check of the address and still applies when that re-check
+ * falls back to the platform default.
  */
 async function requesterFacingConfig(
   params: BaseTicketConfigParams & { ticketId: TicketId; assignedTeamId: TeamId | null }
 ): Promise<Record<string, unknown>> {
-  const { resolveSendingAddress } =
+  const { resolveTicketFrom } =
     await import('@/lib/server/domains/channel-accounts/sender-resolver')
   const { inboundTicketReplyToAddress } =
     await import('@/lib/server/domains/conversation/conversation.email-channel')
   const { currentMailSlug } =
     await import('@/lib/server/domains/conversation/conversation.mail-slug')
-  const from = (await resolveSendingAddress(params.assignedTeamId, 'support')) ?? undefined
+  const from = (await resolveTicketFrom(params.ticketId, params.assignedTeamId)) ?? undefined
   // The mail slug names this workspace in the address, which is what lets a
   // shared inbound domain route the reply back. With none to mint under there is
   // no routable address: the ticket email then carries no Reply-To and its
   // footer points at the portal thread.
   const replyTo = inboundTicketReplyToAddress(params.ticketId, currentMailSlug()) ?? undefined
-  return { ...baseTicketConfig(params), from, replyTo }
+  return {
+    ...baseTicketConfig(params),
+    from,
+    fromDisplayName: params.context.workspaceName,
+    replyTo,
+  }
 }
 
 /** Agent-facing config: branded EMAIL_FROM, no reply-by-email, inbox CTA. */
