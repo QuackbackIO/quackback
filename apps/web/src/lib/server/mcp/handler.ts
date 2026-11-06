@@ -239,6 +239,7 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
       email: principalRecord.user?.email ?? undefined,
       role: authResult.role as Role,
       permissions: authResult.permissions,
+      ...(authResult.scopePrincipalId ? { scopePrincipalId: authResult.scopePrincipalId } : {}),
       authMethod: 'api-key',
       credentialId: authResult.apiKey.id,
       clientName: authResult.apiKey.name,
