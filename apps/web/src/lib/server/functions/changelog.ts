@@ -287,7 +287,8 @@ export const listPublicChangelogsFn = createServerFn({ method: 'GET' })
 const searchShippedPostsSchema = z.object({
   query: z.string().optional(),
   boardId: z.string().optional(),
-  limit: z.number().int().positive().max(50).optional(),
+  limit: z.number().int().positive().max(200).optional(),
+  includeIds: z.array(z.string().min(1)).optional(),
 })
 
 /**
@@ -303,6 +304,7 @@ export const searchShippedPostsFn = createServerFn({ method: 'GET' })
       query: data.query,
       boardId: data.boardId as BoardId | undefined,
       limit: data.limit,
+      includeIds: data.includeIds as PostId[] | undefined,
     })
   })
 
