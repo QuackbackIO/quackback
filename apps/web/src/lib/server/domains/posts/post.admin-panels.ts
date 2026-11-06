@@ -1,7 +1,8 @@
 /**
  * The panels beside a post in the admin post modal: the voter stack, pending
- * merge suggestions, linked external issues, the owner picker's roster and
- * the author's customer context.
+ * merge suggestions, linked external issues, the owner picker's roster, the
+ * author's customer context, the post's subscribers and the teammate's own
+ * follow bell.
  *
  * Each panel has its own query, refreshed on its own by the mutations that
  * change it. On open they are all empty, and filling them one request each
@@ -10,7 +11,7 @@
  * panel comes back in the shape its own server function returns, because the
  * client seeds that function's query with it.
  */
-import type { PostId } from '@quackback/ids'
+import type { PostId, PrincipalId } from '@quackback/ids'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { toIsoString } from '@/lib/shared/utils'
 import { logger } from '@/lib/server/logger'
@@ -18,8 +19,10 @@ import { getPendingSuggestionsForPost } from '@/lib/server/domains/merge-suggest
 import { listTeamMembers } from '@/lib/server/domains/principals/principal.service'
 import { toOwnerRef } from '@/lib/server/functions/post-owner-context'
 import type { EnrichmentCard } from '@/lib/server/integrations/types'
+import { getSubscriptionStatus } from '@/lib/server/domains/subscriptions/subscription.service'
 import { getPostVoters } from './post.voters'
 import { getPostExternalLinks } from './post.cascade-delete'
+import { readPostSubscribers } from './post.subscribers'
 
 const log = logger.child({ component: 'merge-suggestions' })
 
@@ -29,6 +32,8 @@ export const ADMIN_POST_PANELS = [
   'externalLinks',
   'ownerCandidates',
   'customerContext',
+  'subscribers',
+  'subscription',
 ] as const
 
 export type AdminPostPanel = (typeof ADMIN_POST_PANELS)[number]
@@ -40,6 +45,12 @@ export async function loadPostVotersPanel(postId: PostId) {
     ...v,
     createdAt: toIsoString(v.createdAt as Date | string),
   }))
+}
+
+/** Subscribers as `listPostSubscribersFn` returns them. */
+export async function loadPostSubscribersPanel(postId: PostId) {
+  const subscribers = await readPostSubscribers(postId)
+  return subscribers.map((s) => ({ ...s, createdAt: toIsoString(s.createdAt) }))
 }
 
 /** Pending merge suggestions as `getMergeSuggestionsForPostFn` returns them. */
@@ -77,31 +88,45 @@ type Panels = {
   externalLinks?: Awaited<ReturnType<typeof getPostExternalLinks>>
   ownerCandidates?: ReturnType<typeof toOwnerRef>[]
   customerContext?: EnrichmentCard[]
+  subscribers?: Awaited<ReturnType<typeof loadPostSubscribersPanel>>
+  subscription?: Awaited<ReturnType<typeof getSubscriptionStatus>>
 }
 
 /**
  * Load the requested panels for a post the caller may already view privately.
  * The owner roster also needs post.set_owner, like `listOwnerCandidatesFn`;
  * without it that panel is left out and the client never shows the picker.
+ * The follow bell is the caller's own status, read for `viewerId`; a
+ * subscriber list that fails is left for its own request.
  */
 export async function loadAdminPostPanels(
   postId: PostId,
   requested: readonly AdminPostPanel[],
-  permissions: readonly PermissionKey[]
+  permissions: readonly PermissionKey[],
+  viewerId?: PrincipalId
 ): Promise<Panels> {
   const wanted = new Set(requested)
   if (!permissions.includes(PERMISSIONS.POST_SET_OWNER)) wanted.delete('ownerCandidates')
 
-  const [voters, mergeSuggestions, externalLinks, ownerCandidates, customerContext] =
-    await Promise.all([
-      wanted.has('voters') ? loadPostVotersPanel(postId) : undefined,
-      wanted.has('mergeSuggestions') ? loadMergeSuggestionsPanel(postId) : undefined,
-      wanted.has('externalLinks') ? getPostExternalLinks(postId) : undefined,
-      wanted.has('ownerCandidates')
-        ? listTeamMembers().then((members) => members.map(toOwnerRef))
-        : undefined,
-      wanted.has('customerContext') ? loadCustomerContextPanel(permissions) : undefined,
-    ])
+  const [
+    voters,
+    mergeSuggestions,
+    externalLinks,
+    ownerCandidates,
+    customerContext,
+    subscribers,
+    subscription,
+  ] = await Promise.all([
+    wanted.has('voters') ? loadPostVotersPanel(postId) : undefined,
+    wanted.has('mergeSuggestions') ? loadMergeSuggestionsPanel(postId) : undefined,
+    wanted.has('externalLinks') ? getPostExternalLinks(postId) : undefined,
+    wanted.has('ownerCandidates')
+      ? listTeamMembers().then((members) => members.map(toOwnerRef))
+      : undefined,
+    wanted.has('customerContext') ? loadCustomerContextPanel(permissions) : undefined,
+    wanted.has('subscribers') ? loadPostSubscribersPanel(postId).catch(() => undefined) : undefined,
+    viewerId && wanted.has('subscription') ? getSubscriptionStatus(viewerId, postId) : undefined,
+  ])
 
   const panels: Panels = {}
   if (voters) panels.voters = voters
@@ -109,5 +134,7 @@ export async function loadAdminPostPanels(
   if (externalLinks) panels.externalLinks = externalLinks
   if (ownerCandidates) panels.ownerCandidates = ownerCandidates
   if (customerContext) panels.customerContext = customerContext
+  if (subscribers) panels.subscribers = subscribers
+  if (subscription) panels.subscription = subscription
   return panels
 }

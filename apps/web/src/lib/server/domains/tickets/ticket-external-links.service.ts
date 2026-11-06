@@ -1,8 +1,10 @@
+import { syncScopeFor } from '@/lib/server/integrations/sync/identity'
 import {
-  installationIdentity,
-  syncDestination,
-  syncHash,
-} from '@/lib/server/integrations/sync/identity'
+  destinationSends,
+  destinationTarget,
+  listDestinations,
+  outboundTarget,
+} from '@/lib/server/integrations/destinations'
 import { syncSourceForActor } from '@/lib/server/integrations/sync/eligibility'
 /**
  * Ticket <-> external issue links: manual linking of a ticket to an EXISTING
@@ -17,24 +19,10 @@ import { syncSourceForActor } from '@/lib/server/integrations/sync/eligibility'
  * `issues.parseRef` (e.g. Linear, whose inbound externalId is an internal
  * UUID a pasted URL cannot supply) simply offers no manual linking.
  */
-import {
-  db,
-  eq,
-  and,
-  or,
-  asc,
-  ne,
-  isNull,
-  integrations,
-  conversationMessages,
-  ticketExternalLinks,
-} from '@/lib/server/db'
+import { db, eq, and, asc, integrations, ticketExternalLinks } from '@/lib/server/db'
 import type { TicketId, TicketExternalLinkId, IntegrationId } from '@quackback/ids'
 import { getIntegration } from '@/lib/server/integrations'
 import type { ParsedIssueRef } from '@/lib/server/integrations/types'
-import { getBaseUrl } from '@/lib/server/config'
-import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
-import { truncate } from '@/lib/shared/utils/string'
 import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -43,7 +31,7 @@ import { ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { loadTicketOr404 } from './ticket.service'
 import { emitTicketSystemMessage } from './ticket-message.service'
-import { resolvePairConversationId } from './pair-thread.service'
+import { noteUnlinked } from './ticket-external-links.unlink'
 
 const log = logger.child({ component: 'ticket-external-links' })
 
@@ -88,6 +76,14 @@ export interface LinkableTrackerDTO {
   canLink: boolean
   /** issues.create present — "Create new issue" is offered. */
   canCreate: boolean
+  /** issues.comments present — "Sync" resyncs replies and comments with linked issues. */
+  canSync: boolean
+  /**
+   * For a tracker serving several destinations (GitHub repositories): the
+   * switched-on ones new issues can be created in, so the panel can ask
+   * which. Empty otherwise.
+   */
+  destinations: { id: string; name: string }[]
 }
 
 // ------------------------------------------------------------------------ service
@@ -113,17 +109,27 @@ export async function listLinkableTrackers(): Promise<LinkableTrackerDTO[]> {
   const rows = await db.query.integrations.findMany({
     where: eq(integrations.status, 'active'),
   })
-  return rows
-    .map((row) => {
-      const issues = getIntegration(row.integrationType)?.issues
-      return {
-        integrationType: row.integrationType,
-        name: providerName(row.integrationType),
-        canLink: Boolean(issues?.parseRef),
-        canCreate: Boolean(issues?.create),
-      }
+  const trackers: LinkableTrackerDTO[] = []
+  for (const row of rows) {
+    const definition = getIntegration(row.integrationType)
+    const issues = definition?.issues
+    if (!issues?.parseRef && !issues?.create) continue
+    const multiple = definition?.destination?.multiple
+    const destinations = multiple
+      ? (await listDestinations(row.id, multiple.kind))
+          .filter(destinationSends)
+          .map((d) => ({ id: d.id as string, name: d.externalId }))
+      : []
+    trackers.push({
+      integrationType: row.integrationType,
+      name: providerName(row.integrationType),
+      canLink: Boolean(issues?.parseRef),
+      canCreate: Boolean(issues?.create),
+      canSync: Boolean(issues?.comments),
+      destinations,
     })
-    .filter((t) => t.canLink || t.canCreate)
+  }
+  return trackers
 }
 
 /** The link row for a (ticket, provider, externalId) triple, or undefined. */
@@ -152,6 +158,7 @@ async function insertLinkWithNote(
   integrationType: string,
   ref: ParsedIssueRef,
   noteVerb: 'Linked' | 'Created',
+  target: { channelId: unknown },
   expectedScope: string
 ): Promise<LinkRow | null> {
   return db.transaction(async (tx) => {
@@ -166,11 +173,7 @@ async function insertLinkWithNote(
     const { queueSyncOperation } = await import('@/lib/server/integrations/sync/ledger')
     const config = (integration.config ?? {}) as Record<string, unknown>
     const installation = installationIdentity(integration)
-    const destination = syncDestination(
-      { channelId: config.channelId },
-      config,
-      getIntegration(integration.integrationType)
-    )
+    const destination = syncDestination(target, config, getIntegration(integration.integrationType))
     if (`${installation}:${syncHash(destination)}` !== expectedScope)
       throw new ValidationError(
         'CONNECTION_CHANGED',
@@ -211,7 +214,8 @@ async function insertLinkWithNote(
         remoteId: ref.externalId,
         state: 'succeeded',
         result: { ...ref },
-        payload: { executor: 'ticket-create', data: {} },
+        // The target lets a later review inspect the issue in its own repository.
+        payload: { executor: 'ticket-create', data: { target } },
       },
       tx
     )
@@ -236,7 +240,10 @@ async function insertLinkWithNote(
  * Link a ticket to an existing tracker issue (team-only, TICKET_ASSIGN — same
  * gate as tracker links). The provider capability parses the pasted reference
  * (URL or provider shorthand) and enforces its own config validation (e.g.
- * GitHub's connected-repository pin). No issue metadata is fetched — there is
+ * GitHub's connected-repository pin). For a tracker serving several
+ * destinations the reference's repository decides which one the link belongs
+ * to; it must be a switched-on repository the connection syncs, and must match
+ * `destinationId` when one is given. No issue metadata is fetched — there is
  * no read client; we store what the reference gives. Re-linking the same
  * issue is an idempotent no-op. Records a team-only 'external_linked' note on
  * the ticket thread.
@@ -245,7 +252,8 @@ export async function linkTicketToIssue(
   ticketId: TicketId,
   issueRef: string,
   actor: Actor,
-  integrationType = 'github'
+  integrationType = 'github',
+  destinationId?: string
 ): Promise<TicketExternalLinkDTO> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'link this ticket')
   await loadTicketOr404(ticketId)
@@ -266,15 +274,32 @@ export async function linkTicketToIssue(
   }
 
   const config = (integration.config ?? {}) as Record<string, unknown>
-  const ref = parseRef(issueRef, config)
+  const definition = getIntegration(integrationType)
+  const multiple = definition?.destination?.multiple
+  const destinations = multiple
+    ? (await listDestinations(integration.id, multiple.kind)).filter((d) => d.enabled)
+    : []
+  const ref = parseRef(
+    issueRef,
+    config,
+    destinations.map((d) => ({ id: d.id, externalId: d.externalId }))
+  )
   if (!ref) {
     throw new ValidationError(
       'INVALID_ISSUE_REF',
       `Enter a ${providerName(integrationType)} issue URL or reference`
     )
   }
+  const destination = destinations.find((d) => d.id === ref.destinationId)
+  if (destinationId && destination?.id !== destinationId) {
+    throw new ValidationError(
+      'REPO_MISMATCH',
+      `The issue belongs to a different ${multiple?.label.toLowerCase() ?? 'destination'}`
+    )
+  }
+  const target = destination ? destinationTarget(destination) : { channelId: config.channelId }
 
-  const syncScope = `${installationIdentity(integration)}:${syncHash(syncDestination({ channelId: config.channelId }, config, getIntegration(integration.integrationType)))}`
+  const syncScope = syncScopeFor(integration, target, definition)
   const existing = await findLink(ticketId, integrationType, ref.externalId, syncScope)
   if (existing) return toDTO(existing) // idempotent re-link
 
@@ -284,6 +309,7 @@ export async function linkTicketToIssue(
     integrationType,
     ref,
     'Linked',
+    target,
     syncScope
   )
   if (!created) {
@@ -299,11 +325,16 @@ export async function linkTicketToIssue(
   return toDTO(created)
 }
 
-/** Queue one durable creation per ticket, connection and destination. */
+/**
+ * Queue one durable creation per ticket, connection and destination. A
+ * tracker serving several destinations creates in `destinationId`, or in its
+ * default one (see `outboundTarget`).
+ */
 export async function createIssueForTicket(
   ticketId: TicketId,
   integrationType: string,
-  actor: Actor
+  actor: Actor,
+  destinationId?: string
 ): Promise<{ operationId: string; state: string }> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'create an issue for this ticket')
   if (
@@ -320,23 +351,16 @@ export async function createIssueForTicket(
       `Connect the ${providerName(integrationType)} integration first`
     )
   const { queueSyncOperation } = await import('@/lib/server/integrations/sync/ledger')
-  const { installationIdentity, syncDestination, syncOperationKey } =
+  const { installationIdentity, syncDestination } =
     await import('@/lib/server/integrations/sync/identity')
+  const { ticketCreateKey } = await import('@/lib/server/integrations/sync/tickets')
   const config = (integration.config ?? {}) as Record<string, unknown>
   const installation = installationIdentity(integration)
-  const destination = syncDestination(
-    { channelId: config.channelId },
-    config,
-    getIntegration(integration.integrationType)
-  )
+  const target = await outboundTarget(integration, destinationId)
+  const destination = syncDestination(target, config, getIntegration(integration.integrationType))
   const operation = await queueSyncOperation({
-    operationKey: syncOperationKey({
-      installation,
-      destination,
-      sourceType: 'ticket',
-      sourceId: ticketId,
-      kind: 'create',
-    }),
+    // Shared with a destination's automatic create, so the ticket gets one issue there either way.
+    operationKey: ticketCreateKey({ installation, destination, ticketId }),
     integrationId: integration.id,
     installation,
     provider: integrationType,
@@ -346,7 +370,7 @@ export async function createIssueForTicket(
     sourceId: ticketId,
     requestedBy: actor.principalId,
     destination,
-    payload: { executor: 'ticket-create', data: {} },
+    payload: { executor: 'ticket-create', data: { target } },
   })
   if (!operation)
     throw new ValidationError(
@@ -354,45 +378,6 @@ export async function createIssueForTicket(
       'This ticket predates integration sync. You can link an existing issue instead.'
     )
   return { operationId: operation.id, state: operation.state }
-}
-
-/** Read current customer-visible content at dispatch time, excluding removed messages and internal notes. */
-export async function buildTicketIssueData(ticketId: TicketId) {
-  const ticket = await loadTicketOr404(ticketId)
-  const pairConversationId = await resolvePairConversationId(ticketId)
-  const [firstMessage] = await db
-    .select({
-      content: conversationMessages.content,
-      contentJson: conversationMessages.contentJson,
-    })
-    .from(conversationMessages)
-    .where(
-      and(
-        pairConversationId
-          ? or(
-              eq(conversationMessages.ticketId, ticketId),
-              eq(conversationMessages.conversationId, pairConversationId)
-            )
-          : eq(conversationMessages.ticketId, ticketId),
-        ne(conversationMessages.senderType, 'system'),
-        eq(conversationMessages.isInternal, false),
-        isNull(conversationMessages.deletedAt)
-      )
-    )
-    .orderBy(asc(conversationMessages.createdAt), asc(conversationMessages.id))
-    .limit(1)
-  const narrative = firstMessage
-    ? truncate(contentJsonToMarkdown(firstMessage.contentJson, firstMessage.content), 2000)
-    : ''
-  const bodyMarkdown = [
-    narrative,
-    `---`,
-    `Created from Quackback ticket #${ticket.number}: ${getBaseUrl()}/admin/inbox?i=${ticketId}`,
-  ]
-    .filter(Boolean)
-    .join('\n\n')
-
-  return { title: ticket.title, bodyMarkdown }
 }
 
 /**
@@ -413,18 +398,7 @@ export async function unlinkTicketIssue(
       .delete(ticketExternalLinks)
       .where(and(eq(ticketExternalLinks.id, linkId), eq(ticketExternalLinks.ticketId, ticketId)))
       .returning()
-    if (!removed) return
-    const reference = removed.externalDisplayId ?? removed.externalId
-    await emitTicketSystemMessage(
-      ticketId,
-      'external_unlinked',
-      `Unlinked ${providerName(removed.integrationType)} issue ${reference}`,
-      {
-        metadata: { externalReference: reference, externalUrl: removed.externalUrl ?? undefined },
-        exec: tx,
-      }
-    )
-    log.info({ ticket_id: ticketId, link_id: linkId }, 'ticket external link removed')
+    if (removed) await noteUnlinked(removed, tx)
   })
 }
 

@@ -52,8 +52,13 @@ export const EVENT_REACTIONS = {
     // A visitor message on a conversation paired with a customer ticket
     // reopens that ticket.
     'pair-ticket-reopen': ['message.created'],
+    // A customer-visible message on a conversation paired with a customer
+    // ticket is that ticket's reply: it notifies the ticket's watchers.
+    'pair-ticket-replied': ['message.created'],
     // Confirm the assistant's resolution off a positive first CSAT rating.
     'assistant-csat-confirm': ['conversation.csat_submitted'],
+    // A ticket opened from a GitHub issue closes or reopens that issue.
+    'github-issue-state': ['ticket.status_changed'],
   },
   [EVENT_SUMMARIES_QUEUE]: {
     // Summarize a closed conversation for future assistant grounding.
@@ -103,9 +108,10 @@ export function reactionQueuesFor(type: string): ReactionQueue[] {
  * that throws then fails the job, which retries the event's reactions on that
  * queue: they are idempotent against a repeat of the same event. The SLA
  * reaction throws on purpose, so a transient fault in a recorder is retried
- * rather than lost. The pair-ticket reopen, the CSAT confirm and the summaries
- * are best-effort: they log and swallow their own errors, so only the events
- * read and the deadline below fail their jobs.
+ * rather than lost. The pair-ticket reopen and reply, the CSAT confirm, the
+ * GitHub issue state and the summaries are best-effort: they log and swallow
+ * their own errors, so only the events read and the deadline below fail their
+ * jobs.
  *
  * The reactions share a deadline (REACTION_DEADLINE_MS). Past it the job fails
  * and its signal aborts. A reaction that cannot be cancelled (a database call)
