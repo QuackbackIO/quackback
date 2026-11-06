@@ -64,19 +64,6 @@ export async function assertWorkspaceThreadOwned(
   if (!row) missing()
   return row
 }
-/**
- * Lock a thread without asserting who owns it, for a decision any qualified
- * person may make on a request filed there. The thread is locked before its
- * requests everywhere, so locks cannot invert.
- */
-export async function lockWorkspaceThread(key: string, tx: Transaction): Promise<void> {
-  await tx
-    .select({ key: workspaceAssistantThreads.key })
-    .from(workspaceAssistantThreads)
-    .where(eq(workspaceAssistantThreads.key, key))
-    .limit(1)
-    .for('update')
-}
 function summary(
   row: typeof workspaceAssistantThreads.$inferSelect
 ): WorkspaceCopilotThreadSummary {

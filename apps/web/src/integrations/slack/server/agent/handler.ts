@@ -198,7 +198,7 @@ export async function handleSlackDecision(
         person.id,
         actor,
         pending.workspaceThreadKey,
-        { via: 'slack', contentHash: button.contentHash }
+        { contentHash: button.contentHash }
       )
     } catch (error) {
       log.warn(
