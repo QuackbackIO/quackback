@@ -19,7 +19,6 @@ import { toolPermissions } from './tool-permissions'
  */
 import { createHash } from 'node:crypto'
 import { toolDefinition } from '@tanstack/ai'
-import { DomainException } from '@/lib/shared/errors'
 import { can } from '@/lib/server/policy/authorize'
 import { logger } from '@/lib/server/logger'
 import { assistantAttribution, runWithAuditAttribution } from '@/lib/server/audit/attribution'
@@ -85,6 +84,10 @@ export function knowledgeSearchToolName(ctx: Pick<AssistantToolContext, 'role' |
 
 const PENDING_APPROVAL_NOTE =
   'A teammate must approve this action; tell the customer it has been requested.'
+// A customer conversation is handed to the team once the turn ends with a
+// filed proposal (see assistant.orchestrator.ts), so Quinn says who picks it up.
+const PENDING_HANDOFF_NOTE =
+  'A teammate must confirm this action, and this conversation is being passed to the team. Tell the customer it has been requested and a teammate will pick it up.'
 const CONNECTOR_ALLOW_NOTE =
   'The teammate sees an Allow or Skip card for this call. Say what you want to look up and stop; nothing was fetched yet.'
 const DENIED_NOTE = 'This action is not permitted for the assistant.'
@@ -244,50 +247,6 @@ async function runWithPipeline(
     return { simulated: true, summary: spec.summarize(args, ctx) }
   }
 
-  if (mode === 'propose' && spec.name === 'propose_settings_change' && isHomeTurn(ctx)) {
-    const { enqueueWorkspaceSettingsProposal } =
-      await import('./workspace-settings-actions.service')
-    const { settingsProposalInputSchema } =
-      await import('@/lib/shared/assistant/settings-proposals')
-    let pending: Awaited<ReturnType<typeof enqueueWorkspaceSettingsProposal>>
-    try {
-      pending = await enqueueWorkspaceSettingsProposal(
-        ctx.actor,
-        settingsProposalInputSchema.parse(args).changes,
-        ctx.workspaceThreadKey!,
-        ctx.latestCustomerMessageId ?? undefined,
-        assistantRequester(ctx)
-      )
-    } catch (error) {
-      if (!(error instanceof DomainException)) throw error
-      ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'failed' })
-      return { status: 'denied', note: error.message }
-    }
-    // A combined card replaces the one it absorbed, which is never edited.
-    ctx.ledger.proposedActions = ctx.ledger.proposedActions.filter(
-      (action) => action.id !== pending.id && action.id !== pending.supersededId
-    )
-    ctx.ledger.proposedActions.push({
-      id: pending.id,
-      toolName: pending.toolName,
-      summary: pending.summary,
-      label: spec.label,
-      ...(pending.argsDigest ? { contentHash: pending.argsDigest } : {}),
-    })
-    ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'proposed' })
-    return {
-      status: 'pending_approval',
-      note: [
-        PENDING_APPROVAL_NOTE,
-        RETRIEVED_CONTENT_NOTE,
-        JSON.stringify({
-          proposal: pending.args,
-          preparationNotes: pending.preparationNotes ?? [],
-        }),
-      ].join('\n'),
-    }
-  }
-
   if (mode === 'propose') {
     const summary = spec.summarize(args, ctx)
     // Polymorphic parent (unified inbox §3.3): whichever item this turn is
@@ -342,7 +301,12 @@ async function runWithPipeline(
     ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'proposed' })
     return {
       status: 'pending_approval',
-      note: spec.connector && isHomeTurn(ctx) ? CONNECTOR_ALLOW_NOTE : PENDING_APPROVAL_NOTE,
+      note:
+        spec.connector && isHomeTurn(ctx)
+          ? CONNECTOR_ALLOW_NOTE
+          : ctx.role === 'customer_support' && 'conversationId' in parent
+            ? PENDING_HANDOFF_NOTE
+            : PENDING_APPROVAL_NOTE,
     }
   }
 

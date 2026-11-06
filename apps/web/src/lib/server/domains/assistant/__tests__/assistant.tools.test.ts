@@ -453,6 +453,30 @@ describe('assembleAssistantToolset: write-tool pipeline (propose mode)', () => {
     ])
   })
 
+  it('tells the customer a teammate will pick the conversation up, while a copilot proposal keeps the plain note', async () => {
+    mockProposePendingAction.mockResolvedValue({ id: 'assistant_action_1' })
+
+    const customer = ctx({ conversationId: 'conversation_1' as never, writeToolPolicy: 'propose' })
+    const customerTool = await findTool(customer, 'close_conversation', [makeFakeWriteSpec()])
+    const customerOut = (await customerTool.execute({ reason: 'resolved' }, toolCtx(customer))) as {
+      note: string
+    }
+
+    const copilot = ctx({
+      conversationId: 'conversation_1' as never,
+      role: 'copilot_qa',
+      writeToolPolicy: 'propose',
+    })
+    const copilotTool = await findTool(copilot, 'close_conversation', [makeFakeWriteSpec()])
+    const copilotOut = (await copilotTool.execute({ reason: 'resolved' }, toolCtx(copilot))) as {
+      note: string
+    }
+
+    expect(customerOut.note).toMatch(/teammate will pick/i)
+    expect(customerOut.note).not.toMatch(/\u2014/)
+    expect(copilotOut.note).not.toMatch(/pick/i)
+  })
+
   it('computes the same-shaped idempotency key the autonomous branch claims with, so a retry can dedupe (S1)', async () => {
     mockProposePendingAction.mockResolvedValue({ id: 'assistant_action_1' })
 

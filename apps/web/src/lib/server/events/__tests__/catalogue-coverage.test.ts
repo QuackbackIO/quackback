@@ -96,10 +96,6 @@ describe('event catalogue coverage', () => {
     'due_changed',
     'due_soon',
     'overdue',
-    // approvals: a person is asked, decides, and the change is applied
-    'requested',
-    'decided',
-    'applied',
     // status-page legacy compound verbs (entity is status_incident/status_component)
     'incident_created',
     'incident_updated',

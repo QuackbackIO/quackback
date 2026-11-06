@@ -192,13 +192,12 @@ describe('workspace knowledge access', () => {
           'widget_install_status',
           'get_settings',
           'navigate_workspace',
-          'propose_settings_change',
         ])
       )
       expect(new Set(names).size).toBe(names.length)
       expect(
         assembled.activeSpecs.filter((spec) => spec.risk === 'write').map((spec) => spec.name)
-      ).toEqual(['propose_settings_change'])
+      ).toEqual([])
       const knowledge = assembled.tools.find((tool) => tool.name === 'search_knowledge')!
       const result = (await knowledge.execute!({ query })) as {
         results: { id: string; kind: string }[]

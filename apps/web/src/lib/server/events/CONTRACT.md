@@ -19,9 +19,7 @@ checklist.
     `replied`, `handed_off`, `resolved`, `csat_submitted`, `breached`, `voted`,
     `external_status_changed` (a linked tracker issue moved upstream),
     `due_changed` · `due_soon` · `overdue` (a ticket's due date moved, is
-    within 24 hours, or has passed),
-    `requested` · `decided` · `applied` (an approval is asked for, decided by
-    a person, and its change applied), …
+    within 24 hours, or has passed), …
     (add new ones to the list _on purpose_).
 - A new verb is a deliberate decision, not a drive-by string. Adding one and
   forgetting the list turns CI red.
