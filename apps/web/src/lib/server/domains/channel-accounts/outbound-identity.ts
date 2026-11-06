@@ -258,10 +258,15 @@ export function withSendingDisplayName(
 }
 
 export async function permittedSendingIdentity(
-  from: string | null
+  from: string | null,
+  /**
+   * A context the caller already gathered, so a caller checking several
+   * candidates for one send reads the verified domains once, not per candidate.
+   */
+  given?: SendingIdentityContext
 ): Promise<SendingIdentity | null> {
   if (!from) return null
-  const ctx = await sendingIdentityContext()
+  const ctx = given ?? (await sendingIdentityContext())
   // The one cast to the brand, alongside its twin below. Reached only after the
   // rule above has said yes, which is the whole meaning of the type.
   if (isSendingIdentityPermitted(from, ctx)) return from as SendingIdentity
