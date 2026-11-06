@@ -257,6 +257,80 @@ describe.skipIf(!fixture.available)('resolveSender (real DB, rolled back)', () =
     })
   })
 
+  describe('a thread keeps its first sender', () => {
+    async function storedSender(conv: ConversationId): Promise<string | null> {
+      const [row] = await testDb
+        .select({ address: conversations.threadSenderAddress })
+        .from(conversations)
+        .where(eq(conversations.id, conv))
+      return row?.address ?? null
+    }
+
+    it('records the address the first email on a conversation goes out from', async () => {
+      const home = await defaultTeam()
+      await seedVerifiedDomain(home, 'home.example')
+      await seedAddress(home, 'help@home.example', EARLIER)
+      const conv = await seedConversation({ assignedTeamId: home })
+
+      expect(await storedSender(conv)).toBeNull()
+      expect(await resolveConversationFrom(conv)).toBe('help@home.example')
+      expect(await storedSender(conv)).toBe('help@home.example')
+    })
+
+    it('keeps the From when the conversation is reassigned to a team with its own address', async () => {
+      const home = await defaultTeam()
+      await seedVerifiedDomain(home, 'home.example')
+      await seedAddress(home, 'help@home.example', EARLIER)
+      const billing = await seedTeam()
+      await seedAddress(billing, 'billing@home.example', LATER)
+      const conv = await seedConversation({ assignedTeamId: home })
+
+      expect(await resolveConversationFrom(conv)).toBe('help@home.example')
+      await testDb
+        .update(conversations)
+        .set({ assignedTeamId: billing })
+        .where(eq(conversations.id, conv))
+
+      expect(await resolveConversationFrom(conv)).toBe('help@home.example')
+      expect(await resolveSender({ module: 'support', conversationId: conv })).toEqual({
+        from: 'help@home.example',
+        source: 'thread',
+      })
+      expect(await storedSender(conv)).toBe('help@home.example')
+    })
+
+    it('falls through to the normal order once the stored domain is no longer verified', async () => {
+      const home = await defaultTeam()
+      await seedVerifiedDomain(home, 'home.example')
+      await seedAddress(home, 'help@home.example', EARLIER)
+      const conv = await seedConversation({ assignedTeamId: home })
+      expect(await resolveConversationFrom(conv)).toBe('help@home.example')
+
+      // The domain is demoted, and the team gains an address on another domain
+      // that is still live. The stored sender is no longer one the guard
+      // permits, so it gives way rather than suppressing the send.
+      await testDb
+        .update(emailSendingDomains)
+        .set({ status: 'failed' })
+        .where(eq(emailSendingDomains.domain, 'home.example'))
+      await seedVerifiedDomain(home, 'other.example')
+      await seedAddress(home, 'help@other.example', LATER)
+
+      expect(await resolveSender({ module: 'support', conversationId: conv })).toEqual({
+        from: 'help@other.example',
+        source: 'team',
+      })
+      // The thread's own sender is kept, so it comes back if the domain does.
+      expect(await storedSender(conv)).toBe('help@home.example')
+    })
+
+    it('records nothing when the thread sends from the platform default', async () => {
+      const conv = await seedConversation({ assignedTeamId: await seedTeam() })
+      expect(await resolveConversationFrom(conv)).toBeNull()
+      expect(await storedSender(conv)).toBeNull()
+    })
+  })
+
   describe('a fixed, repeatable choice', () => {
     it('picks the oldest permitted row, whatever order the rows were written in', async () => {
       const home = await defaultTeam()
