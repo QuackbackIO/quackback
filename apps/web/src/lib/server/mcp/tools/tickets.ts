@@ -64,7 +64,6 @@ function withAttachmentsSummary(content: string, attachments: ConversationAttach
   return `${content}\n\nAttachments:\n${lines.join('\n')}`
 }
 
-
 /** A link change touches both tickets, so the caller must be able to see each one. */
 async function assertBothEndsVisible(
   trackerTicketId: TicketId,
