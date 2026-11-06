@@ -96,20 +96,6 @@ describe('API-route channel reachability', () => {
   })
 })
 
-describe('workspace Copilot session route', () => {
-  it('requires a teammate session with Copilot permission and excludes API keys', () => {
-    const route = surfaces.find(
-      (surface) => surface.file === 'routes/api/admin/assistant/workspace.ts'
-    )!
-    expect(route.channel).toBe('session-route')
-    expect(route.authz).toEqual({ type: 'permission', permission: 'copilot.use' })
-    expect(evaluate(byId('admin'), route)).toBe('allow')
-    expect(evaluate(byId('member'), route)).toBe('allow')
-    expect(evaluate(byId('portal_user'), route)).toBe('deny')
-    expect(evaluate(byId('full_api_key'), route)).toBe('n/a')
-  })
-})
-
 describe('automatic website branding authorization', () => {
   it('requires current settings management before lookup, private status, an offer answer or Undo', () => {
     const brandingOnly = {

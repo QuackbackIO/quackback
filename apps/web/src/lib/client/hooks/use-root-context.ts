@@ -1,4 +1,6 @@
 import { useRouteContext } from '@tanstack/react-router'
+import { useMemo } from 'react'
+import type { PermissionKey } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
 
 /**
@@ -76,5 +78,32 @@ export function usePrincipalId(): string | undefined {
   return useRouteContext({
     from: '/admin',
     select: (context) => (context as { principal?: { id?: string } | null }).principal?.id,
+  })
+}
+
+/**
+ * The viewer's resolved permissions, from the set the admin shell's beforeLoad
+ * already computed. Render-only: every mutation is still enforced server-side
+ * via requireAuth({ permission }), so a stale value here can only hide or show
+ * affordances, never grant access.
+ *
+ * They live here, in a module the entry chunk already carries, rather than in
+ * a file of their own: the portal post view and many admin pages use them from
+ * separate lazy chunks, so a module of their own becomes a shared chunk and an
+ * extra request on each of those pages.
+ */
+function permissionsOf(context: unknown): PermissionKey[] | undefined {
+  return (context as { permissions?: PermissionKey[] }).permissions
+}
+
+export function usePermissions(): ReadonlySet<PermissionKey> {
+  const permissions = useRouteContext({ from: '/admin', select: permissionsOf })
+  return useMemo(() => new Set(permissions ?? []), [permissions])
+}
+
+export function useHasPermission(permission: PermissionKey): boolean {
+  return useRouteContext({
+    from: '/admin',
+    select: (context) => permissionsOf(context)?.includes(permission) ?? false,
   })
 }

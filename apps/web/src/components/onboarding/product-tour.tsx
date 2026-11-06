@@ -35,12 +35,9 @@ const ProductTourRunner = lazy(() =>
 
 export function ProductTourProvider({
   children,
-  copilotOnHome = false,
   endAction,
 }: {
   children: ReactNode
-  /** Home leads with the Copilot chat, so the tour opens on it. */
-  copilotOnHome?: boolean
   endAction?: TourEndAction
 }) {
   // Counts start requests; each new value starts the tour from the top.
@@ -52,7 +49,7 @@ export function ProductTourProvider({
       {children}
       {runId > 0 && (
         <Suspense fallback={null}>
-          <ProductTourRunner runId={runId} copilotOnHome={copilotOnHome} endAction={endAction} />
+          <ProductTourRunner runId={runId} endAction={endAction} />
         </Suspense>
       )}
     </TourApi.Provider>
