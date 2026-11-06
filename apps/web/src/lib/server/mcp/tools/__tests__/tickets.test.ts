@@ -442,6 +442,11 @@ describe('ticket MCP tools', () => {
       trackerTicketId: 'ticket_tracker',
       linkedTicketIds: ['ticket_customer'],
     })
+    // The returned links are only the ones the caller can see.
+    expect(mockListLinked).toHaveBeenCalledWith(
+      'ticket_tracker',
+      expect.objectContaining({ principalId: 'principal_key' })
+    )
   })
 
   it('link_ticket refuses when the caller cannot see the customer ticket, without linking', async () => {

@@ -432,7 +432,7 @@ Example: link_ticket({ trackerTicketId: "ticket_01tracker...", ticketId: "ticket
       await linkTicketToTracker(trackerTicketId, args.ticketId as TicketId, actor)
       return jsonResult({
         trackerTicketId,
-        linkedTicketIds: await listLinkedTicketIds(trackerTicketId),
+        linkedTicketIds: await listLinkedTicketIds(trackerTicketId, actor),
       })
     },
   })
@@ -459,7 +459,7 @@ Example: unlink_ticket({ trackerTicketId: "ticket_01tracker...", ticketId: "tick
       await unlinkTicketFromTracker(trackerTicketId, args.ticketId as TicketId, actor)
       return jsonResult({
         trackerTicketId,
-        linkedTicketIds: await listLinkedTicketIds(trackerTicketId),
+        linkedTicketIds: await listLinkedTicketIds(trackerTicketId, actor),
       })
     },
   })

@@ -30,6 +30,7 @@ import {
   rolePermissions,
   roles,
   teamMembers,
+  ticketLinks,
   teams,
   tickets,
   ticketStatuses,
@@ -70,6 +71,7 @@ import { serviceActorFromApiAuth } from '../service-actor'
 import { createApiKey } from '@/lib/server/domains/api-keys/api-key.service'
 import { updateMemberRole } from '@/lib/server/domains/principals/principal.service'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
+import { listLinkedTicketIds } from '@/lib/server/domains/tickets/ticket-links.service'
 import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
 import { ticketFilter } from '@/lib/server/policy/tickets'
 import { conversationFilter } from '@/lib/server/policy/conversations'
@@ -263,6 +265,21 @@ describe.skipIf(!fixture.available)('a personal API key follows its creator row 
     ).resolves.toMatchObject({ id: world.conversationIds.mine })
     await expect(assertConversationViewable(world.conversationIds.teamY, actor)).rejects.toThrow(
       NotFoundError
+    )
+  })
+
+  it("lists only the tracker's linked tickets the creator can see", async () => {
+    const world = await seedWorld()
+    await demoteToTeamScope(world)
+    const actor = serviceActorFromApiAuth(await withApiKeyAuth(bearer(world.token)))
+    await testDb.insert(ticketLinks).values([
+      { trackerTicketId: world.ticketIds.mine, linkedTicketId: world.ticketIds.teamX },
+      { trackerTicketId: world.ticketIds.mine, linkedTicketId: world.ticketIds.teamY },
+    ])
+
+    expect(await listLinkedTicketIds(world.ticketIds.mine, actor)).toEqual([world.ticketIds.teamX])
+    expect(new Set(await listLinkedTicketIds(world.ticketIds.mine))).toEqual(
+      new Set([world.ticketIds.teamX, world.ticketIds.teamY])
     )
   })
 
