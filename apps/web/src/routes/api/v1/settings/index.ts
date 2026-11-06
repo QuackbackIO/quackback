@@ -11,7 +11,7 @@ export const Route = createFileRoute('/api/v1/settings/')({
     handlers: {
       /**
        * GET /api/v1/settings
-       * The settings areas the key may read, with risk, revision and gates
+       * The settings areas the key may read, with revision and gates
        */
       GET: async ({ request }) => {
         try {

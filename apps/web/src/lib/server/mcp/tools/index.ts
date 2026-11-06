@@ -31,9 +31,8 @@
  *                    add_ticket_participant, remove_ticket_participant
  * - files.ts         upload_file
  * - widget.ts        widget_install_status
- * - settings.ts      get_settings, propose_settings_change
+ * - settings.ts      get_settings, update_settings
  * - navigation.ts    navigate_workspace
- * - approvals.ts     get_approval, list_approvals
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -50,7 +49,6 @@ import { registerFileTools } from './files'
 import { registerWidgetTools } from './widget'
 import { registerSettingsTools } from './settings'
 import { registerNavigationTools } from './navigation'
-import { registerApprovalTools } from './approvals'
 
 export function registerTools(server: McpServer, auth: McpAuthContext) {
   registerSearchTools(server, auth)
@@ -65,5 +63,4 @@ export function registerTools(server: McpServer, auth: McpAuthContext) {
   registerWidgetTools(server, auth)
   registerSettingsTools(server, auth)
   registerNavigationTools(server, auth)
-  registerApprovalTools(server, auth)
 }

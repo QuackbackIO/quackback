@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   settingsChangeInputSchema,
-  settingsProposalInputSchema,
   selectSettingsChanges,
   settingsProposalSchema,
 } from '../settings-proposals'
@@ -27,47 +26,11 @@ const changes = [
 ]
 
 describe('settings proposals', () => {
-  it('accepts a website only as proposal input and keeps persisted settings website-free', () => {
-    const input = {
-      changes: [
-        { area: 'branding', patch: { website: 'https://example.com/docs' } },
-        { area: 'messenger', patch: { enabled: true } },
-      ],
-    }
-    expect(settingsProposalInputSchema.parse(input)).toEqual(input)
-    for (const website of ['example.com:443', 'http://example.com:80', 'http://example.com:443'])
-      expect(
-        settingsProposalInputSchema.safeParse({
-          changes: [{ area: 'branding', patch: { website } }],
-        }).success
-      ).toBe(true)
-    expect(settingsChangeInputSchema.safeParse(input.changes[0]).success).toBe(false)
-    for (const website of [
-      'javascript:alert(1)',
-      'https://you:password@example.com',
-      '',
-      'example.com:8080',
-      'https://example.com:8443/docs',
-      'http://example.com:22',
-    ])
-      expect(
-        settingsProposalInputSchema.safeParse({
-          changes: [{ area: 'branding', patch: { website } }],
-        }).success
-      ).toBe(false)
+  it('keeps settings changes website-free', () => {
     expect(
-      settingsProposalInputSchema.safeParse({
-        changes: [
-          { area: 'branding', patch: { website: 'example.com', logoKey: 'logos/other.png' } },
-        ],
-      }).success
-    ).toBe(false)
-    expect(
-      settingsProposalInputSchema.safeParse({
-        changes: [
-          { area: 'branding', patch: { website: 'example.com' } },
-          { area: 'branding', patch: { website: 'https://other.example.com' } },
-        ],
+      settingsChangeInputSchema.safeParse({
+        area: 'branding',
+        patch: { website: 'https://example.com/docs' },
       }).success
     ).toBe(false)
     expect(
