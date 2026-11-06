@@ -1263,7 +1263,7 @@ describe('threading headers (P4.6 regression guard)', () => {
       // fromDisplayName so dispatch can wrap EMAIL_FROM.
       expect(
         [call.from, call.fromDisplayName].some(
-          (value) => typeof value === 'string' && value.includes('Agent (Acme)')
+          (value) => typeof value === 'string' && value.includes('Agent from Acme')
         )
       ).toBe(true)
     })

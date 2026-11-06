@@ -38,8 +38,9 @@ export function teamAlertSubject(
   return `${visitorName}: ${topic}`
 }
 
+/** The From display name on an agent's reply: `Alex from Acme`. */
 export function agentReplyDisplayName(agentName: string, workspaceName: string): string {
-  return `${agentName} (${workspaceName})`
+  return `${agentName} from ${workspaceName}`
 }
 
 export function conversationMessageCopy(opts: {
