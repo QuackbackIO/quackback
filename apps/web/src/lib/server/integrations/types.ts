@@ -252,6 +252,14 @@ export interface IntegrationDefinition {
       config: Record<string, unknown>
       accessToken: string
     }) => Promise<boolean>
+    /**
+     * One connection serves several destinations of this `destinations` kind
+     * (GitHub: repositories), each stored in `integration_destinations` with
+     * its own webhook and signing secret. `webhookRegistration` then runs once
+     * per destination with `config.channelId` naming it (see
+     * `destinations.ts`), and `inbound.destinationOf` routes deliveries.
+     */
+    multiple?: { kind: string; label: string }
   }
   appHooks?: {
     /** The provider executes through the shared ledger, with optional queue scheduling. */
@@ -384,6 +392,8 @@ export interface IntegrationDefinition {
           externalWebhookId?: string
           /** Authenticated provider response may issue the signing secret (e.g. Asana). */
           webhookSecret?: string
+          /** The events the webhook subscribes to, kept on the destination for display. */
+          events?: string[]
         }>
         unregister(params: {
           accessToken: string

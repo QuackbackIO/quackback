@@ -25,6 +25,8 @@ export interface InboxFilters {
   updatedBefore?: string
   /** Only show posts with pending duplicate suggestions */
   hasDuplicates?: boolean
+  /** Only show posts the signed-in teammate follows */
+  following?: boolean
   sort?: InboxPostSort
   showDeleted?: boolean
 }

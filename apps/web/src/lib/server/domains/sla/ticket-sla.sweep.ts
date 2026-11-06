@@ -66,6 +66,7 @@ interface TicketSlaSweepRow {
   priority: EventTicketRef['priority']
   assigneePrincipalId: string | null
   assigneeTeamId: string | null
+  dueAt: Date | null
 }
 
 /** Build the EventTicketRef a dispatched ticket-clock trigger embeds, from a
@@ -78,6 +79,7 @@ function ticketRefFromRow(row: TicketSlaSweepRow): EventTicketRef {
     priority: row.priority,
     assignedPrincipalId: row.assigneePrincipalId,
     assignedTeamId: row.assigneeTeamId,
+    dueAt: row.dueAt ? row.dueAt.toISOString() : null,
   }
 }
 
@@ -160,6 +162,7 @@ async function scanTicketSlaCandidates(
       priority: tickets.priority,
       assigneePrincipalId: tickets.assigneePrincipalId,
       assigneeTeamId: tickets.assigneeTeamId,
+      dueAt: tickets.dueAt,
     })
     .from(tickets)
     .where(

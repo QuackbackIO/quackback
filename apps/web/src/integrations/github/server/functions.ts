@@ -180,6 +180,21 @@ export const fetchGitHubReposFn = createServerFn({ method: 'GET' }).handler(
   }
 )
 
+/**
+ * Choose the repository GitHub sync serves. Moves the repository's webhook
+ * with the selection; see `setGitHubRepository`.
+ */
+export const setGitHubRepositoryFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ repository: z.string().trim().min(3).max(200) }))
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
+    const { setGitHubRepository } = await import('@/integrations/github/server/repository')
+
+    await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
+    await setGitHubRepository(data.repository)
+    return { ok: true }
+  })
+
 export const retryGitHubAgentMessageFn = createServerFn({ method: 'POST' })
   .validator(z.object({ messageId: z.string() }))
   .handler(async ({ data }): Promise<{ ok: true }> => {
