@@ -119,7 +119,7 @@ export function ScheduleMaintenanceDialog({
           Schedule maintenance
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Schedule maintenance</DialogTitle>
           <DialogDescription>

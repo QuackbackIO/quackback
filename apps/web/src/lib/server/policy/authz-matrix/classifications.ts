@@ -80,6 +80,23 @@ const SETTINGS_REGISTRY_PERMISSIONS = [
 ]
 
 export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
+  // Personal API keys: any teammate manages their own keys. A personal key acts
+  // as its creator, so it can never hold more than they do.
+  'lib/server/functions/personal-api-keys.ts::fetchMyApiKeysFn': END_USER(
+    'self-service: lists personal API keys of the caller; team members only (inline isTeamMember), and the key is filtered to kind personal and createdById = caller'
+  ),
+  'lib/server/functions/personal-api-keys.ts::createMyApiKeyFn': END_USER(
+    'self-service: creates a personal API key for the caller, refused while the workspace policy is off; team members only (inline isTeamMember), and the key is filtered to kind personal and createdById = caller'
+  ),
+  'lib/server/functions/personal-api-keys.ts::renameMyApiKeyFn': END_USER(
+    'self-service: renames one of personal API keys of the caller; team members only (inline isTeamMember), and the key is filtered to kind personal and createdById = caller'
+  ),
+  'lib/server/functions/personal-api-keys.ts::rotateMyApiKeyFn': END_USER(
+    'self-service: rotates one of personal API keys of the caller; team members only (inline isTeamMember), and the key is filtered to kind personal and createdById = caller'
+  ),
+  'lib/server/functions/personal-api-keys.ts::revokeMyApiKeyFn': END_USER(
+    'self-service: revokes one of personal API keys of the caller; team members only (inline isTeamMember), and the key is filtered to kind personal and createdById = caller'
+  ),
   'lib/server/functions/assistant-connectors.ts::createConnectorFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
     'either AI permission opens it, and assigning to an agent also requires that agent AI permission'
@@ -717,6 +734,31 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
 const NOT_A_GATE = (why: string): Classification => ({ intent: 'NOT_A_GATE', why })
 
 export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
+  'lib/server/functions/personal-api-keys.ts::fetchMyApiKeysFn::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'personal API keys are for team members only; a portal user is refused',
+  },
+  'lib/server/functions/personal-api-keys.ts::createMyApiKeyFn::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'personal API keys are for team members only; a portal user is refused',
+  },
+  'lib/server/functions/personal-api-keys.ts::renameMyApiKeyFn::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'personal API keys are for team members only; a portal user is refused',
+  },
+  'lib/server/functions/personal-api-keys.ts::rotateMyApiKeyFn::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'personal API keys are for team members only; a portal user is refused',
+  },
+  'lib/server/functions/personal-api-keys.ts::revokeMyApiKeyFn::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'personal API keys are for team members only; a portal user is refused',
+  },
   // Real access decisions the requireAuth/withApiKeyAuth scan does NOT cover —
   // surfaced precisely because a stray change here would widen access silently.
   'routes/api/chat/stream.ts::GET::isTeamMember': {
