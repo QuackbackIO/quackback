@@ -146,7 +146,7 @@ export function ReportIncidentDialog({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{backfill ? 'Log a past incident' : 'Report an incident'}</DialogTitle>
           <DialogDescription>
