@@ -5,8 +5,7 @@ import { FormattedMessage, IntlProvider, useIntl } from 'react-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { getTourContextFn, markTourSeenFn } from '@/lib/server/functions/onboarding-progress'
-import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
-import { usePermissions } from '@/lib/client/use-permissions'
+import { useFeatureFlags, usePermissions } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { cn } from '@/lib/shared/utils'
@@ -70,12 +69,9 @@ function tourMessagesFor(messages: Record<string, unknown>, locale: string) {
  */
 export function ProductTourRunner({
   runId,
-  copilotOnHome = false,
   endAction,
 }: {
   runId: number
-  /** Home leads with the Copilot chat, so the tour opens on it. */
-  copilotOnHome?: boolean
   endAction?: TourEndAction
 }) {
   const intl = useIntl()
@@ -138,7 +134,6 @@ export function ProductTourRunner({
         tourMessagesFor(intl.messages, intl.locale),
       ])
       const tourContext: TourContext = {
-        copilotOnHome,
         goals: fetched?.goals ?? ['product_feedback'],
         feedbackPrivate: fetched?.feedbackPrivate ?? false,
         modules: {
@@ -174,7 +169,7 @@ export function ProductTourRunner({
     } finally {
       starting.current = false
     }
-  }, [copilotOnHome, flags, permissions, queryClient, intl.messages, intl.locale])
+  }, [flags, permissions, queryClient, intl.messages, intl.locale])
 
   const finish = useCallback(async () => {
     setTargetElement(null)
