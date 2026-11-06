@@ -545,7 +545,7 @@ describe.skipIf(!fixture.available)('pending-actions.service (real DB, rolled ba
       expect(note).toBeDefined()
       expect(note.conversationId).toBeNull()
       expect(note.principalId).toBe(assistant.id)
-      expect(note.content).toBe('Requested approval: Create a customer ticket: "Follow-up"')
+      expect(note.content).toBe('Waiting for a teammate to confirm: Create a customer ticket: "Follow-up"')
     })
 
     it('rejects a ticket-scoped proposal the same way as a conversation-scoped one', async () => {

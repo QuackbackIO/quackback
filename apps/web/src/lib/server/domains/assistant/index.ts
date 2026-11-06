@@ -94,7 +94,7 @@ export {
   type AssistantToolContext,
 } from './assistant.toolspec'
 
-// Quinn — customization + action plumbing (guidance rules, approval queue,
+// Quinn — customization + action plumbing (guidance rules, pending actions,
 // tool-call audit); the execution pipeline wires these into the tool assembler.
 export {
   createGuidanceRule,

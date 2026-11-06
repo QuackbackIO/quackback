@@ -126,6 +126,7 @@ describe('getAssistantPendingActionFn', () => {
 
     expect(hoisted.getPendingActionById).toHaveBeenCalledWith('assistant_action_1')
     expect(out).toEqual(expect.objectContaining(expectDTOFrom(row)))
+    expect(out).not.toHaveProperty('risk')
   })
 
   it('reflects a decided/executed row (not the stale proposed snapshot)', async () => {
@@ -141,6 +142,7 @@ describe('getAssistantPendingActionFn', () => {
     const out = await fetchPendingAction({ pendingActionId: 'assistant_action_1' })
 
     expect(out).toEqual(expect.objectContaining(expectDTOFrom(row)))
+    expect(out).not.toHaveProperty('risk')
   })
 
   it('404s when the pending action does not exist', async () => {

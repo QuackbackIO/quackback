@@ -289,21 +289,6 @@ export const WEBHOOK_EVENT_CONFIG = [
     label: 'Ticket Priority Changed',
     description: "When a ticket's priority changes",
   },
-  {
-    id: 'approval.requested',
-    label: 'Approval Requested',
-    description: 'When an AI assistant or API key asks a person to approve a change',
-  },
-  {
-    id: 'approval.decided',
-    label: 'Approval Decided',
-    description: 'When a person approves or rejects a requested change',
-  },
-  {
-    id: 'approval.applied',
-    label: 'Approval Applied',
-    description: 'When an approved change is applied',
-  },
 ] as const satisfies ReadonlyArray<{ id: WebhookEventType; label: string; description: string }>
 
 // ============================================

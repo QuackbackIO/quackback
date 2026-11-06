@@ -37,15 +37,14 @@ export function isConnectorTool(name: string): boolean {
 }
 
 /**
- * What Home may offer the model. Reads are allowed except for high blast
- * radius areas; the only write is a settings proposal. Connector writes are
- * never offered, so they can never run from Home.
+ * What Home may offer the model: reads, except for high blast radius areas.
+ * Writes, connector writes included, are never offered, so they can never run
+ * from Home.
  */
 export function isWorkspaceToolAllowed(name: string, risk: string): boolean {
   if (name === 'widget_install_status') return risk === 'read'
-  if (risk !== 'write')
-    return !/(delete|remove|install|oauth|billing|member|api_key|domain|sso)/i.test(name)
-  return name === 'propose_settings_change'
+  if (risk === 'write') return false
+  return !/(delete|remove|install|oauth|billing|member|api_key|domain|sso)/i.test(name)
 }
 
 /**
