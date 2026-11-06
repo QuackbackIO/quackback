@@ -1382,8 +1382,12 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
         // not a per-field reset: a newly added ledger field cannot be forgotten
         // here, and nothing holds a live reference to the old ledger across
         // attempts anyway (both return sites below snapshot via spread at return
-        // time instead).
+        // time instead). Proposals are the exception: each is a durable
+        // pending-action row a failed attempt cannot take back, so they carry
+        // into the retry.
+        const filed = toolContext.ledger?.proposedActions ?? []
         toolContext.ledger = makeAssistantToolLedger()
+        toolContext.ledger.proposedActions.push(...filed)
       },
       onRetry: (_attempt, error) => {
         if (
@@ -1448,7 +1452,10 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
       internalSourced:
         contextInternallySourced ||
         [...toolContext.ledger.sources.values()].some((source) => source.internal === true),
-      proposedActions: [...toolContext.ledger.proposedActions],
+      // A retry that re-runs the same call dedupes onto the same row.
+      proposedActions: [
+        ...new Map(toolContext.ledger.proposedActions.map((a) => [a.id, a])).values(),
+      ],
       ...(homeTurn ? { navigation: [...(toolContext.ledger.navigation ?? [])] } : {}),
       identity: runtimeConfig.config.identity,
       trace,
