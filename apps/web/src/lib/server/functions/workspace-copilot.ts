@@ -11,7 +11,6 @@ import {
   readWorkspaceThread,
 } from '@/lib/server/domains/assistant/workspace-threads.service'
 import type { WorkspaceCopilotAvailability } from '@/lib/shared/assistant/workspace-contract'
-import { approvalRefusal } from '@/lib/shared/approval-refusal'
 
 export const getWorkspaceCopilotAvailabilityFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<WorkspaceCopilotAvailability> => {
@@ -43,61 +42,3 @@ export const getWorkspaceCopilotThreadFn = createServerFn({ method: 'GET' })
       actor = await policyActorFromAuth(auth)
     return readWorkspaceThread(data.threadKey, actor)
   })
-
-export const applyWorkspaceSettingsProposalFn = createServerFn({ method: 'POST' })
-  .validator(
-    z.object({
-      pendingActionId: z.string(),
-      selectedChangeIds: z.array(z.string()).min(1).max(80),
-      /** The digest of the request the person was shown; the decision binds to it. */
-      contentHash: z.string().min(1).max(128),
-    })
-  )
-  .handler(async ({ data }) => {
-    const auth = await requireAuth(),
-      actor = await policyActorFromAuth(auth)
-    const { applyWorkspaceSettingsProposal } =
-      await import('@/lib/server/domains/assistant/workspace-settings-actions.service')
-    try {
-      const row = await applyWorkspaceSettingsProposal(
-        actor,
-        data.pendingActionId as import('@quackback/ids').AssistantPendingActionId,
-        data.selectedChangeIds,
-        { contentHash: data.contentHash, via: 'app' }
-      )
-      return settledRequest(row)
-    } catch (error) {
-      // A refusal the card branches on travels as a value; see approvalRefusal.
-      const refused = approvalRefusal(error)
-      if (refused) return refused
-      throw error
-    }
-  })
-export const undoWorkspaceSettingsProposalFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ pendingActionId: z.string() }))
-  .handler(async ({ data }) => {
-    const auth = await requireAuth(),
-      actor = await policyActorFromAuth(auth)
-    const { undoWorkspaceSettingsProposal } =
-      await import('@/lib/server/domains/assistant/workspace-settings-actions.service')
-    try {
-      const row = await undoWorkspaceSettingsProposal(
-        actor,
-        data.pendingActionId as import('@quackback/ids').AssistantPendingActionId
-      )
-      return settledRequest(row)
-    } catch (error) {
-      const refused = approvalRefusal(error)
-      if (refused) return refused
-      throw error
-    }
-  })
-
-function settledRequest(row: { id: string; status: string; result: unknown }) {
-  return {
-    ok: true as const,
-    id: row.id,
-    status: row.status,
-    result: row.result as import('@/lib/shared/json').JsonValue | null,
-  }
-}
