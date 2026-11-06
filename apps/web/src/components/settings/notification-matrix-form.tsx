@@ -30,7 +30,6 @@ const GROUP_LABELS: Record<NotificationGroup, Message | string> = {
   feedback: { id: 'portal.settings.notifications.group.feedback', defaultMessage: 'Feedback' },
   support: { id: 'portal.settings.notifications.group.support', defaultMessage: 'Support' },
   changelog: { id: 'portal.settings.notifications.group.changelog', defaultMessage: 'Changelog' },
-  approvals: 'Approvals',
 }
 
 function groupLabel(group: NotificationGroup, intl: IntlShape): string {

@@ -1989,6 +1989,20 @@
       "when": 1791001100000,
       "tag": "0306_email_ses_tenants",
       "breakpoints": true
+    },
+    {
+      "idx": 284,
+      "version": "7",
+      "when": 1791001200000,
+      "tag": "0307_drop_approval_bell_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 285,
+      "version": "7",
+      "when": 1791001300000,
+      "tag": "0308_remove_approvals_leftovers",
+      "breakpoints": true
     }
   ]
 }

@@ -11,10 +11,7 @@ vi.mock('@/lib/server/domains/settings/cloud/cloud.service', () => ({
 
 import { registerSettingsTools } from '../settings'
 import { registerNavigationTools } from '../navigation'
-import { registerApprovalTools } from '../approvals'
 import { WORKSPACE_WEB_PROMPT } from '@/lib/server/domains/assistant/workspace-prompt'
-import { settingsProposalInputSchema } from '@/lib/shared/assistant/settings-proposals'
-import { APPROVAL_STATUSES, approvalIdFromReference } from '@/lib/shared/assistant/approvals'
 import type { McpAuthContext } from '../../types'
 
 /** Every JSON object written into a piece of model-facing text. */
@@ -50,7 +47,6 @@ function registered() {
   } as unknown as McpAuthContext
   registerSettingsTools(server as never, auth)
   registerNavigationTools(server as never, auth)
-  registerApprovalTools(server as never, auth)
   return tools
 }
 
@@ -64,33 +60,24 @@ describe('model-facing tool examples', () => {
     }
   )
 
-  it('Home prompt proposal examples parse with the proposal schema', () => {
-    const proposals = jsonExamples(WORKSPACE_WEB_PROMPT).filter(
-      (example) => typeof example === 'object' && example !== null && 'changes' in example
+  it('Home prompt tool examples parse with their tool schemas', () => {
+    const tools = new Map(registered().map((tool) => [tool.name, z.object(tool.schema)]))
+    const calls = jsonExamples(WORKSPACE_WEB_PROMPT).filter(
+      (example) =>
+        typeof example === 'object' &&
+        example !== null &&
+        ('destination' in example || 'area' in example)
     )
-    expect(proposals.length).toBeGreaterThan(0)
-    for (const proposal of proposals) settingsProposalInputSchema.parse(proposal)
-  })
-
-  it('get_approval names every status an approval can be in', () => {
-    const tool = registered().find((candidate) => candidate.name === 'get_approval')!
-    for (const status of APPROVAL_STATUSES) expect(tool.description).toContain(status)
-  })
-
-  it('get_approval url examples are the form the Approvals page opens on', () => {
-    const tool = registered().find((candidate) => candidate.name === 'get_approval')!
-    const urls = jsonExamples(tool.description)
-      .map((example) => (example as { approval: string }).approval)
-      .filter((reference) => reference.startsWith('http'))
-    expect(urls.length).toBeGreaterThan(0)
-    for (const url of urls) {
-      expect(url).toContain('/admin/approvals?id=')
-      expect(approvalIdFromReference(url)).not.toBeNull()
-    }
+    expect(calls.length).toBeGreaterThan(0)
+    for (const call of calls)
+      tools
+        .get('destination' in (call as object) ? 'navigate_workspace' : 'get_settings')!
+        .parse(call)
   })
 
   it('finds a broken example', () => {
-    const [example] = jsonExamples('Example: {"changes":[{"area":"billing","patch":{}}]}')
-    expect(settingsProposalInputSchema.safeParse(example).success).toBe(false)
+    const [example] = jsonExamples('Example: {"destination":"billing_portal"}')
+    const navigation = registered().find((tool) => tool.name === 'navigate_workspace')!
+    expect(z.object(navigation.schema).safeParse(example).success).toBe(false)
   })
 })

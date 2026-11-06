@@ -10,22 +10,9 @@
  * scrub. Payloads persist ~90 days in the outbox, so keep snapshots minimal.
  */
 import { z } from 'zod'
-import {
-  APPROVAL_DECISION_CHANNELS,
-  APPROVAL_REQUEST_CHANNELS,
-  APPROVAL_RISKS,
-} from '@/lib/shared/db-types'
 
 const id = z.string()
 const nullableStr = z.string().nullable().optional()
-
-/** What every approval event says about its request. Never the requested content. */
-const approvalRef = {
-  approvalId: id,
-  toolName: z.string(),
-  summary: z.string(),
-  risk: z.enum(APPROVAL_RISKS),
-}
 
 // --- shared sub-schemas ---
 export const postRef = z.object({ id, title: z.string(), boardId: id, boardSlug: z.string() })
@@ -306,23 +293,6 @@ export const P = {
     ticket: ticketRef.optional(),
   }),
   // --- WO-6a: identity/admin plane (new, catalogue-only) ---
-  // --- approvals: the summary is written by the server from the diff ---
-  'approval.requested': z.looseObject({
-    ...approvalRef,
-    requestedVia: z.enum(APPROVAL_REQUEST_CHANNELS),
-    clientName: nullableStr,
-    conversationId: id.nullable(),
-    ticketId: id.nullable(),
-    expiresAt: z.string(),
-  }),
-  'approval.decided': z.looseObject({
-    ...approvalRef,
-    decision: z.enum(['approved', 'rejected']),
-    decidedById: id,
-    decidedVia: z.enum(APPROVAL_DECISION_CHANNELS),
-    reason: nullableStr,
-  }),
-  'approval.applied': z.looseObject({ ...approvalRef, appliedById: id.nullable() }),
   'apikey.created': z.looseObject({ apiKeyId: id, name: z.string(), scopes: z.array(z.string()) }),
   'apikey.deleted': z.looseObject({ apiKeyId: id }),
   'settings.updated': z.looseObject({ changedKeys: z.array(z.string()) }),
