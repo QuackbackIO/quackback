@@ -101,7 +101,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 772 surfaces
+### Server functions (`requireAuth`) — 784 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -529,6 +529,17 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/ownership.ts`::getCloudOwnerEmailFn | END_USER (any authenticated) |
 | `lib/server/functions/ownership.ts`::transferWorkspaceOwnershipFn | END_USER (any authenticated) |
 | `lib/server/functions/ownership.ts`::leaveCloudWorkspaceFn | END_USER (any authenticated) |
+| `lib/server/functions/personal-api-keys.ts`::fetchMyApiKeysFn | END_USER (any authenticated) |
+| `lib/server/functions/personal-api-keys.ts`::fetchMyApiKeysFn | TEAM-ONLY |
+| `lib/server/functions/personal-api-keys.ts`::createMyApiKeyFn | END_USER (any authenticated) |
+| `lib/server/functions/personal-api-keys.ts`::createMyApiKeyFn | TEAM-ONLY |
+| `lib/server/functions/personal-api-keys.ts`::renameMyApiKeyFn | END_USER (any authenticated) |
+| `lib/server/functions/personal-api-keys.ts`::renameMyApiKeyFn | TEAM-ONLY |
+| `lib/server/functions/personal-api-keys.ts`::rotateMyApiKeyFn | END_USER (any authenticated) |
+| `lib/server/functions/personal-api-keys.ts`::rotateMyApiKeyFn | TEAM-ONLY |
+| `lib/server/functions/personal-api-keys.ts`::revokeMyApiKeyFn | END_USER (any authenticated) |
+| `lib/server/functions/personal-api-keys.ts`::revokeMyApiKeyFn | TEAM-ONLY |
+| `lib/server/functions/personal-key-policy.ts`::setPersonalKeyPolicyFn | api_key.manage |
 | `lib/server/functions/plan-notice.ts`::getPlanNotice | member.view |
 | `lib/server/functions/platform-credentials.ts`::savePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::deletePlatformCredentialsFn | integration.manage |
@@ -876,6 +887,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::previewWorkflowFn | routing.manage |
 | `lib/server/functions/workflows.ts`::listRunnableWorkflowsFn | conversation.reply |
 | `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
+| `lib/server/functions/workspace-api-key-settings.ts`::fetchWorkspaceKeyRolesFn | api_key.manage |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
 ### Public REST API (`withApiKeyAuth`) — 142 surfaces
@@ -1117,7 +1129,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-228 of 1126 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+228 of 1133 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
