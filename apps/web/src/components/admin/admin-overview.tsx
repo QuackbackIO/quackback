@@ -202,24 +202,6 @@ export function OverviewDashboard({
   )
 }
 
-/**
- * The workspace's counts on their own: a teammate's Home under Copilot, where
- * the owner's launch plan would be.
- */
-export function OverviewCounts() {
-  const overview = useQuery(adminOverviewQueries.get())
-  if (overview.data?.hasRealData === false) {
-    return <ModuleEmptyStates sections={overview.data.sections} />
-  }
-  return (
-    <CountsCard
-      metrics={overview.data?.metrics ?? []}
-      loading={overview.isPending}
-      onFilter={() => {}}
-    />
-  )
-}
-
 function CountsCard({
   metrics,
   loading,
