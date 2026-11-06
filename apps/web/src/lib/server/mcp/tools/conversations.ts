@@ -182,14 +182,16 @@ Example: reply_to_conversation({ conversationId: "conversation_01abc...", conten
     scope: 'write:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { sendAgentMessage } =
+      const { assertConversationViewable, sendAgentMessage } =
         await import('@/lib/server/domains/conversation/conversation.service')
       const agent = agentFromMcpAuth(auth)
+      const actor = mcpAgentActor(auth)
+      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const result = await sendAgentMessage(
         args.conversationId as ConversationId,
         args.content,
         agent,
-        mcpAgentActor(auth),
+        actor,
         attachmentsFromFileIds(args.fileIds)
       )
       return jsonResult({
@@ -281,12 +283,14 @@ Example: set_conversation_status({ conversationId: "conversation_01abc...", stat
     scope: 'write:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { setConversationStatus } =
+      const { assertConversationViewable, setConversationStatus } =
         await import('@/lib/server/domains/conversation/conversation.service')
+      const actor = mcpAgentActor(auth)
+      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const updated = await setConversationStatus(
         args.conversationId as ConversationId,
         args.status,
-        mcpAgentActor(auth)
+        actor
       )
       return jsonResult({ id: updated.id, status: updated.status })
     },

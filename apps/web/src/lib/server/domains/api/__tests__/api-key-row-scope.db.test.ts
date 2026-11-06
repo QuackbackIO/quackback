@@ -70,6 +70,7 @@ import { serviceActorFromApiAuth } from '../service-actor'
 import { createApiKey } from '@/lib/server/domains/api-keys/api-key.service'
 import { updateMemberRole } from '@/lib/server/domains/principals/principal.service'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
+import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
 import { ticketFilter } from '@/lib/server/policy/tickets'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import type { Actor } from '@/lib/server/policy/types'
@@ -250,6 +251,19 @@ describe.skipIf(!fixture.available)('a personal API key follows its creator row 
       id: world.ticketIds.teamX,
     })
     await expect(assertTicketVisible(world.ticketIds.teamY, actor)).rejects.toThrow(NotFoundError)
+  })
+
+  it('opens a conversation the creator can see and 404s one they cannot', async () => {
+    const world = await seedWorld()
+    await demoteToTeamScope(world)
+    const actor = serviceActorFromApiAuth(await withApiKeyAuth(bearer(world.token)))
+
+    await expect(
+      assertConversationViewable(world.conversationIds.mine, actor)
+    ).resolves.toMatchObject({ id: world.conversationIds.mine })
+    await expect(assertConversationViewable(world.conversationIds.teamY, actor)).rejects.toThrow(
+      NotFoundError
+    )
   })
 
   it('keeps an actor with no creator behind it (AI agent, workflow) workspace-wide', async () => {
