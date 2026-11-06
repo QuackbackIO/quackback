@@ -76,6 +76,8 @@ export async function maybeSendColdInboundAck(opts: {
     const { typedAddressRecipient } = await import('@/lib/server/email/recipient')
     const { recordOutboundEmail } = await import('./conversation.email-store')
     const { requireSettings } = await import('@/lib/server/domains/settings/settings.helpers')
+    const { formatNamedSendingAddress, resolveConversationFrom } =
+      await import('@/lib/server/domains/channel-accounts/sender-resolver')
     const org = await requireSettings()
     const workspaceName = org.name ?? 'Support'
     const to = typedAddressRecipient(sender)
@@ -83,11 +85,18 @@ export async function maybeSendColdInboundAck(opts: {
     const replyTo = inboundReplyToAddress(opts.conversationId, currentMailSlug())
     const inboundId = opts.parsed.messageId
     const minted = mintOutboundMessageId(opts.conversationId) ?? undefined
+    // Usually the thread's first outbound email, so this is also the call that
+    // fixes the address every later reply on it sends from. Automated mail
+    // speaks as the workspace, not as any one teammate.
+    const resolvedFrom = await resolveConversationFrom(opts.conversationId)
+    const from = resolvedFrom ? formatNamedSendingAddress(resolvedFrom, workspaceName) : undefined
     const result = await sendConversationAutoAckEmail({
       to,
       workspaceName,
       conversationSubject: opts.conversationSubject,
       replyTo: replyTo ?? undefined,
+      from,
+      fromDisplayName: from ? undefined : workspaceName,
       messageId: minted,
       inReplyTo: inboundId ?? undefined,
       references: inboundId ? [inboundId] : undefined,
