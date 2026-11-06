@@ -256,21 +256,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     ],
     'team dashboard search checks each product permission and scopes every entity query to the actor'
   ),
-  'lib/server/functions/workspace-copilot.ts::getWorkspaceCopilotAvailabilityFn': END_USER(
-    'returns only whether this caller has Copilot permission and the enabled capability'
-  ),
-  'lib/server/functions/workspace-copilot.ts::listWorkspaceCopilotThreadsFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.COPILOT_USE],
-    'human team member with Copilot permission reads only their own threads'
-  ),
-  'lib/server/functions/workspace-copilot.ts::createWorkspaceCopilotThreadFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.COPILOT_USE],
-    'human team member creates only their own thread after the capability gate'
-  ),
-  'lib/server/functions/workspace-copilot.ts::getWorkspaceCopilotThreadFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.COPILOT_USE],
-    'human team member with Copilot permission must own the requested thread'
-  ),
   // Anyone signed in acts only on their OWN address here: the principal comes
   // from the session, never from the request, so there is no object whose
   // visibility could be checked and no permission that would mean anything.

@@ -50,7 +50,6 @@ import {
 } from '@/lib/server/functions/owner-workspaces'
 import { friendlySiblingAddress, WorkspaceSwitcher } from '@/components/admin/workspace-switcher'
 import { usePermission } from '@/lib/client/hooks/use-permission'
-import { usePermissions } from '@/lib/client/use-permissions'
 import {
   buildNavSections,
   canOpenSettings,
@@ -65,6 +64,7 @@ import {
   useGithubStarPrompt,
   useSessionContext,
   useWorkspaceSettings,
+  usePermissions,
 } from '@/lib/client/hooks/use-root-context'
 
 /** Availability toggle for the account menu (conversation routing). The label shows the
