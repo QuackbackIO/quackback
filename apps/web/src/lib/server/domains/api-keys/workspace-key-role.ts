@@ -11,7 +11,18 @@
  * keeps owning those rows.
  */
 import type { PrincipalId, RoleId } from '@quackback/ids'
-import { SYSTEM_ROLES } from '@/lib/shared/permissions'
+import {
+  db,
+  principal,
+  principalRoleAssignments,
+  roles,
+  and,
+  eq,
+  inArray,
+  isNull,
+} from '@/lib/server/db'
+import { ForbiddenError } from '@/lib/shared/errors'
+import { SYSTEM_ROLES, presetForLegacyRole } from '@/lib/shared/permissions'
 import { setPrincipalRole, type Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { ApiKeyGranter } from './api-key.types'
 
@@ -53,4 +64,64 @@ export async function applyWorkspaceKeyRole(
     resetAssignment: role.assignRoleId === undefined,
     executor,
   })
+}
+
+type RoleRef = { id: RoleId; name: string }
+
+/** The role each workspace key holds now: its explicit assignment, else its legacy tier's preset. */
+export async function currentWorkspaceKeyRoles(
+  keyPrincipalIds: PrincipalId[]
+): Promise<Map<PrincipalId, RoleRef>> {
+  const result = new Map<PrincipalId, RoleRef>()
+  if (keyPrincipalIds.length === 0) return result
+  const [assigned, tiers, presets] = await Promise.all([
+    db
+      .select({
+        principalId: principalRoleAssignments.principalId,
+        id: roles.id,
+        name: roles.name,
+      })
+      .from(principalRoleAssignments)
+      .innerJoin(roles, eq(roles.id, principalRoleAssignments.roleId))
+      .where(
+        and(
+          inArray(principalRoleAssignments.principalId, keyPrincipalIds),
+          isNull(principalRoleAssignments.teamId)
+        )
+      ),
+    db
+      .select({ id: principal.id, role: principal.role })
+      .from(principal)
+      .where(inArray(principal.id, keyPrincipalIds)),
+    db
+      .select({ id: roles.id, key: roles.key, name: roles.name })
+      .from(roles)
+      .where(inArray(roles.key, [SYSTEM_ROLES.OWNER, SYSTEM_ROLES.MANAGER])),
+  ])
+  const presetByKey = new Map(presets.map((r) => [r.key, { id: r.id as RoleId, name: r.name }]))
+  for (const tier of tiers) {
+    const preset = presetForLegacyRole(tier.role)
+    const ref = preset ? presetByKey.get(preset) : undefined
+    if (ref) result.set(tier.id as PrincipalId, ref)
+  }
+  for (const row of assigned) {
+    result.set(row.principalId as PrincipalId, { id: row.id as RoleId, name: row.name })
+  }
+  return result
+}
+
+/**
+ * Refuse to rotate, rename or re-role a workspace key whose current role
+ * `granter` could not grant: a fresh secret for it would hand them authority
+ * above their own. Revoking needs no such check.
+ */
+export async function assertCanManageWorkspaceKey(
+  keyPrincipalId: PrincipalId,
+  granter: ApiKeyGranter
+): Promise<void> {
+  const current = (await currentWorkspaceKeyRoles([keyPrincipalId])).get(keyPrincipalId)
+  if (!current) {
+    throw new ForbiddenError('GRANT_CEILING', 'This key has no role you can manage')
+  }
+  await resolveGrantableKeyRole(current.id, granter)
 }
