@@ -403,23 +403,25 @@ export async function setWorkspaceKeyRole(
   granter: ApiKeyGranter,
   grantedBy: PrincipalId
 ): Promise<ApiKey> {
-  const key = await db.query.apiKeys.findFirst({
-    where: and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt), eq(apiKeys.kind, 'workspace')),
-  })
-  if (!key) throw new NotFoundError('API_KEY_NOT_FOUND', 'Workspace key not found')
   const role = await resolveGrantableKeyRole(roleId, granter)
-  await applyWorkspaceKeyRole(key.principalId, role, grantedBy)
-  try {
-    await db.transaction((tx) =>
-      emit(tx, apiKeyUpdated, {
-        payload: { apiKeyId: key.id, changedKeys: ['role'], roleName: role.roleName },
-        actor: { type: 'user', id: grantedBy },
-        entityId: key.id,
-        context: { source: 'admin' },
-      })
-    )
-  } catch {
-    /* best-effort emission; never blocks the change */
-  }
-  return toApiKey(key)
+  // Lock the key row for the whole change. Revoking updates that row, so a
+  // revoke either waits and then demotes the key's principal last, or commits
+  // first and this finds no live key. A revoked key is never re-promoted.
+  return db.transaction(async (tx) => {
+    const [key] = await tx
+      .select()
+      .from(apiKeys)
+      .where(and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt), eq(apiKeys.kind, 'workspace')))
+      .limit(1)
+      .for('update')
+    if (!key) throw new NotFoundError('API_KEY_NOT_FOUND', 'Workspace key not found')
+    await applyWorkspaceKeyRole(key.principalId, role, grantedBy, tx)
+    await emit(tx, apiKeyUpdated, {
+      payload: { apiKeyId: key.id, changedKeys: ['role'], roleName: role.roleName },
+      actor: { type: 'user', id: grantedBy },
+      entityId: key.id,
+      context: { source: 'admin' },
+    })
+    return toApiKey(key)
+  })
 }

@@ -244,6 +244,21 @@ describe.skipIf(!fixture.available)('workspace API keys (real Postgres)', () => 
     )
   })
 
+  it('refuses a role change on a revoked key and leaves its principal demoted', async () => {
+    const { apiKey, manager } = await seedWorkspaceKey()
+    await revokeApiKey(apiKey.id)
+    const roleId = await systemRoleId(SYSTEM_ROLES.SUPPORT_LEAD)
+
+    await expect(setWorkspaceKeyRole(apiKey.id, roleId, ADMIN_GRANTER, manager)).rejects.toThrow(
+      NotFoundError
+    )
+    const [row] = await testDb
+      .select({ role: principal.role })
+      .from(principal)
+      .where(eq(principal.id, apiKey.principalId))
+    expect(row.role).toBe('user')
+  })
+
   it('stops working once revoked', async () => {
     const { apiKey, token } = await seedWorkspaceKey()
 

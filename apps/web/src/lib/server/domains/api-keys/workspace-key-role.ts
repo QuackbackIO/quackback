@@ -12,7 +12,7 @@
  */
 import type { PrincipalId, RoleId } from '@quackback/ids'
 import { SYSTEM_ROLES } from '@/lib/shared/permissions'
-import { setPrincipalRole } from '@/lib/server/domains/principals/principal.factory'
+import { setPrincipalRole, type Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { ApiKeyGranter } from './api-key.types'
 
 export interface WorkspaceKeyRole {
@@ -44,11 +44,13 @@ export async function resolveGrantableKeyRole(
 export async function applyWorkspaceKeyRole(
   keyPrincipalId: PrincipalId,
   role: WorkspaceKeyRole,
-  grantedBy: PrincipalId
+  grantedBy: PrincipalId,
+  executor?: Executor
 ): Promise<void> {
   await setPrincipalRole({ principalId: keyPrincipalId }, role.legacyRole, {
     assignRoleId: role.assignRoleId,
     assignGrantedBy: grantedBy,
     resetAssignment: role.assignRoleId === undefined,
+    executor,
   })
 }
