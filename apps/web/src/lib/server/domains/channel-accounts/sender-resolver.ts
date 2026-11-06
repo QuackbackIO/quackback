@@ -135,7 +135,8 @@ export async function resolveSender(input: {
       .limit(1)
     teamId = conv?.assignedTeamId ?? null
     channelAccountId = conv?.channelAccountId ?? null
-    const from = await permittedSendingIdentity(conv?.threadSenderAddress ?? null)
+    const stored = conv?.threadSenderAddress ?? null
+    const from = stored ? await permittedSendingIdentity(stored, await ctx()) : null
     if (from) return { from, source: 'thread' }
   }
 
