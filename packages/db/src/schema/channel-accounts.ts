@@ -9,6 +9,7 @@
 import {
   pgTable,
   text,
+  uuid,
   jsonb,
   timestamp,
   index,
@@ -236,7 +237,13 @@ export const channelAccounts = pgTable(
     channel: text('channel').notNull().default('email'),
     role: text('role', { enum: ['inbound', 'sending', 'connection'] }).notNull(),
     address: text('address'),
+    /**
+     * No longer read: which surface sends from an address is `email_senders`.
+     * Kept, unused, until a later release can drop it under the contract rules.
+     */
     module: text('module', { enum: ['support', 'feedback', 'changelog'] }),
+    /** The name mail from this address is sent under. Null: the workspace name. */
+    senderName: text('sender_name'),
     sendingDomainId: typeIdColumnNullable('sending_domain')('sending_domain_id'),
     config: jsonb('config')
       .$type<ChannelAccountConfig>()
@@ -279,5 +286,53 @@ export const channelAccounts = pgTable(
   ]
 )
 
+/**
+ * Which identity each kind of customer email is sent from. `default` is the
+ * workspace's default sender; the other surfaces override it. A surface with no
+ * row sends from the default, and no default row means the platform address.
+ * Only the workspace scope (`scopeId` null) is written today; the scope columns
+ * are there for per-team or per-site overrides later.
+ */
+export const EMAIL_SENDER_SURFACES = [
+  'default',
+  'support',
+  'feedback',
+  'changelog',
+  'status',
+] as const
+export type EmailSenderSurface = (typeof EMAIL_SENDER_SURFACES)[number]
+export type EmailSenderMode = 'address' | 'inbox'
+
+export const emailSenders = pgTable(
+  'email_senders',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    surface: text('surface').$type<EmailSenderSurface>().notNull(),
+    scopeType: text('scope_type').notNull().default('workspace'),
+    scopeId: text('scope_id'),
+    /** `address`: send as `channelAccountId`. `inbox` (support only): reply from
+     *  the address the customer wrote to, else the default; names no identity. */
+    mode: text('mode').$type<EmailSenderMode>().notNull().default('address'),
+    channelAccountId: typeIdColumnNullable('channel_account')('channel_account_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'email_senders_channel_account_id_fkey',
+      columns: [table.channelAccountId],
+      foreignColumns: [channelAccounts.id],
+    }).onDelete('cascade'),
+    uniqueIndex('email_senders_surface_workspace_uq')
+      .on(table.surface, table.scopeType)
+      .where(sql`scope_id IS NULL`),
+    uniqueIndex('email_senders_surface_scope_uq')
+      .on(table.surface, table.scopeType, table.scopeId)
+      .where(sql`scope_id IS NOT NULL`),
+    index('email_senders_channel_account_idx').on(table.channelAccountId),
+  ]
+)
+
+export type EmailSender = typeof emailSenders.$inferSelect
 export type ChannelAccount = typeof channelAccounts.$inferSelect
 export type EmailSendingDomain = typeof emailSendingDomains.$inferSelect
