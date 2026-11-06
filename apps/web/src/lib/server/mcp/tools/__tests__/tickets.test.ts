@@ -442,6 +442,41 @@ describe('ticket MCP tools', () => {
       trackerTicketId: 'ticket_tracker',
       linkedTicketIds: ['ticket_customer'],
     })
+    // The returned links are only the ones the caller can see.
+    expect(mockListLinked).toHaveBeenCalledWith(
+      'ticket_tracker',
+      expect.objectContaining({ principalId: 'principal_key' })
+    )
+  })
+
+  it('link_ticket refuses when the caller cannot see the customer ticket, without linking', async () => {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    mockAssertTicketVisible
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found'))
+    const out = await collect(teamAuth).get('link_ticket')!({
+      trackerTicketId: 'ticket_tracker',
+      ticketId: 'ticket_customer',
+    })
+    expect(out.isError).toBe(true)
+    expect(mockAssertTicketVisible.mock.calls.map((c) => c[0])).toEqual([
+      'ticket_tracker',
+      'ticket_customer',
+    ])
+    expect(mockLink).not.toHaveBeenCalled()
+  })
+
+  it('reply_to_ticket refuses a ticket the caller cannot see, without sending', async () => {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    mockAssertTicketVisible.mockRejectedValueOnce(
+      new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+    )
+    const out = await collect(teamAuth).get('reply_to_ticket')!({
+      ticketId: 'ticket_1',
+      content: 'hello',
+    })
+    expect(out.isError).toBe(true)
+    expect(mockSendMessage).not.toHaveBeenCalled()
   })
 
   it('unlink_ticket removes the link', async () => {

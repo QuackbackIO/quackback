@@ -15,6 +15,7 @@
  * two surfaces cannot disagree about what a key may do.
  */
 import { db, inArray, principal, type Principal, type user } from '@/lib/server/db'
+import type { PrincipalId } from '@quackback/ids'
 import { permissionsForPrincipal, resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { isTeamMember, type Role } from '@/lib/shared/roles'
@@ -35,6 +36,12 @@ export interface ApiKeyAuthority {
   role: Role
   /** The key's role preset intersected with its creator's current permissions. */
   permissions: ReadonlySet<PermissionKey>
+  /**
+   * The teammate whose row scope the key's requests follow: the creator, for a
+   * personal key. Lists and per-item checks then see exactly what that
+   * teammate sees.
+   */
+  scopePrincipalId: PrincipalId
 }
 
 const ROLE_RANK: Record<Role, number> = { user: 0, member: 1, admin: 2 }
@@ -93,5 +100,6 @@ export async function resolveApiKeyAuthority(
     owner,
     role: lowerRole(keyRole, ownerRole),
     permissions: new Set([...held].filter((permission) => preset.has(permission))),
+    scopePrincipalId: owner.id,
   }
 }
