@@ -67,6 +67,20 @@ describe('conversationViewFiltersSchema', () => {
     expect(conversationViewFiltersSchema.safeParse(filters).success).toBe(true)
   })
 
+  it('accepts a ticket_due rule for every due filter', () => {
+    for (const value of ['overdue', 'due_soon', 'none']) {
+      const r = conversationViewFiltersSchema.safeParse({ rules: [{ field: 'ticket_due', value }] })
+      expect(r.success).toBe(true)
+    }
+  })
+
+  it('rejects an unknown ticket_due value', () => {
+    const r = conversationViewFiltersSchema.safeParse({
+      rules: [{ field: 'ticket_due', value: 'tomorrow' }],
+    })
+    expect(r.success).toBe(false)
+  })
+
   it('rejects an unknown ticket_type value', () => {
     const r = conversationViewFiltersSchema.safeParse({
       rules: [{ field: 'ticket_type', value: 'bogus' }],
@@ -228,6 +242,7 @@ describe('viewHasTicketRules', () => {
       viewHasTicketRules({ rules: [{ field: 'ticket_status_category', value: 'open' }] })
     ).toBe(true)
     expect(viewHasTicketRules({ rules: [{ field: 'ticket_stage', value: 'received' }] })).toBe(true)
+    expect(viewHasTicketRules({ rules: [{ field: 'ticket_due', value: 'overdue' }] })).toBe(true)
   })
 })
 
@@ -283,6 +298,31 @@ describe('viewFiltersToInboxParams', () => {
     expect(result.facet).toBe('waiting')
   })
 
+  it('maps a ticket_due rule to due without narrowing to tickets only', () => {
+    // A linked customer ticket lists as its conversation's row, so both kinds
+    // stay in play; the conversation branch filters through the pair edge.
+    const result = viewFiltersToInboxParams({ rules: [{ field: 'ticket_due', value: 'overdue' }] })
+    expect(result.due).toBe('overdue')
+    expect(result.kinds).toEqual([])
+    expect(result.facet).toBe('all')
+  })
+
+  it('keeps the due rule alongside a ticket field that does narrow to tickets', () => {
+    const result = viewFiltersToInboxParams({
+      rules: [
+        { field: 'ticket_type', value: 'back_office' },
+        { field: 'ticket_due', value: 'none' },
+      ],
+    })
+    expect(result.due).toBe('none')
+    expect(result.kinds).toEqual(['ticket'])
+  })
+
+  it('leaves due unset without a ticket_due rule', () => {
+    const result = viewFiltersToInboxParams({ rules: [{ field: 'kind', value: 'ticket' }] })
+    expect(result.due).toBeUndefined()
+  })
+
   it('a later kind rule overrides the ticket-only default', () => {
     const result = viewFiltersToInboxParams({
       rules: [
@@ -333,6 +373,10 @@ describe('TERMLESS_CONVERSATION_SORTS', () => {
 describe('isConversationSort', () => {
   it('accepts every canonical sort', () => {
     for (const s of CONVERSATION_SORTS) expect(isConversationSort(s)).toBe(true)
+  })
+  it('accepts the due-date sort, which a saved view can pin (no term needed)', () => {
+    expect(isConversationSort('due')).toBe(true)
+    expect(TERMLESS_CONVERSATION_SORTS).toContain('due')
   })
   it('rejects unknown / non-string values', () => {
     expect(isConversationSort('breach')).toBe(false)

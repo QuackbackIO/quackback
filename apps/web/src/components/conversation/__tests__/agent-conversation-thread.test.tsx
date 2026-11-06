@@ -738,6 +738,7 @@ describe('AgentConversationThread — close with a linked ticket', () => {
     title: 'Billing issue',
     statusName: 'Open',
     statusCategory: 'open',
+    dueAt: null,
   }
 
   it('a plain close (no linked ticket) skips the confirm and closes directly', async () => {
@@ -801,6 +802,7 @@ describe('AgentConversationThread — B24 ticket-permission gating', () => {
     title: 'Billing issue',
     statusName: 'Open',
     statusCategory: 'open',
+    dueAt: null,
   }
 
   it('a view-only agent (no ticket.set_status) gets the inert status chip, not the dropdown', async () => {

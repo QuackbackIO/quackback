@@ -48,7 +48,44 @@ export function syncOperationKey(input: {
   return `sync:${syncHash(input)}`
 }
 
-/** A link from another destination must never be inspected with current destination credentials. */
+/**
+ * The scope a link gets when it is made on `target` through this installation:
+ * stored as `sync_scope`, and what inbound status and review match against.
+ */
+export function syncScopeFor(
+  integration: { id: string; connectedAt: Date | string | null; config: unknown },
+  target: unknown,
+  definition: Pick<IntegrationDefinition, 'destination'> | undefined
+): string {
+  const config = (integration.config ?? {}) as Record<string, unknown>
+  return `${installationIdentity(integration)}:${syncHash(syncDestination(target, config, definition))}`
+}
+
+/**
+ * Which of the connection's destinations (`channelIds`, the connection's
+ * `config.channelId` when none are given) a link was made on, by its scope.
+ * Null when the link belongs to none of them.
+ */
+export function linkTarget(
+  link: { syncScope: string | null },
+  integration: { id: string; connectedAt: Date | string | null; config: unknown },
+  definition: Pick<IntegrationDefinition, 'destination'> | undefined,
+  channelIds?: readonly string[]
+): { channelId: unknown } | null {
+  const config = (integration.config ?? {}) as Record<string, unknown>
+  const candidates: unknown[] = channelIds?.length ? [...channelIds] : [config.channelId]
+  for (const channelId of candidates) {
+    if (link.syncScope === syncScopeFor(integration, { channelId }, definition))
+      return { channelId }
+  }
+  return null
+}
+
+/**
+ * A link from another destination must never be inspected with current
+ * destination credentials. A connection serving several destinations passes
+ * their names as `channelIds`, so a link on any of them still verifies.
+ */
 export function reviewDestination(
   link: { id: string; syncScope: string | null },
   integration: {
@@ -57,11 +94,12 @@ export function reviewDestination(
     config: unknown
     integrationType: string
   },
-  definition: Pick<IntegrationDefinition, 'destination'> | undefined
+  definition: Pick<IntegrationDefinition, 'destination'> | undefined,
+  channelIds?: readonly string[]
 ) {
   const config = (integration.config ?? {}) as Record<string, unknown>
-  const destination = syncDestination({ channelId: config.channelId }, config, definition)
-  return link.syncScope === `${installationIdentity(integration)}:${syncHash(destination)}`
-    ? destination
+  const target = linkTarget(link, integration, definition, channelIds)
+  return target
+    ? syncDestination(target, config, definition)
     : { unverifiedLink: syncHash(link.id), previousScope: syncHash(link.syncScope) }
 }

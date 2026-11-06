@@ -225,6 +225,7 @@ describe('agentEventChangesInboxList', () => {
     [{ kind: 'message_updated', conversationId: CONV_ID, message: agentMessage('m9') }, false],
     [{ kind: 'ticket_message', ticketId: TICKET_ID, message: ticketMsg }, true],
     [{ kind: 'ticket_message_updated', ticketId: TICKET_ID, message: ticketMsg }, true],
+    [{ kind: 'ticket_message_deleted', ticketId: TICKET_ID, messageId: ticketMsg.id }, true],
     [{ kind: 'ticket_updated', ticket: { id: TICKET_ID } as never }, true],
     [{ kind: 'ticket_read', ticketId: TICKET_ID, side: 'agent', at: 'x' }, true],
     [{ kind: 'ticket_read', ticketId: TICKET_ID, side: 'visitor', at: 'x' }, false],
@@ -742,6 +743,27 @@ describe('applyTicketThreadEvent', () => {
       editedAt: '2026-07-02T00:00:00.000Z',
     })
     expect(next.messages[1]).toBe(prev.messages[1])
+  })
+
+  it('drops a deleted message, keeping the others in place', () => {
+    const prev = ticketCache({ messages: [ticketMessage('tm1'), ticketMessage('tm2')] })
+    const next = applyTicketThreadEvent(
+      prev,
+      { kind: 'ticket_message_deleted', ticketId: TICKET_ID, messageId: ticketMessage('tm1').id },
+      TICKET_ID
+    )!
+    expect(next.messages.map((m) => m.id)).toEqual(['tm2'])
+    expect(next.messages[0]).toBe(prev.messages[1])
+  })
+
+  it('ignores a deletion for another ticket', () => {
+    const prev = ticketCache()
+    const evt: ConversationStreamEvent = {
+      kind: 'ticket_message_deleted',
+      ticketId: OTHER_TICKET_ID,
+      messageId: ticketMessage('tm1').id,
+    }
+    expect(applyTicketThreadEvent(prev, evt, TICKET_ID)).toBe(prev)
   })
 
   it('does not append an edit for a message outside the loaded page', () => {
