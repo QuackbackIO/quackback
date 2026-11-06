@@ -53,3 +53,25 @@ export interface CreateApiKeyResult {
   /** The full API key - only returned on creation, never stored */
   plainTextKey: string
 }
+
+/** A key as the key managers' list shows it. */
+export interface ManagedApiKey extends ApiKey {
+  /** The creator's name, kept after they leave; null once the creator is deleted. */
+  creatorName: string | null
+  /** False once the creator has left the team, or when no creator is recorded. */
+  creatorIsTeammate: boolean
+  /** A workspace key's role; null for a personal key. */
+  role: { id: RoleId; name: string } | null
+}
+
+/** A role offered for a workspace key, marked with whether the caller may grant it. */
+export interface WorkspaceKeyRoleOption {
+  id: RoleId
+  key: string
+  name: string
+  isSystem: boolean
+  /** Every permission of the role is the caller's own; Owner also needs an admin. */
+  grantable: boolean
+  /** The role can change workspace settings or members. */
+  highImpact: boolean
+}

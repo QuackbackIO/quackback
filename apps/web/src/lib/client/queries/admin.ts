@@ -24,7 +24,11 @@ import { listAuditEventsFn } from '@/lib/server/functions/audit-log'
 import { listCompanyAttributesFn } from '@/lib/server/functions/company-attributes'
 import { listRecoveryCodesFn } from '@/lib/server/functions/recovery-codes'
 import { getModerationStatus } from '@/lib/server/functions/moderation'
-import { fetchApiKeys } from '@/lib/server/functions/api-keys'
+import {
+  fetchApiKeys,
+  fetchPersonalKeyPolicyFn,
+  fetchWorkspaceKeyRolesFn,
+} from '@/lib/server/functions/api-keys'
 import { fetchWebhooks } from '@/lib/server/functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server/functions/roadmaps'
 import { fetchPostWithDetails, fetchPostVotersFn } from '@/lib/server/functions/posts'
@@ -387,6 +391,22 @@ export const adminQueries = {
         }))
       },
       staleTime: 30 * 1000, // 30s - may change when creating/revoking keys
+    }),
+
+  /** Whether teammates may create personal API keys. */
+  personalKeyPolicy: () =>
+    queryOptions({
+      queryKey: ['admin', 'api-keys', 'personal-policy'],
+      queryFn: () => fetchPersonalKeyPolicyFn(),
+      staleTime: 30 * 1000,
+    }),
+
+  /** The roles a workspace key may be given, marked with whether the caller can grant each. */
+  workspaceKeyRoles: () =>
+    queryOptions({
+      queryKey: ['admin', 'api-keys', 'roles'],
+      queryFn: () => fetchWorkspaceKeyRolesFn(),
+      staleTime: 30 * 1000,
     }),
 
   /**

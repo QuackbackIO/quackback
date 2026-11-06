@@ -49,6 +49,24 @@ const KEY_RANDOM_BYTES = 24 // 48 hex chars
 
 type ApiKeyRow = typeof apiKeys.$inferSelect
 
+/**
+ * Limits a change to keys of one kind and, for a teammate's own keys, one
+ * creator. A key outside the filter is not found, the same as a missing one.
+ */
+export interface ApiKeyFilter {
+  kind?: ApiKeyKind
+  createdById?: PrincipalId
+}
+
+function liveKeyWhere(id: ApiKeyId, filter: ApiKeyFilter) {
+  return and(
+    eq(apiKeys.id, id),
+    isNull(apiKeys.revokedAt),
+    filter.kind ? eq(apiKeys.kind, filter.kind) : undefined,
+    filter.createdById ? eq(apiKeys.createdById, filter.createdById) : undefined
+  )
+}
+
 /** Map a database row to the public ApiKey shape (strips keyHash, parses scopes). */
 function toApiKey(row: ApiKeyRow): ApiKey {
   return {
@@ -285,7 +303,10 @@ function hasScope(scopesRaw: string | null, scope: string): boolean {
  * Uses atomic UPDATE with WHERE clause to prevent race conditions
  * (HTTP-driver compatible, no interactive transactions)
  */
-export async function rotateApiKey(id: ApiKeyId): Promise<CreateApiKeyResult> {
+export async function rotateApiKey(
+  id: ApiKeyId,
+  filter: ApiKeyFilter = {}
+): Promise<CreateApiKeyResult> {
   // Generate new key credentials
   const plainTextKey = generateApiKey()
   const keyHash = hashApiKey(plainTextKey)
@@ -299,7 +320,7 @@ export async function rotateApiKey(id: ApiKeyId): Promise<CreateApiKeyResult> {
       keyPrefix,
       lastUsedAt: null, // Reset last used
     })
-    .where(and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt)))
+    .where(liveKeyWhere(id, filter))
     .returning()
 
   if (!updatedKey) {
@@ -312,11 +333,11 @@ export async function rotateApiKey(id: ApiKeyId): Promise<CreateApiKeyResult> {
 /**
  * Revoke an API key (soft delete)
  */
-export async function revokeApiKey(id: ApiKeyId): Promise<void> {
+export async function revokeApiKey(id: ApiKeyId, filter: ApiKeyFilter = {}): Promise<void> {
   const result = await db
     .update(apiKeys)
     .set({ revokedAt: new Date() })
-    .where(and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt)))
+    .where(liveKeyWhere(id, filter))
     .returning()
 
   if (result.length === 0) {
@@ -360,6 +381,19 @@ export async function listApiKeys(): Promise<ApiKey[]> {
   return keys.map(toApiKey)
 }
 
+/** One teammate's live personal keys, newest first. */
+export async function listPersonalApiKeys(createdById: PrincipalId): Promise<ApiKey[]> {
+  const keys = await db.query.apiKeys.findMany({
+    where: and(
+      isNull(apiKeys.revokedAt),
+      eq(apiKeys.kind, 'personal'),
+      eq(apiKeys.createdById, createdById)
+    ),
+    orderBy: (apiKeys, { desc }) => [desc(apiKeys.createdAt)],
+  })
+  return keys.map(toApiKey)
+}
+
 /**
  * Get an API key by ID
  */
@@ -378,7 +412,11 @@ export async function getApiKeyById(id: ApiKeyId): Promise<ApiKey> {
 /**
  * Update an API key's name
  */
-export async function updateApiKeyName(id: ApiKeyId, name: string): Promise<ApiKey> {
+export async function updateApiKeyName(
+  id: ApiKeyId,
+  name: string,
+  filter: ApiKeyFilter = {}
+): Promise<ApiKey> {
   if (!name?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'API key name is required')
   }
@@ -389,7 +427,7 @@ export async function updateApiKeyName(id: ApiKeyId, name: string): Promise<ApiK
   const [updated] = await db
     .update(apiKeys)
     .set({ name: name.trim() })
-    .where(eq(apiKeys.id, id))
+    .where(liveKeyWhere(id, filter))
     .returning()
 
   if (!updated) {
