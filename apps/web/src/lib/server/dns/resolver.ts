@@ -47,19 +47,30 @@ const TXT_STRING_MAX_BYTES = 255
  * own, so a 2048-bit signing key reads as a key cut short at 255 bytes, and a
  * domain that the mail provider has verified stays pending here forever.
  *
- * A record whose last string is a full 255 bytes is joined to the one after it.
- * Two genuinely separate records only meet that rule when the first is longer
- * than 255 bytes and ends exactly on a string boundary, and then the next is its
- * continuation in every answer that splits records this way.
+ * An answer in which any record holds more than one string kept its record
+ * boundaries, so it is returned as it came. In an answer of single strings, a
+ * run of records joined at full 255-byte strings is also read as the one long
+ * record it may have been. The joined record takes the run's place and every
+ * record after the first in the run is kept as well: the boundaries are lost,
+ * so a record that only happens to follow a 255-byte one must still be found on
+ * its own. What is dropped is the first string standing alone, which is never a
+ * whole record when the run was one long record. The kept pieces carry no tag
+ * of their own (no `v=spf1`, no `p=`), so they never read as a second record of
+ * a kind the checks count.
  */
 export function rejoinTxtChunks(records: string[][]): string[][] {
+  if (records.some((record) => record.length > 1)) return records
+  const full = (record: string[]) =>
+    record.length > 0 && Buffer.byteLength(record[record.length - 1]) === TXT_STRING_MAX_BYTES
   const out: string[][] = []
-  let continues = false
-  for (const record of records) {
-    if (continues) out[out.length - 1].push(...record)
-    else out.push([...record])
-    const last = record[record.length - 1]
-    continues = last !== undefined && Buffer.byteLength(last) === TXT_STRING_MAX_BYTES
+  let i = 0
+  while (i < records.length) {
+    let end = i
+    while (end + 1 < records.length && full(records[end])) end++
+    const run = records.slice(i, end + 1)
+    if (run.length === 1) out.push([...run[0]])
+    else out.push(run.flat(), ...run.slice(1).map((record) => [...record]))
+    i = end + 1
   }
   return out
 }
