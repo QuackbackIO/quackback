@@ -36,12 +36,11 @@ export interface AssistantPendingActionDTO {
   result: JsonValue | null
   /** The digest a decision on this request names. */
   argsDigest: string
-  risk: string
 }
 
 function toDTO(
   row: AssistantPendingAction,
-  approval: Pick<AssistantPendingActionDTO, 'argsDigest' | 'risk'>
+  decision: Pick<AssistantPendingActionDTO, 'argsDigest'>
 ): AssistantPendingActionDTO {
   return {
     id: row.id,
@@ -60,7 +59,7 @@ function toDTO(
     decidedAt: row.decidedAt?.toISOString() ?? null,
     executedAt: row.executedAt?.toISOString() ?? null,
     result: (row.result as JsonValue | null) ?? null,
-    ...approval,
+    ...decision,
   }
 }
 
@@ -80,11 +79,11 @@ export const approveAssistantActionFn = createServerFn({ method: 'POST' })
       auth.principal.id,
       actor,
       undefined,
-      { contentHash: data.contentHash, via: 'app' }
+      { contentHash: data.contentHash }
     )
-    const { approvalFieldsForDisplay } =
-      await import('@/lib/server/domains/assistant/approvals.service')
-    return toDTO(settled, await approvalFieldsForDisplay(settled))
+    const { decisionFieldsForDisplay } =
+      await import('@/lib/server/domains/assistant/pending-action-decisions')
+    return toDTO(settled, await decisionFieldsForDisplay(settled))
   })
 
 export const rejectAssistantActionFn = createServerFn({ method: 'POST' })
@@ -101,9 +100,9 @@ export const rejectAssistantActionFn = createServerFn({ method: 'POST' })
       auth.principal.id,
       actor,
       undefined,
-      { contentHash: data.contentHash, via: 'app' }
+      { contentHash: data.contentHash }
     )
-    const { approvalFieldsForDisplay } =
-      await import('@/lib/server/domains/assistant/approvals.service')
-    return toDTO(settled, await approvalFieldsForDisplay(settled))
+    const { decisionFieldsForDisplay } =
+      await import('@/lib/server/domains/assistant/pending-action-decisions')
+    return toDTO(settled, await decisionFieldsForDisplay(settled))
   })

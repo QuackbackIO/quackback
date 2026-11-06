@@ -458,6 +458,7 @@ export const HANDOFF_REASON_LABELS: Record<string, string> = {
   capability_limit: 'outside what the AI agent can do',
   safety: 'safety topic',
   system_error: 'AI agent hit an error',
+  awaiting_confirmation: 'AI agent is waiting for a teammate to confirm an action',
 }
 
 /** Quinn's activity on one conversation, for the agent details panel. Null when
