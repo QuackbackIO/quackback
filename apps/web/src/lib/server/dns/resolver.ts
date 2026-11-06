@@ -47,37 +47,47 @@ const TXT_STRING_MAX_BYTES = 255
  * own, so a 2048-bit signing key reads as a key cut short at 255 bytes, and a
  * domain that the mail provider has verified stays pending here forever.
  *
- * An answer in which any record holds more than one string kept its record
- * boundaries, so it is returned as it came. In an answer of single strings, a
- * run of records joined at full 255-byte strings is also read as the one long
- * record it may have been. The joined record takes the run's place and every
- * record after the first in the run is kept as well: the boundaries are lost,
- * so a record that only happens to follow a 255-byte one must still be found on
- * its own. What is dropped is the first string standing alone, which is never a
- * whole record when the run was one long record. The kept pieces carry no tag
- * of their own (no `v=spf1`, no `p=`), so they never read as a second record of
- * a kind the checks count.
+ * Bun's answer has lost the record boundaries, so a run of records joined at
+ * full 255-byte strings may be one long record or several separate ones. This
+ * only adds: every record that came back is kept exactly as it came, and the
+ * joined value of each run is added after them. The checks that read TXT all
+ * ask whether some record matches what they want, so an added record can make a
+ * long key visible but can never hide a record that was really there. An answer
+ * in which any record holds more than one string kept its boundaries and is
+ * returned as it came.
  */
 export function rejoinTxtChunks(records: string[][]): string[][] {
   if (records.some((record) => record.length > 1)) return records
   const full = (record: string[]) =>
     record.length > 0 && Buffer.byteLength(record[record.length - 1]) === TXT_STRING_MAX_BYTES
-  const out: string[][] = []
+  const added: string[][] = []
   let i = 0
   while (i < records.length) {
     let end = i
     while (end + 1 < records.length && full(records[end])) end++
-    const run = records.slice(i, end + 1)
-    if (run.length === 1) out.push([...run[0]])
-    else out.push(run.flat(), ...run.slice(1).map((record) => [...record]))
+    if (end > i) added.push(records.slice(i, end + 1).flat())
     i = end + 1
   }
-  return out
+  return added.length === 0 ? records : [...records, ...added]
+}
+
+/**
+ * Whether this runtime returns each string of a long TXT record as a record of
+ * its own. Read on every lookup rather than once, so a test can stand in for it.
+ */
+function splitsTxtRecords(): boolean {
+  return typeof (process.versions as Record<string, string | undefined>).bun === 'string'
+}
+
+/** A TXT answer as Node would give it, whichever runtime asked. */
+async function txtRecords(resolver: Resolver, host: string): Promise<string[][]> {
+  const records = await resolver.resolveTxt(host)
+  return splitsTxtRecords() ? rejoinTxtChunks(records) : records
 }
 
 /** One try: for checks that run in the background or on a page load. */
 export const systemResolver: DnsResolver = {
-  resolveTxt: async (host) => rejoinTxtChunks(await shared(1).resolveTxt(host)),
+  resolveTxt: (host) => txtRecords(shared(1), host),
   resolveCname: (host) => shared(1).resolveCname(host),
   resolveMx: (host) => shared(1).resolveMx(host),
   resolve4: (host) => shared(1).resolve4(host),
@@ -90,7 +100,7 @@ export const systemResolver: DnsResolver = {
  * a single dropped packet would read as a missing record.
  */
 export const interactiveResolver: DnsResolver = {
-  resolveTxt: async (host) => rejoinTxtChunks(await shared(2).resolveTxt(host)),
+  resolveTxt: (host) => txtRecords(shared(2), host),
   resolveCname: (host) => shared(2).resolveCname(host),
   resolveMx: (host) => shared(2).resolveMx(host),
   resolve4: (host) => shared(2).resolve4(host),

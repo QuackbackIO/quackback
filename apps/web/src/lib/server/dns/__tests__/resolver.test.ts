@@ -69,9 +69,21 @@ describe('interactiveResolver', () => {
 })
 
 describe('a long TXT record', () => {
-  it('comes back as one record from both resolvers', async () => {
-    const want = [['k'.repeat(255), 'tail'], ['tail']]
-    expect(await systemResolver.resolveTxt('long._domainkey.acme.com')).toEqual(want)
-    expect(await interactiveResolver.resolveTxt('long._domainkey.acme.com')).toEqual(want)
+  const split = [['k'.repeat(255)], ['tail']]
+
+  it('comes back as the runtime returned it on Node, which keeps record boundaries', async () => {
+    expect(await systemResolver.resolveTxt('long._domainkey.acme.com')).toEqual(split)
+    expect(await interactiveResolver.resolveTxt('long._domainkey.acme.com')).toEqual(split)
+  })
+
+  it('also comes back whole from both resolvers on Bun, which splits it', async () => {
+    Object.defineProperty(process.versions, 'bun', { value: '1.4.3', configurable: true })
+    try {
+      const want = [...split, ['k'.repeat(255), 'tail']]
+      expect(await systemResolver.resolveTxt('long._domainkey.acme.com')).toEqual(want)
+      expect(await interactiveResolver.resolveTxt('long._domainkey.acme.com')).toEqual(want)
+    } finally {
+      delete (process.versions as Record<string, string | undefined>).bun
+    }
   })
 })
