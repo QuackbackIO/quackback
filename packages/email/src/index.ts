@@ -1264,7 +1264,10 @@ export async function sendConversationAutoAckEmail(params: {
   messageId?: string
   inReplyTo?: string
   references?: string[]
+  /** The thread's sending address; absent = the workspace default. */
   from?: SendingIdentity
+  /** Display name for the From header (the workspace's name). */
+  fromDisplayName?: string
   conversationId?: string | null
 }): Promise<EmailResult> {
   const subject =
@@ -1281,6 +1284,7 @@ export async function sendConversationAutoAckEmail(params: {
     }),
     replyTo: params.replyTo,
     from: params.from,
+    fromDisplayName: params.fromDisplayName,
     messageId: params.messageId,
     inReplyTo: params.inReplyTo,
     references: params.references,
@@ -1833,6 +1837,15 @@ interface SendCsatRequestEmailParams {
    * being asked and to their mail client's threading.
    */
   from?: SendingIdentity
+  /** Display name for the From header (the workspace's name). */
+  fromDisplayName?: string
+  /** The conversation's own reply address, so a reply lands back on the thread. */
+  replyTo?: string
+  /** Stored `conversations.subject`; the subject is the thread's `Re:` line. */
+  conversationSubject?: string | null
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
   conversationId?: string | null
 }
 
@@ -1843,14 +1856,24 @@ interface SendCsatRequestEmailParams {
 export async function sendCsatRequestEmail(
   params: SendCsatRequestEmailParams
 ): Promise<EmailResult> {
-  const { to, promptText, ratingUrls, workspaceName, logoUrl, from, conversationId } = params
+  const { to, promptText, ratingUrls, workspaceName, logoUrl } = params
+  // A reply on the thread rather than a fresh subject, so the request lands in
+  // the conversation the customer is rating instead of starting a new one.
+  const subject =
+    conversationReplySubject(params.conversationSubject) ??
+    `Re: your conversation with ${workspaceName}`
 
   return sendEmail({
     to,
-    subject: 'How did we do?',
+    subject,
     react: CsatRequestEmail({ promptText, ratingUrls, workspaceName, logoUrl }),
-    from,
-    conversationId,
+    from: params.from,
+    fromDisplayName: params.fromDisplayName,
+    replyTo: params.replyTo,
+    messageId: params.messageId,
+    inReplyTo: params.inReplyTo,
+    references: params.references,
+    conversationId: params.conversationId,
     emailType: 'CsatRequestEmail',
   })
 }
