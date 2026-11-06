@@ -36,10 +36,8 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('@/lib/server/functions/feature-flags', () => ({
   updateFeatureFlagsFn: hoisted.updateFlags,
 }))
-vi.mock('@/lib/client/use-permissions', () => ({
-  useHasPermission: () => hoisted.canManage,
-}))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  useHasPermission: () => hoisted.canManage,
   useWorkspaceSettings: () => ({
     featureFlags: hoisted.flags,
     publicWidgetConfig: { messenger: { assistant: { enabled: true, respond: true } } },

@@ -8,7 +8,10 @@ import { createAutosaveMutationCache } from '@/lib/client/autosave'
 const toastError = vi.hoisted(() => vi.fn())
 vi.mock('sonner', () => ({ toast: { error: toastError } }))
 
-vi.mock('@/lib/client/use-permissions', () => ({ useHasPermission: () => true }))
+vi.mock('@/lib/client/hooks/use-root-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/client/hooks/use-root-context')>()),
+  useHasPermission: () => true,
+}))
 vi.mock('@/lib/server/functions/assistant-settings', () => ({
   getAssistantSettingsFn: vi.fn(),
   updateAssistantIdentityFn: vi.fn(),

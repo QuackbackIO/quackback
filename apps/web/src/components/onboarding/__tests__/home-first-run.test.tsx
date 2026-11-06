@@ -32,10 +32,7 @@ vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useBaseUrl: () => 'https://acme.example.com',
 }))
 vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
-const tourView = vi.hoisted(() => ({ narrow: false, copilot: false }))
-vi.mock('@/components/admin/ask/copilot-on-home', () => ({
-  useCopilotOnHome: () => tourView.copilot,
-}))
+const tourView = vi.hoisted(() => ({ narrow: false }))
 vi.mock('@/lib/server/functions/activation', () => ({
   markPublicBoardLinkCopiedFn: vi.fn(),
   markStatusLinkCopiedFn: vi.fn(),
@@ -110,7 +107,6 @@ function mount({ tour = true }: { tour?: boolean } = {}) {
 
 beforeEach(() => {
   tourView.narrow = false
-  tourView.copilot = false
   window.matchMedia = ((query: string) => ({
     matches: tourView.narrow && query.includes('max-width'),
     media: query,
@@ -279,7 +275,6 @@ describe('Home first-run cards', () => {
   it('offers no tour on a phone, where the sidebar it points at is hidden', async () => {
     hoisted.status = status()
     tourView.narrow = true
-    tourView.copilot = true
     const { client } = mount()
     await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
     await screen.findByText('Launch plan · Step 2 of 3')
