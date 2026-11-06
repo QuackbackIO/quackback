@@ -1404,6 +1404,62 @@ describe('runAssistantTurn', () => {
     expect(mockChat).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps a proposal an earlier attempt filed when the retry succeeds without it', async () => {
+    mockRetrieve.mockResolvedValue([])
+    const proposal = {
+      id: 'assistant_action_1',
+      toolName: 'end_conversation',
+      summary: 'Close the conversation',
+      label: 'End conversation',
+    }
+    let callCount = 0
+    mockChat.mockImplementation((opts: { context: { ledger: { proposedActions: unknown[] } } }) => {
+      callCount += 1
+      if (callCount === 1) {
+        // First attempt files a durable pending action, then fails.
+        return (async function* () {
+          opts.context.ledger.proposedActions.push(proposal)
+          yield { type: 'RUN_ERROR', message: 'provider exploded' }
+        })()
+      }
+      return chunkStream(completeRun({ text: 'A teammate will confirm that.', citations: [] }))
+    })
+
+    const result = await runAssistantTurn({ ...baseInput, messages: customerAsks('q') })
+
+    expect(mockChat).toHaveBeenCalledTimes(2)
+    expect(result).toMatchObject({ status: 'answered', proposedActions: [proposal] })
+  })
+
+  it('reports a proposal once when the retry files the same pending action again', async () => {
+    mockRetrieve.mockResolvedValue([])
+    const proposal = {
+      id: 'assistant_action_1',
+      toolName: 'end_conversation',
+      summary: 'Close the conversation',
+      label: 'End conversation',
+    }
+    let callCount = 0
+    mockChat.mockImplementation((opts: { context: { ledger: { proposedActions: unknown[] } } }) => {
+      callCount += 1
+      if (callCount === 1) {
+        return (async function* () {
+          opts.context.ledger.proposedActions.push(proposal)
+          yield { type: 'RUN_ERROR', message: 'provider exploded' }
+        })()
+      }
+      // The retry re-runs the same call, which dedupes onto the same row.
+      return (async function* () {
+        opts.context.ledger.proposedActions.push(proposal)
+        yield* chunkStream(completeRun({ text: 'A teammate will confirm that.', citations: [] }))
+      })()
+    })
+
+    const result = await runAssistantTurn({ ...baseInput, messages: customerAsks('q') })
+
+    expect(result).toMatchObject({ status: 'answered', proposedActions: [proposal] })
+  })
+
   it('propagates an abort instead of masking it with the fallback', async () => {
     const controller = new AbortController()
     mockChat.mockImplementation(() =>

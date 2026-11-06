@@ -234,11 +234,12 @@ it('hands the next turn only connector reads allowed since the last answer, as d
   await decidePendingAction(skipped.id, 'rejected', owner.principalId!, testDb, {
     contentHash: skipped.argsDigest!,
   })
-  const settings = await propose('propose_settings_change', 'Settings')
-  await decidePendingAction(settings.id, 'approved', owner.principalId!, testDb, {
-    contentHash: settings.argsDigest!,
+  // Only connector results return to the model; any other executed action stays out.
+  const other = await propose('update_settings', 'Settings')
+  await decidePendingAction(other.id, 'approved', owner.principalId!, testDb, {
+    contentHash: other.argsDigest!,
   })
-  await markPendingActionExecuted(settings.id, { kind: 'settings' })
+  await markPendingActionExecuted(other.id, { kind: 'settings' })
 
   const next = await acquireWorkspaceTurn(owner, thread.key, 'run-two', 'Continue')
   if (next.status !== 'acquired') throw new Error('not acquired')
