@@ -14,7 +14,7 @@ vi.mock('@/lib/server/db', async (original) => ({
 }))
 
 import { proposePendingAction } from '../pending-actions.service'
-import { approvalFieldsForDisplay } from '../approvals.service'
+import { decisionFieldsForDisplay } from '../pending-action-decisions'
 import { decideAssistantAction } from '../assistant-actions.service'
 import { digestOf } from '@/lib/server/utils/canonical-json'
 
@@ -77,10 +77,9 @@ async function inboxProposal(
   })
 }
 
-const reject = (id: string, contentHash: string, reason?: string) =>
+const reject = (id: string, contentHash: string) =>
   decideAssistantAction(id as never, 'rejected', admin.principalId!, admin, undefined, {
     contentHash,
-    reason,
   })
 
 const rowOf = async (id: string) =>
@@ -97,8 +96,8 @@ describe('what a decision binds to', () => {
     await expect(reject(pending.id, 'not-the-digest')).rejects.toMatchObject({
       code: 'APPROVAL_CONTENT_CHANGED',
     })
-    const rejected = await reject(pending.id, pending.argsDigest!, 'Not yet')
-    expect(rejected).toMatchObject({ status: 'rejected', decisionReason: 'Not yet' })
+    const rejected = await reject(pending.id, pending.argsDigest!)
+    expect(rejected.status).toBe('rejected')
   })
 
   it('binds a request filed before digests were kept to the content first shown', async () => {
@@ -113,7 +112,7 @@ describe('what a decision binds to', () => {
     })
 
     // Showing it stores the digest of exactly what is shown.
-    const shown = await approvalFieldsForDisplay(await rowOf(pending.id))
+    const shown = await decisionFieldsForDisplay(await rowOf(pending.id))
     expect(shown.argsDigest).toBe(pending.argsDigest)
     expect((await rowOf(pending.id)).argsDigest).toBe(pending.argsDigest)
 
@@ -142,22 +141,17 @@ describe('what a decision binds to', () => {
     })
 
     // Showing it again binds the digest to what is shown now, so it can be decided.
-    const shown = await approvalFieldsForDisplay(await rowOf(pending.id))
-    expect(shown).toEqual({ argsDigest: digestOf(edited), risk: 'medium' })
+    const shown = await decisionFieldsForDisplay(await rowOf(pending.id))
+    expect(shown).toEqual({ argsDigest: digestOf(edited) })
     expect((await rowOf(pending.id)).argsDigest).toBe(shown.argsDigest)
     expect((await reject(pending.id, shown.argsDigest)).status).toBe('rejected')
   })
 
   it('never lets the principal that asked decide its own request', async () => {
-    const pending = await inboxProposal({}, { via: 'ui', requestedById: admin.principalId! })
+    const pending = await inboxProposal({}, { requestedById: admin.principalId! })
     await expect(reject(pending.id, pending.argsDigest!)).rejects.toMatchObject({
       code: 'APPROVAL_SELF_DECISION',
     })
     expect((await rowOf(pending.id)).status).toBe('proposed')
-  })
-
-  it('stores a blank rejection reason as null', async () => {
-    const pending = await inboxProposal()
-    expect((await reject(pending.id, pending.argsDigest!, '   ')).decisionReason).toBeNull()
   })
 })

@@ -426,10 +426,8 @@ describe('assembleAssistantToolset: write-tool pipeline (propose mode)', () => {
       args: { reason: 'resolved' },
       summary: 'Close conversation: resolved',
       originRole: 'customer_support',
-      // Filed by the assistant, which can never decide its own request, at
-      // the tier a teammate approves.
-      requester: expect.objectContaining({ via: 'assistant' }),
-      risk: 'medium',
+      // Filed by the assistant, which can never decide its own request.
+      requester: expect.objectContaining({ requestedById: expect.anything() }),
       // Same-shaped key as the autonomous branch's claim (S1); this context
       // has no latestCustomerMessageId override, so it threads through as
       // the literal "null" segment.
@@ -554,8 +552,7 @@ describe('assembleAssistantToolset: write-tool pipeline (propose mode)', () => {
       args: { reason: 'resolved' },
       summary: 'Close conversation: resolved',
       originRole: 'customer_support',
-      requester: expect.objectContaining({ via: 'assistant' }),
-      risk: 'medium',
+      requester: expect.objectContaining({ requestedById: expect.anything() }),
       // Falls back to ticketId (not the bare "null" a naive conversationId-only
       // key would produce) so two different tickets proposing the same tool
       // with the same args never collide — see resolveIdempotencyKey's doc.

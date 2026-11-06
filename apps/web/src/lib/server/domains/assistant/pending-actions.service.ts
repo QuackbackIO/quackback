@@ -6,17 +6,7 @@
  * callers can never both "win" the same transition, and an UPDATE that
  * matches no row simply returns null instead of throwing.
  */
-import {
-  db,
-  eq,
-  and,
-  lt,
-  gt,
-  desc,
-  assistantPendingActions,
-  type ApprovalDecisionChannel,
-  type ApprovalRisk,
-} from '@/lib/server/db'
+import { db, eq, and, lt, gt, desc, assistantPendingActions } from '@/lib/server/db'
 import type {
   AssistantPendingActionId,
   AssistantInvolvementId,
@@ -34,12 +24,10 @@ import { addTicketNote } from '@/lib/server/domains/tickets/ticket-message.servi
 import { logger } from '@/lib/server/logger'
 import type { AssistantRole } from '@/lib/shared/assistant/config'
 import {
-  approvalContentDigest,
-  normalizeDecisionReason,
+  pendingActionContentDigest,
   requesterColumns,
-  DEFAULT_APPROVAL_RISK,
-  type ApprovalRequester,
-} from './approvals.service'
+  type PendingActionRequester,
+} from './pending-action-decisions'
 
 const log = logger.child({ component: 'assistant-pending-actions' })
 
@@ -67,9 +55,7 @@ export type ProposePendingActionInput = ProposePendingActionParent & {
   originRole?: AssistantRole
   ttlHours?: number
   /** Who filed the request; it can never decide it. */
-  requester?: ApprovalRequester
-  /** The tier the server set for this operation; read off the content when absent. */
-  risk?: ApprovalRisk
+  requester?: PendingActionRequester
   /**
    * A stable per-turn key, same shape as `assistant_tool_calls.idempotency_key`
    * (assistant.tools.ts's `resolveIdempotencyKey`:
@@ -114,8 +100,7 @@ export async function proposePendingAction(
         originRole: input.originRole ?? 'customer_support',
         expiresAt,
         idempotencyKey: input.idempotencyKey ?? null,
-        risk: input.risk ?? DEFAULT_APPROVAL_RISK,
-        argsDigest: approvalContentDigest(input.args),
+        argsDigest: pendingActionContentDigest(input.args),
         ...requesterColumns(input.requester),
       })
       .onConflictDoNothing()
@@ -174,12 +159,12 @@ export async function getPendingActionByIdempotencyKey(
  * Announce a fresh proposal in the item's thread so the team sees it without
  * polling. Best-effort: a note failure (or Quinn not yet provisioned) must
  * never fail the proposal itself, since the pending action row is already the
- * source of truth an agent can act on from the approval queue.
+ * source of truth an agent can act on from the pending action card.
  *
  * Conversation-scoped rows get the rich card note (`appendAssistantPendingActionNote`,
- * with the structured `assistantPendingAction` metadata the approval-queue UI
+ * with the structured `assistantPendingAction` metadata the card UI
  * renders as a card). Ticket-scoped rows (unified inbox §3.3) get a plain
- * internal ticket note instead — there is no ticket-scoped approval-queue card
+ * internal ticket note instead — there is no ticket-scoped pending action card
  * UI yet (see functions/assistant-actions.ts's `AssistantPendingActionDTO`
  * comment), so this only needs to make the proposal visible in the thread, not
  * render a card. Posted as Quinn (`quinnActor`), which needs `ticket.note` —
@@ -225,11 +210,8 @@ export async function getPendingActionById(
   return row ?? null
 }
 
-/** How a decision was made, recorded beside it. */
+/** What a decision carries. */
 export interface PendingActionDecisionOptions {
-  via?: ApprovalDecisionChannel
-  /** Why, for a rejection. Ignored for an approval. */
-  reason?: string | null
   /**
    * The content digest the decision names. The decision only lands on a row
    * whose stored digest is that one, so it can never approve content it was
@@ -258,8 +240,6 @@ export async function decidePendingAction(
         status: decision,
         decidedById,
         decidedAt: new Date(),
-        decidedVia: options.via ?? 'app',
-        decisionReason: decision === 'rejected' ? normalizeDecisionReason(options.reason) : null,
       })
       .where(
         and(
@@ -288,9 +268,6 @@ async function settleApprovedAction(
         status,
         executedAt: new Date(),
         result,
-        executionState: status === 'executed' ? 'succeeded' : 'failed',
-        executionError:
-          status === 'failed' && typeof result?.error === 'string' ? result.error : null,
       })
       .where(
         and(eq(assistantPendingActions.id, id), eq(assistantPendingActions.status, 'approved'))
