@@ -769,6 +769,7 @@ export async function notifyCsatRequestEmail(
       .select({
         channel: conversations.channel,
         visitorPrincipalId: conversations.visitorPrincipalId,
+        subject: conversations.subject,
       })
       .from(conversations)
       .where(eq(conversations.id, conversationId))
@@ -813,6 +814,7 @@ export async function notifyCsatRequestEmail(
       ratingUrls,
       workspaceName: ctx.workspaceName,
       logoUrl: ctx.logoUrl,
+      conversationSubject: conv.subject ?? null,
     })
   } catch (err) {
     log.warn({ err, conversationId }, 'csat request email failed')
