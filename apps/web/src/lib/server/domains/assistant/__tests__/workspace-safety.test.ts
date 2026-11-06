@@ -23,7 +23,7 @@ describe('workspace proposal boundary', () => {
   })
   it('proposes every Home write and connector call, and nothing on Slack', () => {
     const home = { role: 'workspace_assistant', agentKind: 'copilot' } as const
-    expect(workspaceProposalMode({ ...home, name: 'propose_settings_change', risk: 'write' })).toBe(
+    expect(workspaceProposalMode({ ...home, name: 'update_settings', risk: 'write' })).toBe(
       'propose'
     )
     expect(workspaceProposalMode({ ...home, name: 'connector_acme__find', risk: 'read' })).toBe(
@@ -39,7 +39,7 @@ describe('workspace proposal boundary', () => {
       })
     ).toBeNull()
   })
-  it('omits high radius, destructive and unknown write tools', () => {
+  it('omits every write tool and high radius reads', () => {
     for (const name of [
       'delete_post',
       'delete_comment',
@@ -54,7 +54,7 @@ describe('workspace proposal boundary', () => {
       expect(isWorkspaceToolAllowed(name, 'write')).toBe(false)
     expect(isWorkspaceToolAllowed('search', 'read')).toBe(true)
     expect(isWorkspaceToolAllowed('navigate_workspace', 'read')).toBe(true)
-    expect(isWorkspaceToolAllowed('propose_settings_change', 'write')).toBe(true)
+    expect(isWorkspaceToolAllowed('update_settings', 'write')).toBe(false)
     expect(isWorkspaceToolAllowed('create_post', 'write')).toBe(false)
   })
 })

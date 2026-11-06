@@ -16,8 +16,7 @@ import {
   type AssistantPendingAction,
   type PendingActionDecisionOptions,
 } from './pending-actions.service'
-import { assertDecisionNamesContent, rejectApproval } from './approvals.service'
-import { SETTINGS_PROPOSAL_TOOL } from './approval-policy'
+import { assertDecisionNamesContent } from './pending-action-decisions'
 import {
   getToolSpecByName,
   makeAssistantToolContext,
@@ -76,30 +75,13 @@ export async function decideAssistantAction(
   approverPrincipalId: PrincipalId,
   actor: Actor,
   verifiedThreadKey: string | undefined,
-  options: Pick<PendingActionDecisionOptions, 'via' | 'reason' | 'contentHash'>
+  options: Pick<PendingActionDecisionOptions, 'contentHash'>
 ): Promise<AssistantPendingAction> {
   const pending = await getPendingActionById(pendingActionId)
   if (!pending) throw new NotFoundError('PENDING_ACTION_NOT_FOUND', 'Pending action not found')
   // A decision names the digest of the content the person was shown; every
   // caller sends the one its card or message carried.
   const { contentHash } = options
-  const via = options.via ?? 'app'
-  if (isHomeThreadKey(pending.workspaceThreadKey) && pending.toolName === SETTINGS_PROPOSAL_TOOL) {
-    // A Home settings request is decided by any qualified person, under the
-    // approval rules, not only by whoever owns the thread.
-    if (decision === 'rejected')
-      return rejectApproval(actor, pending.id, { contentHash, via, reason: options.reason })
-    const { settingsProposalSchema } = await import('@/lib/shared/assistant/settings-proposals')
-    const { applyWorkspaceSettingsProposal } =
-      await import('@/lib/server/domains/assistant/workspace-settings-actions.service')
-    const proposal = settingsProposalSchema.parse(pending.args)
-    return applyWorkspaceSettingsProposal(
-      actor,
-      pending.id,
-      proposal.changes.map((change) => change.id),
-      { contentHash, via }
-    )
-  }
   await assertPendingWorkspaceParent(pending, actor, verifiedThreadKey)
   // The agent that asked never decides its own request.
   if (approverPrincipalId === pending.requestedById)
@@ -109,8 +91,6 @@ export async function decideAssistantAction(
     )
   assertDecisionNamesContent(pending, contentHash)
   const decideOptions: PendingActionDecisionOptions = {
-    via,
-    reason: options.reason,
     contentHash,
   }
 

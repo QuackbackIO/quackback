@@ -184,11 +184,6 @@ export const inAppNotifications = pgTable(
     index('in_app_notifications_principal_unread_idx')
       .on(table.principalId)
       .where(sql`read_at IS NULL AND archived_at IS NULL`),
-    // One unread approval bell per person: concurrent approval requests count
-    // up the same row through an upsert instead of adding a second one.
-    uniqueIndex('in_app_notifications_unread_approval_idx')
-      .on(table.principalId)
-      .where(sql`type = 'approval_requested' AND read_at IS NULL AND archived_at IS NULL`),
     // Find notifications by related post
     index('in_app_notifications_post_idx').on(table.postId),
     // FK RI lookup when a comment is deleted; partial because most
