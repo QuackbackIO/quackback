@@ -1,6 +1,7 @@
 /**
  * Ticket mutation hooks (support platform §4.2, folded into the unified inbox
- * at UNIFIED-INBOX-SPEC.md M6): status, assignment, priority, and create. Each
+ * at UNIFIED-INBOX-SPEC.md M6): status, assignment, priority, due date, and
+ * create. Each
  * writes the returned ticket into its detail cache for a snappy update and
  * invalidates every ticket list so the row reflects the change.
  *
@@ -16,6 +17,7 @@ import {
   setTicketStatusFn,
   assignTicketFn,
   setTicketPriorityFn,
+  setTicketDueAtFn,
   createTicketFn,
   watchTicketFn,
   unwatchTicketFn,
@@ -66,6 +68,18 @@ export function useSetTicketPriority() {
   })
 }
 
+/** Set, move or clear (`dueAt: null`) the ticket's shared due date. */
+export function useSetTicketDueAt() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: { ticketId: TicketId; dueAt: Date | null }) =>
+      setTicketDueAtFn({
+        data: { ticketId: vars.ticketId, dueAt: vars.dueAt ? vars.dueAt.toISOString() : null },
+      }),
+    onSuccess: (ticket) => applyTicket(queryClient, ticket),
+  })
+}
+
 export function useCreateTicket() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -84,6 +98,7 @@ export function useCreateTicket() {
           priority: input.priority,
           companyId: input.companyId ?? undefined,
           customAttributes: input.customAttributes,
+          dueAt: input.dueAt ? input.dueAt.toISOString() : undefined,
         },
       }),
     onSuccess: (ticket) => applyTicket(queryClient, ticket),

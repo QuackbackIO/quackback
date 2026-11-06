@@ -177,6 +177,18 @@ describe('getNotificationTarget', () => {
     })
   })
 
+  it.each(['ticket_due_soon', 'ticket_overdue'] as const)(
+    'routes %s to the admin inbox (assignee or team bell)',
+    (type) => {
+      const notification = buildNotification({ type, ticketId: 'ticket_5', audience: 'admin' })
+      expect(getNotificationTarget(notification)).toEqual({
+        to: '/admin/inbox',
+        search: { i: 'ticket_5' },
+      })
+      expect(getNotificationTarget(buildNotification({ type, ticketId: null }))).toBeNull()
+    }
+  )
+
   it('routes ticket_assigned (team member) to the admin inbox, NOT the requester-only portal thread', () => {
     const notification = buildNotification({
       type: 'ticket_assigned',

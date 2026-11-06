@@ -1007,7 +1007,10 @@ export function VisitorConversationThread({
           return (
             <div className="flex flex-col items-start">
               {bubble}
-              <BlockTicketForm getAuthHeaders={getAuthHeaders} />
+              <BlockTicketForm
+                getAuthHeaders={getAuthHeaders}
+                askDueDate={block.askDueDate === true}
+              />
             </div>
           )
         }

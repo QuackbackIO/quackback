@@ -69,6 +69,17 @@
  * permission gate by design — see createTicketCore's doc) and links it via
  * ticket-conversation-link.service's linkTicketToConversation. Both are
  * class-agnostic fire-and-continue side effects, like close/add_note.
+ *
+ * `set_ticket_due_date` follows set_ticket_status's policy exactly: it resolves
+ * the same linked CUSTOMER ticket (no linked ticket throws), runs under the
+ * same widened ticketActionActor, and writes through the tickets domain's one
+ * due-date write path (ticket-due.service's setTicketDueAt, which validates
+ * the team window and no-ops on an unchanged date). A relative `seconds` is
+ * resolved to `now + seconds` here at execution time, like snooze's relative
+ * form; `dueAtIso: null` clears the date. Loop safety: setTicketDueAt fires
+ * ticket.due_changed, whose event-trigger.ts mapping does NOT set
+ * `allowServiceActor`, so this action can never re-trigger a
+ * ticket.due_changed workflow.
  */
 import type {
   ConversationId,
@@ -118,6 +129,7 @@ import { tiptapJsonToText } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
 import { NotFoundError } from '@/lib/shared/errors'
 import * as ticketService from '@/lib/server/domains/tickets/ticket.service'
+import { setTicketDueAt } from '@/lib/server/domains/tickets/ticket-due.service'
 import {
   resolveTicketTypeForCreate,
   resolveCategoryDefaultType,
@@ -192,7 +204,9 @@ export type BlockSendSpec =
   // The ticket intake form as an in-thread block (send_ticket_form node): a
   // SEND kind like `message` — the widget renders the form for this block
   // kind and the visitor files the ticket in-thread; the run never parks.
-  | { kind: 'ticketForm'; body: TiptapContent }
+  // `askDueDate` adds the optional "Needed by" field; carried into the
+  // posted payload only when set.
+  | { kind: 'ticketForm'; body: TiptapContent; askDueDate?: boolean }
   | { kind: 'replyTime' }
   | {
       kind: 'buttons'
@@ -261,6 +275,11 @@ export type WorkflowAction =
   // the resolve-the-linked-ticket-then-throw-if-none policy both share, and
   // ticketActionActor's doc for why they run under a locally widened actor.
   | { type: 'set_ticket_status'; statusId: TicketStatusId }
+  // Two shapes, mirroring workflow.schemas.ts's setTicketDueDateActionSchema:
+  // an absolute instant (dueAtIso, null clears the date) or a relative offset
+  // (seconds, resolved to `now + seconds` when the step runs).
+  | { type: 'set_ticket_due_date'; dueAtIso: string | null }
+  | { type: 'set_ticket_due_date'; seconds: number }
   // Optional ticketTypeId (Phase 4): absent = the customer-category default
   // type; existing graphs convert exactly as before.
   | { type: 'convert_to_ticket'; ticketTypeId?: string }
@@ -348,7 +367,11 @@ function buildBlockPayload(
     case 'message':
       return { ...common, kind: 'message' }
     case 'ticketForm':
-      return { ...common, kind: 'ticketForm' }
+      return {
+        ...common,
+        kind: 'ticketForm',
+        ...(block.askDueDate === true ? { askDueDate: true } : {}),
+      }
     case 'buttons':
       return { ...common, kind: 'buttons', options: block.options, allowTyping: block.allowTyping }
     case 'collect':
@@ -660,6 +683,20 @@ export async function applyAction(
       }
       await ticketService.setTicketStatus(linked.id, action.statusId, ticketActionActor(actor))
       return label('ticket status updated')
+    }
+    case 'set_ticket_due_date': {
+      const linked = await getLinkedCustomerTicket(conversationId)
+      if (!linked) {
+        throw new NotFoundError('NOT_FOUND', 'This conversation has no linked ticket')
+      }
+      const dueAt =
+        'seconds' in action
+          ? new Date(Date.now() + action.seconds * 1000)
+          : action.dueAtIso
+            ? new Date(action.dueAtIso)
+            : null
+      await setTicketDueAt(linked.id, dueAt, ticketActionActor(actor))
+      return label(dueAt ? 'ticket due date set' : 'ticket due date cleared')
     }
     case 'convert_to_ticket': {
       const existing = await getLinkedCustomerTicket(conversationId)
