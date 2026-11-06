@@ -397,7 +397,7 @@ function LinkExistingSyncItem({ item }: { item: SyncHistoryItem }) {
           if (!link.isPending) setOpen(value)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Link existing item</DialogTitle>
             <DialogDescription>

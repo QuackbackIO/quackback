@@ -1,6 +1,8 @@
 'use client'
 
+import { useIntl } from 'react-intl'
 import { SecretRevealDialog } from '@/components/shared/secret-reveal-dialog'
+import { ADMIN_KEY_MESSAGES, type KeyDialogMessages } from './key-messages'
 
 interface ApiKeyRevealDialogProps {
   open: boolean
@@ -8,6 +10,7 @@ interface ApiKeyRevealDialogProps {
   keyValue: string | null
   keyName: string
   onClose?: () => void
+  messages?: KeyDialogMessages
 }
 
 export function ApiKeyRevealDialog({
@@ -16,7 +19,9 @@ export function ApiKeyRevealDialog({
   keyValue,
   keyName,
   onClose,
+  messages = ADMIN_KEY_MESSAGES,
 }: ApiKeyRevealDialogProps) {
+  const intl = useIntl()
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
       onClose?.()
@@ -28,19 +33,20 @@ export function ApiKeyRevealDialog({
     <SecretRevealDialog
       open={open}
       onOpenChange={handleOpenChange}
-      title="API key created"
-      description={
-        <>
-          Your API key <strong>{keyName}</strong> has been created successfully.
-        </>
-      }
-      secretLabel="API key"
+      title={intl.formatMessage(messages.revealTitle)}
+      description={intl.formatMessage(messages.revealDescription, {
+        name: <strong>{keyName}</strong>,
+      })}
+      secretLabel={intl.formatMessage(messages.revealSecretLabel)}
       secretValue={keyValue}
-      confirmLabel="I've saved my key"
+      confirmLabel={intl.formatMessage(messages.revealConfirm)}
+      warningTitle={intl.formatMessage(messages.revealCopyTitle)}
+      warningDescription={intl.formatMessage(messages.revealCopyDescription)}
+      copyLabel={intl.formatMessage(messages.revealCopy)}
     >
       {/* Usage example */}
       <div className="space-y-2">
-        <label className="text-sm font-medium">Usage</label>
+        <label className="text-sm font-medium">{intl.formatMessage(messages.revealUsage)}</label>
         <div className="rounded-lg bg-muted p-3">
           <code className="ph-mask text-xs text-muted-foreground block">
             curl -H &quot;Authorization: Bearer {keyValue ? keyValue.slice(0, 20) + '...' : ''}
