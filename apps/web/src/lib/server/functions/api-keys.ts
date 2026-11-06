@@ -8,6 +8,7 @@ import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { API_KEY_SCOPES, EMPTY_SCOPES_MESSAGE } from '@/lib/server/domains/api-keys/api-key-scopes'
 import type { ApiKeyId } from '@/lib/server/domains/api-keys/api-key.service'
+import type { RoleId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'api-keys' })
@@ -20,6 +21,13 @@ const createApiKeySchema = z.object({
   name: z.string().min(1, 'Name is required').max(255, 'Name must be 255 characters or less'),
   expiresAt: z.string().datetime().optional().nullable(),
   scopes: z.array(z.enum(API_KEY_SCOPES)).min(1, EMPTY_SCOPES_MESSAGE).optional(),
+  kind: z.enum(['personal', 'workspace']).optional(),
+  roleId: z.string().optional(),
+})
+
+const setWorkspaceKeyRoleSchema = z.object({
+  id: z.string(),
+  roleId: z.string(),
 })
 
 const getApiKeySchema = z.object({
@@ -102,8 +110,11 @@ export const createApiKeyFn = createServerFn({ method: 'POST' })
         name: data.name,
         expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
         scopes: data.scopes,
+        kind: data.kind,
+        roleId: data.roleId as RoleId | undefined,
       },
-      auth.principal.id
+      auth.principal.id,
+      { permissions: auth.permissions, role: auth.principal.role }
     )
     log.info({ api_key_id: result.apiKey.id }, 'api key created')
     return result
@@ -153,4 +164,24 @@ export const revokeApiKeyFn = createServerFn({ method: 'POST' })
     await revokeApiKey(data.id as ApiKeyId)
     log.info({ api_key_id: data.id }, 'api key revoked')
     return { id: data.id as ApiKeyId }
+  })
+
+/**
+ * Give a workspace key a different role, within the caller's own grant ceiling.
+ */
+export const setWorkspaceKeyRoleFn = createServerFn({ method: 'POST' })
+  .validator(setWorkspaceKeyRoleSchema)
+  .handler(async ({ data }) => {
+    log.debug({ api_key_id: data.id }, 'set workspace key role')
+    const auth = await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
+
+    const { setWorkspaceKeyRole } = await import('@/lib/server/domains/api-keys/api-key.service')
+    const key = await setWorkspaceKeyRole(
+      data.id as ApiKeyId,
+      data.roleId as RoleId,
+      { permissions: auth.permissions, role: auth.principal.role },
+      auth.principal.id
+    )
+    log.info({ api_key_id: key.id }, 'workspace key role changed')
+    return key
   })

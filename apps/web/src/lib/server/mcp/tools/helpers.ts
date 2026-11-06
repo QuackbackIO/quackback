@@ -349,7 +349,8 @@ export function principalTypeOf(auth: McpAuthContext): 'user' | 'service' {
  * Policy actor for the agent-side conversation tools. The conversation gates
  * (canViewConversation / canActAsAgent) short-circuit on the team role, so
  * segment memberships are never consulted and stay empty. A permission ceiling
- * on the context (an API key's resolved authority) rides along.
+ * on the context (an API key's resolved authority) rides along, and so does a
+ * personal key's creator, whose row scope the actor follows.
  */
 export function mcpAgentActor(auth: McpAuthContext): Actor {
   return {
@@ -358,6 +359,7 @@ export function mcpAgentActor(auth: McpAuthContext): Actor {
     principalType: principalTypeOf(auth),
     segmentIds: new Set<SegmentId>(),
     permissions: auth.permissions,
+    ...(auth.scopePrincipalId ? { scopePrincipalId: auth.scopePrincipalId } : {}),
   }
 }
 
@@ -374,6 +376,7 @@ export async function mcpMemberActor(auth: McpAuthContext): Promise<Actor> {
     principalType: principalTypeOf(auth),
     segmentIds: await segmentIdsForPrincipal(auth.principalId),
     permissions: auth.permissions,
+    ...(auth.scopePrincipalId ? { scopePrincipalId: auth.scopePrincipalId } : {}),
   }
 }
 
