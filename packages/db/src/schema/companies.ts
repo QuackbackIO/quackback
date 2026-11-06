@@ -55,8 +55,8 @@ export const companies = pgTable(
       .on(table.externalId)
       .where(sql`"external_id" IS NOT NULL`),
     // Workspace search matches a name or domain anywhere inside (0309).
-    index('companies_name_trgm_idx').using('gin', sql`${table.name} gin_trgm_ops`),
-    index('companies_domain_trgm_idx').using('gin', sql`${table.domain} gin_trgm_ops`),
+    index('companies_name_trgm_idx').using('gin', table.name.op('gin_trgm_ops')),
+    index('companies_domain_trgm_idx').using('gin', table.domain.op('gin_trgm_ops')),
   ]
 )
 

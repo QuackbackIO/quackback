@@ -212,7 +212,7 @@ export const user = pgTable(
     // principal_display_name_trgm_idx approach with a gin_trgm_ops index.
     index('user_name_trgm_idx').using('gin', sql`${table.name} gin_trgm_ops`),
     // Workspace search matches an email anywhere inside (0309).
-    index('user_email_trgm_idx').using('gin', sql`${table.email} gin_trgm_ops`),
+    index('user_email_trgm_idx').using('gin', table.email.op('gin_trgm_ops')),
   ]
 )
 
