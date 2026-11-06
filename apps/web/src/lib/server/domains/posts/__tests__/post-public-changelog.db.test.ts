@@ -24,17 +24,24 @@ vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
-const flags = vi.hoisted(() => ({ changelogOn: true }))
+const flags = vi.hoisted(() => ({
+  changelogOn: true,
+  audience: 'public' as 'public' | 'authenticated',
+}))
 vi.mock('@/lib/server/domains/settings/settings.service', async () => {
   const { getProductFlagUpdate } = await import('@/lib/shared/types/settings')
   return { getFeatureFlags: async () => getProductFlagUpdate('changelog', flags.changelogOn) }
 })
+vi.mock('@/lib/server/domains/settings/settings.changelog', () => ({
+  getChangelogSettings: async () => ({ audience: flags.audience }),
+}))
 import { changelogLinkColumn, toChangelogLink } from '../post.public.changelog'
 
 const fixture = await createDbTestFixture()
 beforeEach(async () => {
   expect(fixture.available).toBe(true)
   flags.changelogOn = true
+  flags.audience = 'public'
   await fixture.begin()
 })
 afterEach(fixture.rollback)
@@ -119,6 +126,23 @@ it('links nothing while the changelog is switched off', async () => {
   flags.changelogOn = false
 
   expect(await linkFor(postId)).toBeNull()
+})
+
+it('links nothing for a signed-out visitor while the changelog is for signed-in users', async () => {
+  const postId = await post()
+  const published = await entry('Published', new Date('2026-01-01'))
+  await testDb.insert(changelogEntryPosts).values({ changelogEntryId: published.id, postId })
+  flags.audience = 'authenticated'
+
+  const signedIn: Actor = {
+    principalId: createId('principal') as PrincipalId,
+    role: 'user',
+    principalType: 'user',
+    segmentIds: new Set(),
+  }
+
+  expect(await linkFor(postId)).toBeNull()
+  expect(await linkFor(postId, signedIn)).toEqual({ id: published.id, title: 'Published' })
 })
 
 it('hides an entry whose category is limited to segments the viewer is not in', async () => {
