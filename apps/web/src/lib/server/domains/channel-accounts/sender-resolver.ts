@@ -16,7 +16,12 @@ import {
   listSendingAddresses,
   type SendingModule,
 } from './channel-account.service'
-import { permittedSendingIdentity, withSendingDisplayName } from './outbound-identity'
+import {
+  permittedSendingIdentity,
+  sendingIdentityContext,
+  withSendingDisplayName,
+  type SendingIdentityContext,
+} from './outbound-identity'
 
 /**
  * RFC 5322 display-name wrapper for a resolved sending address:
@@ -47,10 +52,12 @@ export interface ResolvedSender {
  */
 async function permittedTeamAddress(
   teamId: TeamId,
-  module: SendingModule
+  module: SendingModule,
+  ctx: () => Promise<SendingIdentityContext>
 ): Promise<SendingIdentity | null> {
   for (const row of await listSendingAddresses(teamId, module)) {
-    const permitted = await permittedSendingIdentity(row.address)
+    if (!row.address) continue
+    const permitted = await permittedSendingIdentity(row.address, await ctx())
     if (permitted) return permitted
   }
   return null
@@ -101,6 +108,11 @@ export async function resolveSender(input: {
 }): Promise<ResolvedSender | null> {
   const module = input.module ?? 'support'
   let teamId = input.teamId ?? null
+  // The guard's context, gathered at most once per resolution and only when a
+  // candidate needs checking: it loads every verified domain, and this runs on
+  // every outbound email.
+  let gathered: Promise<SendingIdentityContext> | undefined
+  const ctx = () => (gathered ??= sendingIdentityContext())
   let channelAccountId: ChannelAccountId | null = null
 
   if (input.conversationId) {
@@ -122,23 +134,26 @@ export async function resolveSender(input: {
     // the address mail was forwarded from in its config. Either is "the address
     // the customer wrote to" for the conversation bound to it.
     const inboxAddress = account?.address ?? account?.config?.forwardingTarget ?? null
-    const from = await permittedSendingIdentity(inboxAddress)
+    const from = inboxAddress ? await permittedSendingIdentity(inboxAddress, await ctx()) : null
     if (from) return { from, source: 'inbox' }
   }
 
   const defaultTeam = await defaultTeamId()
   if (teamId && teamId !== defaultTeam) {
-    const from = await permittedTeamAddress(teamId, module)
+    const from = await permittedTeamAddress(teamId, module, ctx)
     if (from) return { from, source: 'team' }
   }
   if (defaultTeam) {
-    const from = await permittedTeamAddress(defaultTeam, module)
+    const from = await permittedTeamAddress(defaultTeam, module, ctx)
     // The default team's address is the team's own when it is the one assigned.
     if (from) return { from, source: teamId === defaultTeam ? 'team' : 'default_team' }
   }
 
   if (channelAccountId) {
-    const from = await permittedSendingIdentity(platformInboxAddress(currentMailSlug()))
+    const from = await permittedSendingIdentity(
+      platformInboxAddress(currentMailSlug()),
+      await ctx()
+    )
     if (from) return { from, source: 'platform_inbox' }
   }
   return null
