@@ -4,13 +4,17 @@
  * value from the bar reports the chosen id to the route (which fans it out over
  * the whole target set), and each control is disabled whenever the target
  * includes a ticket — tickets carry no tags and a macro reply posts a
- * conversation message, so a silent no-op would lie.
+ * conversation message, so a silent no-op would lie. The Due date menu reports
+ * a preset instant (or null to clear) and is disabled when no target has a
+ * ticket.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import type { ReactElement } from 'react'
 import { render, screen, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
+import { inHours, nextMondayAt, tomorrowAt } from '@/lib/shared/utils'
 
 const hoisted = vi.hoisted(() => ({
   fetchConversationTagsFn: vi.fn(),
@@ -74,6 +78,7 @@ function renderBar(props: Partial<React.ComponentProps<typeof BulkActionBar>> = 
       onAssign={() => {}}
       onAssignTeam={() => {}}
       onPriority={() => {}}
+      onSetDue={() => {}}
       onSnooze={() => {}}
       onTag={() => {}}
       onMacro={() => {}}
@@ -81,7 +86,11 @@ function renderBar(props: Partial<React.ComponentProps<typeof BulkActionBar>> = 
       {...props}
     />
   )
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <IntlProvider locale="en">{ui}</IntlProvider>
+    </QueryClientProvider>
+  )
 }
 
 describe('BulkActionBar — tag control', () => {
@@ -158,5 +167,61 @@ describe('BulkActionBar — spam mode', () => {
     expect(onDeleteForever).not.toHaveBeenCalled()
     await userEvent.click(await screen.findByRole('button', { name: 'Delete permanently' }))
     expect(onDeleteForever).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('BulkActionBar — due date control', () => {
+  it('sets the due date 24 hours out', async () => {
+    const onSetDue = vi.fn()
+    renderBar({ openMenu: 'due', onSetDue })
+    const before = inHours(24).getTime()
+    await userEvent.click(await screen.findByText('In 24 hours'))
+    const after = inHours(24).getTime()
+
+    expect(onSetDue).toHaveBeenCalledTimes(1)
+    const picked = new Date(onSetDue.mock.calls[0][0] as string).getTime()
+    expect(picked).toBeGreaterThanOrEqual(before)
+    expect(picked).toBeLessThanOrEqual(after)
+  })
+
+  it('sets tomorrow at 17:00 and next Monday at 09:00, local time', async () => {
+    const onSetDue = vi.fn()
+    renderBar({ openMenu: 'due', onSetDue })
+    await userEvent.click(await screen.findByText('Tomorrow'))
+    expect(onSetDue).toHaveBeenLastCalledWith(tomorrowAt(17).toISOString())
+
+    cleanup()
+    renderBar({ openMenu: 'due', onSetDue })
+    await userEvent.click(await screen.findByText('Next Monday'))
+    expect(onSetDue).toHaveBeenLastCalledWith(nextMondayAt(9).toISOString())
+  })
+
+  it('clears the due date with null', async () => {
+    const onSetDue = vi.fn()
+    renderBar({ openMenu: 'due', onSetDue })
+    await userEvent.click(await screen.findByText('Clear due date'))
+    expect(onSetDue).toHaveBeenCalledWith(null)
+  })
+
+  it('opens a date picker for a custom date, with nothing applied until one is picked', async () => {
+    const onSetDue = vi.fn()
+    renderBar({ openMenu: 'due', onSetDue })
+    await userEvent.click(await screen.findByText('Pick a date'))
+
+    const apply = await screen.findByRole('button', { name: 'Set due date' })
+    expect(apply).toBeDisabled()
+    expect(onSetDue).not.toHaveBeenCalled()
+  })
+
+  it('is disabled, with a reason, when no target has a ticket', () => {
+    renderBar({ disableDue: true })
+    const trigger = screen.getByRole('button', { name: 'Due date' })
+    expect(trigger).toBeDisabled()
+    expect(trigger).toHaveAttribute('title', 'Only available for tickets')
+  })
+
+  it('is enabled when a target has a ticket', () => {
+    renderBar({ disableDue: false })
+    expect(screen.getByRole('button', { name: 'Due date' })).toBeEnabled()
   })
 })

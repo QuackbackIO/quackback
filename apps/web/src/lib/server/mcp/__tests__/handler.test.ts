@@ -745,6 +745,7 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('add_ticket_note')
       expect(toolNames).toContain('link_ticket')
       expect(toolNames).toContain('unlink_ticket')
+      expect(toolNames).toContain('set_ticket_due_date')
       expect(toolNames).toContain('upload_file')
       expect(toolNames).toContain('widget_install_status')
       expect(toolNames).toContain('get_settings')
@@ -752,7 +753,7 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('navigate_workspace')
       // Settings change directly through update_settings; no tool files a settings card.
       expect(toolNames).not.toContain('propose_settings_change')
-      expect(toolNames).toHaveLength(43)
+      expect(toolNames).toHaveLength(44)
     })
 
     it('should handle resources/list request', async () => {

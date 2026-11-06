@@ -189,6 +189,7 @@ function inboxListParamsKey(params: InboxListParams): string {
     // key it so the two never share a cache entry.
     params.linkedPairsOnly ? 'pairs' : '',
     params.channel ?? '',
+    params.due ?? '',
   ].join('|')
 }
 

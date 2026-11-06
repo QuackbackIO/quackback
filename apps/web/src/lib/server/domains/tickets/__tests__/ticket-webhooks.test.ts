@@ -13,6 +13,7 @@ const dispatch = vi.hoisted(() => ({
   dispatchTicketAssigned: vi.fn().mockResolvedValue(undefined),
   dispatchTicketReplied: vi.fn().mockResolvedValue(undefined),
   dispatchTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
+  dispatchTicketDueChanged: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('@/lib/server/events/dispatch', () => dispatch)
 
@@ -22,6 +23,8 @@ import {
   emitTicketAssigned,
   emitTicketReplied,
   emitTicketNoteAdded,
+  emitTicketDueChanged,
+  ticketRef,
 } from '../ticket.webhooks'
 
 const now = new Date('2026-07-04T00:00:00.000Z')
@@ -127,6 +130,7 @@ describe('ticket.webhooks emit helpers', () => {
       priority: 'high',
       assignedPrincipalId: null,
       assignedTeamId: null,
+      dueAt: null,
     })
     expect(previousStatus).toBe('open')
     expect(newStatus).toBe('closed')
@@ -211,6 +215,7 @@ describe('ticket.webhooks reply + note emit helpers', () => {
       priority: 'high',
       assignedPrincipalId: null,
       assignedTeamId: null,
+      dueAt: null,
     })
     expect(messageId).toBe('conversation_message_1')
     expect(content).toBe('Thanks for the report, we are on it.')
@@ -313,5 +318,42 @@ describe('ticket.webhooks reply + note emit helpers', () => {
     await emitTicketStatusChanged(agentActor, typed, 'open', 'closed', 'resolved', 'received', null)
     const [, ref] = dispatch.dispatchTicketStatusChanged.mock.calls[0]
     expect(ref).toMatchObject({ ticketTypeId: 'ticket_type_bug' })
+  })
+})
+
+describe('ticket.webhooks due date', () => {
+  const due = new Date('2026-07-10T21:59:00.000Z')
+  const previous = new Date('2026-07-08T21:59:00.000Z')
+
+  it('ticketRef carries the due date as ISO, null when there is none', () => {
+    expect(ticketRef(baseTicket).dueAt).toBeNull()
+    const dated = { ...baseTicket, dueAt: due } as unknown as Ticket
+    expect(ticketRef(dated).dueAt).toBe('2026-07-10T21:59:00.000Z')
+  })
+
+  it('emitTicketDueChanged sends the ref, title, new and previous due dates', async () => {
+    const dated = { ...baseTicket, dueAt: due } as unknown as Ticket
+    await emitTicketDueChanged(agentActor, dated, previous)
+    expect(dispatch.dispatchTicketDueChanged).toHaveBeenCalledTimes(1)
+    const [actorArg, ref, title, dueAt, previousDueAt] =
+      dispatch.dispatchTicketDueChanged.mock.calls[0]
+    expect(actorArg).toMatchObject({ type: 'user', principalId: 'principal_a' })
+    expect(ref).toMatchObject({ id: 'ticket_1', dueAt: '2026-07-10T21:59:00.000Z' })
+    expect(title).toBe('Cannot log in')
+    expect(dueAt).toBe('2026-07-10T21:59:00.000Z')
+    expect(previousDueAt).toBe('2026-07-08T21:59:00.000Z')
+  })
+
+  it('emitTicketDueChanged reports a cleared date as null, with the date it replaced', async () => {
+    await emitTicketDueChanged(agentActor, baseTicket, previous)
+    const [, ref, , dueAt, previousDueAt] = dispatch.dispatchTicketDueChanged.mock.calls[0]
+    expect(ref.dueAt).toBeNull()
+    expect(dueAt).toBeNull()
+    expect(previousDueAt).toBe('2026-07-08T21:59:00.000Z')
+  })
+
+  it('emitTicketDueChanged swallows a dispatch failure (fire-and-forget)', async () => {
+    dispatch.dispatchTicketDueChanged.mockRejectedValueOnce(new Error('bus down'))
+    await expect(emitTicketDueChanged(agentActor, baseTicket, null)).resolves.toBeUndefined()
   })
 })
