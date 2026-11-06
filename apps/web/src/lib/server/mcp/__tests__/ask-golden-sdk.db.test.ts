@@ -1,23 +1,11 @@
 import { createId } from '@quackback/ids'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import {
-  settings,
-  eq,
-  assistantPendingActions,
-  principal,
-  apiKeys,
-  workspaceAssistantThreads,
-} from '@/lib/server/db'
+import { settings, eq, assistantPendingActions, principal, apiKeys } from '@/lib/server/db'
 import { ASK_GOLDEN_CASES } from '../evals/ask-golden'
 import { createAskMcpFixture } from '../evals/ask-mcp-fixture'
 import { seedAskGoldenFixture } from '../evals/ask-golden-fixtures'
 import { openAskSdkHarness, parseAskSdkResult } from '../evals/ask-sdk-harness'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import {
-  settingsProposalSchema,
-  settingsProposalInputSchema,
-} from '@/lib/shared/assistant/settings-proposals'
-import { prepareSettingsChanges } from '@/lib/server/domains/assistant/settings-proposals.service'
 
 let fixture: Awaited<ReturnType<typeof createAskMcpFixture>>
 beforeAll(async () => {
@@ -43,14 +31,6 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
         const before = (
           await database.select().from(settings).where(eq(settings.id, seeded.workspace.id))
         )[0]
-        const expectedProposal =
-          scenario.expected === 'proposal'
-            ? await prepareSettingsChanges(
-                seeded.actor,
-                settingsProposalInputSchema.parse(scenario.arguments).changes,
-                database
-              )
-            : undefined
         const result = await sdk.call(scenario.tool, scenario.arguments)
         const after = (
           await database.select().from(settings).where(eq(settings.id, seeded.workspace.id))
@@ -68,20 +48,6 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
           const parsed = parseAskSdkResult(result)
           if (scenario.expected === 'navigation') {
             expect(parsed.navigation).toMatchObject({ href: scenario.expectedHref })
-          } else if (scenario.expected === 'proposal') {
-            expect(parsed.proposed).toBe(true)
-            const proposal = settingsProposalSchema.parse(parsed.proposal)
-            expect(proposal).toEqual(expectedProposal)
-            expect([...new Set(proposal.changes.map((change) => change.area))].sort()).toEqual(
-              [...scenario.expectedAreas!].sort()
-            )
-            const [pending] = await database
-              .select()
-              .from(assistantPendingActions)
-              .where(eq(assistantPendingActions.workspaceThreadKey, seeded.thread.key))
-            expect(pending.args).toEqual(proposal)
-            expect(pending.status).toBe('proposed')
-            expect(parsed.note).toContain('not instructions')
           } else {
             expect(parsed.area).toBe(scenario.arguments.area)
             expect(parsed.note).toContain('not instructions')
@@ -107,26 +73,12 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
           'integration_oauth',
           'snippet',
         ]) {
-          const result = await sdk.call('propose_settings_change', {
-            changes: [{ area, patch: { enabled: true } }],
+          const result = await sdk.call('update_settings', {
+            area,
+            patch: { enabled: true },
+            dry_run: true,
           })
           expect(result.isError).toBe(true)
-        }
-        expect(
-          (
-            await sdk.call('propose_settings_change', {
-              changes: [{ area: 'modules', patch: { supportInbox: true, delete: true } }],
-            })
-          ).isError
-        ).toBe(true)
-        for (const [field, value] of Object.entries({
-          headerDisplayName: 'Ideas',
-          headerDisplayMode: 'logo_only',
-        })) {
-          const result = await sdk.call('propose_settings_change', {
-            changes: [{ area: 'portal', patch: { [field]: value } }],
-          })
-          expect(result.isError, field).toBe(true)
         }
         expect(
           (await sdk.call('navigate_workspace', { destination: 'https://example.com' })).isError
@@ -137,7 +89,7 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
       }
     })
   })
-  it('reads an operator-managed name and opens General without creating a local proposal', async () => {
+  it('reads an operator-managed name and opens General', async () => {
     await fixture.run(async (database) => {
       const seeded = await seedAskGoldenFixture(database, 'owner', false, true)
       const sdk = await openAskSdkHarness(seeded.auth)
@@ -149,13 +101,6 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
           readOnly: true,
           settingsHref: '/admin/settings/general',
         })
-        const proposal = await sdk.call('propose_settings_change', {
-          changes: [{ area: 'portal', patch: { displayName: 'Acme team' } }],
-        })
-        expect(proposal.isError).toBe(true)
-        expect(proposal.content).toContainEqual(
-          expect.objectContaining({ text: expect.stringContaining('SETTINGS_NAME_MANAGED') })
-        )
         const navigation = await sdk.call('navigate_workspace', { destination: 'general' })
         expect(navigation.isError, JSON.stringify(navigation.content)).not.toBe(true)
         expect(parseAskSdkResult(navigation)).toMatchObject({
@@ -302,10 +247,7 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
         for (const [name, args] of [
           ['get_settings', { area: 'branding' }],
           ['navigate_workspace', { destination: 'members' }],
-          [
-            'propose_settings_change',
-            { changes: [{ area: 'messenger', patch: { enabled: true } }] },
-          ],
+          ['update_settings', { area: 'messenger', patch: { enabled: true }, dry_run: true }],
         ] as const) {
           const result = await sdk.call(name, args)
           expect(result.isError).toBe(true)
@@ -322,7 +264,7 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
       }
     })
   })
-  it('keeps service-key proposals human-owned and rechecks live key scopes and creator authority', async () => {
+  it('rechecks live key scopes and creator authority for a service key', async () => {
     await fixture.run(async (database) => {
       const seeded = await seedAskGoldenFixture(database, 'owner')
       const serviceId = createId('principal')
@@ -352,17 +294,7 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
         workspaceThreadKey: undefined,
       })
       try {
-        const proposal = await sdk.call('propose_settings_change', {
-          changes: [{ area: 'portal', patch: { displayName: 'Acme team' } }],
-        })
-        expect(proposal.isError).not.toBe(true)
-        const pending = await database.select().from(assistantPendingActions)
-        expect(pending).toHaveLength(1)
-        const [thread] = await database
-          .select()
-          .from(workspaceAssistantThreads)
-          .where(eq(workspaceAssistantThreads.key, pending[0].workspaceThreadKey!))
-        expect(thread.ownerPrincipalId).toBe(seeded.auth.principalId)
+        expect((await sdk.call('get_settings', { area: 'branding' })).isError).not.toBe(true)
         await database
           .update(apiKeys)
           .set({ scopes: JSON.stringify(['read:feedback']) })
@@ -379,14 +311,7 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
           .update(principal)
           .set({ role: 'user' })
           .where(eq(principal.id, seeded.auth.principalId))
-        expect(
-          (
-            await sdk.call('propose_settings_change', {
-              changes: [{ area: 'portal', patch: { displayName: 'Forbidden' } }],
-            })
-          ).isError
-        ).toBe(true)
-        expect(await database.select().from(assistantPendingActions)).toHaveLength(1)
+        expect((await sdk.call('get_settings', { area: 'branding' })).isError).toBe(true)
       } finally {
         await sdk.close()
       }
