@@ -20,7 +20,7 @@ function askMessagesFor(locale: SupportedLocale): Promise<Record<string, string>
 }
 
 /**
- * Supplies the Copilot and search strings, which admin pages leave out of the
+ * Supplies the search strings, which admin pages leave out of the
  * catalog they seed. A catalog that already holds them passes straight through.
  */
 export function AskMessages({ children }: { children: ReactNode }) {
