@@ -381,7 +381,10 @@ async function serveStorageGet(request: Request): Promise<Response> {
   // Force proxy for email embeds (?email=1), since email clients don't follow
   // redirects, and for the file viewer's fetch (?proxy=1), since a script
   // cannot read a cross-origin redirect target the bucket has no CORS grant for.
-  const forceProxy = url.searchParams.has('email') || url.searchParams.has('proxy')
+  // Explicit downloads also stay on this origin: an embedding host's frame-src
+  // policy can block a bucket redirect before its attachment header is read.
+  const forceProxy =
+    downloadName !== null || url.searchParams.has('email') || url.searchParams.has('proxy')
   const requestedRange = request.headers.get('range')
   if (requestedRange && !isSingleByteRange(requestedRange)) {
     return new Response(null, { status: 416, headers: { 'Accept-Ranges': 'bytes' } })
