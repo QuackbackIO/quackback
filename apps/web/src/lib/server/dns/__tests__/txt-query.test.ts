@@ -101,6 +101,9 @@ async function tcpServer(port: number, handler: Handler): Promise<void> {
   await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', () => resolve()))
 }
 
+/** Whether a query carries an EDNS OPT record (ARCOUNT is its only additional). */
+const hasOpt = (q: Buffer) => q.readUInt16BE(10) > 0
+
 const at = (port: number) => [{ address: '127.0.0.1', port }]
 const fast = { timeoutMs: 300, tries: 1 }
 
@@ -191,7 +194,7 @@ describe('queryTxt', () => {
     expect(await queryTxt('acme.test', { ...fast, servers })).toEqual([['ok']])
   })
 
-  it('times out a silent nameserver after the number of tries asked for', async () => {
+  it('times out a silent nameserver after the tries asked for and one plain retry', async () => {
     const { port, queries } = await udpServer(() => null)
     const started = Date.now()
     const code = await codeOf(
@@ -199,8 +202,30 @@ describe('queryTxt', () => {
     )
     expect(code).toBe('ETIMEOUT')
     expect(isNoAnswer({ code })).toBe(false)
-    expect(queries).toHaveLength(2)
+    // EDNS, then once without it in case EDNS was dropped, then the second try.
+    expect(queries.map(hasOpt)).toEqual([true, false, false])
     expect(Date.now() - started).toBeLessThan(1000)
+  })
+
+  it('asks again without EDNS when the nameserver rejects it', async () => {
+    const { port, queries } = await udpServer((q) =>
+      hasOpt(q) ? respond(q, [], { rcode: 1 }) : respond(q, [txt('plain=1')])
+    )
+    expect(await queryTxt('acme.test', { ...fast, servers: at(port) })).toEqual([['plain=1']])
+    expect(queries.map(hasOpt)).toEqual([true, false])
+  })
+
+  it('asks again without EDNS when the EDNS query is dropped on the way', async () => {
+    const { port } = await udpServer((q) => (hasOpt(q) ? null : respond(q, [txt('plain=1')])))
+    expect(await queryTxt('acme.test', { timeoutMs: 100, tries: 1, servers: at(port) })).toEqual([
+      ['plain=1'],
+    ])
+  })
+
+  it('does not drop EDNS for an answer that says nothing is published', async () => {
+    const { port, queries } = await udpServer((q) => respond(q, [], { rcode: 3 }))
+    expect(await codeOf(queryTxt('acme.test', { ...fast, servers: at(port) }))).toBe('ENOTFOUND')
+    expect(queries).toHaveLength(1)
   })
 
   it('ignores a reply that does not answer its query', async () => {

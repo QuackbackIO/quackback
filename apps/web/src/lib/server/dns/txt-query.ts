@@ -23,8 +23,11 @@
  * One question (TXT, class IN, recursion desired, EDNS0 with room for a large
  * answer) to the system's nameservers in order, over UDP, and again over TCP
  * when the UDP answer comes back truncated. Each server is asked up to `tries`
- * times. Packets are encoded and decoded by `dns-packet`, which keeps each TXT
- * record's strings together.
+ * times. When a server times out or answers FORMERR, SERVFAIL or NOTIMP to a
+ * query carrying EDNS, it is asked once more without it, as c-ares does, so a
+ * resolver or middlebox that does not understand EDNS still gets a plain query
+ * it can answer. Packets are encoded and decoded by `dns-packet`, which keeps
+ * each TXT record's strings together.
  *
  * ## Forged answers
  *
@@ -66,9 +69,22 @@ export interface TxtQueryOptions {
 
 const EDNS_UDP_PAYLOAD = 1232
 const RCODE_NOERROR = 0
+const RCODE_FORMERR = 1
 const RCODE_SERVFAIL = 2
 const RCODE_NXDOMAIN = 3
+const RCODE_NOTIMP = 4
 const RCODE_REFUSED = 5
+
+/** The codes Node gives the response codes that say nothing about the record. */
+const RCODE_CODES: Record<number, string> = {
+  [RCODE_FORMERR]: 'EFORMERR',
+  [RCODE_SERVFAIL]: 'ESERVFAIL',
+  [RCODE_NOTIMP]: 'ENOTIMP',
+  [RCODE_REFUSED]: 'EREFUSED',
+}
+
+/** Response codes an older resolver gives a query it cannot parse because of EDNS. */
+const EDNS_REJECTED = new Set([RCODE_FORMERR, RCODE_SERVFAIL, RCODE_NOTIMP])
 
 /** A lookup failure, coded the way Node's resolver codes the same outcome. */
 class DnsQueryError extends Error {
@@ -108,25 +124,31 @@ function canonicalName(host: string): string {
   return name
 }
 
-/** A TXT query for `name` with message id `id`, carrying an EDNS0 OPT record. */
-export function encodeTxtQuery(id: number, name: string): Buffer {
+/**
+ * A TXT query for `name` with message id `id`. With `edns` (the default) it
+ * carries an EDNS0 OPT record offering a large UDP payload; without it, it is a
+ * plain RFC 1035 query, for a resolver that does not understand EDNS.
+ */
+export function encodeTxtQuery(id: number, name: string, { edns = true } = {}): Buffer {
   return dnsPacket.encode({
     type: 'query',
     id,
     flags: dnsPacket.RECURSION_DESIRED,
     questions: [{ type: 'TXT', class: 'IN', name }],
-    additionals: [
-      {
-        type: 'OPT',
-        name: '.',
-        udpPayloadSize: EDNS_UDP_PAYLOAD,
-        extendedRcode: 0,
-        ednsVersion: 0,
-        flags: 0,
-        flag_do: false,
-        options: [],
-      },
-    ],
+    additionals: edns
+      ? [
+          {
+            type: 'OPT',
+            name: '.',
+            udpPayloadSize: EDNS_UDP_PAYLOAD,
+            extendedRcode: 0,
+            ednsVersion: 0,
+            flags: 0,
+            flag_do: false,
+            options: [],
+          },
+        ]
+      : [],
   })
 }
 
@@ -249,15 +271,24 @@ export async function queryTxt(host: string, opts: TxtQueryOptions): Promise<str
   if (servers.length === 0) throw new DnsQueryError('ECONNREFUSED', host)
   let lastCode = 'ETIMEOUT'
   for (const server of servers) {
-    for (let attempt = 0; attempt < Math.max(1, opts.tries); attempt++) {
+    let edns = true
+    let attemptsLeft = Math.max(1, opts.tries)
+    while (attemptsLeft > 0) {
+      attemptsLeft--
       const id = randomInt(0, 0x10000)
-      const query = encodeTxtQuery(id, name)
+      const query = encodeTxtQuery(id, name, { edns })
       let answer: ParsedAnswer
       try {
         answer = await overUdp(server, query, id, name, opts.timeoutMs)
         if (answer.truncated) answer = await overTcp(server, query, id, name, opts.timeoutMs)
       } catch (err) {
         lastCode = transportCode(err)
+        // A query with an OPT record can be dropped by a resolver or middlebox
+        // that does not understand EDNS. Ask once more without it.
+        if (edns) {
+          edns = false
+          attemptsLeft++
+        }
         continue
       }
       if (answer.rcode === RCODE_NXDOMAIN) throw new DnsQueryError('ENOTFOUND', host)
@@ -265,13 +296,15 @@ export async function queryTxt(host: string, opts: TxtQueryOptions): Promise<str
         if (answer.records.length === 0) throw new DnsQueryError('ENODATA', host)
         return answer.records
       }
-      // SERVFAIL, REFUSED and the rest say nothing about the record: next server.
-      lastCode =
-        answer.rcode === RCODE_SERVFAIL
-          ? 'ESERVFAIL'
-          : answer.rcode === RCODE_REFUSED
-            ? 'EREFUSED'
-            : 'EBADRESP'
+      lastCode = RCODE_CODES[answer.rcode] ?? 'EBADRESP'
+      // An older resolver answers an OPT record it does not understand with one
+      // of these. Ask the same server once more without EDNS, as c-ares does.
+      if (edns && EDNS_REJECTED.has(answer.rcode)) {
+        edns = false
+        attemptsLeft++
+        continue
+      }
+      // The rest say nothing about the record: next server.
       break
     }
   }
