@@ -192,6 +192,9 @@ beforeEach(() => {
   visitorRows = []
   limitQueue = []
   vi.clearAllMocks()
+  // clearAllMocks keeps implementations, so a case that set a From would leak
+  // it into every later case without this.
+  resolveConversationFrom.mockReset().mockResolvedValue(null)
   // Silence the fire-and-forget warning logs.
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   buildHookContext.mockResolvedValue(ctx)
@@ -1253,6 +1256,41 @@ describe('threading headers (P4.6 regression guard)', () => {
       const call = sendConversationMessageEmail.mock.calls[0][0]
       expect(call.references).toEqual(prior)
       expect(call.inReplyTo).toBe('c.1.bbb@tenaevexeo.resend.app')
+    })
+
+    it('names a messenger reply after the agent and the workspace', async () => {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+
+      await notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Alex',
+        channel: 'messenger',
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.from).toBeUndefined()
+      expect(call.fromDisplayName).toBe('Alex from Acme')
+    })
+
+    it("names a messenger reply sent from the thread's own address", async () => {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+      resolveConversationFrom.mockResolvedValueOnce('help@home.example')
+
+      await notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Alex',
+        channel: 'messenger',
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.from).toBe('Alex from Acme <help@home.example>')
+      expect(call.fromDisplayName).toBeUndefined()
     })
 
     it('forwards the stored conversation subject to the sender', async () => {
