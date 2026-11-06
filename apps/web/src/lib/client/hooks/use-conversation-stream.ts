@@ -58,6 +58,7 @@ const NAMED_EVENTS = [
   // listener, so hover-prefetched ticket caches would stay stale without these.
   'ticket_message',
   'ticket_message_updated',
+  'ticket_message_deleted',
   'ticket_updated',
   'ticket_read',
 ] as const

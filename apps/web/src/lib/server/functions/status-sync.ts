@@ -5,7 +5,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
-import { db, integrations, eq } from '@/lib/server/db'
+import { db, integrations, eq, sql } from '@/lib/server/db'
 import { getIntegrationAuth } from '@/lib/server/integrations/token-refresh'
 import {
   generateWebhookSecret,
@@ -78,7 +78,8 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
     if (integration.status !== 'active') throw new Error('Integration must be active')
 
     const { getIntegration } = await import('@/lib/server/integrations')
-    const registration = getIntegration(data.integrationType)?.webhookRegistration
+    const definition = getIntegration(data.integrationType)
+    const registration = definition?.webhookRegistration
     if (!registration) throw new Error('Status sync is not supported for this integration')
     let secret = generateWebhookSecret()
     const callbackUrl = buildWebhookCallbackUrl(data.integrationType)
@@ -88,6 +89,43 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
     let externalWebhookId: string | undefined
 
     const accessToken = credentials.accessToken
+
+    // A provider serving several destinations registers one webhook per
+    // destination, each with its own secret stored on the destination. The
+    // connection keeps only the status-sync switch.
+    const multiple = definition.destination?.multiple
+    if (multiple && registration !== 'manual') {
+      if (!accessToken) throw new Error('Reconnect the integration before enabling status sync')
+      const { ensureDestinations, registerDestinationWebhooks } =
+        await import('@/lib/server/integrations/destinations')
+      await ensureDestinations(integration)
+      const { registered, failures } = await registerDestinationWebhooks({
+        integration,
+        kind: multiple.kind,
+        accessToken,
+      })
+      if (failures.length > 0 || registered === 0) {
+        const reason =
+          failures.length > 0
+            ? failures.join('; ')
+            : `No ${multiple.label.toLowerCase()} configured`
+        const { recordIntegrationLastError } =
+          await import('@/lib/server/integrations/webhook-registration')
+        await recordIntegrationLastError(
+          integrationId,
+          `Failed to register webhook: ${reason}`
+        ).catch(() => {})
+        throw new Error(`Failed to register webhook: ${reason}`)
+      }
+      await db
+        .update(integrations)
+        .set({
+          config: sql`${integrations.config} || '{"statusSyncEnabled": true}'::jsonb`,
+          updatedAt: new Date(),
+        })
+        .where(eq(integrations.id, integrationId))
+      return { success: true, callbackUrl, isManual: false }
+    }
 
     // Auto-register webhook for platforms whose definition provides a
     // registration capability; 'manual' providers skip (the UI shows the
@@ -175,6 +213,35 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
         return { success: true }
       }
     }
+    // One webhook per destination: remove each (best effort) and forget it,
+    // except where something other than status sync still listens (GitHub:
+    // a repository with assignee sync on).
+    const { getIntegration } = await import('@/lib/server/integrations')
+    const multiple = getIntegration(data.integrationType)?.destination?.multiple
+    if (multiple) {
+      const {
+        listDestinations,
+        unregisterDestinationWebhook,
+        destinationConfig,
+        ensureDestinations,
+      } = await import('@/lib/server/integrations/destinations')
+      // A hook that stays must carry its own secret before the connection's
+      // legacy one is cleared below.
+      await ensureDestinations(integration)
+      const statusSyncOff = { config: { ...config, statusSyncEnabled: false } }
+      for (const destination of await listDestinations(integrationId, multiple.kind)) {
+        if (!destination.externalWebhookId && !destination.secrets) continue
+        if (await multiple.webhookWanted?.(destinationConfig(statusSyncOff, destination))) continue
+        await unregisterDestinationWebhook({
+          integration,
+          destination,
+          accessToken: credentials.accessToken,
+        })
+      }
+      await clearWebhookConfig(integrationId)
+      return { success: true }
+    }
+
     const externalWebhookId = config.externalWebhookId as string | undefined
 
     // Clean up external webhook if one was registered
@@ -182,7 +249,6 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
       try {
         const secrets = credentials
         if (secrets.accessToken) {
-          const { getIntegration } = await import('@/lib/server/integrations')
           const registration = getIntegration(data.integrationType)?.webhookRegistration
           if (registration && registration !== 'manual') {
             await registration.unregister({

@@ -210,6 +210,10 @@ export interface EventMappingActionConfig {
 export interface EventMappingFilters {
   boardIds?: string[]
   statusIds?: string[]
+  /** Ticket events: only tickets assigned to one of these teams. Empty or absent: every team. */
+  ticketTeamIds?: string[]
+  /** Ticket events: only tickets of one of these ticket types. Empty or absent: every type. */
+  ticketTypeIds?: string[]
   [key: string]: string[] | string | boolean | number | undefined
 }
 
@@ -1070,8 +1074,9 @@ export type WorkflowBlockPayload =
   // The ticket intake form sent into the thread by a workflow's
   // send_ticket_form node: a SEND kind (waiting always false) — the widget
   // renders the form card for this kind and the visitor files the ticket
-  // in-thread; there is no structured block reply to correlate.
-  | (WorkflowBlockPayloadBase & { kind: 'ticketForm' })
+  // in-thread; there is no structured block reply to correlate. askDueDate
+  // adds the optional "Needed by" date field (absent on older messages).
+  | (WorkflowBlockPayloadBase & { kind: 'ticketForm'; askDueDate?: boolean })
   | (WorkflowBlockPayloadBase & {
       kind: 'buttons'
       options: WorkflowBlockButtonOption[]

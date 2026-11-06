@@ -22,19 +22,24 @@ import {
   getConversationAssignedTargets,
   getTicketAssignedTargets,
   getPostOwnerAssignedTargets,
+  getPostSubscriberAddedTargets,
   getAssistantHandedOffTargets,
   getConversationNoteMentionedTargets,
   getTicketStatusChangedTargets,
   getTicketRepliedTargets,
   getTicketNoteAddedTargets,
   getTicketExternalStatusChangedTargets,
+  getTicketSubscriberAddedTargets,
   getMessageCreatedTargets,
   getTicketCreatedEmailTargets,
   getTicketRepliedEmailTargets,
+  getTicketSharedEmailTargets,
   getTicketResolvedEmailTargets,
   getTicketAssignedEmailTargets,
   getSlaEmailTargets,
   getConversationNoteMentionedEmailTargets,
+  getTicketDueTargets,
+  getTicketDueEmailTargets,
 } from '../targets'
 import type { SinkResolver } from './registry'
 import type { DomainEvent } from '../envelope'
@@ -62,13 +67,17 @@ const BELL_BUILDERS: Record<string, BellBuilder> = {
   'conversation.assigned': getConversationAssignedTargets,
   'ticket.assigned': getTicketAssignedTargets,
   'post.owner_assigned': getPostOwnerAssignedTargets,
+  'post.subscriber_added': getPostSubscriberAddedTargets,
   'assistant.handed_off': getAssistantHandedOffTargets,
   'conversation.note_mentioned': getConversationNoteMentionedTargets,
   'ticket.status_changed': getTicketStatusChangedTargets,
   'ticket.replied': getTicketRepliedTargets,
   'ticket.note_added': getTicketNoteAddedTargets,
   'ticket.external_status_changed': getTicketExternalStatusChangedTargets,
+  'ticket.subscriber_added': getTicketSubscriberAddedTargets,
   'message.created': getMessageCreatedTargets,
+  'ticket.due_soon': getTicketDueTargets,
+  'ticket.overdue': getTicketDueTargets,
 }
 
 /**
@@ -85,8 +94,11 @@ const EMAIL_BUILDERS: Record<string, EmailBuilder> = {
   'ticket.replied': getTicketRepliedEmailTargets,
   'ticket.status_changed': getTicketResolvedEmailTargets,
   'ticket.assigned': getTicketAssignedEmailTargets,
+  'ticket.subscriber_added': getTicketSharedEmailTargets,
   'sla.approaching_breach': getSlaEmailTargets,
   'sla.breached': getSlaEmailTargets,
+  'ticket.due_soon': getTicketDueEmailTargets,
+  'ticket.overdue': getTicketDueEmailTargets,
   'conversation.note_mentioned': getConversationNoteMentionedEmailTargets,
 }
 
