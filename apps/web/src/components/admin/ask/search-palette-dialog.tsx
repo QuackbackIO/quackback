@@ -5,11 +5,11 @@ import { useIntl } from 'react-intl'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { AskComposer } from './ask-composer'
 import { AskMessages } from './ask-messages'
-import { usePermissions } from '@/lib/client/use-permissions'
 import {
   useBillingEnabled,
   useFeatureFlags,
   usePrincipalId,
+  usePermissions,
 } from '@/lib/client/hooks/use-root-context'
 import { buildAskDestinations, searchAskDestinations } from '@/lib/shared/ask-destinations'
 import { searchAskEntitiesFn } from '@/lib/server/functions/ask-search'
