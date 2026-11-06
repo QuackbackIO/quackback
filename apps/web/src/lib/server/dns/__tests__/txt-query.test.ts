@@ -63,12 +63,18 @@ afterEach(async () => {
   )
 })
 
+/** The client endpoint and server socket of the latest query, for replies sent later. */
+let lastPeer: { address: string; port: number } | null = null
+let realSocket: Socket | null = null
+
 /** A UDP nameserver on 127.0.0.1; null from the handler means stay silent. */
 async function udpServer(handler: Handler): Promise<{ port: number; queries: Buffer[] }> {
   const queries: Buffer[] = []
   const socket = createSocket('udp4')
   open.push(socket)
   socket.on('message', (msg, rinfo) => {
+    lastPeer = { address: rinfo.address, port: rinfo.port }
+    realSocket = socket
     queries.push(msg)
     const reply = handler(msg)
     if (reply) socket.send(reply, rinfo.port, rinfo.address)
@@ -140,7 +146,7 @@ describe('queryTxt', () => {
     expect(await queryTxt('acme.test', { ...fast, servers: at(port) })).toEqual([['v=spf1 -all']])
   })
 
-  it('asks for TXT with recursion and room for a large answer', async () => {
+  it('asks for TXT by its canonical name, with recursion and room for a large answer', async () => {
     const { port, queries } = await udpServer((q) => respond(q, [txt('a')]))
     await queryTxt('Sel._DomainKey.acme.test.', { ...fast, servers: at(port) })
     const q = queries[0]
@@ -149,7 +155,7 @@ describe('queryTxt', () => {
     expect(q.readUInt16BE(10)).toBe(1) // one additional: the EDNS OPT record
     const question = questionOf(q)
     expect(question.subarray(0, -4).toString('latin1')).toBe(
-      '\x03Sel\x0a_DomainKey\x04acme\x04test\x00'
+      '\x03sel\x0a_domainkey\x04acme\x04test\x00'
     )
     expect(question.readUInt16BE(question.length - 4)).toBe(16) // TXT
     const opt = q.subarray(12 + question.length)
@@ -202,6 +208,44 @@ describe('queryTxt', () => {
       respond(q, [txt('spoofed')], { id: q.readUInt16BE(0) ^ 1 })
     )
     expect(await codeOf(queryTxt('acme.test', { ...fast, servers: at(port) }))).toBe('ETIMEOUT')
+  })
+
+  it('ignores a reply with the right id from anywhere but the nameserver it asked', async () => {
+    // A forger who knows the id answers first from another port; the real
+    // nameserver answers moments later. Only the real answer may be read.
+    const stranger = createSocket('udp4')
+    open.push(stranger)
+    await new Promise<void>((resolve) => stranger.bind(0, '127.0.0.1', resolve))
+    const { port } = await udpServer((q) => {
+      const peer = lastPeer
+      if (peer) stranger.send(respond(q, [txt('forged=1')]), peer.port, peer.address)
+      setTimeout(() => {
+        if (peer) realSocket?.send(respond(q, [txt('real=1')]), peer.port, peer.address)
+      }, 30)
+      return null
+    })
+    expect(await queryTxt('acme.test', { timeoutMs: 500, tries: 1, servers: at(port) })).toEqual([
+      ['real=1'],
+    ])
+  })
+
+  it('ignores a reply with the right id that answers a different question', async () => {
+    const { port } = await udpServer((q) => {
+      const other = Buffer.from(q)
+      // Swap the first letter of the asked name: same id, same server, wrong question.
+      other[13] = other[13] === 0x61 ? 0x62 : 0x61
+      return respond(other, [txt('forged=1')], { id: q.readUInt16BE(0) })
+    })
+    expect(await codeOf(queryTxt('acme.test', { ...fast, servers: at(port) }))).toBe('ETIMEOUT')
+  })
+
+  it('matches the question without regard to letter case', async () => {
+    const { port } = await udpServer((q) => {
+      const upper = Buffer.from(q)
+      upper[13] = upper[13] & ~0x20 // the first letter, upper-cased
+      return respond(upper, [txt('ok')], { id: q.readUInt16BE(0) })
+    })
+    expect(await queryTxt('acme.test', { ...fast, servers: at(port) })).toEqual([['ok']])
   })
 
   it('asks again over TCP when the UDP answer was cut short', async () => {

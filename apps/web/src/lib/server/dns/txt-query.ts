@@ -5,31 +5,50 @@
  *
  * A TXT value longer than 255 bytes is published as one record made of several
  * strings, and every 2048-bit signing key is one. Node's `resolveTxt` returns it
- * as one record holding all of its strings. Bun's (oven-sh/bun#44692) returns
- * each string as a record of its own, and once the strings are flattened the
- * record boundaries are gone: no rule applied afterwards can tell one long
- * record from several short ones in every case. So a signing key read on Bun
- * looks cut short at 255 bytes and a domain the mail provider has verified
- * stays pending here.
+ * as one record holding all of its strings. Bun's returns each string as a
+ * record of its own (oven-sh/bun#44692; the fix, oven-sh/bun#45543, is not
+ * released). Once flattened, the record boundaries are gone, and no rule applied
+ * afterwards can tell one long record from several short ones in every case. So
+ * a signing key read on Bun looks cut short at 255 bytes, and a domain the mail
+ * provider has verified stays pending here.
  *
  * Reading the answer ourselves keeps each record's strings exactly as the zone
  * published them, on either runtime. It also asks the nameserver every time,
- * rather than through a runtime cache that can hold an empty answer for up to
- * an hour after a record is published (oven-sh/bun#44777).
+ * rather than through Bun's resolver cache, which can hold an empty answer for
+ * up to an hour after a record is published (oven-sh/bun#44777). When Bun ships
+ * the fix, `resolveTxt` can go back to the runtime and this module can go.
  *
  * ## What it does
  *
  * One question (TXT, class IN, recursion desired, EDNS0 with room for a large
  * answer) to the system's nameservers in order, over UDP, and again over TCP
  * when the UDP answer comes back truncated. Each server is asked up to `tries`
- * times. Failures carry the codes Node uses, so `isNoAnswer` reads them the
- * same way: ENOTFOUND and ENODATA mean the zone said nothing is published;
- * ESERVFAIL, EREFUSED, ETIMEOUT and the rest mean we could not ask.
+ * times. Packets are encoded and decoded by `dns-packet`, which keeps each TXT
+ * record's strings together.
+ *
+ * ## Forged answers
+ *
+ * An answer here can prove a workspace owns a domain, so a forged one must not
+ * be accepted. Following RFC 5452 section 9.1, a reply is read only when it
+ * comes from the nameserver the query was sent to, arrives at the port it was
+ * sent from, carries the query's id, and answers the same question (name, type
+ * and class). Every query uses a fresh socket, so the operating system picks a
+ * new random source port, and an id drawn from a cryptographic generator over
+ * the full 16-bit range. The UDP socket is connected to the nameserver, so the
+ * operating system drops datagrams from any other address before they reach
+ * us, and the sender is checked again on arrival.
+ *
+ * ## Failures
+ *
+ * Failures carry the codes Node uses, so `isNoAnswer` reads them the same way:
+ * ENOTFOUND and ENODATA mean the zone said nothing is published; ESERVFAIL,
+ * EREFUSED, ETIMEOUT and the rest mean we could not ask.
  */
-import { createSocket } from 'node:dgram'
+import { randomInt } from 'node:crypto'
+import { createSocket, type RemoteInfo } from 'node:dgram'
 import { getServers } from 'node:dns'
 import { connect, isIPv6 } from 'node:net'
-import { randomInt } from 'node:crypto'
+import * as dnsPacket from 'dns-packet'
 
 export interface NameServer {
   address: string
@@ -45,9 +64,6 @@ export interface TxtQueryOptions {
   servers?: NameServer[]
 }
 
-const TYPE_TXT = 16
-const TYPE_OPT = 41
-const CLASS_IN = 1
 const EDNS_UDP_PAYLOAD = 1232
 const RCODE_NOERROR = 0
 const RCODE_SERVFAIL = 2
@@ -74,40 +90,44 @@ export function parseServer(value: string): NameServer {
   return { address, port: Number(port ?? 53) }
 }
 
-/** The name as wire labels, or EBADNAME for one that cannot be sent as it is. */
-function encodeName(host: string): Buffer {
-  const name = host.endsWith('.') ? host.slice(0, -1) : host
+/**
+ * The name as it is asked and compared: without a trailing dot, lower-cased.
+ * EBADNAME for one that cannot be sent as it is: an empty or over-long label, a
+ * name over 253 characters, or anything but printable ASCII (a non-ASCII name
+ * must be IDNA-encoded by the caller).
+ */
+function canonicalName(host: string): string {
+  const name = (host.endsWith('.') ? host.slice(0, -1) : host).toLowerCase()
   const labels = name.split('.')
-  const parts: Buffer[] = []
-  for (const label of labels) {
-    const bytes = Buffer.from(label, 'latin1')
-    // Printable ASCII only: a non-ASCII name must be IDNA-encoded by the caller.
-    if (bytes.length === 0 || bytes.length > 63 || !/^[\x21-\x7e]+$/.test(label)) {
-      throw new DnsQueryError('EBADNAME', host)
-    }
-    parts.push(Buffer.from([bytes.length]), bytes)
-  }
-  const encoded = Buffer.concat([...parts, Buffer.from([0])])
-  if (encoded.length > 255) throw new DnsQueryError('EBADNAME', host)
-  return encoded
+  const valid =
+    name.length > 0 &&
+    name.length <= 253 &&
+    labels.every((label) => label.length > 0 && label.length <= 63) &&
+    /^[\x21-\x7e]+$/.test(name)
+  if (!valid) throw new DnsQueryError('EBADNAME', host)
+  return name
 }
 
-/** A TXT query for `host` with message id `id`, carrying an EDNS0 OPT record. */
-export function encodeTxtQuery(id: number, host: string): Buffer {
-  const header = Buffer.alloc(12)
-  header.writeUInt16BE(id, 0)
-  header.writeUInt16BE(0x0100, 2) // recursion desired
-  header.writeUInt16BE(1, 4) // one question
-  header.writeUInt16BE(1, 10) // one additional record: OPT
-  const question = Buffer.alloc(4)
-  question.writeUInt16BE(TYPE_TXT, 0)
-  question.writeUInt16BE(CLASS_IN, 2)
-  const opt = Buffer.alloc(11)
-  opt.writeUInt8(0, 0) // root name
-  opt.writeUInt16BE(TYPE_OPT, 1)
-  opt.writeUInt16BE(EDNS_UDP_PAYLOAD, 3)
-  // extended rcode, version, flags (ttl) and rdlength stay zero
-  return Buffer.concat([header, encodeName(host), question, opt])
+/** A TXT query for `name` with message id `id`, carrying an EDNS0 OPT record. */
+export function encodeTxtQuery(id: number, name: string): Buffer {
+  return dnsPacket.encode({
+    type: 'query',
+    id,
+    flags: dnsPacket.RECURSION_DESIRED,
+    questions: [{ type: 'TXT', class: 'IN', name }],
+    additionals: [
+      {
+        type: 'OPT',
+        name: '.',
+        udpPayloadSize: EDNS_UDP_PAYLOAD,
+        extendedRcode: 0,
+        ednsVersion: 0,
+        flags: 0,
+        flag_do: false,
+        options: [],
+      },
+    ],
+  })
 }
 
 interface ParsedAnswer {
@@ -116,84 +136,81 @@ interface ParsedAnswer {
   records: string[][]
 }
 
-/** The offset just past a (possibly compressed) name starting at `off`. */
-function skipName(msg: Buffer, off: number): number {
-  for (;;) {
-    if (off >= msg.length) throw new RangeError('name runs past the message')
-    const len = msg[off]
-    if (len === 0) return off + 1
-    if ((len & 0xc0) === 0xc0) return off + 2 // a pointer ends the name
-    off += len + 1
+/**
+ * The answer to the query `id` for `name`, or null when the message is not that
+ * answer: unreadable, not a response, another id, or another question.
+ */
+function readAnswer(msg: Buffer, id: number, name: string): ParsedAnswer | null {
+  let packet: dnsPacket.DecodedPacket
+  try {
+    packet = dnsPacket.decode(msg)
+  } catch {
+    return null
   }
-}
-
-/** The answer to query `id`, or null when the message is not that answer. */
-function parseAnswer(msg: Buffer, id: number): ParsedAnswer | null {
-  if (msg.length < 12 || msg.readUInt16BE(0) !== id) return null
-  const flags = msg.readUInt16BE(2)
-  if ((flags & 0x8000) === 0) return null // not a response
-  const qdcount = msg.readUInt16BE(4)
-  const ancount = msg.readUInt16BE(6)
-  let off = 12
-  for (let i = 0; i < qdcount; i++) off = skipName(msg, off) + 4
+  if (!packet.flag_qr || packet.id !== id) return null
+  const question = packet.questions?.[0]
+  if (
+    packet.questions?.length !== 1 ||
+    question?.type !== 'TXT' ||
+    question.class !== 'IN' ||
+    question.name.toLowerCase() !== name
+  ) {
+    return null
+  }
   const records: string[][] = []
-  for (let i = 0; i < ancount; i++) {
-    off = skipName(msg, off)
-    if (off + 10 > msg.length) throw new RangeError('record header runs past the message')
-    const type = msg.readUInt16BE(off)
-    const klass = msg.readUInt16BE(off + 2)
-    const rdlength = msg.readUInt16BE(off + 8)
-    const start = off + 10
-    const end = start + rdlength
-    if (end > msg.length) throw new RangeError('record data runs past the message')
-    if (type === TYPE_TXT && klass === CLASS_IN) {
-      const strings: string[] = []
-      let p = start
-      while (p < end) {
-        const len = msg[p]
-        if (p + 1 + len > end) throw new RangeError('string runs past its record')
-        strings.push(msg.toString('utf8', p + 1, p + 1 + len))
-        p += 1 + len
-      }
-      records.push(strings)
-    }
-    off = end
+  for (const answer of packet.answers ?? []) {
+    if (answer.type !== 'TXT' || (answer.class ?? 'IN') !== 'IN') continue
+    const data = Array.isArray(answer.data) ? answer.data : [answer.data]
+    records.push(data.map((s) => (typeof s === 'string' ? s : s.toString('utf8'))))
   }
-  return { truncated: (flags & 0x0200) !== 0, rcode: flags & 0x000f, records }
+  return { truncated: packet.flag_tc, rcode: (packet.flags ?? 0) & 0x0f, records }
 }
 
-/** One UDP exchange; resolves with the first message that answers `id`. */
-function overUdp(server: NameServer, query: Buffer, id: number, timeoutMs: number) {
+/** Whether a datagram came from the nameserver it was sent to. */
+function fromServer(rinfo: RemoteInfo, server: NameServer): boolean {
+  if (rinfo.port !== server.port) return false
+  // Compare addresses in one spelling: an IPv6 address can be written several ways.
+  const spell = (address: string) =>
+    isIPv6(address) ? new URL(`http://[${address}]/`).hostname : address
+  return spell(rinfo.address) === spell(server.address)
+}
+
+/** One UDP exchange on a socket connected to the nameserver. */
+function overUdp(server: NameServer, query: Buffer, id: number, name: string, timeoutMs: number) {
   return new Promise<ParsedAnswer>((resolve, reject) => {
     const socket = createSocket(isIPv6(server.address) ? 'udp6' : 'udp4')
+    let settled = false
     const done = (fn: () => void) => {
+      if (settled) return
+      settled = true
       clearTimeout(timer)
       socket.close()
       fn()
     }
     const timer = setTimeout(() => done(() => reject(new Error('ETIMEOUT'))), timeoutMs)
     socket.on('error', (err) => done(() => reject(err)))
-    socket.on('message', (msg) => {
-      let parsed: ParsedAnswer | null
-      try {
-        parsed = parseAnswer(msg, id)
-      } catch {
-        return // a malformed packet is ignored like a stray one
-      }
-      if (parsed) done(() => resolve(parsed))
+    socket.on('message', (msg, rinfo) => {
+      if (!fromServer(rinfo, server)) return
+      const answer = readAnswer(msg, id, name)
+      if (answer) done(() => resolve(answer))
     })
-    socket.send(query, server.port, server.address, (err) => {
-      if (err) done(() => reject(err))
+    socket.connect(server.port, server.address, () => {
+      socket.send(query, (err) => {
+        if (err) done(() => reject(err))
+      })
     })
   })
 }
 
 /** One TCP exchange, for an answer too large for UDP. */
-function overTcp(server: NameServer, query: Buffer, id: number, timeoutMs: number) {
+function overTcp(server: NameServer, query: Buffer, id: number, name: string, timeoutMs: number) {
   return new Promise<ParsedAnswer>((resolve, reject) => {
     const conn = connect({ host: server.address, port: server.port })
     let buf = Buffer.alloc(0)
+    let settled = false
     const done = (fn: () => void) => {
+      if (settled) return
+      settled = true
       clearTimeout(timer)
       conn.destroy()
       fn()
@@ -208,12 +225,8 @@ function overTcp(server: NameServer, query: Buffer, id: number, timeoutMs: numbe
     conn.on('data', (chunk) => {
       buf = Buffer.concat([buf, Buffer.from(chunk)])
       if (buf.length < 2 || buf.length < 2 + buf.readUInt16BE(0)) return
-      try {
-        const parsed = parseAnswer(buf.subarray(2, 2 + buf.readUInt16BE(0)), id)
-        done(() => (parsed ? resolve(parsed) : reject(new Error('EBADRESP'))))
-      } catch {
-        done(() => reject(new Error('EBADRESP')))
-      }
+      const answer = readAnswer(buf.subarray(2, 2 + buf.readUInt16BE(0)), id, name)
+      done(() => (answer ? resolve(answer) : reject(new Error('EBADRESP'))))
     })
   })
 }
@@ -231,19 +244,18 @@ function transportCode(err: unknown): string {
  * Throws a coded error when there are none or the nameservers cannot be asked.
  */
 export async function queryTxt(host: string, opts: TxtQueryOptions): Promise<string[][]> {
+  const name = canonicalName(host)
   const servers = opts.servers ?? getServers().map(parseServer)
   if (servers.length === 0) throw new DnsQueryError('ECONNREFUSED', host)
-  // Encoded once, so a bad name fails before anything is sent.
-  encodeName(host)
   let lastCode = 'ETIMEOUT'
   for (const server of servers) {
     for (let attempt = 0; attempt < Math.max(1, opts.tries); attempt++) {
       const id = randomInt(0, 0x10000)
-      const query = encodeTxtQuery(id, host)
+      const query = encodeTxtQuery(id, name)
       let answer: ParsedAnswer
       try {
-        answer = await overUdp(server, query, id, opts.timeoutMs)
-        if (answer.truncated) answer = await overTcp(server, query, id, opts.timeoutMs)
+        answer = await overUdp(server, query, id, name, opts.timeoutMs)
+        if (answer.truncated) answer = await overTcp(server, query, id, name, opts.timeoutMs)
       } catch (err) {
         lastCode = transportCode(err)
         continue
