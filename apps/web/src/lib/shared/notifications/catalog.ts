@@ -130,11 +130,32 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     surfaces: ['admin'],
   },
   {
+    type: 'ticket_subscriber_added',
+    label: 'Added as a ticket watcher',
+    description: 'A teammate adds you as a watcher on a ticket',
+    group: 'support',
+    surfaces: ['admin'],
+  },
+  {
     type: 'ticket_created',
     label: 'Ticket received',
     description: 'Confirmation when we receive your ticket',
     group: 'support',
     surfaces: ['portal'],
+  },
+  {
+    type: 'ticket_due_soon',
+    label: 'Ticket due soon',
+    description: 'A ticket assigned to you or your team is due within 24 hours',
+    group: 'support',
+    surfaces: ['admin'],
+  },
+  {
+    type: 'ticket_overdue',
+    label: 'Ticket overdue',
+    description: 'A ticket assigned to you or your team is past its due date',
+    group: 'support',
+    surfaces: ['admin'],
   },
   {
     type: 'sla_warning',

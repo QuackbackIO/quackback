@@ -484,3 +484,31 @@ describe('CreateTicketDialog — attachment tray', () => {
     expect(mocks.mutate).not.toHaveBeenCalled()
   })
 })
+
+describe('CreateTicketDialog — due date', () => {
+  it('sends no due date unless one is picked', async () => {
+    renderDialog()
+    fireEvent.change(await screen.findByPlaceholderText('Summarize the request…'), {
+      target: { value: 'No rush' },
+    })
+    await screen.findByText('Steps to reproduce')
+    fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }))
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalledOnce())
+    expect(mocks.mutate.mock.calls[0][0].dueAt).toBeUndefined()
+  })
+
+  it('sends the picked due date with the create', async () => {
+    renderDialog()
+    fireEvent.change(await screen.findByPlaceholderText('Summarize the request…'), {
+      target: { value: 'Needed soon' },
+    })
+    await screen.findByText('Steps to reproduce')
+    fireEvent.click(screen.getByRole('button', { name: 'Set due date' }))
+    fireEvent.click(await screen.findByText('15'))
+    fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }))
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalledOnce())
+    const { dueAt } = mocks.mutate.mock.calls[0][0]
+    expect(dueAt).toBeInstanceOf(Date)
+    expect(dueAt.getDate()).toBe(15)
+  })
+})

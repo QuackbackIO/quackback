@@ -1,8 +1,8 @@
 /**
  * The converged Messages surface's ticket header (design: one thread per pair,
  * rendered as a conversation with a ticket "hat"): compact stage chip + title +
- * reference + watch bell on top, the full StageTracker under it, and a
- * collapsed Details disclosure holding what the old ticket page's rail showed
+ * reference + watch bell on top, the full StageTracker under it (with the
+ * due date, when one is set), and a collapsed Details disclosure holding what the old ticket page's rail showed
  * (type, opened date, intake answers). Rendered by VisitorConversationThread
  * whenever the conversation carries a linked customer ticket — one
  * implementation for the portal and the widget, like the thread itself.
@@ -20,7 +20,7 @@ import type { RequesterTicketDTO } from '@/lib/server/domains/tickets'
 import type { TicketFormField } from '@/lib/shared/tickets'
 import { DEFAULT_TICKET_STAGE_LABELS } from '@/lib/shared/tickets'
 import { readAttributeValue } from '@/lib/shared/conversation/attribute-values'
-import { StageChip, StageTracker } from '@/components/shared/ticket-stage'
+import { StageChip, StageTracker, TicketDueLabel } from '@/components/shared/ticket-stage'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { formatCalendarDate } from '@/lib/shared/utils/date'
@@ -159,6 +159,9 @@ export function TicketHeaderCard({
           closedLabelId="portal.tickets.stage.closed"
         />
       </div>
+
+      {/* The shared due date stays in view, not inside Details. */}
+      <TicketDueLabel dueAt={ticket.dueAt} closed={ticket.stage.closed} className="mt-1.5 flex" />
 
       <button
         type="button"

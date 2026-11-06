@@ -13,6 +13,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import type { CompanyId } from '@quackback/ids'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 import type { Channel } from '@/lib/shared/channels'
+import type { TicketDueFilter } from '@/lib/shared/ticket-due'
 import {
   viewFiltersToListParams,
   type ConversationSort,
@@ -56,6 +57,8 @@ export interface UseInboxListSourceParams {
   streamConnected: boolean
   /** Conversation channel chip. Options come from the descriptor registry. */
   channel?: Channel
+  /** The ticket Due date filter (unified list only; see buildInboxListParams). */
+  due?: TicketDueFilter
 }
 
 export interface UseInboxListSourceResult {
@@ -81,6 +84,7 @@ export function useInboxListSource({
   isSaved,
   streamConnected,
   channel,
+  due,
 }: UseInboxListSourceParams): UseInboxListSourceResult {
   const useUnified = usesUnifiedInboxList(nav, activeViewFilters)
   // A custom view's legacy-path rules are pre-translated to the conversation
@@ -102,7 +106,8 @@ export function useInboxListSource({
         sort,
         activeViewFilters,
         ticketTypeId,
-        channel
+        channel,
+        due
       )
     ),
     // Ticket SSE has landed (M3) and drives real-time updates via
