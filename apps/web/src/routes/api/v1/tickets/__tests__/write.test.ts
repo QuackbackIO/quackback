@@ -10,6 +10,7 @@ const mockSendMessage = vi.fn()
 const mockAddNote = vi.fn()
 const mockSetDueAt = vi.fn()
 
+const mockAssertVisible = vi.fn(async (..._args: unknown[]) => ({}))
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: vi.fn(() => (opts: unknown) => ({ options: opts })),
 }))
@@ -22,6 +23,7 @@ vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   assignTicket: (...a: unknown[]) => mockAssign(...a),
   setTicketPriority: (...a: unknown[]) => mockSetPriority(...a),
   setTicketTitle: (...a: unknown[]) => mockSetTitle(...a),
+  assertTicketVisible: (...a: unknown[]) => mockAssertVisible(...a),
 }))
 vi.mock('@/lib/server/domains/tickets/ticket-due.service', () => ({
   setTicketDueAt: (...a: unknown[]) => mockSetDueAt(...a),
@@ -288,6 +290,21 @@ describe('POST /api/v1/tickets/:id/status', () => {
     expect(mockSetStatus).toHaveBeenCalledWith(TICKET_ID, STATUS_ID, expect.anything())
   })
 
+  it("404s a ticket outside the key creator's scope without changing it", async () => {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    mockAssertVisible.mockRejectedValueOnce(
+      new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+    )
+    const res = await post(StatusRoute)({
+      request: jsonReq(`https://x.test/api/v1/tickets/${TICKET_ID}/status`, {
+        statusId: STATUS_ID,
+      }),
+      params: { ticketId: TICKET_ID },
+    })
+    expect(res.status).toBe(404)
+    expect(mockSetStatus).not.toHaveBeenCalled()
+  })
+
   it('400s a malformed statusId without calling the service', async () => {
     const res = await post(StatusRoute)({
       request: jsonReq(`https://x.test/api/v1/tickets/${TICKET_ID}/status`, { statusId: 'nope' }),
@@ -443,6 +460,19 @@ describe('POST /api/v1/tickets/:id/title', () => {
     )
     const body = await res.json()
     expect(body.data.title).toBe('Cannot log in with SSO')
+  })
+
+  it("404s a ticket outside the key creator's scope without renaming it", async () => {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    mockAssertVisible.mockRejectedValueOnce(
+      new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+    )
+    const res = await post(TitleRoute)({
+      request: jsonReq(`https://x.test/api/v1/tickets/${TICKET_ID}/title`, { title: 'Renamed' }),
+      params: { ticketId: TICKET_ID },
+    })
+    expect(res.status).toBe(404)
+    expect(mockSetTitle).not.toHaveBeenCalled()
   })
 
   it.each([{ title: '' }, { title: '   ' }, { title: 'x'.repeat(301) }, {}])(
