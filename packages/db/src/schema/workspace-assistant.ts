@@ -2,7 +2,11 @@ import { pgTable, text, timestamp, integer, index, foreignKey } from 'drizzle-or
 import { typeIdColumn } from '@quackback/ids/drizzle'
 import { principal } from './auth'
 
-/** Ownership, ordering and turn leases for private workspace conversations. */
+/**
+ * Ownership, ordering and turn leases for private workspace conversations.
+ * Unused since the Copilot on Home chat was retired: nothing creates or reads
+ * these threads now. The table stays so existing rows are kept.
+ */
 export const workspaceAssistantThreads = pgTable(
   'workspace_assistant_threads',
   {

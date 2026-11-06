@@ -123,7 +123,7 @@ vi.mock('@tanstack/react-router', () => ({
   },
 }))
 
-import { OverviewCounts, OverviewDashboard } from '../admin-overview'
+import { OverviewDashboard } from '../admin-overview'
 
 describe('OverviewDashboard', () => {
   it('keeps a fresh workspace quiet until real data exists', () => {
@@ -160,7 +160,7 @@ describe('OverviewDashboard', () => {
       },
     }
     try {
-      for (const view of [<OverviewDashboard />, <OverviewCounts />]) {
+      for (const view of [<OverviewDashboard />]) {
         const { unmount } = render(view)
         const empty = screen.getByRole('list', { name: 'Nothing here yet' })
         expect(

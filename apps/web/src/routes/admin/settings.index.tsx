@@ -5,8 +5,11 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { SettingsNav } from '@/components/admin/settings/settings-nav'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
-import { useBillingEnabled, useFeatureFlags } from '@/lib/client/hooks/use-root-context'
-import { usePermissions } from '@/lib/client/use-permissions'
+import {
+  useBillingEnabled,
+  useFeatureFlags,
+  usePermissions,
+} from '@/lib/client/hooks/use-root-context'
 import {
   buildNavSections,
   firstSettingsPath,
