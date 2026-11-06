@@ -8,7 +8,7 @@ const mockSetPriority = vi.fn()
 const mockSendMessage = vi.fn()
 const mockAddNote = vi.fn()
 
-const mockAssertVisible = vi.fn(async () => ({}))
+const mockAssertVisible = vi.fn(async (..._args: unknown[]) => ({}))
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: vi.fn(() => (opts: unknown) => ({ options: opts })),
 }))
@@ -245,7 +245,9 @@ describe('POST /api/v1/tickets/:id/status', () => {
 
   it("404s a ticket outside the key creator's scope without changing it", async () => {
     const { NotFoundError } = await import('@/lib/shared/errors')
-    mockAssertVisible.mockRejectedValueOnce(new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found'))
+    mockAssertVisible.mockRejectedValueOnce(
+      new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+    )
     const res = await post(StatusRoute)({
       request: jsonReq(`https://x.test/api/v1/tickets/${TICKET_ID}/status`, {
         statusId: STATUS_ID,
