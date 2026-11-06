@@ -21,3 +21,33 @@ export function helpCenterHeadMessages(
   const layout = matches.find((m) => m.routeId === helpCenterLayout.id)
   return (layout?.loaderData as { messages?: Record<string, string> } | undefined)?.messages ?? {}
 }
+
+/**
+ * The portal's head inputs for a help center page: the workspace name for the
+ * title, and the public base URL canonical links are built on (the verified
+ * custom domain when the request arrived on it, else BASE_URL). The base URL is
+ * undefined when the request carries none.
+ */
+export function helpCenterHeadPortal(
+  matches: readonly { routeId: string; loaderData?: unknown; context?: unknown }[]
+): { workspaceName: string; baseUrl: string | undefined } {
+  const portal = matches.find((m) => m.routeId === '/_portal')
+  return {
+    workspaceName:
+      (portal?.loaderData as { workspaceName?: string } | undefined)?.workspaceName ??
+      'Help Center',
+    baseUrl: (portal?.context as { baseUrl?: string } | undefined)?.baseUrl,
+  }
+}
+
+/**
+ * The absolute URL of a help center path on the base URL, or undefined when
+ * there is no base URL to build it on. A relative canonical or og:url would
+ * resolve against whichever host the crawler fetched the page from.
+ */
+export function helpCenterAbsoluteUrl(
+  baseUrl: string | undefined,
+  path: string
+): string | undefined {
+  return baseUrl ? `${baseUrl}${path}` : undefined
+}

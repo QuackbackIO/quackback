@@ -1,7 +1,7 @@
 export type InboundMessage =
   | { type: 'quackback:init'; data?: unknown }
   | { type: 'quackback:identify'; data: unknown }
-  | { type: 'quackback:device'; data: string }
+  | { type: 'quackback:device'; data: string | null }
   | { type: 'quackback:metadata'; data: Record<string, string> }
   | { type: 'quackback:open'; data?: unknown }
   | { type: 'quackback:locale'; data: string }

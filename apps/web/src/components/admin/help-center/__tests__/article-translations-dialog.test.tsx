@@ -54,7 +54,11 @@ describe('ArticleTranslationsDialog auto-translate pause', () => {
       { locale: 'de', status: 'untranslated', updatedAt: null, autoTranslatePaused: true },
     ]
     renderDialog('de', de)
-    expect(await screen.findByText('Pausiert: KI-Budget aufgebraucht')).toBeTruthy()
+    expect(
+      await screen.findByText(
+        'Pausiert: KI-Nutzung für diesen Zeitraum aufgebraucht. Upgrade deinen Tarif für mehr.'
+      )
+    ).toBeTruthy()
   })
 
   it('stays quiet when nothing is paused', async () => {

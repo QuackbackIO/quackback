@@ -211,7 +211,7 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
     })
     expect(await sendOnboardingEmail('nudge', owner)).toEqual({ sent: true })
     expect(mail.nudge.mock.calls[0][0]).toMatchObject({
-      cta: { label: 'A customer posts an idea', url: 'https://acme.quackback.test/admin' },
+      cta: { label: 'A customer creates a post', url: 'https://acme.quackback.test/admin' },
     })
   })
 
@@ -244,7 +244,7 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
       share: { url: string; text: string } | null
     }
     expect(params.paragraphs).toContain(
-      'One step gets you to your first customer idea: share the link.'
+      'One step gets you to your first customer post: share the link.'
     )
     expect(params.share).toMatchObject({
       url: 'https://acme.quackback.test/',

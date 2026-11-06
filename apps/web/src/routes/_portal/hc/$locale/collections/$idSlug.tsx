@@ -12,6 +12,10 @@ import { buildCollectionPageJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/j
 import { CategoryIcon } from '@/components/help-center/category-icon'
 import { Avatar } from '@/components/ui/avatar'
 import { hcArticlePath, hcCollectionPath } from '@/lib/shared/help-center-url'
+import {
+  helpCenterAbsoluteUrl,
+  helpCenterHeadPortal,
+} from '@/components/help-center/help-center-head'
 import { useBaseUrl, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 const MAX_ARTICLES_SHOWN = 8
@@ -47,11 +51,34 @@ export const Route = createFileRoute('/_portal/hc/$locale/collections/$idSlug')(
     }
     return data
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, params, matches }) => {
     if (!loaderData) return {}
     const { category } = loaderData
+    const { workspaceName, baseUrl } = helpCenterHeadPortal(matches)
+    const pageTitle = `${category.name} - ${workspaceName}`
+    const description = category.description || undefined
+    const canonicalUrl = helpCenterAbsoluteUrl(
+      baseUrl,
+      hcCollectionPath({
+        locale: params.locale,
+        urlId: category.urlId,
+        slug: category.slug,
+      })
+    )
+
     return {
-      meta: [{ title: `${category.name} - Help Center` }],
+      meta: [
+        { title: pageTitle },
+        ...(description ? [{ name: 'description', content: description }] : []),
+        { property: 'og:title', content: pageTitle },
+        ...(description ? [{ property: 'og:description', content: description }] : []),
+        ...(canonicalUrl ? [{ property: 'og:url', content: canonicalUrl }] : []),
+        { property: 'og:site_name', content: workspaceName },
+        { name: 'twitter:card', content: 'summary' },
+        { name: 'twitter:title', content: pageTitle },
+        ...(description ? [{ name: 'twitter:description', content: description }] : []),
+      ],
+      links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
     }
   },
   component: CollectionPage,

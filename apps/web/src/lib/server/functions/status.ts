@@ -9,6 +9,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type {
+  PrincipalId,
   StatusComponentId,
   StatusComponentGroupId,
   StatusIncidentId,
@@ -52,6 +53,7 @@ import {
   getStatusSubscriptionCounts,
   addStatusSubscriberByEmail,
   importStatusSubscribersFromEmails,
+  removeStatusSubscriberByAdmin,
   listAllStatusSubscribersForExport,
   countActiveSubscribersForComponents,
   isStatusAudienceGranted,
@@ -746,6 +748,19 @@ export const importStatusSubscribersFn = createServerFn({ method: 'POST' })
     log.info({ count: data.emails.length }, 'import status subscribers from CSV')
     await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
     return await importStatusSubscribersFromEmails(data.emails)
+  })
+
+const removeStatusSubscriberSchema = z.object({ principalId: z.string().min(1) })
+
+/** Admin Remove on one subscriber (the list row action). Keeps the row and sets
+ *  the opt-out, so `removed: false` means the person had already opted out. */
+export const removeStatusSubscriberFn = createServerFn({ method: 'POST' })
+  .validator(removeStatusSubscriberSchema)
+  .handler(async ({ data }) => {
+    log.debug({ principal_id: data.principalId }, 'remove status subscriber')
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    const { removed } = await removeStatusSubscriberByAdmin(data.principalId as PrincipalId)
+    return { success: true, removed }
   })
 
 /** Full unpaginated subscriber set for the client-side CSV export. The

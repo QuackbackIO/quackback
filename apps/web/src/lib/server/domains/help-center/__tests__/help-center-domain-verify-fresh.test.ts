@@ -52,12 +52,14 @@ vi.mock('@/lib/server/auth/auth-providers', () => ({
 }))
 
 const resolvedHosts: string[] = []
-vi.mock('node:dns/promises', () => ({
-  resolve4: vi.fn(async (host: string) => {
-    resolvedHosts.push(host)
-    return ['203.0.113.1']
-  }),
-  resolve6: vi.fn(async () => []),
+vi.mock('@/lib/server/dns/resolver', () => ({
+  systemResolver: {
+    resolve4: vi.fn(async (host: string) => {
+      resolvedHosts.push(host)
+      return ['203.0.113.1']
+    }),
+    resolve6: vi.fn(async () => []),
+  },
 }))
 
 const { verifyHelpCenterDomain } = await import('../help-center-domain.service')

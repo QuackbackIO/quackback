@@ -115,7 +115,7 @@ import { FeedbackHeaderAnimated } from '../feedback-header-animated'
 
 const BOARD = { id: 'board_1', name: 'Ideas', slug: 'ideas' }
 
-function renderHeader() {
+function renderHeader(draft?: { title: string; key: number }) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <IntlProvider locale="en" messages={{}} onError={() => {}}>
@@ -124,6 +124,7 @@ function renderHeader() {
           boards={[BOARD]}
           defaultBoardId={BOARD.id}
           boardPermissions={{ [BOARD.id]: { canSubmit: true, canVote: true } }}
+          draft={draft}
         />
       </IntlProvider>
     </QueryClientProvider>
@@ -177,6 +178,35 @@ function typeTitleByKey(text: string, from = '') {
 }
 
 describe('feedback header title', () => {
+  it('opens with a handed-in draft title, ready to finish', async () => {
+    // happy-dom has no scrollIntoView; the composer scrolls itself into view.
+    const scrollIntoView = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = vi.fn()
+    try {
+      renderHeader({ title: 'zapier', key: 1 })
+      await screen.findByTestId('editor')
+      const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' })
+      expect(field.value).toBe('zapier')
+      expect(document.activeElement).toBe(field)
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView
+    }
+  })
+
+  it('cuts a long draft to the title limit, so it can be submitted', async () => {
+    const scrollIntoView = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = vi.fn()
+    try {
+      renderHeader({ title: 'x'.repeat(250), key: 1 })
+      await screen.findByTestId('editor')
+      const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' })
+      expect(field.value).toHaveLength(200)
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView
+    }
+  })
+
   it('does not re-render the header per keystroke in the title', async () => {
     renderHeader()
     typeTitle('D')
@@ -222,7 +252,7 @@ describe('feedback header title', () => {
 
     typeTitleByKey('Light mode')
     await screen.findByTestId('editor')
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
     expect(createPost.mock.calls[0]![0]).toMatchObject({ title: 'Light mode' })
@@ -234,7 +264,7 @@ describe('feedback header title', () => {
     await screen.findByTestId('editor')
     typeTitle('   ')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     expect(await screen.findByText('Please add a title')).toBeTruthy()
     expect(createPost).not.toHaveBeenCalled()
@@ -258,7 +288,7 @@ describe('feedback header post composer', () => {
     await screen.findByTestId('editor')
     typeDetails('Please add it')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
     expect(createPost.mock.calls[0]![0]).toEqual({
@@ -278,7 +308,7 @@ describe('feedback header post composer', () => {
 
     typeTitle('Light mode')
     await screen.findByTestId('editor')
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
     expect(createPost.mock.calls[0]![0]).toStrictEqual({
@@ -291,7 +321,7 @@ describe('feedback header post composer', () => {
   it('posts a title on its own, before the details editor mounts, as a payload the server accepts', async () => {
     renderHeader()
     typeTitle('Dark mode')
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
     const payload = createPost.mock.calls[0]![0]
@@ -322,7 +352,7 @@ describe('feedback header post composer', () => {
         markdown: () => long,
       })
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     expect(await screen.findByText('Keep the details under 10,000 characters.')).toBeTruthy()
     expect(createPost).not.toHaveBeenCalled()
@@ -335,7 +365,7 @@ describe('feedback header post composer', () => {
     renderHeader()
     typeTitle('Dark mode')
     await screen.findByTestId('editor')
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     expect(
       await screen.findByText('Could not submit your feedback. Please try again.')

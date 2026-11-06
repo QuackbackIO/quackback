@@ -1143,17 +1143,20 @@ describe('AgentConversationThread: reads that ride with the thread', () => {
 
 describe('AgentConversationThread: inbox translation past the AI allowance', () => {
   it('shows the notice above the composer, and nothing when there is none', async () => {
-    threadProbe.overAllowanceNotice = 'Your AI allowance is used up. Translation keeps working.'
+    threadProbe.overAllowanceNotice =
+      'AI usage for this period is used up. Translation keeps working. Upgrade your plan for more.'
     renderThread({ kind: 'conversation', id: 'conversation_over_allowance' })
     expect(
-      await screen.findByText('Your AI allowance is used up. Translation keeps working.')
+      await screen.findByText(
+        'AI usage for this period is used up. Translation keeps working. Upgrade your plan for more.'
+      )
     ).toBeTruthy()
     cleanup()
 
     threadProbe.overAllowanceNotice = null
     renderThread({ kind: 'conversation', id: 'conversation_within_allowance' })
     await screen.findByTestId('editor')
-    expect(screen.queryByText(/AI allowance/)).toBeNull()
+    expect(screen.queryByText(/AI usage/)).toBeNull()
   })
 })
 

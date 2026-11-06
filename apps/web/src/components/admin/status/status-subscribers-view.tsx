@@ -5,6 +5,7 @@ import {
   ArrowUpTrayIcon,
   DocumentTextIcon,
   ExclamationCircleIcon,
+  UserMinusIcon,
   UsersIcon,
 } from '@heroicons/react/24/outline'
 import { Badge } from '@/components/ui/badge'
@@ -15,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
 import { NewButton } from '@/components/shared/new-button'
@@ -32,8 +34,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
-import { statusSubscriberQueries } from '@/lib/client/queries/status'
-import { useAddStatusSubscriber, useImportStatusSubscribers } from '@/lib/client/mutations/status'
+import { statusSubscriberQueries, type StatusSubscriptionAdmin } from '@/lib/client/queries/status'
+import {
+  useAddStatusSubscriber,
+  useImportStatusSubscribers,
+  useRemoveStatusSubscriber,
+} from '@/lib/client/mutations/status'
 import { exportStatusSubscribersAdminFn } from '@/lib/server/functions/status'
 
 /** Extract the "Email" column from a CSV file; falls back to treating every
@@ -114,6 +120,10 @@ const SOURCE_LABELS: Record<string, string> = {
   csv_import: 'CSV import',
 }
 
+function subscriberName(sub: StatusSubscriptionAdmin): string {
+  return sub.displayName ?? sub.email ?? 'Unknown'
+}
+
 export function StatusSubscribersView() {
   const formatNumber = useFormatNumber()
   const [debouncedSearch, setDebouncedSearch] = useState<string | undefined>(undefined)
@@ -122,6 +132,8 @@ export function StatusSubscribersView() {
     onChange: setDebouncedSearch,
   })
   const [exporting, setExporting] = useState(false)
+  const [removing, setRemoving] = useState<StatusSubscriptionAdmin | null>(null)
+  const removeMutation = useRemoveStatusSubscriber()
 
   const countsQuery = useQuery(statusSubscriberQueries.counts())
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
@@ -137,6 +149,19 @@ export function StatusSubscribersView() {
   })
 
   const items = data?.pages.flatMap((page) => page.items) ?? []
+
+  async function confirmRemove() {
+    if (!removing) return
+    const name = subscriberName(removing)
+    try {
+      const { removed } = await removeMutation.mutateAsync(removing.principalId)
+      toast.success(removed ? `Removed ${name}.` : `${name} had already unsubscribed.`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to remove subscriber')
+    } finally {
+      setRemoving(null)
+    }
+  }
 
   async function handleExport() {
     setExporting(true)
@@ -200,11 +225,9 @@ export function StatusSubscribersView() {
         ) : (
           <div className="overflow-hidden border-y border-t-transparent border-border/50 divide-y divide-border/50">
             {items.map((sub) => (
-              <div key={sub.id} className="flex items-center gap-3 px-4 py-3">
+              <div key={sub.id} className="group flex items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium truncate">
-                    {sub.displayName ?? sub.email ?? 'Unknown'}
-                  </div>
+                  <div className="text-sm font-medium truncate">{subscriberName(sub)}</div>
                   {sub.email && sub.displayName && (
                     <div className="text-xs text-muted-foreground truncate">{sub.email}</div>
                   )}
@@ -230,10 +253,37 @@ export function StatusSubscribersView() {
                     </span>
                   )}
                 </div>
+                {!sub.unsubscribedAt && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                    title="Remove subscriber"
+                    aria-label={`Remove ${subscriberName(sub)}`}
+                    onClick={() => setRemoving(sub)}
+                  >
+                    <UserMinusIcon className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             ))}
           </div>
         )}
+
+        <ConfirmDialog
+          open={!!removing}
+          onOpenChange={(o) => !o && setRemoving(null)}
+          title="Remove subscriber?"
+          description={
+            removing
+              ? `${subscriberName(removing)} stops receiving status updates. They can subscribe again themselves.`
+              : undefined
+          }
+          confirmLabel="Remove"
+          variant="destructive"
+          isPending={removeMutation.isPending}
+          onConfirm={confirmRemove}
+        />
 
         {hasNextPage && (
           <div ref={loadMoreRef} className="flex justify-center py-2">

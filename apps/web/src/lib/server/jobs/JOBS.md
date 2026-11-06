@@ -420,11 +420,14 @@ went stale the moment a queue moved.
 | `onboarding-email`              | —              | 1           | 3        | 60s   |
 | `spam-retention`                | `0 5 * * *`    | 1           | 3        | 60s   |
 | `sending-domain-recheck`        | `20 6 * * *`   | 1           | 3        | 60s   |
+| `sending-domain-watch`          | `7/10 * * * *` | 1           | 1        | 60s   |
+| `ses-tenant-reconcile`          | `41 * * * *`   | 1           | 3        | 60s   |
 | `analytics`                     | `0 * * * *`    | 1           | 3        | 60s   |
 | `events`                        | —              | 5           | 6        | 60s   |
 | `integration-sync`              | —              | 5           | 6        | 90s   |
 | `integration-sync-sweep`        | `* * * * *`    | 1           | 1        | 60s   |
 | `integration-sync-retention`    | `45 2 * * *`   | 1           | 3        | 60s   |
+| `jira-webhook-refresh`          | `* * * * *`    | 1           | 3        | 60s   |
 | `event-dispatch`                | —              | 5           | 10       | 60s   |
 | `event-reactions`               | —              | 1           | 3        | 60s   |
 | `event-summaries`               | —              | 2           | 3        | 60s   |

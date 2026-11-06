@@ -140,6 +140,18 @@ describe('enforceAiTokenBudget window selection', () => {
     await expect(enforceAiTokenBudget()).rejects.toThrow(/trial/)
   })
 
+  it('says the period is used up and to upgrade, quoting no usage figures or prices', async () => {
+    vi.useFakeTimers({ now: new Date('2026-11-02T12:00:00Z'), toFake: ['Date'] })
+    state.cap = 1000
+    state.cloud = { ...TRIAL }
+    state.rows = [{ at: '2026-10-27T10:00:00Z', tokens: 1000 }]
+    const error = await enforceAiTokenBudget().catch((err: unknown) => err)
+    expect(error).toBeInstanceOf(TierLimitError)
+    expect((error as TierLimitError).message).toBe(
+      'AI usage for this trial is used up. Upgrade your plan for more.'
+    )
+  })
+
   it('allows calls while the trial total is under the cap', async () => {
     vi.useFakeTimers({ now: new Date('2026-11-02T12:00:00Z'), toFake: ['Date'] })
     state.cap = 1000

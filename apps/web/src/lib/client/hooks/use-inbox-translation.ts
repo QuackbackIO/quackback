@@ -199,7 +199,8 @@ export function useInboxTranslation({
     enabledFlag && translationState?.enabled && translationsQuery.data?.overAllowance
       ? intl.formatMessage({
           id: 'admin.inbox.translationOverAllowance',
-          defaultMessage: 'Your AI allowance is used up. Translation keeps working.',
+          defaultMessage:
+            'AI usage for this period is used up. Translation keeps working. Upgrade your plan for more.',
         })
       : null
 

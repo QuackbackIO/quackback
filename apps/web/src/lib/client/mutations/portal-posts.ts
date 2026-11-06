@@ -19,6 +19,7 @@ import {
 import { portalDetailQueries, type PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { adminQueries } from '@/lib/client/queries/admin'
 import type { PublicPostListItem } from '@/lib/shared/types'
+import type { PublicFeedbackFilters } from '@/lib/shared/types/filters'
 import type { JSONContent } from '@tiptap/react'
 import type { PostId, BoardId, PostStatusId } from '@quackback/ids'
 
@@ -193,6 +194,16 @@ export function useVoteMutation(options?: { getAuthHeaders?: () => Record<string
           next.delete(postId)
         }
         return next
+      })
+
+      // The Voted view no longer holds what it shows. The card stays where it
+      // is, so an unvote can be taken back, and the view refreshes the next
+      // time it's shown.
+      void queryClient.invalidateQueries({
+        queryKey: publicPostsKeys.lists(),
+        predicate: (query) =>
+          (query.queryKey[2] as PublicFeedbackFilters | undefined)?.view === 'voted',
+        refetchType: 'none',
       })
     },
   })

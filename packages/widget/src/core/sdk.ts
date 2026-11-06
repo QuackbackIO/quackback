@@ -12,7 +12,7 @@ import { createLauncher, type LauncherHandle } from './launcher'
 import { createPanel, type PanelHandle } from './panel'
 import { fetchServerConfig, type ServerConfig } from './config'
 import { createTracker, type Tracker } from './tracker'
-import { getOrCreateDeviceId } from './device'
+import { clearDeviceId, getOrCreateDeviceId } from './device'
 import { removeStyles } from './style'
 
 type Command =
@@ -25,6 +25,7 @@ type Command =
   | 'hideLauncher'
   | 'destroy'
   | 'metadata'
+  | 'tracking'
   | 'on'
   | 'off'
 
@@ -64,6 +65,10 @@ export function createSDK(): SDK {
   let mobileMql: MediaQueryList | null = null
   let mobileCleanup: (() => void) | null = null
   let tracker: Tracker | null = null
+  // The host page's say on pageview tracking (for example its consent
+  // banner). Tracking runs only when both the host and the instance allow it.
+  let hostTracking = true
+  let analyticsConfig: { instanceUrl: string; deviceTracking: boolean } | null = null
   let pendingDevice: string | null = null
   const emitter = createEmitter()
 
@@ -259,17 +264,33 @@ export function createSDK(): SDK {
     // the server config enables visitor analytics, and only if this init is
     // still the live one. The durable device id is a separate opt-in on top.
     if (serverConfig.visitorAnalytics && config === initToken) {
-      tracker?.stop()
-      const deviceId = serverConfig.visitorDeviceTracking ? getOrCreateDeviceId() : null
-      tracker = createTracker(initToken.instanceUrl, deviceId)
-      tracker.start()
-      // The iframe links the device to the session's principal; queue
-      // until the panel reports ready if it hasn't yet.
-      if (deviceId) {
-        if (ready && bridge) bridge.send('quackback:device', deviceId)
-        else pendingDevice = deviceId
+      analyticsConfig = {
+        instanceUrl: initToken.instanceUrl,
+        deviceTracking: serverConfig.visitorDeviceTracking === true,
       }
+      startTracking()
     }
+  }
+
+  function startTracking(): void {
+    // A running tracker is left alone: restarting it would count the current
+    // page again.
+    if (!hostTracking || !analyticsConfig || tracker) return
+    const deviceId = analyticsConfig.deviceTracking ? getOrCreateDeviceId() : null
+    tracker = createTracker(analyticsConfig.instanceUrl, deviceId)
+    tracker.start()
+    // The iframe links the device to the session's principal; queue
+    // until the panel reports ready if it hasn't yet.
+    if (deviceId) {
+      if (ready && bridge) bridge.send('quackback:device', deviceId)
+      else pendingDevice = deviceId
+    }
+  }
+
+  function stopTracking(): void {
+    tracker?.stop()
+    tracker = null
+    pendingDevice = null
   }
 
   function createLauncherIfNeeded(): void {
@@ -293,6 +314,9 @@ export function createSDK(): SDK {
         // Validate before destroy so a bad re-init leaves the working instance intact.
         if (config) dispatch('destroy')
         config = next
+        // Only an explicit option changes the host's choice, so a withdrawal
+        // made before init, or before a re-init, is never silently undone.
+        if (next.tracking !== undefined) hostTracking = next.tracking
         placement = next.placement ?? 'right'
         createLauncherIfNeeded()
         // Preload the hidden panel iframe off the host page's critical path:
@@ -350,7 +374,7 @@ export function createSDK(): SDK {
         launcher?.setOpen(true)
         panelOpen = true
         const ctx = opts as {
-          view?: 'home' | 'new-post' | 'changelog' | 'help'
+          view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
           postId?: string
           articleId?: string
           entryId?: string
@@ -392,14 +416,25 @@ export function createSDK(): SDK {
         if (ready && bridge) bridge.send('quackback:metadata', metadata)
         return
       }
+      case 'tracking':
+        hostTracking = a === true
+        if (hostTracking) startTracking()
+        else {
+          // Withdrawn consent also removes the stored device id.
+          stopTracking()
+          clearDeviceId()
+          // The panel keeps the id it was given for linking sessions to the
+          // device; a null tells it to drop it.
+          if (ready && bridge) bridge.send('quackback:device', null)
+        }
+        return
       case 'destroy':
         cancelPanelPreload()
         panel?.destroy()
         launcher?.remove()
         bridge?.dispose()
-        tracker?.stop()
-        tracker = null
-        pendingDevice = null
+        stopTracking()
+        analyticsConfig = null
         mobileCleanup?.()
         mobileCleanup = null
         mobileMql = null

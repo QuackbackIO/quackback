@@ -18,7 +18,6 @@ const options = {
     changelog: true,
   },
   billingEnabled: true,
-  domainsEnabled: true,
 }
 
 describe('Ask destinations', () => {
@@ -47,18 +46,17 @@ describe('Ask destinations', () => {
     expect(limited).toContain('/admin/settings/office-hours')
     expect(limited).not.toContain('/admin/settings/widget')
   })
-  it('hides disabled products and optional billing and domain destinations', () => {
+  it('hides disabled products and optional billing destinations', () => {
     const paths = buildAskDestinations({
       ...options,
       featureFlags: { feedback: true },
       billingEnabled: false,
-      domainsEnabled: false,
     }).map((item) => item.href)
     expect(paths).not.toContain('/admin/inbox')
     expect(paths).not.toContain('/admin/settings/office-hours')
     expect(paths).not.toContain('/admin/settings/status')
     expect(paths).not.toContain('/admin/settings/billing')
-    expect(paths).not.toContain('/admin/settings/domains')
+    expect(paths).toContain('/admin/settings/domains')
     expect(paths).toContain('/admin/settings/widget/install')
   })
   it('searches translated labels and keywords without a model or server dependency', () => {

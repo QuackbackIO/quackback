@@ -130,7 +130,7 @@ export const WEBHOOK_EVENT_CONFIG = [
   {
     id: 'conversation.status_changed',
     label: 'Conversation Status Changed',
-    description: 'When a conversation moves between open, pending, and closed',
+    description: 'When a conversation moves between open, snoozed, and closed',
   },
   {
     id: 'conversation.assigned',
@@ -243,21 +243,6 @@ export const WEBHOOK_EVENT_CONFIG = [
     id: 'ticket.external_status_changed',
     label: 'Linked Issue Status Changed',
     description: 'When a tracker issue linked to a ticket changes status on the external platform',
-  },
-  {
-    id: 'approval.requested',
-    label: 'Approval Requested',
-    description: 'When an AI assistant or API key asks a person to approve a change',
-  },
-  {
-    id: 'approval.decided',
-    label: 'Approval Decided',
-    description: 'When a person approves or rejects a requested change',
-  },
-  {
-    id: 'approval.applied',
-    label: 'Approval Applied',
-    description: 'When an approved change is applied',
   },
 ] as const satisfies ReadonlyArray<{ id: WebhookEventType; label: string; description: string }>
 

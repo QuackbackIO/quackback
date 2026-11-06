@@ -15,7 +15,15 @@ import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-sco
 process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
 process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_dGVzdHNlY3JldA=='
 import { teams, channelAccounts, emailSendingDomains, eq } from '@/lib/server/db'
+import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
+const inboundLimit = vi.hoisted(() => ({ cap: null as number | null }))
+vi.mock('@/lib/server/domains/settings/tier-limits.service', async () => {
+  const { OSS_TIER_LIMITS } = await import('@/lib/server/domains/settings/tier-limits.types')
+  return {
+    getTierLimits: async () => ({ ...OSS_TIER_LIMITS, maxInboundEmailAddresses: inboundLimit.cap }),
+  }
+})
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
@@ -66,7 +74,10 @@ async function seedTeam(): Promise<TeamId> {
 }
 
 describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled back)', () => {
-  beforeEach(fixture.begin)
+  beforeEach(async () => {
+    inboundLimit.cap = null
+    await fixture.begin()
+  })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
@@ -88,6 +99,26 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
     await expect(
       createInboundRoute({ owningTeamId: teamId, config: { provider: 'imap' } })
     ).rejects.toThrow()
+  })
+
+  it('refuses an inbound route when the plan allows none', async () => {
+    inboundLimit.cap = 0
+    const teamId = await seedTeam()
+
+    await expect(
+      createInboundRoute({ owningTeamId: teamId, config: { provider: 'resend' } })
+    ).rejects.toBeInstanceOf(TierLimitError)
+    expect(await getInboundRoute(teamId)).toBeNull()
+  })
+
+  it('refuses a second inbound route with the plan message, not the index error', async () => {
+    inboundLimit.cap = 1
+    const teamId = await seedTeam()
+    await createInboundRoute({ owningTeamId: teamId, config: { provider: 'resend' } })
+
+    await expect(
+      createInboundRoute({ owningTeamId: teamId, config: { provider: 'imap' } })
+    ).rejects.toBeInstanceOf(TierLimitError)
   })
 
   it('resolves a sending address by module', async () => {

@@ -154,3 +154,60 @@ describe('tierLimits.notice', () => {
     ).toBe(false)
   })
 })
+
+function issuePaths(result: ReturnType<typeof quackbackConfigSchema.safeParse>): string[] {
+  return result.success ? [] : result.error.issues.map((issue) => issue.path.join('.'))
+}
+
+describe('tierLimits inbound, locale and subscriber caps', () => {
+  const CAP_KEYS = ['maxInboundEmailAddresses', 'maxHelpCenterLocales', 'maxStatusSubscribers']
+
+  it('accepts integers and null for each cap, null meaning unlimited', () => {
+    const r = quackbackConfigSchema.safeParse({
+      ...baseConfig,
+      spec: {
+        tierLimits: {
+          maxInboundEmailAddresses: 2,
+          maxHelpCenterLocales: null,
+          maxStatusSubscribers: 1000,
+        },
+      },
+    })
+    expect(r.success).toBe(true)
+    if (r.success) {
+      expect(r.data.spec.tierLimits).toEqual({
+        maxInboundEmailAddresses: 2,
+        maxHelpCenterLocales: null,
+        maxStatusSubscribers: 1000,
+      })
+    }
+  })
+
+  it('leaves each cap absent when the file does not declare it', () => {
+    const r = quackbackConfigSchema.safeParse({
+      ...baseConfig,
+      spec: { tierLimits: { maxBoards: 3 } },
+    })
+    expect(r.success).toBe(true)
+    if (r.success) {
+      for (const key of CAP_KEYS) {
+        expect(r.data.spec.tierLimits).not.toHaveProperty(key)
+      }
+    }
+  })
+
+  it.each(
+    CAP_KEYS.flatMap((key) => [
+      [key, -1],
+      [key, 1.5],
+      [key, '3'],
+    ])
+  )('rejects %s given %j on the value, not as an unknown key', (key, value) => {
+    const r = quackbackConfigSchema.safeParse({
+      ...baseConfig,
+      spec: { tierLimits: { [key]: value } },
+    })
+    expect(r.success).toBe(false)
+    expect(issuePaths(r)).toEqual([`spec.tierLimits.${key}`])
+  })
+})

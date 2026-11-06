@@ -23,16 +23,18 @@
  * below catches the same mistake arriving out of a jsonb column, where no type
  * survives.
  */
-import { resolveTxt } from 'node:dns/promises'
-import type { SendingDomainOwnershipRecord } from '@/lib/server/db'
+import type { SendingDomainOwnershipRecord, SendingDomainProofRecord } from '@/lib/server/db'
+import { dkimPublicKeyOf, isKeyRecord } from './dkim-key'
 import { logger } from '@/lib/server/logger'
+import { systemResolver } from '@/lib/server/dns/resolver'
+import { isNoAnswer } from '@/lib/server/dns/lookup-outcome'
 
 const log = logger.child({
   component: 'sending-domain-verification',
 })
 
 /** The host to query for a record: '@' is the domain apex, else `host.domain`. */
-function hostFor(record: SendingDomainOwnershipRecord, domain: string): string {
+function hostFor(record: SendingDomainProofRecord, domain: string): string {
   return record.host === '@' ? domain : `${record.host}.${domain}`
 }
 
@@ -52,9 +54,30 @@ export function ownershipRecordSatisfied(
   return resolved.some((r) => r.trim().toLowerCase() === want)
 }
 
-/** Is this stored record one that could prove ownership at all? */
-function isOwnershipRecord(record: { type: string; purpose: string }): boolean {
-  return record.type === 'TXT' && record.purpose === 'ownership'
+/**
+ * Whether the resolved values carry this row's own signing key.
+ *
+ * Compared on the `p=` key alone, whitespace removed, since that is the part
+ * minted for this row; the other tags are the same for every key.
+ */
+export function keyRecordSatisfied(resolved: string[], record: SendingDomainProofRecord): boolean {
+  const want = dkimPublicKeyOf(record.value)
+  if (!want) return false
+  return resolved.some((r) => dkimPublicKeyOf(r) === want)
+}
+
+/**
+ * Is this stored record one that could prove ownership at all? The
+ * `_quackback` token, or a signing key minted for this row. A DKIM CNAME is
+ * the provider's and the same for everyone who follows the instructions, so it
+ * never is.
+ */
+function isProofRecord(record: {
+  type: string
+  purpose: string
+  value: string
+}): record is SendingDomainProofRecord {
+  return (record.type === 'TXT' && record.purpose === 'ownership') || isKeyRecord(record)
 }
 
 /**
@@ -69,9 +92,26 @@ function isOwnershipRecord(record: { type: string; purpose: string }): boolean {
  */
 export type ZoneReader = (host: string) => Promise<string[][]>
 
+/** One bounded try, like every other background domain check. */
+const readTxt: ZoneReader = (host) => systemResolver.resolveTxt(host)
+
 /**
- * Resolve and check every expected ownership record. A lookup failure (NXDOMAIN,
- * no record yet) counts as unsatisfied, not an error — the owner is still
+ * What a check of the zone found:
+ *
+ * - `proven`: every record was read and carries this row's value;
+ * - `absent`: the zone answered and at least one record is not there (not
+ *   published, NXDOMAIN, or another value), or nothing could prove it at all;
+ * - `unknown`: no record was found missing, but a lookup went unanswered
+ *   (timeout, server failure, refusal), so the zone has not said either way.
+ *
+ * Only `absent` is evidence that ownership was lost. A caller holding an
+ * earlier proof keeps it through `unknown` and lets the next check decide.
+ */
+export type OwnershipAnswer = 'proven' | 'absent' | 'unknown'
+
+/**
+ * Resolve and check every expected ownership record. A name that answers with
+ * nothing counts as unsatisfied, not an error: the owner may still be
  * propagating DNS. An empty expectation is never satisfied: nothing published
  * proves nothing.
  *
@@ -79,29 +119,52 @@ export type ZoneReader = (host: string) => Promise<string[][]>
  * loudly, because the only way one gets here is a caller that has confused the
  * records a domain owner publishes for us with the record that identifies THEM.
  */
-export async function verifySendingDomainDns(
+export async function checkSendingDomainOwnership(
   domain: string,
-  expected: SendingDomainOwnershipRecord[],
-  readZone: ZoneReader = resolveTxt
-): Promise<boolean> {
-  if (expected.length === 0) return false
-  const notOwnership = expected.filter((r) => !isOwnershipRecord(r))
+  expected: SendingDomainProofRecord[],
+  readZone: ZoneReader = readTxt
+): Promise<OwnershipAnswer> {
+  if (expected.length === 0) return 'absent'
+  // Typed as proof, but read out of a jsonb column where no type survives.
+  const notOwnership = (expected as { type: string; purpose: string; value: string }[]).filter(
+    (r) => !isProofRecord(r)
+  )
   if (notOwnership.length > 0) {
     log.error(
       { domain, purposes: notOwnership.map((r) => `${r.type}/${r.purpose}`) },
       'refusing to treat a non-ownership record as proof of domain ownership'
     )
-    return false
+    return 'absent'
   }
+  let unanswered = false
   for (const record of expected) {
+    let resolved: string[]
     try {
       // A long TXT arrives split into 255-byte chunks; joined, it is the value
       // the domain owner typed.
-      const resolved = (await readZone(hostFor(record, domain))).map((chunks) => chunks.join(''))
-      if (!ownershipRecordSatisfied(resolved, record)) return false
-    } catch {
-      return false
+      resolved = (await readZone(hostFor(record, domain))).map((chunks) => chunks.join(''))
+    } catch (err) {
+      if (!isNoAnswer(err)) {
+        // Keep reading: a record the zone does answer for can still settle it.
+        unanswered = true
+        continue
+      }
+      resolved = []
     }
+    const satisfied =
+      record.purpose === 'dkim'
+        ? keyRecordSatisfied(resolved, record)
+        : ownershipRecordSatisfied(resolved, record)
+    if (!satisfied) return 'absent'
   }
-  return true
+  return unanswered ? 'unknown' : 'proven'
+}
+
+/** Whether ownership is proven now: {@link checkSendingDomainOwnership} as a yes or no. */
+export async function verifySendingDomainDns(
+  domain: string,
+  expected: SendingDomainProofRecord[],
+  readZone: ZoneReader = readTxt
+): Promise<boolean> {
+  return (await checkSendingDomainOwnership(domain, expected, readZone)) === 'proven'
 }

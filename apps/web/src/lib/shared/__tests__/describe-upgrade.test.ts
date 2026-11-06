@@ -37,8 +37,21 @@ describe('describeEntitlementUpgrade', () => {
     expect(describeEntitlementUpgrade('webhooks').requiredPlan).toBe('pro')
     expect(describeEntitlementUpgrade('workflows').requiredPlan).toBe('business')
     expect(describeEntitlementUpgrade('mcpServer').requiredPlan).toBe('pro')
-    expect(describeEntitlementUpgrade('aiDrafts').requiredPlan).toBe('pro')
     expect(describeEntitlementUpgrade('aiInsights').requiredPlan).toBe('pro')
+  })
+})
+
+describe('describeEntitlementUpgrade for a feature every plan includes', () => {
+  it('never offers the Free plan as an upgrade; a withheld feature points to support', () => {
+    const description = describeEntitlementUpgrade('aiDrafts')
+    expect(description.requiredPlan).toBeNull()
+    expect(description.body).toMatch(/Contact us/)
+  })
+
+  it('treats the REST API the same way, since Free includes it', () => {
+    const description = describeEntitlementUpgrade('apiAccess')
+    expect(description.requiredPlan).toBeNull()
+    expect(description.body).toMatch(/Contact us/)
   })
 })
 

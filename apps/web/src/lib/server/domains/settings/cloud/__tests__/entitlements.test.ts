@@ -79,9 +79,17 @@ describe('isEntitled', () => {
     expect(isEntitled(config, 'auditLog')).toBe(false)
   })
 
-  it('grants nothing on the free plan', () => {
+  it('grants only AI drafts and the REST API on the free plan', () => {
     const config = cloud({ plan: 'free' })
-    for (const key of ENTITLEMENT_KEYS) expect(isEntitled(config, key)).toBe(false)
+    const granted = ENTITLEMENT_KEYS.filter((key) => isEntitled(config, key))
+    expect(granted).toEqual(['aiDrafts', 'apiAccess'])
+  })
+
+  it('grants AI article translation from Business up, never on Free or Pro', () => {
+    expect(isEntitled(cloud({ plan: 'free' }), 'aiArticleTranslation')).toBe(false)
+    expect(isEntitled(cloud({ plan: 'pro' }), 'aiArticleTranslation')).toBe(false)
+    expect(isEntitled(cloud({ plan: 'business' }), 'aiArticleTranslation')).toBe(true)
+    expect(isEntitled(cloud({ plan: 'enterprise' }), 'aiArticleTranslation')).toBe(true)
   })
 
   it('lets an explicit override open a feature the plan does not include', () => {
@@ -143,19 +151,21 @@ describe('the refusal names the plan', () => {
     expect(err.message).toBe('Workflows are a Business feature. Upgrade to Business to enable it.')
   })
 
-  it.each(ENTITLEMENT_KEYS.filter((key) => key !== 'hideBranding'))(
-    '%s refuses with a nameable plan from the free tier',
-    (key) => {
-      const err = buildRefusal(cloud({ plan: 'free' }), key)
-      // Every catalogue entry must be reachable by upgrading — an entitlement no
-      // plan grants is a pricing bug, and this pins it at build time.
-      const cheapest = minimumPlanFor(key)
-      expect(cheapest).not.toBeNull()
-      expect(err.requiredPlan).toBe(cheapest!.id)
-      expect(err.message).toContain(ENTITLEMENTS[key].friendly)
-      expect(err.message).toContain(PLAN_CATALOGUE[cheapest!.id].name)
-    }
-  )
+  // aiDrafts and apiAccess are included on Free, so they have no refusal to name.
+  it.each(
+    ENTITLEMENT_KEYS.filter(
+      (key) => key !== 'hideBranding' && key !== 'aiDrafts' && key !== 'apiAccess'
+    )
+  )('%s refuses with a nameable plan from the free tier', (key) => {
+    const err = buildRefusal(cloud({ plan: 'free' }), key)
+    // Every catalogue entry must be reachable by upgrading — an entitlement no
+    // plan grants is a pricing bug, and this pins it at build time.
+    const cheapest = minimumPlanFor(key)
+    expect(cheapest).not.toBeNull()
+    expect(err.requiredPlan).toBe(cheapest!.id)
+    expect(err.message).toContain(ENTITLEMENTS[key].friendly)
+    expect(err.message).toContain(PLAN_CATALOGUE[cheapest!.id].name)
+  })
 
   it('hideBranding has no plan; refusal degrades to contact us', () => {
     const err = buildRefusal(cloud({ plan: 'free' }), 'hideBranding')
@@ -192,7 +202,7 @@ describe('the refusal reuses the existing 402 plumbing', () => {
   })
 
   it('sends the refusal to the workspace billing page when no upgradeUrl is set', () => {
-    const err = buildRefusal(cloud({ plan: 'free' }), 'apiAccess')
+    const err = buildRefusal(cloud({ plan: 'free' }), 'webhooks')
     expect(err.upgradeUrl).toBe('/admin/settings/billing')
   })
 
@@ -250,6 +260,7 @@ describe('requireEntitlement against a configured workspace', () => {
       customDomain: true,
       sso: false,
       aiAssistant: true,
+      aiArticleTranslation: false,
       aiDrafts: true,
       aiInsights: true,
       workflows: false,
@@ -270,6 +281,7 @@ describe('requireEntitlement against a configured workspace', () => {
       customDomain: true,
       sso: false,
       aiAssistant: true,
+      aiArticleTranslation: true,
       aiDrafts: true,
       aiInsights: true,
       workflows: true,

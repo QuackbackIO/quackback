@@ -56,7 +56,7 @@ export function CopilotPaused({
           <p className="text-sm text-muted-foreground">
             <FormattedMessage
               id="ask.paused.reason"
-              defaultMessage="This period’s AI allowance is used up."
+              defaultMessage="AI usage for this period is used up. Upgrade your plan for more."
             />
           </p>
         </div>

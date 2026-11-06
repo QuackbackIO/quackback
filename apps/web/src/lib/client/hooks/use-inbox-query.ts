@@ -81,6 +81,7 @@ function toInboxListInput(filters: InboxFilters) {
     responded: filters.responded,
     updatedBefore: filters.updatedBefore,
     showDeleted: filters.showDeleted,
+    hasDuplicates: filters.hasDuplicates,
   }
 }
 

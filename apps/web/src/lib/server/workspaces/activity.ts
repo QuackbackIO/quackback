@@ -40,7 +40,9 @@
  * clock-driven deadline (a snoozed conversation, an SLA due-at). Those are the
  * two things the database already knows how to report — `earliestPendingJobAt`
  * and `earliestWorkspaceDeadline` — so the worker asks both before it parks a
- * loop, and keeps the loop for any workspace that answers. That check needs the
+ * loop. Work due within one refresh pass keeps the loop awake; later work is
+ * recorded as the instant the worker wakes the workspace for, so a workspace
+ * with a refresh days away parks now and wakes in time. That check needs the
  * workspace's own database, so it lives in the worker (`worker.ts`), and the
  * result is published here (`hasStandingWork`) so a fleet pass in the same
  * process honours the same exception.

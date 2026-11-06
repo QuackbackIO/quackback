@@ -84,7 +84,8 @@ async function bootJobWorker(
     }),
     getControlSql: () => ({}),
   }))
-  vi.doMock('../deadlines', () => ({
+  vi.doMock('../deadlines', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../deadlines')>()),
     earliestWorkspaceDeadline: async () => dormancy?.deadlineAt ?? null,
   }))
   vi.doMock('../job-queue', () => ({
@@ -372,20 +373,20 @@ describe('pooled job worker', () => {
       expect(handle.dormant()).toBe(1)
     })
 
-    it('keeps an idle workspace awake while it has a pending job or a deadline', async () => {
+    it('keeps an idle workspace awake while work falls due within a refresh pass', async () => {
       vi.useFakeTimers()
       const dormancy: DormancyPlan = {
         workspaces: [idle('ws_idle')],
-        pendingJobAt: new Date(Date.now() + HOUR),
+        pendingJobAt: new Date(Date.now() + 30_000),
         deadlineAt: null,
       }
       handle = await bootJobWorker({ claimed: 0 }, dormancy)
       expect(handle.loops()).toEqual(['ws_idle'])
       expect(handle.dormant()).toBe(0)
 
-      // The job drains; a deadline still holds it.
+      // The job drains; a deadline due inside the window still holds it.
       dormancy.pendingJobAt = null
-      dormancy.deadlineAt = new Date(Date.now() + 2 * HOUR)
+      dormancy.deadlineAt = new Date(Date.now() + 30_000)
       await handle.refresh()
       expect(handle.loops()).toEqual(['ws_idle'])
 
@@ -394,6 +395,57 @@ describe('pooled job worker', () => {
       await handle.refresh()
       expect(handle.loops()).toEqual([])
       expect(handle.dormant()).toBe(1)
+    })
+
+    it('parks a workspace whose next deadline is days away instead of keeping it awake', async () => {
+      vi.useFakeTimers()
+      const dormancy: DormancyPlan = {
+        workspaces: [idle('ws_idle')],
+        pendingJobAt: null,
+        deadlineAt: new Date(Date.now() + 3 * 24 * HOUR),
+      }
+      handle = await bootJobWorker({ claimed: 0 }, dormancy)
+      expect(handle.loops()).toEqual([])
+      expect(handle.dormant()).toBe(1)
+
+      await handle.refresh()
+      expect(handle.loops()).toEqual([])
+      expect(handle.dormant()).toBe(1)
+    })
+
+    it('parks a workspace whose next delayed job is hours away instead of keeping it awake', async () => {
+      vi.useFakeTimers()
+      const dormancy: DormancyPlan = {
+        workspaces: [idle('ws_idle')],
+        pendingJobAt: new Date(Date.now() + 2 * HOUR),
+        deadlineAt: null,
+      }
+      handle = await bootJobWorker({ claimed: 0 }, dormancy)
+      expect(handle.loops()).toEqual([])
+      expect(handle.dormant()).toBe(1)
+    })
+
+    it('wakes a parked workspace in the refresh pass before its deadline falls due', async () => {
+      vi.useFakeTimers()
+      const deadline = new Date(Date.now() + 10 * 60_000)
+      const dormancy: DormancyPlan = {
+        workspaces: [idle('ws_idle')],
+        pendingJobAt: null,
+        deadlineAt: deadline,
+      }
+      handle = await bootJobWorker({ claimed: 0 }, dormancy)
+      expect(handle.dormant()).toBe(1)
+
+      // One minute in, the deadline is nine minutes away: still parked.
+      await handle.refresh()
+      expect(handle.loops()).toEqual([])
+      expect(handle.dormant()).toBe(1)
+
+      // At six minutes the deadline is inside the four-minute wake lead: woken, not yet due.
+      await vi.advanceTimersByTimeAsync(5 * 60_000)
+      expect(handle.loops()).toEqual(['ws_idle'])
+      expect(handle.dormant()).toBe(0)
+      expect(Date.now()).toBeLessThan(deadline.getTime())
     })
 
     it("wakes a parked workspace that has not sent last month's usage report, once", async () => {

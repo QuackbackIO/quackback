@@ -420,6 +420,13 @@ export function WidgetAuthProvider({
         return
       }
 
+      if (msg.type === 'quackback:device' && msg.data === null) {
+        // The host withdrew tracking consent: stop linking sessions to the device.
+        deviceIdRef.current = null
+        lastDeviceLinkRef.current = null
+        return
+      }
+
       if (msg.type === 'quackback:device' && typeof msg.data === 'string' && msg.data) {
         deviceIdRef.current = msg.data.slice(0, 128)
         attemptDeviceLink()

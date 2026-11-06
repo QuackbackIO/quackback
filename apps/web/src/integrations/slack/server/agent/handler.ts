@@ -198,7 +198,7 @@ export async function handleSlackDecision(
         person.id,
         actor,
         pending.workspaceThreadKey,
-        { via: 'slack', contentHash: button.contentHash }
+        { contentHash: button.contentHash }
       )
     } catch (error) {
       log.warn(
@@ -537,7 +537,7 @@ async function handleSlackQuestion(input: {
     try {
       await enforceAiTokenBudget()
     } catch {
-      await replyError('This workspace has reached its AI usage limit.')
+      await replyError('AI usage for this period is used up. Upgrade your plan for more.')
       return
     }
     if (turnAbort.signal.aborted) return

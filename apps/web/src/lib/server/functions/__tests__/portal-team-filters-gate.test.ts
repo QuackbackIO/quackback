@@ -44,6 +44,16 @@ vi.mock('../portal-access', () => ({
 
 // The data layer under assertion.
 const mockListPublicPosts = vi.fn()
+// The portal feed's first page also counts the filter panel; not under test here.
+vi.mock('@/lib/server/domains/posts/post.public.facets', () => ({
+  countPublicPostFacetsOrNull: vi
+    .fn()
+    .mockResolvedValue({ statuses: {}, boards: {}, tags: {}, total: 0, views: null }),
+}))
+// Settles a search's word mode with a probe query; a pass-through here.
+vi.mock('@/lib/server/domains/posts/post.public.search', () => ({
+  withPublicSearchMode: async <T>(params: T) => ({ ...params, searchMode: 'all' }),
+}))
 vi.mock('@/lib/server/domains/posts/post.public', () => ({
   listPublicPosts: (...a: unknown[]) => mockListPublicPosts(...a),
   getAllUserVotedPostIds: vi.fn(),

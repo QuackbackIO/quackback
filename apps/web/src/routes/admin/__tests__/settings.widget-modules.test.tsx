@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { render, screen } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { describe, expect, it, vi } from 'vitest'
+import en from '@/locales/en.json'
 
 vi.mock('@tanstack/react-router', async () => {
   const actual =
@@ -16,7 +18,7 @@ vi.mock('@/lib/client/mutations/settings', () => ({
   useUpdateWidgetConfig: () => ({ mutateAsync: vi.fn() }),
 }))
 
-const { TabsCard, LayoutCard } =
+const { TabsCard, LayoutCard, VisitorTrackingCard } =
   await import('@/components/admin/settings/widget/widget-settings-page')
 
 const config = {
@@ -106,5 +108,42 @@ describe('Widget Layout card', () => {
     expect(screen.getByLabelText('Launcher greeting')).toBeInTheDocument()
     expect(screen.getByLabelText('Button label')).toBeInTheDocument()
     expect(screen.getByText('Button position')).toBeInTheDocument()
+  })
+})
+
+describe('Widget Visitor tracking card', () => {
+  function renderVisitorTracking(config: {
+    visitorAnalytics?: boolean
+    visitorDeviceTracking?: boolean
+  }) {
+    return render(
+      <IntlProvider locale="en" messages={en}>
+        <VisitorTrackingCard config={config} />
+      </IntlProvider>
+    )
+  }
+
+  it('shows both switches on for a workspace with no stored choice', () => {
+    renderVisitorTracking({})
+    expect(screen.getByRole('switch', { name: 'Count page views on your site' })).toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Remember returning visitors' })).toBeChecked()
+  })
+
+  it('reflects stored choices', () => {
+    renderVisitorTracking({ visitorAnalytics: true, visitorDeviceTracking: false })
+    expect(screen.getByRole('switch', { name: 'Count page views on your site' })).toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Remember returning visitors' })).not.toBeChecked()
+  })
+
+  it('disables the device switch while page views are off', () => {
+    renderVisitorTracking({ visitorAnalytics: false, visitorDeviceTracking: true })
+    expect(screen.getByRole('switch', { name: 'Count page views on your site' })).not.toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Remember returning visitors' })).toBeDisabled()
+  })
+
+  it('explains the device id and the SDK consent option in one line', () => {
+    renderVisitorTracking({})
+    expect(screen.getByText(/Stores a device id in the visitor's browser\./)).toBeInTheDocument()
+    expect(screen.getByText(/tracking: false/)).toBeInTheDocument()
   })
 })

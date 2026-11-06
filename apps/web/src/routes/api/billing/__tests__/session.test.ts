@@ -202,35 +202,28 @@ describe('POST /api/billing/session checkout', () => {
   })
 })
 
-describe('POST /api/billing/session top-up', () => {
+describe('POST /api/billing/session refuses top-ups', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     hoisted.requireAuth.mockResolvedValue({ user: { id: 'user_1' } })
-    hoisted.getCloudConfig.mockResolvedValue({ enabled: true, canUpgrade: true, canManageBilling: true })
-    hoisted.createHostedBillingSession.mockResolvedValue({ url: 'https://billing.example.com/checkout' })
+    hoisted.getCloudConfig.mockResolvedValue({
+      enabled: true,
+      canUpgrade: true,
+      canManageBilling: true,
+    })
+    hoisted.createHostedBillingSession.mockResolvedValue({
+      url: 'https://billing.example.com/checkout',
+    })
   })
 
-  it('forwards the pack price and size the customer was shown', async () => {
-    const res = await POST({
-      request: formRequest({ action: 'topup', meter: 'email', packs: '2', packCents: '1000', packUnits: '10000' }),
-    })
+  it.each([
+    ['AI usage', { meter: 'ai', packCents: '1000' }],
+    ['email', { meter: 'email', packs: '1', packCents: '1000', packUnits: '10000' }],
+    ['email without a quoted price', { meter: 'email', packs: '1' }],
+    ['meterless', { packs: '1' }],
+  ])('refuses an %s top-up through the invalid billing error', async (_label, fields) => {
+    const res = await POST({ request: formRequest({ action: 'topup', ...fields }) })
     expect(res.status).toBe(303)
-    expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
-      action: 'topup',
-      meter: 'email',
-      packs: 2,
-      packCents: 1000,
-      packUnits: 10000,
-    })
-  })
-
-  it('still forwards a top-up posted without them', async () => {
-    await POST({ request: formRequest({ action: 'topup', meter: 'ai', packs: '1' }) })
-    expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({ action: 'topup', meter: 'ai', packs: 1 })
-  })
-
-  it('refuses a malformed quoted price rather than forward it', async () => {
-    const res = await POST({ request: formRequest({ action: 'topup', meter: 'ai', packs: '1', packCents: '-5' }) })
     expect(res.headers.get('location')).toContain('billing_error=invalid')
     expect(hoisted.createHostedBillingSession).not.toHaveBeenCalled()
   })

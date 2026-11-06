@@ -10,15 +10,56 @@ vi.mock('@/lib/server/storage/s3', () => ({
   getPublicUrlOrNull: mockGetPublicUrlOrNull,
 }))
 
+const { mockPrincipalRows } = vi.hoisted(() => ({ mockPrincipalRows: vi.fn() }))
+
 vi.mock('@/lib/server/db', () => ({
-  db: { select: vi.fn() },
+  db: {
+    select: () => ({
+      from: () => ({ leftJoin: () => ({ where: () => mockPrincipalRows() }) }),
+    }),
+  },
   principal: {},
   user: {},
   eq: vi.fn(),
   inArray: vi.fn(),
 }))
 
-import { resolveUserAvatarUrl } from '../principal-display'
+import { loadAuthors, resolveUserAvatarUrl } from '../principal-display'
+
+const authorRow = (over: Record<string, unknown>) => ({
+  id: 'principal_x',
+  displayName: null,
+  accountName: null,
+  avatarUrl: null,
+  avatarKey: null,
+  userImage: null,
+  userImageKey: null,
+  testOwnerPrincipalId: null,
+  serviceMetadata: null,
+  ...over,
+})
+
+describe('loadAuthors', () => {
+  it('shows the product name for the assistant principal stored under the former default name', async () => {
+    mockPrincipalRows.mockResolvedValueOnce([
+      authorRow({
+        id: 'principal_assistant',
+        displayName: 'Quinn',
+        serviceMetadata: { kind: 'integration', integrationType: 'assistant' },
+      }),
+    ])
+    const authors = await loadAuthors(['principal_assistant' as never])
+    expect(authors.get('principal_assistant' as never)?.displayName).toBe('Quackback AI')
+  })
+
+  it('keeps the public name of a person or integration that is not the assistant', async () => {
+    mockPrincipalRows.mockResolvedValueOnce([
+      authorRow({ id: 'principal_teammate', displayName: 'Quinn', serviceMetadata: null }),
+    ])
+    const authors = await loadAuthors(['principal_teammate' as never])
+    expect(authors.get('principal_teammate' as never)?.displayName).toBe('Quinn')
+  })
+})
 
 describe('resolveUserAvatarUrl', () => {
   beforeEach(() => {

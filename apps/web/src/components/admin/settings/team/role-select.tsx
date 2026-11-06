@@ -37,10 +37,11 @@ export function roleValueOf(role: { role: 'admin' | 'member'; roleId?: string | 
 }
 
 /**
- * Presets (Member, Admin) then any custom roles. Admin-tier roles are offered
- * only to someone who can grant them; the server refuses them otherwise
- * anyway. A role the person already holds that is neither (another system
- * role, such as Contributor) is listed in its group so the select opens on it.
+ * Presets (Member, Admin, and Support lead when the workspace has it) then any
+ * custom roles. Admin-tier roles are offered only to someone who can grant
+ * them; the server refuses them otherwise anyway. A role the person already
+ * holds that is neither (another system role, such as Contributor) is listed
+ * in its group so the select opens on it.
  */
 export function RoleSelect({
   id,

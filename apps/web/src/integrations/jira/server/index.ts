@@ -4,6 +4,7 @@ import { fetchJiraStatuses } from '@/integrations/jira/server/statuses'
 import {
   registerJiraWebhook,
   deleteJiraWebhook,
+  jiraProjectRef,
 } from '@/integrations/jira/server/webhook-registration'
 import { jiraHook } from '@/integrations/jira/server/hook'
 import { jiraInboundHandler } from '@/integrations/jira/server/inbound'
@@ -36,7 +37,7 @@ export const jiraIntegration: IntegrationDefinition = {
     register: async ({ accessToken, config, callbackUrl }) => {
       const cloudId = config.cloudId as string
       if (!cloudId) throw new Error('No Jira Cloud ID configured')
-      const projectRef = String(config.channelId ?? '').split(':')[0]
+      const projectRef = jiraProjectRef(config.channelId)
       if (!projectRef) throw new Error('No Jira project configured')
       const result = await registerJiraWebhook(accessToken, cloudId, callbackUrl, projectRef)
       return { externalWebhookId: result.webhookId }

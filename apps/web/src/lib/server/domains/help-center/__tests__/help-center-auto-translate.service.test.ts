@@ -47,6 +47,11 @@ const budget = vi.hoisted(() => ({
   exhausted: false,
   windowEnd: new Date('2026-12-01T00:00:00.000Z'),
 }))
+const translateEntitlement = vi.hoisted(() => ({ granted: true }))
+vi.mock('@/lib/server/domains/settings/cloud/entitlements', () => ({
+  hasEntitlement: async (key: string) =>
+    key === 'aiArticleTranslation' ? translateEntitlement.granted : true,
+}))
 vi.mock('@/lib/server/domains/ai/ai-budget', () => ({
   getAiBudgetStatus: async () => ({
     cap: 1000,
@@ -264,5 +269,36 @@ describe('queueAutoTranslateOnPublish', () => {
     mockGetHelpCenterConfig.mockRejectedValue(new Error('settings unavailable'))
 
     await expect(queueAutoTranslateOnPublish({ id: 'article_1' } as never)).resolves.toBeUndefined()
+  })
+})
+
+describe('AI article translation entitlement', () => {
+  beforeEach(() => {
+    translateEntitlement.granted = true
+  })
+
+  it('makes no AI call on a plan without AI article translation', async () => {
+    translateEntitlement.granted = false
+    mockGetHelpCenterConfig.mockResolvedValue({ autoTranslate: { protectedTerms: [] } })
+    mockGetArticleById.mockResolvedValue({ title: 'Refunds', description: null, content: 'x' })
+    mockChat.mockResolvedValue({ title: 'T', content: 'C' })
+
+    const result = await translateArticleForLocale('article_1' as KbArticleId, 'de')
+
+    expect(result).toBeUndefined()
+    expect(mockChat).not.toHaveBeenCalled()
+    expect(mockUpsertArticleTranslation).not.toHaveBeenCalled()
+  })
+
+  it('queues no translation jobs on a plan without AI article translation', async () => {
+    translateEntitlement.granted = false
+    mockGetHelpCenterConfig.mockResolvedValue({
+      autoTranslate: { enabled: true },
+      locales: { additional: ['de', 'fr'] },
+    })
+
+    await queueAutoTranslateOnPublish({ id: 'article_1' } as never)
+
+    expect(mockEnqueueHelpCenterTranslateJob).not.toHaveBeenCalled()
   })
 })

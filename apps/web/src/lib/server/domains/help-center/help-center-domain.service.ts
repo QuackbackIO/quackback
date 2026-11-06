@@ -7,7 +7,8 @@
  *  - the pure host-matching helpers the router/bootstrap layer uses for the
  *    default-host -> custom-domain 301 and for domain-aware canonical URLs.
  */
-import { resolve4, resolve6 } from 'node:dns/promises'
+import { systemResolver } from '@/lib/server/dns/resolver'
+import { isNoAnswer } from '@/lib/server/dns/lookup-outcome'
 import { normalizeDomain } from '@/lib/server/auth/normalize-domain'
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
@@ -29,20 +30,26 @@ export interface HelpCenterDomainStatus {
   verified: boolean
 }
 
-/** Resolves A then AAAA records; either succeeding counts as "DNS resolves". */
-async function domainResolves(domain: string): Promise<boolean> {
-  try {
-    const addrs = await resolve4(domain)
-    if (addrs.length > 0) return true
-  } catch {
-    // fall through to AAAA
+/**
+ * Resolves A then AAAA records; either succeeding counts as "DNS resolves".
+ * Through the shared resolver, so a nameserver that does not answer costs
+ * seconds, not the system default's retry cycle.
+ *
+ * `absent` only when both names answered with nothing; a lookup that went
+ * unanswered (timeout, server failure) leaves the answer `unknown`.
+ */
+async function domainResolves(domain: string): Promise<'resolved' | 'absent' | 'unknown'> {
+  let unanswered = false
+  const lookups = [() => systemResolver.resolve4(domain), () => systemResolver.resolve6(domain)]
+  for (const lookup of lookups) {
+    try {
+      const addrs = await lookup()
+      if (addrs.length > 0) return 'resolved'
+    } catch (err) {
+      if (!isNoAnswer(err)) unanswered = true
+    }
   }
-  try {
-    const addrs = await resolve6(domain)
-    return addrs.length > 0
-  } catch {
-    return false
-  }
+  return unanswered ? 'unknown' : 'absent'
 }
 
 /**
@@ -61,13 +68,24 @@ async function instanceAnswersOn(domain: string): Promise<boolean> {
   }
 }
 
-/** Read-only status check, used both by the "Verify" action and its status chip. */
-export async function checkHelpCenterDomainStatus(domain: string): Promise<HelpCenterDomainStatus> {
-  const [dnsResolved, instanceReachable] = await Promise.all([
+/** The status, and whether DNS gave an answer at all. */
+async function probeHelpCenterDomain(
+  domain: string
+): Promise<{ status: HelpCenterDomainStatus; dnsAnswered: boolean }> {
+  const [dns, instanceReachable] = await Promise.all([
     domainResolves(domain),
     instanceAnswersOn(domain),
   ])
-  return { dnsResolved, instanceReachable, verified: dnsResolved && instanceReachable }
+  const dnsResolved = dns === 'resolved'
+  return {
+    status: { dnsResolved, instanceReachable, verified: dnsResolved && instanceReachable },
+    dnsAnswered: dns !== 'unknown',
+  }
+}
+
+/** Read-only status check, used both by the "Verify" action and its status chip. */
+export async function checkHelpCenterDomainStatus(domain: string): Promise<HelpCenterDomainStatus> {
+  return (await probeHelpCenterDomain(domain)).status
 }
 
 /**
@@ -134,9 +152,15 @@ export async function verifyHelpCenterDomain(): Promise<{
     throw new ValidationError('HC_DOMAIN_NOT_SET', 'Set a domain before verifying it')
   }
 
-  const status = await checkHelpCenterDomainStatus(domain)
-  log.info({ domain, status }, 'help center domain verify check')
-  const verifiedAt = status.verified ? new Date().toISOString() : null
+  const { status, dnsAnswered } = await probeHelpCenterDomain(domain)
+  log.info({ domain, status, dns_answered: dnsAnswered }, 'help center domain verify check')
+  // A lookup that went unanswered says nothing about the domain, so it keeps
+  // a verification it already has; only an answer can take one away.
+  const kept = !status.verified && !dnsAnswered ? (current.domain?.verifiedAt ?? null) : null
+  if (kept) {
+    log.warn({ domain }, 'help center domain lookup went unanswered; keeping its verification')
+  }
+  const verifiedAt = status.verified ? new Date().toISOString() : kept
   const updated = await updateHelpCenterConfig({ domain: { domain, verifiedAt } })
   return { config: updated.domain, status }
 }

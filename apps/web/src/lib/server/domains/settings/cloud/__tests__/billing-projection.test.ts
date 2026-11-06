@@ -25,6 +25,9 @@ const LIMITS = {
   emailsPerMonth: null,
   apiRequestsPerMonth: 100_000,
   apiRequestsPerMinute: 600,
+  maxInboundEmailAddresses: null,
+  maxHelpCenterLocales: null,
+  maxStatusSubscribers: null,
 }
 
 const PROJECTION: BillingProjection = {

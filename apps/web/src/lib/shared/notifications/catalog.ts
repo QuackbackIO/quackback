@@ -15,7 +15,7 @@ export type NotificationChannel = 'inApp' | 'email' | 'push'
 
 export const NOTIFICATION_CHANNELS: readonly NotificationChannel[] = ['inApp', 'email', 'push']
 
-export type NotificationGroup = 'feedback' | 'support' | 'changelog' | 'approvals'
+export type NotificationGroup = 'feedback' | 'support' | 'changelog'
 
 export interface NotificationTypeMeta {
   type: NotificationType
@@ -150,6 +150,20 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     group: 'support',
     surfaces: ['admin'],
   },
+  {
+    type: 'sending_domain_live',
+    label: 'Sending domain live',
+    description: 'A sending domain is verified and mail sends from it',
+    group: 'support',
+    surfaces: ['admin'],
+  },
+  {
+    type: 'sending_domain_needs_attention',
+    label: 'Sending domain needs attention',
+    description: 'A sending domain stops verifying and replies use the default address',
+    group: 'support',
+    surfaces: ['admin'],
+  },
   // Changelog
   {
     type: 'changelog_published',
@@ -164,14 +178,6 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     description: 'A status incident or maintenance window is posted',
     group: 'changelog',
     surfaces: ['admin', 'portal'],
-  },
-  // Approvals
-  {
-    type: 'approval_requested',
-    label: 'Approval requests',
-    description: 'A change waits for someone who can approve it',
-    group: 'approvals',
-    surfaces: ['admin'],
   },
 ]
 
@@ -188,7 +194,6 @@ export function catalogByGroup(
     feedback: [],
     support: [],
     changelog: [],
-    approvals: [],
   }
   for (const meta of metas) {
     grouped[meta.group].push(meta)

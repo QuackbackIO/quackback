@@ -25,7 +25,7 @@ export interface InboxFilters {
   updatedBefore?: string
   /** Only show posts with pending duplicate suggestions */
   hasDuplicates?: boolean
-  sort?: 'newest' | 'oldest' | 'votes' | 'priority'
+  sort?: InboxPostSort
   showDeleted?: boolean
 }
 
@@ -34,13 +34,74 @@ export interface InboxFilters {
  */
 export type RespondedFilter = 'responded' | 'unresponded'
 
+/** Portal feed views for a signed-in viewer: ideas they posted, voted on or follow. */
+export const PUBLIC_FEED_VIEWS = ['mine', 'voted', 'following'] as const
+
+/**
+ * Feed orders. 'relevance' (best match) applies while searching; without a
+ * search it falls back to trending.
+ */
+export const PUBLIC_POST_SORTS = ['top', 'new', 'trending', 'relevance'] as const
+export type PublicPostSort = (typeof PUBLIC_POST_SORTS)[number]
+
+/**
+ * How a search was widened when nothing matched every word: posts with half
+ * the words, or titles with a close spelling. Absent for an exact match.
+ */
+export type WidenedSearch = 'most' | 'similar'
+
+/**
+ * Admin feedback list orders. 'relevance' (best match) applies while
+ * searching; without a search it falls back to newest.
+ */
+export const INBOX_POST_SORTS = ['newest', 'oldest', 'votes', 'priority', 'relevance'] as const
+export type InboxPostSort = (typeof INBOX_POST_SORTS)[number]
+
+/**
+ * The order to use once the search changes. Starting a search from the
+ * default order switches to best match and clearing it goes back; a sort
+ * picked while searching stays.
+ */
+export function sortForSearch<S extends string>(
+  sort: S | 'relevance',
+  previousSearch: string | undefined,
+  search: string | undefined,
+  defaultSort: S
+): S | 'relevance' {
+  if (search && !previousSearch && sort === defaultSort) return 'relevance'
+  if (!search && sort === 'relevance') return defaultSort
+  return sort
+}
+export type PublicFeedView = (typeof PUBLIC_FEED_VIEWS)[number]
+
+/** Portal filter panel counts, keyed by status slug, board slug, tag id and view. */
+export interface PublicPostFacetCounts {
+  statuses: Record<string, number>
+  boards: Record<string, number>
+  tags: Record<string, number>
+  /** Posts the feed holds with every filter applied. */
+  total: number
+  /** Null for anonymous viewers, who have no views. */
+  views: Record<PublicFeedView, number> | null
+}
+
+/**
+ * With no status picked, the portal feed shows only active-category posts,
+ * except while searching or in a view (My ideas, Voted, Following), so
+ * shipped and closed ideas can still be found. The query, the panel and the
+ * status chip all read this, so they never disagree.
+ */
+export function feedShowsActiveOnly(feed: { search?: string; view?: string }): boolean {
+  return !feed.search && !feed.view
+}
+
 /**
  * Filters for the public portal post list.
  */
 export interface PublicFeedbackFilters {
   board?: string
   search?: string
-  sort?: 'top' | 'new' | 'trending'
+  sort?: PublicPostSort
   status?: string[]
   tagIds?: string[]
   minVotes?: number
@@ -57,6 +118,8 @@ export interface PublicFeedbackFilters {
    * Applied server-side only for post.view_private holders.
    */
   segmentIds?: string[]
+  /** Signed-in viewers: only ideas they posted, voted on or follow. */
+  view?: PublicFeedView
 }
 
 /**

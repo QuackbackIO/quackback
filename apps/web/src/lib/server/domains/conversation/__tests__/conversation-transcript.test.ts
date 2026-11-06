@@ -60,7 +60,7 @@ describe('renderConversationTranscript', () => {
       }),
       msg({
         senderType: 'agent',
-        author: { displayName: 'Quinn' } as TranscriptMessage['author'],
+        author: { displayName: 'Quackback AI' } as TranscriptMessage['author'],
         isAssistant: true,
         content: 'See this article',
         createdAt: '2026-07-04T09:18:00.000Z',
@@ -75,8 +75,26 @@ describe('renderConversationTranscript', () => {
     expect(out).toContain('[2026-07-04 09:15 UTC] Alice (visitor): I need help')
     expect(out).toContain('Jane (agent): Sure')
     expect(out).toContain('Jane (agent) · internal note: escalate to billing')
-    expect(out).toContain('Quinn (assistant): See this article')
+    expect(out).toContain('Quackback AI (assistant): See this article')
     expect(out).toContain('System: Conversation closed')
+  })
+
+  it('names the assistant by the product name when its stored author is the former default', () => {
+    const out = renderConversationTranscript({ id: 'c' }, [
+      msg({
+        senderType: 'agent',
+        author: { displayName: 'Quinn' } as TranscriptMessage['author'],
+        content: 'Happy to help',
+        isAssistant: true,
+      }),
+      msg({
+        senderType: 'agent',
+        author: { displayName: 'Quinn' } as TranscriptMessage['author'],
+        content: 'Hi from a teammate',
+      }),
+    ])
+    expect(out).toContain('Quackback AI (assistant)')
+    expect(out).toContain('Quinn (agent)')
   })
 
   it('falls back to a role name, notes attachments, and handles empty content', () => {
@@ -182,11 +200,11 @@ describe('renderConversationTranscript — deriving text and images from content
       msg({
         senderType: 'agent',
         isAssistant: true,
-        author: { displayName: 'Quinn' } as TranscriptMessage['author'],
+        author: { displayName: 'Quackback AI' } as TranscriptMessage['author'],
         content: 'Pick one\n[Billing] [Technical issue]',
         contentJson: { type: 'doc', content: [{ type: 'text', text: 'Pick one' }] },
       }),
     ])
-    expect(out).toContain('Quinn (assistant): Pick one\n[Billing] [Technical issue]')
+    expect(out).toContain('Quackback AI (assistant): Pick one\n[Billing] [Technical issue]')
   })
 })

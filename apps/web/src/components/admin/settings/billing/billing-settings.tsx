@@ -15,7 +15,6 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { cn } from '@/lib/shared/utils'
 import { formatUsd } from '@/lib/shared/format-usd'
 import { annualSavingsLabel } from '@/lib/shared/billing/checkout-path'
-import { hasTopUpPackPrice } from './topup-price'
 import {
   billingPlanAction,
   catalogueTrialDays,
@@ -26,7 +25,6 @@ import {
 import { daysUntil } from '@/lib/shared/billing/trial-state'
 import { checkoutPath } from '@/lib/shared/billing/checkout-path'
 import { SubscribeDialog } from './subscribe-dialog'
-import { TopUpDialog } from './topup-dialog'
 import { UsageMeter } from './usage-meter'
 import { TrialExpiredBilling } from './trial-expired-billing'
 import { PlanDowngradeDialog } from './free-downgrade-dialog'
@@ -71,7 +69,6 @@ export function BillingPlansView(props: {
   pending?: { planId: string; planName: string } | null
 }) {
   const [period, setPeriod] = useState<'monthly' | 'annual'>('annual')
-  const [topupMeter, setTopupMeter] = useState<'ai' | 'email' | null>(null)
   const [subscribePlanId, setSubscribePlanId] = useState<PaidPlanId | null>(null)
   const [pendingOpen, setPendingOpen] = useState(Boolean(props.pending?.planId))
   const { overview, catalogue } = props
@@ -108,12 +105,7 @@ export function BillingPlansView(props: {
       ) : null}
       <CurrentPlanCard overview={overview} catalogue={catalogue} onSubscribe={setSubscribePlanId} />
 
-      <UsageCard
-        overview={overview}
-        catalogue={catalogue}
-        usage={props.usage ?? []}
-        onTopUp={setTopupMeter}
-      />
+      <UsageCard overview={overview} usage={props.usage ?? []} />
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -190,15 +182,6 @@ export function BillingPlansView(props: {
           period={period}
           onOpenChange={(open) => {
             if (!open) setSubscribePlanId(null)
-          }}
-        />
-      ) : null}
-      {topupMeter ? (
-        <TopUpDialog
-          open
-          meter={topupMeter}
-          onOpenChange={(open) => {
-            if (!open) setTopupMeter(null)
           }}
         />
       ) : null}
@@ -425,9 +408,7 @@ function usageMeterDescription(key: string): string | undefined {
 
 function UsageCard(props: {
   overview: BillingProjectionOverview
-  catalogue: BillingCatalogue | null
   usage: Array<{ key: string; label: string; used: number; limit: number | null }>
-  onTopUp: (meter: 'ai' | 'email') => void
 }) {
   const format = useLocalDateFormatter()
   const intl = useIntl()
@@ -442,7 +423,6 @@ function UsageCard(props: {
   )
   const formatNumber = useFormatNumber()
   const ai = props.overview.ai
-  const canTopUp = props.overview.canManageBilling
   const hasAi = ai != null && (ai.includedCents > 0 || ai.extraCents > 0)
   const hasEmails = emails != null && emails.limit != null
   const hasApi = api != null && api.limit != null
@@ -485,18 +465,6 @@ function UsageCard(props: {
               valueText={`${aiPercent}% used this period`}
               used={aiUsed}
               limit={aiCap}
-              action={
-                canTopUp && hasTopUpPackPrice(props.catalogue?.aiTopUpPackCents) ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => props.onTopUp('ai')}
-                  >
-                    Top up
-                  </Button>
-                ) : null
-              }
             />
           </div>
         ) : null}
@@ -508,20 +476,7 @@ function UsageCard(props: {
               valueText={`${formatNumber(emails.used)} of ${formatNumber(emails.limit)}`}
               used={emails.used}
               limit={emails.limit}
-              action={
-                canTopUp &&
-                emails.limit != null &&
-                hasTopUpPackPrice(props.catalogue?.emailTopUpPackCents) ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => props.onTopUp('email')}
-                  >
-                    Top up
-                  </Button>
-                ) : null
-              }
+              note={emails.used >= emails.limit ? <EmailsPausedNotice resetsOn={reset} /> : null}
             />
           </div>
         ) : null}
@@ -552,6 +507,26 @@ function UsageCard(props: {
       </div>
     </section>
   )
+}
+
+/** The line under the emails meter once the month's allowance is used up. */
+export function EmailsPausedNotice(props: { resetsOn: string | null }) {
+  const intl = useIntl()
+  const text = props.resetsOn
+    ? intl.formatMessage(
+        {
+          id: 'admin.billing.emailsPausedUntilResetDate',
+          defaultMessage:
+            'Changelog and status page emails are paused until your allowance resets on {date}. Sign-in and support emails still send.',
+        },
+        { date: props.resetsOn }
+      )
+    : intl.formatMessage({
+        id: 'admin.billing.emailsPausedUntilReset',
+        defaultMessage:
+          'Changelog and status page emails are paused until your allowance resets. Sign-in and support emails still send.',
+      })
+  return <>{text}</>
 }
 
 function AddOnsCard(props: {
@@ -603,11 +578,11 @@ function AddOnsCard(props: {
   )
 }
 
+/** The calendar-month meters reset at 00:00 UTC on the 1st, so name that day in UTC. */
 function nextMonthResetLabel(format: LocalDateFormatter): string {
-  const date = new Date()
-  date.setUTCDate(1)
-  date.setUTCMonth(date.getUTCMonth() + 1)
-  return format(date, { month: 'short', day: 'numeric' })
+  const now = new Date()
+  const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+  return format(reset, { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
 function PlanCard(props: {

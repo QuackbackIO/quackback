@@ -1,5 +1,9 @@
 import { createHmac } from 'node:crypto'
 import { canonicalPlanId, isPlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
+import type {
+  HostnameProof,
+  HostnameProofSource,
+} from '@/lib/server/domains/domain-proof/hostname-proof'
 import {
   getCurrentWorkspace,
   getWorkspaceSecretKey,
@@ -30,12 +34,16 @@ export type CustomDomainInstruction = {
    * until the proof is seen. A domain goes live only after it is published.
    */
   ownershipProof?: { name: string; value: string } | null
+  /** Set when a zone this workspace already proved stood in for that record. */
+  ownership?: 'proven-zone'
+  ownershipSource?: HostnameProofSource
 }
 
 export async function requestWorkspaceIdentityMutation(input: {
   displayName?: string
   platformLabel?: string
-  customDomain?: { action: CustomDomainAction; hostname: string }
+  /** `proof` goes with `add` and `refresh` only. */
+  customDomain?: { action: CustomDomainAction; hostname: string; proof?: HostnameProof }
 }): Promise<{ projectionToken: string }> {
   const result = await requestWorkspaceControlPlane<{ projectionToken?: unknown }>(
     '/api/v1/internal/identity',
@@ -184,9 +192,12 @@ export type BillingCatalogue = {
   /** @deprecated unread; older catalogues may still send this. */
   liteSeatsIncluded?: Record<CataloguePlanId, number | null>
   aiIncludedCentsPerMonth?: Partial<Record<CataloguePlanId, number>>
+  /** @deprecated unread; older catalogues may still send this. */
   aiTopUpPackCents?: number
   aiBlendedCentsPerMTok?: number
+  /** @deprecated unread; older catalogues may still send this. */
   emailTopUpPackCents?: number
+  /** @deprecated unread; older catalogues may still send this. */
   emailTopUpPackUnits?: number
   plans: Array<{
     id: CataloguePlanId
@@ -270,15 +281,6 @@ export type HostedBillingSessionInput =
       brandingRemoval?: boolean
     }
   | { action: 'downgrade'; planId: 'free' }
-  | {
-      action: 'topup'
-      meter: 'ai' | 'email'
-      packs: number
-      /** The per-pack price the customer was shown; charged only if it is still live. */
-      packCents?: number
-      /** The emails per pack the customer was shown (email packs). */
-      packUnits?: number
-    }
   | { action: 'branding'; billingPeriod: 'monthly' | 'annual' }
   | { action: 'branding-remove' }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { useIntl } from 'react-intl'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -56,7 +56,7 @@ interface ConvertToPostDialogProps {
 }
 
 /** Agent action: turn the conversation into a feedback post (new or upvote). */
-export function ConvertToPostDialog({
+export const ConvertToPostDialog = memo(function ConvertToPostDialog({
   conversationId,
   defaultTitle,
   defaultContent,
@@ -312,4 +312,4 @@ export function ConvertToPostDialog({
       </DialogContent>
     </Dialog>
   )
-}
+})

@@ -13,6 +13,7 @@
 import { z } from 'zod'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 
 const log = logger.child({ component: 'config' })
 
@@ -237,6 +238,35 @@ const configSchema = z
      */
     emailSesIdentityAccessKeyId: z.string().optional(),
     emailSesIdentitySecretAccessKey: z.string().optional(),
+    /**
+     * Send each workspace's mail under a provider tenant of its own, so the
+     * provider tracks bounces and complaints per workspace and pauses only the
+     * one at fault. Off by default. Needs the configuration set (a tenant sends
+     * only with one associated) and the identity credential (which manages the
+     * tenants); boot refuses it without either. Read by `sesTenantsEnabled` in
+     * @quackback/email.
+     */
+    emailSesTenants: envBoolean,
+    /**
+     * Domain the operator serves bounce records under (a wildcard MX to the
+     * provider's feedback host and a wildcard SPF TXT). Set, a new sending
+     * domain's return path is one CNAME to `<workspace label>.<this domain>`
+     * instead of an MX and a TXT. Read by `sesReturnPathDomain` in
+     * @quackback/email; validated here so a malformed value stops boot rather
+     * than quietly reading as unset.
+     */
+    emailReturnPathDomain: z.preprocess(
+      (v) =>
+        typeof v === 'string'
+          ? v.trim() === ''
+            ? undefined
+            : v.trim().toLowerCase().replace(/\.$/, '')
+          : v,
+      z
+        .string()
+        .regex(MAIL_DOMAIN_RE, 'must be a domain name, such as bounces.example.net')
+        .optional()
+    ),
 
     // S3 (optional)
     s3Endpoint: z.string().optional(),
@@ -288,6 +318,8 @@ const configSchema = z
     posthogHost: z.preprocess(emptyToUndefined, z.string().url().optional()),
     posthogUiHost: z.preprocess(emptyToUndefined, z.string().url().optional()),
     posthogSessionRecording: envBoolean,
+    posthogSessionRecordingMaskText: envBoolean,
+    posthogSessionRecordingMaskInputs: envBoolean,
   })
   .superRefine((cfg, ctx) => {
     // A wildcard is a routing pattern, never an origin. Refused in every mode:
@@ -325,6 +357,27 @@ const configSchema = z
           `USER_CONTENT_URL is ${cfg.userContentUrl}, which is not a bare http(s) origin. ` +
           'Set it to a scheme and host with no path, query or wildcard, e.g. https://files.example.com.',
       })
+    }
+
+    if (cfg.emailSesTenants) {
+      const missing: string[] = []
+      if (!cfg.emailSesConfigurationSet?.trim()) missing.push('EMAIL_SES_CONFIGURATION_SET')
+      if (
+        !cfg.emailSesIdentityAccessKeyId?.trim() ||
+        !cfg.emailSesIdentitySecretAccessKey?.trim()
+      ) {
+        missing.push('EMAIL_SES_IDENTITY_ACCESS_KEY_ID and EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY')
+      }
+      if (missing.length > 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['emailSesTenants'],
+          message:
+            `EMAIL_SES_TENANTS is on but ${missing.join(' and ')} must be set: a tenant sends ` +
+            'only with a configuration set associated, and tenants are managed with the ' +
+            'identity credential.',
+        })
+      }
     }
 
     // Exactly one database story per mode. A pooled fleet with a stray
@@ -405,6 +458,8 @@ function buildConfigFromEnv(): unknown {
     emailSesMaxSendRate: env('EMAIL_SES_MAX_SEND_RATE'),
     emailSesIdentityAccessKeyId: env('EMAIL_SES_IDENTITY_ACCESS_KEY_ID'),
     emailSesIdentitySecretAccessKey: env('EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY'),
+    emailReturnPathDomain: env('EMAIL_RETURN_PATH_DOMAIN'),
+    emailSesTenants: env('EMAIL_SES_TENANTS'),
 
     // S3
     s3Endpoint: env('S3_ENDPOINT'),
@@ -450,6 +505,8 @@ function buildConfigFromEnv(): unknown {
     posthogHost: env('POSTHOG_HOST'),
     posthogUiHost: env('POSTHOG_UI_HOST'),
     posthogSessionRecording: env('POSTHOG_SESSION_RECORDING'),
+    posthogSessionRecordingMaskText: env('POSTHOG_SESSION_RECORDING_MASK_TEXT'),
+    posthogSessionRecordingMaskInputs: env('POSTHOG_SESSION_RECORDING_MASK_INPUTS'),
   }
 }
 
@@ -643,6 +700,12 @@ export const config = {
   get emailSesIdentitySecretAccessKey() {
     return loadConfig().emailSesIdentitySecretAccessKey
   },
+  get emailReturnPathDomain() {
+    return loadConfig().emailReturnPathDomain
+  },
+  get emailSesTenants() {
+    return loadConfig().emailSesTenants
+  },
 
   // S3
   get s3Endpoint() {
@@ -763,12 +826,19 @@ export const config = {
    * a domain content blockers do not list. `uiHost` is the PostHog app the
    * toolbar links to; it follows from a PostHog host and must be given as
    * `POSTHOG_UI_HOST` behind a proxy.
+   *
+   * `maskText` hides every text node in a replay and `maskInputs` every
+   * input value. Both are on unless `POSTHOG_SESSION_RECORDING_MASK_TEXT` or
+   * `POSTHOG_SESSION_RECORDING_MASK_INPUTS` is `false`, since admin screens
+   * show the workspace's customers. Password fields are masked either way.
    */
   get productAnalytics(): {
     key: string
     host: string
     uiHost: string | null
     sessionRecording: boolean
+    maskText: boolean
+    maskInputs: boolean
   } | null {
     const cfg = loadConfig()
     if (!cfg.posthogKey) return null
@@ -780,6 +850,8 @@ export const config = {
       uiHost:
         cfg.posthogUiHost?.replace(/\/+$/, '') ?? (region ? `https://${region}.posthog.com` : null),
       sessionRecording: cfg.posthogSessionRecording ?? true,
+      maskText: cfg.posthogSessionRecordingMaskText ?? true,
+      maskInputs: cfg.posthogSessionRecordingMaskInputs ?? true,
     }
   },
 

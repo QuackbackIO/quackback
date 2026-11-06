@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   runtime: vi.fn(),
   runAssistantTurn: vi.fn(),
   endSlackTurn: vi.fn(),
+  enforceBudget: vi.fn(),
 }))
 
 vi.mock('@/lib/server/db', async (original) => ({
@@ -43,7 +44,7 @@ vi.mock('@/lib/server/domains/settings/cloud/entitlements', async (original) => 
 }))
 vi.mock('@/lib/server/domains/settings/tier-enforce', async (original) => ({
   ...(await original<typeof import('@/lib/server/domains/settings/tier-enforce')>()),
-  enforceAiTokenBudget: async () => {},
+  enforceAiTokenBudget: () => mocks.enforceBudget(),
 }))
 vi.mock('@/lib/server/domains/assistant/assistant.principal', async (original) => ({
   ...(await original<typeof import('@/lib/server/domains/assistant/assistant.principal')>()),
@@ -108,6 +109,7 @@ const job = {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.enforceBudget.mockResolvedValue(undefined)
   mocks.read.mockResolvedValue(installed)
   mocks.apiCall.mockResolvedValue({ ok: true })
   mocks.ephemeral.mockResolvedValue({ ok: true })
@@ -150,6 +152,17 @@ it('ends the turn and sets the session active when Stop aborts during preflight'
       channel_id: 'C1',
       thread_ts: '1.2',
       status: 'active',
+    })
+  )
+})
+
+it('replies that the period is used up and to upgrade when the AI budget is spent', async () => {
+  mocks.enforceBudget.mockRejectedValueOnce(new Error('AI budget spent'))
+  await handleSlackHookJob(job)
+  expect(mocks.runAssistantTurn).not.toHaveBeenCalled()
+  expect(mocks.ephemeral).toHaveBeenCalledWith(
+    expect.objectContaining({
+      text: 'AI usage for this period is used up. Upgrade your plan for more.',
     })
   )
 })

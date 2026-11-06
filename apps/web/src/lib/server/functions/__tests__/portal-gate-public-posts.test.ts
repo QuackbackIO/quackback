@@ -90,9 +90,18 @@ vi.mock('@/lib/server/domains/posts/post.public.utils', () => ({
 // ---------------------------------------------------------------------------
 
 const mockListPublicPosts = vi.fn()
+// Settles a search's word mode with a probe query; a pass-through here.
+vi.mock('@/lib/server/domains/posts/post.public.search', () => ({
+  withPublicSearchMode: async <T>(params: T) => ({ ...params, searchMode: 'all' }),
+}))
 vi.mock('@/lib/server/domains/posts/post.public', () => ({
   listPublicPosts: (...a: unknown[]) => mockListPublicPosts(...a),
   getAllUserVotedPostIds: vi.fn(),
+}))
+
+const mockCountFacets = vi.fn()
+vi.mock('@/lib/server/domains/posts/post.public.facets', () => ({
+  countPublicPostFacetsOrNull: (...a: unknown[]) => mockCountFacets(...a),
 }))
 
 const mockPolicyActor = vi.fn()
@@ -741,5 +750,54 @@ describe('write-path portal-visibility gates (G6)', () => {
     await publicPostsHandlers[TOGGLE_VOTE]({ data: { postId: 'pst_x' } }).catch(() => {})
 
     expect(mockResolvePortalAccess).toHaveBeenCalled()
+  })
+})
+
+describe('listPublicPostsFn — filter panel counts', () => {
+  const page = { items: [], hasMore: false }
+  const counts = { statuses: { open: 3 }, boards: {}, views: null }
+
+  beforeEach(() => {
+    mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'public' })
+    mockPolicyActor.mockResolvedValue({
+      principalId: null,
+      role: null,
+      principalType: 'anonymous',
+      segmentIds: new Set(),
+    })
+    mockListPublicPosts.mockResolvedValue(page)
+    mockCountFacets.mockResolvedValue(counts)
+  })
+
+  it('carries the counts on the first page of the portal feed', async () => {
+    const result = await publicPostsHandlers[LIST_PUBLIC_POSTS]({
+      data: { page: 1, search: 'dark' },
+    })
+    expect(result).toMatchObject({ facets: counts })
+    expect(mockCountFacets).toHaveBeenCalledWith(
+      expect.objectContaining({ search: 'dark', portalFeed: true }),
+      expect.anything()
+    )
+  })
+
+  it('skips them on later pages', async () => {
+    const result = await publicPostsHandlers[LIST_PUBLIC_POSTS]({ data: { page: 2 } })
+    expect(result).not.toHaveProperty('facets')
+    expect(mockCountFacets).not.toHaveBeenCalled()
+  })
+
+  it('skips them when the caller already holds them (a sort change)', async () => {
+    const result = await publicPostsHandlers[LIST_PUBLIC_POSTS]({
+      data: { page: 1, facets: false },
+    })
+    expect(result).not.toHaveProperty('facets')
+    expect(mockCountFacets).not.toHaveBeenCalled()
+  })
+
+  it('still serves the feed when the counts fail', async () => {
+    mockCountFacets.mockResolvedValue(null)
+    const result = await publicPostsHandlers[LIST_PUBLIC_POSTS]({ data: { page: 1 } })
+    expect(result).not.toHaveProperty('facets')
+    expect(result).toMatchObject({ hasMore: page.hasMore })
   })
 })

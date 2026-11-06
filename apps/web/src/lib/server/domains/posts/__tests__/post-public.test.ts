@@ -105,6 +105,13 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   principal: { id: Symbol('principal.id') },
 }))
 
+// The changelog link columns read workspace settings; their SQL is covered by
+// post-public-changelog.db.test.ts.
+vi.mock('../post.public.changelog', () => ({
+  changelogLinkColumn: async () => null,
+  toChangelogLink: () => null,
+}))
+
 describe('listPublicPostsWithVotesAndAvatars — default status filtering', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -137,6 +144,42 @@ describe('listPublicPostsWithVotesAndAvatars — default status filtering', () =
     expect(activeFilterApplied).toBe(false)
     expect(mockOr).not.toHaveBeenCalled()
     expect(mockInArray).toHaveBeenCalledWith(mockPostStatuses.slug, ['open', 'under_review'])
+  })
+
+  it('searches every status in the portal feed when no status is picked', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ search: 'widget', portalFeed: true })
+
+    const activeFilterApplied = mockEq.mock.calls.some(
+      ([col, val]) => col === mockPostStatuses.category && val === 'active'
+    )
+    expect(activeFilterApplied).toBe(false)
+    expect(mockOr).not.toHaveBeenCalled()
+  })
+
+  it('keeps the active-only default for a search outside the portal feed', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ search: 'widget' })
+
+    expect(mockEq).toHaveBeenCalledWith(mockPostStatuses.category, 'active')
+  })
+
+  it('keeps an explicit status filter while searching', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({
+      search: 'widget',
+      statusSlugs: ['complete'],
+      portalFeed: true,
+    })
+
+    expect(mockInArray).toHaveBeenCalledWith(mockPostStatuses.slug, ['complete'])
+    const activeFilterApplied = mockEq.mock.calls.some(
+      ([col, val]) => col === mockPostStatuses.category && val === 'active'
+    )
+    expect(activeFilterApplied).toBe(false)
   })
 
   it('does not apply the default category filter when statusIds are provided', async () => {

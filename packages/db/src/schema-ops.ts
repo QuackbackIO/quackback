@@ -106,6 +106,13 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS conversation_messages_content_trgm_idx ON conversation_messages USING gin (content gin_trgm_ops) WHERE deleted_at IS NULL',
   },
   {
+    // Search's close-spelling fallback on post titles (post.search.ts). posts
+    // is a large table, so it is built here rather than in a migration.
+    name: 'posts_title_trgm_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_title_trgm_idx ON posts USING gin (title gin_trgm_ops) WHERE deleted_at IS NULL',
+  },
+  {
     name: 'user_name_trgm_idx',
     concurrent: true,
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS user_name_trgm_idx ON "user" USING gin (name gin_trgm_ops)',

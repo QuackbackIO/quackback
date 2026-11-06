@@ -17,6 +17,7 @@ import {
   DEFAULT_ASSISTANT_CONFIG,
   assistantConfigSchema,
   assistantRoleSchema,
+  displayAssistantName,
   normalizeAssistantConfig,
   normalizeAssistantText,
   roleToAgent,
@@ -431,5 +432,20 @@ describe('v3 per-agent sub-config', () => {
     const missingCapability = structuredClone(DEFAULT_ASSISTANT_CONFIG)
     delete (missingCapability.agents.copilot.capabilities as { qa?: boolean }).qa
     expect(assistantConfigSchema.safeParse(missingCapability).success).toBe(false)
+  })
+})
+
+describe('assistant display name fallback', () => {
+  it('maps the former default name to the product name and keeps any other name', () => {
+    expect(displayAssistantName('Quinn')).toBe('Quackback AI')
+    expect(displayAssistantName(' Quinn ')).toBe('Quackback AI')
+    expect(displayAssistantName('Quackback AI')).toBe('Quackback AI')
+    expect(displayAssistantName('Quinn Two')).toBe('Quinn Two')
+  })
+
+  it('applies to a stored config when it is parsed and when it is normalized', () => {
+    const stored = { ...DEFAULT_ASSISTANT_CONFIG, identity: { name: 'Quinn', avatarUrl: null } }
+    expect(assistantConfigSchema.parse(stored).identity.name).toBe('Quackback AI')
+    expect(normalizeAssistantConfig(stored).identity.name).toBe('Quackback AI')
   })
 })

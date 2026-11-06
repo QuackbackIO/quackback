@@ -21,7 +21,7 @@ export function SettingsNav() {
 
   return (
     <nav className="w-full md:w-56 md:shrink-0">
-      <div className="sticky top-6 bg-card border border-border/50 rounded-lg p-4 shadow-sm">
+      <div className="sticky top-[calc(var(--portal-header-height,0px)+1.5rem)] bg-card border border-border/50 rounded-lg p-4 shadow-sm">
         <h3 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-2 px-3">
           <FormattedMessage id="portal.settings.nav.personal" defaultMessage="Personal" />
         </h3>

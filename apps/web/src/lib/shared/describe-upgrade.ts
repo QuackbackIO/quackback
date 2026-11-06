@@ -22,7 +22,10 @@ export type UpgradeDescription = {
 /** Catalogue-backed copy for an entitlement. Plan names come from PLAN_CATALOGUE. */
 export function describeEntitlementUpgrade(key: EntitlementKey): UpgradeDescription {
   const definition = ENTITLEMENTS[key]
-  const plan = minimumPlanFor(key)
+  // Free is never an upgrade target: a feature Free includes that a workspace
+  // still lacks was withheld, which only support can change.
+  const cheapest = minimumPlanFor(key)
+  const plan = cheapest && cheapest.id !== 'free' ? cheapest : null
   const verb = definition.plural ? 'are' : 'is'
   if (!plan) {
     return {

@@ -49,9 +49,9 @@
  * they cannot disagree:
  *
  * 1. `dueWithin()` gates the cron — is the next deadline inside the next slot?
- * 2. `earliestWorkspaceDeadline()` tells a **detaching** tier when to come back, so
- *    a workspace that has gone quiet with a deadline pending still wakes for it
- *    rather than waiting out the rescan interval.
+ * 2. `earliestWorkspaceDeadline()` tells the worker when a **parked** workspace has
+ *    clock-driven work, so it is woken for that work rather than for a poll. Work
+ *    due within one refresh pass keeps a loop awake; later work only sets the wake.
  *
  * A provider that threw, or one that has not been registered, is treated as
  * "due now". That is the fail-safe direction: the cost of a wrong `now` is a
@@ -61,6 +61,8 @@
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'job-deadlines' })
+
+const MINUTE_MS = 60_000
 
 /**
  * The earliest instant this workspace has due work of one kind, or null when it has
@@ -131,9 +133,9 @@ export async function dueWithin(
  * The earliest deadline across every registered queue for this workspace, rounded
  * up to the next whole minute.
  *
- * What a detaching loop records so it knows when to come back. Null means no
- * clock-driven work exists at all, which is the only state in which sleeping
- * until the safety-net rescan is the whole answer.
+ * What the worker records when it parks a workspace, so the refresh wakes it in
+ * time. Null means no clock-driven work exists at all, and the workspace is woken
+ * only by a request.
  *
  * ## The rounding is load-bearing, and it was found by measurement
  *
@@ -159,6 +161,28 @@ export async function earliestWorkspaceDeadline(now = Date.now()): Promise<Date 
   }
   if (earliest === null) return null
   return nextMinuteBoundaryAfter(Math.max(now, earliest.getTime()))
+}
+
+/**
+ * How far ahead of a parked workspace's clock-driven work the worker wakes it.
+ *
+ * The loop must be running before the slot that spends the work, not merely before
+ * the work falls due, because a loop adopts the slot it starts in rather than running
+ * it. That slot is the first one to start once the deadline's gate opens, a minute
+ * before the deadline (`dueWithin` looks one slot ahead). The spread offset can put
+ * a slot start right at the gate, so the loop must be up by then. The lead covers:
+ * - that minute, which the gate opens early;
+ * - one refresh interval, since the wake is taken on a refresh pass;
+ * - the minute that rounding can add to the wake instant;
+ * - one more minute, for a refresh pass that runs long.
+ */
+export function clockWakeLeadMs(refreshIntervalMs: number): number {
+  return refreshIntervalMs + 3 * MINUTE_MS
+}
+
+/** Is a parked workspace's next clock-driven work inside its wake lead at `nowMs`? */
+export function withinWakeLead(wakeAtMs: number, nowMs: number, leadMs: number): boolean {
+  return wakeAtMs <= nowMs + leadMs
 }
 
 /** The next whole minute strictly after `ms`. Never returns the current one. */

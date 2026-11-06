@@ -1,10 +1,16 @@
-import { Suspense, useDeferredValue } from 'react'
+import { Suspense, useDeferredValue, useState } from 'react'
 import { createFileRoute, notFound, redirect, useRouteContext } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { ViewerPortalNoBoards } from '@/components/public/portal-no-boards'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
+import { PortalFeedSkeleton } from '@/components/public/feedback/portal-feed-skeleton'
+import { PortalPoweredBy } from '@/components/public/feedback/portal-powered-by'
+import {
+  createFeedHandoff,
+  FeedHandoffContext,
+} from '@/components/public/feedback/feed-input-handoff'
 import { usePreviewWelcomeCard } from '@/components/public/preview-draft-context'
 import { portalQueries, useSeedPortalStatusesCache } from '@/lib/client/queries/portal'
 import { isProductEnabled } from '@/lib/shared/types/settings'
@@ -12,11 +18,14 @@ import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { PUBLIC_FEED_VIEWS, PUBLIC_POST_SORTS } from '@/lib/shared/types/filters'
 
 const searchSchema = z.object({
   board: z.string().optional(),
   search: z.string().optional(),
-  sort: z.enum(['top', 'new', 'trending']).optional().catch('trending').default('trending'),
+  // No schema default: the router would write it into the URL and redirect a bare
+  // "/" to "/?sort=trending". An absent sort is trending wherever the feed reads it.
+  sort: z.enum(PUBLIC_POST_SORTS).optional().catch('trending'),
   status: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
   minVotes: z.coerce.number().int().min(1).optional(),
@@ -30,6 +39,7 @@ const searchSchema = z.object({
   // ignores them for everyone else). URL-driven + shareable like the rest.
   owner: z.string().optional(),
   segmentIds: z.array(z.string()).optional(),
+  view: z.enum(PUBLIC_FEED_VIEWS).optional().catch(undefined),
 })
 
 /** Build the portalData query params from the current search + session. */
@@ -46,6 +56,7 @@ function portalDataParams(searchParams: z.infer<typeof searchSchema>, userId: st
     responded: searchParams.responded,
     owner: searchParams.owner,
     segmentIds: searchParams.segmentIds?.length ? searchParams.segmentIds : undefined,
+    view: searchParams.view,
   }
 }
 
@@ -130,14 +141,28 @@ export const Route = createFileRoute('/_portal/')({
 })
 
 function PublicPortalPage() {
+  const { showPoweredBy } = Route.useLoaderData()
+  const settings = useWorkspaceSettings()
+  // Input typed while the feed loads is carried only within this visit's feed.
+  const [feedHandoff] = useState(createFeedHandoff)
   return (
     <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-6">
       {/* Hero renders immediately (context-only, no feed dependency). */}
       <PortalHero />
       {/* Only the feed region suspends on the streamed portalData query. */}
-      <Suspense fallback={<PortalFeedSkeleton />}>
-        <PortalFeed />
-      </Suspense>
+      <FeedHandoffContext.Provider value={feedHandoff}>
+        <Suspense
+          fallback={
+            <PortalFeedSkeleton
+              poweredBy={
+                showPoweredBy ? <PortalPoweredBy workspaceSlug={settings?.slug ?? ''} /> : null
+              }
+            />
+          }
+        >
+          <PortalFeed />
+        </Suspense>
+      </FeedHandoffContext.Provider>
     </div>
   )
 }
@@ -166,11 +191,15 @@ function PortalFeed() {
   const session = useSessionContext()
   const settings = useWorkspaceSettings()
   const { showPoweredBy } = Route.useLoaderData()
-  const search = Route.useSearch()
+  const liveSearch = Route.useSearch()
+  // This query only seeds the first render. Later filter changes belong to
+  // the feed's own query, which keeps the page on screen while it loads;
+  // keying this one on the live URL would suspend the whole feed region.
+  const [search] = useState(liveSearch)
 
-  const currentBoard = search.board
-  const currentSearch = search.search
-  const currentSort = search.sort ?? 'trending'
+  const currentBoard = liveSearch.board
+  const currentSearch = liveSearch.search
+  const currentSort = liveSearch.sort ?? 'trending'
 
   // A visitor's first post or vote mints an anonymous session mid-action,
   // which changes the viewer and so the feed's key. Deferring the viewer
@@ -224,35 +253,10 @@ function PortalFeed() {
       currentSort={currentSort}
       defaultBoardId={portalData.boards[0]?.id}
       boardPermissions={portalData.boardPermissions}
+      facets={portalData.facets}
+      searchMode={'searchMode' in portalData.posts ? portalData.posts.searchMode : undefined}
+      postsFilters={search}
       showPoweredBy={showPoweredBy}
     />
-  )
-}
-
-/**
- * Feed placeholder shown while the streamed portalData query resolves. Matches
- * the feed's list rhythm (toolbar band + a few PostCard-height rows) so the
- * layout doesn't jump when the real feed swaps in.
- */
-function PortalFeedSkeleton() {
-  return (
-    <div className="py-6" aria-hidden="true">
-      <div className="flex gap-8">
-        <div className="flex-1 min-w-0 space-y-3">
-          <div className="h-10 rounded-lg bg-muted/60 animate-pulse" />
-          <div className="mt-5 space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-24 rounded-lg border border-border/40 bg-muted/40 animate-pulse"
-              />
-            ))}
-          </div>
-        </div>
-        <div className="hidden lg:block w-64 shrink-0 space-y-3">
-          <div className="h-32 rounded-lg bg-muted/40 animate-pulse" />
-        </div>
-      </div>
-    </div>
   )
 }

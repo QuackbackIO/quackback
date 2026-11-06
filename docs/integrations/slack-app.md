@@ -24,4 +24,4 @@ Status calls use `agents.sessions.setStatus` with `channel_id`. Suggested prompt
 
 ## Cloud deployment
 
-See [the integration gateway runbook](./integration-gateway-rollout.md). The shared app uses the manifest's `app.quackback.io` URLs. Every workspace database keeps its own assistant configuration, member links, pending actions and deduplication receipts. Shared OAuth client/signing credentials are Railway environment variables on CP and the fleet. Tenant installation tokens remain isolated in workspace databases.
+See [the integration gateway runbook](./integration-gateway-rollout.md). The shared app uses `app.quackback.io` URLs in place of `YOUR_HOST`. Every workspace database keeps its own assistant configuration, member links, pending actions and deduplication receipts. Shared OAuth client/signing credentials are Railway environment variables on CP and the fleet. Tenant installation tokens remain isolated in workspace databases.

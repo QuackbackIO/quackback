@@ -30,7 +30,7 @@ import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn } from '@/lib/shared/utils'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
-import type { PostId, PostStatusId, PrincipalId } from '@quackback/ids'
+import type { ChangelogId, PostId, PostStatusId, PrincipalId } from '@quackback/ids'
 import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
 
 interface PostCardProps {
@@ -44,7 +44,7 @@ interface PostCardProps {
   authorName: string | null
   authorAvatarUrl?: string | null
   /**
-   * Author's principal id. When present in portal (Link) mode, the author
+   * Author's principal id. When present in portal mode, the author
    * name/avatar link to the public profile with a lazy hover card. Omit (or
    * null) for anonymous authors without a resolvable profile. Ignored in admin
    * (onClick) mode — admin rendering is unchanged.
@@ -53,6 +53,10 @@ interface PostCardProps {
   createdAt: Date | string
   boardSlug: string
   tags: { id: string; name: string; color?: string }[]
+  /** Portal: makes each tag a button that filters the feed by it. */
+  onTagClick?: (tagId: string) => void
+  /** Portal: the published changelog entry that announced this post. */
+  changelogEntry?: { id: ChangelogId; title: string } | null
 
   // Portal mode props
   /**
@@ -90,7 +94,7 @@ interface PostCardProps {
   onStatusChange?: (statusId: PostStatusId) => void
   /** Whether status update is in progress */
   isUpdatingStatus?: boolean
-  /** Use onClick instead of Link navigation */
+  /** Admin mode: the card calls this instead of linking to the post */
   onClick?: () => void
   /** Hover state handlers for quick actions visibility */
   onMouseEnter?: () => void
@@ -120,6 +124,8 @@ export function PostCard({
   createdAt,
   boardSlug,
   tags,
+  onTagClick,
+  changelogEntry,
   isAuthenticated = true,
   canVote = true,
   isCurrentUserAuthor = false,
@@ -147,12 +153,13 @@ export function PostCard({
   const intl = useIntl()
   const authPopover = useAuthPopoverSafe()
   // "Admin mode" here means the inbox list rendering: modal-style navigation
-  // (onClick instead of a Link) plus the admin quick-actions overlay. It is
-  // deliberately NOT tied to canChangeStatus: the public portal grants status
-  // editing to team members via canChangeStatus while keeping Link navigation
-  // and the author quick-actions (edit/delete), so the two concerns are split.
+  // (onClick instead of a title link) plus the admin quick-actions overlay. It
+  // is deliberately NOT tied to canChangeStatus: the public portal grants
+  // status editing to team members via canChangeStatus while keeping the title
+  // link and the author quick-actions (edit/delete), so the two are split.
   const isAdminMode = !!onClick
   const currentStatus = statuses.find((s) => s.id === statusId)
+  const isDone = currentStatus?.category === 'complete' || currentStatus?.category === 'closed'
   const createdAtDate = typeof createdAt === 'string' ? new Date(createdAt) : createdAt
 
   // Vote handling - only used in portal mode
@@ -169,7 +176,6 @@ export function PostCard({
   async function handleVoteClick(e: React.MouseEvent): Promise<void> {
     e.stopPropagation()
     if (!canVote) {
-      e.preventDefault()
       // Signed in but denied by the board's vote tier (segments/team) — an
       // authorization failure, not authentication. The button's tooltip
       // explains; do nothing (never fire a vote the server would reject).
@@ -180,7 +186,6 @@ export function PostCard({
     }
     if (!isAuthenticated && canVote) {
       // Anonymous voting: sign in silently, then vote
-      e.preventDefault()
       if (isAnonSigningIn) return
       setIsAnonSigningIn(true)
       try {
@@ -294,7 +299,11 @@ export function PostCard({
         variant="badge"
       />
     ) : currentStatus ? (
-      <StatusBadge name={currentStatus.name} color={currentStatus.color} className="mb-1" />
+      <StatusBadge
+        name={currentStatus.name}
+        color={currentStatus.color}
+        className={changelogEntry ? undefined : 'mb-1'}
+      />
     ) : null
 
   // Admin quick actions (status dropdown button + more actions)
@@ -355,13 +364,12 @@ export function PostCard({
 
   // Portal author quick actions (edit/delete)
   const portalQuickActions = !isAdminMode && isCurrentUserAuthor && (
-    <div className="absolute end-2 top-1/2 -translate-y-1/2" onClick={(e) => e.stopPropagation()}>
+    <div className="absolute end-2 top-1/2 -translate-y-1/2">
       <TooltipProvider>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              onClick={(e) => e.preventDefault()}
               className="p-1 -m-1 rounded hover:bg-muted/50 transition-colors"
               aria-label={intl.formatMessage({
                 id: 'portal.postCard.quickActions.options',
@@ -371,14 +379,9 @@ export function PostCard({
               <EllipsisHorizontalIcon className="h-4 w-4" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onClick={(e) => e.preventDefault()}>
+          <DropdownMenuContent align="end">
             {canEdit ? (
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.preventDefault()
-                  onEdit?.()
-                }}
-              >
+              <DropdownMenuItem onClick={() => onEdit?.()}>
                 <PencilIcon className="h-4 w-4" />
                 {intl.formatMessage({
                   id: 'portal.postCard.quickActions.edit',
@@ -408,13 +411,7 @@ export function PostCard({
               </Tooltip>
             )}
             {canDelete ? (
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={(e) => {
-                  e.preventDefault()
-                  onDelete?.()
-                }}
-              >
+              <DropdownMenuItem variant="destructive" onClick={() => onDelete?.()}>
                 <TrashIcon className="h-4 w-4" />
                 {intl.formatMessage({
                   id: 'portal.postCard.quickActions.delete',
@@ -449,7 +446,7 @@ export function PostCard({
     </div>
   )
 
-  // Author meta (avatar + name). In portal (Link) mode with a resolvable
+  // Author meta (avatar + name). In portal mode with a resolvable
   // principal, it links to the public profile behind a lazy hover card; in
   // admin (onClick) mode it stays inert so admin rendering is unchanged.
   const authorFallback = intl.formatMessage({
@@ -482,7 +479,23 @@ export function PostCard({
       authorInner
     )
 
-  // Main content
+  // In portal mode the title is the card's only link. `.post-card__link`
+  // (globals.css) stretches it over the card and lifts every other control
+  // above it, so nothing nests inside an <a>.
+  const titleText = isAdminMode ? (
+    title
+  ) : (
+    <Link
+      to="/b/$slug/posts/$postId"
+      params={{ slug: boardSlug, postId: id }}
+      className="post-card__link"
+    >
+      {title}
+    </Link>
+  )
+
+  const tagClassName = 'inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium'
+
   const cardContent = (
     <div className="flex items-start p-4 gap-4">
       {/* Vote column */}
@@ -491,9 +504,33 @@ export function PostCard({
       {/* Main content */}
       <div className="flex-1 min-w-0">
         {/* Status badge/dropdown - above title */}
-        {statusDisplay}
+        {changelogEntry ? (
+          <div className="mb-1 flex items-center gap-2">
+            {statusDisplay}
+            <Link
+              to="/changelog/$entryId"
+              params={{ entryId: changelogEntry.id }}
+              title={changelogEntry.title}
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              {intl.formatMessage({
+                id: 'portal.postCard.inChangelog',
+                defaultMessage: 'In the changelog',
+              })}
+            </Link>
+          </div>
+        ) : (
+          statusDisplay
+        )}
         {/* Title */}
-        <h3 className="font-semibold text-base text-foreground line-clamp-1">{title}</h3>
+        <h3
+          className={cn(
+            'font-semibold text-base line-clamp-1',
+            isDone ? 'text-foreground/75' : 'text-foreground'
+          )}
+        >
+          {titleText}
+        </h3>
 
         {/* Description */}
         {content && (
@@ -505,18 +542,27 @@ export function PostCard({
         {/* Tags */}
         {tags.length > 0 && (
           <div className="flex items-center gap-1 mt-1.5">
-            {tags.slice(0, 3).map((tag) => (
-              <span
-                key={tag.id}
-                className="inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium"
-                style={{
-                  backgroundColor: tag.color + '20',
-                  color: tag.color,
-                }}
-              >
-                {tag.name}
-              </span>
-            ))}
+            {tags.slice(0, 3).map((tag) => {
+              const style = { backgroundColor: tag.color + '20', color: tag.color }
+              return onTagClick ? (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => onTagClick(tag.id)}
+                  className={cn(
+                    tagClassName,
+                    'hover:brightness-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                  )}
+                  style={style}
+                >
+                  {tag.name}
+                </button>
+              ) : (
+                <span key={tag.id} className={tagClassName} style={style}>
+                  {tag.name}
+                </span>
+              )
+            })}
             {tags.length > 3 && (
               <span className="text-xs text-muted-foreground/60">+{tags.length - 3}</span>
             )}
@@ -557,31 +603,16 @@ export function PostCard({
   const rootClassName =
     'post-card cursor-pointer transition-colors relative group hover:bg-muted/20'
 
-  // Render as div with onClick for modal navigation, or Link for full-page navigation
-  if (onClick) {
-    return (
-      <div
-        className={rootClassName}
-        onClick={onClick}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-        data-post-id={id}
-      >
-        {cardContent}
-      </div>
-    )
-  }
-
   return (
-    <Link
-      to="/b/$slug/posts/$postId"
-      params={{ slug: boardSlug, postId: id }}
+    <div
       className={rootClassName}
+      onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       data-post-id={id}
+      data-done={isDone || undefined}
     >
       {cardContent}
-    </Link>
+    </div>
   )
 }

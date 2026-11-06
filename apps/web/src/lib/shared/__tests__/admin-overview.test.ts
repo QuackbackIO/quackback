@@ -136,8 +136,8 @@ describe('buildOverviewMetrics', () => {
 
     expect(metrics.map((metric) => [metric.count, metric.label, metric.detail])).toEqual([
       [3, 'conversations', 'waiting for reply'],
-      [30, 'ideas', 'to review'],
-      [6, 'ideas', 'shipped, not announced'],
+      [30, 'posts', 'to review'],
+      [6, 'posts', 'shipped, not announced'],
       [0, 'help center articles', 'in draft'],
     ])
     for (const metric of metrics) {

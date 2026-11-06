@@ -32,6 +32,7 @@ import { PUBLIC_FEEDBACK_EDITOR_FEATURES } from '@/components/public/feedback/fe
 import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import { shownName } from '@/lib/shared/greeting-name'
+import { TITLE_MAX_LENGTH } from './feedback-header'
 
 interface BoardOption {
   id: string
@@ -58,10 +59,14 @@ export interface FeedbackHeaderProps {
    * board switcher.
    */
   boardLocked?: boolean
+  /**
+   * Opens the composer with this title, for example from a search that found
+   * nothing. A new `key` opens it again with the same title.
+   */
+  draft?: { title: string; key: number }
 }
 
 /** The server's limits for a new post's title and details (createPublicPostSchema). */
-const TITLE_MAX_LENGTH = 200
 const DETAILS_MAX_LENGTH = 10_000
 
 export function FeedbackHeaderAnimated({
@@ -70,6 +75,7 @@ export function FeedbackHeaderAnimated({
   user,
   boardPermissions,
   onPostCreated,
+  draft,
   boardLocked = false,
 }: FeedbackHeaderProps) {
   const intl = useIntl()
@@ -134,6 +140,16 @@ export function FeedbackHeaderAnimated({
   // these client-side (same rules the server enforces on write).
   const selectedBoard = boards.find((b) => b.id === selectedBoardId)
   const boardCustomFields = selectedBoard?.settings?.customFields ?? []
+
+  // A draft handed in (a search that found nothing) opens the composer with
+  // that title, in view.
+  useEffect(() => {
+    if (!draft) return
+    title.set(draft.title.slice(0, TITLE_MAX_LENGTH))
+    setExpanded(true)
+    titleInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    titleInputRef.current?.focus({ preventScroll: true })
+  }, [draft, title])
 
   // Focus title input when form expands
   useEffect(() => {
@@ -539,10 +555,10 @@ export function FeedbackHeaderAnimated({
                   {createPost.isPending ? (
                     <FormattedMessage
                       id="portal.feedback.header.submitting"
-                      defaultMessage="Submitting..."
+                      defaultMessage="Posting..."
                     />
                   ) : (
-                    <FormattedMessage id="portal.feedback.header.submit" defaultMessage="Submit" />
+                    <FormattedMessage id="portal.feedback.header.submit" defaultMessage="Post" />
                   )}
                 </Button>
               </div>
@@ -583,7 +599,7 @@ function TitleInput({
       maxLength={TITLE_MAX_LENGTH}
       placeholder={intl.formatMessage({
         id: 'portal.feedback.header.titlePlaceholder',
-        defaultMessage: "What's your idea?",
+        defaultMessage: "What's on your mind?",
       })}
       value={value}
       aria-label={intl.formatMessage({

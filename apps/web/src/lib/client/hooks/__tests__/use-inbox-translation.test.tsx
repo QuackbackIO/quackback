@@ -503,7 +503,7 @@ describe('useInboxTranslation over the AI allowance', () => {
 
     await waitFor(() => expect(result.current.overAllowanceNotice).not.toBeNull())
     expect(result.current.overAllowanceNotice).toBe(
-      'Das KI-Budget ist aufgebraucht. Die Übersetzung läuft weiter.'
+      'Die KI-Nutzung für diesen Zeitraum ist aufgebraucht. Die Übersetzung läuft weiter. Upgrade deinen Tarif für mehr.'
     )
     expect(result.current.translationFor(message)?.translatedContent).toBe('Hello')
   })

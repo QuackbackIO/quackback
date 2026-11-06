@@ -591,9 +591,12 @@ same minute the loop cadence already implies.
 Idle is not the same as nothing to do. Before parking, the worker asks the
 workspace's own database two questions it already knows how to answer —
 `earliestPendingJobAt()` (a delayed hook retry, a scheduled publish) and
-`earliestWorkspaceDeadline()` (a snooze, an SLA due-at) — and keeps the loop
-for any workspace that answers. That exception is shared with the fleet passes
-in the same process. A workspace with no stamp at all is treated as active;
+`earliestWorkspaceDeadline()` (a snooze, an SLA due-at, a Jira webhook refresh).
+Work due within one refresh pass (60 s) keeps the loop awake. Later work parks
+the workspace, and the worker records when that work falls due and wakes the
+workspace on the refresh pass before it, so a refresh days away costs nothing
+while the workspace is idle. That exception is shared with the fleet passes in
+the same process. A workspace with no stamp at all is treated as active;
 `WORKSPACE_DORMANT_AFTER_HOURS=0` switches the policy off.
 
 Known trade-off: `usage-report` is one of the parked crons. Its CP snapshot is

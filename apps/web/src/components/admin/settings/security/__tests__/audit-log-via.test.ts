@@ -34,10 +34,25 @@ describe('attributionLine', () => {
     )
     expect(
       attributionLine(
+        { channel: 'assistant', clientName: 'Quackback AI', onBehalfOfName: 'Jane Doe' },
+        intl
+      )
+    ).toBe('via assistant · Quackback AI for Jane Doe')
+  })
+
+  it('shows the product name for an assistant row stored under the former default name', () => {
+    expect(
+      attributionLine(
         { channel: 'assistant', clientName: 'Quinn', onBehalfOfName: 'Jane Doe' },
         intl
       )
-    ).toBe('via assistant · Quinn for Jane Doe')
+    ).toBe('via assistant · Quackback AI for Jane Doe')
+  })
+
+  it('keeps a client name that happens to match the former default outside the assistant channel', () => {
+    expect(
+      attributionLine({ channel: 'mcp', clientName: 'Quinn', onBehalfOfName: null }, intl)
+    ).toBe('via MCP · Quinn')
   })
 
   it('stays quiet for changes made in the app and for rows with no attribution', () => {

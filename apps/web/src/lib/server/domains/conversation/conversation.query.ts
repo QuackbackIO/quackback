@@ -79,6 +79,7 @@ import { loadAuthors, loadAuthorAudiences, fallbackAuthor } from '../principals/
 import { toMessageDTO } from '@/lib/server/messages/message-core'
 import { aggregateReactions } from '@/lib/shared'
 import { supportContactName } from '@/lib/shared/support-contact-name'
+import { displayAssistantName } from '@/lib/shared/assistant/config'
 import { truncate } from '@/lib/shared/utils/string'
 import type { Channel } from '@/lib/shared/channels'
 import { keywordInContext, type TermSegment } from '@/lib/shared/utils/keyword-context'
@@ -324,6 +325,7 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
         content: conversationMessages.content,
         senderType: conversationMessages.senderType,
         authorPublicName: principal.displayName,
+        authorIsAssistant: sql<boolean>`${principal.serviceMetadata}->>'integrationType' = 'assistant'`,
         authorAccountName: user.name,
         visitorPrincipalId: conversations.visitorPrincipalId,
         flaggedAt: conversationMessageFlags.flaggedAt,
@@ -349,6 +351,7 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
         content: conversationMessages.content,
         senderType: conversationMessages.senderType,
         authorPublicName: principal.displayName,
+        authorIsAssistant: sql<boolean>`${principal.serviceMetadata}->>'integrationType' = 'assistant'`,
         authorAccountName: user.name,
         ticketTitle: tickets.title,
         ticketNumber: tickets.number,
@@ -377,11 +380,15 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
   const flaggedAuthor = (row: {
     authorAccountName: string | null
     authorPublicName: string | null
+    authorIsAssistant: boolean | null
     senderType: string
   }) =>
     supportContactName({
       accountName: row.authorAccountName,
-      publicName: row.authorPublicName,
+      publicName:
+        row.authorIsAssistant && row.authorPublicName
+          ? displayAssistantName(row.authorPublicName)
+          : row.authorPublicName,
       fallback: row.senderType === 'agent' ? 'Agent' : 'Visitor',
     })
   const fromConversations: FlaggedMessageDTO[] = conversationRows.map((r) => ({

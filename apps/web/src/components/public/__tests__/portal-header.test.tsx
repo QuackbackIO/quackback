@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { useState, type ReactNode } from 'react'
 import { act, render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
+import { renderToString } from 'react-dom/server'
 
 // vi.hoisted ensures these mocks are available when the vi.mock factory runs
 // (vi.mock calls are hoisted above imports by the Vitest transformer).
@@ -339,5 +340,18 @@ describe('PortalHeader branding preview drafts', () => {
     expect(linkRenders).toContain('Plans')
     expect(linkRenders).not.toContain('Feedback')
     expect(linkRenders).not.toContain('Changelog')
+  })
+})
+
+describe('PortalHeader — first paint', () => {
+  it('server-renders the theme toggle, so it does not pop in and shift the header', () => {
+    renderHeader({ isLoggedIn: false })
+    cleanup()
+    const html = renderToString(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PortalHeader orgName="Acme" />
+      </IntlProvider>
+    )
+    expect(html).toContain('Toggle theme')
   })
 })

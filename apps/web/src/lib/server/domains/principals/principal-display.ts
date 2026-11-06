@@ -5,12 +5,13 @@
  * rule is a principal concern, not a conversation one; the `ConversationAuthorDTO`
  * name is historical.
  */
-import { db, principal, user, eq, inArray } from '@/lib/server/db'
+import { db, principal, user, eq, inArray, type ServiceMetadata } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
 import { rememberTestOwner } from '@/lib/server/test-data'
 import { supportContactName } from '@/lib/shared/support-contact-name'
+import { displayAssistantName } from '@/lib/shared/assistant/config'
 
 /**
  * Display URL: the public URL of an uploaded key, else an OAuth/external URL.
@@ -45,11 +46,20 @@ type AuthorRow = {
   avatarKey: string | null
   userImage: string | null
   userImageKey: string | null
+  serviceMetadata: ServiceMetadata | null
+}
+
+/** The AI agent's service principal; the discriminator is set in assistant.principal.ts. */
+function isAssistantPrincipal(metadata: ServiceMetadata | null): boolean {
+  return metadata?.kind === 'integration' && metadata.integrationType === 'assistant'
 }
 
 /** Public label, or the account name agents should see. */
 function authorFromRow(row: AuthorRow, preferAccountName: boolean): ConversationAuthorDTO {
-  const publicName = row.displayName ?? null
+  const publicName =
+    isAssistantPrincipal(row.serviceMetadata) && row.displayName
+      ? displayAssistantName(row.displayName)
+      : (row.displayName ?? null)
   return {
     principalId: row.id,
     displayName: preferAccountName
@@ -88,6 +98,7 @@ async function selectAuthorRows(
       userImage: user.image,
       userImageKey: user.imageKey,
       testOwnerPrincipalId: principal.testOwnerPrincipalId,
+      serviceMetadata: principal.serviceMetadata,
     })
     .from(principal)
     .leftJoin(user, eq(user.id, principal.userId))

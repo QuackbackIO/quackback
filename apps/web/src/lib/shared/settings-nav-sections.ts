@@ -1,5 +1,6 @@
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { AI_ANY_PERMISSIONS } from '@/lib/shared/ai-permissions'
+import { DOMAINS_PAGE_PERMISSIONS } from '@/lib/shared/domains-permissions'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
 import {
   AUTOMATION_PAGES,
@@ -25,6 +26,12 @@ export interface NavItem {
   permission?: PermissionKey
   /** Pages that open to a holder of any one of these, instead of a single permission. */
   anyOf?: readonly PermissionKey[]
+  /**
+   * A page that summarises others (Domains). It is offered in the nav, but chosen
+   * as the page Settings opens on only for a holder of `owner`, the one permission
+   * whose setup lives on the page itself; every other viewer owns a page of their own.
+   */
+  overview?: { owner: PermissionKey }
 }
 
 /**
@@ -203,8 +210,7 @@ export function isNavModule(entry: NavEntry): entry is NavModule {
  */
 export function buildNavSections(
   flags?: Partial<FeatureFlags>,
-  billingEnabled = false,
-  operatorEnabled = false
+  billingEnabled = false
 ): NavSection[] {
   const products: NavEntry[] = buildSettingsModuleRows(flags).map((module): NavEntry => {
     const [only, ...rest] = module.pages
@@ -239,14 +245,7 @@ export function buildNavSections(
           ...navPage('/admin/settings/general'),
           permission: PERMISSIONS.SETTINGS_MANAGE,
         },
-        ...(operatorEnabled
-          ? [
-              {
-                ...navPage('/admin/settings/domains'),
-                permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
-              },
-            ]
-          : []),
+        { ...navPage('/admin/settings/domains'), anyOf: DOMAINS_PAGE_PERMISSIONS, overview: { owner: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN } },
         { ...navPage('/admin/settings/notifications') },
         {
           ...navPage('/admin/settings/portal'),
@@ -361,7 +360,8 @@ const NOTIFICATIONS_PATH = '/admin/settings/notifications'
 /**
  * The page the Settings entry opens for a viewer: General when they may open
  * it, otherwise the first page in nav order they hold the permission for, and
- * the personal Notifications page when they hold none. It never names a page
+ * the personal Notifications page when they hold none. An overview page is
+ * chosen only for a holder of its owner permission. It never names a page
  * whose route would answer Access denied.
  */
 export function firstSettingsPath(
@@ -371,6 +371,7 @@ export function firstSettingsPath(
   const gatedPaths = navSectionsFor(sections, permissions)
     .flatMap((section) => section.items)
     .flatMap((entry) => (isNavModule(entry) ? entry.pages : [entry]))
+    .filter((item) => !item.overview || permissions.has(item.overview.owner))
     .filter((item) => item.permission !== undefined || item.anyOf !== undefined)
     .map((item) => item.to)
   if (gatedPaths.includes(GENERAL_PATH)) return GENERAL_PATH

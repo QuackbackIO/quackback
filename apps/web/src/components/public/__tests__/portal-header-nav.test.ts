@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  isTabActive,
   resolvePortalNavItems,
   seedNavEditorItems,
   type PortalNavGates,
@@ -220,5 +221,20 @@ describe('seedNavEditorItems', () => {
     const seeded = seedNavEditorItems(nav)
     seeded[0].enabled = false
     expect(nav.items?.[0].enabled).toBeUndefined()
+  })
+})
+
+describe('isTabActive', () => {
+  it('keeps Feedback lit on the feed and on a post', () => {
+    expect(isTabActive('/', '/')).toBe(true)
+    expect(isTabActive('/', '/b/feature-requests/posts/post_01abc')).toBe(true)
+    expect(isTabActive('/roadmap', '/b/feature-requests/posts/post_01abc')).toBe(false)
+  })
+
+  it('lights only the tab for the page', () => {
+    expect(isTabActive('/', '/roadmap')).toBe(false)
+    expect(isTabActive('/roadmap', '/roadmap')).toBe(true)
+    expect(isTabActive('/hc', '/hc/getting-started')).toBe(true)
+    expect(isTabActive('/hc', '/hcx')).toBe(false)
   })
 })

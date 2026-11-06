@@ -11,8 +11,9 @@ const { Route: LocaleLanding } = await import('../_portal/hc/$locale/index')
 
 type Head = (ctx: {
   loaderData: Record<string, unknown>
-  matches: Array<{ routeId: string; loaderData?: unknown }>
-}) => { meta?: Array<Record<string, string>> }
+  params?: Record<string, string>
+  matches: Array<{ routeId: string; loaderData?: unknown; context?: unknown }>
+}) => { meta?: Array<Record<string, string>>; links?: Array<Record<string, string>> }
 const headOf = (route: unknown) => (route as { options: { head: Head } }).options.head
 
 // The help center layout, whose loader reads its strings in the page's language.
@@ -49,6 +50,7 @@ describe('a language’s help center landing tab title', () => {
     tabTitle(
       headOf(LocaleLanding)({
         loaderData: { title, description: null, workspaceName: 'Acme', logoUrl: null },
+        params: { locale: 'en' },
         matches: [polishLayout],
       }).meta
     )
@@ -60,5 +62,57 @@ describe('a language’s help center landing tab title', () => {
 
   it("keeps the language's own title", () => {
     expect(localeLanding('Centre d’aide Acme')).toBe('Centre d’aide Acme - Acme')
+  })
+})
+
+describe('help center landing canonicals', () => {
+  const portal = {
+    routeId: '/_portal',
+    loaderData: { workspaceName: 'Acme' },
+    context: { baseUrl: 'https://feedback.example.com' },
+  }
+
+  it('canonicalises /hc to itself on the request base', () => {
+    const { links } = headOf(Landing)({
+      loaderData: { helpCenterConfig: null, workspaceName: 'Acme', logoUrl: null },
+      matches: [polishLayout, portal],
+    })
+    expect(links).toContainEqual({ rel: 'canonical', href: 'https://feedback.example.com/hc' })
+  })
+
+  it('canonicalises the default locale landing to /hc', () => {
+    const { links } = headOf(LocaleLanding)({
+      loaderData: { title: null, description: null, workspaceName: 'Acme', logoUrl: null },
+      params: { locale: 'en' },
+      matches: [polishLayout, portal],
+    })
+    expect(links).toContainEqual({ rel: 'canonical', href: 'https://feedback.example.com/hc' })
+  })
+
+  it("canonicalises another locale's landing to its own prefixed path", () => {
+    const { links } = headOf(LocaleLanding)({
+      loaderData: { title: null, description: null, workspaceName: 'Acme', logoUrl: null },
+      params: { locale: 'de' },
+      matches: [polishLayout, portal],
+    })
+    expect(links).toContainEqual({
+      rel: 'canonical',
+      href: 'https://feedback.example.com/hc/de',
+    })
+  })
+
+  it('emits no canonical on either landing when the request has no base URL', () => {
+    const noBase = { routeId: '/_portal', loaderData: { workspaceName: 'Acme' }, context: {} }
+    const home = headOf(Landing)({
+      loaderData: { helpCenterConfig: null, workspaceName: 'Acme', logoUrl: null },
+      matches: [polishLayout, noBase],
+    })
+    const locale = headOf(LocaleLanding)({
+      loaderData: { title: null, description: null, workspaceName: 'Acme', logoUrl: null },
+      params: { locale: 'en' },
+      matches: [polishLayout, noBase],
+    })
+    expect(home.links).toEqual([])
+    expect(locale.links).toEqual([])
   })
 })
