@@ -527,6 +527,8 @@ describe('emailHook — ticket + SLA lifecycle', () => {
     ['ticket.replied', 'reply'],
     ['ticket.status_changed', 'status_resolved'],
     ['ticket.assigned', 'assigned'],
+    ['ticket.due_soon', 'due_soon'],
+    ['ticket.overdue', 'overdue'],
     ['sla.approaching_breach', 'sla_warning'],
     ['sla.breached', 'sla_breach'],
   ] as const)('routes %s → sendTicketEventEmail(kind=%s)', async (type, kind) => {
@@ -562,6 +564,21 @@ describe('emailHook — ticket + SLA lifecycle', () => {
     expect(args.messageId).toMatch(/^ticket-1\..+@acme\.test$/)
     expect(args.inReplyTo).toBe('ticket-1@acme.test')
     expect(args.references).toEqual(['ticket-1@acme.test'])
+  })
+
+  it.each([
+    ['ticket.due_soon', 'due_soon'],
+    ['ticket.overdue', 'overdue'],
+  ] as const)('a %s alert threads on the ticket root', async (type, kind) => {
+    await emailHook.run(
+      evt(type),
+      baseTarget,
+      ticketConfig({ kind, ctaUrl: 'https://p/admin/inbox?i=ticket_1', dueLabel: 'Jul 17' })
+    )
+    const args = mockTicketEventEmail.mock.calls[0][0]
+    expect(args.messageId).toMatch(/^ticket-1\..+@acme\.test$/)
+    expect(args.references).toEqual(['ticket-1@acme.test'])
+    expect(args.dueLabel).toBe('Jul 17')
   })
 
   it('an SLA email (no ticket id) threads on nothing', async () => {

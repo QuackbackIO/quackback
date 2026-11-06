@@ -17,6 +17,7 @@ import {
   RectangleStackIcon,
   NoSymbolIcon,
   PencilSquareIcon,
+  EyeIcon,
 } from '@heroicons/react/24/solid'
 import { StarIcon as StarOutlineIcon } from '@heroicons/react/24/outline'
 import type { ConversationTagId, SegmentId, TeamId, ConversationViewId } from '@quackback/ids'
@@ -126,6 +127,7 @@ export const TICKET_INBOX_VIEWS = [
   { view: 'tickets_customer', label: 'Customer', Icon: TicketIcon },
   { view: 'tickets_back_office', label: 'Back office', Icon: BuildingOffice2Icon },
   { view: 'tickets_tracker', label: 'Trackers', Icon: RectangleStackIcon },
+  { view: 'tickets_watching', label: 'Watching', Icon: EyeIcon },
 ] as const
 
 /** Shared (deduped) source of `supportTickets` — gates the Tickets nav section. */
@@ -223,6 +225,8 @@ export function scopeLabelFor(
       return 'Back office tickets'
     case 'tickets_tracker':
       return 'Trackers'
+    case 'tickets_watching':
+      return 'Tickets you watch'
     default:
       return 'All conversations'
   }
@@ -502,6 +506,8 @@ function countForTicketView(
   if (view === 'tickets_all') {
     return Object.values(counts.ticketsByType).reduce((total, count) => total + count, 0)
   }
+  // The Watching scope is personal and carries no badge.
+  if (view === 'tickets_watching') return undefined
   return counts.ticketsByType[ticketTypeForView(view)]
 }
 

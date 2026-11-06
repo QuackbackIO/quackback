@@ -1,7 +1,7 @@
 'use client'
 
-import { Suspense, useState } from 'react'
-import { useSuspenseQuery, useQuery } from '@tanstack/react-query'
+import { Suspense, useCallback, useState } from 'react'
+import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
@@ -67,6 +67,12 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
   const postQuery = useSuspenseQuery(adminQueries.postDetail(postId))
   const { data: tags = [] } = useQuery(adminQueries.tags())
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
+  // The teammate's own follow bell.
+  const queryClient = useQueryClient()
+  const { data: subscription } = useQuery(adminQueries.postSubscription(postId))
+  const refreshSubscription = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: adminQueries.postSubscription(postId).queryKey })
+  }, [queryClient, postId])
 
   const post = postQuery.data as PostDetails
 
@@ -150,6 +156,7 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
               onTagsChange={handleTagsChange}
               isUpdating={isUpdating || updateEta.isPending}
               hideSubscribe
+              teamSubscribe={{ status: subscription, onChange: refreshSubscription }}
               hideVote
             />
           </Suspense>

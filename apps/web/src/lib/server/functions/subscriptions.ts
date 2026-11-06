@@ -19,9 +19,11 @@ const getSubscriptionStatusSchema = z.object({
   postId: z.string(),
 })
 
+// A subscription someone makes for themselves is always 'manual'; the other
+// reasons are written by the paths that create them (authoring, voting,
+// commenting, being assigned or added), never chosen by the client.
 const subscribeToPostSchema = z.object({
   postId: z.string(),
-  reason: z.enum(['manual', 'author', 'vote', 'comment']).optional().default('manual'),
   level: z.enum(['all', 'status_only']).optional().default('all'),
 })
 
@@ -78,6 +80,21 @@ async function gateSubscriptionWrite(
   const { policyActorFromAuth } = await import('./auth-helpers')
   const actor = await policyActorFromAuth(auth)
   await assertPostViewable(postId, actor)
+  return actor
+}
+
+// Following or unfollowing a post by hand announces itself (webhooks see it);
+// see post.subscribers.ts.
+async function announceOwnChange(
+  change: 'added' | 'removed',
+  actor: Awaited<ReturnType<typeof gateSubscriptionWrite>>,
+  postId: PostId,
+  principalId: PrincipalId,
+  reason: string | null
+) {
+  const { announcePostSubscriberChange } =
+    await import('@/lib/server/domains/posts/post.subscribers')
+  await announcePostSubscriberChange(change, actor, postId, principalId, reason)
 }
 
 // Write Operations
@@ -86,13 +103,16 @@ export const subscribeToPostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId, level: data.level }, 'subscribe to post')
     const auth = await requireAuth()
-    await gateSubscriptionWrite(data.postId as PostId, auth)
+    const actor = await gateSubscriptionWrite(data.postId as PostId, auth)
 
     const { subscribeToPost } =
       await import('@/lib/server/domains/subscriptions/subscription.service')
-    await subscribeToPost(auth.principal.id, data.postId as PostId, data.reason || 'manual', {
+    const added = await subscribeToPost(auth.principal.id, data.postId as PostId, 'manual', {
       level: data.level as SubscriptionLevel,
     })
+    if (added) {
+      await announceOwnChange('added', actor, data.postId as PostId, auth.principal.id, 'manual')
+    }
     log.info({ post_id: data.postId }, 'post subscribed')
     return { postId: data.postId }
   })
@@ -102,11 +122,21 @@ export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'unsubscribe from post')
     const auth = await requireAuth()
-    await gateSubscriptionWrite(data.postId as PostId, auth)
+    const actor = await gateSubscriptionWrite(data.postId as PostId, auth)
 
-    const { unsubscribeFromPost } =
+    const { getSubscriptionStatus, unsubscribeFromPost } =
       await import('@/lib/server/domains/subscriptions/subscription.service')
+    const before = await getSubscriptionStatus(auth.principal.id, data.postId as PostId)
     await unsubscribeFromPost(auth.principal.id, data.postId as PostId)
+    if (before?.subscribed) {
+      await announceOwnChange(
+        'removed',
+        actor,
+        data.postId as PostId,
+        auth.principal.id,
+        before.reason
+      )
+    }
     log.info({ post_id: data.postId }, 'post unsubscribed')
     return { postId: data.postId }
   })
@@ -116,15 +146,23 @@ export const updateSubscriptionLevelFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId, level: data.level }, 'update subscription level')
     const auth = await requireAuth()
-    await gateSubscriptionWrite(data.postId as PostId, auth)
+    const actor = await gateSubscriptionWrite(data.postId as PostId, auth)
 
-    const { updateSubscriptionLevel } =
+    const { getSubscriptionStatus, updateSubscriptionLevel } =
       await import('@/lib/server/domains/subscriptions/subscription.service')
+    const before = await getSubscriptionStatus(auth.principal.id, data.postId as PostId)
     await updateSubscriptionLevel(
       auth.principal.id,
       data.postId as PostId,
       data.level as SubscriptionLevel
     )
+    // Going to or from 'none' starts or stops following the post.
+    const postId = data.postId as PostId
+    if (data.level === 'none' && before?.subscribed) {
+      await announceOwnChange('removed', actor, postId, auth.principal.id, before.reason)
+    } else if (data.level !== 'none' && before && !before.subscribed) {
+      await announceOwnChange('added', actor, postId, auth.principal.id, 'manual')
+    }
     log.info({ post_id: data.postId }, 'subscription level updated')
     return { postId: data.postId }
   })
