@@ -79,7 +79,7 @@ function SearchResultsView({ query, kind, page = 1 }: SearchResultsPageProps) {
 
   return (
     <div className="min-h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl space-y-5 px-4 py-6 sm:px-8 sm:py-10">
+      <div className="mx-auto max-w-4xl space-y-5 px-4 py-6 sm:px-8 sm:py-10">
         <h1 className="text-xl font-semibold">{f('ask.search.row', 'Search')}</h1>
         <form
           role="search"
