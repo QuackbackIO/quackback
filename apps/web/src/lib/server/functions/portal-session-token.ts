@@ -1,3 +1,8 @@
+import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
+import { config } from '@/lib/server/config'
+import { readSessionCookie } from '@/lib/shared/auth-cookies'
+
 /**
  * Extract the signed Better Auth session token from a cookie header string.
  *
@@ -6,22 +11,15 @@
  * This enables the widget to reuse the portal's existing session instead of
  * creating a separate one.
  */
-export function extractSessionTokenFromCookie(cookieHeader: string): string | null {
-  if (!cookieHeader) return null
-
-  const cookies = cookieHeader.split(';')
-  for (const cookie of cookies) {
-    const [name, ...valueParts] = cookie.trim().split('=')
-    if (name?.trim() === 'better-auth.session_token') {
-      const raw = valueParts.join('=') // rejoin in case value contains '='
-      if (!raw) return null
-      try {
-        return decodeURIComponent(raw)
-      } catch {
-        return raw
-      }
-    }
-  }
-
-  return null
+export function extractSessionTokenFromCookie(
+  cookieHeader: string,
+  cookiePrefix?: string
+): string | null {
+  return readSessionCookie(cookieHeader, cookiePrefix)
 }
+
+/** Extract the signed cookie for same-origin widget session reuse. */
+export const getPortalSessionToken = createServerFn({ method: 'GET' }).handler(async () => {
+  const cookie = getRequestHeaders().get('cookie') ?? ''
+  return extractSessionTokenFromCookie(cookie, config.authCookiePrefix)
+})

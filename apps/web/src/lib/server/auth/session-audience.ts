@@ -1,3 +1,5 @@
+import { config } from '@/lib/server/config'
+import { hasSessionCookie } from '@/lib/shared/auth-cookies'
 /**
  * The audience a Better Auth session is minted for, decided as the row is
  * created (`databaseHooks.session.create.before`).
@@ -68,7 +70,7 @@ function carriesBearer(headers: HeaderBag): boolean {
 }
 
 function carriesSessionCookie(headers: HeaderBag): boolean {
-  return /(?:^|;)\s*(?:__Secure-)?better-auth\.session_token=/.test(headers.get('cookie') ?? '')
+  return hasSessionCookie(headers.get('cookie'), config.authCookiePrefix)
 }
 
 /**
