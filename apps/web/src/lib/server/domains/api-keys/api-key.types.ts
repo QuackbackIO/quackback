@@ -62,6 +62,11 @@ export interface ManagedApiKey extends ApiKey {
   creatorIsTeammate: boolean
   /** A workspace key's role; null for a personal key. */
   role: { id: RoleId; name: string } | null
+  /**
+   * Whether the viewer may rotate, rename or re-role this key: a workspace key
+   * whose current role they could grant. Any key manager may revoke any key.
+   */
+  manageable: boolean
 }
 
 /** A role offered for a workspace key, marked with whether the caller may grant it. */

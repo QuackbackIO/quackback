@@ -3,37 +3,33 @@
 import { useState, useTransition } from 'react'
 import { defineMessages, useIntl } from 'react-intl'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRouter } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 import { DomainAccessPicker } from '@/components/domain-access-picker'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { createApiKeyFn } from '@/lib/server/functions/api-keys'
-import { workspaceKeyRolesQuery } from './workspace-key-roles-query'
 import {
   API_KEY_SCOPES,
   domainAccessLevels,
   scopesFromDomainLevels,
   type DomainAccessLevels,
 } from '@/lib/shared/api-key-scopes'
-import type { ApiKey } from '@/lib/shared/types'
+import { ApiKeyRevealDialog } from './api-key-reveal-dialog'
+import { ADMIN_KEY_MESSAGES, refusalText } from './key-messages'
 import { WorkspaceKeyRolePicker } from './workspace-key-role-picker'
+import { workspaceKeyRolesQuery } from './workspace-key-roles-query'
 
 const m = defineMessages({
-  title: { id: 'apiKeys.workspace.createTitle', defaultMessage: 'Create workspace key' },
+  title: { id: 'apiKeys.workspace.new', defaultMessage: 'New workspace key' },
   description: {
     id: 'apiKeys.workspace.createDescription',
     defaultMessage:
       'For integrations. The key has its own role and keeps working when people leave.',
   },
+  developers: { id: 'apiKeys.workspace.developersCrumb', defaultMessage: 'Developers' },
   name: { id: 'apiKeys.form.name', defaultMessage: 'Name' },
   namePlaceholder: { id: 'apiKeys.workspace.namePlaceholder', defaultMessage: 'e.g. CRM sync' },
   role: { id: 'apiKeys.workspace.role', defaultMessage: 'Role' },
@@ -48,41 +44,26 @@ const m = defineMessages({
   failed: { id: 'apiKeys.form.createFailed', defaultMessage: 'The key could not be created.' },
 })
 
-interface CreateWorkspaceKeyDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onKeyCreated: (key: ApiKey, plainTextKey: string) => void
-}
+const KEYS_TAB = { to: '/admin/settings/developers', search: { tab: 'keys' } } as const
 
-function defaultLevels(): DomainAccessLevels {
-  return domainAccessLevels(API_KEY_SCOPES)
-}
-
-export function CreateWorkspaceKeyDialog({
-  open,
-  onOpenChange,
-  onKeyCreated,
-}: CreateWorkspaceKeyDialogProps) {
+/** /admin/settings/developers/workspace-keys/new: name, role and access for a new workspace key. */
+export function CreateWorkspaceKeyPage() {
   const intl = useIntl()
+  const navigate = useNavigate()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const rolesQuery = useQuery({ ...workspaceKeyRolesQuery(), enabled: open })
+  const rolesQuery = useQuery(workspaceKeyRolesQuery())
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
   const [name, setName] = useState('')
   const [roleId, setRoleId] = useState('')
-  const [levels, setLevels] = useState<DomainAccessLevels>(defaultLevels)
+  const [levels, setLevels] = useState<DomainAccessLevels>(() => domainAccessLevels(API_KEY_SCOPES))
   const [error, setError] = useState<string | null>(null)
+  const [created, setCreated] = useState<{ name: string; value: string } | null>(null)
 
   const scopes = scopesFromDomainLevels(levels)
   const busy = saving || isPending
-
-  const reset = () => {
-    setName('')
-    setRoleId('')
-    setLevels(defaultLevels())
-    setError(null)
-  }
+  const backToKeys = () => void navigate(KEYS_TAB)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -92,15 +73,14 @@ export function CreateWorkspaceKeyDialog({
     try {
       const result = await createApiKeyFn({ data: { name: name.trim(), scopes, roleId } })
       if (!result.ok) {
-        setError(result.message)
+        setError(refusalText(intl, ADMIN_KEY_MESSAGES, result.code))
         return
       }
       startTransition(() => {
         queryClient.invalidateQueries({ queryKey: ['admin', 'api-keys'] })
         router.invalidate()
       })
-      reset()
-      onKeyCreated(result.apiKey, result.plainTextKey)
+      setCreated({ name: result.apiKey.name, value: result.plainTextKey })
     } catch {
       setError(intl.formatMessage(m.failed))
     } finally {
@@ -108,24 +88,20 @@ export function CreateWorkspaceKeyDialog({
     }
   }
 
-  const handleOpenChange = (next: boolean) => {
-    if (!next) reset()
-    onOpenChange(next)
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{intl.formatMessage(m.title)}</DialogTitle>
-          <DialogDescription>{intl.formatMessage(m.description)}</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4 py-4">
+    <SettingsPage
+      title={intl.formatMessage(m.title)}
+      description={intl.formatMessage(m.description)}
+      crumbs={[{ label: intl.formatMessage(m.developers), to: '/admin/settings/developers' }]}
+    >
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <SettingsCard>
+          <div className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="workspace-key-name">{intl.formatMessage(m.name)}</Label>
               <Input
                 id="workspace-key-name"
+                className="max-w-sm"
                 placeholder={intl.formatMessage(m.namePlaceholder)}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -160,21 +136,24 @@ export function CreateWorkspaceKeyDialog({
               </p>
             )}
           </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-              disabled={busy}
-            >
-              {intl.formatMessage(m.cancel)}
-            </Button>
-            <Button type="submit" disabled={busy || !name.trim() || !roleId || scopes.length === 0}>
-              {intl.formatMessage(busy ? m.creating : m.create)}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </SettingsCard>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={backToKeys} disabled={busy}>
+            {intl.formatMessage(m.cancel)}
+          </Button>
+          <Button type="submit" disabled={busy || !name.trim() || !roleId || scopes.length === 0}>
+            {intl.formatMessage(busy ? m.creating : m.create)}
+          </Button>
+        </div>
+      </form>
+
+      <ApiKeyRevealDialog
+        open={created !== null}
+        onOpenChange={(open) => !open && setCreated(null)}
+        keyValue={created?.value ?? null}
+        keyName={created?.name ?? ''}
+        onClose={backToKeys}
+      />
+    </SettingsPage>
   )
 }

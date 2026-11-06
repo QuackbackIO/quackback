@@ -2,69 +2,20 @@
  * What the key managers see: every live key with its creator and, for a
  * workspace key, its role; and the roles a workspace key may be given.
  */
-import type { PrincipalId, RoleId } from '@quackback/ids'
-import {
-  db,
-  principal,
-  principalRoleAssignments,
-  roles,
-  user,
-  and,
-  eq,
-  inArray,
-  isNull,
-} from '@/lib/server/db'
-import { PERMISSIONS, SYSTEM_ROLES, presetForLegacyRole } from '@/lib/shared/permissions'
+import type { PrincipalId } from '@quackback/ids'
+import { db, principal, user, eq, inArray } from '@/lib/server/db'
+import { PERMISSIONS, SYSTEM_ROLES } from '@/lib/shared/permissions'
 import { isAdmin, isTeamMember } from '@/lib/shared/roles'
 import { listApiKeys } from './api-key.service'
+import { currentWorkspaceKeyRoles } from './workspace-key-role'
 import type { ApiKeyGranter, ManagedApiKey, WorkspaceKeyRoleOption } from './api-key.types'
 
-type RoleRef = { id: RoleId; name: string }
-
-/** Whose roles give a workspace key its authority: an explicit assignment, else its legacy tier's preset. */
-async function workspaceKeyRoles(
-  keyPrincipalIds: PrincipalId[]
-): Promise<Map<PrincipalId, RoleRef>> {
-  const result = new Map<PrincipalId, RoleRef>()
-  if (keyPrincipalIds.length === 0) return result
-  const [assigned, tiers, presets] = await Promise.all([
-    db
-      .select({
-        principalId: principalRoleAssignments.principalId,
-        id: roles.id,
-        name: roles.name,
-      })
-      .from(principalRoleAssignments)
-      .innerJoin(roles, eq(roles.id, principalRoleAssignments.roleId))
-      .where(
-        and(
-          inArray(principalRoleAssignments.principalId, keyPrincipalIds),
-          isNull(principalRoleAssignments.teamId)
-        )
-      ),
-    db
-      .select({ id: principal.id, role: principal.role })
-      .from(principal)
-      .where(inArray(principal.id, keyPrincipalIds)),
-    db
-      .select({ id: roles.id, key: roles.key, name: roles.name })
-      .from(roles)
-      .where(inArray(roles.key, [SYSTEM_ROLES.OWNER, SYSTEM_ROLES.MANAGER])),
-  ])
-  const presetByKey = new Map(presets.map((r) => [r.key, { id: r.id as RoleId, name: r.name }]))
-  for (const tier of tiers) {
-    const preset = presetForLegacyRole(tier.role)
-    const ref = preset ? presetByKey.get(preset) : undefined
-    if (ref) result.set(tier.id as PrincipalId, ref)
-  }
-  for (const row of assigned) {
-    result.set(row.principalId as PrincipalId, { id: row.id as RoleId, name: row.name })
-  }
-  return result
-}
-
-/** Every live key, newest first, with its creator and (for a workspace key) its role. */
-export async function listManagedApiKeys(): Promise<ManagedApiKey[]> {
+/**
+ * Every live key, newest first, with its creator and (for a workspace key) its
+ * role, marked with whether `viewer` may rotate, rename or re-role it: only
+ * when they could grant the role it holds now.
+ */
+export async function listManagedApiKeys(viewer: ApiKeyGranter): Promise<ManagedApiKey[]> {
   const keys = await listApiKeys()
   const creatorIds = [
     ...new Set(keys.map((k) => k.createdById).filter((id): id is PrincipalId => !!id)),
@@ -82,16 +33,23 @@ export async function listManagedApiKeys(): Promise<ManagedApiKey[]> {
           .from(principal)
           .leftJoin(user, eq(user.id, principal.userId))
           .where(inArray(principal.id, creatorIds)),
-    workspaceKeyRoles(keys.filter((k) => k.kind === 'workspace').map((k) => k.principalId)),
+    currentWorkspaceKeyRoles(keys.filter((k) => k.kind === 'workspace').map((k) => k.principalId)),
   ])
+  const grantable = keys.some((k) => k.kind === 'workspace')
+    ? new Set(
+        (await listWorkspaceKeyRoleOptions(viewer)).filter((o) => o.grantable).map((o) => o.id)
+      )
+    : new Set()
   const creatorById = new Map(creators.map((c) => [c.id as PrincipalId, c]))
   return keys.map((key) => {
     const creator = key.createdById ? creatorById.get(key.createdById) : undefined
+    const role = key.kind === 'workspace' ? (keyRoles.get(key.principalId) ?? null) : null
     return {
       ...key,
       creatorName: creator ? (creator.displayName ?? creator.userName ?? null) : null,
       creatorIsTeammate: creator ? isTeamMember(creator.role) : false,
-      role: key.kind === 'workspace' ? (keyRoles.get(key.principalId) ?? null) : null,
+      role,
+      manageable: key.kind === 'workspace' && !!role && grantable.has(role.id),
     }
   })
 }

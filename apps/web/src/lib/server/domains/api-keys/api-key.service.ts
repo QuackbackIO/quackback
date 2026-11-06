@@ -5,7 +5,7 @@
  * for public API authentication.
  */
 
-import { db, apiKeys, principal, eq, and, isNull } from '@/lib/server/db'
+import { db, apiKeys, principal, eq, and, gt, isNull, or } from '@/lib/server/db'
 import { emit } from '@/lib/server/events/emit'
 import { apiKeyCreated, apiKeyDeleted, apiKeyUpdated } from '@/lib/server/events/catalogue'
 import type { PrincipalId } from '@quackback/ids'
@@ -35,6 +35,7 @@ import type {
 } from './api-key.types'
 import {
   applyWorkspaceKeyRole,
+  assertCanManageWorkspaceKey,
   resolveGrantableKeyRole,
   type WorkspaceKeyRole,
 } from './workspace-key-role'
@@ -56,6 +57,19 @@ type ApiKeyRow = typeof apiKeys.$inferSelect
 export interface ApiKeyFilter {
   kind?: ApiKeyKind
   createdById?: PrincipalId
+  /**
+   * Whoever changes a workspace key must be able to grant the role it holds
+   * now, or rotating it would hand them that role's authority.
+   */
+  granter?: ApiKeyGranter
+}
+
+/** Refuse a change to a workspace key whose role the filter's granter cannot grant. */
+async function assertFilterMayManage(id: ApiKeyId, filter: ApiKeyFilter): Promise<void> {
+  if (!filter.granter) return
+  const key = await db.query.apiKeys.findFirst({ where: liveKeyWhere(id, filter) })
+  if (!key) throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found or already revoked')
+  if (key.kind === 'workspace') await assertCanManageWorkspaceKey(key.principalId, filter.granter)
 }
 
 function liveKeyWhere(id: ApiKeyId, filter: ApiKeyFilter) {
@@ -307,12 +321,15 @@ export async function rotateApiKey(
   id: ApiKeyId,
   filter: ApiKeyFilter = {}
 ): Promise<CreateApiKeyResult> {
+  await assertFilterMayManage(id, filter)
+
   // Generate new key credentials
   const plainTextKey = generateApiKey()
   const keyHash = hashApiKey(plainTextKey)
   const keyPrefix = getKeyPrefix(plainTextKey)
 
-  // Atomic update: only succeeds if key exists and isn't revoked
+  // Atomic update: only succeeds if the key exists, isn't revoked and hasn't
+  // expired (a new secret for an expired key would not work).
   const [updatedKey] = await db
     .update(apiKeys)
     .set({
@@ -320,7 +337,12 @@ export async function rotateApiKey(
       keyPrefix,
       lastUsedAt: null, // Reset last used
     })
-    .where(liveKeyWhere(id, filter))
+    .where(
+      and(
+        liveKeyWhere(id, filter),
+        or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, new Date()))
+      )
+    )
     .returning()
 
   if (!updatedKey) {
@@ -424,6 +446,8 @@ export async function updateApiKeyName(
     throw new ValidationError('VALIDATION_ERROR', 'API key name must be 255 characters or less')
   }
 
+  await assertFilterMayManage(id, filter)
+
   const [updated] = await db
     .update(apiKeys)
     .set({ name: name.trim() })
@@ -463,6 +487,8 @@ export async function setWorkspaceKeyRole(
       .limit(1)
       .for('update')
     if (!key) throw new NotFoundError('API_KEY_NOT_FOUND', 'Workspace key not found')
+    // The role it holds now must be one the caller could grant, as well as the new one.
+    await assertCanManageWorkspaceKey(key.principalId, granter)
     await applyWorkspaceKeyRole(key.principalId, role, grantedBy, tx)
     await emit(tx, apiKeyUpdated, {
       payload: { apiKeyId: key.id, changedKeys: ['role'], roleName: role.roleName },

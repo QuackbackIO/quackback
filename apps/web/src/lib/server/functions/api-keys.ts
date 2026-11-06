@@ -64,8 +64,16 @@ export type UpdateApiKeyInput = z.infer<typeof updateApiKeySchema>
 export type RotateApiKeyInput = z.infer<typeof rotateApiKeySchema>
 export type RevokeApiKeyInput = z.infer<typeof revokeApiKeySchema>
 
-/** Managers rename, rotate and re-role workspace keys only. */
-const WORKSPACE_ONLY: ApiKeyFilter = { kind: 'workspace' }
+/**
+ * Managers rename and rotate workspace keys only, and only those whose current
+ * role they could grant.
+ */
+function workspaceKeysOf(auth: Awaited<ReturnType<typeof requireAuth>>): ApiKeyFilter {
+  return {
+    kind: 'workspace',
+    granter: { permissions: auth.permissions, role: auth.principal.role },
+  }
+}
 
 function refusalOr(error: unknown): ApiKeyRefusal {
   const refusal = toApiKeyRefusal(error)
@@ -85,13 +93,16 @@ function refusalOr(error: unknown): ApiKeyRefusal {
  */
 export const fetchApiKeys = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list api keys')
-  await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
+  const auth = await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
 
   const [{ listManagedApiKeys }, { getDeveloperConfig }] = await Promise.all([
     import('@/lib/server/domains/api-keys/api-key-management'),
     import('@/lib/server/domains/settings/settings.service'),
   ])
-  const [keys, config] = await Promise.all([listManagedApiKeys(), getDeveloperConfig()])
+  const [keys, config] = await Promise.all([
+    listManagedApiKeys({ permissions: auth.permissions, role: auth.principal.role }),
+    getDeveloperConfig(),
+  ])
   log.debug({ count: keys.length }, 'api keys fetched')
   return { keys, personalKeysEnabled: config.personalApiKeysEnabled }
 })
@@ -152,11 +163,11 @@ export const updateApiKeyFn = createServerFn({ method: 'POST' })
   .validator(updateApiKeySchema)
   .handler(async ({ data }) => {
     log.debug({ api_key_id: data.id }, 'update api key')
-    await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
 
     const { updateApiKeyName } = await import('@/lib/server/domains/api-keys/api-key.service')
     try {
-      const apiKey = await updateApiKeyName(data.id as ApiKeyId, data.name, WORKSPACE_ONLY)
+      const apiKey = await updateApiKeyName(data.id as ApiKeyId, data.name, workspaceKeysOf(auth))
       log.info({ api_key_id: apiKey.id }, 'api key updated')
       return { ok: true as const, apiKey }
     } catch (error) {
@@ -171,11 +182,11 @@ export const rotateApiKeyFn = createServerFn({ method: 'POST' })
   .validator(rotateApiKeySchema)
   .handler(async ({ data }) => {
     log.debug({ api_key_id: data.id }, 'rotate api key')
-    await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
 
     const { rotateApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
     try {
-      const result = await rotateApiKey(data.id as ApiKeyId, WORKSPACE_ONLY)
+      const result = await rotateApiKey(data.id as ApiKeyId, workspaceKeysOf(auth))
       log.info({ api_key_id: result.apiKey.id }, 'api key rotated')
       return { ok: true as const, ...result }
     } catch (error) {

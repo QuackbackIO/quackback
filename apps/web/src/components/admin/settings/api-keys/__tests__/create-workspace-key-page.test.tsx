@@ -1,14 +1,15 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, cleanup, fireEvent, waitFor, screen } from '@testing-library/react'
+import { render, cleanup, fireEvent, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { API_KEY_SCOPES } from '@/lib/shared/api-key-scopes'
 import type { WorkspaceKeyRoleOption } from '@/lib/server/domains/api-keys/api-key.types'
 
-const { mockCreateApiKeyFn, mockRoles } = vi.hoisted(() => ({
+const { mockCreateApiKeyFn, mockRoles, navigate } = vi.hoisted(() => ({
   mockCreateApiKeyFn: vi.fn(),
   mockRoles: vi.fn(),
+  navigate: vi.fn(),
 }))
 
 vi.mock('@/lib/server/functions/api-keys', () => ({
@@ -20,9 +21,35 @@ vi.mock('@/lib/server/functions/workspace-api-key-settings', () => ({
 
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
+  useNavigate: () => navigate,
+}))
+vi.mock('@/components/admin/settings/settings-page', () => ({
+  SettingsPage: ({ title, children }: { title: string; children: React.ReactNode }) => (
+    <main>
+      <h1>{title}</h1>
+      {children}
+    </main>
+  ),
+}))
+vi.mock('../api-key-reveal-dialog', () => ({
+  ApiKeyRevealDialog: ({
+    open,
+    keyName,
+    onClose,
+  }: {
+    open: boolean
+    keyName: string
+    onClose: () => void
+  }) =>
+    open ? (
+      <div>
+        <p>Revealing {keyName}</p>
+        <button onClick={onClose}>Done</button>
+      </div>
+    ) : null,
 }))
 
-import { CreateWorkspaceKeyDialog } from '../create-workspace-key-dialog'
+import { CreateWorkspaceKeyPage } from '../create-workspace-key-page'
 
 const ROLES: WorkspaceKeyRoleOption[] = [
   {
@@ -59,16 +86,15 @@ const ROLES: WorkspaceKeyRoleOption[] = [
   },
 ] as unknown as WorkspaceKeyRoleOption[]
 
-function renderDialog(onKeyCreated = vi.fn()) {
+function renderDialog() {
   mockRoles.mockResolvedValue(ROLES)
   render(
     <IntlProvider locale="en">
       <QueryClientProvider client={new QueryClient()}>
-        <CreateWorkspaceKeyDialog open={true} onOpenChange={vi.fn()} onKeyCreated={onKeyCreated} />
+        <CreateWorkspaceKeyPage />
       </QueryClientProvider>
     </IntlProvider>
   )
-  return { onKeyCreated }
 }
 
 afterEach(() => {
@@ -76,7 +102,16 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('CreateWorkspaceKeyDialog', () => {
+describe('CreateWorkspaceKeyPage', () => {
+  it('is a page titled "New workspace key" that says what the key can do', async () => {
+    renderDialog()
+    expect(screen.getByRole('heading', { name: 'New workspace key' })).toBeInTheDocument()
+    expect(
+      screen.getByText('The key can only do what its role allows and you select here.')
+    ).toBeInTheDocument()
+    await screen.findByRole('radio', { name: 'Owner' })
+  })
+
   it('lists roles, greys out the ones the caller cannot grant, and flags high impact', async () => {
     renderDialog()
     const owner = await screen.findByRole('radio', { name: 'Owner' })
@@ -107,35 +142,55 @@ describe('CreateWorkspaceKeyDialog', () => {
     expect(screen.getByRole('button', { name: 'Create key' })).toBeDisabled()
   })
 
+  it('shows the new key once, then returns to the keys tab', async () => {
+    mockCreateApiKeyFn.mockResolvedValue({
+      ok: true,
+      apiKey: { id: 'api_key_1', name: 'CRM sync' },
+      plainTextKey: 'qb_secret',
+    })
+    renderDialog()
+    fireEvent.click(await screen.findByRole('radio', { name: 'Support lead' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'CRM sync' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Done' }))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/admin/settings/developers',
+      search: { tab: 'keys' },
+    })
+  })
+
   it('sends the name, scopes and role', async () => {
     mockCreateApiKeyFn.mockResolvedValue({
       ok: true,
       apiKey: { id: 'api_key_1', name: 'CRM sync' },
       plainTextKey: 'qb_secret',
     })
-    const { onKeyCreated } = renderDialog()
+    renderDialog()
     fireEvent.click(await screen.findByRole('radio', { name: 'Support lead' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'CRM sync' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
 
-    await waitFor(() => expect(onKeyCreated).toHaveBeenCalled())
+    expect(await screen.findByText('Revealing CRM sync')).toBeInTheDocument()
     expect(mockCreateApiKeyFn).toHaveBeenCalledWith({
       data: { name: 'CRM sync', scopes: [...API_KEY_SCOPES], roleId: 'role_lead' },
     })
   })
 
-  it('shows a refusal from the server', async () => {
+  it('shows a refusal from the server in catalogue words', async () => {
     mockCreateApiKeyFn.mockResolvedValue({
       ok: false,
       code: 'GRANT_CEILING',
-      message: "You can't grant a role with permissions you don't hold",
+      message: "You can't grant a role with permissions you don't hold: member.manage",
     })
-    const { onKeyCreated } = renderDialog()
+    renderDialog()
     fireEvent.click(await screen.findByRole('radio', { name: 'Data sync' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'X' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
 
-    expect(await screen.findByText(/permissions you don't hold/)).toBeInTheDocument()
-    expect(onKeyCreated).not.toHaveBeenCalled()
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'You can only manage keys whose role you could give.'
+    )
+    expect(screen.queryByText(/Revealing/)).toBeNull()
   })
 })

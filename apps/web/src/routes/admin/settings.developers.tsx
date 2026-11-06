@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { ClientOnly, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
@@ -10,14 +11,25 @@ import { WorkspaceKeysSettings } from '@/components/admin/settings/api-keys/work
 import { PersonalKeysOversight } from '@/components/admin/settings/api-keys/personal-keys-oversight'
 import { ApiReferenceCard } from '@/components/admin/settings/api-keys/api-reference-card'
 import { WebhooksSettings } from '@/components/admin/settings/webhooks/webhooks-settings'
-import { WebhookVerificationGuide } from '@/components/admin/settings/webhooks/webhook-verification-guide'
 import { McpServerSettings } from '@/components/admin/settings/mcp/mcp-server-settings'
-import { McpSetupGuide } from '@/components/admin/settings/mcp/mcp-setup-guide'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
+
+// The two guides are long and sit on the Webhooks and MCP tabs, so they load
+// with their tab rather than with the Keys tab every visit opens on.
+const WebhookVerificationGuide = lazy(() =>
+  import('@/components/admin/settings/webhooks/webhook-verification-guide').then((mod) => ({
+    default: mod.WebhookVerificationGuide,
+  }))
+)
+const McpSetupGuide = lazy(() =>
+  import('@/components/admin/settings/mcp/mcp-setup-guide').then((mod) => ({
+    default: mod.McpSetupGuide,
+  }))
+)
 
 const searchSchema = z.object({
   tab: z.enum(['keys', 'webhooks', 'mcp']).optional(),
@@ -104,7 +116,9 @@ function ApiPage() {
 
         <TabsContent value="webhooks" className="space-y-6">
           <WebhooksSettings webhooks={webhooksQuery.data} entitled={webhooksEntitled} />
-          <WebhookVerificationGuide />
+          <Suspense fallback={null}>
+            <WebhookVerificationGuide />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="mcp" className="space-y-6">
@@ -117,7 +131,9 @@ function ApiPage() {
               }
             />
           </SettingsCard>
-          <McpSetupGuide endpointUrl={mcpEndpointUrl} />
+          <Suspense fallback={null}>
+            <McpSetupGuide endpointUrl={mcpEndpointUrl} />
+          </Suspense>
         </TabsContent>
       </Tabs>
     </SettingsPage>

@@ -17,7 +17,7 @@ import {
   SYSTEM_ROLES,
   type PermissionKey,
 } from '@/lib/shared/permissions'
-import { NotFoundError } from '@/lib/shared/errors'
+import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -39,6 +39,7 @@ vi.mock('@/lib/server/domains/principals/membership-sync', () => ({
 
 import {
   createApiKey,
+  setWorkspaceKeyRole,
   listPersonalApiKeys,
   revokeApiKey,
   rotateApiKey,
@@ -197,7 +198,7 @@ describe.skipIf(!fixture.available)('the key managers’ list', () => {
     await testDb.update(apiKeys).set({ createdById: null }).where(eq(apiKeys.id, orphan.apiKey.id))
     await removeTeamMember(sam, ben, null, undefined, { granterRole: 'admin' })
 
-    const byId = new Map((await listManagedApiKeys()).map((k) => [k.id, k]))
+    const byId = new Map((await listManagedApiKeys(ADMIN_GRANTER)).map((k) => [k.id, k]))
 
     expect(byId.get(personal.apiKey.id)).toMatchObject({
       kind: 'personal',
@@ -231,7 +232,7 @@ describe.skipIf(!fixture.available)('the key managers’ list', () => {
     const ben = await seedTeammate('admin')
     const { apiKey } = await createApiKey({ name: 'Old' }, ben)
     await revokeApiKey(apiKey.id)
-    expect((await listManagedApiKeys()).some((k) => k.id === apiKey.id)).toBe(false)
+    expect((await listManagedApiKeys(ADMIN_GRANTER)).some((k) => k.id === apiKey.id)).toBe(false)
   })
 })
 
@@ -260,5 +261,97 @@ describe.skipIf(!fixture.available)('the workspace key role options', () => {
     expect(byId.get(wide)).toMatchObject({ grantable: false, isSystem: false })
     expect(byId.get(narrow)).toMatchObject({ grantable: true, name: 'Narrow' })
     expect(byId.get(await systemRoleId(SYSTEM_ROLES.CONTRIBUTOR))?.grantable).toBe(false)
+  })
+})
+
+describe.skipIf(!fixture.available)('managing a workspace key above your own role', () => {
+  // A key manager without member.manage: below the Owner and Admin roles.
+  const KEY_MANAGER = {
+    permissions: [PERMISSIONS.API_KEY_MANAGE, PERMISSIONS.POST_VIEW_PRIVATE],
+    role: 'member' as const,
+  }
+
+  async function ownerKey() {
+    const admin = await seedTeammate('admin')
+    const { apiKey } = await createApiKey(
+      { name: 'Order export', kind: 'workspace', roleId: await systemRoleId(SYSTEM_ROLES.OWNER) },
+      admin,
+      ADMIN_GRANTER
+    )
+    return { admin, apiKey }
+  }
+
+  it('refuses to rotate, rename or re-role a key whose role the manager cannot grant', async () => {
+    const { apiKey } = await ownerKey()
+    const [before] = await testDb.select().from(apiKeys).where(eq(apiKeys.id, apiKey.id))
+    const manager = await seedTeammate('member')
+    const narrow = await seedCustomRole('Narrow', [PERMISSIONS.POST_VIEW_PRIVATE])
+    const scoped = { kind: 'workspace' as const, granter: KEY_MANAGER }
+
+    await expect(rotateApiKey(apiKey.id, scoped)).rejects.toThrow(ForbiddenError)
+    await expect(updateApiKeyName(apiKey.id, 'Mine', scoped)).rejects.toThrow(ForbiddenError)
+    await expect(setWorkspaceKeyRole(apiKey.id, narrow, KEY_MANAGER, manager)).rejects.toThrow(
+      ForbiddenError
+    )
+    const [row] = await testDb.select().from(apiKeys).where(eq(apiKeys.id, apiKey.id))
+    expect(row.name).toBe('Order export')
+    expect(row.keyHash).toBe(before.keyHash)
+  })
+
+  it('lets an admin rotate, rename and re-role it', async () => {
+    const { admin, apiKey } = await ownerKey()
+    const narrow = await seedCustomRole('Narrow', [PERMISSIONS.POST_VIEW_PRIVATE])
+    const scoped = { kind: 'workspace' as const, granter: ADMIN_GRANTER }
+
+    await expect(rotateApiKey(apiKey.id, scoped)).resolves.toHaveProperty('plainTextKey')
+    await expect(updateApiKeyName(apiKey.id, 'Renamed', scoped)).resolves.toMatchObject({
+      name: 'Renamed',
+    })
+    await expect(
+      setWorkspaceKeyRole(apiKey.id, narrow, ADMIN_GRANTER, admin)
+    ).resolves.toMatchObject({ id: apiKey.id })
+  })
+
+  it('lets any key manager revoke it', async () => {
+    const first = await ownerKey()
+    const second = await ownerKey()
+    await expect(revokeApiKey(first.apiKey.id)).resolves.toBeUndefined()
+    await expect(revokeApiKey(second.apiKey.id)).resolves.toBeUndefined()
+  })
+
+  it('marks in the list which workspace keys the viewer can manage', async () => {
+    const { apiKey } = await ownerKey()
+    const admin = await seedTeammate('admin')
+    const { apiKey: narrowKey } = await createApiKey(
+      {
+        name: 'Narrow',
+        kind: 'workspace',
+        roleId: await seedCustomRole('Narrow', [PERMISSIONS.POST_VIEW_PRIVATE]),
+      },
+      admin,
+      ADMIN_GRANTER
+    )
+
+    const asManager = new Map((await listManagedApiKeys(KEY_MANAGER)).map((k) => [k.id, k]))
+    expect(asManager.get(apiKey.id)?.manageable).toBe(false)
+    expect(asManager.get(narrowKey.id)?.manageable).toBe(true)
+    const asAdmin = new Map((await listManagedApiKeys(ADMIN_GRANTER)).map((k) => [k.id, k]))
+    expect(asAdmin.get(apiKey.id)?.manageable).toBe(true)
+  })
+})
+
+describe.skipIf(!fixture.available)('expired keys', () => {
+  it('does not rotate an expired key', async () => {
+    const me = await seedTeammate('member')
+    const { apiKey } = await createApiKey(
+      { name: 'Old', expiresAt: new Date(Date.now() - 60_000) },
+      me
+    )
+    await expect(rotateApiKey(apiKey.id, { kind: 'personal', createdById: me })).rejects.toThrow(
+      NotFoundError
+    )
+    await expect(
+      revokeApiKey(apiKey.id, { kind: 'personal', createdById: me })
+    ).resolves.toBeUndefined()
   })
 })

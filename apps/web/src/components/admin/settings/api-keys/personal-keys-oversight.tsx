@@ -11,11 +11,11 @@ import { Switch } from '@/components/ui/switch'
 import { KeyTable, KeyTableCell, KeyTableHead } from './key-table'
 import { formatDistanceToNow } from 'date-fns'
 import { revokeApiKeyFn } from '@/lib/server/functions/api-keys'
-import { setPersonalKeyPolicyFn } from '@/lib/server/functions/workspace-api-key-settings'
+import { setPersonalKeyPolicyFn } from '@/lib/server/functions/personal-key-policy'
 import type { ManagedApiKey } from '@/lib/server/domains/api-keys/api-key.types'
 import { summarizeDomainAccess } from '@/lib/shared/api-key-scopes'
 import type { ApiKey } from '@/lib/shared/types'
-import { creatorLabel, LONG_DATE } from './key-labels'
+import { creatorLabel, ExpiredTag, isKeyExpired, LONG_DATE } from './key-labels'
 
 // Loads when first opened.
 const RevokeApiKeyDialog = lazy(() =>
@@ -47,6 +47,7 @@ const m = defineMessages({
   never: { id: 'apiKeys.never', defaultMessage: 'Never' },
   noExpiry: { id: 'apiKeys.noExpiry', defaultMessage: 'No expiry' },
   revoke: { id: 'apiKeys.action.revoke', defaultMessage: 'Revoke' },
+  expired: { id: 'apiKeys.expired', defaultMessage: 'Expired' },
   revokeLabel: { id: 'apiKeys.personal.revokeLabel', defaultMessage: 'Revoke {name}' },
   settingsRead: { id: 'apiKeys.scopes.settingsReadSummary', defaultMessage: 'Settings (read)' },
   settingsReadWrite: {
@@ -142,7 +143,12 @@ export function PersonalKeysOversight({
             <tbody>
               {apiKeys.map((key) => (
                 <tr key={key.id}>
-                  <KeyTableCell className="pl-4 font-medium sm:pl-6">{key.name}</KeyTableCell>
+                  <KeyTableCell className="pl-4 font-medium sm:pl-6">
+                    <span className="flex items-center gap-2">
+                      {key.name}
+                      {isKeyExpired(key) && <ExpiredTag label={intl.formatMessage(m.expired)} />}
+                    </span>
+                  </KeyTableCell>
                   <KeyTableCell>{creatorLabel(intl, key)}</KeyTableCell>
                   <KeyTableCell className="whitespace-normal text-muted-foreground">
                     {scopesOf(key)}

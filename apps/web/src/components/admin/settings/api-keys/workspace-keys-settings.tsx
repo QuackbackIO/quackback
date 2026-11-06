@@ -1,6 +1,7 @@
 'use client'
 
 import { lazy, Suspense, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { defineMessages, useIntl } from 'react-intl'
 import { KeyIcon } from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -13,7 +14,7 @@ import { revokeApiKeyFn, rotateApiKeyFn, updateApiKeyFn } from '@/lib/server/fun
 import type { ManagedApiKey } from '@/lib/server/domains/api-keys/api-key.types'
 import type { ApiKey } from '@/lib/shared/types'
 import { summarizeDomainAccess } from '@/lib/shared/api-key-scopes'
-import { creatorLabel, SHORT_DATE } from './key-labels'
+import { creatorLabel, ExpiredTag, isKeyExpired, SHORT_DATE } from './key-labels'
 
 // Each dialog loads when first opened.
 const ApiKeyRevealDialog = lazy(() =>
@@ -28,13 +29,8 @@ const RotateApiKeyDialog = lazy(() =>
 const RenameApiKeyDialog = lazy(() =>
   import('./key-dialogs').then((mod) => ({ default: mod.RenameApiKeyDialog }))
 )
-const CreateWorkspaceKeyDialog = lazy(() =>
-  import('./workspace-key-dialogs').then((mod) => ({
-    default: mod.CreateWorkspaceKeyDialog,
-  }))
-)
 const ChangeKeyRoleDialog = lazy(() =>
-  import('./workspace-key-dialogs').then((mod) => ({ default: mod.ChangeKeyRoleDialog }))
+  import('./change-key-role-dialog').then((mod) => ({ default: mod.ChangeKeyRoleDialog }))
 )
 
 const m = defineMessages({
@@ -67,6 +63,7 @@ const m = defineMessages({
   changeRole: { id: 'apiKeys.action.changeRole', defaultMessage: 'Change role' },
   rotate: { id: 'apiKeys.action.rotate', defaultMessage: 'Rotate' },
   revoke: { id: 'apiKeys.action.revoke', defaultMessage: 'Revoke' },
+  expired: { id: 'apiKeys.expired', defaultMessage: 'Expired' },
 })
 
 type Dialog = 'rename' | 'role' | 'rotate' | 'revoke'
@@ -78,8 +75,6 @@ const rename = (id: ApiKey['id'], name: string) => updateApiKeyFn({ data: { id, 
 /** Settings > Developers: keys for integrations, each holding its own role. */
 export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] }) {
   const intl = useIntl()
-  const [createOpen, setCreateOpen] = useState(false)
-  const [createOpened, setCreateOpened] = useState(false)
   const [revealOpen, setRevealOpen] = useState(false)
   const [revealed, setRevealed] = useState<{ name: string; value: string } | null>(null)
   const [selected, setSelected] = useState<ManagedApiKey | null>(null)
@@ -87,7 +82,6 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
 
   const reveal = (key: ApiKey, plainTextKey: string) => {
     setRevealed({ name: key.name, value: plainTextKey })
-    setCreateOpen(false)
     setDialog(null)
     setRevealOpen(true)
   }
@@ -96,18 +90,28 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
     setSelected(key)
     setDialog(next)
   }
+  // Rename, change role and rotate only for a live key whose role the viewer
+  // could grant; any key manager can revoke any key.
+  const rowActions = (key: ManagedApiKey) => [
+    ...(key.manageable && !isKeyExpired(key)
+      ? [
+          { label: intl.formatMessage(m.rename), onSelect: () => open(key, 'rename') },
+          { label: intl.formatMessage(m.changeRole), onSelect: () => open(key, 'role') },
+          { label: intl.formatMessage(m.rotate), onSelect: () => open(key, 'rotate') },
+        ]
+      : []),
+    {
+      label: intl.formatMessage(m.revoke),
+      destructive: true,
+      onSelect: () => open(key, 'revoke'),
+    },
+  ]
   const dialogOpen = (which: Dialog) => dialog === which
   const setDialogOpen = (which: Dialog) => (next: boolean) => setDialog(next ? which : null)
 
   const newKeyButton = (
-    <NewButton
-      noun="workspace key"
-      onClick={() => {
-        setCreateOpened(true)
-        setCreateOpen(true)
-      }}
-    >
-      {intl.formatMessage(m.newKey)}
+    <NewButton noun="workspace key" asChild>
+      <Link to="/admin/settings/developers/workspace-keys/new">{intl.formatMessage(m.newKey)}</Link>
     </NewButton>
   )
 
@@ -145,7 +149,10 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
               {apiKeys.map((key) => (
                 <tr key={key.id} className="group">
                   <KeyTableCell className="pl-4 sm:pl-6">
-                    <div className="font-medium">{key.name}</div>
+                    <div className="flex items-center gap-2 font-medium">
+                      {key.name}
+                      {isKeyExpired(key) && <ExpiredTag label={intl.formatMessage(m.expired)} />}
+                    </div>
                     <code className="font-mono text-xs text-muted-foreground">
                       {key.keyPrefix}...
                     </code>
@@ -168,28 +175,7 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
                       : intl.formatMessage(m.never)}
                   </KeyTableCell>
                   <KeyTableCell className="pr-4 text-right sm:pr-6">
-                    <RowActions
-                      label={key.name}
-                      items={[
-                        {
-                          label: intl.formatMessage(m.rename),
-                          onSelect: () => open(key, 'rename'),
-                        },
-                        {
-                          label: intl.formatMessage(m.changeRole),
-                          onSelect: () => open(key, 'role'),
-                        },
-                        {
-                          label: intl.formatMessage(m.rotate),
-                          onSelect: () => open(key, 'rotate'),
-                        },
-                        {
-                          label: intl.formatMessage(m.revoke),
-                          destructive: true,
-                          onSelect: () => open(key, 'revoke'),
-                        },
-                      ]}
-                    />
+                    <RowActions label={key.name} items={rowActions(key)} />
                   </KeyTableCell>
                 </tr>
               ))}
@@ -197,16 +183,6 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
           </KeyTable>
         )}
       </SettingsCard>
-
-      {createOpened && (
-        <Suspense fallback={null}>
-          <CreateWorkspaceKeyDialog
-            open={createOpen}
-            onOpenChange={setCreateOpen}
-            onKeyCreated={reveal}
-          />
-        </Suspense>
-      )}
 
       {revealed && (
         <Suspense fallback={null}>

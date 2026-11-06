@@ -16,7 +16,7 @@ vi.mock('../revoke-api-key-dialog', () => ({
     open ? <p>Revoking {apiKey.name}</p> : null,
 }))
 vi.mock('@/lib/server/functions/api-keys', () => ({ revokeApiKeyFn: vi.fn() }))
-vi.mock('@/lib/server/functions/workspace-api-key-settings', () => ({
+vi.mock('@/lib/server/functions/personal-key-policy', () => ({
   setPersonalKeyPolicyFn: setPolicy,
 }))
 
@@ -69,6 +69,11 @@ describe('PersonalKeysOversight', () => {
     const legacy = screen.getByRole('row', { name: /Docs import/ })
     expect(within(legacy).getByText('Full access (legacy)')).toBeInTheDocument()
     expect(within(legacy).getByText('No expiry')).toBeInTheDocument()
+  })
+
+  it('marks an expired key', () => {
+    renderIt([key({ expiresAt: new Date('2026-01-01') })])
+    expect(screen.getByText('Expired')).toBeInTheDocument()
   })
 
   it('revokes a teammate key, and offers no rotate', async () => {

@@ -33,3 +33,17 @@ export const LONG_DATE: Intl.DateTimeFormatOptions = {
   year: 'numeric',
   timeZone: 'UTC',
 }
+
+/** The quiet tag on a key that has passed its expiry. */
+export function ExpiredTag({ label }: { label: string }) {
+  return (
+    <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+      {label}
+    </span>
+  )
+}
+
+/** Whether a key has passed its expiry: it no longer works and can only be revoked. */
+export function isKeyExpired(key: { expiresAt: Date | string | null }): boolean {
+  return key.expiresAt != null && new Date(key.expiresAt).getTime() <= Date.now()
+}

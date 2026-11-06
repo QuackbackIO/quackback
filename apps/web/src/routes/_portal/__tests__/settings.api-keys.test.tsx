@@ -19,25 +19,29 @@ vi.mock('@tanstack/react-router', () => ({
     <a href={to}>{children}</a>
   ),
 }))
-vi.mock('@/lib/server/functions/personal-api-keys', () => ({ fetchMyApiKeysFn: vi.fn() }))
+vi.mock('@/lib/server/functions/personal-api-keys', () => ({
+  fetchMyApiKeysFn: vi.fn(async () => ({ keys: [], canCreate: true })),
+}))
 vi.mock('@/components/settings/api-keys/personal-api-keys', () => ({ PersonalApiKeys: () => null }))
 
 const { Route } = await import('../settings.api-keys')
 const { SettingsNav } = await import('@/components/settings/settings-nav')
 
-type BeforeLoad = (args: { context: { userRole?: string | null } }) => void
+type Loader = (args: {
+  context: { userRole?: string | null; acceptLanguageLocale?: string }
+}) => Promise<unknown>
 
 afterEach(cleanup)
 
 describe('/settings/api-keys', () => {
-  it.each(['user', null])('sends a %s to their profile', (userRole) => {
-    const beforeLoad = (Route as unknown as { beforeLoad: BeforeLoad }).beforeLoad
-    expect(() => beforeLoad({ context: { userRole } })).toThrow()
+  it.each(['user', null])('sends a %s to their profile', async (userRole) => {
+    const loader = (Route as unknown as { loader: Loader }).loader
+    await expect(loader({ context: { userRole } })).rejects.toBeTruthy()
   })
 
-  it.each(['admin', 'member'])('lets a %s in', (userRole) => {
-    const beforeLoad = (Route as unknown as { beforeLoad: BeforeLoad }).beforeLoad
-    expect(() => beforeLoad({ context: { userRole } })).not.toThrow()
+  it.each(['admin', 'member'])('lets a %s in', async (userRole) => {
+    const loader = (Route as unknown as { loader: Loader }).loader
+    await expect(loader({ context: { userRole } })).resolves.toMatchObject({ canCreate: true })
   })
 
   it('shows the API keys tab only to team members', () => {

@@ -31,6 +31,8 @@ import {
   type PersonalKeyExpiry,
 } from '@/lib/shared/api-key-refusal'
 import type { ApiKey } from '@/lib/shared/types'
+import { refusalText } from '@/components/admin/settings/api-keys/key-messages'
+import { PORTAL_KEY_MESSAGES, portalScopeWords } from './portal-key-messages'
 
 const m = defineMessages({
   title: { id: 'portal.settings.apiKeys.createTitle', defaultMessage: 'Create API key' },
@@ -123,7 +125,7 @@ export function CreatePersonalKeyDialog({
     try {
       const result = await createMyApiKeyFn({ data: { name: name.trim(), scopes, expiry } })
       if (!result.ok) {
-        setError(result.message)
+        setError(refusalText(intl, PORTAL_KEY_MESSAGES, result.code))
         return
       }
       startTransition(() => {
@@ -166,7 +168,12 @@ export function CreatePersonalKeyDialog({
             <div className="space-y-2">
               <Label>{intl.formatMessage(m.access)}</Label>
               <div className="overflow-hidden rounded-lg border border-border/50">
-                <DomainAccessPicker levels={levels} onChange={setLevels} disabled={busy} />
+                <DomainAccessPicker
+                  levels={levels}
+                  onChange={setLevels}
+                  disabled={busy}
+                  words={portalScopeWords(intl)}
+                />
               </div>
               <p className="text-xs text-muted-foreground">{intl.formatMessage(m.accessHint)}</p>
             </div>

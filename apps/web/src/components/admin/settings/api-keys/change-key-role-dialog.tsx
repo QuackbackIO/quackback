@@ -17,6 +17,7 @@ import { setWorkspaceKeyRoleFn } from '@/lib/server/functions/api-keys'
 import { workspaceKeyRolesQuery } from './workspace-key-roles-query'
 import type { ManagedApiKey } from '@/lib/server/domains/api-keys/api-key.types'
 import { WorkspaceKeyRolePicker } from './workspace-key-role-picker'
+import { ADMIN_KEY_MESSAGES, refusalText } from './key-messages'
 
 const m = defineMessages({
   title: { id: 'apiKeys.changeRole.title', defaultMessage: 'Change role' },
@@ -56,7 +57,7 @@ export function ChangeKeyRoleDialog({
     try {
       const result = await setWorkspaceKeyRoleFn({ data: { id: apiKey.id, roleId } })
       if (!result.ok) {
-        setError(result.message)
+        setError(refusalText(intl, ADMIN_KEY_MESSAGES, result.code))
         return
       }
       startTransition(() => {

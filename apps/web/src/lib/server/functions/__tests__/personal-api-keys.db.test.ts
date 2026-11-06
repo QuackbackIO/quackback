@@ -54,9 +54,15 @@ vi.mock('@/lib/server/domains/principals/membership-sync', () => ({
 
 const { fetchMyApiKeysFn, createMyApiKeyFn, renameMyApiKeyFn, rotateMyApiKeyFn, revokeMyApiKeyFn } =
   await import('../personal-api-keys')
-const { createApiKeyFn, fetchApiKeys, revokeApiKeyFn, rotateApiKeyFn, updateApiKeyFn } =
-  await import('../api-keys')
-const { setPersonalKeyPolicyFn } = await import('../workspace-api-key-settings')
+const {
+  createApiKeyFn,
+  fetchApiKeys,
+  revokeApiKeyFn,
+  rotateApiKeyFn,
+  updateApiKeyFn,
+  setWorkspaceKeyRoleFn,
+} = await import('../api-keys')
+const { setPersonalKeyPolicyFn } = await import('../personal-key-policy')
 const { createApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
 
 const fixture = await createDbTestFixture({
@@ -253,6 +259,36 @@ describe.skipIf(!fixture.available)('key manager functions', () => {
       ok: false,
       code: 'NOT_FOUND',
     })
+    expect(await revokeApiKeyFn({ data: { id: apiKey.id } })).toEqual({ ok: true, id: apiKey.id })
+  })
+
+  it("refuses to rotate, rename or re-role a key above the manager's role, but revokes it", async () => {
+    const admin = await seedPerson('admin')
+    const manager = await seedPerson('member')
+    const [owner] = await testDb
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.key, SYSTEM_ROLES.OWNER))
+    const { apiKey } = await createApiKey(
+      { name: 'Order export', kind: 'workspace', roleId: owner.id as RoleId },
+      admin,
+      { permissions: ALL_PERMISSIONS, role: 'admin' }
+    )
+    signInAs(manager, 'member', ['api_key.manage'] as never)
+
+    expect(await rotateApiKeyFn({ data: { id: apiKey.id } })).toMatchObject({
+      ok: false,
+      code: 'GRANT_CEILING',
+    })
+    expect(await updateApiKeyFn({ data: { id: apiKey.id, name: 'Mine' } })).toMatchObject({
+      ok: false,
+      code: 'GRANT_CEILING',
+    })
+    expect(
+      await setWorkspaceKeyRoleFn({ data: { id: apiKey.id, roleId: await managerRoleId() } })
+    ).toMatchObject({ ok: false, code: 'GRANT_CEILING' })
+    const { keys } = await fetchApiKeys()
+    expect(keys.find((k) => k.id === apiKey.id)?.manageable).toBe(false)
     expect(await revokeApiKeyFn({ data: { id: apiKey.id } })).toEqual({ ok: true, id: apiKey.id })
   })
 

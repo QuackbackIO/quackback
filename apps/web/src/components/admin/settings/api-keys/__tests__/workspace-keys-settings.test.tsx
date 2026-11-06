@@ -5,9 +5,10 @@ import { IntlProvider } from 'react-intl'
 import userEvent from '@testing-library/user-event'
 import type { ManagedApiKey } from '@/lib/server/domains/api-keys/api-key.types'
 
-vi.mock('../create-workspace-key-dialog', () => ({
-  CreateWorkspaceKeyDialog: ({ open }: { open: boolean }) =>
-    open ? <p>Create workspace key form</p> : null,
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
 }))
 vi.mock('../change-key-role-dialog', () => ({
   ChangeKeyRoleDialog: ({ open, apiKey }: { open: boolean; apiKey: ManagedApiKey }) =>
@@ -49,6 +50,7 @@ function key(over: Partial<ManagedApiKey> = {}): ManagedApiKey {
     creatorName: 'Priya Shah',
     creatorIsTeammate: true,
     role: { id: 'role_lead', name: 'Support lead' },
+    manageable: true,
     createdAt: new Date('2026-10-23T12:00:00Z'),
     lastUsedAt: null,
     expiresAt: null,
@@ -105,11 +107,29 @@ describe('WorkspaceKeysSettings', () => {
     expect(screen.getByRole('cell', { name: 'Removed teammate, Oct 23' })).toBeInTheDocument()
   })
 
-  it('opens the create dialog from "New workspace key"', async () => {
-    const user = userEvent.setup()
+  it('links "New workspace key" to its own page', () => {
     render(<WorkspaceKeysSettings apiKeys={[]} />, { wrapper: intl })
-    await user.click(screen.getAllByRole('button', { name: 'New workspace key' })[0])
-    expect(await screen.findByText('Create workspace key form')).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'New workspace key' })[0]).toHaveAttribute(
+      'href',
+      '/admin/settings/developers/workspace-keys/new'
+    )
+  })
+
+  it('offers only Revoke on a key whose role the viewer cannot grant', async () => {
+    const user = userEvent.setup()
+    render(<WorkspaceKeysSettings apiKeys={[key({ manageable: false })]} />, { wrapper: intl })
+    await user.click(screen.getByRole('button', { name: 'Actions for Warehouse sync' }))
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Revoke'])
+  })
+
+  it('marks an expired key and offers only Revoke on it', async () => {
+    const user = userEvent.setup()
+    render(<WorkspaceKeysSettings apiKeys={[key({ expiresAt: new Date('2026-01-01') })]} />, {
+      wrapper: intl,
+    })
+    expect(screen.getByText('Expired')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Actions for Warehouse sync' }))
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Revoke'])
   })
 
   it.each([

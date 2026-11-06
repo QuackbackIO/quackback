@@ -94,6 +94,33 @@ describe('PersonalApiKeys', () => {
   })
 })
 
+describe('PersonalApiKeys expired keys', () => {
+  it('marks an expired key and offers only Revoke', async () => {
+    const user = userEvent.setup()
+    wrap(<PersonalApiKeys apiKeys={[key({ expiresAt: new Date('2026-01-01') })]} canCreate />)
+    expect(screen.getByText('Expired')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Actions for Inbox triage script' }))
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Revoke'])
+  })
+
+  it('reads its scope summary from the page catalogue', () => {
+    render(
+      <IntlProvider
+        locale="de"
+        messages={{
+          'portal.settings.apiKeys.summary.readWrite': '{domain} (Lesen und Schreiben)',
+          'portal.settings.apiKeys.scope.chat': 'Unterhaltungen',
+        }}
+      >
+        <QueryClientProvider client={new QueryClient()}>
+          <PersonalApiKeys apiKeys={[key()]} canCreate />
+        </QueryClientProvider>
+      </IntlProvider>
+    )
+    expect(screen.getByText('Unterhaltungen (Lesen und Schreiben)')).toBeInTheDocument()
+  })
+})
+
 describe('CreatePersonalKeyDialog', () => {
   it('creates a key that expires in 90 days by default', async () => {
     createMine.mockResolvedValue({
@@ -125,11 +152,29 @@ describe('CreatePersonalKeyDialog', () => {
     expect(createMine.mock.calls[0][0].data.expiry).toBe('never')
   })
 
-  it('shows a refusal', async () => {
+  it('labels the scope picker from the page catalogue', () => {
+    render(
+      <IntlProvider
+        locale="de"
+        messages={{
+          'portal.settings.apiKeys.scope.feedback': 'Feedback DE',
+          'portal.settings.apiKeys.scope.read': 'Lesen',
+        }}
+      >
+        <QueryClientProvider client={new QueryClient()}>
+          <CreatePersonalKeyDialog open onOpenChange={vi.fn()} onKeyCreated={vi.fn()} />
+        </QueryClientProvider>
+      </IntlProvider>
+    )
+    expect(screen.getByText('Feedback DE')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Feedback DE: Lesen' })).toBeInTheDocument()
+  })
+
+  it('shows a refusal in catalogue words, not the server text', async () => {
     createMine.mockResolvedValue({
       ok: false,
       code: 'POLICY_OFF',
-      message: 'Your admin has turned off new personal keys.',
+      message: 'server text',
     })
     const onKeyCreated = vi.fn()
     wrap(<CreatePersonalKeyDialog open onOpenChange={vi.fn()} onKeyCreated={onKeyCreated} />)

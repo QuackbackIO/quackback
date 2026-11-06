@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { defineMessages, useIntl, type MessageDescriptor } from 'react-intl'
+import { useIntl } from 'react-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
@@ -16,17 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import type { ApiKey } from '@/lib/shared/types'
 import type { ApiKeyRefusal } from '@/lib/shared/api-key-refusal'
-
-const m = defineMessages({
-  title: { id: 'apiKeys.rename.title', defaultMessage: 'Rename key' },
-  name: { id: 'apiKeys.form.name', defaultMessage: 'Name' },
-  cancel: { id: 'apiKeys.form.cancel', defaultMessage: 'Cancel' },
-  save: { id: 'apiKeys.form.save', defaultMessage: 'Save' },
-  failed: { id: 'apiKeys.form.saveFailed', defaultMessage: 'The change could not be saved.' },
-})
-
-/** The dialog's words; a page in another message area passes its own. */
-export type RenameApiKeyMessages = Record<keyof typeof m, MessageDescriptor>
+import { ADMIN_KEY_MESSAGES, refusalText, type KeyDialogMessages } from './key-messages'
 
 export type RenameApiKeyAction = (
   id: ApiKey['id'],
@@ -38,13 +28,13 @@ export function RenameApiKeyDialog({
   onOpenChange,
   apiKey,
   rename,
-  messages = m,
+  messages = ADMIN_KEY_MESSAGES,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   apiKey: Pick<ApiKey, 'id' | 'name'>
   rename: RenameApiKeyAction
-  messages?: RenameApiKeyMessages
+  messages?: KeyDialogMessages
 }) {
   const intl = useIntl()
   const router = useRouter()
@@ -63,7 +53,7 @@ export function RenameApiKeyDialog({
     try {
       const result = await rename(apiKey.id, name.trim())
       if (!result.ok) {
-        setError(result.message)
+        setError(refusalText(intl, messages, result.code))
         return
       }
       startTransition(() => {
@@ -82,7 +72,7 @@ export function RenameApiKeyDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{intl.formatMessage(messages.title)}</DialogTitle>
+          <DialogTitle>{intl.formatMessage(messages.renameTitle)}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-2 py-4">

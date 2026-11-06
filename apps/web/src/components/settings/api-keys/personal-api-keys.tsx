@@ -13,7 +13,8 @@ import {
   revokeMyApiKeyFn,
   rotateMyApiKeyFn,
 } from '@/lib/server/functions/personal-api-keys'
-import { summarizeDomainAccess } from '@/lib/shared/api-key-scopes'
+import { Badge } from '@/components/ui/badge'
+import { isKeyExpired, PORTAL_KEY_MESSAGES, summarizeScopes } from './portal-key-messages'
 import type { ApiKey } from '@/lib/shared/types'
 
 // Each dialog loads when first opened.
@@ -67,22 +68,7 @@ const m = defineMessages({
   rename: { id: 'portal.settings.apiKeys.rename', defaultMessage: 'Rename' },
   rotate: { id: 'portal.settings.apiKeys.rotate', defaultMessage: 'Rotate' },
   revoke: { id: 'portal.settings.apiKeys.revoke', defaultMessage: 'Revoke' },
-  settingsRead: { id: 'portal.settings.apiKeys.settingsRead', defaultMessage: 'Settings (read)' },
-  settingsReadWrite: {
-    id: 'portal.settings.apiKeys.settingsReadWrite',
-    defaultMessage: 'Settings (read and write)',
-  },
-})
-
-const renameMessages = defineMessages({
-  title: { id: 'portal.settings.apiKeys.renameTitle', defaultMessage: 'Rename key' },
-  name: { id: 'portal.settings.apiKeys.name', defaultMessage: 'Name' },
-  cancel: { id: 'portal.settings.apiKeys.cancel', defaultMessage: 'Cancel' },
-  save: { id: 'portal.settings.apiKeys.save', defaultMessage: 'Save' },
-  failed: {
-    id: 'portal.settings.apiKeys.saveFailed',
-    defaultMessage: 'The change could not be saved.',
-  },
+  expired: { id: 'portal.settings.apiKeys.expired', defaultMessage: 'Expired' },
 })
 
 /** "Feb 4, 2027" */
@@ -124,11 +110,7 @@ export function PersonalApiKeys({ apiKeys, canCreate }: { apiKeys: ApiKey[]; can
         {key.lastUsedAt
           ? intl.formatMessage(m.lastUsed, { time: <TimeAgo date={key.lastUsedAt} /> })
           : intl.formatMessage(m.neverUsed)}
-        <span className="block whitespace-normal">
-          {summarizeDomainAccess(key.scopes, (level) =>
-            intl.formatMessage(level === 'read' ? m.settingsRead : m.settingsReadWrite)
-          )}
-        </span>
+        <span className="block whitespace-normal">{summarizeScopes(intl, key.scopes)}</span>
       </>
     )
   }
@@ -171,30 +153,33 @@ export function PersonalApiKeys({ apiKeys, canCreate }: { apiKeys: ApiKey[]; can
                 leading={<RowIcon icon={KeyGlyph} />}
                 title={key.name}
                 meta={meta(key)}
+                badges={
+                  isKeyExpired(key) ? (
+                    <Badge variant="secondary" size="sm">
+                      {intl.formatMessage(m.expired)}
+                    </Badge>
+                  ) : undefined
+                }
                 actions={[
-                  {
-                    label: intl.formatMessage(m.rename),
-                    onSelect: () => {
-                      setSelected(key)
-                      setDialog('rename')
-                    },
-                  },
-                  {
-                    label: intl.formatMessage(m.rotate),
-                    onSelect: () => {
-                      setSelected(key)
-                      setDialog('rotate')
-                    },
-                  },
+                  // An expired key no longer works: it can only be revoked.
+                  ...(isKeyExpired(key)
+                    ? []
+                    : [
+                        { label: intl.formatMessage(m.rename), dialog: 'rename' as const },
+                        { label: intl.formatMessage(m.rotate), dialog: 'rotate' as const },
+                      ]),
                   {
                     label: intl.formatMessage(m.revoke),
+                    dialog: 'revoke' as const,
                     destructive: true,
-                    onSelect: () => {
-                      setSelected(key)
-                      setDialog('revoke')
-                    },
                   },
-                ]}
+                ].map(({ dialog: next, ...item }) => ({
+                  ...item,
+                  onSelect: () => {
+                    setSelected(key)
+                    setDialog(next)
+                  },
+                }))}
               />
             ))}
           </SettingsList>
@@ -220,6 +205,7 @@ export function PersonalApiKeys({ apiKeys, canCreate }: { apiKeys: ApiKey[]; can
             keyValue={revealed.value}
             keyName={revealed.name}
             onClose={() => setRevealed(null)}
+            messages={PORTAL_KEY_MESSAGES}
           />
         </Suspense>
       )}
@@ -232,7 +218,7 @@ export function PersonalApiKeys({ apiKeys, canCreate }: { apiKeys: ApiKey[]; can
               onOpenChange={(next) => setDialog(next ? 'rename' : null)}
               apiKey={selected}
               rename={rename}
-              messages={renameMessages}
+              messages={PORTAL_KEY_MESSAGES}
             />
           )}
           {dialog === 'rotate' && (
@@ -242,6 +228,7 @@ export function PersonalApiKeys({ apiKeys, canCreate }: { apiKeys: ApiKey[]; can
               apiKey={selected}
               rotate={rotate}
               onKeyRotated={reveal}
+              messages={PORTAL_KEY_MESSAGES}
             />
           )}
           {dialog === 'revoke' && (
@@ -250,6 +237,7 @@ export function PersonalApiKeys({ apiKeys, canCreate }: { apiKeys: ApiKey[]; can
               onOpenChange={(next) => setDialog(next ? 'revoke' : null)}
               apiKey={selected}
               revoke={revoke}
+              messages={PORTAL_KEY_MESSAGES}
             />
           )}
         </Suspense>
