@@ -16,6 +16,7 @@ import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
   createdResponse,
+  noContentResponse,
   badRequestResponse,
   notFoundResponse,
   handleDomainError,
@@ -216,6 +217,33 @@ export async function patchStatusComponentHandler({
     if (!row) return notFoundResponse('Status component')
 
     return successResponse(serializeStatusComponent(row))
+  } catch (error) {
+    return handleDomainError(error)
+  }
+}
+
+/**
+ * DELETE /api/v1/status/components/:componentId (aliased at
+ * /api/v1/status/services/:serviceId)
+ * Soft-deletes the component, as the dashboard does: past incidents that
+ * used it keep their history.
+ */
+export async function deleteStatusComponentHandler({
+  request,
+  id,
+}: {
+  request: Request
+  id: string
+}) {
+  try {
+    await withApiKeyAuth(request, { permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+
+    const componentId = parseTypeId<StatusComponentId>(id, 'status_component', 'component ID')
+
+    const { deleteStatusComponent } = await import('@/lib/server/domains/status')
+    await deleteStatusComponent(componentId)
+
+    return noContentResponse()
   } catch (error) {
     return handleDomainError(error)
   }
