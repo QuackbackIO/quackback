@@ -17,6 +17,8 @@ type MembersPageTab = (typeof TABS)[number]
 
 const searchSchema = z.object({
   tab: z.enum(TABS).optional(),
+  /** Opens the roster filtered, as a teammate search result does. */
+  q: z.string().max(200).optional(),
 })
 
 export const Route = createFileRoute('/admin/settings/members')({
@@ -50,7 +52,7 @@ export const Route = createFileRoute('/admin/settings/members')({
 
 function MembersPage() {
   const { currentMember, canManageTeams, canManageMembers } = Route.useLoaderData()
-  const { tab: requested = 'members' } = Route.useSearch()
+  const { tab: requested = 'members', q } = Route.useSearch()
   const tab = requested === 'teams' && !canManageTeams ? 'members' : requested
   const navigate = Route.useNavigate()
 
@@ -73,7 +75,11 @@ function MembersPage() {
           <TabsTrigger value="roles">Roles</TabsTrigger>
         </TabsList>
         <TabsContent value="members">
-          <MembersTab currentMember={currentMember} canManageMembers={canManageMembers} />
+          <MembersTab
+            currentMember={currentMember}
+            canManageMembers={canManageMembers}
+            initialSearch={q}
+          />
         </TabsContent>
         {canManageTeams && (
           <TabsContent value="teams">

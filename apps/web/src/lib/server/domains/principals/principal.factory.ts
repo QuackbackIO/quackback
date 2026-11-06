@@ -379,10 +379,11 @@ export async function setPrincipalRole(
 }
 
 /**
- * Revoke every live key a principal created, inside the caller's executor, and
- * downgrade each key's service principal as revoking a key does. Runs when a
- * person joins or leaves the team, and before a person is deleted, since
- * deleting them clears `created_by_id` on their keys.
+ * Revoke every live personal key a principal created, inside the caller's
+ * executor, and downgrade each key's service principal as revoking a key does.
+ * Runs when a person joins or leaves the team, and before a person is deleted,
+ * since deleting them clears `created_by_id` on their keys. Workspace keys
+ * belong to nobody and are untouched.
  */
 export async function revokeApiKeysCreatedBy(
   exec: Executor,
@@ -391,7 +392,13 @@ export async function revokeApiKeysCreatedBy(
   const revoked = await exec
     .update(apiKeys)
     .set({ revokedAt: new Date() })
-    .where(and(eq(apiKeys.createdById, creatorId), isNull(apiKeys.revokedAt)))
+    .where(
+      and(
+        eq(apiKeys.createdById, creatorId),
+        eq(apiKeys.kind, 'personal'),
+        isNull(apiKeys.revokedAt)
+      )
+    )
     .returning({ principalId: apiKeys.principalId })
   for (const key of revoked) {
     // A legacy key backed by the creator's own principal goes with that principal.

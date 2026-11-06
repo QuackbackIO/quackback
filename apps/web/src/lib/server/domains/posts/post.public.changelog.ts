@@ -12,6 +12,7 @@ import { fromUuid, type ChangelogId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy'
 import { publicChangelogConditions } from '@/lib/server/domains/changelog/changelog.public'
 import { categoryGateCondition } from '@/lib/server/domains/changelog/changelog-category.service'
+import { isChangelogAudienceGranted } from '@/lib/server/domains/changelog/changelog.audience'
 import { getFeatureFlags } from '@/lib/server/domains/settings/settings.service'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 
@@ -27,10 +28,15 @@ type RawChangelogLink = { id: string; title: string } | null
  * A column for a feed query over `posts`: the newest changelog entry linked to
  * each post that `actor` may read, so a shipped idea can point at its
  * announcement. One correlated subquery, so it costs no extra round trip.
- * Null when not requested or when the changelog product is off.
+ * Null when not requested, when the changelog product is off, or when the
+ * changelog is for signed-in people and `actor` is not one.
  */
 export async function changelogLinkColumn(actor: Actor, requested: boolean | undefined) {
-  if (!requested || !isProductEnabled(await getFeatureFlags(), 'changelog')) {
+  if (
+    !requested ||
+    !isProductEnabled(await getFeatureFlags(), 'changelog') ||
+    !(await isChangelogAudienceGranted(actor))
+  ) {
     return sql<RawChangelogLink | string>`null`
   }
   const newest = db
