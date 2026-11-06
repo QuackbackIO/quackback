@@ -32,7 +32,7 @@ import {
   type AssistantToolCall,
 } from './tool-audit'
 import { proposePendingAction, type AssistantPendingAction } from './pending-actions.service'
-import type { ApprovalRequester } from './approvals.service'
+import type { PendingActionRequester } from './pending-action-decisions'
 import { describeEnabledKnowledgeSources } from './retrieval-sources'
 
 const log = logger.child({ component: 'assistant-tools' })
@@ -203,10 +203,9 @@ function resolveIdempotencyKey(
  * teammate it works for when there is one. The assistant can never decide its
  * own request; the teammate, like any qualified person, can.
  */
-function assistantRequester(ctx: AssistantToolContext): ApprovalRequester {
+function assistantRequester(ctx: AssistantToolContext): PendingActionRequester {
   const person = ctx.actor.principalType === 'user' ? ctx.actor.principalId : null
   return {
-    via: 'assistant',
     // A turn whose assistant identity is the person themselves has no agent
     // principal of its own to record.
     requestedById:
@@ -266,9 +265,6 @@ async function runWithPipeline(
       summary,
       originRole: ctx.role,
       requester: assistantRequester(ctx),
-      // A connector read a teammate allows in their own Home chat is low risk;
-      // any other write waits for a teammate's approval.
-      risk: spec.connector && isHomeTurn(ctx) && spec.risk !== 'write' ? 'low' : 'medium',
       // Same-shaped key as the autonomous branch's claim below: a synthesis
       // retry that re-runs this exact write-tool call for the same turn
       // dedupes onto the first proposal row instead of inserting a duplicate
