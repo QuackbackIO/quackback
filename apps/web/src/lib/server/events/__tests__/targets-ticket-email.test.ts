@@ -56,7 +56,7 @@ vi.mock('@/lib/server/domains/teams', () => ({
 
 // --- channel-account From resolution ---
 const resolveSendingAddress = vi.fn<() => Promise<string | null>>()
-vi.mock('@/lib/server/domains/channel-accounts/channel-account.service', () => ({
+vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({
   resolveSendingAddress: () => resolveSendingAddress(),
 }))
 

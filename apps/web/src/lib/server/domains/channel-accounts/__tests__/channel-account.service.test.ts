@@ -44,11 +44,11 @@ import {
   listChannelAccounts,
   softDeleteChannelAccount,
   resolveChannelAccountByRecipient,
-  resolveSendingAddress,
   updateInboundTrust,
   clearInboundForwarding,
   updateSendingAddressSmtp,
 } from '../channel-account.service'
+import { resolveSendingAddress } from '../sender-resolver'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -446,17 +446,20 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
       .from(teams)
       .where(eq(teams.isDefault, true))
       .limit(1)
-    if (defaultTeam) {
-      await createSendingAddress({
-        owningTeamId: defaultTeam.id as TeamId,
-        address: 'default@acme.com',
-        module: 'support',
-      })
-      expect(await resolveSendingAddress(null)).toBe('default@acme.com')
-    }
+    expect(defaultTeam, 'a workspace is seeded with one default team').toBeTruthy()
 
-    // A team with no sending address resolves null (caller uses EMAIL_FROM).
+    // A team with no sending address, and no default-team address either,
+    // resolves null (caller uses EMAIL_FROM).
     const bare = await seedTeam()
     expect(await resolveSendingAddress(bare)).toBeNull()
+
+    await createSendingAddress({
+      owningTeamId: defaultTeam.id as TeamId,
+      address: 'default@acme.com',
+      module: 'support',
+    })
+    expect(await resolveSendingAddress(null)).toBe('default@acme.com')
+    // And the team with none of its own now sends as the default team.
+    expect(await resolveSendingAddress(bare)).toBe('default@acme.com')
   })
 })
