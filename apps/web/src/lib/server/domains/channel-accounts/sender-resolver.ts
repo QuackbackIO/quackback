@@ -5,10 +5,10 @@
  * directly or through one of the two wrappers below, so the choice is made the
  * same way for a reply, a closing notice, a ticket notice and changelog mail.
  */
-import type { ChannelAccountId, ConversationId, TeamId } from '@quackback/ids'
+import type { ChannelAccountId, ConversationId, TeamId, TicketId } from '@quackback/ids'
 import type { SendingIdentity } from '@quackback/email/sender'
 import { parseAddress } from '@quackback/email/ses'
-import { db, and, eq, isNull, conversations } from '@/lib/server/db'
+import { db, and, asc, eq, isNull, conversations, ticketConversations } from '@/lib/server/db'
 import { platformInboxAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import {
@@ -225,4 +225,30 @@ export async function resolveConversationFrom(
   // write, or the stored one is refused for now. Asking again returns the
   // former and falls through the same way for the latter.
   return (await resolveSender({ module, conversationId }))?.from ?? null
+}
+
+/**
+ * The From for an email to a ticket's requester.
+ *
+ * A ticket opened from a conversation is the same customer's thread carried on
+ * elsewhere, so it sends from that conversation's thread sender
+ * ({@link resolveConversationFrom}): the ticket's emails and the conversation's
+ * replies then come from one address even when the ticket is worked by another
+ * team. With several linked, the first one linked decides. A ticket with no
+ * linked conversation sends from its team's address, as
+ * {@link resolveSendingAddress} chooses it.
+ */
+export async function resolveTicketFrom(
+  ticketId: TicketId,
+  assignedTeamId: TeamId | null,
+  module: SendingModule = 'support'
+): Promise<SendingIdentity | null> {
+  const [link] = await db
+    .select({ conversationId: ticketConversations.conversationId })
+    .from(ticketConversations)
+    .where(eq(ticketConversations.ticketId, ticketId))
+    .orderBy(asc(ticketConversations.createdAt), asc(ticketConversations.conversationId))
+    .limit(1)
+  if (link) return resolveConversationFrom(link.conversationId, module)
+  return resolveSendingAddress(assignedTeamId, module)
 }
