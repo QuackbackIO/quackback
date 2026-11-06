@@ -115,6 +115,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'CloudCredentialSource reads only the process environment populated before startup. Cross-workspace calls return the same centrally managed OAuth application credentials; per-workspace installation tokens remain in workspace databases.',
   },
   {
+    file: 'apps/web/src/lib/server/domains/assistant/workspace-semantic-search.ts',
+    name: 'vectors',
+    category: 'workspace-keyed',
+    reason:
+      'Query embeddings for workspace search, kept a few minutes so paging reuses one request. ' +
+      'A cross-workspace hit would reveal that another workspace searched the same words and ' +
+      'skip the embedding request billed to this one.',
+  },
+  {
     file: 'apps/web/src/lib/server/auth/index.ts',
     name: 'authConfigVersions',
     category: 'workspace-keyed',

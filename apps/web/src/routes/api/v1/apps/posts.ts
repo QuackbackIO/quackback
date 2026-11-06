@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
@@ -77,11 +78,9 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
           // internal flow.
           const callerSegmentIds = await segmentIdsForPrincipal(authorPrincipalId)
           const actor = {
+            ...serviceActorFromApiAuth(apiAuth),
             principalId: authorPrincipalId,
-            role: apiAuth.role,
-            principalType: 'service' as const,
             segmentIds: callerSegmentIds,
-            permissions: apiAuth.permissions,
           }
 
           const result = await createPost(

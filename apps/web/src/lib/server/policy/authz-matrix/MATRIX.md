@@ -208,7 +208,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/api-keys.ts`::updateApiKeyFn | api_key.manage |
 | `lib/server/functions/api-keys.ts`::rotateApiKeyFn | api_key.manage |
 | `lib/server/functions/api-keys.ts`::revokeApiKeyFn | api_key.manage |
-| `lib/server/functions/ask-search.ts`::searchAskEntitiesFn | DYNAMIC (post.view_private | help_center.manage | changelog.view_draft | changelog.manage | conversation.view | ticket.view) |
+| `lib/server/functions/ask-search.ts`::searchWorkspaceFn | DYNAMIC (post.view_private | help_center.manage | changelog.view_draft | changelog.manage | conversation.view | conversation.view_all | ticket.view | ticket.view_all | people.view | member.view | company.view) |
 | `lib/server/functions/assistant-actions.ts`::approveAssistantActionFn | DYNAMIC (conversation.view | ticket.view | copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage | conversation.set_attributes | conversation.set_status | ticket.create | post.create | post.vote_on_behalf) |
 | `lib/server/functions/assistant-actions.ts`::rejectAssistantActionFn | DYNAMIC (conversation.view | ticket.view | copilot.use) |
 | `lib/server/functions/assistant-analytics.ts`::getQuinnPerformanceFn | analytics.view |
