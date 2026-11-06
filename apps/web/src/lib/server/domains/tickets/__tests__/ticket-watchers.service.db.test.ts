@@ -279,9 +279,21 @@ describe.skipIf(!fixture.available)('ticket-watchers.service (real DB, rolled ba
   it('lists watchers with whether each is a teammate today', async () => {
     const { ticketId, requester } = await seedWorld()
     const mate = await seedPerson('member', 'Max Mate')
+    // Distinct timestamps: one insert gives both rows the same created_at,
+    // and the list orders by it, so a tie would come back in any order.
     await testDb.insert(ticketSubscriptions).values([
-      { ticketId, principalId: requester, reason: 'requester' },
-      { ticketId, principalId: mate, reason: 'manual' },
+      {
+        ticketId,
+        principalId: requester,
+        reason: 'requester',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      },
+      {
+        ticketId,
+        principalId: mate,
+        reason: 'manual',
+        createdAt: new Date('2026-01-02T00:00:00Z'),
+      },
     ])
 
     const watchers = await listWatchersOfTicket(ticketId, managerActor(mate))
