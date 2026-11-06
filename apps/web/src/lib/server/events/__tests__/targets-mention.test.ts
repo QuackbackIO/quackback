@@ -115,7 +115,11 @@ beforeEach(() => {
  * row second so the fast-path triggers and the mentioned principal
  * passes the audience filter.
  */
-function setupMentionDbChain(rows: unknown[]) {
+function setupMentionDbChain(
+  rows: unknown[],
+  // The mentioning principal, read third for the mentioner's name.
+  mentioner: unknown[] = [{ displayName: 'Bea' }]
+) {
   // mockReset (vs clearAllMocks in beforeEach) so leftover
   // mockResolvedValueOnce queues from prior tests don't carry over.
   mockLimit.mockReset()
@@ -133,10 +137,11 @@ function setupMentionDbChain(rows: unknown[]) {
       },
     },
   ])
+  mockLimit.mockResolvedValueOnce(mentioner)
   mockDbWhere.mockReturnValue({ limit: mockLimit })
   mockLeftJoin.mockReturnValue({ where: mockDbWhere })
   mockInnerJoin.mockReturnValue({ where: mockDbWhere })
-  mockFrom.mockReturnValue({ leftJoin: mockLeftJoin, innerJoin: mockInnerJoin })
+  mockFrom.mockReturnValue({ leftJoin: mockLeftJoin, innerJoin: mockInnerJoin, where: mockDbWhere })
   mockSelect.mockReturnValue({ from: mockFrom })
 }
 
@@ -190,7 +195,10 @@ describe('post.mentioned target resolution', () => {
       postTitle: 'A test post',
       postUrl: 'https://test.quackback.io/b/bugs/posts/post_1',
       workspaceName: 'Test Workspace',
+      mentionerName: 'Bea',
     })
+    // The relayed event carries no actor name; both name the mentioner.
+    expect(notificationTargets[0].config).toMatchObject({ mentionerName: 'Bea' })
     // Token was issued with action=unsubscribe_all (global mute) since the
     // user didn't subscribe to the post — they were tagged.
     expect(mockBatchGenerateUnsubscribeTokens).toHaveBeenCalledWith([
@@ -200,6 +208,16 @@ describe('post.mentioned target resolution', () => {
         action: 'unsubscribe_all',
       },
     ])
+  })
+
+  it('leaves the mentioner unnamed when their principal has no name', async () => {
+    setupMentionDbChain(
+      [{ id: 'principal_mentioned', type: 'user', role: 'user', email: 'alice@example.com' }],
+      [{ displayName: null }]
+    )
+    const targets = await getHookTargets(makePostMentionedEvent())
+    const bell = targets.find((t) => t.type === 'notification')
+    expect(bell?.config).toMatchObject({ mentionerName: null })
   })
 
   it('notifies nobody when the principal mentioned themselves', async () => {
