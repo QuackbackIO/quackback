@@ -2260,5 +2260,11 @@
   "portal.feedback.list.searchWidenedMost": "Ни одно предложение не содержит все ваши слова. Показаны предложения с большинством из них.",
   "portal.feedback.list.searchWidenedSimilar": "Точных совпадений нет. Показаны предложения с похожим написанием.",
   "settings.labs.empty.title": "Сейчас экспериментов нет",
-  "settings.labs.empty.description": "Здесь появляются функции, которые можно попробовать до выхода."
+  "settings.labs.empty.description": "Здесь появляются функции, которые можно попробовать до выхода.",
+  "admin.integrations.oauthError.denied": "Подключение отклонено в {name}. Подключитесь снова, чтобы разрешить доступ.",
+  "admin.integrations.oauthError.expired": "Срок запроса на подключение истёк, или он недействителен. Попробуйте подключиться снова.",
+  "admin.integrations.oauthError.session": "Сеанс изменился во время подключения. Войдите снова, затем подключитесь.",
+  "admin.integrations.oauthError.credentials": "Добавьте учётные данные приложения {name} перед подключением.",
+  "admin.integrations.oauthError.elsewhere": "Этот аккаунт {name} уже подключён к другому рабочему пространству Quackback.",
+  "admin.integrations.oauthError.failed": "{name} не завершил подключение. Попробуйте подключиться снова."
 }
