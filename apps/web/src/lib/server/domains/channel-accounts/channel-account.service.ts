@@ -17,10 +17,10 @@ import {
   isNull,
   isNotNull,
   inArray,
+  asc,
   desc,
   sql,
   channelAccounts,
-  conversations,
   emailSendingDomains,
   teams,
   type ChannelAccount,
@@ -28,15 +28,8 @@ import {
   type ChannelAccountConfig,
   type SendingDomainDnsRecord,
 } from '@/lib/server/db'
-import type {
-  ChannelAccountId,
-  ConversationId,
-  IntegrationId,
-  SendingDomainId,
-  TeamId,
-} from '@quackback/ids'
+import type { ChannelAccountId, IntegrationId, SendingDomainId, TeamId } from '@quackback/ids'
 import { requireChannelDescriptor } from '@/lib/shared/channels'
-import type { SendingIdentity } from '@quackback/email/sender'
 import * as tierEnforce from '@/lib/server/domains/settings/tier-enforce'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import {
@@ -45,11 +38,10 @@ import {
 } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { logger } from '@/lib/server/logger'
-import { permittedSendingIdentity, withSendingDisplayName } from './outbound-identity'
 
 const log = logger.child({ component: 'channel-accounts' })
 
-type SendingModule = 'support' | 'feedback' | 'changelog'
+export type SendingModule = 'support' | 'feedback' | 'changelog'
 
 // ---------------------------------------------------------------------------
 // Sending domains (SPF/DKIM verified)
@@ -267,7 +259,7 @@ export function addressesPlatformInbox(recipients: string[]): boolean {
  *
  * ## Why the row records no address
  *
- * `address` is the column {@link resolveConversationFrom} reads FIRST and the
+ * `address` is the column `resolveSender` (`sender-resolver.ts`) reads FIRST and the
  * column `channel_accounts_sending_address_uq` is built over, so writing the
  * platform address into it costs three things and buys none: the row falls under
  * a second unique index (a workspace that had registered that same address as a
@@ -530,12 +522,22 @@ export async function getInboundRoute(owningTeamId: TeamId): Promise<ChannelAcco
   return row ?? null
 }
 
-/** Resolve the sending address for a module (the outbound From for a reply). */
-export async function getSendingAddress(
+/**
+ * A team's sending addresses for a module, in the one order every choice
+ * between them is made in: oldest first, then by id.
+ *
+ * Fixed rather than left to the planner, because two rows for the same team
+ * and module are a normal state (a second address added beside a live one) and
+ * a query with no ORDER BY is free to hand back either. The From a customer sees
+ * would then change between two replies on the same thread for no reason anyone
+ * could find. Oldest first means a newly added address never takes over from
+ * the one that was already in use.
+ */
+export async function listSendingAddresses(
   owningTeamId: TeamId,
   module: SendingModule
-): Promise<ChannelAccount | null> {
-  const [row] = await db
+): Promise<ChannelAccount[]> {
+  return db
     .select()
     .from(channelAccounts)
     .where(
@@ -546,103 +548,21 @@ export async function getSendingAddress(
         isNull(channelAccounts.deletedAt)
       )
     )
-    .limit(1)
+    .orderBy(asc(channelAccounts.createdAt), asc(channelAccounts.id))
+}
+
+/**
+ * The first sending address configured for a team and module, in the fixed
+ * order (oldest first, then id). Says nothing about whether it may be sent as:
+ * the From is chosen by `resolveSender` (`sender-resolver.ts`), which skips rows the send guard
+ * refuses.
+ */
+export async function getSendingAddress(
+  owningTeamId: TeamId,
+  module: SendingModule
+): Promise<ChannelAccount | null> {
+  const [row] = await listSendingAddresses(owningTeamId, module)
   return row ?? null
-}
-
-/**
- * The sending address an outbound message for a conversation should come from
- * (§4.8): the conversation's assigned team's sending address for the module, else
- * the default team's, else null so the caller falls back to the workspace default
- * (`getEmailFrom()`, registry `email.from` when pooled). The one place the outbound
- * From is resolved.
- *
- * Every answer passes the sending-identity guard on the way out. A row's mere
- * existence in this database is not authority to send as the address it holds:
- * the mail provider signs for any identity verified on the account it shares
- * with every other workspace, so a row naming a domain this workspace never
- * proved it owns would be an impersonation the provider would carry out. See
- * `outbound-identity.ts`.
- */
-/**
- * RFC 5322 display-name wrapper for a resolved sending address:
- * `"Alex (Acme)" <support@acme.com>`. Does not change address resolution.
- */
-export function formatNamedSendingAddress(
-  address: SendingIdentity,
-  displayName: string
-): SendingIdentity {
-  return withSendingDisplayName(address, displayName)
-}
-
-export async function resolveSendingAddress(
-  assignedTeamId: TeamId | null,
-  module: SendingModule = 'support'
-): Promise<SendingIdentity | null> {
-  const teamId = assignedTeamId ?? (await defaultTeamId())
-  if (!teamId) return null
-  const account = await getSendingAddress(teamId, module)
-  return permittedSendingIdentity(account?.address ?? null)
-}
-
-/**
- * The From for a reply on an email conversation: the address the customer wrote
- * to, when this workspace can prove it may send as it.
- *
- * Replying from the address that was written to is what every mail-shaped
- * support product does, and it is the point of a customer-owned sending domain:
- * a customer forwards `support@theircompany.com` in, and the reply has to leave
- * as `support@theircompany.com` or the thread visibly changes identity halfway
- * through. The inbound route records that address as its forwarding target, so
- * it is already known — what was missing was the ability to sign for it.
- *
- * Falls back, in order, to the team's configured sending address for the module,
- * then to the workspace's own platform address, then to null, which the caller
- * reads as the branded workspace default. Each candidate is guarded
- * independently: an unverified inbox address must not suppress a verified team
- * address that would have been fine.
- *
- * The platform address is DERIVED here rather than read off the route row, and
- * it is LAST. Derived, because an install's mint domain can move under a row
- * written months ago, and a From on a domain that has been retired from minting
- * has no verified identity behind it — the reply then leaves as the platform
- * default with a refusal logged per message. Last, because it is the address a
- * workspace has rather than one it chose: a customer who verified their own
- * domain and forwards `support@theircompany.com` in must not have the thread
- * answered from the platform's shared domain instead.
- *
- * Only for a conversation that arrived through a front door. A thread with no
- * channel account is a widget conversation, and its notifications go out from
- * the branded workspace default they always have.
- */
-export async function resolveConversationFrom(
-  conversationId: ConversationId,
-  module: SendingModule = 'support'
-): Promise<SendingIdentity | null> {
-  const [conv] = await db
-    .select({
-      assignedTeamId: conversations.assignedTeamId,
-      channelAccountId: conversations.channelAccountId,
-    })
-    .from(conversations)
-    .where(eq(conversations.id, conversationId))
-    .limit(1)
-
-  if (conv?.channelAccountId) {
-    const account = await getChannelAccount(conv.channelAccountId)
-    // A sending row carries its address in the column; an inbound route carries
-    // the address mail was forwarded from in its config. Either is "the address
-    // the customer wrote to" for the conversation bound to it.
-    const inboxAddress = account?.address ?? account?.config?.forwardingTarget ?? null
-    const permitted = await permittedSendingIdentity(inboxAddress)
-    if (permitted) return permitted
-  }
-
-  const configured = await resolveSendingAddress(conv?.assignedTeamId ?? null, module)
-  if (configured) return configured
-
-  if (!conv?.channelAccountId) return null
-  return permittedSendingIdentity(platformInboxAddress(currentMailSlug()))
 }
 
 export async function listChannelAccounts(owningTeamId: TeamId): Promise<ChannelAccount[]> {

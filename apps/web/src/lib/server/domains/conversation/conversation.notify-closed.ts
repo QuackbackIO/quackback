@@ -1,8 +1,10 @@
 import { db, eq, and, conversations, emailLog, principal, user } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import { resolveReplyRecipient } from './conversation.recipient'
-import { resolveConversationFrom } from '@/lib/server/domains/channel-accounts/channel-account.service'
-import { formatNamedSendingAddress } from '@/lib/server/domains/channel-accounts/channel-account.service'
+import {
+  formatNamedSendingAddress,
+  resolveConversationFrom,
+} from '@/lib/server/domains/channel-accounts/sender-resolver'
 import {
   inboundReplyToAddress,
   isEmailInboundConfigured,

@@ -206,16 +206,19 @@ describe('an internationalised domain is one domain, not two', () => {
  */
 describe('withSendingDisplayName', () => {
   it('wraps a bare address with a quoted display name when needed', () => {
-    const named = withSendingDisplayName('support@acme.com' as SendingIdentity, 'Alex (Acme)')
-    expect(named).toBe('"Alex (Acme)" <support@acme.com>')
+    const named = withSendingDisplayName(
+      'support@acme.com' as SendingIdentity,
+      'Alex from Acme, Inc.'
+    )
+    expect(named).toBe('"Alex from Acme, Inc." <support@acme.com>')
   })
 
   it('replaces an existing display name without changing the addr-spec', () => {
     const named = withSendingDisplayName(
       'Support <support@acme.com>' as SendingIdentity,
-      'Alex (Acme)'
+      'Alex from Acme'
     )
-    expect(named).toBe('"Alex (Acme)" <support@acme.com>')
+    expect(named).toBe('Alex from Acme <support@acme.com>')
   })
 })
 
