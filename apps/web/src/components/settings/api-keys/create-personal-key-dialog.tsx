@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { LocalDate } from '@/components/ui/local-date'
 import {
   Dialog,
   DialogContent,
@@ -69,6 +70,9 @@ const m = defineMessages({
     defaultMessage: 'The key could not be created.',
   },
 })
+
+/** "Feb 4, 2027" */
+const EXPIRY_DATE: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }
 
 const EXPIRY_LABELS = {
   '30d': m.days30,
@@ -190,7 +194,7 @@ export function CreatePersonalKeyDialog({
               <p className="text-xs text-muted-foreground">
                 {expiresAt
                   ? intl.formatMessage(m.expiresOn, {
-                      date: intl.formatDate(expiresAt, { dateStyle: 'medium' }),
+                      date: <LocalDate date={expiresAt} options={EXPIRY_DATE} />,
                     })
                   : intl.formatMessage(m.neverExpires)}
               </p>

@@ -24,11 +24,7 @@ import { listAuditEventsFn } from '@/lib/server/functions/audit-log'
 import { listCompanyAttributesFn } from '@/lib/server/functions/company-attributes'
 import { listRecoveryCodesFn } from '@/lib/server/functions/recovery-codes'
 import { getModerationStatus } from '@/lib/server/functions/moderation'
-import {
-  fetchApiKeys,
-  fetchPersonalKeyPolicyFn,
-  fetchWorkspaceKeyRolesFn,
-} from '@/lib/server/functions/api-keys'
+import { fetchApiKeys } from '@/lib/server/functions/api-keys'
 import { fetchWebhooks } from '@/lib/server/functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server/functions/roadmaps'
 import { fetchPostWithDetails, fetchPostVotersFn } from '@/lib/server/functions/posts'
@@ -382,31 +378,16 @@ export const adminQueries = {
       queryKey: ['admin', 'api-keys'],
       queryFn: async () => {
         const data = await fetchApiKeys()
-        return data.map((k) => ({
+        const keys = data.keys.map((k) => ({
           ...k,
           createdAt: new Date(k.createdAt),
           lastUsedAt: k.lastUsedAt ? new Date(k.lastUsedAt) : null,
           expiresAt: k.expiresAt ? new Date(k.expiresAt) : null,
           revokedAt: k.revokedAt ? new Date(k.revokedAt) : null,
         }))
+        return { keys, personalKeysEnabled: data.personalKeysEnabled }
       },
       staleTime: 30 * 1000, // 30s - may change when creating/revoking keys
-    }),
-
-  /** Whether teammates may create personal API keys. */
-  personalKeyPolicy: () =>
-    queryOptions({
-      queryKey: ['admin', 'api-keys', 'personal-policy'],
-      queryFn: () => fetchPersonalKeyPolicyFn(),
-      staleTime: 30 * 1000,
-    }),
-
-  /** The roles a workspace key may be given, marked with whether the caller can grant each. */
-  workspaceKeyRoles: () =>
-    queryOptions({
-      queryKey: ['admin', 'api-keys', 'roles'],
-      queryFn: () => fetchWorkspaceKeyRolesFn(),
-      staleTime: 30 * 1000,
     }),
 
   /**

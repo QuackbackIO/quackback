@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { defineMessages, useIntl } from 'react-intl'
+import { defineMessages, useIntl, type MessageDescriptor } from 'react-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
@@ -25,6 +25,9 @@ const m = defineMessages({
   failed: { id: 'apiKeys.form.saveFailed', defaultMessage: 'The change could not be saved.' },
 })
 
+/** The dialog's words; a page in another message area passes its own. */
+export type RenameApiKeyMessages = Record<keyof typeof m, MessageDescriptor>
+
 export type RenameApiKeyAction = (
   id: ApiKey['id'],
   name: string
@@ -35,11 +38,13 @@ export function RenameApiKeyDialog({
   onOpenChange,
   apiKey,
   rename,
+  messages = m,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   apiKey: Pick<ApiKey, 'id' | 'name'>
   rename: RenameApiKeyAction
+  messages?: RenameApiKeyMessages
 }) {
   const intl = useIntl()
   const router = useRouter()
@@ -67,7 +72,7 @@ export function RenameApiKeyDialog({
       })
       onOpenChange(false)
     } catch {
-      setError(intl.formatMessage(m.failed))
+      setError(intl.formatMessage(messages.failed))
     } finally {
       setSaving(false)
     }
@@ -77,11 +82,11 @@ export function RenameApiKeyDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{intl.formatMessage(m.title)}</DialogTitle>
+          <DialogTitle>{intl.formatMessage(messages.title)}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-2 py-4">
-            <Label htmlFor="rename-api-key">{intl.formatMessage(m.name)}</Label>
+            <Label htmlFor="rename-api-key">{intl.formatMessage(messages.name)}</Label>
             <Input
               id="rename-api-key"
               value={name}
@@ -102,10 +107,10 @@ export function RenameApiKeyDialog({
               onClick={() => onOpenChange(false)}
               disabled={busy}
             >
-              {intl.formatMessage(m.cancel)}
+              {intl.formatMessage(messages.cancel)}
             </Button>
             <Button type="submit" disabled={busy || !name.trim()}>
-              {intl.formatMessage(m.save)}
+              {intl.formatMessage(messages.save)}
             </Button>
           </DialogFooter>
         </form>

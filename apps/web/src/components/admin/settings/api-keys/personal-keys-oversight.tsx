@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { lazy, Suspense, useState, useTransition } from 'react'
 import { defineMessages, useIntl } from 'react-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
@@ -8,21 +8,19 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SettingRow } from '@/components/admin/settings/setting-row'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { TimeAgo } from '@/components/ui/time-ago'
-import { revokeApiKeyFn, setPersonalKeyPolicyFn } from '@/lib/server/functions/api-keys'
+import { KeyTable, KeyTableCell, KeyTableHead } from './key-table'
+import { formatDistanceToNow } from 'date-fns'
+import { revokeApiKeyFn } from '@/lib/server/functions/api-keys'
+import { setPersonalKeyPolicyFn } from '@/lib/server/functions/workspace-api-key-settings'
 import type { ManagedApiKey } from '@/lib/server/domains/api-keys/api-key.types'
 import { summarizeDomainAccess } from '@/lib/shared/api-key-scopes'
 import type { ApiKey } from '@/lib/shared/types'
-import { RevokeApiKeyDialog } from './revoke-api-key-dialog'
-import { creatorLabel, longDate } from './key-labels'
+import { creatorLabel, LONG_DATE } from './key-labels'
+
+// Loads when first opened.
+const RevokeApiKeyDialog = lazy(() =>
+  import('./key-dialogs').then((mod) => ({ default: mod.RevokeApiKeyDialog }))
+)
 
 const m = defineMessages({
   title: { id: 'apiKeys.personal.title', defaultMessage: 'Personal keys' },
@@ -85,7 +83,7 @@ export function PersonalKeysOversight({
       const result = await setPersonalKeyPolicyFn({ data: { enabled: next } })
       setEnabled(result.enabled)
       startTransition(() => {
-        queryClient.invalidateQueries({ queryKey: ['admin', 'api-keys', 'personal-policy'] })
+        queryClient.invalidateQueries({ queryKey: ['admin', 'api-keys'] })
         router.invalidate()
       })
     } catch {
@@ -128,38 +126,38 @@ export function PersonalKeysOversight({
             {intl.formatMessage(m.empty)}
           </p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-4 sm:pl-6">{intl.formatMessage(m.key)}</TableHead>
-                <TableHead>{intl.formatMessage(m.teammate)}</TableHead>
-                <TableHead>{intl.formatMessage(m.scopes)}</TableHead>
-                <TableHead>{intl.formatMessage(m.expires)}</TableHead>
-                <TableHead>{intl.formatMessage(m.lastUsed)}</TableHead>
-                <TableHead className="pr-4 sm:pr-6">
+          <KeyTable>
+            <thead>
+              <tr>
+                <KeyTableHead className="pl-4 sm:pl-6">{intl.formatMessage(m.key)}</KeyTableHead>
+                <KeyTableHead>{intl.formatMessage(m.teammate)}</KeyTableHead>
+                <KeyTableHead>{intl.formatMessage(m.scopes)}</KeyTableHead>
+                <KeyTableHead>{intl.formatMessage(m.expires)}</KeyTableHead>
+                <KeyTableHead>{intl.formatMessage(m.lastUsed)}</KeyTableHead>
+                <KeyTableHead className="pr-4 sm:pr-6">
                   <span className="sr-only">{intl.formatMessage(m.actions)}</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+                </KeyTableHead>
+              </tr>
+            </thead>
+            <tbody>
               {apiKeys.map((key) => (
-                <TableRow key={key.id} className="hover:bg-transparent">
-                  <TableCell className="pl-4 font-medium sm:pl-6">{key.name}</TableCell>
-                  <TableCell>{creatorLabel(intl, key)}</TableCell>
-                  <TableCell className="whitespace-normal text-muted-foreground">
+                <tr key={key.id}>
+                  <KeyTableCell className="pl-4 font-medium sm:pl-6">{key.name}</KeyTableCell>
+                  <KeyTableCell>{creatorLabel(intl, key)}</KeyTableCell>
+                  <KeyTableCell className="whitespace-normal text-muted-foreground">
                     {scopesOf(key)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {key.expiresAt ? longDate(key.expiresAt) : intl.formatMessage(m.noExpiry)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {key.lastUsedAt ? (
-                      <TimeAgo date={key.lastUsedAt} />
-                    ) : (
-                      intl.formatMessage(m.never)
-                    )}
-                  </TableCell>
-                  <TableCell className="pr-4 text-right sm:pr-6">
+                  </KeyTableCell>
+                  <KeyTableCell className="text-muted-foreground">
+                    {key.expiresAt
+                      ? intl.formatDate(key.expiresAt, LONG_DATE)
+                      : intl.formatMessage(m.noExpiry)}
+                  </KeyTableCell>
+                  <KeyTableCell className="text-muted-foreground">
+                    {key.lastUsedAt
+                      ? formatDistanceToNow(key.lastUsedAt, { addSuffix: true })
+                      : intl.formatMessage(m.never)}
+                  </KeyTableCell>
+                  <KeyTableCell className="pr-4 text-right sm:pr-6">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -169,21 +167,23 @@ export function PersonalKeysOversight({
                     >
                       {intl.formatMessage(m.revoke)}
                     </Button>
-                  </TableCell>
-                </TableRow>
+                  </KeyTableCell>
+                </tr>
               ))}
-            </TableBody>
-          </Table>
+            </tbody>
+          </KeyTable>
         )}
       </SettingsCard>
 
       {revoking && (
-        <RevokeApiKeyDialog
-          open
-          onOpenChange={(next) => !next && setRevoking(null)}
-          apiKey={revoking}
-          revoke={revoke}
-        />
+        <Suspense fallback={null}>
+          <RevokeApiKeyDialog
+            open
+            onOpenChange={(next) => !next && setRevoking(null)}
+            apiKey={revoking}
+            revoke={revoke}
+          />
+        </Suspense>
       )}
     </>
   )

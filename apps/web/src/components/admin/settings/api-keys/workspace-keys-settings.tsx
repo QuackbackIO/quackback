@@ -7,32 +7,34 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { NewButton } from '@/components/shared/new-button'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { RowActions } from '@/components/admin/settings/settings-list'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { TimeAgo } from '@/components/ui/time-ago'
+import { KeyTable, KeyTableCell, KeyTableHead } from './key-table'
+import { formatDistanceToNow } from 'date-fns'
 import { revokeApiKeyFn, rotateApiKeyFn, updateApiKeyFn } from '@/lib/server/functions/api-keys'
 import type { ManagedApiKey } from '@/lib/server/domains/api-keys/api-key.types'
 import type { ApiKey } from '@/lib/shared/types'
-import { ApiKeyRevealDialog } from './api-key-reveal-dialog'
-import { RevokeApiKeyDialog } from './revoke-api-key-dialog'
-import { RotateApiKeyDialog } from './rotate-api-key-dialog'
-import { RenameApiKeyDialog } from './rename-api-key-dialog'
-import { creatorLabel, shortDate } from './key-labels'
+import { summarizeDomainAccess } from '@/lib/shared/api-key-scopes'
+import { creatorLabel, SHORT_DATE } from './key-labels'
 
-// The dialogs with the role list load when first opened.
+// Each dialog loads when first opened.
+const ApiKeyRevealDialog = lazy(() =>
+  import('./key-dialogs').then((mod) => ({ default: mod.ApiKeyRevealDialog }))
+)
+const RevokeApiKeyDialog = lazy(() =>
+  import('./key-dialogs').then((mod) => ({ default: mod.RevokeApiKeyDialog }))
+)
+const RotateApiKeyDialog = lazy(() =>
+  import('./key-dialogs').then((mod) => ({ default: mod.RotateApiKeyDialog }))
+)
+const RenameApiKeyDialog = lazy(() =>
+  import('./key-dialogs').then((mod) => ({ default: mod.RenameApiKeyDialog }))
+)
 const CreateWorkspaceKeyDialog = lazy(() =>
-  import('./create-workspace-key-dialog').then((mod) => ({
+  import('./workspace-key-dialogs').then((mod) => ({
     default: mod.CreateWorkspaceKeyDialog,
   }))
 )
 const ChangeKeyRoleDialog = lazy(() =>
-  import('./change-key-role-dialog').then((mod) => ({ default: mod.ChangeKeyRoleDialog }))
+  import('./workspace-key-dialogs').then((mod) => ({ default: mod.ChangeKeyRoleDialog }))
 )
 
 const m = defineMessages({
@@ -50,6 +52,12 @@ const m = defineMessages({
   },
   name: { id: 'apiKeys.column.name', defaultMessage: 'Name' },
   role: { id: 'apiKeys.column.role', defaultMessage: 'Role' },
+  scopes: { id: 'apiKeys.column.scopes', defaultMessage: 'Scopes' },
+  settingsRead: { id: 'apiKeys.scopes.settingsReadSummary', defaultMessage: 'Settings (read)' },
+  settingsReadWrite: {
+    id: 'apiKeys.scopes.settingsReadWriteSummary',
+    defaultMessage: 'Settings (read and write)',
+  },
   createdBy: { id: 'apiKeys.column.createdBy', defaultMessage: 'Created by' },
   lastUsed: { id: 'apiKeys.column.lastUsed', defaultMessage: 'Last used' },
   actions: { id: 'apiKeys.column.actions', defaultMessage: 'Actions' },
@@ -120,42 +128,46 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
             action={newKeyButton}
           />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-4 sm:pl-6">{intl.formatMessage(m.name)}</TableHead>
-                <TableHead>{intl.formatMessage(m.role)}</TableHead>
-                <TableHead>{intl.formatMessage(m.createdBy)}</TableHead>
-                <TableHead>{intl.formatMessage(m.lastUsed)}</TableHead>
-                <TableHead className="w-10 pr-4 sm:pr-6">
+          <KeyTable>
+            <thead>
+              <tr>
+                <KeyTableHead className="pl-4 sm:pl-6">{intl.formatMessage(m.name)}</KeyTableHead>
+                <KeyTableHead>{intl.formatMessage(m.role)}</KeyTableHead>
+                <KeyTableHead>{intl.formatMessage(m.scopes)}</KeyTableHead>
+                <KeyTableHead>{intl.formatMessage(m.createdBy)}</KeyTableHead>
+                <KeyTableHead>{intl.formatMessage(m.lastUsed)}</KeyTableHead>
+                <KeyTableHead className="w-10 pr-4 sm:pr-6">
                   <span className="sr-only">{intl.formatMessage(m.actions)}</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+                </KeyTableHead>
+              </tr>
+            </thead>
+            <tbody>
               {apiKeys.map((key) => (
-                <TableRow key={key.id} className="group hover:bg-transparent">
-                  <TableCell className="pl-4 sm:pl-6">
+                <tr key={key.id} className="group">
+                  <KeyTableCell className="pl-4 sm:pl-6">
                     <div className="font-medium">{key.name}</div>
                     <code className="font-mono text-xs text-muted-foreground">
                       {key.keyPrefix}...
                     </code>
-                  </TableCell>
-                  <TableCell>{key.role?.name ?? ''}</TableCell>
-                  <TableCell className="text-muted-foreground">
+                  </KeyTableCell>
+                  <KeyTableCell>{key.role?.name ?? ''}</KeyTableCell>
+                  <KeyTableCell className="whitespace-normal text-muted-foreground">
+                    {summarizeDomainAccess(key.scopes, (level) =>
+                      intl.formatMessage(level === 'read' ? m.settingsRead : m.settingsReadWrite)
+                    )}
+                  </KeyTableCell>
+                  <KeyTableCell className="text-muted-foreground">
                     {intl.formatMessage(m.createdOn, {
                       creator: creatorLabel(intl, key),
-                      date: shortDate(key.createdAt),
+                      date: intl.formatDate(key.createdAt, SHORT_DATE),
                     })}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {key.lastUsedAt ? (
-                      <TimeAgo date={key.lastUsedAt} />
-                    ) : (
-                      intl.formatMessage(m.never)
-                    )}
-                  </TableCell>
-                  <TableCell className="pr-4 text-right sm:pr-6">
+                  </KeyTableCell>
+                  <KeyTableCell className="text-muted-foreground">
+                    {key.lastUsedAt
+                      ? formatDistanceToNow(key.lastUsedAt, { addSuffix: true })
+                      : intl.formatMessage(m.never)}
+                  </KeyTableCell>
+                  <KeyTableCell className="pr-4 text-right sm:pr-6">
                     <RowActions
                       label={key.name}
                       items={[
@@ -178,11 +190,11 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
                         },
                       ]}
                     />
-                  </TableCell>
-                </TableRow>
+                  </KeyTableCell>
+                </tr>
               ))}
-            </TableBody>
-          </Table>
+            </tbody>
+          </KeyTable>
         )}
       </SettingsCard>
 
@@ -196,16 +208,20 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
         </Suspense>
       )}
 
-      <ApiKeyRevealDialog
-        open={revealOpen}
-        onOpenChange={setRevealOpen}
-        keyValue={revealed?.value ?? null}
-        keyName={revealed?.name ?? ''}
-        onClose={() => setRevealed(null)}
-      />
+      {revealed && (
+        <Suspense fallback={null}>
+          <ApiKeyRevealDialog
+            open={revealOpen}
+            onOpenChange={setRevealOpen}
+            keyValue={revealed.value}
+            keyName={revealed.name}
+            onClose={() => setRevealed(null)}
+          />
+        </Suspense>
+      )}
 
-      {selected && (
-        <>
+      {selected && dialog && (
+        <Suspense fallback={null}>
           {dialogOpen('rename') && (
             <RenameApiKeyDialog
               open
@@ -215,24 +231,26 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
             />
           )}
           {dialogOpen('role') && (
-            <Suspense fallback={null}>
-              <ChangeKeyRoleDialog open onOpenChange={setDialogOpen('role')} apiKey={selected} />
-            </Suspense>
+            <ChangeKeyRoleDialog open onOpenChange={setDialogOpen('role')} apiKey={selected} />
           )}
-          <RotateApiKeyDialog
-            open={dialogOpen('rotate')}
-            onOpenChange={setDialogOpen('rotate')}
-            apiKey={selected}
-            rotate={rotate}
-            onKeyRotated={reveal}
-          />
-          <RevokeApiKeyDialog
-            open={dialogOpen('revoke')}
-            onOpenChange={setDialogOpen('revoke')}
-            apiKey={selected}
-            revoke={revoke}
-          />
-        </>
+          {dialogOpen('rotate') && (
+            <RotateApiKeyDialog
+              open
+              onOpenChange={setDialogOpen('rotate')}
+              apiKey={selected}
+              rotate={rotate}
+              onKeyRotated={reveal}
+            />
+          )}
+          {dialogOpen('revoke') && (
+            <RevokeApiKeyDialog
+              open
+              onOpenChange={setDialogOpen('revoke')}
+              apiKey={selected}
+              revoke={revoke}
+            />
+          )}
+        </Suspense>
       )}
     </>
   )

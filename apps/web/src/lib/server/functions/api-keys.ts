@@ -54,10 +54,6 @@ const revokeApiKeySchema = z.object({
   id: z.string(),
 })
 
-const setPersonalKeyPolicySchema = z.object({
-  enabled: z.boolean(),
-})
-
 // ============================================
 // Type Exports
 // ============================================
@@ -84,16 +80,20 @@ function refusalOr(error: unknown): ApiKeyRefusal {
 
 /**
  * Every live key, with its kind, its creator (and whether they are still on
- * the team) and, for a workspace key, its role.
+ * the team) and, for a workspace key, its role; and whether teammates may
+ * create personal keys.
  */
 export const fetchApiKeys = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list api keys')
   await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
 
-  const { listManagedApiKeys } = await import('@/lib/server/domains/api-keys/api-key-management')
-  const keys = await listManagedApiKeys()
+  const [{ listManagedApiKeys }, { getDeveloperConfig }] = await Promise.all([
+    import('@/lib/server/domains/api-keys/api-key-management'),
+    import('@/lib/server/domains/settings/settings.service'),
+  ])
+  const [keys, config] = await Promise.all([listManagedApiKeys(), getDeveloperConfig()])
   log.debug({ count: keys.length }, 'api keys fetched')
-  return keys
+  return { keys, personalKeysEnabled: config.personalApiKeysEnabled }
 })
 
 /**
@@ -110,21 +110,6 @@ export const fetchApiKey = createServerFn({ method: 'GET' })
     log.debug({ found: !!key }, 'api key lookup')
     return key
   })
-
-/** The roles a workspace key may be given, each marked with whether the caller can grant it. */
-export const fetchWorkspaceKeyRolesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  const auth = await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
-  const { listWorkspaceKeyRoleOptions } =
-    await import('@/lib/server/domains/api-keys/api-key-management')
-  return listWorkspaceKeyRoleOptions({ permissions: auth.permissions, role: auth.principal.role })
-})
-
-/** Whether teammates may create personal API keys. */
-export const fetchPersonalKeyPolicyFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
-  const { getDeveloperConfig } = await import('@/lib/server/domains/settings/settings.service')
-  return { enabled: (await getDeveloperConfig()).personalApiKeysEnabled }
-})
 
 // ============================================
 // Write Operations
@@ -239,18 +224,4 @@ export const setWorkspaceKeyRoleFn = createServerFn({ method: 'POST' })
     } catch (error) {
       return refusalOr(error)
     }
-  })
-
-/**
- * Turn "Teammates can create personal API keys" on or off. Off stops new
- * personal keys only; existing ones keep working until revoked or expired.
- */
-export const setPersonalKeyPolicyFn = createServerFn({ method: 'POST' })
-  .validator(setPersonalKeyPolicySchema)
-  .handler(async ({ data }) => {
-    log.info({ enabled: data.enabled }, 'set personal api key policy')
-    await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
-    const { updateDeveloperConfig } = await import('@/lib/server/domains/settings/settings.service')
-    await updateDeveloperConfig({ personalApiKeysEnabled: data.enabled })
-    return { enabled: data.enabled }
   })

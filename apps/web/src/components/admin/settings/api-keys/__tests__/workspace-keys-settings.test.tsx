@@ -61,12 +61,23 @@ describe('WorkspaceKeysSettings', () => {
   it('shows name, role, creator with date, and last used', () => {
     render(<WorkspaceKeysSettings apiKeys={[key()]} />, { wrapper: intl })
     expect(screen.getByRole('heading', { name: 'Workspace keys' })).toBeInTheDocument()
-    for (const header of ['Name', 'Role', 'Created by', 'Last used'])
+    for (const header of ['Name', 'Role', 'Scopes', 'Created by', 'Last used'])
       expect(screen.getByRole('columnheader', { name: header })).toBeInTheDocument()
     const row = screen.getByRole('row', { name: /Warehouse sync/ })
     expect(within(row).getByText('Support lead')).toBeInTheDocument()
-    expect(within(row).getByText('Priya Shah, 23 Oct')).toBeInTheDocument()
+    expect(within(row).getByRole('cell', { name: 'Priya Shah, Oct 23' })).toBeInTheDocument()
     expect(within(row).getByText('Never')).toBeInTheDocument()
+    expect(within(row).getByText('Full access (legacy)')).toBeInTheDocument()
+  })
+
+  it('shows the scopes a key was given', () => {
+    render(
+      <WorkspaceKeysSettings
+        apiKeys={[key({ scopes: ['read:feedback', 'read:chat'] as never })]}
+      />,
+      { wrapper: intl }
+    )
+    expect(screen.getByText('Feedback (read), Conversations (read)')).toBeInTheDocument()
   })
 
   it('marks a creator who left and a deleted creator', () => {
@@ -90,8 +101,8 @@ describe('WorkspaceKeysSettings', () => {
       />,
       { wrapper: intl }
     )
-    expect(screen.getByText('Sam Cole (removed), 23 Oct')).toBeInTheDocument()
-    expect(screen.getByText('Removed teammate, 23 Oct')).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Sam Cole (removed), Oct 23' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Removed teammate, Oct 23' })).toBeInTheDocument()
   })
 
   it('opens the create dialog from "New workspace key"', async () => {

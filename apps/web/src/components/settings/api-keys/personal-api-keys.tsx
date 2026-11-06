@@ -2,19 +2,41 @@
 
 import { lazy, Suspense, useState } from 'react'
 import { defineMessages, useIntl } from 'react-intl'
-import { KeyIcon } from '@heroicons/react/24/solid'
 import { PortalPageHeader } from '@/components/public/portal-page-header'
+import { KeyGlyph } from '@/components/settings/settings-nav'
 import { NewButton } from '@/components/shared/new-button'
 import { RowIcon, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
-import { ApiKeyRevealDialog } from '@/components/admin/settings/api-keys/api-key-reveal-dialog'
-import { RevokeApiKeyDialog } from '@/components/admin/settings/api-keys/revoke-api-key-dialog'
-import { RotateApiKeyDialog } from '@/components/admin/settings/api-keys/rotate-api-key-dialog'
+import { LocalDate } from '@/components/ui/local-date'
 import { TimeAgo } from '@/components/ui/time-ago'
-import { revokeMyApiKeyFn, rotateMyApiKeyFn } from '@/lib/server/functions/personal-api-keys'
+import {
+  renameMyApiKeyFn,
+  revokeMyApiKeyFn,
+  rotateMyApiKeyFn,
+} from '@/lib/server/functions/personal-api-keys'
 import { summarizeDomainAccess } from '@/lib/shared/api-key-scopes'
 import type { ApiKey } from '@/lib/shared/types'
 
-// The form loads when first opened.
+// Each dialog loads when first opened.
+const ApiKeyRevealDialog = lazy(() =>
+  import('@/components/admin/settings/api-keys/key-dialogs').then((mod) => ({
+    default: mod.ApiKeyRevealDialog,
+  }))
+)
+const RevokeApiKeyDialog = lazy(() =>
+  import('@/components/admin/settings/api-keys/key-dialogs').then((mod) => ({
+    default: mod.RevokeApiKeyDialog,
+  }))
+)
+const RotateApiKeyDialog = lazy(() =>
+  import('@/components/admin/settings/api-keys/key-dialogs').then((mod) => ({
+    default: mod.RotateApiKeyDialog,
+  }))
+)
+const RenameApiKeyDialog = lazy(() =>
+  import('@/components/admin/settings/api-keys/key-dialogs').then((mod) => ({
+    default: mod.RenameApiKeyDialog,
+  }))
+)
 const CreatePersonalKeyDialog = lazy(() =>
   import('./create-personal-key-dialog').then((mod) => ({
     default: mod.CreatePersonalKeyDialog,
@@ -42,17 +64,33 @@ const m = defineMessages({
   noExpiry: { id: 'portal.settings.apiKeys.noExpiry', defaultMessage: 'No expiry' },
   lastUsed: { id: 'portal.settings.apiKeys.lastUsed', defaultMessage: 'Last used {time}' },
   neverUsed: { id: 'portal.settings.apiKeys.neverUsed', defaultMessage: 'Never used' },
+  rename: { id: 'portal.settings.apiKeys.rename', defaultMessage: 'Rename' },
   rotate: { id: 'portal.settings.apiKeys.rotate', defaultMessage: 'Rotate' },
   revoke: { id: 'portal.settings.apiKeys.revoke', defaultMessage: 'Revoke' },
-  settingsRead: { id: 'apiKeys.scopes.settingsReadSummary', defaultMessage: 'Settings (read)' },
+  settingsRead: { id: 'portal.settings.apiKeys.settingsRead', defaultMessage: 'Settings (read)' },
   settingsReadWrite: {
-    id: 'apiKeys.scopes.settingsReadWriteSummary',
+    id: 'portal.settings.apiKeys.settingsReadWrite',
     defaultMessage: 'Settings (read and write)',
   },
 })
 
+const renameMessages = defineMessages({
+  title: { id: 'portal.settings.apiKeys.renameTitle', defaultMessage: 'Rename key' },
+  name: { id: 'portal.settings.apiKeys.name', defaultMessage: 'Name' },
+  cancel: { id: 'portal.settings.apiKeys.cancel', defaultMessage: 'Cancel' },
+  save: { id: 'portal.settings.apiKeys.save', defaultMessage: 'Save' },
+  failed: {
+    id: 'portal.settings.apiKeys.saveFailed',
+    defaultMessage: 'The change could not be saved.',
+  },
+})
+
+/** "Feb 4, 2027" */
+const EXPIRY_DATE: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }
+
 const rotate = (id: ApiKey['id']) => rotateMyApiKeyFn({ data: { id } })
 const revoke = (id: ApiKey['id']) => revokeMyApiKeyFn({ data: { id } })
+const rename = (id: ApiKey['id'], name: string) => renameMyApiKeyFn({ data: { id, name } })
 
 /** /settings/api-keys: the signed-in teammate's own personal keys. */
 export function PersonalApiKeys({ apiKeys, canCreate }: { apiKeys: ApiKey[]; canCreate: boolean }) {
@@ -62,7 +100,7 @@ export function PersonalApiKeys({ apiKeys, canCreate }: { apiKeys: ApiKey[]; can
   const [revealOpen, setRevealOpen] = useState(false)
   const [revealed, setRevealed] = useState<{ name: string; value: string } | null>(null)
   const [selected, setSelected] = useState<ApiKey | null>(null)
-  const [dialog, setDialog] = useState<'rotate' | 'revoke' | null>(null)
+  const [dialog, setDialog] = useState<'rename' | 'rotate' | 'revoke' | null>(null)
 
   const reveal = (key: ApiKey, plainTextKey: string) => {
     setRevealed({ name: key.name, value: plainTextKey })
@@ -74,7 +112,7 @@ export function PersonalApiKeys({ apiKeys, canCreate }: { apiKeys: ApiKey[]; can
   const meta = (key: ApiKey) => {
     const expiry = key.expiresAt
       ? intl.formatMessage(m.expires, {
-          date: intl.formatDate(key.expiresAt, { dateStyle: 'medium' }),
+          date: <LocalDate date={key.expiresAt} options={EXPIRY_DATE} />,
         })
       : intl.formatMessage(m.noExpiry)
     return (
@@ -98,7 +136,7 @@ export function PersonalApiKeys({ apiKeys, canCreate }: { apiKeys: ApiKey[]; can
   return (
     <div className="space-y-6">
       <PortalPageHeader
-        icon={KeyIcon}
+        icon={KeyGlyph}
         title={intl.formatMessage(m.title)}
         description={intl.formatMessage(m.actsAsYou)}
         action={
@@ -130,10 +168,17 @@ export function PersonalApiKeys({ apiKeys, canCreate }: { apiKeys: ApiKey[]; can
             {apiKeys.map((key) => (
               <SettingsListRow
                 key={key.id}
-                leading={<RowIcon icon={KeyIcon} />}
+                leading={<RowIcon icon={KeyGlyph} />}
                 title={key.name}
                 meta={meta(key)}
                 actions={[
+                  {
+                    label: intl.formatMessage(m.rename),
+                    onSelect: () => {
+                      setSelected(key)
+                      setDialog('rename')
+                    },
+                  },
                   {
                     label: intl.formatMessage(m.rotate),
                     onSelect: () => {
@@ -167,30 +212,47 @@ export function PersonalApiKeys({ apiKeys, canCreate }: { apiKeys: ApiKey[]; can
         </Suspense>
       )}
 
-      <ApiKeyRevealDialog
-        open={revealOpen}
-        onOpenChange={setRevealOpen}
-        keyValue={revealed?.value ?? null}
-        keyName={revealed?.name ?? ''}
-        onClose={() => setRevealed(null)}
-      />
+      {revealed && (
+        <Suspense fallback={null}>
+          <ApiKeyRevealDialog
+            open={revealOpen}
+            onOpenChange={setRevealOpen}
+            keyValue={revealed.value}
+            keyName={revealed.name}
+            onClose={() => setRevealed(null)}
+          />
+        </Suspense>
+      )}
 
-      {selected && (
-        <>
-          <RotateApiKeyDialog
-            open={dialog === 'rotate'}
-            onOpenChange={(next) => setDialog(next ? 'rotate' : null)}
-            apiKey={selected}
-            rotate={rotate}
-            onKeyRotated={reveal}
-          />
-          <RevokeApiKeyDialog
-            open={dialog === 'revoke'}
-            onOpenChange={(next) => setDialog(next ? 'revoke' : null)}
-            apiKey={selected}
-            revoke={revoke}
-          />
-        </>
+      {selected && dialog && (
+        <Suspense fallback={null}>
+          {dialog === 'rename' && (
+            <RenameApiKeyDialog
+              open
+              onOpenChange={(next) => setDialog(next ? 'rename' : null)}
+              apiKey={selected}
+              rename={rename}
+              messages={renameMessages}
+            />
+          )}
+          {dialog === 'rotate' && (
+            <RotateApiKeyDialog
+              open
+              onOpenChange={(next) => setDialog(next ? 'rotate' : null)}
+              apiKey={selected}
+              rotate={rotate}
+              onKeyRotated={reveal}
+            />
+          )}
+          {dialog === 'revoke' && (
+            <RevokeApiKeyDialog
+              open
+              onOpenChange={(next) => setDialog(next ? 'revoke' : null)}
+              apiKey={selected}
+              revoke={revoke}
+            />
+          )}
+        </Suspense>
       )}
     </div>
   )

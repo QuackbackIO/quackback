@@ -15,8 +15,8 @@ vi.mock('../revoke-api-key-dialog', () => ({
   RevokeApiKeyDialog: ({ open, apiKey }: { open: boolean; apiKey: ManagedApiKey }) =>
     open ? <p>Revoking {apiKey.name}</p> : null,
 }))
-vi.mock('@/lib/server/functions/api-keys', () => ({
-  revokeApiKeyFn: vi.fn(),
+vi.mock('@/lib/server/functions/api-keys', () => ({ revokeApiKeyFn: vi.fn() }))
+vi.mock('@/lib/server/functions/workspace-api-key-settings', () => ({
   setPersonalKeyPolicyFn: setPolicy,
 }))
 
@@ -64,7 +64,7 @@ describe('PersonalKeysOversight', () => {
     const row = screen.getByRole('row', { name: /Inbox triage script/ })
     expect(within(row).getByText('Ana Lima')).toBeInTheDocument()
     expect(within(row).getByText('Conversations (read and write)')).toBeInTheDocument()
-    expect(within(row).getByText('4 Feb 2027')).toBeInTheDocument()
+    expect(within(row).getByText('Feb 4, 2027')).toBeInTheDocument()
     expect(within(row).getByText('Never')).toBeInTheDocument()
     const legacy = screen.getByRole('row', { name: /Docs import/ })
     expect(within(legacy).getByText('Full access (legacy)')).toBeInTheDocument()
@@ -76,7 +76,7 @@ describe('PersonalKeysOversight', () => {
     renderIt([key()])
     expect(screen.queryByRole('button', { name: /Rotate/ })).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Revoke Inbox triage script' }))
-    expect(screen.getByText('Revoking Inbox triage script')).toBeInTheDocument()
+    expect(await screen.findByText('Revoking Inbox triage script')).toBeInTheDocument()
   })
 
   it('switches the policy', async () => {

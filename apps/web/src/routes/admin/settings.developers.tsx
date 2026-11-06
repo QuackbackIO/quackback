@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useSuspenseQuery } from '@tanstack/react-query'
@@ -40,7 +40,6 @@ export const Route = createFileRoute('/admin/settings/developers')({
     const [, entitlements] = await Promise.all([
       Promise.all([
         ensure(adminQueries.apiKeys()),
-        ensure(adminQueries.personalKeyPolicy()),
         ensure(adminQueries.webhooks()),
         ensure(settingsQueries.developerConfig()),
       ]),
@@ -59,9 +58,8 @@ function ApiPage() {
   const navigate = useNavigate()
 
   const apiKeysQuery = useSuspenseQuery(adminQueries.apiKeys())
-  const personalPolicyQuery = useSuspenseQuery(adminQueries.personalKeyPolicy())
-  const workspaceKeys = apiKeysQuery.data.filter((k) => k.kind === 'workspace')
-  const personalKeys = apiKeysQuery.data.filter((k) => k.kind === 'personal')
+  const workspaceKeys = apiKeysQuery.data.keys.filter((k) => k.kind === 'workspace')
+  const personalKeys = apiKeysQuery.data.keys.filter((k) => k.kind === 'personal')
   const webhooksQuery = useSuspenseQuery(adminQueries.webhooks())
   const developerConfigQuery = useSuspenseQuery(settingsQueries.developerConfig())
 
@@ -94,10 +92,13 @@ function ApiPage() {
 
         <TabsContent value="keys" className="space-y-6">
           <WorkspaceKeysSettings apiKeys={workspaceKeys} />
-          <PersonalKeysOversight
-            apiKeys={personalKeys}
-            policyEnabled={personalPolicyQuery.data.enabled}
-          />
+          {/* Below the fold: drawn once the page is live, which keeps the document small. */}
+          <ClientOnly>
+            <PersonalKeysOversight
+              apiKeys={personalKeys}
+              policyEnabled={apiKeysQuery.data.personalKeysEnabled}
+            />
+          </ClientOnly>
           <ApiReferenceCard apiBaseUrl={apiBaseUrl} />
         </TabsContent>
 

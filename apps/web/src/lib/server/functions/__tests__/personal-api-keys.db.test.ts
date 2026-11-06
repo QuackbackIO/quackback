@@ -54,14 +54,9 @@ vi.mock('@/lib/server/domains/principals/membership-sync', () => ({
 
 const { fetchMyApiKeysFn, createMyApiKeyFn, renameMyApiKeyFn, rotateMyApiKeyFn, revokeMyApiKeyFn } =
   await import('../personal-api-keys')
-const {
-  createApiKeyFn,
-  fetchApiKeys,
-  revokeApiKeyFn,
-  rotateApiKeyFn,
-  updateApiKeyFn,
-  setPersonalKeyPolicyFn,
-} = await import('../api-keys')
+const { createApiKeyFn, fetchApiKeys, revokeApiKeyFn, rotateApiKeyFn, updateApiKeyFn } =
+  await import('../api-keys')
+const { setPersonalKeyPolicyFn } = await import('../workspace-api-key-settings')
 const { createApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
 
 const fixture = await createDbTestFixture({
@@ -267,7 +262,8 @@ describe.skipIf(!fixture.available)('key manager functions', () => {
     signInAs(admin, 'admin')
     const { apiKey } = await createApiKey({ name: 'Teammate key' }, teammate)
 
-    const keys = await fetchApiKeys()
+    const { keys, personalKeysEnabled } = await fetchApiKeys()
+    expect(personalKeysEnabled).toBe(true)
     expect(keys.find((k) => k.id === apiKey.id)).toMatchObject({
       kind: 'personal',
       creatorName: 'Person member',

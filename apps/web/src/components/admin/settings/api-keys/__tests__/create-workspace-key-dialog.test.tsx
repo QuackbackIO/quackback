@@ -13,9 +13,9 @@ const { mockCreateApiKeyFn, mockRoles } = vi.hoisted(() => ({
 
 vi.mock('@/lib/server/functions/api-keys', () => ({
   createApiKeyFn: mockCreateApiKeyFn,
+}))
+vi.mock('@/lib/server/functions/workspace-api-key-settings', () => ({
   fetchWorkspaceKeyRolesFn: mockRoles,
-  fetchApiKeys: vi.fn(),
-  fetchPersonalKeyPolicyFn: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({

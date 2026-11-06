@@ -1,5 +1,4 @@
 import { defineMessages, type IntlShape } from 'react-intl'
-import { format } from 'date-fns'
 import type { ManagedApiKey } from '@/lib/server/domains/api-keys/api-key.types'
 
 const m = defineMessages({
@@ -17,12 +16,20 @@ export function creatorLabel(
   return key.creatorName
 }
 
-/** "23 Oct" */
-export function shortDate(date: Date | string): string {
-  return format(new Date(date), 'd MMM')
+/**
+ * "Oct 23": a calendar day, read in UTC so the server and the browser print
+ * the same text.
+ */
+export const SHORT_DATE: Intl.DateTimeFormatOptions = {
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'UTC',
 }
 
-/** "4 Feb 2027" */
-export function longDate(date: Date | string): string {
-  return format(new Date(date), 'd MMM yyyy')
+/** "Feb 4, 2027", in UTC like SHORT_DATE. */
+export const LONG_DATE: Intl.DateTimeFormatOptions = {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC',
 }

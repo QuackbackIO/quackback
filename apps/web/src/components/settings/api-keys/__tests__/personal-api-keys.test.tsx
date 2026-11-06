@@ -14,6 +14,7 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/lib/server/functions/personal-api-keys', () => ({
   createMyApiKeyFn: createMine,
   rotateMyApiKeyFn: vi.fn(),
+  renameMyApiKeyFn: vi.fn(),
   revokeMyApiKeyFn: vi.fn(),
 }))
 vi.mock('@/components/admin/settings/api-keys/api-key-reveal-dialog', () => ({
@@ -23,6 +24,10 @@ vi.mock('@/components/admin/settings/api-keys/api-key-reveal-dialog', () => ({
 vi.mock('@/components/admin/settings/api-keys/rotate-api-key-dialog', () => ({
   RotateApiKeyDialog: ({ open, apiKey }: { open: boolean; apiKey: ApiKey }) =>
     open ? <p>Rotating {apiKey.name}</p> : null,
+}))
+vi.mock('@/components/admin/settings/api-keys/rename-api-key-dialog', () => ({
+  RenameApiKeyDialog: ({ open, apiKey }: { open: boolean; apiKey: ApiKey }) =>
+    open ? <p>Renaming {apiKey.name}</p> : null,
 }))
 vi.mock('@/components/admin/settings/api-keys/revoke-api-key-dialog', () => ({
   RevokeApiKeyDialog: ({ open, apiKey }: { open: boolean; apiKey: ApiKey }) =>
@@ -74,15 +79,18 @@ describe('PersonalApiKeys', () => {
     expect(screen.getByText('Your admin has turned off new personal keys.')).toBeInTheDocument()
   })
 
-  it('opens Rotate and Revoke from the row menu', async () => {
+  it('opens Rename, Rotate and Revoke from the row menu', async () => {
     const user = userEvent.setup()
     wrap(<PersonalApiKeys apiKeys={[key()]} canCreate />)
     await user.click(screen.getByRole('button', { name: 'Actions for Inbox triage script' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Rename' }))
+    expect(await screen.findByText('Renaming Inbox triage script')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Actions for Inbox triage script' }))
     await user.click(screen.getByRole('menuitem', { name: 'Rotate' }))
-    expect(screen.getByText('Rotating Inbox triage script')).toBeInTheDocument()
+    expect(await screen.findByText('Rotating Inbox triage script')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Actions for Inbox triage script' }))
     await user.click(screen.getByRole('menuitem', { name: 'Revoke' }))
-    expect(screen.getByText('Revoking Inbox triage script')).toBeInTheDocument()
+    expect(await screen.findByText('Revoking Inbox triage script')).toBeInTheDocument()
   })
 })
 

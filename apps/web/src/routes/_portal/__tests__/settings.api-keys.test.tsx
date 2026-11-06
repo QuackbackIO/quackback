@@ -14,6 +14,7 @@ vi.mock('@tanstack/react-router', () => ({
     <T extends object>(options: T) => ({ ...options }),
   redirect: (options: unknown) => ({ redirect: options }),
   useRouterState: () => '/settings/profile',
+  useHydrated: () => true,
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
     <a href={to}>{children}</a>
   ),

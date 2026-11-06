@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { setWorkspaceKeyRoleFn } from '@/lib/server/functions/api-keys'
-import { adminQueries } from '@/lib/client/queries/admin'
+import { workspaceKeyRolesQuery } from './workspace-key-roles-query'
 import type { ManagedApiKey } from '@/lib/server/domains/api-keys/api-key.types'
 import { WorkspaceKeyRolePicker } from './workspace-key-role-picker'
 
@@ -42,7 +42,7 @@ export function ChangeKeyRoleDialog({
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const rolesQuery = useQuery({ ...adminQueries.workspaceKeyRoles(), enabled: open })
+  const rolesQuery = useQuery({ ...workspaceKeyRolesQuery(), enabled: open })
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
   const [roleId, setRoleId] = useState(apiKey.role?.id ?? '')
