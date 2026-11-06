@@ -139,6 +139,41 @@ describe.skipIf(!fixture.available)('conversationFilter (real DB, rolled back)',
     expect(await visibleLabels(soloB, world)).toEqual(new Set(['selfB']))
   })
 
+  it('a service actor acting for a scoped creator (personal API key) sees only what the creator sees', async () => {
+    const world = await seedWorld()
+    const personalKey = buildActor({
+      principalId: createId('principal') as PrincipalId,
+      principalType: 'service',
+      scopePrincipalId: world.agentA,
+      permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
+    })
+    expect(await visibleLabels(personalKey, world)).toEqual(new Set(['selfA', 'teamX']))
+  })
+
+  it('a personal API key whose creator holds view_all sees everything', async () => {
+    const world = await seedWorld()
+    const personalKey = buildActor({
+      principalId: createId('principal') as PrincipalId,
+      principalType: 'service',
+      scopePrincipalId: world.agentA,
+      permissions: new Set([PERMISSIONS.CONVERSATION_VIEW_ALL]),
+    })
+    expect(await visibleLabels(personalKey, world)).toEqual(
+      new Set(['selfA', 'teamX', 'teamY', 'selfB', 'unassigned'])
+    )
+  })
+
+  it('a personal API key without the view permission sees nothing', async () => {
+    const world = await seedWorld()
+    const personalKey = buildActor({
+      principalId: createId('principal') as PrincipalId,
+      principalType: 'service',
+      scopePrincipalId: world.agentA,
+      permissions: new Set(),
+    })
+    expect(await visibleLabels(personalKey, world)).toEqual(new Set())
+  })
+
   it('an actor without conversation.view (and anonymous) sees nothing', async () => {
     const world = await seedWorld()
     const noPerm = buildActor({ principalId: world.agentA, permissions: new Set() })

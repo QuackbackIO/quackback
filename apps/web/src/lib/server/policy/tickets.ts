@@ -11,7 +11,14 @@ import { tickets, teamMembers } from '@/lib/server/db'
 import type { TeamId } from '@quackback/ids'
 import { can } from './authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { allowDecision, denyDecision, type Actor, type Decision } from './types'
+import {
+  allowDecision,
+  denyDecision,
+  isUnscopedService,
+  rowScopePrincipalId,
+  type Actor,
+  type Decision,
+} from './types'
 
 /**
  * Scalar subquery of the team ids an actor belongs to, over `team_members`.
@@ -30,7 +37,7 @@ export function teamsForActor(principalId: string): SQL {
  * SQL predicate for ticket list queries (§4.11 resolution over `tickets`).
  * Branches, in order:
  *
- * 1. Service principals (API keys, MCP, the AI agent) act workspace-wide — ALL
+ * 1. Unscoped service principals (workspace API keys, the AI agent, workflows) act workspace-wide — ALL
  *    non-deleted tickets. First so a service actor is never narrowed by team
  *    membership; the owner-perms ∩ scopes intersection is applied later at the
  *    call site.
@@ -45,8 +52,9 @@ export function teamsForActor(principalId: string): SQL {
 export function ticketFilter(actor: Actor): SQL {
   const notDeleted = isNull(tickets.deletedAt)
 
-  // (1) Service principals first — workspace-wide, membership-independent.
-  if (actor.principalType === 'service') return sql`${notDeleted}`
+  // (1) Unscoped service principals first — workspace-wide, membership-independent.
+  // A personal API key carries its creator and falls through to their scope.
+  if (isUnscopedService(actor)) return sql`${notDeleted}`
 
   // (2) Workspace-wide viewers.
   if (can(actor, PERMISSIONS.TICKET_VIEW_ALL)) return sql`${notDeleted}`
@@ -54,7 +62,7 @@ export function ticketFilter(actor: Actor): SQL {
   // (3)/(4) Below here a scoped viewer needs both ticket.view and an identity;
   // without either they see nothing (anonymous/end-user principals never reach
   // tickets).
-  const principalId: string | null = actor.principalId ?? null
+  const principalId: string | null = rowScopePrincipalId(actor)
   if (!can(actor, PERMISSIONS.TICKET_VIEW) || principalId === null) return sql`false`
 
   const assignedToMe = eq(tickets.assigneePrincipalId, principalId as never)
@@ -85,12 +93,13 @@ export function canViewTicket(
   actorTeamIds: ReadonlySet<TeamId | string>
 ): Decision {
   if (ticket.deletedAt) return denyDecision('ticket is deleted')
-  if (actor.principalType === 'service') return allowDecision()
+  if (isUnscopedService(actor)) return allowDecision()
   if (can(actor, PERMISSIONS.TICKET_VIEW_ALL)) return allowDecision()
-  if (!can(actor, PERMISSIONS.TICKET_VIEW) || actor.principalId === null) {
+  const principalId = rowScopePrincipalId(actor)
+  if (!can(actor, PERMISSIONS.TICKET_VIEW) || principalId === null) {
     return denyDecision('no ticket view permission')
   }
-  if (ticket.assigneePrincipalId === actor.principalId) return allowDecision()
+  if (ticket.assigneePrincipalId === principalId) return allowDecision()
   if (ticket.assigneeTeamId !== null && actorTeamIds.has(ticket.assigneeTeamId)) {
     return allowDecision()
   }

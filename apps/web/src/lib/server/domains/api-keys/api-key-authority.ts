@@ -1,7 +1,11 @@
 /**
  * The authority an API key carries on a request.
  *
- * A key acts for the teammate who created it, so its authority is the
+ * A workspace key belongs to nobody: its authority is its own workspace role
+ * (a role assignment on its service principal), and nobody joining or leaving
+ * changes it. Revoking it demotes that principal, which ends it.
+ *
+ * A personal key acts for the teammate who created it, so its authority is the
  * intersection of the key's own role preset and that person's current
  * permission set, resolved exactly as a signed-in session resolves it (custom
  * roles included). Key scopes narrow it further at each gate. A key whose
@@ -14,7 +18,8 @@
  * (`mcp/handler.ts`, `mcp/resolve-actor.ts`) both resolve keys here, so the
  * two surfaces cannot disagree about what a key may do.
  */
-import { db, inArray, principal, type Principal, type user } from '@/lib/server/db'
+import { db, eq, inArray, principal, type Principal, type user } from '@/lib/server/db'
+import type { PrincipalId } from '@quackback/ids'
 import { permissionsForPrincipal, resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { isTeamMember, type Role } from '@/lib/shared/roles'
@@ -29,12 +34,18 @@ export type ApiKeyPrincipal = Principal & { user: typeof user.$inferSelect | nul
 export interface ApiKeyAuthority {
   /** The key's own principal (with any linked user), or null when it is missing. */
   principal: ApiKeyPrincipal | null
-  /** The creator the key acts for. */
-  owner: ApiKeyPrincipal
+  /** The creator a personal key acts for; null for a workspace key. */
+  owner: ApiKeyPrincipal | null
   /** The key's role, capped at its creator's current role. */
   role: Role
   /** The key's role preset intersected with its creator's current permissions. */
   permissions: ReadonlySet<PermissionKey>
+  /**
+   * The teammate whose row scope the key's requests follow: the creator, for a
+   * personal key, so lists and per-item checks see exactly what that teammate
+   * sees. Null for a workspace key, which is workspace-wide within its role.
+   */
+  scopePrincipalId: PrincipalId | null
 }
 
 const ROLE_RANK: Record<Role, number> = { user: 0, member: 1, admin: 2 }
@@ -66,8 +77,9 @@ function reportCreatorless(keyId: string): void {
  * workspace grants in one more; nothing scales with the request.
  */
 export async function resolveApiKeyAuthority(
-  key: Pick<ApiKey, 'id' | 'principalId' | 'createdById'>
+  key: Pick<ApiKey, 'id' | 'principalId' | 'createdById'> & { kind?: ApiKey['kind'] }
 ): Promise<ApiKeyAuthority | null> {
+  if (key.kind === 'workspace') return resolveWorkspaceKeyAuthority(key.principalId)
   if (!key.createdById) {
     reportCreatorless(key.id)
     return null
@@ -93,5 +105,30 @@ export async function resolveApiKeyAuthority(
     owner,
     role: lowerRole(keyRole, ownerRole),
     permissions: new Set([...held].filter((permission) => preset.has(permission))),
+    scopePrincipalId: owner.id,
+  }
+}
+
+/**
+ * A workspace key's authority is its own role. Its principal stays a team role
+ * while the key is live; revoking the key demotes it to `user`, so a missing or
+ * demoted principal is refused like an unknown key.
+ */
+async function resolveWorkspaceKeyAuthority(
+  principalId: ApiKey['principalId']
+): Promise<ApiKeyAuthority | null> {
+  const keyPrincipal = await db.query.principal.findFirst({
+    where: eq(principal.id, principalId),
+    with: { user: true },
+  })
+  if (!keyPrincipal || keyPrincipal.type !== 'service' || !isTeamMember(keyPrincipal.role))
+    return null
+  const role = keyPrincipal.role as Role
+  return {
+    principal: keyPrincipal,
+    owner: null,
+    role,
+    permissions: await permissionsForPrincipal(keyPrincipal.id, role),
+    scopePrincipalId: null,
   }
 }

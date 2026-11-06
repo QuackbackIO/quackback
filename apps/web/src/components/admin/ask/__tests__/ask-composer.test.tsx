@@ -66,4 +66,42 @@ describe('the separate search palette', () => {
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'office hours' } })
     expect(props.onQueryChange).toHaveBeenCalledExactlyOnceWith('office hours')
   })
+
+  it('opens the results page on Enter once a search can run', () => {
+    const onSubmitSearch = vi.fn()
+    const props = mount({ query: ' refund ', onSubmitSearch })
+    expect(screen.getAllByRole('option')[0].textContent).toBe('Search for “refund”')
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' })
+    expect(onSubmitSearch).toHaveBeenCalledExactlyOnceWith('refund')
+    expect(props.onNavigate).not.toHaveBeenCalled()
+  })
+
+  it('offers no results page for a single character', () => {
+    mount({ query: 'r', onSubmitSearch: vi.fn() })
+    expect(screen.queryByRole('option', { name: /Search for/ })).toBeNull()
+  })
+
+  it('lists records of every kind in the order given, each with its kind', () => {
+    const props = mount({
+      results: [],
+      onSubmitSearch: vi.fn(),
+      records: [
+        { id: 'c1', title: 'Acme', href: '/admin/c1', kindLabel: 'Company', detail: 'acme.io' },
+        { id: 'p1', title: 'Acme export', href: '/admin/p1', kindLabel: 'Post' },
+      ],
+    })
+    const options = screen.getAllByRole('option')
+    expect(options.map((option) => option.textContent)).toEqual([
+      'Search for “messenger”',
+      'Acmeacme.ioCompany',
+      'Acme exportPost',
+    ])
+    fireEvent.click(options[2])
+    expect(props.onNavigate).toHaveBeenCalledExactlyOnceWith('/admin/p1')
+  })
+
+  it('says when search failed, quietly', () => {
+    mount({ error: true })
+    expect(screen.getByRole('alert').textContent).toBe('Search could not finish. Try again.')
+  })
 })
