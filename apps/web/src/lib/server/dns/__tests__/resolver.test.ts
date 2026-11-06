@@ -12,7 +12,11 @@ vi.mock('node:dns/promises', () => {
     constructor(options: unknown) {
       constructed(options)
     }
-    resolveTxt = async (host: string) => (asked('TXT', host), [['v=spf1 -all']])
+    resolveTxt = async (host: string) => (
+      asked('TXT', host),
+      // The shape some runtimes return for one record of two strings.
+      host === 'long._domainkey.acme.com' ? [['k'.repeat(255)], ['tail']] : [['v=spf1 -all']]
+    )
     resolveCname = async (host: string) => (asked('CNAME', host), ['x.example.com'])
     resolveMx = async (host: string) => (asked('MX', host), [])
     resolve4 = async (host: string) => (asked('A', host), [])
@@ -61,5 +65,13 @@ describe('interactiveResolver', () => {
     // The background resolver is untouched by it.
     await systemResolver.resolveTxt('acme.com')
     expect(constructed).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('a long TXT record', () => {
+  it('comes back as one record from both resolvers', async () => {
+    const want = [['k'.repeat(255), 'tail']]
+    expect(await systemResolver.resolveTxt('long._domainkey.acme.com')).toEqual(want)
+    expect(await interactiveResolver.resolveTxt('long._domainkey.acme.com')).toEqual(want)
   })
 })

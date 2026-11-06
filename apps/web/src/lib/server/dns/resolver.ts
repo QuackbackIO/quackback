@@ -35,9 +35,38 @@ function shared(tries: number): Resolver {
   return resolver
 }
 
+/** The most a single TXT string can hold, in bytes. */
+const TXT_STRING_MAX_BYTES = 255
+
+/**
+ * Put back together a long TXT record a runtime returned as separate records.
+ *
+ * A value longer than 255 bytes is published as one record made of several
+ * strings, every one but the last exactly 255 bytes. Node returns that as one
+ * record holding all of its strings. Bun returns each string as a record of its
+ * own, so a 2048-bit signing key reads as a key cut short at 255 bytes, and a
+ * domain that the mail provider has verified stays pending here forever.
+ *
+ * A record whose last string is a full 255 bytes is joined to the one after it.
+ * Two genuinely separate records only meet that rule when the first is longer
+ * than 255 bytes and ends exactly on a string boundary, and then the next is its
+ * continuation in every answer that splits records this way.
+ */
+export function rejoinTxtChunks(records: string[][]): string[][] {
+  const out: string[][] = []
+  let continues = false
+  for (const record of records) {
+    if (continues) out[out.length - 1].push(...record)
+    else out.push([...record])
+    const last = record[record.length - 1]
+    continues = last !== undefined && Buffer.byteLength(last) === TXT_STRING_MAX_BYTES
+  }
+  return out
+}
+
 /** One try: for checks that run in the background or on a page load. */
 export const systemResolver: DnsResolver = {
-  resolveTxt: (host) => shared(1).resolveTxt(host),
+  resolveTxt: async (host) => rejoinTxtChunks(await shared(1).resolveTxt(host)),
   resolveCname: (host) => shared(1).resolveCname(host),
   resolveMx: (host) => shared(1).resolveMx(host),
   resolve4: (host) => shared(1).resolve4(host),
@@ -50,7 +79,7 @@ export const systemResolver: DnsResolver = {
  * a single dropped packet would read as a missing record.
  */
 export const interactiveResolver: DnsResolver = {
-  resolveTxt: (host) => shared(2).resolveTxt(host),
+  resolveTxt: async (host) => rejoinTxtChunks(await shared(2).resolveTxt(host)),
   resolveCname: (host) => shared(2).resolveCname(host),
   resolveMx: (host) => shared(2).resolveMx(host),
   resolve4: (host) => shared(2).resolve4(host),
