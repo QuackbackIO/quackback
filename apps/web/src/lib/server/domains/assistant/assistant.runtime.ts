@@ -42,6 +42,7 @@ import type {
 } from '@/lib/shared/conversation/types'
 import { resolveContentAudience } from './audience'
 import { assembleAssistantToolset } from './assistant.tools'
+import { loadOwnApprovedConnectorResults } from './copilot-connector-results'
 import {
   applyBuiltInToolRules,
   resolveToolSpecs,
@@ -319,6 +320,8 @@ export type AssistantTurnInput = AssistantTurnCommonInput &
     | {
         role: 'copilot_qa'
         surface: 'copilot'
+        /** Server-resolved asker, used only to read their own approved results. */
+        askerActor?: Actor
         messages: AssistantThreadMessage[]
       }
   )
@@ -973,7 +976,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
           includeInternalGrounding
         )
       : null
-  const contextInternallySourced =
+  let contextInternallySourced =
     ticketGrounding?.internalSourced === true ||
     conversationGrounding?.internalSourced === true ||
     (role === 'copilot_qa' && messages.some((message) => message.sender === 'assistant'))
@@ -1100,6 +1103,26 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     ])
     let toolNames = new Set(tools.map((t) => t.name))
 
+    let approvedConnectorContext: string | null = null
+    if (role === 'copilot_qa' && input.askerActor) {
+      try {
+        approvedConnectorContext = await loadOwnApprovedConnectorResults(
+          {
+            askerActor: input.askerActor,
+            conversationId,
+            ticketId,
+            connectorSpecs: activeSpecs.filter((spec) => spec.connector),
+          },
+          execDb
+        )
+      } catch (error) {
+        log.warn({ err: error }, 'approved connector results unavailable; omitting private context')
+      }
+      // External approvals are private reference material. A generated draft
+      // using them must never gain the customer-composer insert affordance.
+      contextInternallySourced ||= approvedConnectorContext !== null
+    }
+
     // Live attribute catalogue (P0 catalogue injection): fetched only when
     // set_attribute actually made it into this turn's tool set, so a turn with
     // the tool disabled never pays for the
@@ -1204,6 +1227,9 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     const modelMessages = buildThreadModelMessages(messages, {
       visionCapable: isVisionCapableModel(model),
     })
+    if (approvedConnectorContext) {
+      modelMessages.unshift({ role: 'user', content: approvedConnectorContext })
+    }
     if (ticketGrounding) {
       const status = ticketGrounding.facts.stage
         ? `${ticketGrounding.facts.status} (${ticketGrounding.facts.stage})`
