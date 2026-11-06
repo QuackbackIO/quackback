@@ -21,7 +21,8 @@ vi.mock('@/lib/server/functions/tickets', () => ({
 }))
 vi.mock('@/lib/server/functions/admin', () => ({ fetchTeamMembers: vi.fn() }))
 const canManage = vi.hoisted(() => ({ value: true }))
-vi.mock('@/lib/client/use-permissions', () => ({
+vi.mock('@/lib/client/hooks/use-root-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/client/hooks/use-root-context')>()),
   useHasPermission: () => canManage.value,
   usePermissions: () => new Set(),
 }))
