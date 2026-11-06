@@ -245,16 +245,21 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     SETTINGS_REGISTRY_PERMISSIONS,
     'the key needs the write:settings scope and the permission of every area the receipt changed'
   ),
-  'lib/server/functions/ask-search.ts::searchAskEntitiesFn': DYNAMIC_PERMISSION(
+  'lib/server/functions/ask-search.ts::searchWorkspaceFn': DYNAMIC_PERMISSION(
     [
       PERMISSIONS.POST_VIEW_PRIVATE,
       PERMISSIONS.HELP_CENTER_MANAGE,
       PERMISSIONS.CHANGELOG_VIEW_DRAFT,
       PERMISSIONS.CHANGELOG_MANAGE,
       PERMISSIONS.CONVERSATION_VIEW,
+      PERMISSIONS.CONVERSATION_VIEW_ALL,
       PERMISSIONS.TICKET_VIEW,
+      PERMISSIONS.TICKET_VIEW_ALL,
+      PERMISSIONS.PEOPLE_VIEW,
+      PERMISSIONS.MEMBER_VIEW,
+      PERMISSIONS.COMPANY_VIEW,
     ],
-    'team dashboard search checks each product permission and scopes every entity query to the actor'
+    "team dashboard search: each kind needs its page permission and reads through that kind's row visibility (posts, conversations, tickets, help center audience, changelog drafts) for the effective actor, full text and semantic alike"
   ),
   // Anyone signed in acts only on their OWN address here: the principal comes
   // from the session, never from the request, so there is no object whose
