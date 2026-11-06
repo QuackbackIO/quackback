@@ -24,6 +24,7 @@ const PORTAL_SOURCE_ROOTS = [
   'components/help-center',
   'components/shared/conversation',
   'components/shared/files',
+  'components/settings',
 ]
 
 const PORTAL_SOURCE_FILES = [

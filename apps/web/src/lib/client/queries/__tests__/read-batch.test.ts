@@ -43,16 +43,19 @@ vi.mock('@/lib/server/functions/teams', async (importOriginal) => ({
 }))
 vi.mock('@/lib/server/functions/api-keys', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/functions/api-keys')>()),
-  fetchApiKeys: gated('api_key.manage', 'apiKeys', [
-    {
-      id: 'api_key_1',
-      name: 'CI',
-      createdAt: '2026-09-01T00:00:00.000Z',
-      lastUsedAt: null,
-      expiresAt: null,
-      revokedAt: null,
-    },
-  ]),
+  fetchApiKeys: gated('api_key.manage', 'apiKeys', {
+    keys: [
+      {
+        id: 'api_key_1',
+        name: 'CI',
+        createdAt: '2026-09-01T00:00:00.000Z',
+        lastUsedAt: null,
+        expiresAt: null,
+        revokedAt: null,
+      },
+    ],
+    personalKeysEnabled: true,
+  }),
 }))
 vi.mock('@/lib/server/functions/read-batch', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/server/functions/read-batch')>()
@@ -102,7 +105,7 @@ describe('readBatch', () => {
     ])
     // The query's own function shaped it (its dates are dates).
     expect(keys).toEqual(await newClient().ensureQueryData(adminQueries.apiKeys()))
-    expect(keys[0]!.createdAt).toBeInstanceOf(Date)
+    expect(keys.keys[0]!.createdAt).toBeInstanceOf(Date)
 
     const query = client.getQueryCache().find({ queryKey: adminQueries.apiKeys().queryKey })!
     expect((query.options as { staleTime?: unknown }).staleTime).toBe(

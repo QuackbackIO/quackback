@@ -7,6 +7,7 @@ const devConfig = (overrides = {}) => ({
   mcpEnabled: true,
   mcpPortalAccessEnabled: true,
   oauthDynamicClientRegistrationEnabled: true,
+  personalApiKeysEnabled: true,
   ...overrides,
 })
 
