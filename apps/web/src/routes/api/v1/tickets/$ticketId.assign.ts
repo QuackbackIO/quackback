@@ -56,6 +56,10 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId/assign')({
           }
 
           const actor = serviceActorFromApiAuth(auth)
+          // A personal key acts only on tickets its creator can see.
+          const { assertTicketVisible } =
+            await import('@/lib/server/domains/tickets/ticket.service')
+          await assertTicketVisible(ticketId, actor)
           const { assignTicket } = await import('@/lib/server/domains/tickets/ticket.service')
           const dto = await assignTicket(ticketId, input, actor)
 

@@ -117,6 +117,61 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     concurrent: true,
     ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS user_name_trgm_idx ON "user" USING gin (name gin_trgm_ops)',
   },
+  // Workspace search (ask-search.ts) reads every kind from an index: the text
+  // the queries rank (each expression matches the query's, so the planner uses
+  // it) and titles, emails, names and domains matched anywhere inside with
+  // ILIKE '%query%'. user, conversations and tickets are large, so these are
+  // built here rather than in a migration.
+  {
+    name: 'tickets_title_search_idx',
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS tickets_title_search_idx ON tickets USING gin (to_tsvector('english', title))",
+  },
+  {
+    name: 'conversations_subject_search_idx',
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS conversations_subject_search_idx ON conversations USING gin (to_tsvector('english', coalesce(subject, '')))",
+  },
+  {
+    name: 'changelog_entries_search_idx',
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS changelog_entries_search_idx ON changelog_entries USING gin (to_tsvector('english', coalesce(title, '') || ' ' || coalesce(content, '')))",
+  },
+  {
+    name: 'user_email_trgm_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS user_email_trgm_idx ON "user" USING gin (email gin_trgm_ops)',
+  },
+  {
+    name: 'companies_name_trgm_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS companies_name_trgm_idx ON companies USING gin (name gin_trgm_ops)',
+  },
+  {
+    name: 'companies_domain_trgm_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS companies_domain_trgm_idx ON companies USING gin (domain gin_trgm_ops)',
+  },
+  {
+    name: 'kb_articles_title_trgm_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS kb_articles_title_trgm_idx ON kb_articles USING gin (title gin_trgm_ops)',
+  },
+  {
+    name: 'changelog_entries_title_trgm_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS changelog_entries_title_trgm_idx ON changelog_entries USING gin (title gin_trgm_ops)',
+  },
+  {
+    name: 'tickets_title_trgm_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS tickets_title_trgm_idx ON tickets USING gin (title gin_trgm_ops)',
+  },
+  {
+    name: 'conversations_subject_trgm_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS conversations_subject_trgm_idx ON conversations USING gin (subject gin_trgm_ops)',
+  },
   {
     // page_views is range-partitioned (0137); Postgres rejects CREATE INDEX
     // CONCURRENTLY on a partitioned parent ("cannot create index on partitioned

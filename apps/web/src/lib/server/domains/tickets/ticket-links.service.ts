@@ -9,6 +9,7 @@
 import { db, eq, and, isNull, inArray, ticketLinks, tickets } from '@/lib/server/db'
 import type { TicketId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
+import { ticketFilter } from '@/lib/server/policy/tickets'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
@@ -105,14 +106,30 @@ export async function unlinkTicketFromTracker(
     )
 }
 
-/** The ids of the customer tickets a tracker tracks (the caller builds DTOs). */
-export async function listLinkedTicketIds(trackerTicketId: TicketId): Promise<TicketId[]> {
+/**
+ * The ids of the customer tickets a tracker tracks (the caller builds DTOs).
+ * With an actor, only the tickets that actor can see.
+ */
+export async function listLinkedTicketIds(
+  trackerTicketId: TicketId,
+  actor?: Actor
+): Promise<TicketId[]> {
+  const tracked = and(
+    eq(ticketLinks.trackerTicketId, trackerTicketId),
+    eq(ticketLinks.relation, 'tracks')
+  )
+  if (!actor) {
+    const rows = await db
+      .select({ id: ticketLinks.linkedTicketId })
+      .from(ticketLinks)
+      .where(tracked)
+    return rows.map((r) => r.id)
+  }
   const rows = await db
     .select({ id: ticketLinks.linkedTicketId })
     .from(ticketLinks)
-    .where(
-      and(eq(ticketLinks.trackerTicketId, trackerTicketId), eq(ticketLinks.relation, 'tracks'))
-    )
+    .innerJoin(tickets, eq(tickets.id, ticketLinks.linkedTicketId))
+    .where(and(tracked, ticketFilter(actor)))
   return rows.map((r) => r.id)
 }
 

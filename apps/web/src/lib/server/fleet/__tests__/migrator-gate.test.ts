@@ -383,11 +383,12 @@ describe('replayGateVerdict', () => {
       '0306_email_ses_tenants',
       '0307_drop_approval_bell_index',
       '0308_remove_approvals_leftovers',
-      '0309_ticket_due_dates',
-      '0310_ticket_sharing',
-      '0311_integration_destinations',
-      '0312_integration_user_mappings',
-      '0313_message_external_links',
+      '0309_api_key_kinds',
+      '0310_ticket_due_dates',
+      '0311_ticket_sharing',
+      '0312_integration_destinations',
+      '0313_integration_user_mappings',
+      '0314_message_external_links',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)
