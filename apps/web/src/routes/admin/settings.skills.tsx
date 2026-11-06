@@ -217,7 +217,7 @@ function SkillsPage() {
       )}
 
       <Dialog open={editor !== null} onOpenChange={(open) => !open && setEditor(null)}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {editor === 'new'
