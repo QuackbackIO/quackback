@@ -452,3 +452,24 @@ describe('widget BFF unauthenticated workspace reads', () => {
     expect(hoisted.run.getWidgetTeamAvatars).toHaveBeenCalled()
   })
 })
+
+describe('widgetCreateMyTicketFn due date', () => {
+  it('passes the proposed dueAt through to the shared run helper unchanged', async () => {
+    await widgetCreateMyTicketFn({
+      data: { title: 'Broken login', dueAt: '2026-11-03T23:59:00-08:00' },
+    })
+    const [ctx, data] = hoisted.run.createMyTicket.mock.calls[0]
+    expect(ctx).toBe(WIDGET_CTX)
+    expect(data).toMatchObject({ title: 'Broken login', dueAt: '2026-11-03T23:59:00-08:00' })
+  })
+
+  it('rejects a date-only or garbage dueAt before auth or the run helper', async () => {
+    for (const dueAt of ['2026-11-03', 'whenever', 20261103]) {
+      await expect(
+        widgetCreateMyTicketFn({ data: { title: 'Broken login', dueAt } as never })
+      ).rejects.toThrow()
+    }
+    expect(hoisted.requireWidgetAuth).not.toHaveBeenCalled()
+    expect(hoisted.run.createMyTicket).not.toHaveBeenCalled()
+  })
+})

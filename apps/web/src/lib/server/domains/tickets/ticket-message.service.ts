@@ -46,9 +46,11 @@
  * ticket's `firstResponseAt` column is deliberately NOT stamped by redirected
  * agent replies: at link time `linkTicketToConversation` backfills it from the
  * conversation's first agent message, and afterwards the conversation's
- * first-response machinery owns the timeline. The caller-side `ticket.replied`
- * emission (sendTicketMessage / appendRequesterReply) fires alongside the
- * delegate's `message.created` — the notification matrix's watcher fan-out.
+ * first-response machinery owns the timeline. The pair's `ticket.replied` (the
+ * watcher fan-out) is raised off the delegate's `message.created` by the
+ * pair-reply reaction (ticket.event-hooks.ts), as it is for replies written on
+ * the conversation directly; the callers (sendTicketMessage /
+ * appendRequesterReply) emit it themselves only for ticket-parented replies.
  *
  * PHASE 1a/1b BOUNDARY: the redirect only governs writes on already-linked
  * pairs. Phase 1b (createTicketCore's `withBackingConversation` intake path)
@@ -340,10 +342,12 @@ export async function insertTicketMessage(
  * (a requester reply arms the NRT clock; an agent reply stops it), the read
  * stamps and status transitions, `emitMessageCreated` (sla.event-hooks.ts's
  * FRT/NRT settle/resume/re-arm rides it), the conversation-channel realtime,
- * and the notification dispatch (presence-gated requester email on an agent
- * reply — the matrix keeps it alongside the ticket-side email, no cross-channel
- * dedupe in v1). The already-validated/sanitized write inputs are threaded
- * through; the delegates' own validation passes are idempotent over them.
+ * and the notification dispatch (the requester's email on an agent reply: on a
+ * pair it is the requester's only reply email, since the ticket-side reply
+ * email goes to watchers other than the requester there, see
+ * getTicketRepliedEmailTargets). The already-validated/sanitized write inputs
+ * are threaded through; the delegates' own validation passes are idempotent
+ * over them.
  *
  * Redirect invariants the delegate does NOT own (they're ticket-side):
  * `tickets.updatedAt` keeps being bumped (listMyTickets orders by it), and the
@@ -435,10 +439,11 @@ export async function sendTicketMessage(
     await cascadeTrackerReplyAll(ticket, input, principalId, actor)
   }
   // Agent/integration-facing signal, fire-and-forget after the write commits.
-  // On a linked pair this rides ALONGSIDE the delegate's `message.created`
-  // (notification matrix: the watcher fan-out — the requester included through
-  // their subscription row, B18 — is ticket-side, unchanged by the redirect).
-  void emitTicketReplied(actor, ticket, message)
+  // A reply the redirect landed on a pair's conversation is raised by the
+  // pair-reply reaction off the delegate's `message.created` instead
+  // (ticket.event-hooks.ts), the one source for every pair reply whichever
+  // surface wrote it, so emitting here too would announce it twice.
+  if (!message.conversationId) void emitTicketReplied(actor, ticket, message)
   return { message }
 }
 

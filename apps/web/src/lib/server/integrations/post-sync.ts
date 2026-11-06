@@ -12,7 +12,9 @@ import {
   syncHash,
   syncOperationKey,
   reviewDestination,
+  linkTarget,
 } from './sync/identity'
+import { destinationChannelIds } from './destinations'
 
 export async function syncPostIntegrations(
   postId: PostId,
@@ -87,11 +89,10 @@ export async function syncPostIntegrations(
     if (!link.syncScope || !getIntegration(integration.integrationType)?.linkedItems) continue
     try {
       const installation = installationIdentity(integration)
-      const destination = reviewDestination(
-        link,
-        integration,
-        getIntegration(integration.integrationType)
-      )
+      const definition = getIntegration(integration.integrationType)
+      const channelIds = await destinationChannelIds(integration)
+      const destination = reviewDestination(link, integration, definition, channelIds)
+      const target = linkTarget(link, integration, definition, channelIds)
       results.push(
         await queueSyncOperation({
           operationKey: syncOperationKey({
@@ -117,7 +118,10 @@ export async function syncPostIntegrations(
           state: 'conflict',
           errorCode: 'manual_update',
           result: { externalUrl: link.externalUrl, externalDisplayId: link.externalDisplayId },
-          payload: { executor: 'refresh', data: { event, externalId: link.externalId } },
+          payload: {
+            executor: 'refresh',
+            data: { event, externalId: link.externalId, ...(target ? { target } : {}) },
+          },
         })
       )
     } catch {
