@@ -19,6 +19,7 @@ import {
   ticketExternalLinks,
   settings,
   integrations,
+  integrationDestinations,
   user,
   principal,
   eq,
@@ -34,6 +35,8 @@ vi.mock('../ticket.webhooks', () => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
+  emitTicketUpdated: vi.fn().mockResolvedValue(undefined),
+  emitTicketPriorityChanged: vi.fn().mockResolvedValue(undefined),
 }))
 
 // Neutralize the real Postgres-backed realtime publish; this suite doesn't
@@ -53,6 +56,14 @@ import {
   listTicketExternalLinks,
   createIssueForTicket,
 } from '../ticket-external-links.service'
+import { unlinkTicketLinksInScope } from '../ticket-external-links.unlink'
+import { getIntegration } from '@/lib/server/integrations'
+import {
+  installationIdentity,
+  syncDestination,
+  syncHash,
+  syncScopeFor,
+} from '@/lib/server/integrations/sync/identity'
 import { githubIssues } from '@/integrations/github/server/issues'
 import { jiraIssues } from '@/integrations/jira/server/issues'
 import { azureDevOpsIssues } from '@/integrations/azure-devops/server/issues'
@@ -178,6 +189,22 @@ describe('githubIssues.parseRef', () => {
     ]) {
       expect(parse(input)).toBeNull()
     }
+  })
+
+  it('accepts any configured repository and names it, refusing the rest', () => {
+    const repos = [
+      { id: 'dest_widgets', externalId: 'acme/widgets' },
+      { id: 'dest_gadgets', externalId: 'acme/gadgets' },
+    ]
+    expect(githubIssues.parseRef!('ACME/Gadgets#4', { channelId: 'acme/widgets' }, repos)).toEqual({
+      externalId: '4',
+      externalDisplayId: 'ACME/Gadgets#4',
+      externalUrl: 'https://github.com/ACME/Gadgets/issues/4',
+      destinationId: 'dest_gadgets',
+    })
+    expect(() => githubIssues.parseRef!('other/repo#1', {}, repos)).toThrowError(
+      /connected repository \(acme\/widgets, acme\/gadgets\)/
+    )
   })
 
   it('throws REPO_MISMATCH when the integration pins a different repository', () => {
@@ -700,5 +727,165 @@ describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rol
 
     const links = await listTicketExternalLinks(ticketId)
     expect(links.map((l) => l.externalId).sort()).toEqual(['1', '2'])
+  })
+
+  describe('with several repositories', () => {
+    async function seedRepositories() {
+      const integration = await seedGitHubIntegration()
+      const rows = await testDb
+        .insert(integrationDestinations)
+        .values([
+          { integrationId: integration.id, kind: 'repo', externalId: 'acme/widgets' },
+          { integrationId: integration.id, kind: 'repo', externalId: 'acme/gadgets' },
+          {
+            integrationId: integration.id,
+            kind: 'repo',
+            externalId: 'acme/archive',
+            enabled: false,
+          },
+          {
+            integrationId: integration.id,
+            kind: 'repo',
+            externalId: 'acme/reports',
+            config: { direction: 'inbound' },
+          },
+        ])
+        .returning()
+      const byName = Object.fromEntries(rows.map((row) => [row.externalId, row]))
+      return { integration, byName }
+    }
+    const scopeOf = (integration: typeof integrations.$inferSelect, repository: string) =>
+      syncScopeFor(integration, { channelId: repository }, getIntegration('github'))
+
+    it('links in the repository the reference names, keeping the default scope unchanged', async () => {
+      await seedSettings()
+      await seedDefaultStatus()
+      const { integration, byName } = await seedRepositories()
+      const actor = await seedActor()
+      const ticketId = await makeTicket(actor)
+
+      await linkTicketToIssue(ticketId, 'acme/gadgets#5', actor)
+      await linkTicketToIssue(
+        ticketId,
+        'acme/widgets#5',
+        actor,
+        'github',
+        byName['acme/widgets'].id
+      )
+
+      const rows = await testDb
+        .select()
+        .from(ticketExternalLinks)
+        .where(eq(ticketExternalLinks.ticketId, ticketId))
+      const scopes = Object.fromEntries(rows.map((r) => [r.externalDisplayId, r.syncScope]))
+      expect(scopes['acme/gadgets#5']).toBe(scopeOf(integration, 'acme/gadgets'))
+      // The default repository's links keep the scope every link made before
+      // repositories had rows carries.
+      expect(scopes['acme/widgets#5']).toBe(
+        `${installationIdentity(integration)}:${syncHash(syncDestination({ channelId: 'acme/widgets' }, integration.config as Record<string, unknown>, getIntegration('github')))}`
+      )
+    })
+
+    it('refuses a repository it does not sync, a switched-off one, or a mismatch', async () => {
+      await seedSettings()
+      await seedDefaultStatus()
+      const { byName } = await seedRepositories()
+      const actor = await seedActor()
+      const ticketId = await makeTicket(actor)
+
+      await expect(linkTicketToIssue(ticketId, 'evil/repo#1', actor)).rejects.toThrow(
+        /connected repository/
+      )
+      await expect(linkTicketToIssue(ticketId, 'acme/archive#1', actor)).rejects.toThrow(
+        /connected repository/
+      )
+      await expect(
+        linkTicketToIssue(ticketId, 'acme/gadgets#1', actor, 'github', byName['acme/widgets'].id)
+      ).rejects.toThrow(/different repository/)
+    })
+
+    it('creates the issue in the chosen repository, or the default one', async () => {
+      await seedSettings()
+      await seedDefaultStatus()
+      const { integration, byName } = await seedRepositories()
+      await testDb
+        .update(integrations)
+        .set({ secrets: 'encrypted-blob' })
+        .where(eq(integrations.id, integration.id))
+      const actor = await seedActor()
+      const chosen = await makeTicket(actor)
+      const fallback = await makeTicket(actor)
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+        Response.json(
+          {
+            number: 9,
+            html_url: `${String(input).replace('api.github.com/repos', 'github.com')}/9`,
+          },
+          { status: 201 }
+        )
+      )
+      try {
+        const queued = await createIssueForTicket(
+          chosen,
+          'github',
+          actor,
+          byName['acme/gadgets'].id
+        )
+        await runIntegrationSync(syncTestJob(queued.operationId))
+        const created = await createAndRun(fallback, actor)
+
+        expect(fetchSpy.mock.calls.map(([url]) => String(url))).toEqual([
+          'https://api.github.com/repos/acme/gadgets/issues',
+          'https://api.github.com/repos/acme/widgets/issues',
+        ])
+        const [link] = await testDb
+          .select()
+          .from(ticketExternalLinks)
+          .where(eq(ticketExternalLinks.ticketId, chosen))
+        expect(link).toMatchObject({
+          externalDisplayId: 'acme/gadgets#9',
+          syncScope: scopeOf(integration, 'acme/gadgets'),
+        })
+        expect(created.externalDisplayId).toBe('acme/widgets#9')
+      } finally {
+        fetchSpy.mockRestore()
+      }
+    })
+
+    it('refuses to create in a repository that only receives or is switched off', async () => {
+      await seedSettings()
+      await seedDefaultStatus()
+      const { byName } = await seedRepositories()
+      const actor = await seedActor()
+      const ticketId = await makeTicket(actor)
+
+      for (const name of ['acme/reports', 'acme/archive'])
+        await expect(
+          createIssueForTicket(ticketId, 'github', actor, byName[name].id)
+        ).rejects.toThrow(/does not take new issues/)
+    })
+
+    it('unlinks every ticket link made on one repository, each with a note', async () => {
+      await seedSettings()
+      await seedDefaultStatus()
+      const { integration } = await seedRepositories()
+      const actor = await seedActor()
+      const ticketId = await makeTicket(actor)
+      await linkTicketToIssue(ticketId, 'acme/gadgets#1', actor)
+      await linkTicketToIssue(ticketId, 'acme/widgets#1', actor)
+
+      expect(
+        await unlinkTicketLinksInScope(integration.id, scopeOf(integration, 'acme/gadgets'))
+      ).toBe(1)
+      expect((await listTicketExternalLinks(ticketId)).map((l) => l.externalDisplayId)).toEqual([
+        'acme/widgets#1',
+      ])
+      const page = await listTicketMessages(ticketId, { includeInternal: true })
+      expect(
+        page.messages
+          .filter((m) => m.systemEvent?.kind === 'external_unlinked')
+          .map((m) => m.content)
+      ).toEqual(['Unlinked GitHub issue acme/gadgets#1'])
+    })
   })
 })

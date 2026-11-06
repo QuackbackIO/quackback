@@ -15,19 +15,33 @@ import type { PostStatusId, TicketStatusId } from '@quackback/ids'
 export type StatusMappings = Record<string, string | null>
 
 /**
+ * The mapping for an external status name, falling back to `fallbackStatus`
+ * when the name has no entry at all. An entry mapped to null (ignore) does
+ * not fall back.
+ */
+function mappedStatus(
+  externalStatus: string,
+  mappings: StatusMappings | undefined,
+  fallbackStatus?: string
+): string | null {
+  if (!mappings) return null
+  const mapped =
+    mappings[externalStatus] === undefined && fallbackStatus
+      ? mappings[fallbackStatus]
+      : mappings[externalStatus]
+  return mapped ?? null
+}
+
+/**
  * Resolve an external status name to a Quackback PostStatusId.
  * Returns null if no mapping exists or the mapping explicitly says to ignore.
  */
 export function resolveStatusMapping(
   externalStatus: string,
-  mappings: StatusMappings | undefined
+  mappings: StatusMappings | undefined,
+  fallbackStatus?: string
 ): PostStatusId | null {
-  if (!mappings) return null
-
-  const mapped = mappings[externalStatus]
-  if (mapped === undefined || mapped === null) return null
-
-  return mapped as PostStatusId
+  return mappedStatus(externalStatus, mappings, fallbackStatus) as PostStatusId | null
 }
 
 /**
@@ -38,12 +52,8 @@ export function resolveStatusMapping(
  */
 export function resolveTicketStatusMapping(
   externalStatus: string,
-  mappings: StatusMappings | undefined
+  mappings: StatusMappings | undefined,
+  fallbackStatus?: string
 ): TicketStatusId | null {
-  if (!mappings) return null
-
-  const mapped = mappings[externalStatus]
-  if (mapped === undefined || mapped === null) return null
-
-  return mapped as TicketStatusId
+  return mappedStatus(externalStatus, mappings, fallbackStatus) as TicketStatusId | null
 }

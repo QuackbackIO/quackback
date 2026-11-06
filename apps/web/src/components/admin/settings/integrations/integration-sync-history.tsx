@@ -23,6 +23,15 @@ import {
 } from '@/components/ui/dialog'
 import { TimeAgo } from '@/components/ui/time-ago'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { useIntl } from 'react-intl'
+import { adminQueries } from '@/lib/client/queries/admin'
+import {
   listIntegrationSyncHistoryFn,
   inspectIntegrationSyncFn,
   recoverIntegrationSyncFn,
@@ -50,17 +59,25 @@ const actionLabels: Record<SyncAction, string> = {
   link_existing: 'Link existing item',
 }
 type Cursor = { at: string; id: string }
+const ALL_DESTINATIONS = 'all'
 
 export function IntegrationSyncHistory({ provider }: { provider: string }) {
+  const intl = useIntl()
   const [filter, setFilter] = useState<SyncFilter>('all')
+  const [destinationId, setDestinationId] = useState<string>(ALL_DESTINATIONS)
   const [cursors, setCursors] = useState<Cursor[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
   const queryClient = useQueryClient()
   const actionIds = useRef(new Map<string, string>())
+  // A connection serving several repositories can narrow the history to one.
+  const destinations = useQuery(adminQueries.integrationDestinations(provider)).data ?? []
+  const scoped = destinationId === ALL_DESTINATIONS ? undefined : destinationId
   const history = useQuery({
-    queryKey: ['integration-sync', provider, filter, cursors.at(-1)],
+    queryKey: ['integration-sync', provider, filter, scoped, cursors.at(-1)],
     queryFn: () =>
-      listIntegrationSyncHistoryFn({ data: { provider, filter, cursor: cursors.at(-1) } }),
+      listIntegrationSyncHistoryFn({
+        data: { provider, filter, cursor: cursors.at(-1), destinationId: scoped },
+      }),
     refetchInterval: 10_000,
   })
   const action = useMutation({
@@ -101,6 +118,39 @@ export function IntegrationSyncHistory({ provider }: { provider: string }) {
               {label}
             </Button>
           ))}
+          {destinations.length > 1 && (
+            <Select
+              value={destinationId}
+              onValueChange={(value) => {
+                setDestinationId(value)
+                setCursors([])
+                setExpanded(null)
+              }}
+            >
+              <SelectTrigger
+                className="h-8 w-48 text-xs"
+                aria-label={intl.formatMessage({
+                  id: 'admin.syncHistory.repository',
+                  defaultMessage: 'Repository',
+                })}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_DESTINATIONS}>
+                  {intl.formatMessage({
+                    id: 'admin.syncHistory.allRepositories',
+                    defaultMessage: 'All repositories',
+                  })}
+                </SelectItem>
+                {destinations.map((destination) => (
+                  <SelectItem key={destination.id} value={destination.id}>
+                    {destination.externalId}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
         <Button
           size="sm"

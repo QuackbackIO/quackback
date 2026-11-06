@@ -46,7 +46,7 @@ export const postSubscriptions = pgTable(
     principalId: typeIdColumn('principal')('principal_id')
       .notNull()
       .references(() => principal.id, { onDelete: 'cascade' }),
-    reason: varchar('reason', { length: 20 }).notNull(), // 'author' | 'vote' | 'comment' | 'manual'
+    reason: varchar('reason', { length: 20 }).notNull(), // 'author' | 'vote' | 'comment' | 'manual' | 'owner' | 'added'
     notifyComments: boolean('notify_comments').default(true).notNull(),
     notifyStatusChanges: boolean('notify_status_changes').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -108,7 +108,7 @@ export const unsubscribeTokens = pgTable(
     postId: typeIdColumnNullable('post')('post_id').references(() => posts.id, {
       onDelete: 'cascade',
     }), // null = global unsubscribe
-    action: varchar('action', { length: 30 }).notNull(), // 'unsubscribe_post' | 'unsubscribe_all' | 'mute_post'
+    action: varchar('action', { length: 30 }).notNull(), // 'unsubscribe_post' | 'unsubscribe_all'
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedAt: timestamp('used_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

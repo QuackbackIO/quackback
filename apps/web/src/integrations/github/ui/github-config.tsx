@@ -1,32 +1,17 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
+import { FormattedMessage } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import {
-  ArrowPathIcon,
-  FolderIcon,
-  ChevronRightIcon,
-  ChatBubbleLeftRightIcon,
-} from '@heroicons/react/24/solid'
+import { ArrowPathIcon, ChevronRightIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { MENU_LABEL } from '@/components/ui/menu'
 import { useUpdateIntegration } from '@/lib/client/mutations'
-import {
-  fetchGitHubReposFn,
-  getGitHubChannelStatusFn,
-  type GitHubRepo,
-} from '@/integrations/github/server/functions'
+import { getGitHubChannelStatusFn } from '@/integrations/github/server/functions'
+import { GitHubRepositoryList } from '@/integrations/github/ui/github-repository-list'
 import { StatusSyncConfig } from '@/components/admin/settings/integrations/status-sync-config'
 import { TicketStatusSyncConfig } from '@/components/admin/settings/integrations/ticket-status-sync-config'
 import { OnDeleteConfig } from '@/components/admin/settings/integrations/on-delete-config'
@@ -52,9 +37,11 @@ const EVENT_CONFIG = [
   },
 ]
 
+/** The issue states GitHub sync maps (see `GITHUB_ISSUE_STATES` on the server). */
 const GITHUB_STATUSES = [
   { id: 'Open', name: 'Open' },
   { id: 'Closed', name: 'Closed' },
+  { id: 'Closed (not planned)', name: 'Closed (not planned)' },
 ]
 
 export function GitHubConfig({
@@ -64,10 +51,6 @@ export function GitHubConfig({
   enabled,
 }: GitHubConfigProps) {
   const updateMutation = useUpdateIntegration()
-  const [repos, setRepos] = useState<GitHubRepo[]>([])
-  const [loadingRepos, setLoadingRepos] = useState(false)
-  const [repoError, setRepoError] = useState<string | null>(null)
-  const [selectedRepo, setSelectedRepo] = useState((initialConfig.channelId as string) || '')
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
   const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
@@ -83,31 +66,9 @@ export function GitHubConfig({
     staleTime: 60_000,
   })
 
-  const fetchRepos = useCallback(async () => {
-    setLoadingRepos(true)
-    setRepoError(null)
-    try {
-      const result = await fetchGitHubReposFn()
-      setRepos(result)
-    } catch {
-      setRepoError('Failed to load repositories. Please try again.')
-    } finally {
-      setLoadingRepos(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchRepos()
-  }, [fetchRepos])
-
   const handleEnabledChange = (checked: boolean) => {
     setIntegrationEnabled(checked)
     updateMutation.mutate({ id: integrationId, enabled: checked })
-  }
-
-  const handleRepoChange = (ownerRepo: string) => {
-    setSelectedRepo(ownerRepo)
-    updateMutation.mutate({ id: integrationId, config: { channelId: ownerRepo } })
   }
 
   const handleEventToggle = (eventId: string, checked: boolean) => {
@@ -158,51 +119,15 @@ export function GitHubConfig({
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="repo-select">Repository</Label>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={fetchRepos}
-                disabled={loadingRepos}
-                className="h-8 gap-1.5 text-xs"
-              >
-                <ArrowPathIcon className={`h-3.5 w-3.5 ${loadingRepos ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-            </div>
-            {repoError ? (
-              <p className="text-sm text-destructive">{repoError}</p>
-            ) : (
-              <Select
-                value={selectedRepo}
-                onValueChange={handleRepoChange}
-                disabled={loadingRepos || saving || !integrationEnabled}
-              >
-                <SelectTrigger id="repo-select" className="w-full">
-                  {loadingRepos ? (
-                    <div className="flex items-center gap-2">
-                      <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                      <span>Loading repositories...</span>
-                    </div>
-                  ) : (
-                    <SelectValue placeholder="Select a repository" />
-                  )}
-                </SelectTrigger>
-                <SelectContent>
-                  {repos.map((repo) => (
-                    <SelectItem key={repo.id} value={repo.fullName}>
-                      <div className="flex items-center gap-2">
-                        <FolderIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span>{repo.fullName}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <GitHubRepositoryList
+              disabled={!integrationEnabled}
+              inboxOff={!!inbox && !inbox.inboxEnabled}
+            />
             <p className="text-xs text-muted-foreground">
-              New feedback issues will be created in this repository.
+              <FormattedMessage
+                id="admin.githubRepository.listHelp"
+                defaultMessage="Issues from new feedback go to every repository set to send. A ticket's issue goes to the repository you pick, or the default one."
+              />
             </p>
           </div>
 

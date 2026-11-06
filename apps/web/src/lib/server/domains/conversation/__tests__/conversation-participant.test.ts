@@ -31,6 +31,7 @@ const hoisted = vi.hoisted(() => ({
   // (inserted/deleted) or [] (conflict / nothing matched).
   writeQueue: [] as unknown[][],
   deletedFrom: [] as unknown[],
+  updatedSets: [] as unknown[],
   emitSystemMessage: vi.fn(),
 }))
 
@@ -66,7 +67,21 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
   return {
     ...(await importOriginal<typeof import('@/lib/server/db')>()),
-    db: { select: () => chain(), insert: () => insertChain(), delete: deleteChain },
+    db: {
+      select: () => chain(),
+      insert: () => insertChain(),
+      delete: deleteChain,
+      update: () => {
+        const c: Record<string, unknown> = {}
+        c.set = (v: unknown) => {
+          hoisted.updatedSets.push(v)
+          return c
+        }
+        c.where = () => c
+        c.returning = async () => hoisted.writeQueue.shift() ?? []
+        return c
+      },
+    },
   }
 })
 
@@ -104,6 +119,7 @@ beforeEach(() => {
   hoisted.insertedRows.length = 0
   hoisted.writeQueue.length = 0
   hoisted.deletedFrom.length = 0
+  hoisted.updatedSets.length = 0
   hoisted.emitSystemMessage.mockResolvedValue(undefined)
   // Default conversation lookup: exists, owned by VISITOR.
   hoisted.selectQueue.push([{ visitorPrincipalId: VISITOR }])
@@ -129,9 +145,10 @@ describe('addConversationParticipantByEmail', () => {
         conversationId: CONVERSATION,
         principalId: 'principal_user9',
         addedByPrincipalId: 'principal_agent1',
+        threadAccess: false,
       },
     ])
-    expect(result).toEqual({ principalId: 'principal_user9' })
+    expect(result).toEqual({ principalId: 'principal_user9', added: false })
   })
 
   it('reuses a lead minted from an earlier email instead of minting a second one', async () => {
@@ -142,7 +159,7 @@ describe('addConversationParticipantByEmail', () => {
 
     expect(hoisted.createPrincipal).not.toHaveBeenCalled()
     expect(hoisted.insertedRows[0]).toMatchObject({ principalId: 'principal_lead1' })
-    expect(result).toEqual({ principalId: 'principal_lead1' })
+    expect(result).toEqual({ principalId: 'principal_lead1', added: false })
   })
 
   it('mints a standalone lead for an address the workspace has never seen', async () => {
@@ -158,7 +175,7 @@ describe('addConversationParticipantByEmail', () => {
       contactEmail: 'new@example.com',
     })
     expect(hoisted.insertedRows[0]).toMatchObject({ principalId: 'principal_newlead' })
-    expect(result).toEqual({ principalId: 'principal_newlead' })
+    expect(result).toEqual({ principalId: 'principal_newlead', added: false })
   })
 
   it('lowercases the address before resolving (display case never forks identity)', async () => {
@@ -187,7 +204,45 @@ describe('addConversationParticipantByEmail', () => {
     )
 
     expect(hoisted.insertedRows).toEqual([])
-    expect(result).toEqual({ principalId: VISITOR as PrincipalId })
+    expect(result).toEqual({ principalId: VISITOR as PrincipalId, added: false })
+  })
+
+  it('shares the thread when asked (ticket sharing), and says so in the notice', async () => {
+    hoisted.selectQueue.push([]) // no user account
+    hoisted.selectQueue.push([{ id: 'principal_lead1' }])
+    hoisted.writeQueue.push([{ principalId: 'principal_lead1' }]) // insert landed
+
+    const result = await addConversationParticipantByEmail(
+      CONVERSATION,
+      'lead@example.com',
+      ACTOR,
+      {
+        threadAccess: true,
+      }
+    )
+
+    expect(hoisted.insertedRows[0]).toMatchObject({ threadAccess: true })
+    expect(result).toEqual({ principalId: 'principal_lead1', added: true })
+    expect(hoisted.emitSystemMessage.mock.calls[0][1]).toContain('see and reply on the thread')
+  })
+
+  it('upgrades an email-only participant to the shared thread', async () => {
+    hoisted.selectQueue.push([]) // no user account
+    hoisted.selectQueue.push([{ id: 'principal_lead1' }])
+    hoisted.writeQueue.push([]) // insert conflicts: already a participant
+    hoisted.writeQueue.push([{ principalId: 'principal_lead1' }]) // upgrade landed
+
+    const result = await addConversationParticipantByEmail(
+      CONVERSATION,
+      'lead@example.com',
+      ACTOR,
+      {
+        threadAccess: true,
+      }
+    )
+
+    expect(hoisted.updatedSets).toEqual([{ threadAccess: true }])
+    expect(result).toEqual({ principalId: 'principal_lead1', added: true })
   })
 
   it('throws when the conversation does not exist', async () => {

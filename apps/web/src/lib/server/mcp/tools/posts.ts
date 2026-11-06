@@ -6,6 +6,7 @@
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { isTeamMember } from '@/lib/shared/roles'
 import { z } from 'zod'
+import { ValidationError } from '@/lib/shared/errors'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
@@ -19,6 +20,8 @@ import { withItemFacts } from '../untrusted'
 import {
   registerTool,
   mcpMemberActor,
+  mcpAgentActor,
+  principalTypeOf,
   jsonResult,
   READ_ONLY,
   WRITE,
@@ -110,6 +113,27 @@ const getPostActivitySchema = {
   postId: z.string().describe('Post TypeID to get activity for'),
 }
 
+const listPostSubscribersSchema = {
+  postId: z.string().describe('Post TypeID'),
+}
+
+const subscribePostSchema = {
+  postId: z.string().describe('Post TypeID'),
+  principalId: z
+    .string()
+    .optional()
+    .describe('Who to subscribe or unsubscribe. Omit to follow or unfollow the post yourself.'),
+  action: z
+    .enum(['add', 'remove'])
+    .optional()
+    .default('add')
+    .describe('add (default) subscribes, remove unsubscribes'),
+  level: z
+    .enum(['all', 'status_only'])
+    .optional()
+    .describe('What a new subscription is notified about: all (default) or status_only'),
+}
+
 // ============================================================================
 // Type aliases — manually defined to avoid deep Zod type recursion.
 // WARNING: These must stay in sync with the Zod schemas above.
@@ -153,6 +177,18 @@ type DeletePostArgs = { postId: string }
 type RestorePostArgs = { postId: string }
 
 type GetPostActivityArgs = { postId: string }
+type ListPostSubscribersArgs = { postId: string }
+type SubscribePostArgs = {
+  postId: string
+  principalId?: string
+  action: 'add' | 'remove'
+  level?: 'all' | 'status_only'
+}
+
+/** Someone else's subscription, as opposed to the caller's own follow. */
+function forSomeoneElse(args: SubscribePostArgs, auth: McpAuthContext): boolean {
+  return !!args.principalId && args.principalId !== auth.principalId
+}
 
 // ============================================================================
 // Tool registration
@@ -463,6 +499,85 @@ Examples:
           activities.map((a, i) => [`activities[${i}]`, { authorOnTeam: a.actorOnTeam }])
         )
       )
+    },
+  })
+  registerTool<ListPostSubscribersArgs>(server, auth, {
+    name: 'list_post_subscribers',
+    permissions: [PERMISSIONS.POST_VIEW_PRIVATE],
+    description: `List who follows a post's thread (the post and the posts merged into it): why each follows it (author, vote, comment, manual, owner, added by a teammate), at what level (all or status_only), and whether they can still see the post (someone who can't stays subscribed but is not notified).
+
+Example: list_post_subscribers({ postId: "post_01abc..." })`,
+    schema: listPostSubscribersSchema,
+    annotations: READ_ONLY,
+    scope: 'read:feedback',
+    teamOnly: true,
+    handler: async (args) => {
+      const { listPostSubscribers } = await import('@/lib/server/domains/posts/post.subscribers')
+      const subscribers = await listPostSubscribers(args.postId as PostId, mcpAgentActor(auth))
+      return jsonResult({
+        postId: args.postId,
+        subscribers: subscribers.map((s) => ({
+          principalId: s.principalId,
+          displayName: s.displayName,
+          email: s.email,
+          isTeamMember: s.isTeamMember,
+          reason: s.reason,
+          level: s.level,
+          canView: s.canView,
+        })),
+      })
+    },
+  })
+
+  registerTool<SubscribePostArgs>(server, auth, {
+    name: 'subscribe_post',
+    // Your own follow needs only a post you can see; anyone else's rides
+    // post.vote_on_behalf, the permission that already acts for a customer.
+    permissions: (args, ctx) =>
+      forSomeoneElse(args, ctx) ? [PERMISSIONS.POST_VOTE_ON_BEHALF] : [],
+    description: `Subscribe someone to a post, or unsubscribe them, so they get (or stop getting) its comments and status changes. Omit principalId to follow or unfollow the post yourself (a signed-in person only; an API key has no subscription of its own). Someone you subscribe must have an account and be able to see the post (INVALID_SUBSCRIBER, SUBSCRIBER_CANNOT_SEE_POST); they are notified. Subscribing someone who already follows the thread changes nothing.
+
+Examples:
+- Follow a post yourself: subscribe_post({ postId: "post_01abc..." })
+- Subscribe a customer to status changes: subscribe_post({ postId: "post_01abc...", principalId: "principal_01xyz...", level: "status_only" })
+- Unsubscribe someone: subscribe_post({ postId: "post_01abc...", principalId: "principal_01xyz...", action: "remove" })`,
+    schema: subscribePostSchema,
+    annotations: WRITE,
+    scope: 'write:feedback',
+    teamOnly: true,
+    handler: async (args) => {
+      const postId = args.postId as PostId
+      const subscribers = await import('@/lib/server/domains/posts/post.subscribers')
+      if (forSomeoneElse(args, auth)) {
+        const principalId = args.principalId as PrincipalId
+        const actor = mcpAgentActor(auth)
+        if (args.action === 'remove') {
+          const { removed } = await subscribers.removePostSubscriber(postId, principalId, actor)
+          return jsonResult({ postId, principalId, subscribed: false, changed: removed })
+        }
+        const { added } = await subscribers.addPostSubscriber(postId, principalId, actor, {
+          level: args.level,
+        })
+        return jsonResult({ postId, principalId, subscribed: true, changed: added })
+      }
+      if (principalTypeOf(auth) !== 'user') {
+        throw new ValidationError(
+          'PERSON_REQUIRED',
+          'An API key cannot follow a post: following is per person. Sign in as a teammate, or pass principalId to subscribe someone else.'
+        )
+      }
+      const actor = await mcpMemberActor(auth)
+      if (args.action === 'remove') {
+        const { removed } = await subscribers.unfollowPost(postId, actor)
+        return jsonResult({
+          postId,
+          principalId: auth.principalId,
+          subscribed: false,
+          changed: removed,
+        })
+      }
+      const { added } = await subscribers.followPost(postId, actor, { level: args.level })
+      return jsonResult({ postId, principalId: auth.principalId, subscribed: true, changed: added })
     },
   })
 }
