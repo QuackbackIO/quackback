@@ -13,7 +13,7 @@ import {
   sendTicketEventEmail,
   sendNoteMentionEmail,
 } from '@quackback/email'
-import type { EmailResult, IncidentImpact } from '@quackback/email'
+import type { EmailResult, IncidentImpact, SendingIdentity } from '@quackback/email'
 import type { TicketId } from '@quackback/ids'
 import type {
   HookHandler,
@@ -116,6 +116,30 @@ function noteMentionThreading(cfg: NoteMentionEmailConfig): {
 
 const log = logger.child({ component: 'email' })
 
+/**
+ * The From and display name a send goes out with, re-asked HERE rather than
+ * trusted from the payload. The target builder resolved the address when the
+ * event was enqueued, and this send happens after the queue, which may be
+ * minutes later and is certainly after a re-check could have demoted the
+ * domain. Sending is the moment the claim is made, so it is the moment the
+ * claim is checked; the enqueue-time resolution stays because it decides WHICH
+ * address to try, and this decides whether it may be used.
+ *
+ * The address's sender name goes with the address: mail that falls back to the
+ * platform address goes under the workspace name.
+ */
+async function checkedSender(cfg: {
+  from?: string
+  fromDisplayName?: string
+  workspaceName: string
+}): Promise<{ from: SendingIdentity | undefined; fromDisplayName: string }> {
+  const from = (await permittedSendingIdentity(cfg.from ?? null)) ?? undefined
+  return {
+    from,
+    fromDisplayName: from ? (cfg.fromDisplayName ?? cfg.workspaceName) : cfg.workspaceName,
+  }
+}
+
 const BROADCAST_EMAIL_EVENTS = new Set([
   'changelog.published',
   'status.incident_created',
@@ -170,6 +194,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        ...(await checkedSender(cfg)),
       })
     } else if (event.type === 'comment.created') {
       result = await sendNewCommentEmail({
@@ -183,6 +208,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        ...(await checkedSender(cfg)),
       })
     } else if (event.type === 'post.mentioned') {
       const data = event.data as EventPostMentionedData
@@ -199,6 +225,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        ...(await checkedSender(cfg)),
       })
     } else if (event.type === 'conversation.note_mentioned') {
       const c = config as unknown as NoteMentionEmailConfig
@@ -224,9 +251,7 @@ async function deliverEmail(
         unsubscribeUrl,
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
-        from:
-          (await permittedSendingIdentity((changelogCfg.from as string | undefined) ?? null)) ??
-          undefined,
+        ...(await checkedSender(cfg)),
       })
     } else if (event.type === 'status.incident_created') {
       const c = config as Record<string, unknown>
@@ -242,6 +267,7 @@ async function deliverEmail(
         unsubscribeUrl: unsubscribeUrl ?? '',
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        ...(await checkedSender(cfg)),
       })
     } else if (event.type === 'status.maintenance_scheduled') {
       const c = config as Record<string, unknown>
@@ -259,6 +285,7 @@ async function deliverEmail(
         unsubscribeUrl: unsubscribeUrl ?? '',
         preferencesUrl: cfg.preferencesUrl,
         logoUrl: cfg.logoUrl,
+        ...(await checkedSender(cfg)),
       })
     } else if (TICKET_EMAIL_EVENT_TYPES.has(event.type)) {
       // All six ticket/SLA event types map onto sendTicketEventEmail; the
@@ -271,14 +298,11 @@ async function deliverEmail(
       result = await sendTicketEventEmail({
         to: email,
         ...t,
-        // Re-asked HERE rather than trusted from the payload. The target
-        // builder resolved this address when the event was enqueued, and this
-        // send happens after the queue, which may be minutes later and is
-        // certainly after a re-check could have demoted the domain. Sending
-        // is the moment the claim is made, so it is the moment the claim is
-        // checked; the enqueue-time resolution stays because it decides
-        // WHICH address to try, and this decides whether it may be used.
-        from: (await permittedSendingIdentity(t.from ?? null)) ?? undefined,
+        // Agent-facing ticket mail carries no From and no name: it stays the
+        // platform's branded sender, as it always was.
+        ...(t.from || t.fromDisplayName
+          ? await checkedSender(t)
+          : { from: undefined, fromDisplayName: undefined }),
         ...ticketThreading(t),
       })
     } else {

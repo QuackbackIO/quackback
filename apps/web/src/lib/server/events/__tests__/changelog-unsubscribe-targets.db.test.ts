@@ -44,7 +44,7 @@ vi.mock('@/lib/server/domains/settings/settings.changelog', () => ({
   }),
 }))
 vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({
-  resolveSendingAddress: vi.fn().mockResolvedValue(null),
+  resolveSender: vi.fn().mockResolvedValue(null),
 }))
 
 import { getChangelogSubscriberTargets } from '../targets'

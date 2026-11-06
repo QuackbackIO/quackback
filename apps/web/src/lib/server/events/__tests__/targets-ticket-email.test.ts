@@ -55,13 +55,19 @@ vi.mock('@/lib/server/domains/teams', () => ({
 }))
 
 // --- channel-account From resolution ---
-// A ticket's From: its linked conversation's thread sender, else the team's
+// A ticket's From: its linked conversation's thread sender, else support's
 // address. Which of the two it is is pinned in sender-resolver.db.test.ts; this
 // suite pins what the requester's config does with the answer.
-const resolveTicketFrom = vi.fn<(...args: unknown[]) => Promise<string | null>>()
+type Sender = { from: string; source: string; senderName: string | null }
+const resolveTicketSender = vi.fn<(...args: unknown[]) => Promise<Sender | null>>()
 vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({
-  resolveTicketFrom: (...args: unknown[]) => resolveTicketFrom(...args),
+  resolveTicketSender: (...args: unknown[]) => resolveTicketSender(...args),
 }))
+const sender = (from: string, senderName: string | null = null): Sender => ({
+  from,
+  source: 'surface',
+  senderName,
+})
 
 // --- reply-to minting ---
 // Arguments are forwarded, not swallowed: the second one is the workspace's mail
@@ -103,7 +109,7 @@ beforeEach(() => {
   isSupportTicketsEnabled.mockReset().mockResolvedValue(true)
   getTicketNotifiableWatchers.mockReset().mockResolvedValue([])
   listTeamMemberPrincipalIds.mockReset().mockResolvedValue([])
-  resolveTicketFrom.mockReset().mockResolvedValue(null)
+  resolveTicketSender.mockReset().mockResolvedValue(null)
   inboundTicketReplyToAddress.mockReset().mockReturnValue(null)
   getStageLabels.mockReset().mockResolvedValue({ received: 'Received', resolved: 'Resolved' })
   batchGetNotificationPreferences.mockReset().mockResolvedValue(new Map())
@@ -202,17 +208,17 @@ describe('getTicketCreatedEmailTargets', () => {
 
   it('carries the per-team From and signed reply-to when configured', async () => {
     queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
-    resolveTicketFrom.mockResolvedValue('support@team.example')
+    resolveTicketSender.mockResolvedValue(sender('support@team.example'))
     inboundTicketReplyToAddress.mockReturnValue('reply+tkt-1.sig@inbound.example')
     const targets = await getTicketCreatedEmailTargets(createdEvent(), context)
-    expect(resolveTicketFrom).toHaveBeenCalledWith('ticket_1', null)
+    expect(resolveTicketSender).toHaveBeenCalledWith('ticket_1', null)
     expect(targets[0].config).toMatchObject({
       from: 'support@team.example',
       replyTo: 'reply+tkt-1.sig@inbound.example',
     })
   })
 
-  it("names the requester's email after the workspace, with or without an address", async () => {
+  it("names the requester's email after the workspace when the address has no name", async () => {
     // Kept apart from `from` so the name survives the send-time re-check, and
     // still applies when that re-check falls back to the platform default.
     queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
@@ -221,11 +227,21 @@ describe('getTicketCreatedEmailTargets', () => {
     expect((targets[0].config as Record<string, unknown>).from).toBeUndefined()
 
     queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
-    resolveTicketFrom.mockResolvedValue('support@team.example')
+    resolveTicketSender.mockResolvedValue(sender('support@team.example'))
     targets = await getTicketCreatedEmailTargets(createdEvent(), context)
     expect(targets[0].config).toMatchObject({
       from: 'support@team.example',
       fromDisplayName: 'W',
+    })
+  })
+
+  it("names the requester's email after the address's sender name when it has one", async () => {
+    queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
+    resolveTicketSender.mockResolvedValue(sender('support@team.example', 'Team Support'))
+    const targets = await getTicketCreatedEmailTargets(createdEvent(), context)
+    expect(targets[0].config).toMatchObject({
+      from: 'support@team.example',
+      fromDisplayName: 'Team Support',
     })
   })
 
