@@ -7,9 +7,9 @@
 
 import { db, apiKeys, principal, eq, and, isNull } from '@/lib/server/db'
 import { emit } from '@/lib/server/events/emit'
-import { apiKeyCreated, apiKeyDeleted } from '@/lib/server/events/catalogue'
+import { apiKeyCreated, apiKeyDeleted, apiKeyUpdated } from '@/lib/server/events/catalogue'
 import type { PrincipalId } from '@quackback/ids'
-import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isAdmin } from '@/lib/shared/roles'
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
@@ -25,8 +25,21 @@ import {
   parseApiKeyScopes,
   parseScopesJson,
 } from './api-key-scopes'
-import type { ApiKey, ApiKeyId, CreateApiKeyInput, CreateApiKeyResult } from './api-key.types'
-export type { ApiKey, ApiKeyId, CreateApiKeyInput, CreateApiKeyResult }
+import type {
+  ApiKey,
+  ApiKeyGranter,
+  ApiKeyId,
+  ApiKeyKind,
+  CreateApiKeyInput,
+  CreateApiKeyResult,
+} from './api-key.types'
+import {
+  applyWorkspaceKeyRole,
+  resolveGrantableKeyRole,
+  type WorkspaceKeyRole,
+} from './workspace-key-role'
+import type { RoleId } from '@quackback/ids'
+export type { ApiKey, ApiKeyGranter, ApiKeyId, ApiKeyKind, CreateApiKeyInput, CreateApiKeyResult }
 
 /** API key prefix */
 const API_KEY_PREFIX = 'qb_'
@@ -41,6 +54,7 @@ function toApiKey(row: ApiKeyRow): ApiKey {
   return {
     id: row.id,
     name: row.name,
+    kind: row.kind,
     keyPrefix: row.keyPrefix,
     createdById: row.createdById,
     principalId: row.principalId,
@@ -101,11 +115,16 @@ function getKeyPrefix(key: string): string {
 }
 
 /**
- * Create a new API key
+ * Create a new API key.
+ *
+ * A personal key (the default) acts as `createdById`. A workspace key needs a
+ * `roleId` and the creator's own authority as `granter`: the role is checked
+ * against it exactly as re-roling a teammate is, then held by the key itself.
  */
 export async function createApiKey(
   input: CreateApiKeyInput,
-  createdById: PrincipalId
+  createdById: PrincipalId,
+  granter?: ApiKeyGranter
 ): Promise<CreateApiKeyResult> {
   // Validate input
   if (!input.name?.trim()) {
@@ -116,6 +135,17 @@ export async function createApiKey(
   }
 
   const storedScopes = normalizeScopesInput(input.scopes)
+  const kind: ApiKeyKind = input.kind ?? 'personal'
+  let workspaceRole: WorkspaceKeyRole | null = null
+  if (kind === 'workspace') {
+    if (!input.roleId) {
+      throw new ValidationError('VALIDATION_ERROR', 'A workspace key needs a role')
+    }
+    if (!granter) {
+      throw new ForbiddenError('GRANT_CEILING', 'Creator permission set is required')
+    }
+    workspaceRole = await resolveGrantableKeyRole(input.roleId, granter)
+  }
 
   // Generate the key
   const plainTextKey = generateApiKey()
@@ -127,7 +157,9 @@ export async function createApiKey(
     where: eq(principal.id, createdById),
     columns: { role: true },
   })
-  const role = (isAdmin(creator?.role) ? 'admin' : 'member') as 'admin' | 'member'
+  const role =
+    workspaceRole?.legacyRole ??
+    ((isAdmin(creator?.role) ? 'admin' : 'member') as 'admin' | 'member')
 
   // Create service principal for this API key
   const servicePrincipal = await createServicePrincipal({
@@ -141,6 +173,7 @@ export async function createApiKey(
     .insert(apiKeys)
     .values({
       name: input.name.trim(),
+      kind,
       keyHash,
       keyPrefix,
       createdById,
@@ -156,13 +189,21 @@ export async function createApiKey(
     { serviceMetadata: { kind: 'api_key', apiKeyId: apiKey.id } }
   )
 
+  if (workspaceRole) await applyWorkspaceKeyRole(servicePrincipal.id, workspaceRole, createdById)
+
   // EVENTING-V2 WO-6a: emit the audit-relevant creation event. A short tx since
   // this service has no surrounding one; exposure.audit writes the audit_log row
   // in the same tx (best-effort — a failure must not fail key creation).
   try {
     await db.transaction((tx) =>
       emit(tx, apiKeyCreated, {
-        payload: { apiKeyId: apiKey.id, name: apiKey.name, scopes: storedScopes },
+        payload: {
+          apiKeyId: apiKey.id,
+          name: apiKey.name,
+          scopes: storedScopes,
+          kind,
+          ...(workspaceRole ? { roleName: workspaceRole.roleName } : {}),
+        },
         actor: { type: 'user', id: createdById },
         entityId: apiKey.id,
         context: { source: 'admin' },
@@ -349,4 +390,36 @@ export async function updateApiKeyName(id: ApiKeyId, name: string): Promise<ApiK
   await syncPrincipalProfileById(updated.principalId, { displayName: name.trim() })
 
   return toApiKey(updated)
+}
+
+/**
+ * Give a workspace key a different role. Any holder of key management may do
+ * this, within the same grant ceiling as creating one. Personal keys have no
+ * role of their own (they act as their creator), so they are not found here.
+ */
+export async function setWorkspaceKeyRole(
+  id: ApiKeyId,
+  roleId: RoleId,
+  granter: ApiKeyGranter,
+  grantedBy: PrincipalId
+): Promise<ApiKey> {
+  const key = await db.query.apiKeys.findFirst({
+    where: and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt), eq(apiKeys.kind, 'workspace')),
+  })
+  if (!key) throw new NotFoundError('API_KEY_NOT_FOUND', 'Workspace key not found')
+  const role = await resolveGrantableKeyRole(roleId, granter)
+  await applyWorkspaceKeyRole(key.principalId, role, grantedBy)
+  try {
+    await db.transaction((tx) =>
+      emit(tx, apiKeyUpdated, {
+        payload: { apiKeyId: key.id, changedKeys: ['role'], roleName: role.roleName },
+        actor: { type: 'user', id: grantedBy },
+        entityId: key.id,
+        context: { source: 'admin' },
+      })
+    )
+  } catch {
+    /* best-effort emission; never blocks the change */
+  }
+  return toApiKey(key)
 }

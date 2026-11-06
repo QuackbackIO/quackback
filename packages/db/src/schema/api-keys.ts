@@ -49,6 +49,13 @@ export const apiKeys = pgTable(
      * serialized to the public API.
      */
     scopes: text('scopes'),
+    /**
+     * 'personal' keys act as their creator (permissions and row scope) and
+     * stop working when the creator leaves. 'workspace' keys hold their own
+     * role, as a workspace role assignment on `principalId`, and belong to
+     * nobody; `createdById` is then only an audit record.
+     */
+    kind: text('kind').$type<'personal' | 'workspace'>().notNull().default('personal'),
   },
   (table) => [
     // Index for listing keys by creator
