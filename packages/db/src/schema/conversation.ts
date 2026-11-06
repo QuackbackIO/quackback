@@ -203,6 +203,13 @@ export const conversations = pgTable(
     // FILING instant, which is the clock the retention window is measured from;
     // restore-from-spam clears end_reason, so a released thread leaves this
     // index rather than lingering in it (migration 0252).
+    // Workspace search by subject (0309).
+    index('conversations_subject_search_idx').using(
+      'gin',
+      sql`to_tsvector('english', coalesce(${table.subject}, ''))`
+    ),
+    // Workspace search: a subject containing the query anywhere inside (0309).
+    index('conversations_subject_trgm_idx').using('gin', table.subject.op('gin_trgm_ops')),
     index('conversations_spam_resolved_at_idx')
       .on(table.resolvedAt)
       .where(sql`status = 'closed' AND end_reason = 'spam'`),

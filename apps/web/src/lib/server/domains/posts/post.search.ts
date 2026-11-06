@@ -70,6 +70,15 @@ function postSearchQuery(search: string, join: '&' | '|'): SQL | null {
 }
 
 /**
+ * Every word of the search as a prefix match (or the search as written when
+ * it uses operators), for any english tsvector. Null when it has no words.
+ * Workspace search reuses it so every kind reads a query the same way.
+ */
+export function keywordTsQuery(search: string): SQL | null {
+  return postSearchQuery(search, '&')
+}
+
+/**
  * How many of the search's words a post has, and how many words count (stop
  * words match nothing, so they don't count toward the half).
  */

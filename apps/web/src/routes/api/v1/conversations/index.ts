@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeConversation } from './-serialize'
 import type { ConversationStatus, ConversationPriority } from '@/lib/server/db'
-import type { PrincipalId, SegmentId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/conversations/')({
   server: {
@@ -26,16 +27,9 @@ export const Route = createFileRoute('/api/v1/conversations/')({
           const assignedAgentPrincipalId =
             (url.searchParams.get('assignedAgentPrincipalId') as PrincipalId | null) ?? undefined
 
-          // A service (API key) actor sees every conversation via
-          // conversationFilter's service-principal branch, mirroring the
-          // ticket REST route's inline actor.
-          const actor = {
-            principalId: auth.principalId,
-            role: auth.role,
-            principalType: 'service' as const,
-            segmentIds: new Set<SegmentId>(),
-            permissions: auth.permissions,
-          }
+          // A personal key lists only what its creator can see
+          // (conversationFilter follows the actor's scopePrincipalId).
+          const actor = serviceActorFromApiAuth(auth)
 
           const { listConversationsForAgent } =
             await import('@/lib/server/domains/conversation/conversation.query')
