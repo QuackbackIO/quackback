@@ -25,6 +25,10 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/read
           )
 
           const actor = serviceActorFromApiAuth(auth)
+          // A personal key acts only on conversations its creator can see.
+          const { assertConversationViewable } =
+            await import('@/lib/server/domains/conversation/conversation.service')
+          await assertConversationViewable(conversationId, actor)
           const { markConversationRead } =
             await import('@/lib/server/domains/conversation/conversation.service')
           await markConversationRead(conversationId, actor)

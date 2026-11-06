@@ -73,10 +73,10 @@ Edges (146):
 - api -> settings
 - api -> webhooks
 - api-keys -> principals
+- api-keys -> roles
 - assistant -> ai
 - assistant -> api
 - assistant -> boards
-- assistant -> changelog
 - assistant -> conversation
 - assistant -> conversation-attributes
 - assistant -> embeddings
