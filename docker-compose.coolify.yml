@@ -1,0 +1,173 @@
+# ============================================================================
+# Quackback — Coolify deployment (app + PostgreSQL + RustFS)
+# ============================================================================
+# Deploy in Coolify as a "Docker Compose" resource, either:
+#   - from this Git repository (Build Pack: Docker Compose,
+#     Docker Compose Location: /docker-compose.coolify.yml), or
+#   - by pasting this file into an "Empty Docker Compose" resource.
+# Nothing here builds an image or bind-mounts repo files, so both work.
+#
+# Coolify-specific choices:
+#   - No `ports:` and no `container_name:`. Coolify's proxy (Traefik/Caddy)
+#     routes the domain to the app via SERVICE_URL_APP_3000; Postgres and
+#     RustFS are reachable only on the internal network.
+#   - Secrets come from Coolify magic variables (SERVICE_PASSWORD_*,
+#     SERVICE_USER_*). Coolify generates them on first deploy and keeps them.
+#   - BASE_URL follows the domain you set on the `app` service in Coolify.
+#
+# After the first deploy, set the app domain (e.g. https://feedback.example.com)
+# in the `app` service settings, then configure email in the Environment
+# Variables tab. Migrations run automatically on app startup.
+#
+# Object storage is RustFS (S3-compatible) instead of MinIO/Silo. The bucket
+# stays private; files are served through the app at /api/storage
+# (S3_PROXY=true).
+# ============================================================================
+
+services:
+  app:
+    image: ghcr.io/quackbackio/quackback:${QUACKBACK_TAG:-latest}
+    restart: unless-stopped
+    init: true
+    environment:
+      # Coolify routes the app's domain to container port 3000.
+      - SERVICE_URL_APP_3000
+      - BASE_URL=${SERVICE_URL_APP}
+      # Session signing + encryption key (>= 32 chars). Generated once by Coolify.
+      - SECRET_KEY=${SERVICE_PASSWORD_64_SECRETKEY}
+      # Coolify's proxy sits in front of the app: 1 hop. Use 2 if you also put
+      # a CDN (e.g. Cloudflare proxy) in front, or set TRUSTED_CLIENT_IP_HEADER.
+      - TRUSTED_PROXY_HOPS=${TRUSTED_PROXY_HOPS:-1}
+      - TRUSTED_CLIENT_IP_HEADER=${TRUSTED_CLIENT_IP_HEADER:-}
+      - SETUP_OWNER_EMAIL=${SETUP_OWNER_EMAIL:-}
+
+      # --- Internal wiring (do not change) ---------------------------------
+      - DATABASE_URL=postgresql://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-quackback}
+      - S3_ENDPOINT=http://rustfs:9000
+      - S3_BUCKET=${S3_BUCKET:-quackback}
+      - S3_REGION=${S3_REGION:-us-east-1}
+      - S3_ACCESS_KEY_ID=${SERVICE_USER_RUSTFS}
+      - S3_SECRET_ACCESS_KEY=${SERVICE_PASSWORD_RUSTFS}
+      - S3_FORCE_PATH_STYLE=true
+      # RustFS has no public domain, so uploads are served through the app.
+      - S3_PROXY=true
+
+      # --- Email: configure exactly ONE provider (SMTP, SES or Resend) -----
+      # Leave all blank to log emails to the console.
+      - EMAIL_FROM=${EMAIL_FROM:-Quackback <noreply@example.com>}
+      - EMAIL_SMTP_HOST=${EMAIL_SMTP_HOST:-}
+      - EMAIL_SMTP_PORT=${EMAIL_SMTP_PORT:-587}
+      - EMAIL_SMTP_USER=${EMAIL_SMTP_USER:-}
+      - EMAIL_SMTP_PASS=${EMAIL_SMTP_PASS:-}
+      - EMAIL_SES_ACCESS_KEY_ID=${EMAIL_SES_ACCESS_KEY_ID:-}
+      - EMAIL_SES_SECRET_ACCESS_KEY=${EMAIL_SES_SECRET_ACCESS_KEY:-}
+      - EMAIL_SES_REGION=${EMAIL_SES_REGION:-}
+      - EMAIL_RESEND_API_KEY=${EMAIL_RESEND_API_KEY:-}
+
+      # --- AI (optional) ---------------------------------------------------
+      # AI stays off until OPENAI_API_KEY is set. Defaults target OpenAI;
+      # change the base URL and model ids for OpenRouter, a gateway, etc.
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      # Chat features: summary, sentiment, extraction, quality gate, merge...
+      - AI_CHAT_MODEL=${AI_CHAT_MODEL:-gpt-4o-mini}
+      # Duplicate detection and help-center search. Embeddings are stored at
+      # 1536 dimensions, so the model must support that size.
+      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-text-embedding-3-small}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # Bun is always in the image, so no curl/wget dependency.
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://localhost:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # PostgreSQL 18 with pgvector. The app creates the extensions it needs
+  # (vector, pg_trgm) itself during startup migrations, so no init script or
+  # custom build is required.
+  postgres:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${SERVICE_USER_POSTGRES}
+      - POSTGRES_PASSWORD=${SERVICE_PASSWORD_POSTGRES}
+      - POSTGRES_DB=${POSTGRES_DB:-quackback}
+    command: postgres -c max_connections=200
+    volumes:
+      # Postgres 18 images keep data under /var/lib/postgresql/<major>/.
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Object storage: RustFS, an S3-compatible store written in Rust.
+  # Internal only; the console is disabled because nothing exposes it.
+  rustfs:
+    image: rustfs/rustfs:${RUSTFS_TAG:-1.0.4}
+    restart: unless-stopped
+    command: /data
+    security_opt:
+      - 'no-new-privileges:true'
+    environment:
+      - RUSTFS_ACCESS_KEY=${SERVICE_USER_RUSTFS}
+      - RUSTFS_SECRET_KEY=${SERVICE_PASSWORD_RUSTFS}
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ENABLE=false
+    volumes:
+      - rustfs_data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:9000/health']
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+
+  # One-shot job: creates the private upload bucket, then exits.
+  # Uses the official AWS CLI against RustFS's S3 API.
+  rustfs-init:
+    image: ${S3_CLIENT_IMAGE:-amazon/aws-cli:2.39.3@sha256:d557b3524475d70dd3104cf44d96568ee3188897b73a6ece2b37aa50e1af362f}
+    restart: 'no'
+    # Keep Coolify from judging overall health by this exited container.
+    exclude_from_hc: true
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=${SERVICE_USER_RUSTFS}
+      - AWS_SECRET_ACCESS_KEY=${SERVICE_PASSWORD_RUSTFS}
+      - AWS_DEFAULT_REGION=${S3_REGION:-us-east-1}
+      - AWS_ENDPOINT_URL=http://rustfs:9000
+      # Only send checksums when an operation requires them; newer CLI
+      # defaults can trip non-AWS S3 servers.
+      - AWS_REQUEST_CHECKSUM_CALCULATION=when_required
+      - AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
+      - S3_BUCKET=${S3_BUCKET:-quackback}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        aws configure set default.s3.addressing_style path
+        if aws s3api head-bucket --bucket "$$S3_BUCKET" >/dev/null 2>&1; then
+          echo "Bucket $$S3_BUCKET already exists"
+        else
+          aws s3api create-bucket --bucket "$$S3_BUCKET"
+          echo "Created bucket $$S3_BUCKET"
+        fi
+
+volumes:
+  postgres_data:
+  rustfs_data:
