@@ -137,3 +137,8 @@ it('asks for two characters before searching', () => {
   expect(screen.getByText('Type at least two characters.')).toBeTruthy()
   expect(state.calls).toEqual([])
 })
+
+it('puts focus in its search box when the page opens', () => {
+  mount({ query: 'refund' })
+  expect(document.activeElement).toBe(screen.getByRole('searchbox'))
+})

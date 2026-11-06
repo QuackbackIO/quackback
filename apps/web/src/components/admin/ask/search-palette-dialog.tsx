@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
@@ -82,14 +82,21 @@ function SearchPaletteDialogView({ open, onOpenChange, returnFocus }: SearchPale
     id: 'ask.composer.search',
     defaultMessage: 'Search Quackback',
   })
+  // Opening a result moves focus to the new page, not back to where Ctrl+K was pressed.
+  const navigated = useRef(false)
   const go = (href: string) => {
+    navigated.current = true
     onOpenChange(false)
     void router.navigate({ href })
   }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        finalFocus={returnFocus}
+        finalFocus={() => {
+          if (!navigated.current) return returnFocus.current ?? true
+          navigated.current = false
+          return false
+        }}
         className="max-w-xl gap-0 p-0 [&>button]:top-3 [&>button]:right-3"
       >
         <DialogTitle className="sr-only">{title}</DialogTitle>

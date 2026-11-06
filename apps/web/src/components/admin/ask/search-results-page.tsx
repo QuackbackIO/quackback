@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useRouter } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
@@ -58,6 +58,9 @@ function SearchResultsView({ query, kind, page = 1 }: SearchResultsPageProps) {
   const labels = useSearchKindLabels()
   const [draft, setDraft] = useState(query)
   useEffect(() => setDraft(query), [query])
+  // The page is opened to search, often straight from Ctrl+K, so typing goes to its box.
+  const input = useRef<HTMLInputElement>(null)
+  useEffect(() => input.current?.focus(), [])
   const f = (id: string, defaultMessage: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id, defaultMessage }, values)
 
@@ -94,6 +97,7 @@ function SearchResultsView({ query, kind, page = 1 }: SearchResultsPageProps) {
               className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
             />
             <Input
+              ref={input}
               type="search"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
