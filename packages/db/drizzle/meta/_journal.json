@@ -2003,6 +2003,13 @@
       "when": 1791001300000,
       "tag": "0308_remove_approvals_leftovers",
       "breakpoints": true
+    },
+    {
+      "idx": 286,
+      "version": "7",
+      "when": 1791001400000,
+      "tag": "0309_workspace_search_indexes",
+      "breakpoints": true
     }
   ]
 }
