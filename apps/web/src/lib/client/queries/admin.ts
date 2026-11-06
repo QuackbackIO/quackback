@@ -378,13 +378,14 @@ export const adminQueries = {
       queryKey: ['admin', 'api-keys'],
       queryFn: async () => {
         const data = await fetchApiKeys()
-        return data.map((k) => ({
+        const keys = data.keys.map((k) => ({
           ...k,
           createdAt: new Date(k.createdAt),
           lastUsedAt: k.lastUsedAt ? new Date(k.lastUsedAt) : null,
           expiresAt: k.expiresAt ? new Date(k.expiresAt) : null,
           revokedAt: k.revokedAt ? new Date(k.revokedAt) : null,
         }))
+        return { keys, personalKeysEnabled: data.personalKeysEnabled }
       },
       staleTime: 30 * 1000, // 30s - may change when creating/revoking keys
     }),
