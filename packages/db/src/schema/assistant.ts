@@ -51,12 +51,15 @@ export const ASSISTANT_MODEL_HANDOFF_REASONS = [
   'safety',
 ] as const
 
-/** Full storage union: the model-pickable reasons plus `system_error`, which is
- *  server-assigned only — the failure floor's reason when a turn dies before
- *  the model produced anything. Never offered to the model. */
+/** Full storage union: the model-pickable reasons plus the server-assigned
+ *  ones, never offered to the model. `system_error` is the failure floor's
+ *  reason when a turn dies before the model produced anything;
+ *  `awaiting_confirmation` is set when a customer turn filed an action that a
+ *  teammate has to confirm. */
 export const ASSISTANT_HANDOFF_REASONS = [
   ...ASSISTANT_MODEL_HANDOFF_REASONS,
   'system_error',
+  'awaiting_confirmation',
 ] as const
 
 export type AssistantInvolvementTrigger = (typeof ASSISTANT_INVOLVEMENT_TRIGGERS)[number]

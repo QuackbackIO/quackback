@@ -2,7 +2,7 @@
  * The settings registry: one entry per area, shared by the app, the REST API
  * and MCP.
  *
- * An entry joins the pure table (`lib/shared/settings-registry`: risk,
+ * An entry joins the pure table (`lib/shared/settings-registry`:
  * permission, schemas) to the handlers that read, apply and undo. The handlers
  * wrap the services the settings pages already call, so caching, plan checks
  * and config-file locks stay where they are; nothing here writes a column.

@@ -77,9 +77,6 @@ vi.mock('@/lib/client/queries/assistant-pending-actions', () => ({
     }),
   },
 }))
-vi.mock('../workspace-settings-proposal-card', () => ({
-  WorkspaceSettingsProposalCard: () => <p>Settings card</p>,
-}))
 vi.mock('../search-palette', () => ({
   useSearchPalette: () => ({ open: vi.fn() }),
   useSearchShortcutLabel: () => 'Ctrl K',

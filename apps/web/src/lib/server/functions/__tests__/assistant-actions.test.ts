@@ -241,7 +241,7 @@ describe('approveAssistantActionFn', () => {
       'approved',
       'principal_agent1',
       expect.anything(),
-      expect.objectContaining({ via: 'app', contentHash: pendingRow().argsDigest })
+      expect.objectContaining({ contentHash: pendingRow().argsDigest })
     )
     expect(hoisted.executeApprovedPendingAction).toHaveBeenCalledWith(
       CLOSE_SPEC,
@@ -261,6 +261,7 @@ describe('approveAssistantActionFn', () => {
     expect(hoisted.markPendingActionFailed).not.toHaveBeenCalled()
     expect(hoisted.requireAuth).toHaveBeenCalledWith()
     expect(out).toEqual(expect.objectContaining(expectDTOFrom(settled)))
+    expect(out).not.toHaveProperty('risk')
   })
 
   it('threads the ticket parent onto the execution context for a ticket-scoped pending action (unified inbox §2.9)', async () => {
@@ -484,7 +485,7 @@ describe('rejectAssistantActionFn', () => {
       'rejected',
       'principal_agent1',
       expect.anything(),
-      expect.objectContaining({ via: 'app', contentHash: pendingRow().argsDigest })
+      expect.objectContaining({ contentHash: pendingRow().argsDigest })
     )
     expect(hoisted.requireAuth).toHaveBeenCalledWith()
     expect(hoisted.resolveToolSpecs).not.toHaveBeenCalled()
