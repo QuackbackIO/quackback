@@ -6,8 +6,8 @@
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 
-import { createDbTestFixture } from '@/lib/server/__tests__/db-test-fixture'
-import { conversationAttributeDefinitions } from '@/lib/server/db'
+import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
+import { conversationAttributeDefinitions, eq } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -21,6 +21,7 @@ import {
   updateConversationAttribute,
   archiveConversationAttribute,
   restoreConversationAttribute,
+  ensureAssistantEscalationReasonAttribute,
 } from '../conversation-attribute.service'
 
 const fixture = await createDbTestFixture({
@@ -290,6 +291,39 @@ describe.skipIf(!fixture.available)(
       expect(restored.archivedAt).toBeNull()
       const listAgain = await listConversationAttributes()
       expect(listAgain.find((a) => a.id === created.id)).toBeDefined()
+    })
+
+    it('tops up a seeded escalation reason select with reasons added since it was seeded', async () => {
+      await testDb
+        .delete(conversationAttributeDefinitions)
+        .where(eq(conversationAttributeDefinitions.key, 'assistant_escalation_reason'))
+      // A workspace seeded before awaiting_confirmation existed, with one
+      // option relabelled by an admin.
+      await testDb.insert(conversationAttributeDefinitions).values({
+        key: 'assistant_escalation_reason',
+        label: 'Escalation reason',
+        fieldType: 'select',
+        options: [
+          { id: 'frustration', label: 'Upset customer' },
+          { id: 'system_error', label: 'AI agent hit an error' },
+        ],
+        sourceHint: 'ai',
+        aiDetect: false,
+        detectOnClose: false,
+      })
+
+      await ensureAssistantEscalationReasonAttribute()
+
+      const [row] = await testDb
+        .select({ options: conversationAttributeDefinitions.options })
+        .from(conversationAttributeDefinitions)
+        .where(eq(conversationAttributeDefinitions.key, 'assistant_escalation_reason'))
+      const options = row.options ?? []
+      expect(options.find((o) => o.id === 'frustration')?.label).toBe('Upset customer')
+      expect(options.find((o) => o.id === 'awaiting_confirmation')?.label).toBe(
+        'AI agent is waiting for a teammate to confirm an action'
+      )
+      expect(options.map((o) => o.id).slice(0, 2)).toEqual(['frustration', 'system_error'])
     })
   }
 )

@@ -13,6 +13,7 @@ import type { CreateNotificationInput, NotificationType } from '@/lib/server/dom
 import type { PrincipalId, PostId, PostCommentId, ConversationMessageId } from '@quackback/ids'
 import { truncate, isRetryableError } from '../hook-utils'
 import { logger } from '@/lib/server/logger'
+import { HANDOFF_REASON_LABELS } from '@/lib/shared/conversation/types'
 import {
   batchGetNotificationPreferences,
   type NotificationPreferencesData,
@@ -293,7 +294,8 @@ function buildNotifications(
       principalId,
       type: 'assistant_handed_off' as NotificationType,
       title: 'The AI agent handed off a conversation',
-      body: truncate(reason ?? '', 150),
+      // A reason is usually a fixed id; show its label when it has one.
+      body: truncate(reason ? (HANDOFF_REASON_LABELS[reason] ?? reason) : '', 150),
       metadata: { conversationId },
     }))
   }
