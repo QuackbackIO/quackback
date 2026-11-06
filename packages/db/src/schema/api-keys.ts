@@ -4,8 +4,8 @@
  * API keys are created by admins and used by external integrations
  * to authenticate with the public REST API.
  */
-import { pgTable, timestamp, varchar, index, text } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { pgTable, timestamp, varchar, index, text, check } from 'drizzle-orm/pg-core'
+import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
 
@@ -49,6 +49,13 @@ export const apiKeys = pgTable(
      * serialized to the public API.
      */
     scopes: text('scopes'),
+    /**
+     * 'personal' keys act as their creator (permissions and row scope) and
+     * stop working when the creator leaves. 'workspace' keys hold their own
+     * role, as a workspace role assignment on `principalId`, and belong to
+     * nobody; `createdById` is then only an audit record.
+     */
+    kind: text('kind').$type<'personal' | 'workspace'>().notNull().default('personal'),
   },
   (table) => [
     // Index for listing keys by creator
@@ -57,6 +64,7 @@ export const apiKeys = pgTable(
     index('api_keys_principal_id_idx').on(table.principalId),
     // Index for filtering active/revoked keys
     index('api_keys_revoked_at_idx').on(table.revokedAt),
+    check('api_keys_kind_check', sql`${table.kind} IN ('personal', 'workspace')`),
   ]
 )
 

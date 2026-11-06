@@ -31,6 +31,7 @@ import {
 } from '@/lib/server/db'
 import { resolveBlockReply, type BlockReplyInput, type ResolvedBlockReply } from './block-reply'
 import { isTeamMember } from '@/lib/shared/roles'
+import { conversationFilter } from '@/lib/server/policy/conversations'
 import type { ConversationAttachment, ConversationMessageCitation, Team } from '@/lib/server/db'
 import { getTeam } from '@/lib/server/domains/teams'
 import { isBlocked } from '@/lib/server/domains/principals/blocking'
@@ -165,6 +166,16 @@ async function loadConversationOr404(conversationId: ConversationId): Promise<Co
   return row
 }
 
+/** Whether `conversationFilter` admits the conversation for this actor. */
+async function conversationInScope(conversationId: ConversationId, actor: Actor): Promise<boolean> {
+  const [row] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(eq(conversations.id, conversationId), conversationFilter(actor)))
+    .limit(1)
+  return !!row
+}
+
 /**
  * Read chokepoint: resolve a conversation the actor is allowed to see, or throw
  * NotFound (never Forbidden) so a non-owner can't probe conversation ids.
@@ -174,6 +185,11 @@ export async function assertConversationViewable(
   actor: Actor
 ): Promise<Conversation> {
   const conversation = await loadConversationOr404(conversationId)
+  // A personal API key reads only what its creator's inbox lists. The per-item
+  // team boundary for people lands separately; a key must not wait for it.
+  if (actor.scopePrincipalId && !(await conversationInScope(conversationId, actor))) {
+    throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+  }
   if (canViewConversation(actor, conversation).allowed) return conversation
   // A customer the paired ticket was shared with reads it too. Looked up only
   // when ownership and the team permission have both said no, so the common
