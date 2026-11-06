@@ -18,6 +18,10 @@ interface SecretRevealDialogProps {
   secretLabel: string
   secretValue: string | null
   confirmLabel?: string
+  /** The copy warning and button, for copy in another language. */
+  warningTitle?: string
+  warningDescription?: string
+  copyLabel?: string
   children?: React.ReactNode
 }
 
@@ -29,6 +33,9 @@ export function SecretRevealDialog({
   secretLabel,
   secretValue,
   confirmLabel = "I've saved this",
+  warningTitle = 'Copy this now',
+  warningDescription = "This is the only time you'll see it. Store it securely and never share it publicly.",
+  copyLabel = 'Copy to clipboard',
   children,
 }: SecretRevealDialogProps) {
   return (
@@ -42,11 +49,7 @@ export function SecretRevealDialog({
         </DialogHeader>
 
         <div className="py-4 space-y-4">
-          <WarningBox
-            variant="warning"
-            title="Copy this now"
-            description="This is the only time you'll see it. Store it securely and never share it publicly."
-          />
+          <WarningBox variant="warning" title={warningTitle} description={warningDescription} />
 
           <div className="space-y-2">
             <label className="text-sm font-medium">{secretLabel}</label>
@@ -54,7 +57,7 @@ export function SecretRevealDialog({
               <code className="ph-mask flex-1 rounded-lg bg-muted px-3 py-2.5 font-mono text-sm break-all">
                 {secretValue}
               </code>
-              <CopyButton value={secretValue ?? ''} aria-label="Copy to clipboard" />
+              <CopyButton value={secretValue ?? ''} aria-label={copyLabel} />
             </div>
           </div>
 
