@@ -13,7 +13,7 @@ vi.mock('nodemailer', () => ({
   default: { createTransport: () => ({ sendMail: sendMailMock }) },
 }))
 
-import { sendConversationAutoAckEmail, sendCsatRequestEmail } from '../index'
+import { sendConversationAutoAckEmail, sendCsatRequestEmail, sendTicketEventEmail } from '../index'
 import { sendingAs } from './brands'
 
 const ENV_KEYS = [
@@ -118,5 +118,30 @@ describe('sendCsatRequestEmail', () => {
       from: 'Example Co <noreply@platform.example>',
       subject: 'Re: your conversation with Example Co',
     })
+  })
+})
+
+describe('sendTicketEventEmail', () => {
+  const ticket = {
+    to: 'customer@example.org',
+    kind: 'created' as const,
+    workspaceName: 'Example Co',
+    ticketLabel: '#1',
+    title: 'Cannot sign in',
+    ctaUrl: 'https://portal.example/tickets/1',
+  }
+
+  it('names the ticket address after the workspace', async () => {
+    await sendTicketEventEmail({
+      ...ticket,
+      from: sendingAs('help@home.example'),
+      fromDisplayName: 'Example Co',
+    })
+    expect(wire().from).toBe('Example Co <help@home.example>')
+  })
+
+  it('names the platform default when the address was refused at send', async () => {
+    await sendTicketEventEmail({ ...ticket, fromDisplayName: 'Example Co' })
+    expect(wire().from).toBe('Example Co <noreply@platform.example>')
   })
 })

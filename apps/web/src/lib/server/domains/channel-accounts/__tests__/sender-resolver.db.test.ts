@@ -17,6 +17,7 @@ import {
   type ConversationId,
   type PrincipalId,
   type TeamId,
+  type TicketId,
   type UserId,
 } from '@quackback/ids'
 
@@ -31,6 +32,9 @@ import {
   conversations,
   principal,
   user,
+  tickets,
+  ticketStatuses,
+  ticketConversations,
 } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -43,7 +47,12 @@ import {
   createSendingAddress,
   createSendingDomain,
 } from '../channel-account.service'
-import { resolveConversationFrom, resolveSender, resolveSendingAddress } from '../sender-resolver'
+import {
+  resolveConversationFrom,
+  resolveSender,
+  resolveSendingAddress,
+  resolveTicketFrom,
+} from '../sender-resolver'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -328,6 +337,50 @@ describe.skipIf(!fixture.available)('resolveSender (real DB, rolled back)', () =
       const conv = await seedConversation({ assignedTeamId: await seedTeam() })
       expect(await resolveConversationFrom(conv)).toBeNull()
       expect(await storedSender(conv)).toBeNull()
+    })
+  })
+
+  describe("a ticket's From", () => {
+    async function seedTicket(linked?: ConversationId): Promise<TicketId> {
+      const [status] = await testDb
+        .insert(ticketStatuses)
+        .values({ name: `Open-${suffix()}`, slug: createId('ticket_status') })
+        .returning()
+      const [ticket] = await testDb
+        .insert(tickets)
+        .values({ title: 'Cannot sign in', statusId: status.id })
+        .returning()
+      if (linked) {
+        await testDb
+          .insert(ticketConversations)
+          .values({ ticketId: ticket.id, conversationId: linked, ticketType: 'customer' })
+      }
+      return ticket.id
+    }
+
+    it("matches the linked conversation's replies, not the ticket team's address", async () => {
+      const home = await defaultTeam()
+      await seedVerifiedDomain(home, 'home.example')
+      await seedAddress(home, 'help@home.example', EARLIER)
+      const billing = await seedTeam()
+      await seedAddress(billing, 'billing@home.example', LATER)
+      const conv = await seedConversation({ assignedTeamId: home })
+      // The conversation has already been answered, so its thread has a sender.
+      expect(await resolveConversationFrom(conv)).toBe('help@home.example')
+
+      const ticket = await seedTicket(conv)
+      expect(await resolveTicketFrom(ticket, billing)).toBe('help@home.example')
+    })
+
+    it("uses the ticket team's address when no conversation is linked", async () => {
+      const home = await defaultTeam()
+      await seedVerifiedDomain(home, 'home.example')
+      await seedAddress(home, 'help@home.example', EARLIER)
+      const billing = await seedTeam()
+      await seedAddress(billing, 'billing@home.example', LATER)
+
+      const ticket = await seedTicket()
+      expect(await resolveTicketFrom(ticket, billing)).toBe('billing@home.example')
     })
   })
 
