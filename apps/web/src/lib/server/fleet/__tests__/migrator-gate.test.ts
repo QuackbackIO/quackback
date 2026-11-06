@@ -383,7 +383,8 @@ describe('replayGateVerdict', () => {
       '0306_email_ses_tenants',
       '0307_drop_approval_bell_index',
       '0308_remove_approvals_leftovers',
-      '0309_ticket_due_dates',
+      '0309_api_key_kinds',
+      '0310_ticket_due_dates',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

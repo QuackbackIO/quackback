@@ -317,6 +317,7 @@ export const P = {
   // --- WO-6a: identity/admin plane (new, catalogue-only) ---
   'apikey.created': z.looseObject({ apiKeyId: id, name: z.string(), scopes: z.array(z.string()) }),
   'apikey.deleted': z.looseObject({ apiKeyId: id }),
+  'apikey.updated': z.looseObject({ apiKeyId: id, changedKeys: z.array(z.string()) }),
   'settings.updated': z.looseObject({ changedKeys: z.array(z.string()) }),
   // --- WO-6b: content / taxonomy plane (new, catalogue-only) ---
   'board.created': z.looseObject({ boardId: id, name: z.string(), slug: z.string() }),
