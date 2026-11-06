@@ -321,35 +321,45 @@ export async function rotateApiKey(
   id: ApiKeyId,
   filter: ApiKeyFilter = {}
 ): Promise<CreateApiKeyResult> {
-  await assertFilterMayManage(id, filter)
-
   // Generate new key credentials
   const plainTextKey = generateApiKey()
   const keyHash = hashApiKey(plainTextKey)
   const keyPrefix = getKeyPrefix(plainTextKey)
 
-  // Atomic update: only succeeds if the key exists, isn't revoked and hasn't
-  // expired (a new secret for an expired key would not work).
-  const [updatedKey] = await db
-    .update(apiKeys)
-    .set({
-      keyHash,
-      keyPrefix,
-      lastUsedAt: null, // Reset last used
-    })
-    .where(
-      and(
-        liveKeyWhere(id, filter),
-        or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, new Date()))
+  // Lock the key row for the whole rotation. A role change holds the same lock
+  // while it writes, so the ceiling is checked against the role the new secret
+  // will actually carry. The key must exist, be live and not have expired (a
+  // new secret for an expired key would not work).
+  return db.transaction(async (tx) => {
+    const [key] = await tx
+      .select()
+      .from(apiKeys)
+      .where(
+        and(
+          liveKeyWhere(id, filter),
+          or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, new Date()))
+        )
       )
-    )
-    .returning()
+      .limit(1)
+      .for('update')
+    if (!key) {
+      throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found or already revoked')
+    }
+    if (filter.granter && key.kind === 'workspace') {
+      await assertCanManageWorkspaceKey(key.principalId, filter.granter)
+    }
 
-  if (!updatedKey) {
-    throw new NotFoundError('API_KEY_NOT_FOUND', 'API key not found or already revoked')
-  }
-
-  return { apiKey: toApiKey(updatedKey), plainTextKey }
+    const [updatedKey] = await tx
+      .update(apiKeys)
+      .set({
+        keyHash,
+        keyPrefix,
+        lastUsedAt: null, // Reset last used
+      })
+      .where(eq(apiKeys.id, key.id))
+      .returning()
+    return { apiKey: toApiKey(updatedKey), plainTextKey }
+  })
 }
 
 /**
