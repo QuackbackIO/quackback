@@ -6,7 +6,7 @@
  * a company via `principal.company_id` (nullable, soft-owned FK, set null on
  * delete). Tickets gain a `company_id` when the support platform lands.
  */
-import { pgTable, text, integer, timestamp, jsonb, uniqueIndex } from 'drizzle-orm/pg-core'
+import { pgTable, text, integer, timestamp, jsonb, uniqueIndex, index } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault } from '@quackback/ids/drizzle'
 import { principal } from './auth'
@@ -54,6 +54,9 @@ export const companies = pgTable(
     uniqueIndex('companies_external_id_idx')
       .on(table.externalId)
       .where(sql`"external_id" IS NOT NULL`),
+    // Workspace search matches a name or domain anywhere inside (0309).
+    index('companies_name_trgm_idx').using('gin', table.name.op('gin_trgm_ops')),
+    index('companies_domain_trgm_idx').using('gin', table.domain.op('gin_trgm_ops')),
   ]
 )
 

@@ -31,6 +31,14 @@ export interface Actor {
    * function of role) is equivalent.
    */
   permissions?: ReadonlySet<PermissionKey>
+  /**
+   * The teammate whose row scope a service actor inherits. Set for personal
+   * API keys (REST and MCP), which act as their creator: the list filters and
+   * per-item checks treat the actor as that teammate, while writes stay
+   * attributed to the key's own principal. Absent on workspace keys, the AI
+   * agent and workflows, which stay workspace-wide.
+   */
+  scopePrincipalId?: PrincipalId
   /** Server-resolved authority for a customer's own test ideas, never team authority. */
   testFeedback?: {
     ownerPrincipalId: PrincipalId
@@ -64,6 +72,23 @@ export function denyDecision(reason: string): Decision {
  */
 export function isTeamActor(actor: Actor): boolean {
   return actor.role === 'admin' || actor.role === 'member'
+}
+
+/**
+ * A service actor with no teammate behind it (a workspace key, the AI agent, a
+ * workflow). These are workspace-wide in the row filters; a personal API key
+ * carries `scopePrincipalId` and is filtered as its creator instead.
+ */
+export function isUnscopedService(actor: Actor): boolean {
+  return actor.principalType === 'service' && !actor.scopePrincipalId
+}
+
+/**
+ * The principal whose row scope an actor's lists follow: the creator of a
+ * personal API key, otherwise the actor itself.
+ */
+export function rowScopePrincipalId(actor: Actor): PrincipalId | null {
+  return actor.scopePrincipalId ?? actor.principalId ?? null
 }
 
 /** Anonymous actor — used by public portal pages and unsigned widget requests. */
