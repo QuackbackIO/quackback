@@ -1,7 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { useHasPermission } from '@/lib/client/use-permissions'
+import { useHasPermission } from '@/lib/client/hooks/use-root-context'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { listRolesFn } from '@/lib/server/functions/roles'
 import { SettingsCard } from '@/components/admin/settings/settings-card'

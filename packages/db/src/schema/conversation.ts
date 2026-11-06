@@ -263,6 +263,8 @@ export const conversationMessages = pgTable(
     // below guarantees precisely one is set.
     conversationId: typeIdColumnNullable('conversation')('conversation_id'),
     ticketId: typeIdColumnNullable('ticket')('ticket_id'),
+    // Retired Home chat transcripts only. Nothing writes it now; existing rows
+    // stay and remain hidden from every public read.
     workspaceThreadKey: text('workspace_thread_key'),
     // Nullable: system events (e.g. assignment notices) have no human author.
     principalId: typeIdColumnNullable('principal')('principal_id'),

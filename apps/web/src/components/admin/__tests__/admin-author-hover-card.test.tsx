@@ -20,7 +20,8 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 let canViewPeople = true
-vi.mock('@/lib/client/use-permissions', () => ({
+vi.mock('@/lib/client/hooks/use-root-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/client/hooks/use-root-context')>()),
   useHasPermission: () => canViewPeople,
 }))
 
