@@ -228,6 +228,8 @@ export function isSetupWizardMessage(key: string): boolean {
  */
 export const AREA_MESSAGE_PREFIXES = {
   notificationPreferences: ['portal.settings.notifications.'],
+  // A teammate's own API keys page (/settings/api-keys).
+  personalApiKeys: ['portal.settings.apiKeys.'],
   settings: ['portal.settings.'],
   helpCenter: ['portal.hc.'],
   twoFactor: ['portal.auth.twoFactor.'],

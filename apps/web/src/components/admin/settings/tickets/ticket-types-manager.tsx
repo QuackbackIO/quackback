@@ -332,7 +332,7 @@ function TypeEditorDialog({ open, onOpenChange, type, onSaved }: TypeEditorDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit type' : 'New type'}</DialogTitle>
           <DialogDescription>Behavior comes from the category; fields are yours.</DialogDescription>

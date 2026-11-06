@@ -23,10 +23,14 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
     users: /^components\/settings\/notification-matrix-form\.tsx$/,
     importers: /^routes\/(_portal\/settings\.preferences|admin\/settings\.notifications)\.tsx$/,
   },
+  personalApiKeys: {
+    users: /^components\/settings\/api-keys\//,
+    importers: /^(components\/settings\/api-keys\/|routes\/_portal\/settings\.api-keys\.tsx$)/,
+  },
   settings: {
     users:
-      /^(components\/settings\/(email-field|password-form|profile-form|settings-nav|two-factor-section)\.tsx|routes\/_portal\/settings\.[a-z]+\.tsx)$/,
-    importers: /^(components\/settings\/|routes\/_portal\/settings(\.[a-z]+)?\.tsx$)/,
+      /^(components\/settings\/(email-field|password-form|profile-form|settings-nav|two-factor-section)\.tsx|routes\/_portal\/settings\.[a-z-]+\.tsx)$/,
+    importers: /^(components\/settings\/|routes\/_portal\/settings(\.[a-z-]+)?\.tsx$)/,
   },
   helpCenter: {
     users: /^(components\/help-center\/|routes\/_portal\/hc\/)/,
