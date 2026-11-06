@@ -10,6 +10,7 @@ import type {
   Channel,
 } from '@/lib/shared/conversation/types'
 import { CONVERSATION_SPAM_FILED_BY_LABELS } from '@/lib/shared/conversation/types'
+import type { TicketDueFilter } from '@/lib/shared/ticket-due'
 import {
   inboxItemRefFromId,
   type InboxItemDTO,
@@ -25,6 +26,7 @@ import {
   type InboxNavItem,
 } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { TicketStatusChip, TICKET_TYPE_CLASS } from '@/components/admin/inbox/ticket-chips'
+import { TicketDueMarker } from '@/components/admin/inbox/ticket-due-marker'
 import { NewButton } from '@/components/shared/new-button'
 import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { SearchInput } from '@/components/shared/search-input'
@@ -79,6 +81,8 @@ function emptyStateMessage(nav: InboxNavItem, facet: InboxTriageFacet, scopeLabe
         return `No ${facetPart}back office tickets`
       case 'tickets_tracker':
         return `No ${facetPart}trackers`
+      case 'tickets_watching':
+        return `No ${facetPart}tickets you watch`
     }
     return `No ${facetPart}conversations`
   }
@@ -163,6 +167,10 @@ interface ConversationListColumnProps {
   ticketTypeOptions?: Array<{ id: string; name: string; icon: string | null; color: string }>
   channelFilter?: Channel
   onChannelFilter?: (value: Channel | undefined) => void
+  /** The ticket Due date filter; the toolbar offers it (and the Due date
+   *  sort) only when `onDueFilter` is set. */
+  dueFilter?: TicketDueFilter
+  onDueFilter?: (value: TicketDueFilter | undefined) => void
   /** The company refinement; offered only when the workspace has companies. */
   companyFilter?: CompanyFilter
   sort: ConversationSort
@@ -198,6 +206,8 @@ export function ConversationListColumn({
   ticketTypeOptions,
   channelFilter,
   onChannelFilter,
+  dueFilter,
+  onDueFilter,
   companyFilter,
   sort,
   onSort,
@@ -256,6 +266,8 @@ export function ConversationListColumn({
         ticketTypeOptions={ticketTypeOptions}
         channelFilter={channelFilter}
         onChannelFilter={onChannelFilter}
+        dueFilter={dueFilter}
+        onDueFilter={onDueFilter}
         companyFilter={companyFilter}
         sort={sort}
         onSort={onSort}
@@ -271,6 +283,7 @@ export function ConversationListColumn({
             searchInput={searchInput}
             priorityFilter={priorityFilter}
             channelFilter={channelFilter}
+            dueFilter={dueFilter}
           />
         ) : (
           items.map((item) => {
@@ -331,6 +344,8 @@ const ConversationListHeader = memo(function ConversationListHeader({
   ticketTypeOptions,
   channelFilter,
   onChannelFilter,
+  dueFilter,
+  onDueFilter,
   companyFilter,
   sort,
   onSort,
@@ -373,6 +388,8 @@ const ConversationListHeader = memo(function ConversationListHeader({
         ticketTypeOptions={ticketTypeOptions}
         channelFilter={channelFilter}
         onChannelFilter={onChannelFilter}
+        dueFilter={dueFilter}
+        onDueFilter={onDueFilter}
         companyFilter={companyFilter}
         sort={sort}
         onSort={onSort}
@@ -395,9 +412,10 @@ function EmptyList({
   searchInput,
   priorityFilter,
   channelFilter,
+  dueFilter,
 }: Pick<
   ConversationListColumnProps,
-  'nav' | 'facet' | 'scopeLabel' | 'searchInput' | 'priorityFilter' | 'channelFilter'
+  'nav' | 'facet' | 'scopeLabel' | 'searchInput' | 'priorityFilter' | 'channelFilter' | 'dueFilter'
 >) {
   const intl = useIntl()
   const activationAction = useActivationAction('conversation_empty')
@@ -408,6 +426,7 @@ function EmptyList({
     searchInput.trim().length > 0 ||
     priorityFilter !== 'all' ||
     !!channelFilter ||
+    !!dueFilter ||
     (facet !== 'all' && facet !== 'open')
   // A workspace that has never had a conversation gets the first-run state in
   // every main queue, whatever its launch plan says.
@@ -571,15 +590,18 @@ export const ConversationRow = memo(function ConversationRow({
   return (
     <RowShell selected={selected}>
       {/* Rows keep a fixed anatomy (name / linked-ticket line / preview + time)
-          so the list scans uniformly — the sometimes-present decorations
+          so the list scans uniformly — sometimes-present decorations
           (priority dot, SLA, channel, tags) live on the thread, not here. The
-          ONE identity decoration is the assignee column pinned to the row's
-          right edge at a fixed width (a glance must answer "who has this?"
-          without opening the thread, and the fixed slot lets the eye scan
-          assignees down one vertical line); unassigned threads render an
-          explicit "Unassigned" label there, so the scan line never breaks. A
-          result row swaps the preview for the matched excerpt and moves the
-          time up beside the name, so the excerpt gets the full row width. */}
+          one sometimes-present decoration a row does carry is the linked
+          ticket's due state (overdue or due soon), inline on the existing
+          ticket line so the row height stays fixed. The ONE identity decoration is the assignee
+          column pinned to the row's right edge at a fixed width (a glance must
+          answer "who has this?" without opening the thread, and the fixed slot
+          lets the eye scan assignees down one vertical line); unassigned
+          threads render an explicit "Unassigned" label there, so the scan line
+          never breaks. A result row swaps the preview for the matched excerpt
+          and moves the time up beside the name, so the excerpt gets the full
+          row width. */}
       <button
         type="button"
         onClick={() => onSelect(id)}
@@ -620,6 +642,10 @@ export const ConversationRow = memo(function ConversationRow({
               <TicketIcon className="size-3.5 shrink-0 text-foreground/70" />
               <span className="shrink-0 text-foreground/80">#{item.linkedTicket.number}</span>
               <span className="truncate text-muted-foreground">· {item.linkedTicket.title}</span>
+              <TicketDueMarker
+                dueAt={item.linkedTicket.dueAt}
+                closed={item.linkedTicket.statusCategory === 'closed'}
+              />
             </div>
           )}
           {item.searchSnippet ? (
@@ -658,7 +684,7 @@ export const ConversationRow = memo(function ConversationRow({
   )
 })
 
-const TicketRow = memo(function TicketRow({
+export const TicketRow = memo(function TicketRow({
   item,
   id,
   selected,
@@ -703,6 +729,8 @@ const TicketRow = memo(function TicketRow({
           <div className="mt-0.5 flex items-center gap-1.5">
             <span className="font-mono text-xs text-foreground/80">#{t.number}</span>
             <TicketStatusChip status={t.status} />
+            {/* The due state rides the existing ticket line (fixed row height). */}
+            <TicketDueMarker dueAt={t.dueAt} closed={t.status.category === 'closed'} />
           </div>
           <div className="mt-0.5 flex items-center justify-between gap-2">
             <p className="min-w-0 truncate text-xs text-muted-foreground">
