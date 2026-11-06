@@ -101,7 +101,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 753 surfaces
+### Server functions (`requireAuth`) — 752 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -230,7 +230,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-guidance.ts`::reorderGuidanceRulesFn | DYNAMIC (ai.customer.manage | ai.teammate.manage) |
 | `lib/server/functions/assistant-guidance.ts`::deleteGuidanceRuleFn | DYNAMIC (ai.customer.manage | ai.teammate.manage) |
 | `lib/server/functions/assistant-guidance.ts`::listAssistantToolsFn | DYNAMIC (ai.customer.manage | ai.teammate.manage) |
-| `lib/server/functions/assistant-improve-answer.ts`::improveAssistantAnswerFn | conversation.reply |
 | `lib/server/functions/assistant-pending-actions.ts`::getAssistantPendingActionFn | DYNAMIC (conversation.view | ticket.view | copilot.use) |
 | `lib/server/functions/assistant-settings.ts`::getAssistantSettingsFn | DYNAMIC (ai.customer.manage | ai.teammate.manage) |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantIdentityFn | ai.customer.manage |
@@ -1076,7 +1075,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-228 of 1097 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+228 of 1096 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
