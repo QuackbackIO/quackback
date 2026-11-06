@@ -9,7 +9,6 @@ vi.mock('../invite-team-sheet', () => ({
   InviteTeamSheet: ({ open }: { open: boolean }) =>
     open ? <div role="region" aria-label="Invite your team" /> : null,
 }))
-vi.mock('@/components/admin/ask/copilot-on-home', () => ({ useCopilotOnHome: () => false }))
 
 import { consumeSetupLink, useGoingLiveSheets } from '../going-live-sheets'
 import { openGoingLiveSheet } from '../going-live-events'

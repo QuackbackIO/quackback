@@ -98,7 +98,6 @@ describe('wizard goals read and write', () => {
       supportInbox: true,
       supportTickets: true,
       helpCenter: true,
-      copilotHome: true,
     })
     expect(await testDb.query.boards.findMany()).toHaveLength(0)
     // Turning Support on through the one flag write also opens the portal surface.
@@ -382,27 +381,11 @@ describe('wizard goals read and write', () => {
     expect(getSetupState(row!.setupState)!.ownerPrincipalId).toBe(owner!.id)
   })
 
-  it('turns Copilot on Home on for a new workspace an operator provisioned', async () => {
+  it('gives a new workspace an operator provisioned no Copilot on Home flag', async () => {
     await testDb.insert(settings).values(operatorRow(new Date()))
     await ensureOnboardingHomeReadyFn()
     const row = await testDb.query.settings.findFirst()
-    expect(JSON.parse(row!.featureFlags!)).toMatchObject({ copilotHome: true })
-  })
-
-  it('never turns Copilot on Home on for an established workspace or over a saved choice', async () => {
-    const yearAgo = new Date(Date.now() - 365 * 86_400_000)
-    await testDb.insert(settings).values(operatorRow(yearAgo))
-    await ensureOnboardingHomeReadyFn()
-    let row = await testDb.query.settings.findFirst()
-    expect(JSON.parse(row!.featureFlags ?? '{}').copilotHome ?? false).toBe(false)
-
-    await testDb.delete(settings)
-    await testDb
-      .insert(settings)
-      .values(operatorRow(new Date(), JSON.stringify({ copilotHome: false })))
-    await ensureOnboardingHomeReadyFn()
-    row = await testDb.query.settings.findFirst()
-    expect(JSON.parse(row!.featureFlags!).copilotHome).toBe(false)
+    expect(JSON.parse(row!.featureFlags ?? '{}')).not.toHaveProperty('copilotHome')
   })
 
   // A provisioner stores only its own auth keys; the anonymous switch is unset.

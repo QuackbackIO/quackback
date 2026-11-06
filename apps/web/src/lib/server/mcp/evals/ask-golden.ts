@@ -7,7 +7,6 @@ export interface AskGoldenCase {
   expected: 'read' | 'navigation' | 'denied'
   denialReason?: 'permission' | 'unavailable'
   expectedHref?: string
-  operatorManagedName?: boolean
 }
 
 /** Requests pin the tool contract separately from configured-model selection. */
@@ -178,15 +177,3 @@ export const ASK_GOLDEN_CASES: readonly AskGoldenCase[] = [
     expected: 'denied',
   },
 ]
-
-/** One more request beyond the base set, for the operator identity boundary. */
-export const ASK_OPERATOR_GOLDEN_CASE: AskGoldenCase = {
-  id: '31',
-  request: 'Rename my workspace to Acme team',
-  profile: 'owner',
-  tool: 'navigate_workspace',
-  arguments: { destination: 'general' },
-  expected: 'navigation',
-  expectedHref: '/admin/settings/general',
-  operatorManagedName: true,
-}
