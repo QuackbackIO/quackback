@@ -156,7 +156,7 @@ describe('PATCH /api/v1/changelog/:entryId — linkedPostIds', () => {
     expect(mockUpdateChangelog.mock.calls[0][1]).toMatchObject({ linkedPostIds: [] })
   })
 
-  it('does not send linkedPostIds when the field is omitted', async () => {
+  it('does not send linkedPostIds or featuredImageUrl when the fields are omitted', async () => {
     const res = await PATCH({
       request: patchRequest({ title: 'Renamed' }),
       params: { entryId: ENTRY_ID },
@@ -165,6 +165,29 @@ describe('PATCH /api/v1/changelog/:entryId — linkedPostIds', () => {
     expect(res.status).toBe(200)
     const input = mockUpdateChangelog.mock.calls[0][1] as Record<string, unknown>
     expect(input).not.toHaveProperty('linkedPostIds')
+    expect(input).not.toHaveProperty('featuredImageUrl')
+    expect(input).not.toHaveProperty('publishState')
+  })
+
+  it('forwards featuredImageUrl (and null to clear) and echoes it on the response', async () => {
+    mockUpdateChangelog.mockResolvedValue({
+      ...baseEntry(),
+      featuredImageUrl: '/api/storage/changelog-images/2026/10/hero.png',
+    })
+
+    const res = await PATCH({
+      request: patchRequest({
+        featuredImageUrl: '/api/storage/changelog-images/2026/10/hero.png',
+      }),
+      params: { entryId: ENTRY_ID },
+    })
+
+    expect(res.status).toBe(200)
+    expect(mockUpdateChangelog.mock.calls[0][1]).toMatchObject({
+      featuredImageUrl: '/api/storage/changelog-images/2026/10/hero.png',
+    })
+    const json = await res.json()
+    expect(json.data.featuredImageUrl).toBe('/api/storage/changelog-images/2026/10/hero.png')
   })
 
   it('echoes linked posts on the update response', async () => {

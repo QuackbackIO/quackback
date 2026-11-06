@@ -54,6 +54,7 @@ function entry(overrides: Record<string, unknown> = {}) {
     contentJson: null,
     publishedAt: new Date('2026-01-01T00:00:00.000Z'),
     displayDate: null,
+    featuredImageUrl: '/api/storage/changelog-images/2026/01/hero.png',
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     linkedPosts: [LINKED_POST],
@@ -105,11 +106,12 @@ describe('GET /api/v1/changelog — linked posts', () => {
 })
 
 describe('POST /api/v1/changelog — linked posts', () => {
-  it('forwards linkedPostIds to createChangelog and echoes linked posts', async () => {
+  it('forwards linkedPostIds and featuredImageUrl to createChangelog and echoes both', async () => {
     const res = await POST({
       request: postRequest({
         title: 'Dark mode',
         content: 'We shipped dark mode.',
+        featuredImageUrl: '/api/storage/changelog-images/2026/01/hero.png',
         linkedPostIds: [POST_A],
       }),
     })
@@ -118,9 +120,11 @@ describe('POST /api/v1/changelog — linked posts', () => {
     expect(mockCreateChangelog).toHaveBeenCalledTimes(1)
     expect(mockCreateChangelog.mock.calls[0][0]).toMatchObject({
       title: 'Dark mode',
+      featuredImageUrl: '/api/storage/changelog-images/2026/01/hero.png',
       linkedPostIds: [POST_A],
     })
     const json = await res.json()
+    expect(json.data.featuredImageUrl).toBe('/api/storage/changelog-images/2026/01/hero.png')
     expect(json.data.linkedPosts).toEqual([LINKED_POST])
   })
 
