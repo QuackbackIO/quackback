@@ -19,10 +19,8 @@ vi.mock('@tanstack/react-router', () => ({
   useRouterState: ({ select }: { select: (value: unknown) => unknown }) =>
     select({ location: { pathname: state.pathname } }),
 }))
-vi.mock('@/lib/client/use-permissions', () => ({
-  usePermissions: () => new Set(['settings.manage', 'post.view_private']),
-}))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  usePermissions: () => new Set(['settings.manage', 'post.view_private']),
   usePrincipalId: () => 'owner-acme',
   useFeatureFlags: () => ({ feedback: true }),
   useBillingEnabled: () => false,
