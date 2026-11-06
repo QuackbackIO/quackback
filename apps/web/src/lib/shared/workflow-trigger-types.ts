@@ -42,6 +42,12 @@ export const DISPATCHABLE_TRIGGER_TYPES = [
   // and maps to no dispatch at all when there's no link.
   'ticket.created',
   'ticket.status_changed',
+  // Ticket due dates: the due date was set, moved or cleared, plus the two
+  // timer events from the ticket-due sweep (due within 24 hours, past due
+  // while still open). Same linked-conversation-only rule as the two above.
+  'ticket.due_changed',
+  'ticket.due_soon',
+  'ticket.overdue',
 ] as const
 
 export type DispatchableTriggerType = (typeof DISPATCHABLE_TRIGGER_TYPES)[number]
