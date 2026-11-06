@@ -39,6 +39,12 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: mockIsFeatureEnabled,
 }))
 
+const mockIsVisitorAnalyticsEntitled = vi.fn()
+vi.mock('../visitor-tracking', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../visitor-tracking')>()
+  return { ...actual, isVisitorAnalyticsEntitled: mockIsVisitorAnalyticsEntitled }
+})
+
 const { recordPageView } = await import('../track.service')
 
 const CHROME_UA =
@@ -69,9 +75,18 @@ beforeEach(() => {
   mockIsFeatureEnabled.mockResolvedValue(true)
   mockIncrementBucket.mockResolvedValue({ count: 1 })
   mockGetDailySalt.mockResolvedValue('test-salt')
+  mockIsVisitorAnalyticsEntitled.mockResolvedValue(true)
 })
 
 describe('recordPageView', () => {
+  it('stores nothing for a workspace whose plan excludes visitor analytics', async () => {
+    mockIsVisitorAnalyticsEntitled.mockResolvedValue(false)
+
+    await recordPageView(makeRequest(validBeacon, { 'cf-ipcountry': 'DE' }))
+
+    expect(mockValues).not.toHaveBeenCalled()
+  })
+
   it('inserts a derived row for a valid beacon and never raw identifiers', async () => {
     await recordPageView(makeRequest(validBeacon, { 'cf-ipcountry': 'DE' }))
 

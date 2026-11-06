@@ -19,6 +19,7 @@ import { captureCountryFromHeaders } from '@/lib/server/auth/country-capture'
 import { dispatchWorkflowTrigger } from '@/lib/server/domains/workflows/dispatcher'
 import type { ConversationId } from '@quackback/ids'
 import { getDailySalt, computeVisitorHash } from './visitor-hash'
+import { isVisitorAnalyticsEntitled } from './visitor-tracking'
 
 const log = logger.child({ component: 'visitor-track' })
 
@@ -136,6 +137,9 @@ export async function dispatchPageVisitWorkflows(deviceId: string, path: string)
 export async function recordPageView(request: Request): Promise<void> {
   // Opt-out signals win before anything else is read.
   if (request.headers.get('dnt') === '1' || request.headers.get('sec-gpc') === '1') return
+  // A workspace whose plan excludes visitor analytics stores nothing, whatever
+  // the embed sends.
+  if (!(await isVisitorAnalyticsEntitled())) return
 
   const userAgent = request.headers.get('user-agent') ?? ''
   if (!userAgent || isbot(userAgent)) return

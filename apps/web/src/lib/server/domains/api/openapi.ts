@@ -145,8 +145,7 @@ Example: \`post_01h455vb4pex5vsknk084sn02q\`
       },
       {
         name: 'Settings',
-        description:
-          'Read and change workspace settings by area, with revisions, approvals and undo',
+        description: 'Read and change workspace settings by area, with revisions and undo',
       },
       { name: 'Roadmaps', description: 'Manage roadmaps' },
       { name: 'Changelog', description: 'Manage changelog entries' },
@@ -157,11 +156,6 @@ Example: \`post_01h455vb4pex5vsknk084sn02q\`
       {
         name: 'Status',
         description: 'Manage the status page: components, incidents, and maintenance',
-      },
-      {
-        name: 'Approvals',
-        description:
-          'Follow requests for a person to approve a change. People decide them in the app.',
       },
     ],
     paths: registeredPaths,

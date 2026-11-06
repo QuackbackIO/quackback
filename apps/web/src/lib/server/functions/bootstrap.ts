@@ -9,6 +9,7 @@ import {
 } from '@/lib/shared/theme'
 import { getUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
 import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
+import { starPromptAllowedHere } from '@/lib/server/github-star-prompt'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import {
   getSetupState,
@@ -84,6 +85,11 @@ export interface BootstrapData {
    */
   cloudEnabled: boolean
   /**
+   * Whether the one-time GitHub star prompt and the Help menu's GitHub link may
+   * show: self-hosted only, never on the Cloud fleet, and not switched off.
+   */
+  githubStarPrompt: boolean
+  /**
    * Browser product analytics for the admin app, present only when the
    * operator set `POSTHOG_KEY`. `workspaceId` is the opaque group key the
    * admin events and this workspace's instance ping share
@@ -96,6 +102,10 @@ export interface BootstrapData {
     /** The PostHog app, for toolbar links; null when it cannot be known. */
     uiHost: string | null
     sessionRecording: boolean
+    /** Replays hide every text node, not only inputs. */
+    maskText: boolean
+    /** Replays hide every input value, not only passwords. */
+    maskInputs: boolean
     workspaceId: string | null
   } | null
 }
@@ -301,12 +311,15 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     updateBannerDismissedVersion,
     billingEnabled: cloud.enabled && (cloud.canUpgrade || cloud.canManageBilling),
     cloudEnabled: cloud.enabled,
+    githubStarPrompt: starPromptAllowedHere(cloud.enabled),
     productAnalytics: config.productAnalytics
       ? {
           key: config.productAnalytics.key,
           apiHost: config.productAnalytics.host,
           uiHost: config.productAnalytics.uiHost,
           sessionRecording: config.productAnalytics.sessionRecording,
+          maskText: config.productAnalytics.maskText,
+          maskInputs: config.productAnalytics.maskInputs,
           workspaceId: await analyticsWorkspaceKey(
             getCurrentWorkspace()?.workspaceKey,
             typeof settings?.settings?.id === 'string' ? settings.settings.id : null

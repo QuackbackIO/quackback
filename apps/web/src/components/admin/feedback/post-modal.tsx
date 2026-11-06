@@ -405,14 +405,20 @@ export const PostModalContent = memo(function PostModalContent({
           <div className="flex-1 min-w-0">
             {/* Editor area */}
             <div className="p-6" onKeyDown={handleKeyDown}>
-              {post.moderationState === 'pending' && (
+              {/* A rejected post keeps moderationState 'pending' (reject is a
+                  soft delete), so the banner must also check deletedAt. */}
+              {post.moderationState === 'pending' && !post.deletedAt && (
                 <InlineModerationActions
                   pending
                   noun="post"
                   className="mb-4"
                   busy={approvePost.isPending || rejectPost.isPending}
                   onApprove={canModerate ? () => approvePost.mutate(postId) : undefined}
-                  onReject={canModerate ? () => rejectPost.mutate({ postId }) : undefined}
+                  onReject={
+                    canModerate
+                      ? () => rejectPost.mutate({ postId }, { onSuccess: () => onClose() })
+                      : undefined
+                  }
                 />
               )}
               {/* Title input */}

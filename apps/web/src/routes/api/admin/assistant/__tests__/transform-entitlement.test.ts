@@ -151,8 +151,10 @@ describe('POST /api/admin/assistant/transform — no cloud config', () => {
 })
 
 describe('POST /api/admin/assistant/transform — plan gate', () => {
-  it('refuses with 402 on a plan without the entitlement and names the plan that has it', async () => {
-    withCloud({ enabled: true, plan: 'free' })
+  // Every catalogue plan grants AI drafts, so a refusal comes from an explicit
+  // override, and the copy points to support instead of naming a plan.
+  it('refuses with 402 when the entitlement is withheld', async () => {
+    withCloud({ enabled: true, plan: 'free', entitlements: { aiDrafts: false } })
 
     const res = await handleTransform({ request: makeRequest() })
 
@@ -162,14 +164,13 @@ describe('POST /api/admin/assistant/transform — plan gate', () => {
     }
     expect(body.error.code).toBe('ENTITLEMENT_REQUIRED')
     expect(body.error.message).toBe(
-      'AI drafts are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
+      'AI drafts are not included in your plan. Your workspace is on Free. Contact us to enable it.'
     )
     expect(body.error.details).toMatchObject({
       error: 'entitlement_required',
       entitlement: 'aiDrafts',
       currentPlan: 'free',
-      requiredPlan: 'pro',
-      requiredPlanName: 'Pro',
+      requiredPlan: null,
     })
     // No model work was started.
     expect(mockRunCopilotTransform).not.toHaveBeenCalled()

@@ -9,16 +9,14 @@ test.describe('Public Base UI component usability', () => {
 
   test('filters, menus, and styled links stay usable', async ({ page }) => {
     await page.goto('/')
-    const filter = page.getByRole('button', { name: /^filter$/i })
-    await waitForHydration(filter)
-    await filter.click()
-    const overlay = page.locator(
-      '[data-slot="popover-content"], [role="menu"], [data-slot="dropdown-menu-content"]'
-    )
-    await expect(overlay.first()).toBeVisible()
-    await expect(page.getByRole('button', { name: /^Status$/i })).toBeVisible()
-    await page.keyboard.press('Escape')
-    await expect(overlay.first()).toBeHidden()
+    // The less common filters unfold under More filters, at the foot of the panel.
+    const more = page.getByRole('button', { name: /^more filters$/i })
+    await waitForHydration(more)
+    await more.click()
+    await expect(more).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByRole('group', { name: 'Vote count' })).toBeVisible()
+    await more.click()
+    await expect(page.getByRole('group', { name: 'Vote count' })).toHaveCount(0)
 
     await page.goto('/changelog')
     const rss = page.locator('a[href="/changelog/feed"]')

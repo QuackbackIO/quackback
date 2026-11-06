@@ -20,6 +20,10 @@ import { buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 import { stripMarkdownPreview } from '@/lib/shared/utils'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { hcArticlePath, hcCollectionPath } from '@/lib/shared/help-center-url'
+import {
+  helpCenterAbsoluteUrl,
+  helpCenterHeadPortal,
+} from '@/components/help-center/help-center-head'
 import type { JSONContent } from '@tiptap/react'
 import { useBaseUrl, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
@@ -50,22 +54,19 @@ export const Route = createFileRoute('/_portal/hc/$locale/articles/$idSlug/')({
   head: ({ loaderData, params, matches }) => {
     if (!loaderData) return {}
     const { article } = loaderData
-    const portalMatch = matches.find((m) => (m.routeId as string) === '/_portal')
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    const parentLoaderData = portalMatch?.loaderData as Record<string, any> | undefined
-    const workspaceName =
-      (parentLoaderData?.org as Record<string, string> | undefined)?.name ?? 'Help Center'
+    const { workspaceName, baseUrl } = helpCenterHeadPortal(matches)
     const description =
       article.description ||
       (article.content ? stripMarkdownPreview(article.content, 160) : undefined)
     const pageTitle = `${article.title} - ${workspaceName}`
-    const baseUrl =
-      ((portalMatch?.context as Record<string, unknown> | undefined)?.baseUrl as string) ?? ''
-    const canonicalUrl = `${baseUrl}${hcArticlePath({
-      locale: params.locale,
-      urlId: article.urlId,
-      slug: article.slug,
-    })}`
+    const canonicalUrl = helpCenterAbsoluteUrl(
+      baseUrl,
+      hcArticlePath({
+        locale: params.locale,
+        urlId: article.urlId,
+        slug: article.slug,
+      })
+    )
 
     return {
       meta: [
@@ -74,13 +75,13 @@ export const Route = createFileRoute('/_portal/hc/$locale/articles/$idSlug/')({
         { property: 'og:title', content: pageTitle },
         ...(description ? [{ property: 'og:description', content: description }] : []),
         { property: 'og:type', content: 'article' },
-        { property: 'og:url', content: canonicalUrl },
+        ...(canonicalUrl ? [{ property: 'og:url', content: canonicalUrl }] : []),
         { property: 'og:site_name', content: workspaceName },
         { name: 'twitter:card', content: 'summary' },
         { name: 'twitter:title', content: pageTitle },
         ...(description ? [{ name: 'twitter:description', content: description }] : []),
       ],
-      links: [{ rel: 'canonical', href: canonicalUrl }],
+      links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
     }
   },
   component: ArticleDetailPage,

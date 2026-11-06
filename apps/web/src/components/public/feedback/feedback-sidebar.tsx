@@ -1,112 +1,102 @@
-import { ListBulletIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
-import { FormattedMessage } from 'react-intl'
-import { cn } from '@/lib/shared/utils'
-import type { PublicBoardWithStats } from '@/lib/shared/types'
+import { useEffect, useRef } from 'react'
 
 interface FeedbackSidebarProps {
-  boards: PublicBoardWithStats[]
-  currentBoard?: string
-  onBoardChange: (board: string | undefined) => void
-  workspaceSlug?: string
-  showPoweredBy?: boolean
+  /** The filter panel. */
+  children: React.ReactNode
+  /** Pinned under the panel, outside its scroll area, so it stays in view. */
+  footer?: React.ReactNode
 }
 
-export function FeedbackSidebar({
-  boards,
-  currentBoard,
-  onBoardChange,
-  workspaceSlug,
-  showPoweredBy = true,
-}: FeedbackSidebarProps) {
+/** Gap kept between the column and the viewport's bottom edge. */
+const EDGE = 24
+/**
+ * Where the column sits below the header at the top of the page: the page's
+ * top padding (py-6). It sticks at the same spot, so it never moves while the
+ * page scrolls under it.
+ */
+const STICK_GAP = 24
+
+/** The portal's sticky header height, which the column sticks below. */
+function headerHeight(): number {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(
+    '--portal-header-height'
+  )
+  return parseFloat(value) || 0
+}
+
+export function FeedbackSidebar({ children, footer }: FeedbackSidebarProps) {
+  const columnRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // The column fills the space from where it sits down to the viewport's
+  // bottom edge: below the portal header at the top of the page, and below
+  // the sticky header once it sticks. The panel scrolls inside it and the footer stays
+  // in view throughout.
+  useEffect(() => {
+    const column = columnRef.current
+    if (!column) return
+    let frame = 0
+    const fit = () => {
+      frame = 0
+      const top = Math.max(headerHeight() + STICK_GAP, column.getBoundingClientRect().top)
+      column.style.maxHeight = `${window.innerHeight - top - EDGE}px`
+    }
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(fit)
+    }
+    fit()
+    window.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    // The header can change height after mount (a late font, custom CSS),
+    // which moves where the column sticks.
+    const header = document.querySelector('.portal-header')
+    const observer = new ResizeObserver(schedule)
+    if (header) observer.observe(header)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+      observer.disconnect()
+    }
+  }, [])
+
+  // While more of the panel sits below its fold, its foot fades out as a cue
+  // to scroll. Set on the element directly so scrolling never re-renders.
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!panel) return
+    const update = () => {
+      panel.toggleAttribute(
+        'data-more-below',
+        panel.scrollTop + panel.clientHeight < panel.scrollHeight - 1
+      )
+    }
+    update()
+    panel.addEventListener('scroll', update, { passive: true })
+    // The panel resizes with the column, and its content grows when a
+    // section unfolds.
+    const observer = new ResizeObserver(update)
+    observer.observe(panel)
+    if (panel.firstElementChild) observer.observe(panel.firstElementChild)
+    return () => {
+      panel.removeEventListener('scroll', update)
+      observer.disconnect()
+    }
+  }, [])
+
   return (
-    <aside className="w-64 shrink-0 hidden lg:block">
-      <div className="sticky top-24">
-        <div className="bg-card border border-border/50 rounded-lg shadow-sm overflow-hidden">
-          <h2 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground px-4 pt-4 pb-3">
-            <FormattedMessage id="portal.feedback.sidebar.boards" defaultMessage="Boards" />
-          </h2>
-          <nav className="space-y-1 px-4 pb-4 max-h-[calc(100vh-16rem)] overflow-y-auto scrollbar-thin">
-            {/* View all ideas */}
-            <button
-              type="button"
-              onClick={() => onBoardChange(undefined)}
-              className={cn(
-                'max-w-full flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer w-full text-left',
-                !currentBoard
-                  ? 'bg-muted text-foreground font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              )}
-            >
-              <ListBulletIcon className={cn('h-4 w-4 shrink-0', !currentBoard && 'text-primary')} />
-              <span className="truncate">
-                <FormattedMessage
-                  id="portal.feedback.sidebar.viewAllPosts"
-                  defaultMessage="View all ideas"
-                />
-              </span>
-            </button>
-
-            {/* Board list */}
-            {boards.map((board) => {
-              const isActive = currentBoard === board.slug
-              return (
-                <button
-                  key={board.id}
-                  type="button"
-                  onClick={() => onBoardChange(board.slug)}
-                  className={cn(
-                    'max-w-full flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer w-full text-left',
-                    isActive
-                      ? 'bg-muted text-foreground font-medium'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  )}
-                >
-                  <ChatBubbleLeftIcon
-                    className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')}
-                  />
-                  <span className="truncate min-w-0">{board.name}</span>
-                  {board.postCount > 0 && (
-                    <span
-                      className={cn(
-                        'text-xs font-semibold ms-auto ps-1 shrink-0 tabular-nums',
-                        isActive ? 'text-primary' : 'text-muted-foreground'
-                      )}
-                    >
-                      {board.postCount}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </nav>
+    <aside className="hidden w-72 shrink-0 lg:block xl:w-80">
+      <div
+        ref={columnRef}
+        className="sticky top-[calc(var(--portal-header-height,0px)+1.5rem)] flex max-h-[calc(100vh-3rem)] flex-col gap-3"
+      >
+        <div
+          ref={panelRef}
+          className="min-h-0 overflow-y-auto scrollbar-thin rounded-lg border border-border/50 bg-card shadow-sm data-more-below:[mask-image:linear-gradient(to_bottom,black_calc(100%-2.5rem),transparent)]"
+        >
+          {children}
         </div>
-
-        {showPoweredBy ? (
-          <div className="flex justify-center mt-3">
-            <a
-              href={`https://quackback.io?utm_campaign=${encodeURIComponent(workspaceSlug || 'unknown')}&utm_content=feedback-board&utm_medium=referral&utm_source=powered-by`}
-              target="_blank"
-              className="group inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-all px-2.5 py-1 rounded-full bg-muted/50 hover:bg-muted border border-transparent hover:border-border/50"
-            >
-              <img
-                src="/logo.png"
-                alt=""
-                width={14}
-                height={14}
-                className="-mt-px opacity-60 group-hover:opacity-100 transition-opacity"
-              />
-              <span>
-                <FormattedMessage
-                  id="portal.feedback.sidebar.poweredBy"
-                  defaultMessage="Powered by {brand}"
-                  values={{
-                    brand: <span className="font-semibold">Quackback</span>,
-                  }}
-                />
-              </span>
-            </a>
-          </div>
-        ) : null}
+        {footer && <div className="shrink-0">{footer}</div>}
       </div>
     </aside>
   )

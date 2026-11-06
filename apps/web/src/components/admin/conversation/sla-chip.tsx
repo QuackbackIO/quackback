@@ -5,7 +5,7 @@
  * renders only after mount (the label depends on "now", which would otherwise
  * differ between the SSR pass and hydration).
  */
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { ClockIcon } from '@heroicons/react/24/outline'
 import type { ConversationSlaDTO, ConversationStatus } from '@/lib/shared/conversation/types'
 import { slaChipState, SLA_TARGET_LABELS, type SlaChipTone } from '@/lib/shared/conversation/sla'
@@ -21,7 +21,7 @@ export const TONE_CLASSES: Record<SlaChipTone, string> = {
   paused: 'bg-muted text-muted-foreground/70',
 }
 
-export function SlaChip({
+export const SlaChip = memo(function SlaChip({
   sla,
   status,
   className,
@@ -56,4 +56,4 @@ export function SlaChip({
       {state.label}
     </span>
   )
-}
+})

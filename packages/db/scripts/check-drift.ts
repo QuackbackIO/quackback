@@ -202,6 +202,19 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
     pattern: /^DROP INDEX "user_name_trgm_idx"/,
   },
   {
+    // GIN pg_trgm index on posts.title for search's close-spelling fallback.
+    // Same gin_trgm_ops introspection limitation as the indexes above.
+    reason:
+      'pg_trgm GIN index on posts.title for typo-tolerant search; gin_trgm_ops opclass is not introspectable, so drizzle-kit re-emits the CREATE',
+    pattern: /^CREATE INDEX "posts_title_trgm_idx" ON "posts" USING gin /,
+  },
+  {
+    // Drop half of the same spurious pair for the partial gin_trgm index.
+    reason:
+      'pg_trgm GIN index on posts.title for typo-tolerant search; drizzle-kit cannot round-trip the partial gin_trgm index, so it re-emits the DROP',
+    pattern: /^DROP INDEX "posts_title_trgm_idx"/,
+  },
+  {
     // Case-insensitive unique index on lower(name) (0156). drizzle-kit cannot
     // express a functional/expression index, so it reads the index as undeclared
     // and wants to drop it. The plain unique on name is declared in TS separately.

@@ -132,6 +132,18 @@ export const ENTITLEMENTS = {
     chokepoint:
       'lib/server/domains/assistant/copilot-gate.ts (gateCopilotAguiRequest, the shared gate for the drafting routes), lib/server/domains/macros/macro.service.ts (listMacros, createMacro)',
   },
+  /**
+   * Automatic translation of help center articles into the workspace's other
+   * languages. Refused when auto-translate is switched on. Background jobs
+   * already queued skip silently once the plan excludes it, so a plan change
+   * takes effect on the next job without failing the queue.
+   */
+  aiArticleTranslation: {
+    friendly: 'AI article translation',
+    plural: false,
+    tierFeature: null,
+    chokepoint: 'lib/server/functions/help-center-settings.ts (updateHelpCenterAutoTranslateFn)',
+  },
   workflows: {
     friendly: 'Workflows',
     plural: true,
@@ -234,7 +246,7 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
     article: 'a',
     name: 'Free',
     rank: 0,
-    grants: [],
+    grants: ['aiDrafts', 'apiAccess'],
   },
   pro: {
     id: 'pro',
@@ -258,6 +270,7 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
     rank: 2,
     grants: [
       'customDomain',
+      'aiArticleTranslation',
       'aiAssistant',
       'aiDrafts',
       'aiInsights',
@@ -274,6 +287,7 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
     rank: 3,
     grants: [
       'customDomain',
+      'aiArticleTranslation',
       'aiAssistant',
       'aiDrafts',
       'aiInsights',

@@ -33,6 +33,7 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { ASSISTANT_CONFIG_EVENT_LABELS } from '@/lib/shared/assistant/config-audit-events'
 import type { AuditEventRow } from '@/lib/server/functions/audit-log'
 import type { AuditChannel } from '@/lib/shared/audit-attribution'
+import { displayAssistantName } from '@/lib/shared/assistant/config'
 
 /**
  * Event-type catalog for the filter dropdown. Mirrors the
@@ -235,7 +236,7 @@ export function rowsToCsv(rows: AuditEventRow[]): string {
         r.channel,
         r.credentialKind,
         r.credentialId,
-        r.clientName,
+        viaClientName(r),
         r.onBehalfOfPrincipalId,
         r.onBehalfOfName,
       ]
@@ -259,6 +260,15 @@ const VIA_ON_BEHALF_OF = defineMessages({
 }).onBehalfOf
 
 /**
+ * The client name a row shows. An assistant row stored under the former default
+ * name reads as the product name.
+ */
+function viaClientName(row: { channel: AuditChannel | null; clientName: string | null }) {
+  if (row.channel !== 'assistant' || !row.clientName) return row.clientName
+  return displayAssistantName(row.clientName)
+}
+
+/**
  * How a change that did not come from someone using the app arrived, and for
  * whom: "via MCP · Claude Desktop for James Morton". Null for a change made in
  * the app, and for a row with no attribution, so the normal row stays quiet.
@@ -270,7 +280,7 @@ export function attributionLine(
   // `ui` has no line, and neither does a channel this build does not know.
   const channel = row.channel ? VIA_CHANNEL[row.channel] : undefined
   if (!channel) return null
-  const via = [intl.formatMessage(channel), row.clientName].filter(Boolean).join(' · ')
+  const via = [intl.formatMessage(channel), viaClientName(row)].filter(Boolean).join(' · ')
   if (!row.onBehalfOfName) return via
   return `${via} ${intl.formatMessage(VIA_ON_BEHALF_OF, { name: row.onBehalfOfName })}`
 }

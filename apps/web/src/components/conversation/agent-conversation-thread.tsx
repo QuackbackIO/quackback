@@ -257,6 +257,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn, tomorrowAt, inHours, nextMondayAt } from '@/lib/shared/utils'
 import { useFeatureFlag, usePrincipalId } from '@/lib/client/hooks/use-root-context'
+import { useStableCallback } from '@/lib/client/hooks/use-stable-callback'
 
 // "Jump to message" tuning: how long the flash plays (must match the
 // flash-highlight keyframe duration) and how many older pages we'll auto-pull
@@ -779,14 +780,21 @@ export function AgentConversationThread({
   // Create-ticket dialog defaults (unified inbox §M5): title from the subject
   // or first message (mirrors "Track as feedback"'s own default), requester
   // fixed to this conversation's visitor.
-  const createTicketDefaultRequester = conversation
-    ? {
-        principalId: conversation.visitor.principalId,
-        name: conversation.visitor.displayName,
-        email: visitorContactEmail,
-        image: conversation.visitor.avatarUrl,
-      }
-    : null
+  const requesterPrincipalId = conversation?.visitor.principalId
+  const requesterName = conversation?.visitor.displayName
+  const requesterImage = conversation?.visitor.avatarUrl
+  const createTicketDefaultRequester = useMemo(
+    () =>
+      requesterPrincipalId !== undefined
+        ? {
+            principalId: requesterPrincipalId,
+            name: requesterName ?? '',
+            email: visitorContactEmail,
+            image: requesterImage ?? null,
+          }
+        : null,
+    [requesterPrincipalId, requesterName, requesterImage, visitorContactEmail]
+  )
 
   // The agent's latest message is "Seen" once the visitor read watermark
   // reaches it. Conversation-only (a ticket carries no visitor read watermark
@@ -1761,6 +1769,42 @@ export function AgentConversationThread({
   }
   const onSend = useCallback(() => sendRef.current(), [])
 
+  // Stable handlers for the memoised menus and dialogs below. Every render of
+  // this thread (each message, read and conversation event) would otherwise
+  // re-render all of them, closed, for nothing.
+  const snoozeStable = useStableCallback(snooze)
+  const pickCustomSnooze = useCallback(() => {
+    setSnoozeCustomDate(tomorrowAt(9))
+    // Let the menu finish closing before the dialog grabs focus,
+    // so the menu teardown and the dialog focus grab don't fight over it.
+    requestAnimationFrame(() => setSnoozeCustomOpen(true))
+  }, [])
+  const exportTranscriptStable = useStableCallback(() => void exportTranscript())
+  const toggleBlock = useStableCallback(() =>
+    visitorBlocked ? unblockMutation.mutate() : setBlockConfirmOpen(true)
+  )
+  const confirmBlock = useStableCallback(() => blockMutation.mutate())
+  const openAddParticipant = useCallback(() => setAddParticipantOpen(true), [])
+  const openEndDialog = useCallback(() => setEndDialogOpen(true), [])
+  const openConvert = useStableCallback(() =>
+    setConvertSeed({ title: convertDefaultTitle, content: convertDefaultContent })
+  )
+  const removeSla = useStableCallback(() => removeSlaMutation.mutate())
+  const closeConvertDialog = useCallback((open: boolean) => {
+    if (!open) setConvertSeed(null)
+  }, [])
+  const closeShareDialog = useCallback((open: boolean) => {
+    if (!open) setShareMsg(null)
+  }, [])
+  const closeRequiredAttributes = useCallback(() => setCloseBlocked(null), [])
+  const cancelCloseConfirm = useCallback(() => setCloseConfirmTicket(null), [])
+  const resolveTicketAndCloseStable = useStableCallback(() => void resolveTicketAndClose())
+  const closeConversationOnlyStable = useStableCallback(closeConversationOnly)
+  const selectEmoji = useStableCallback((emoji: string) =>
+    insertText(noteMode ? 'note' : 'reply', emoji)
+  )
+  const setComposerMode = useCallback((mode: string) => setNoteMode(mode === 'note'), [])
+
   const activeMode: ComposerMode = noteMode || !capabilities.reply ? 'note' : 'reply'
   // Re-renders the thread only when the active draft turns empty or not.
   const activeDraftEmpty = useComposerDraftValue(drafts, activeMode, isEmptyDraft)
@@ -1953,41 +1997,12 @@ export function AgentConversationThread({
         </button>
       )}
       {!isTicket && conversation && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              title="Snooze"
-              aria-label="Snooze"
-              disabled={snoozeMutation.isPending}
-              className={headerIconButtonClass}
-            >
-              <MoonIcon className="h-4 w-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => snooze(inHours(4).toISOString())}>
-              Later today
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => snooze(tomorrowAt(9).toISOString())}>
-              Tomorrow
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => snooze(nextMondayAt(9).toISOString())}>
-              Next week
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => snooze(null)}>Until they reply</DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                setSnoozeCustomDate(tomorrowAt(9))
-                // Let the menu finish closing before the dialog grabs focus,
-                // so the menu teardown and the dialog focus grab don't fight over it.
-                requestAnimationFrame(() => setSnoozeCustomOpen(true))
-              }}
-            >
-              Pick a date &amp; time…
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <SnoozeMenu
+          pending={snoozeMutation.isPending}
+          onSnooze={snoozeStable}
+          onPickCustom={pickCustomSnooze}
+          className={headerIconButtonClass}
+        />
       )}
       {/* P2-D.1 inbox translation: manual per-conversation toggle. */}
       {inboxTranslationEnabled && conversation && (
@@ -2009,74 +2024,30 @@ export function AgentConversationThread({
           <LanguageIcon className="h-4 w-4" />
         </button>
       )}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label={isTicket ? 'More ticket actions' : 'More conversation actions'}
-            className={headerIconButtonClass}
-          >
-            <EllipsisHorizontalIcon className="h-5 w-5" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => void exportTranscript()}>
-            <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-            {exporting ? 'Exporting…' : 'Export transcript'}
-          </DropdownMenuItem>
-          {!isTicket && conversation?.visitor.principalId && (
-            <DropdownMenuItem
-              onClick={() =>
-                visitorBlocked ? unblockMutation.mutate() : setBlockConfirmOpen(true)
-              }
-            >
-              <NoSymbolIcon className="h-3.5 w-3.5" />
-              {visitorBlocked ? 'Unblock person' : 'Block person'}
-            </DropdownMenuItem>
-          )}
-          {!isTicket && conversation && !isClosedConversation && (
-            <DropdownMenuItem onClick={() => setAddParticipantOpen(true)}>
-              <UserPlusIcon className="h-3.5 w-3.5" />
-              Add customer…
-            </DropdownMenuItem>
-          )}
-          {!isTicket &&
-            conversation &&
-            !isClosedConversation &&
-            channelShowsEndConversation(conversation.channel) && (
-              <DropdownMenuItem onClick={() => setEndDialogOpen(true)}>
-                <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
-                End conversation
-              </DropdownMenuItem>
-            )}
-          {conversation && capabilities.convertToPost && (
-            <DropdownMenuItem
-              onClick={() =>
-                setConvertSeed({ title: convertDefaultTitle, content: convertDefaultContent })
-              }
-            >
-              <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
-              Convert to post
-            </DropdownMenuItem>
-          )}
-          {!isTicket && conversation?.sla && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => removeSlaMutation.mutate()}
-                disabled={removeSlaMutation.isPending}
-              >
-                Remove SLA ({conversation.sla.policyName})
-              </DropdownMenuItem>
-            </>
-          )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={copyLink}>
-            <LinkIcon className="h-3.5 w-3.5" />
-            Copy link
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <ThreadOverflowMenu
+        isTicket={isTicket}
+        exporting={exporting}
+        onExport={exportTranscriptStable}
+        canBlock={!isTicket && !!conversation?.visitor.principalId}
+        visitorBlocked={visitorBlocked}
+        onToggleBlock={toggleBlock}
+        canAddParticipant={!isTicket && !!conversation && !isClosedConversation}
+        onAddParticipant={openAddParticipant}
+        canEnd={
+          !isTicket &&
+          !!conversation &&
+          !isClosedConversation &&
+          channelShowsEndConversation(conversation.channel)
+        }
+        onEnd={openEndDialog}
+        canConvert={!!conversation && capabilities.convertToPost}
+        onConvert={openConvert}
+        slaPolicyName={!isTicket && conversation?.sla ? conversation.sla.policyName : null}
+        removeSlaPending={removeSlaMutation.isPending}
+        onRemoveSla={removeSla}
+        onCopyLink={copyLink}
+        className={headerIconButtonClass}
+      />
       <Button
         type="button"
         size="sm"
@@ -2258,31 +2229,7 @@ export function AgentConversationThread({
                 per §2.5). */}
             {capabilities.reply && (
               <div className="mb-1.5 flex items-center">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={cn(
-                        'flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                        noteMode
-                          ? 'bg-amber-400/20 text-amber-700 dark:text-amber-300'
-                          : 'bg-muted text-foreground hover:bg-muted/80'
-                      )}
-                    >
-                      {noteMode ? 'Note' : 'Reply'}
-                      <ChevronDownIcon className="h-3 w-3" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuRadioGroup
-                      value={noteMode ? 'note' : 'reply'}
-                      onValueChange={(value) => setNoteMode(value === 'note')}
-                    >
-                      <DropdownMenuRadioItem value="reply">Reply</DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="note">Note</DropdownMenuRadioItem>
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <ComposerModeMenu noteMode={noteMode} onModeChange={setComposerMode} />
               </div>
             )}
             <input
@@ -2359,10 +2306,7 @@ export function AgentConversationThread({
                 <PaperClipIcon className="h-4 w-4" />
               </button>
               {capabilities.emojiPicker && (
-                <EmojiPicker
-                  className="size-8"
-                  onSelect={(emoji) => insertText(noteMode ? 'note' : 'reply', emoji)}
-                />
+                <EmojiPicker className="size-8" onSelect={selectEmoji} />
               )}
               {/* Send this one note back to the conversation the ticket was
                   opened from, as an internal note there too. Note mode only,
@@ -2445,9 +2389,7 @@ export function AgentConversationThread({
         <>
           <ConvertToPostDialog
             open={!!convertSeed}
-            onOpenChange={(o) => {
-              if (!o) setConvertSeed(null)
-            }}
+            onOpenChange={closeConvertDialog}
             conversationId={conversationId}
             defaultTitle={convertSeed?.title ?? ''}
             defaultContent={convertSeed?.content ?? ''}
@@ -2458,9 +2400,7 @@ export function AgentConversationThread({
           />
           <SharePostDialog
             open={!!shareMsg}
-            onOpenChange={(o) => {
-              if (!o) setShareMsg(null)
-            }}
+            onOpenChange={closeShareDialog}
             conversationId={conversationId}
             onShared={refreshThread}
           />
@@ -2492,101 +2432,31 @@ export function AgentConversationThread({
             confirmLabel="Block"
             variant="destructive"
             isPending={blockMutation.isPending}
-            onConfirm={() => blockMutation.mutate()}
+            onConfirm={confirmBlock}
           />
           {/* Close-with-open-linked-ticket guard (three actions, so not the
               shared ConfirmDialog — a hand-rolled AlertDialog button trio). */}
-          <AlertDialog
-            open={!!closeConfirmTicket}
-            onOpenChange={(o) => {
-              if (!o) setCloseConfirmTicket(null)
-            }}
-          >
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  Ticket {closeConfirmTicket ? formatTicketNumber(closeConfirmTicket.number) : ''}{' '}
-                  is still open
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {isNativeIssueChannel(conversation?.channel)
-                    ? 'Closing the issue leaves the ticket open — and with its own inbox row folded into the conversation, it can go stale unnoticed.'
-                    : 'Closing the conversation leaves the ticket open — and with its own inbox row folded into the conversation, it can go stale unnoticed.'}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={closeConfirmPending}
-                  onClick={() => setCloseConfirmTicket(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={closeConfirmPending}
-                  onClick={closeConversationOnly}
-                >
-                  {isNativeIssueChannel(conversation?.channel)
-                    ? 'Close issue only'
-                    : 'Close conversation only'}
-                </Button>
-                {/* Resolving the linked ticket requires `ticket.set_status`
-                    (B24) — without it the mutation can only 403, so the
-                    combined action is hidden rather than left to error. */}
-                {canSetTicketStatus && (
-                  <Button
-                    type="button"
-                    disabled={closeConfirmPending}
-                    onClick={() => void resolveTicketAndClose()}
-                  >
-                    Resolve ticket and close
-                  </Button>
-                )}
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <Dialog open={snoozeCustomOpen} onOpenChange={setSnoozeCustomOpen}>
-            <DialogContent className="sm:max-w-sm">
-              <DialogHeader>
-                <DialogTitle>Snooze until</DialogTitle>
-                <DialogDescription>
-                  The conversation leaves your open queue and returns at the time you pick.
-                </DialogDescription>
-              </DialogHeader>
-              <SnoozeNaturalInput
-                onResolve={setSnoozeCustomDate}
-                disabled={snoozeMutation.isPending}
-              />
-              <DateTimePicker
-                value={snoozeCustomDate}
-                onChange={setSnoozeCustomDate}
-                minDate={new Date()}
-                className="w-full"
-              />
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setSnoozeCustomOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  disabled={!snoozeCustomDate || snoozeMutation.isPending}
-                  onClick={() => {
-                    if (!snoozeCustomDate) return
-                    snooze(snoozeCustomDate.toISOString())
-                    setSnoozeCustomOpen(false)
-                  }}
-                >
-                  Snooze
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <CloseConfirmDialog
+            ticket={closeConfirmTicket}
+            channel={conversation?.channel}
+            pending={closeConfirmPending}
+            canResolveTicket={canSetTicketStatus}
+            onCancel={cancelCloseConfirm}
+            onCloseOnly={closeConversationOnlyStable}
+            onResolveAndClose={resolveTicketAndCloseStable}
+          />
+          <SnoozeCustomDialog
+            open={snoozeCustomOpen}
+            onOpenChange={setSnoozeCustomOpen}
+            date={snoozeCustomDate}
+            onDateChange={setSnoozeCustomDate}
+            pending={snoozeMutation.isPending}
+            onSnooze={snoozeStable}
+          />
         </>
       )}
 
-      <RequiredAttributesDialog messages={closeBlocked} onClose={() => setCloseBlocked(null)} />
+      <RequiredAttributesDialog messages={closeBlocked} onClose={closeRequiredAttributes} />
 
       {/* The unified detail panel (§2.7, M5): one panel for both kinds,
           assembled from existing per-kind pieces. */}
@@ -2623,6 +2493,288 @@ export function AgentConversationThread({
     </div>
   )
 }
+
+// The thread's menus and its two hand-rolled dialogs, memoised on plain props
+// and stable handlers: the thread renders on every message, read and
+// conversation event, and these stay closed through nearly all of them.
+const SnoozeMenu = memo(function SnoozeMenu({
+  pending,
+  onSnooze,
+  onPickCustom,
+  className,
+}: {
+  pending: boolean
+  onSnooze: (until: string | null) => void
+  onPickCustom: () => void
+  className: string
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          title="Snooze"
+          aria-label="Snooze"
+          disabled={pending}
+          className={className}
+        >
+          <MoonIcon className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => onSnooze(inHours(4).toISOString())}>
+          Later today
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSnooze(tomorrowAt(9).toISOString())}>
+          Tomorrow
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSnooze(nextMondayAt(9).toISOString())}>
+          Next week
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSnooze(null)}>Until they reply</DropdownMenuItem>
+        <DropdownMenuItem onClick={onPickCustom}>Pick a date &amp; time…</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+})
+
+const ThreadOverflowMenu = memo(function ThreadOverflowMenu({
+  isTicket,
+  exporting,
+  onExport,
+  canBlock,
+  visitorBlocked,
+  onToggleBlock,
+  canAddParticipant,
+  onAddParticipant,
+  canEnd,
+  onEnd,
+  canConvert,
+  onConvert,
+  slaPolicyName,
+  removeSlaPending,
+  onRemoveSla,
+  onCopyLink,
+  className,
+}: {
+  isTicket: boolean
+  exporting: boolean
+  onExport: () => void
+  canBlock: boolean
+  visitorBlocked: boolean
+  onToggleBlock: () => void
+  canAddParticipant: boolean
+  onAddParticipant: () => void
+  canEnd: boolean
+  onEnd: () => void
+  canConvert: boolean
+  onConvert: () => void
+  /** The conversation's SLA policy, offered for removal; null hides the item. */
+  slaPolicyName: string | null
+  removeSlaPending: boolean
+  onRemoveSla: () => void
+  onCopyLink: () => void
+  className: string
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={isTicket ? 'More ticket actions' : 'More conversation actions'}
+          className={className}
+        >
+          <EllipsisHorizontalIcon className="h-5 w-5" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={onExport}>
+          <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+          {exporting ? 'Exporting…' : 'Export transcript'}
+        </DropdownMenuItem>
+        {canBlock && (
+          <DropdownMenuItem onClick={onToggleBlock}>
+            <NoSymbolIcon className="h-3.5 w-3.5" />
+            {visitorBlocked ? 'Unblock person' : 'Block person'}
+          </DropdownMenuItem>
+        )}
+        {canAddParticipant && (
+          <DropdownMenuItem onClick={onAddParticipant}>
+            <UserPlusIcon className="h-3.5 w-3.5" />
+            Add customer…
+          </DropdownMenuItem>
+        )}
+        {canEnd && (
+          <DropdownMenuItem onClick={onEnd}>
+            <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+            End conversation
+          </DropdownMenuItem>
+        )}
+        {canConvert && (
+          <DropdownMenuItem onClick={onConvert}>
+            <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+            Convert to post
+          </DropdownMenuItem>
+        )}
+        {slaPolicyName !== null && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onRemoveSla} disabled={removeSlaPending}>
+              Remove SLA ({slaPolicyName})
+            </DropdownMenuItem>
+          </>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onCopyLink}>
+          <LinkIcon className="h-3.5 w-3.5" />
+          Copy link
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+})
+
+const ComposerModeMenu = memo(function ComposerModeMenu({
+  noteMode,
+  onModeChange,
+}: {
+  noteMode: boolean
+  onModeChange: (mode: string) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            'flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+            noteMode
+              ? 'bg-amber-400/20 text-amber-700 dark:text-amber-300'
+              : 'bg-muted text-foreground hover:bg-muted/80'
+          )}
+        >
+          {noteMode ? 'Note' : 'Reply'}
+          <ChevronDownIcon className="h-3 w-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuRadioGroup value={noteMode ? 'note' : 'reply'} onValueChange={onModeChange}>
+          <DropdownMenuRadioItem value="reply">Reply</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="note">Note</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+})
+
+const CloseConfirmDialog = memo(function CloseConfirmDialog({
+  ticket,
+  channel,
+  pending,
+  canResolveTicket,
+  onCancel,
+  onCloseOnly,
+  onResolveAndClose,
+}: {
+  /** The open linked ticket the close would leave behind; null keeps it shut. */
+  ticket: LinkedTicketSummary | null
+  channel: ConversationDTO['channel'] | undefined
+  pending: boolean
+  canResolveTicket: boolean
+  onCancel: () => void
+  onCloseOnly: () => void
+  onResolveAndClose: () => void
+}) {
+  const issue = isNativeIssueChannel(channel)
+  return (
+    <AlertDialog
+      open={!!ticket}
+      onOpenChange={(o) => {
+        if (!o) onCancel()
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            Ticket {ticket ? formatTicketNumber(ticket.number) : ''} is still open
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {issue
+              ? 'Closing the issue leaves the ticket open — and with its own inbox row folded into the conversation, it can go stale unnoticed.'
+              : 'Closing the conversation leaves the ticket open — and with its own inbox row folded into the conversation, it can go stale unnoticed.'}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="button" variant="secondary" disabled={pending} onClick={onCloseOnly}>
+            {issue ? 'Close issue only' : 'Close conversation only'}
+          </Button>
+          {/* Resolving the linked ticket requires `ticket.set_status`
+              (B24) — without it the mutation can only 403, so the
+              combined action is hidden rather than left to error. */}
+          {canResolveTicket && (
+            <Button type="button" disabled={pending} onClick={onResolveAndClose}>
+              Resolve ticket and close
+            </Button>
+          )}
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+})
+
+const SnoozeCustomDialog = memo(function SnoozeCustomDialog({
+  open,
+  onOpenChange,
+  date,
+  onDateChange,
+  pending,
+  onSnooze,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  date: Date | undefined
+  onDateChange: (date: Date | undefined) => void
+  pending: boolean
+  onSnooze: (until: string) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Snooze until</DialogTitle>
+          <DialogDescription>
+            The conversation leaves your open queue and returns at the time you pick.
+          </DialogDescription>
+        </DialogHeader>
+        <SnoozeNaturalInput onResolve={onDateChange} disabled={pending} />
+        <DateTimePicker
+          value={date}
+          onChange={onDateChange}
+          minDate={new Date()}
+          className="w-full"
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!date || pending}
+            onClick={() => {
+              if (!date) return
+              onSnooze(date.toISOString())
+              onOpenChange(false)
+            }}
+          >
+            Snooze
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+})
 
 // The header's narrow-viewport fallbacks. Each is memoised on plain props, so
 // the render a keystroke causes (the reply turning sendable or empty) leaves

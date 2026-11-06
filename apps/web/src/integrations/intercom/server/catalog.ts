@@ -3,17 +3,12 @@ import type { IntegrationCatalogEntry } from '@/lib/server/integrations/types'
 export const intercomCatalog: IntegrationCatalogEntry = {
   id: 'intercom',
   name: 'Intercom',
-  description: 'Push feedback from Intercom conversations and sync customer data.',
+  description: 'Show Intercom contact details, such as plan and company, next to feedback.',
   category: 'support_crm',
   capabilities: [
     {
-      label: 'Capture feedback',
-      description: 'Turn Intercom conversations into feedback posts without leaving your inbox',
-    },
-    {
       label: 'Customer context',
-      description:
-        'Enrich feedback with Intercom contact data like plan, company, and conversation history',
+      description: 'Look up Intercom contact details like plan, company, and tags by email',
     },
   ],
   iconBg: 'bg-[#1F8DED]',

@@ -4,9 +4,14 @@ export const Route = createFileRoute('/robots.txt')({
   server: {
     handlers: {
       GET: async () => {
-        const [{ config }, { isFeatureEnabled, getHelpCenterConfig }] = await Promise.all([
+        const [
+          { config },
+          { isFeatureEnabled, getHelpCenterConfig },
+          { resolveHelpCenterPublicBaseUrl },
+        ] = await Promise.all([
           import('@/lib/server/config'),
           import('@/lib/server/domains/settings/settings.service'),
+          import('@/lib/shared/help-center-domain'),
         ])
         const baseUrl = config.baseUrl
 
@@ -15,6 +20,12 @@ export const Route = createFileRoute('/robots.txt')({
         // Indexing toggle (domains/languages §1): off means neither crawlable
         // nor advertised via a sitemap link.
         const helpCenterIndexable = helpCenterEnabled && helpCenterConfig.seo?.indexable !== false
+        // The default host's /hc/sitemap.xml redirects to a verified custom domain,
+        // so the sitemap is advertised on that domain directly.
+        const helpCenterBaseUrl = resolveHelpCenterPublicBaseUrl({
+          domainConfig: helpCenterConfig.domain,
+          fallback: baseUrl,
+        })
 
         const lines = [
           'User-agent: *',
@@ -27,7 +38,7 @@ export const Route = createFileRoute('/robots.txt')({
           ...(helpCenterEnabled && !helpCenterIndexable ? ['Disallow: /hc'] : []),
           '',
           `Sitemap: ${baseUrl}/sitemap.xml`,
-          ...(helpCenterIndexable ? [`Sitemap: ${baseUrl}/hc/sitemap.xml`] : []),
+          ...(helpCenterIndexable ? [`Sitemap: ${helpCenterBaseUrl}/hc/sitemap.xml`] : []),
         ]
         const body = lines.join('\n') + '\n'
 

@@ -222,7 +222,7 @@ describe('widget home title', () => {
     expect(similarSearches()).toHaveLength(0)
 
     expect(await screen.findByText('Dark theme')).toBeTruthy()
-    expect(screen.getByText('Similar ideas')).toBeTruthy()
+    expect(screen.getByText('Similar posts')).toBeTruthy()
     const searches = similarSearches()
     expect(searches).toHaveLength(1)
     expect(searches[0]!.url.searchParams.get('q')).toBe('Dark mode')
@@ -241,7 +241,7 @@ describe('widget home title', () => {
         })
     )
     renderHome()
-    typeTitleByKey('Dark')
+    typeTitleByKey('Dark m')
     await screen.findByTestId('editor')
     await waitFor(() => expect(signals).toHaveLength(1))
     expect(signals[0]!.aborted).toBe(false)
@@ -250,11 +250,29 @@ describe('widget home title', () => {
     expect(signals[0]!.aborted).toBe(true)
   })
 
+  it('looks for similar ideas only once the title is long enough to be like one', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      renderHome()
+      typeTitleByKey('Dark')
+      await screen.findByTestId('editor')
+      await act(async () => {
+        vi.advanceTimersByTime(1000)
+      })
+      expect(fetch).not.toHaveBeenCalledWith(
+        expect.stringContaining('/api/widget/search'),
+        expect.anything()
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('offers Submit only once the title has text', async () => {
     renderHome()
     typeTitle('  ')
     await screen.findByTestId('editor')
-    const submit = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Submit' })
+    const submit = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Post' })
     expect(submit().disabled).toBe(true)
 
     typeTitle('  x')
@@ -283,7 +301,7 @@ describe('widget home post composer', () => {
     await screen.findByTestId('editor')
     typeDetails('Please add it')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
     expect(createPost.mock.calls[0]![0]).toMatchObject({
@@ -300,7 +318,7 @@ describe('widget home post composer', () => {
     await screen.findByTestId('editor')
     expect(editor.value).toEqual(paragraph('From the host'))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
     await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
     expect(createPost.mock.calls[0]![0]).toMatchObject({

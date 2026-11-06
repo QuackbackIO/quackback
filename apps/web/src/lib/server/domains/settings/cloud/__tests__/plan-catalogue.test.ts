@@ -53,12 +53,13 @@ function on(plan: PlanId): CloudConfig {
 const INCLUDED_FROM: Partial<Record<EntitlementKey, PlanId>> = {
   customDomain: 'pro',
   aiAssistant: 'pro',
-  aiDrafts: 'pro',
-  apiAccess: 'pro',
+  aiDrafts: 'free',
+  apiAccess: 'free',
   mcpServer: 'pro',
   webhooks: 'pro',
   aiInsights: 'pro',
   workflows: 'business',
+  aiArticleTranslation: 'business',
   auditLog: 'enterprise',
   sso: 'enterprise',
 }
@@ -151,7 +152,11 @@ describe('what each plan includes', () => {
         key,
         off: true,
       })
-      expect({ key, free: isEntitled(on('free'), key) }).toEqual({ key, free: false })
+      // Free includes drafting and the REST API, and nothing else from the catalogue.
+      expect({ key, free: isEntitled(on('free'), key) }).toEqual({
+        key,
+        free: key === 'aiDrafts' || key === 'apiAccess',
+      })
     }
   })
 })
@@ -159,6 +164,11 @@ describe('what each plan includes', () => {
 describe('the levels the price list moved', () => {
   // One test per correction. Each states the level it moved FROM as well as
   // the one it moved to, so a catalogue that simply granted more would fail.
+
+  it('includes the REST API on every plan, Free included', () => {
+    expect(isEntitled(on('free'), 'apiAccess')).toBe(true)
+    expect(isEntitled(on('pro'), 'apiAccess')).toBe(true)
+  })
 
   it('includes the MCP server from Pro, the cheapest paid plan', () => {
     expect(isEntitled(on('free'), 'mcpServer')).toBe(false)
@@ -180,10 +190,12 @@ describe('the levels the price list moved', () => {
     expect(isEntitled(on('enterprise'), 'auditLog')).toBe(true)
   })
 
-  it('includes drafting and insights together on every paid plan', () => {
+  it('includes drafting on every plan, and insights from Pro up', () => {
+    expect(isEntitled(on('free'), 'aiDrafts')).toBe(true)
     expect(isEntitled(on('pro'), 'aiDrafts')).toBe(true)
-    expect(isEntitled(on('pro'), 'aiInsights')).toBe(true)
     expect(isEntitled(on('business'), 'aiDrafts')).toBe(true)
+    expect(isEntitled(on('free'), 'aiInsights')).toBe(false)
+    expect(isEntitled(on('pro'), 'aiInsights')).toBe(true)
     expect(isEntitled(on('business'), 'aiInsights')).toBe(true)
   })
 

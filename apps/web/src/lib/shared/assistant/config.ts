@@ -3,6 +3,8 @@ import type { AssistantSurface } from './surfaces'
 
 export const ASSISTANT_CONFIG_VERSION = 4 as const
 export const ASSISTANT_NAME_MAX_LENGTH = 80
+/** The name the AI agent uses for itself unless a workspace chooses another. */
+export const ASSISTANT_PRODUCT_NAME = 'Quackback AI'
 export const ASSISTANT_AVATAR_URL_MAX_LENGTH = 2_000
 export const ASSISTANT_ADDITIONAL_INSTRUCTIONS_MAX_LENGTH = 2_000
 
@@ -51,8 +53,20 @@ export const assistantAvatarUrlSchema = z
     message: 'Avatar URL must be a stored asset ref or HTTP(S) URL',
   })
 
+/** The default name the assistant was first stored under. */
+const FORMER_ASSISTANT_DEFAULT_NAME = 'Quinn'
+
+/**
+ * The name customers see for the assistant. Stored configs, principals and audit
+ * rows can still hold the former default, which reads as the product name. Any
+ * other name, including one a workspace chose, is returned unchanged.
+ */
+export function displayAssistantName(name: string): string {
+  return name.trim() === FORMER_ASSISTANT_DEFAULT_NAME ? ASSISTANT_PRODUCT_NAME : name
+}
+
 export const assistantIdentitySchema = z.object({
-  name: z.string().trim().min(1).max(ASSISTANT_NAME_MAX_LENGTH),
+  name: z.string().trim().min(1).max(ASSISTANT_NAME_MAX_LENGTH).transform(displayAssistantName),
   avatarUrl: assistantAvatarUrlSchema.nullable(),
 })
 
@@ -243,7 +257,7 @@ export type AssistantConfig = z.infer<typeof assistantConfigSchema>
 export const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
   version: ASSISTANT_CONFIG_VERSION,
   identity: {
-    name: 'Quackback AI',
+    name: ASSISTANT_PRODUCT_NAME,
     avatarUrl: null,
   },
   agents: {

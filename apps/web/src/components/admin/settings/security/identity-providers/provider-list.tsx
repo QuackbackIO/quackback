@@ -7,8 +7,9 @@
  * the same label the end user meets at login. Adding or configuring a provider
  * leaves this page: /sso/new is the short create form and /sso/:id is the
  * provider's own page (connection, sign-in, accounts, claim mapping, removal).
- * When the custom-OIDC tier is off, the provider list is replaced by an
- * upgrade prompt but the recovery codes stay.
+ * When the custom-OIDC tier is off, the upgrade prompt sits above the list.
+ * Enabled providers can still be switched off from the list; turning one on,
+ * adding one, and opening its page need the tier. The recovery codes stay.
  */
 import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
@@ -57,18 +58,21 @@ export function IdentityProvidersSection({
       action={tierEnabled && providers.length > 0 ? createAction : undefined}
       flush
     >
-      {!tierEnabled ? (
+      {!tierEnabled && (
         <div className="p-4 sm:p-6">
           <SsoUpgradeNotice />
         </div>
-      ) : providers.length === 0 ? (
-        <EmptyState
-          size="compact"
-          icon={ShieldCheckIcon}
-          title="No providers yet"
-          description="Add an OIDC provider to let your team and end users sign in through it."
-          action={createAction}
-        />
+      )}
+      {providers.length === 0 ? (
+        tierEnabled && (
+          <EmptyState
+            size="compact"
+            icon={ShieldCheckIcon}
+            title="No providers yet"
+            description="Add an OIDC provider to let your team and end users sign in through it."
+            action={createAction}
+          />
+        )
       ) : (
         <SettingsList>
           {providers.map((provider) => (
@@ -76,6 +80,7 @@ export function IdentityProvidersSection({
               key={provider.id}
               provider={provider}
               enabledMethodCount={enabledMethodCount}
+              tierEnabled={tierEnabled}
             />
           ))}
         </SettingsList>
@@ -95,9 +100,11 @@ export function IdentityProvidersSection({
 function ProviderRow({
   provider,
   enabledMethodCount,
+  tierEnabled,
 }: {
   provider: IdentityProvider
   enabledMethodCount: number
+  tierEnabled: boolean
 }) {
   const queryClient = useQueryClient()
   const upsert = useServerFn(upsertIdentityProviderFn)
@@ -109,7 +116,11 @@ function ProviderRow({
   // Persisted choice wins; infer from the discovery URL only for legacy rows.
   const kind = provider.kind ?? inferIdpKind(provider.discoveryUrl)
   const verifiedDomains = provider.domains.filter((d) => d.verifiedAt)
-  const isOnlyMethod = isOnlyWorkingMethod(provider, enabledMethodCount)
+  // Without the tier the count leaves identity providers out, so the guard
+  // would wrongly lock a stale provider on. Switching it off must stay possible.
+  const isOnlyMethod = tierEnabled && isOnlyWorkingMethod(provider, enabledMethodCount)
+  // Without the tier a provider can be switched off but not switched on.
+  const needsTierToEnable = !tierEnabled && !enabled
 
   // Flip just the `enabled` flag in place. Resends the required identity
   // fields (registrationId/label/clientId) unchanged so the patch validator
@@ -173,24 +184,32 @@ function ProviderRow({
         <>
           <span
             className="inline-flex"
-            title={isOnlyMethod ? 'At least one sign-in method must stay enabled.' : undefined}
+            title={
+              isOnlyMethod
+                ? 'At least one sign-in method must stay enabled.'
+                : needsTierToEnable
+                  ? 'Single sign-on is an Enterprise feature.'
+                  : undefined
+            }
           >
             <Switch
               checked={enabled}
               onCheckedChange={(v) => void handleToggle(v)}
-              disabled={pending || isOnlyMethod}
+              disabled={pending || isOnlyMethod || needsTierToEnable}
               aria-label={`Enable ${provider.label}`}
             />
           </span>
-          <Button type="button" size="sm" variant="outline" asChild>
-            <Link
-              to="/admin/settings/security/sso/$providerId"
-              params={{ providerId: provider.id }}
-              aria-label={`Configure ${provider.label}`}
-            >
-              Configure
-            </Link>
-          </Button>
+          {tierEnabled && (
+            <Button type="button" size="sm" variant="outline" asChild>
+              <Link
+                to="/admin/settings/security/sso/$providerId"
+                params={{ providerId: provider.id }}
+                aria-label={`Configure ${provider.label}`}
+              >
+                Configure
+              </Link>
+            </Button>
+          )}
         </>
       }
     />

@@ -4,6 +4,7 @@
  * The server is the enforcement point; this dialog explains the refusal and
  * points at the detail panel's Attributes section.
  */
+import { memo } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,7 +15,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-export function RequiredAttributesDialog({
+export const RequiredAttributesDialog = memo(function RequiredAttributesDialog({
   messages,
   onClose,
 }: {
@@ -42,4 +43,4 @@ export function RequiredAttributesDialog({
       </AlertDialogContent>
     </AlertDialog>
   )
-}
+})

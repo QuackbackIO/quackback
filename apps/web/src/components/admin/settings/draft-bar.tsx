@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Button } from '@/components/ui/button'
 
 interface DraftBarProps {
@@ -11,7 +12,12 @@ interface DraftBarProps {
  * Floating save bar for pages with a live preview, where changes are reviewed
  * before they apply. Every other settings page autosaves.
  */
-export function DraftBar({ dirty, saving, onSave, onDiscard }: DraftBarProps) {
+export const DraftBar = memo(function DraftBar({
+  dirty,
+  saving,
+  onSave,
+  onDiscard,
+}: DraftBarProps) {
   if (!dirty) return null
   return (
     <div
@@ -34,4 +40,4 @@ export function DraftBar({ dirty, saving, onSave, onDiscard }: DraftBarProps) {
       </Button>
     </div>
   )
-}
+})

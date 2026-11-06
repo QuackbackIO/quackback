@@ -107,6 +107,9 @@ const PROJECTED_LIMITS: ProjectedLimits = {
   emailsPerMonth: null,
   apiRequestsPerMonth: 100_000,
   apiRequestsPerMinute: 600,
+  maxInboundEmailAddresses: null,
+  maxHelpCenterLocales: null,
+  maxStatusSubscribers: null,
 }
 
 const PROJECTION: BillingProjection = {
@@ -310,5 +313,156 @@ describe('resolveEffectiveTierLimits (cloud, no operator row)', () => {
     expect(effective.maxBoards).toBe(25)
     expect(effective.maxPosts).toBe(PROJECTED_LIMITS.maxPosts)
     expect(effective.features.customDomain).toBe(false)
+  })
+})
+
+describe('plan limits for inbound addresses, help center locales and status subscribers', () => {
+  const beforeExpiry = new Date('2026-08-14T12:00:00.000Z')
+  const NEW_KEYS = [
+    'maxInboundEmailAddresses',
+    'maxHelpCenterLocales',
+    'maxStatusSubscribers',
+  ] as const
+  const FREE_LIMITS: ProjectedLimits = {
+    ...PROJECTED_LIMITS,
+    maxBoards: 1,
+    maxPosts: 50,
+    maxTeamSeats: 1,
+    maxStatusComponents: 3,
+    maxCustomRoles: 0,
+    maxSendingDomains: 0,
+    aiTokensPerMonth: 400_000,
+    emailsPerMonth: 250,
+    apiRequestsPerMonth: 10_000,
+    apiRequestsPerMinute: 60,
+    maxInboundEmailAddresses: 1,
+    maxHelpCenterLocales: 1,
+    maxStatusSubscribers: 100,
+  }
+
+  it('is unlimited on OSS and when a stored row omits the keys', () => {
+    for (const key of NEW_KEYS) {
+      expect(OSS_TIER_LIMITS[key]).toBeNull()
+      expect(mergeTierLimits({ maxBoards: 2 })[key]).toBeNull()
+    }
+  })
+
+  it('reads the three keys from a projection that carries them', () => {
+    const parsed = parseBillingProjection({
+      ...PROJECTION,
+      effectivePlan: 'free',
+      freeLimits: FREE_LIMITS,
+      planLimits: FREE_LIMITS,
+    })
+    expect(parsed?.planLimits.maxInboundEmailAddresses).toBe(1)
+    expect(parsed?.planLimits.maxHelpCenterLocales).toBe(1)
+    expect(parsed?.planLimits.maxStatusSubscribers).toBe(100)
+  })
+
+  it('treats a projection that omits the keys as unlimited instead of dropping it', () => {
+    const {
+      maxInboundEmailAddresses: _a,
+      maxHelpCenterLocales: _b,
+      maxStatusSubscribers: _c,
+      ...legacy
+    } = FREE_LIMITS
+    const parsed = parseBillingProjection({
+      ...PROJECTION,
+      freeLimits: legacy,
+      planLimits: legacy,
+    })
+    expect(parsed).not.toBeNull()
+    for (const key of NEW_KEYS) expect(parsed?.planLimits[key]).toBeNull()
+  })
+
+  it('applies the Free caps to a workspace with no operator row', () => {
+    const projection = parseBillingProjection({
+      ...PROJECTION,
+      effectivePlan: 'free',
+      freeLimits: FREE_LIMITS,
+      planLimits: FREE_LIMITS,
+      planLimitsExpireAt: null,
+    })
+    const effective = resolveEffectiveTierLimits(null, projection, beforeExpiry)
+    expect(effective.maxInboundEmailAddresses).toBe(1)
+    expect(effective.maxHelpCenterLocales).toBe(1)
+    expect(effective.maxStatusSubscribers).toBe(100)
+  })
+
+  it('leaves the keys unlimited on a paid projection that does not cap them', () => {
+    const paid = {
+      ...FREE_LIMITS,
+      maxInboundEmailAddresses: null,
+      maxHelpCenterLocales: null,
+      maxStatusSubscribers: null,
+    }
+    const projection = parseBillingProjection({
+      ...PROJECTION,
+      effectivePlan: 'enterprise',
+      freeLimits: FREE_LIMITS,
+      planLimits: paid,
+      planLimitsExpireAt: null,
+    })
+    const effective = resolveEffectiveTierLimits(null, projection, beforeExpiry)
+    for (const key of NEW_KEYS) expect(effective[key]).toBeNull()
+  })
+})
+
+describe('Free AI allowance', () => {
+  it('projects a finite AI token cap to a workspace with no operator row, so usage stops at it', () => {
+    const freeLimits: ProjectedLimits = {
+      ...PROJECTED_LIMITS,
+      aiTokensPerMonth: 400_000,
+      maxInboundEmailAddresses: 1,
+      maxHelpCenterLocales: 1,
+      maxStatusSubscribers: 100,
+    }
+    const projection = parseBillingProjection({
+      ...PROJECTION,
+      effectivePlan: 'free',
+      freeLimits,
+      planLimits: freeLimits,
+      planLimitsExpireAt: null,
+    })
+    const effective = resolveEffectiveTierLimits(
+      null,
+      projection,
+      new Date('2026-08-14T12:00:00.000Z')
+    )
+    expect(effective.aiTokensPerMonth).toBe(400_000)
+  })
+})
+
+describe('visitorAnalytics plan feature', () => {
+  const beforeExpiry = new Date('2026-08-14T12:00:00.000Z')
+  const atExpiry = new Date('2026-08-15T00:00:00.000Z')
+
+  it('is on for self-hosted installs with no tier-limits row', () => {
+    expect(OSS_TIER_LIMITS.features.visitorAnalytics).toBe(true)
+    expect(mergeTierLimits(null).features.visitorAnalytics).toBe(true)
+  })
+
+  it.each(['free', 'pro', 'business', 'enterprise'] as const)(
+    'is included on the %s plan, so existing cloud workspaces keep counting',
+    (plan) => {
+      const projection: BillingProjection = { ...PROJECTION, effectivePlan: plan }
+      expect(
+        resolveEffectiveTierLimits(null, projection, beforeExpiry).features.visitorAnalytics
+      ).toBe(true)
+    }
+  )
+
+  it('stays on after a projection expires back to Free', () => {
+    const effective = resolveEffectiveTierLimits(null, PROJECTION, atExpiry)
+    expect(effective.features.visitorAnalytics).toBe(true)
+  })
+
+  it('can be switched off by an operator tier-limits row', () => {
+    const effective = resolveEffectiveTierLimits(
+      { features: { visitorAnalytics: false } },
+      PROJECTION,
+      beforeExpiry
+    )
+    expect(effective.features.visitorAnalytics).toBe(false)
   })
 })

@@ -24,6 +24,9 @@ export interface TierFeatureFlags {
   /** Connecting external tools (GitHub, Slack, Linear, Jira, etc.).
    *  All paid tiers on cloud; always on for self-hosters. */
   integrations: boolean
+  /** Host-page pageview counting and the widget's durable device id. Gates
+   *  both ingest and the widget config served to embeds. */
+  visitorAnalytics: boolean
 }
 
 /**
@@ -85,6 +88,24 @@ export interface TierLimits {
   aiTokensPerMonth: TierLimit<number>
   emailsPerMonth: TierLimit<number>
 
+  /**
+   * Inbound email addresses (routes) a workspace may receive mail on. Checked
+   * when a route is created. Null = unlimited.
+   */
+  maxInboundEmailAddresses: TierLimit<number>
+  /**
+   * Help center languages, counting the default. Checked when a language is
+   * enabled; re-enabling a language that is already on is never refused.
+   * Null = unlimited.
+   */
+  maxHelpCenterLocales: TierLimit<number>
+  /**
+   * Active status page subscribers. Checked when a new active subscription is
+   * added; existing subscribers are never removed when the cap is lowered.
+   * Null = unlimited.
+   */
+  maxStatusSubscribers: TierLimit<number>
+
   apiRequestsPerMonth: TierLimit<number>
   apiRequestsPerMinute: TierLimit<number>
 
@@ -104,6 +125,10 @@ export const OSS_TIER_LIMITS: TierLimits = {
   aiTokensPerMonth: null,
   emailsPerMonth: null,
 
+  maxInboundEmailAddresses: null,
+  maxHelpCenterLocales: null,
+  maxStatusSubscribers: null,
+
   apiRequestsPerMonth: null,
   apiRequestsPerMinute: null,
 
@@ -117,5 +142,6 @@ export const OSS_TIER_LIMITS: TierLimits = {
     customColors: true,
     customCss: true,
     integrations: true,
+    visitorAnalytics: true,
   },
 }

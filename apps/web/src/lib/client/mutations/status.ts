@@ -27,6 +27,7 @@ import {
   deleteStatusIncidentTemplateFn,
   addStatusSubscriberFn,
   importStatusSubscribersFn,
+  removeStatusSubscriberFn,
   updateStatusSettingsFn,
 } from '@/lib/server/functions/status'
 import { statusKeys } from '@/lib/client/queries/status'
@@ -240,6 +241,16 @@ export function useAddStatusSubscriber() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (email: string) => addStatusSubscriberFn({ data: { email } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: statusKeys.subscribers() }),
+  })
+}
+
+/** Admin removal of one active subscriber. Invalidates the subscriber list +
+ *  counts on success, so the row drops out and the Active count moves. */
+export function useRemoveStatusSubscriber() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (principalId: string) => removeStatusSubscriberFn({ data: { principalId } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: statusKeys.subscribers() }),
   })
 }

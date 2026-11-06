@@ -19,7 +19,7 @@
     "slash_commands": [
       {
         "command": "/quackback",
-        "url": "https://app.quackback.io/api/hooks/slack/commands",
+        "url": "https://YOUR_HOST/api/integrations/slack/hooks/commands",
         "description": "Ask Quackback or capture feedback",
         "usage_hint": "what are the top requests this month?",
         "should_escape": false
@@ -35,7 +35,7 @@
     ]
   },
   "oauth_config": {
-    "redirect_urls": ["https://app.quackback.io/oauth/slack/callback"],
+    "redirect_urls": ["https://YOUR_HOST/oauth/slack/callback"],
     "scopes": {
       "bot": [
         "chat:write",
@@ -61,7 +61,7 @@
   },
   "settings": {
     "event_subscriptions": {
-      "request_url": "https://app.quackback.io/api/hooks/slack/events",
+      "request_url": "https://YOUR_HOST/api/integrations/slack/hooks/events",
       "bot_events": [
         "app_mention",
         "message.im",
@@ -77,8 +77,8 @@
     },
     "interactivity": {
       "is_enabled": true,
-      "request_url": "https://app.quackback.io/api/hooks/slack/interactions",
-      "message_menu_options_url": "https://app.quackback.io/api/hooks/slack/options"
+      "request_url": "https://YOUR_HOST/api/integrations/slack/hooks/interactions",
+      "message_menu_options_url": "https://YOUR_HOST/api/integrations/slack/hooks/options"
     },
     "org_deploy_enabled": false,
     "socket_mode_enabled": false,

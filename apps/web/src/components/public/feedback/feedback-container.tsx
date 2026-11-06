@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useIntl } from 'react-intl'
+import { useIntl, type MessageDescriptor } from 'react-intl'
 import { toast } from 'sonner'
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { Spinner } from '@/components/shared/spinner'
+import { Button } from '@/components/ui/button'
 import { useRouter } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
+import { PortalPoweredBy } from '@/components/public/feedback/portal-powered-by'
+import { PortalFilterPanel } from '@/components/public/feedback/portal-filter-panel'
+import { PortalFilterSheet } from '@/components/public/feedback/portal-filter-sheet'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
 import {
+  PublicMoreFilters,
   PublicFiltersBar,
-  PublicFiltersToolbarButton,
 } from '@/components/public/feedback/public-filters-bar'
 import { usePublicFilters } from '@/components/public/feedback/use-public-filters'
 import { PortalModerationSection } from '@/components/public/feedback/portal-moderation-section'
@@ -22,6 +26,7 @@ import {
   flattenPublicPosts,
   publicPostsKeys,
   usePublicPosts,
+  useFirstPage,
   useVotedPosts,
 } from '@/lib/client/hooks/use-portal-posts-query'
 import { useChangePostStatusId } from '@/lib/client/mutations/posts'
@@ -29,10 +34,46 @@ import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
 import type { PublicPostListItem } from '@/lib/shared/types'
+import {
+  sortForSearch,
+  type PublicFeedbackFilters,
+  type PublicFeedView,
+  type PublicPostFacetCounts,
+  type PublicPostSort,
+  type WidenedSearch,
+} from '@/lib/shared/types/filters'
 import { cn } from '@/lib/shared/utils'
 import type { PostId, PostStatusId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
+import { toggleItem } from '@/components/shared/filter-utils'
 import { shownName } from '@/lib/shared/greeting-name'
+import { useFeedHandoff } from '@/components/public/feedback/feed-input-handoff'
+
+const EMPTY_VIEW_MESSAGES: Record<PublicFeedView, MessageDescriptor> = {
+  mine: {
+    id: 'portal.feedback.list.emptyMine',
+    defaultMessage: "You haven't created any posts yet.",
+  },
+  voted: {
+    id: 'portal.feedback.list.emptyVoted',
+    defaultMessage: "You haven't voted on any posts yet.",
+  },
+  following: {
+    id: 'portal.feedback.list.emptyFollowing',
+    defaultMessage: "You aren't following any posts yet.",
+  },
+}
+
+const WIDENED_SEARCH_MESSAGES: Record<WidenedSearch, MessageDescriptor> = {
+  most: {
+    id: 'portal.feedback.list.searchWidenedMost',
+    defaultMessage: 'No post has all your words. Showing posts with most of them.',
+  },
+  similar: {
+    id: 'portal.feedback.list.searchWidenedSimilar',
+    defaultMessage: 'No exact matches. Showing posts with a similar spelling.',
+  },
+}
 
 interface FeedbackContainerProps {
   workspaceName: string
@@ -45,7 +86,7 @@ interface FeedbackContainerProps {
   votedPostIds: string[]
   currentBoard?: string
   currentSearch?: string
-  currentSort?: 'top' | 'new' | 'trending'
+  currentSort?: PublicPostSort
   defaultBoardId?: string
   /** User info if authenticated */
   user?: { name: string | null; email: string } | null
@@ -56,6 +97,52 @@ interface FeedbackContainerProps {
    */
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
   showPoweredBy?: boolean
+  /** Filter panel counts as rendered on the server. */
+  facets?: PublicPostFacetCounts | null
+  /** How the server-rendered search was widened, if it was. */
+  searchMode?: WidenedSearch
+  /**
+   * The filters `posts` were fetched for. The visitor can change filters while
+   * they load, so these can differ from the current ones by the time they
+   * arrive.
+   */
+  postsFilters: PublicFeedbackFilters
+}
+
+/**
+ * Whether a signed-in visitor can post a new idea. On a board the composer is
+ * locked to that board, so it decides; on the whole feed any board will do.
+ */
+export function canPostTo(
+  boardPermissions: Record<string, { canSubmit: boolean }> | undefined,
+  lockedBoardId: string | undefined
+): boolean {
+  if (lockedBoardId) return !!boardPermissions?.[lockedBoardId]?.canSubmit
+  return Object.values(boardPermissions ?? {}).some((board) => board.canSubmit)
+}
+
+const isEmpty = (value: unknown): boolean =>
+  value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
+
+/**
+ * Whether posts fetched for `postsFor` are the first page for `filters`, so
+ * they can seed the feed. Only the plain feed is seeded: any narrowing filter
+ * on either side makes the feed fetch its own first page.
+ */
+export function postsMatchFilters(
+  postsFor: PublicFeedbackFilters,
+  filters: PublicFeedbackFilters
+): boolean {
+  const narrowing = ['status', 'tagIds', 'minVotes', 'dateFrom', 'responded'] as const
+  if (narrowing.some((key) => !isEmpty(postsFor[key]) || !isEmpty(filters[key]))) return false
+  return (
+    postsFor.board === filters.board &&
+    postsFor.search === filters.search &&
+    (postsFor.sort ?? 'trending') === (filters.sort ?? 'trending') &&
+    postsFor.view === filters.view &&
+    postsFor.owner === filters.owner &&
+    (postsFor.segmentIds ?? []).join() === (filters.segmentIds ?? []).join()
+  )
 }
 
 export function FeedbackContainer({
@@ -74,6 +161,9 @@ export function FeedbackContainer({
   user,
   boardPermissions,
   showPoweredBy = true,
+  facets,
+  searchMode: initialSearchMode,
+  postsFilters,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const router = useRouter()
@@ -93,7 +183,7 @@ export function FeedbackContainer({
 
   // List key for animations - only updates when data finishes loading
   // This prevents double animations when filters change (stale data → new data)
-  const filterKey = `${filters.board ?? currentBoard}-${filters.sort ?? currentSort}-${filters.search ?? currentSearch}-${(filters.status ?? []).join()}-${(filters.tagIds ?? []).join()}-${filters.minVotes ?? ''}-${filters.dateFrom ?? ''}-${filters.responded ?? ''}-${filters.owner ?? ''}-${(filters.segmentIds ?? []).join()}`
+  const filterKey = `${filters.board ?? currentBoard}-${filters.sort ?? currentSort}-${filters.search ?? currentSearch}-${(filters.status ?? []).join()}-${(filters.tagIds ?? []).join()}-${filters.minVotes ?? ''}-${filters.dateFrom ?? ''}-${filters.responded ?? ''}-${filters.owner ?? ''}-${(filters.segmentIds ?? []).join()}-${filters.view ?? ''}`
   const [listKey, setListKey] = useState(filterKey)
 
   const effectiveUser = session?.user
@@ -104,6 +194,8 @@ export function FeedbackContainer({
   // session viewer gets the sign-in path. Anonymous sessions also populate
   // session.user, so !!effectiveUser is not the right signal here.
   const isRealUser = !!session?.user && session.user.principalType !== 'anonymous'
+  // Views are for signed-in users; the server ignores one from anyone else.
+  const activeView = isRealUser ? filters.view : undefined
 
   // Current filter values (URL state takes precedence over props)
   const activeBoard = filters.board ?? currentBoard
@@ -127,6 +219,7 @@ export function FeedbackContainer({
       // without post.view_private, so passing them through is always safe.
       owner: filters.owner,
       segmentIds: filters.segmentIds,
+      view: activeView,
     }),
     [
       activeBoard,
@@ -139,26 +232,17 @@ export function FeedbackContainer({
       filters.responded,
       filters.owner,
       filters.segmentIds,
+      activeView,
     ]
   )
 
-  // Track initial filters from server props to know when to use initialData
-  const initialFiltersRef = useRef({
-    board: currentBoard,
-    search: currentSearch,
-    sort: currentSort,
-  })
-
-  // Only use initialData when current filters match what the server rendered
-  const filtersMatchInitial =
-    mergedFilters.board === initialFiltersRef.current.board &&
-    mergedFilters.search === initialFiltersRef.current.search &&
-    mergedFilters.sort === initialFiltersRef.current.sort &&
-    !mergedFilters.status?.length &&
-    !mergedFilters.tagIds?.length &&
-    !mergedFilters.minVotes &&
-    !mergedFilters.dateFrom &&
-    !mergedFilters.responded
+  // Seed the feed with the server's posts only while the filters are still
+  // the ones they were fetched for. Views are ignored for anyone not signed
+  // in, on the server as here.
+  const filtersMatchInitial = postsMatchFilters(
+    { ...postsFilters, view: isRealUser ? postsFilters.view : undefined },
+    mergedFilters
+  )
 
   // Server state - Posts list using TanStack Query
   const {
@@ -171,14 +255,52 @@ export function FeedbackContainer({
     fetchNextPage,
   } = usePublicPosts({
     filters: mergedFilters,
+    viewerKey: session?.user?.email,
     initialData: filtersMatchInitial
       ? {
           items: initialPosts,
           total: initialPosts.length,
           hasMore: initialHasMore,
+          facets: facets ?? undefined,
+          searchMode: initialSearchMode,
         }
       : undefined,
   })
+
+  // Filter panel counts ride on the first page of the feed.
+  const firstPage = useFirstPage(postsData)
+  const facetCounts = firstPage?.facets
+  // Set when nothing matched every word and the search was widened.
+  const widenedSearch = activeSearch ? firstPage?.searchMode : undefined
+
+  // A view the server ignores is not counted as on.
+  const filterCount = activeFilterCount - (filters.view && !activeView ? 1 : 0)
+  // An empty board is still a place to post the first idea, so the board
+  // alone doesn't make the feed "filtered".
+  const narrowingCount = filterCount - (filters.board ? 1 : 0)
+
+  // One panel, shown in the sidebar on wide screens and in a sheet below that.
+  const filterPanel = (layout: 'sidebar' | 'sheet') => (
+    <PortalFilterPanel
+      filters={mergedFilters}
+      setFilters={setFilters}
+      boards={boards}
+      statuses={statuses}
+      tags={tags}
+      counts={facetCounts}
+      showViews={isRealUser}
+      layout={layout}
+      footer={
+        <PublicMoreFilters
+          filters={filters}
+          setFilters={setFilters}
+          size={layout === 'sheet' ? 'md' : 'sm'}
+        />
+      }
+    />
+  )
+
+  const poweredBy = showPoweredBy ? <PortalPoweredBy workspaceSlug={workspaceSlug} /> : null
 
   const posts = flattenPublicPosts(postsData)
   // Dim the list only during an actual filter transition (placeholderData is
@@ -227,23 +349,36 @@ export function FeedbackContainer({
     onLoadMore: fetchNextPage,
   })
 
-  function handleSortChange(sort: 'top' | 'new' | 'trending'): void {
+  function handleSortChange(sort: PublicPostSort): void {
     setFilters({ sort })
   }
 
-  function handleBoardChange(board: string | undefined): void {
-    setFilters({ board })
-  }
-
   function handleSearchChange(search: string): void {
-    setFilters({ search: search || undefined })
+    setFilters({
+      search: search || undefined,
+      sort: sortForSearch(activeSort, activeSearch, search, 'trending'),
+    })
   }
 
   const currentBoardInfo = activeBoard ? boards.find((b) => b.slug === activeBoard) : boards[0]
   const boardIdForCreate = currentBoardInfo?.id || defaultBoardId
-  // A selected board is page context (sidebar / ?board=), not a filter the
-  // submit form or chip row should switch away from.
+  // A selected board is page context (sidebar / ?board=), not a choice the
+  // submit form should switch away from.
   const boardLocked = Boolean(activeBoard)
+
+  // The composer opened from a search that found nothing, with its words as
+  // the title. Signed-out visitors get the composer's own sign-in path.
+  const [draft, setDraft] = useState<{ title: string; key: number }>()
+  const handoff = useFeedHandoff()
+  // A title typed (or a click) into the loading feed's composer opens it too.
+  // Taken in an effect: the loading composer hands it over in its cleanup,
+  // which React runs before this mounts.
+  useEffect(() => {
+    const title = handoff?.take('composeTitle')
+    if (title !== undefined) setDraft({ title, key: Date.now() })
+  }, [handoff])
+  const canStartIdea =
+    !isRealUser || canPostTo(boardPermissions, boardLocked ? boardIdForCreate : undefined)
 
   function handlePostCreated(postId: string): void {
     setTimeout(() => {
@@ -325,8 +460,8 @@ export function FeedbackContainer({
   }
 
   return (
-    <div className="py-6">
-      <div className="flex gap-8">
+    <div>
+      <div className="flex gap-6 lg:gap-8">
         <div className="flex-1 min-w-0">
           <FeedbackHeader
             workspaceName={workspaceName}
@@ -336,6 +471,7 @@ export function FeedbackContainer({
             boardPermissions={boardPermissions}
             onPostCreated={handlePostCreated}
             boardLocked={boardLocked}
+            draft={draft}
           />
 
           <FeedbackToolbar
@@ -343,47 +479,99 @@ export function FeedbackContainer({
             onSortChange={handleSortChange}
             currentSearch={activeSearch}
             onSearchChange={handleSearchChange}
-            isLoading={isLoading}
             filterButton={
-              <PublicFiltersToolbarButton
-                filters={filters}
-                setFilters={setFilters}
-                statuses={statuses}
-                tags={tags}
-                boards={boards}
-                boardLocked={boardLocked}
-              />
+              <div className="lg:hidden">
+                <PortalFilterSheet activeCount={filterCount} footer={poweredBy}>
+                  {filterPanel('sheet')}
+                </PortalFilterSheet>
+              </div>
             }
           />
-          <div className="mt-3">
+          <div className="mt-3 empty:hidden">
             <PublicFiltersBar
-              filters={filters}
+              filters={mergedFilters}
               setFilters={setFilters}
               clearFilters={clearFilters}
               statuses={statuses}
               tags={tags}
               boards={boards}
-              boardLocked={boardLocked}
+              counts={facetCounts}
             />
           </div>
+          {facetCounts && (
+            <p role="status" className="sr-only">
+              {intl.formatMessage(
+                {
+                  id: 'portal.feedback.list.resultCount',
+                  defaultMessage: '{count, plural, one {# post} other {# posts}}',
+                },
+                { count: facetCounts.total }
+              )}
+            </p>
+          )}
 
           <PortalModerationSection enabled={canApprove} />
 
-          <div className="mt-5">
+          {/* The results region: while a filter change loads, the cards (or the
+              empty message) dim and a thin bar runs along the top, so the
+              signal sits where the change will land. */}
+          <div
+            aria-busy={isLoading}
+            className={cn(
+              'relative mt-5 transition-opacity duration-150',
+              isLoading && 'opacity-60'
+            )}
+          >
+            <div
+              aria-hidden
+              className={cn(
+                'pointer-events-none absolute inset-x-0 -top-3 h-0.5 overflow-hidden rounded-full bg-border opacity-0 transition-opacity',
+                isLoading && 'opacity-100 delay-150'
+              )}
+            >
+              <div className="feed-loading-bar h-full w-1/3 rounded-full bg-muted-foreground" />
+            </div>
             {posts.length === 0 && !isPending ? (
-              activeSearch || activeFilterCount > 0 ? (
+              activeSearch ? (
+                // A search that finds nothing is the moment to post the idea.
+                <div className="text-center py-8 px-4 space-y-3">
+                  <p className="text-muted-foreground">
+                    {intl.formatMessage(
+                      {
+                        id: 'portal.feedback.list.noSearchResults',
+                        defaultMessage: 'No posts match “{query}”.',
+                      },
+                      { query: activeSearch }
+                    )}
+                  </p>
+                  {canStartIdea && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDraft({ title: activeSearch, key: Date.now() })}
+                    >
+                      {intl.formatMessage({
+                        id: 'portal.feedback.list.postSearchAsIdea',
+                        defaultMessage: 'Create a post from it',
+                      })}
+                    </Button>
+                  )}
+                </div>
+              ) : narrowingCount > 0 ? (
                 <p className="text-muted-foreground text-center py-8">
-                  {intl.formatMessage({
-                    id: 'portal.feedback.list.noPostsFiltered',
-                    defaultMessage: 'No posts match your filters.',
-                  })}
+                  {activeView && narrowingCount === 1
+                    ? intl.formatMessage(EMPTY_VIEW_MESSAGES[activeView])
+                    : intl.formatMessage({
+                        id: 'portal.feedback.list.noPostsFiltered',
+                        defaultMessage: 'No posts match your filters.',
+                      })}
                 </p>
               ) : (
                 <div className="text-center py-10 px-4 space-y-3">
                   <p className="text-base font-medium text-foreground">
                     {intl.formatMessage({
                       id: 'portal.feedback.list.noPostsYetTitle',
-                      defaultMessage: 'Got an idea? Be the first to share it',
+                      defaultMessage: 'No posts yet. Be the first to post',
                     })}
                   </p>
                   <p className="text-sm text-muted-foreground max-w-sm mx-auto">
@@ -399,13 +587,12 @@ export function FeedbackContainer({
               )
             ) : (
               <>
-                <div
-                  key={listKey}
-                  className={cn(
-                    'space-y-3 transition-opacity duration-150',
-                    isLoading && 'opacity-60'
-                  )}
-                >
+                {widenedSearch && (
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    {intl.formatMessage(WIDENED_SEARCH_MESSAGES[widenedSearch])}
+                  </p>
+                )}
+                <div key={listKey} className="space-y-3">
                   {posts.map((post, index) => (
                     <div
                       key={post.id}
@@ -425,6 +612,10 @@ export function FeedbackContainer({
                         createdAt={post.createdAt}
                         boardSlug={post.board?.slug || ''}
                         tags={post.tags}
+                        onTagClick={(tagId) =>
+                          setFilters({ tagIds: toggleItem(activeTagIds, tagId) })
+                        }
+                        changelogEntry={post.changelogEntry}
                         isAuthenticated={isRealUser}
                         canVote={
                           post.board ? (boardPermissions?.[post.board.id]?.canVote ?? false) : false
@@ -454,13 +645,7 @@ export function FeedbackContainer({
           </div>
         </div>
 
-        <FeedbackSidebar
-          boards={boards}
-          currentBoard={activeBoard}
-          onBoardChange={handleBoardChange}
-          workspaceSlug={workspaceSlug}
-          showPoweredBy={showPoweredBy}
-        />
+        <FeedbackSidebar footer={poweredBy}>{filterPanel('sidebar')}</FeedbackSidebar>
       </div>
     </div>
   )

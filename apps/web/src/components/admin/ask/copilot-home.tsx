@@ -34,7 +34,6 @@ import { ChatComposer } from './chat-composer'
 import { ConnectorCallCard } from './connector-call-card'
 import { useSearchPalette, useSearchShortcutLabel } from './search-palette'
 import { WorkspaceAssistantMessage } from './workspace-assistant-message'
-import { WorkspaceSettingsProposalCard } from './workspace-settings-proposal-card'
 import { HomeColumn, HomeHeaderSpace } from '../home-frame'
 
 type DraftTurn = {
@@ -70,8 +69,6 @@ export interface CopilotHomeProps {
    * in plain sight.
    */
   paused?: ReactNode
-  /** What waits on the teammate, above their last chat. */
-  waiting?: ReactNode
   below?: ReactNode
 }
 
@@ -83,7 +80,7 @@ export function CopilotHome(props: CopilotHomeProps) {
   )
 }
 
-function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: CopilotHomeProps) {
+function CopilotHomeView({ threadKey, canAsk, header, paused, below }: CopilotHomeProps) {
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -333,7 +330,6 @@ function CopilotHomeView({ threadKey, canAsk, header, paused, waiting, below }: 
                   {error}
                 </p>
               )}
-              {waiting}
               {latest && (
                 <button
                   type="button"
@@ -414,9 +410,7 @@ function CopilotThread({
     final ? (
       <>
         {final.proposedActions.map((action) =>
-          action.toolName === 'propose_settings_change' ? (
-            <WorkspaceSettingsProposalCard key={action.id} action={action} />
-          ) : action.connector ? (
+          action.connector ? (
             <ConnectorCallCard
               key={action.id}
               action={{ ...action, connector: action.connector }}

@@ -87,7 +87,8 @@ export function inboxFiltersToPostViewFilters(filters: InboxFilters): PostViewFi
   if (filters.minComments !== undefined) out.minComments = filters.minComments
   if (filters.hasDuplicates) out.hasDuplicates = true
   if (filters.showDeleted) out.showDeleted = true
-  if (filters.sort) out.sort = filters.sort
+  // Best match ranks the search, which a view leaves out, so it doesn't save.
+  if (filters.sort && filters.sort !== 'relevance') out.sort = filters.sort
   if (filters.dateFrom) out.dateFrom = filters.dateFrom
   if (filters.dateTo) out.dateTo = filters.dateTo
   if (filters.updatedBefore) out.updatedBefore = filters.updatedBefore

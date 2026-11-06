@@ -304,8 +304,6 @@ export async function undoSettingsChangesInTransaction(
   await tx.update(settings).set(patch).where(eq(settings.id, row.id))
 }
 
-export { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
-
 async function verifyRehostedLogoKey(key: unknown): Promise<void> {
   if (
     typeof key !== 'string' ||

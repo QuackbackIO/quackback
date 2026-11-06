@@ -58,8 +58,8 @@ Edges (28):
 
 ## 3. Server domains (lib/server/domains)
 
-Nodes (54): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (140):
+Nodes (55): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, domain-proof, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, settings-registry, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
+Edges (146):
 
 - activity -> principals
 - admin-overview -> changelog
@@ -67,6 +67,7 @@ Edges (140):
 - analytics -> api
 - analytics -> assistant
 - analytics -> principals
+- analytics -> settings
 - analytics -> workflows
 - api -> api-keys
 - api -> settings
@@ -84,7 +85,6 @@ Edges (140):
 - assistant -> post-tags
 - assistant -> posts
 - assistant -> principals
-- assistant -> segments
 - assistant -> settings
 - assistant -> status
 - assistant -> statuses
@@ -100,7 +100,9 @@ Edges (140):
 - changelog -> embeddings
 - changelog -> settings
 - channel-accounts -> conversation
+- channel-accounts -> notifications
 - channel-accounts -> settings
+- channel-accounts -> subscriptions
 - channels -> channel-accounts
 - channels -> conversation
 - comments -> activity
@@ -129,6 +131,8 @@ Edges (140):
 - conversation-attributes -> conversation
 - conversation-attributes -> settings
 - conversation-attributes -> workflows
+- domain-proof -> channel-accounts
+- domain-proof -> settings
 - embeddings -> ai
 - embeddings -> merge-suggestions
 - export -> companies
@@ -156,6 +160,7 @@ Edges (140):
 - onboarding -> users
 - posts -> activity
 - posts -> ai
+- posts -> changelog
 - posts -> embeddings
 - posts -> merge-suggestions
 - posts -> principals
@@ -177,6 +182,7 @@ Edges (140):
 - settings-registry -> settings
 - sla -> office-hours
 - sla -> settings
+- status -> settings
 - subscriptions -> changelog
 - subscriptions -> posts
 - subscriptions -> status

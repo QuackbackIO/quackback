@@ -1,6 +1,6 @@
 import { queryOptions, useQuery, type QueryClient } from '@tanstack/react-query'
 import type { PrincipalId, RoadmapId, PostStatusId, BoardId } from '@quackback/ids'
-import type { RespondedFilter } from '@/lib/shared/types/filters'
+import type { PublicFeedView, PublicPostSort, RespondedFilter } from '@/lib/shared/types/filters'
 import {
   fetchPublicBoards,
   fetchPublicPosts,
@@ -77,7 +77,7 @@ export const portalQueries = {
   portalData: (params: {
     boardSlug?: string
     search?: string
-    sort: 'top' | 'new' | 'trending'
+    sort: PublicPostSort
     statusSlugs?: string[]
     tagIds?: string[]
     userId?: string
@@ -86,6 +86,7 @@ export const portalQueries = {
     responded?: RespondedFilter
     owner?: string
     segmentIds?: string[]
+    view?: PublicFeedView
   }) =>
     queryOptions({
       queryKey: [
@@ -102,6 +103,7 @@ export const portalQueries = {
         params.responded,
         params.owner,
         params.segmentIds,
+        params.view,
       ],
       queryFn: async () => {
         const { userId: _cacheKeyOnly, ...input } = params
@@ -135,7 +137,7 @@ export const portalQueries = {
   /**
    * List posts for a board with filtering
    */
-  posts: (filters: { boardSlug?: string; search?: string; sort: 'top' | 'new' | 'trending' }) =>
+  posts: (filters: { boardSlug?: string; search?: string; sort: PublicPostSort }) =>
     queryOptions({
       queryKey: ['portal', 'posts', filters],
       queryFn: () => fetchPublicPosts({ data: filters }),

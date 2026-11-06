@@ -55,55 +55,11 @@ export const fetchBillingInvoicesFn = createServerFn({ method: 'GET' }).handler(
 export const fetchPlanUsageFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-  const { finiteUsageLines } = await import('@/lib/server/domains/billing/plan-usage')
+  const { finiteUsageLines, planUsageLines } =
+    await import('@/lib/server/domains/billing/plan-usage')
   const { loadUsageCounts } = await import('@/lib/server/domains/billing/usage-counts')
   const [limits, used] = await Promise.all([getTierLimits(), loadUsageCounts()])
-  return finiteUsageLines([
-    { key: 'maxBoards', label: 'boards', used: used.maxBoards ?? 0, limit: limits.maxBoards },
-    { key: 'maxPosts', label: 'posts', used: used.maxPosts ?? 0, limit: limits.maxPosts },
-    {
-      key: 'maxTeamSeats',
-      label: 'seats',
-      used: used.maxTeamSeats ?? 0,
-      limit: limits.maxTeamSeats,
-    },
-    {
-      key: 'maxStatusComponents',
-      label: 'status components',
-      used: used.maxStatusComponents ?? 0,
-      limit: limits.maxStatusComponents,
-    },
-    {
-      key: 'maxCustomRoles',
-      label: 'custom roles',
-      used: used.maxCustomRoles ?? 0,
-      limit: limits.maxCustomRoles,
-    },
-    {
-      key: 'maxSendingDomains',
-      label: 'sending domains',
-      used: used.maxSendingDomains ?? 0,
-      limit: limits.maxSendingDomains,
-    },
-    {
-      key: 'aiTokensPerMonth',
-      label: 'AI tokens this month',
-      used: used.aiTokensPerMonth ?? 0,
-      limit: limits.aiTokensPerMonth,
-    },
-    {
-      key: 'emailsPerMonth',
-      label: 'emails',
-      used: used.emailsPerMonth ?? 0,
-      limit: limits.emailsPerMonth,
-    },
-    {
-      key: 'apiRequestsPerMonth',
-      label: 'API requests',
-      used: used.apiRequestsPerMonth ?? 0,
-      limit: limits.apiRequestsPerMonth,
-    },
-  ])
+  return finiteUsageLines(planUsageLines(limits, used))
 })
 
 export const fetchDowngradePreviewFn = createServerFn({ method: 'GET' })

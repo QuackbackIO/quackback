@@ -188,7 +188,7 @@ function TicketSlaChip({ sla }: { sla: NonNullable<TicketDTO['sla']> }) {
  * whole thread, newest first, as compact rows. Renders nothing for an item
  * with no files at all — no empty section, no "no files yet" copy.
  */
-function FilesSection({
+const FilesSection = memo(function FilesSection({
   target,
   visible,
 }: {
@@ -230,7 +230,7 @@ function FilesSection({
       </div>
     </div>
   )
-}
+})
 
 export interface InboxDetailPanelProps {
   /** The open item, discriminated by kind. */
@@ -396,6 +396,16 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
       ? CONVERSATION_END_REASON_LABELS[conversation.endReason]
       : null
 
+  // One target object per item, so the memoised sections that take it skip
+  // the panel's renders while the item stays the same.
+  const ticketId = ticket?.id
+  const conversationId = conversation?.id
+  const itemTarget = useMemo(
+    () =>
+      isTicketItem ? (ticketId ? { ticketId } : null) : conversationId ? { conversationId } : null,
+    [isTicketItem, ticketId, conversationId]
+  )
+
   const showTickets = flags?.supportTickets ?? false
   // A conversation with no ticket in scope gets the create-ticket empty slot
   // instead of the populated Ticket card.
@@ -540,11 +550,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
         )}
 
         {/* 1b. Files — every attachment across the item's whole thread. */}
-        {isTicketItem
-          ? ticket && <FilesSection target={{ ticketId: ticket.id }} visible={isVisible} />
-          : conversation && (
-              <FilesSection target={{ conversationId: conversation.id }} visible={isVisible} />
-            )}
+        {itemTarget && <FilesSection target={itemTarget} visible={isVisible} />}
 
         {!isTicketItem &&
           conversation?.channel === 'github' &&
@@ -795,9 +801,9 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
         </div>
 
         {/* 4. Attributes use one consistent section for either item kind. */}
-        {(isTicketItem ? ticket : conversation) && (
+        {itemTarget && (
           <ConversationAttributesEditor
-            target={isTicketItem ? { ticketId: ticket!.id } : { conversationId: conversation!.id }}
+            target={itemTarget}
             customAttributes={
               isTicketItem ? ticket!.customAttributes : conversation!.customAttributes
             }

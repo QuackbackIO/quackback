@@ -729,6 +729,14 @@ export interface WidgetConfig {
   /** Per-locale overrides of the messenger welcome/offline message. The base
    *  fields are the fallback. */
   translations?: WidgetTranslations
+  /** Count pageviews from the host page the widget is embedded on. Absent
+   *  resolves to on where the plan includes visitor analytics; the embed
+   *  receives false wherever the plan does not include it. */
+  visitorAnalytics?: boolean
+  /** Store a durable device id in the visitor's browser so returning visitors
+   *  are recognised. Absent resolves to on where the plan includes visitor
+   *  analytics. Only has effect while `visitorAnalytics` resolves to on. */
+  visitorDeviceTracking?: boolean
 }
 
 /**
@@ -821,6 +829,8 @@ export interface UpdateWidgetConfigInput {
   messenger?: Partial<MessengerConfig>
   home?: WidgetHomeConfig
   translations?: WidgetTranslations
+  visitorAnalytics?: boolean
+  visitorDeviceTracking?: boolean
 }
 
 // =============================================================================

@@ -7,6 +7,7 @@
 import type { ConversationMessageDTO, MessageSenderType } from '@/lib/shared/conversation/types'
 import type { TiptapContent } from '@/lib/server/db'
 import { tiptapJsonToText } from '@/lib/server/markdown-tiptap'
+import { displayAssistantName } from '@/lib/shared/assistant/config'
 
 export interface TranscriptMeta {
   id: string
@@ -46,11 +47,16 @@ function defaultName(senderType: MessageSenderType, isAssistant: boolean): strin
   return 'Agent'
 }
 
-/** "Jane (agent)", "Quinn (assistant)", "Jane (agent) · internal note", "System". */
+/** "Jane (agent)", "Quackback AI (assistant)", "Jane (agent) · internal note", "System". */
 function speaker(m: TranscriptMessage): string {
   if (m.senderType === 'system') return 'System'
   const roleLabel = m.senderType === 'visitor' ? 'visitor' : m.isAssistant ? 'assistant' : 'agent'
-  const name = m.author?.displayName?.trim() || defaultName(m.senderType, m.isAssistant)
+  const authorName = m.author?.displayName?.trim()
+  const name = authorName
+    ? m.isAssistant
+      ? displayAssistantName(authorName)
+      : authorName
+    : defaultName(m.senderType, m.isAssistant)
   return `${name} (${roleLabel})${m.isInternal ? ' · internal note' : ''}`
 }
 

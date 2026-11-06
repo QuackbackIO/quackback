@@ -17,15 +17,26 @@ const mockSubscribeInsert = vi.fn()
 // when the conflict update was skipped because they had opted out.
 const mockUpsertReturning = vi.fn()
 
-vi.mock('@/lib/server/db', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/server/db')>()),
-  db: {
+const mockStateLimit = vi.fn()
+const mockExecute = vi.fn(async (..._args: unknown[]) => [])
+
+vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
+  // No cap: the slot lock still runs, the count does not.
+  getTierLimits: async () => ({ maxStatusSubscribers: null }),
+}))
+
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  const mockDb: Record<string, unknown> = {
     select: () => ({
       from: () => ({
         innerJoin: () => ({
           where: () => ({
             limit: (...args: unknown[]) => mockSelectLimit(...args),
           }),
+        }),
+        // The existing-row lookup, used to decide whether a new slot is needed.
+        where: () => ({
+          limit: (...args: unknown[]) => mockStateLimit(...args),
         }),
       }),
     }),
@@ -37,17 +48,30 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
         }
       },
     }),
-  },
-}))
+    execute: (...args: unknown[]) => mockExecute(...args),
+  }
+  mockDb.transaction = (fn: (tx: unknown) => unknown) => fn(mockDb)
+  return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
+    db: mockDb,
+  }
+})
 
 import { importStatusSubscribersFromEmails } from '../status.subscription'
 
 beforeEach(() => {
   vi.clearAllMocks()
   mockUpsertReturning.mockResolvedValue([{ id: 'status_sub_1' }])
+  mockStateLimit.mockResolvedValue([])
 })
 
 describe('importStatusSubscribersFromEmails', () => {
+  it('takes no subscriber lock when the plan has no subscriber cap', async () => {
+    mockSelectLimit.mockResolvedValueOnce([{ principalId: 'pr_1' }])
+    await importStatusSubscribersFromEmails(['a@example.com'])
+    expect(mockExecute).not.toHaveBeenCalled()
+  })
+
   it('subscribes known emails with the csv_import source', async () => {
     mockSelectLimit
       .mockResolvedValueOnce([{ principalId: 'pr_1' }])

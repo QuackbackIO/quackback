@@ -1,28 +1,38 @@
-import { useState } from 'react'
-import { useIntl, FormattedMessage } from 'react-intl'
+import { useEffect, useRef, useState } from 'react'
+import { useIntl } from 'react-intl'
 import {
   ArrowTrendingUpIcon,
   ClockIcon,
   FireIcon,
   MagnifyingGlassIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/solid'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/shared/utils'
+import type { PublicPostSort } from '@/lib/shared/types/filters'
+import { useFeedHandoff } from './feed-input-handoff'
 
 interface FeedbackToolbarProps {
-  currentSort: 'top' | 'new' | 'trending'
-  onSortChange: (sort: 'top' | 'new' | 'trending') => void
+  currentSort: PublicPostSort
+  onSortChange: (sort: PublicPostSort) => void
   currentSearch?: string
   onSearchChange: (search: string) => void
-  /** Show loading indicator */
-  isLoading?: boolean
   /** Optional slot rendered after the search button on the right (typically the Filter button). */
   filterButton?: React.ReactNode
+  /**
+   * Set on the loading feed's toolbar: a search still waiting on its debounce
+   * when it unmounts passes to the loaded feed's toolbar instead of being lost.
+   */
+  handOffSearch?: boolean
 }
 
 const SORT_OPTIONS = [
+  {
+    // Offered only while searching.
+    value: 'relevance',
+    messageId: 'portal.feedback.toolbar.sortRelevance',
+    defaultMessage: 'Best match',
+    icon: MagnifyingGlassIcon,
+  },
   {
     value: 'trending',
     messageId: 'portal.feedback.toolbar.sortTrending',
@@ -48,93 +58,128 @@ export function FeedbackToolbar({
   onSortChange,
   currentSearch,
   onSearchChange,
-  isLoading = false,
   filterButton,
+  handOffSearch = false,
 }: FeedbackToolbarProps): React.ReactElement {
   const intl = useIntl()
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [searchValue, setSearchValue] = useState(currentSearch || '')
-
-  function handleSearchSubmit(e: React.FormEvent): void {
-    e.preventDefault()
-    onSearchChange(searchValue)
-    setSearchOpen(false)
-  }
+  // Best match only applies to a search; without one the feed is trending.
+  const shownSort = currentSort === 'relevance' && !currentSearch ? 'trending' : currentSort
+  // A local debounce rather than the shared useDebouncedSearch: importing that
+  // hook into the portal bundle splits it out of the admin chunk it lives in,
+  // costing admin pages an extra request.
+  const [searchValue, setSearchValue] = useState(currentSearch ?? '')
+  const handoff = useFeedHandoff()
+  // A search typed while the feed loaded arrives once this toolbar mounts
+  // (React runs the loading toolbar's cleanup, which hands it over, before
+  // this effect); the debounce below then applies it.
+  useEffect(() => {
+    const carried = handoff?.take('search')
+    if (carried !== undefined) setSearchValue(carried)
+  }, [handoff])
+  // The last query this field applied. When the URL catches up to it, the
+  // field keeps whatever was typed meanwhile; any other change (Clear all,
+  // Back) comes from elsewhere and replaces the field.
+  const appliedRef = useRef((currentSearch ?? '').trim())
+  const onSearchChangeRef = useRef(onSearchChange)
+  useEffect(() => {
+    onSearchChangeRef.current = onSearchChange
+  })
+  useEffect(() => {
+    const external = currentSearch ?? ''
+    if (external.trim() === appliedRef.current) return
+    appliedRef.current = external.trim()
+    setSearchValue(external)
+  }, [currentSearch])
+  useEffect(() => {
+    const query = searchValue.trim()
+    if (query === appliedRef.current) return
+    const timeoutId = setTimeout(() => {
+      appliedRef.current = query
+      onSearchChangeRef.current(query)
+    }, 300)
+    return () => clearTimeout(timeoutId)
+  }, [searchValue])
+  const searchValueRef = useRef(searchValue)
+  useEffect(() => {
+    searchValueRef.current = searchValue
+  })
+  useEffect(() => {
+    if (!handOffSearch || !handoff) return
+    return () => {
+      if (searchValueRef.current.trim() !== appliedRef.current) {
+        handoff.handOff({ search: searchValueRef.current })
+      }
+    }
+  }, [handOffSearch, handoff])
+  const searchLabel = intl.formatMessage({
+    id: 'portal.feedback.toolbar.searchLabel',
+    defaultMessage: 'Search posts',
+  })
 
   function handleClearSearch(): void {
     setSearchValue('')
+    appliedRef.current = ''
     onSearchChange('')
-    setSearchOpen(false)
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 sm:gap-4">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
       <div className="flex items-center gap-1 min-w-0">
-        {SORT_OPTIONS.map((option) => {
-          const Icon = option.icon
-          const isActive = currentSort === option.value
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onSortChange(option.value)}
-              className={cn(
-                'flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
-                isActive
-                  ? 'bg-muted text-foreground font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              )}
-            >
-              <Icon className={cn('h-3.5 w-3.5', isActive && 'text-primary')} />
-              {intl.formatMessage({ id: option.messageId, defaultMessage: option.defaultMessage })}
-            </button>
-          )
-        })}
-        {isLoading && (
-          <span className="ml-1 h-4 w-4 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin" />
+        {SORT_OPTIONS.filter((option) => option.value !== 'relevance' || currentSearch).map(
+          (option) => {
+            const Icon = option.icon
+            const isActive = shownSort === option.value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => onSortChange(option.value)}
+                className={cn(
+                  'flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
+                  isActive
+                    ? 'bg-muted text-foreground font-medium'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                )}
+              >
+                <Icon className={cn('h-3.5 w-3.5', isActive && 'text-primary')} />
+                {intl.formatMessage({
+                  id: option.messageId,
+                  defaultMessage: option.defaultMessage,
+                })}
+              </button>
+            )
+          }
         )}
       </div>
 
-      <div className="flex items-center gap-2">
-        {/* Search */}
-        <Popover open={searchOpen} onOpenChange={setSearchOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-1.5">
-              <MagnifyingGlassIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">
-                <FormattedMessage id="portal.feedback.toolbar.search" defaultMessage="Search" />
-              </span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="max-w-[calc(100vw-2rem)] sm:w-80" align="end">
-            <form onSubmit={handleSearchSubmit} className="flex gap-2">
-              <Input
-                placeholder={intl.formatMessage({
-                  id: 'portal.feedback.toolbar.searchPlaceholder',
-                  defaultMessage: 'Search posts...',
-                })}
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                className="flex-1"
-                autoFocus
-              />
-              <Button type="submit" size="sm">
-                <FormattedMessage
-                  id="portal.feedback.toolbar.searchSubmit"
-                  defaultMessage="Search"
-                />
-              </Button>
-            </form>
-            {currentSearch && (
-              <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={handleClearSearch}>
-                <FormattedMessage
-                  id="portal.feedback.toolbar.clearSearch"
-                  defaultMessage="Clear search"
-                />
-              </Button>
-            )}
-          </PopoverContent>
-        </Popover>
+      {/* Search sits after the sort, capped so it reads as a field rather than
+          a banner; on a phone it takes the row with the Filters button. */}
+      <div className="flex min-w-0 flex-1 basis-44 items-center gap-2 sm:ms-auto sm:max-w-xs">
+        <label className="flex h-11 lg:h-8 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-transparent ps-3 pe-1 text-sm focus-within:ring-2 focus-within:ring-ring/50">
+          <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <input
+            type="search"
+            aria-label={searchLabel}
+            placeholder={searchLabel}
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
+          />
+          {searchValue && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              aria-label={intl.formatMessage({
+                id: 'portal.feedback.toolbar.clearSearch',
+                defaultMessage: 'Clear search',
+              })}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <XMarkIcon className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </label>
 
         {filterButton}
       </div>

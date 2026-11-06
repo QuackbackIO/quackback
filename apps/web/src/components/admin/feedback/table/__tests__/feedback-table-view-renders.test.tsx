@@ -142,7 +142,7 @@ describe('FeedbackTableView renders', () => {
     expect(filterBarRenders).toBe(1)
   })
 
-  it('leaves the sort menu alone while the search is typed', () => {
+  it('leaves the sort menu alone while the search is typed, until it lands', () => {
     render(<Harness />)
     expect(sortMenuRenders).toBe(1)
 
@@ -156,8 +156,10 @@ describe('FeedbackTableView renders', () => {
       vi.advanceTimersByTime(300)
     })
 
+    // Typing renders nothing; the search landing renders it once, to offer
+    // Best match.
     expect(filterChanges).toEqual([{ search: 'export' }])
-    expect(sortMenuRenders).toBe(1)
+    expect(sortMenuRenders).toBe(2)
   })
 
   it('renders no row when the debounced search lands with the old rows still showing', () => {

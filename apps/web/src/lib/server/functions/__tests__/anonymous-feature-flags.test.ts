@@ -125,6 +125,10 @@ vi.mock('@/lib/server/sanitize-tiptap', () => ({
   sanitizeTiptapContent: (v: unknown) => v,
 }))
 
+// Settles a search's word mode with a probe query; a pass-through here.
+vi.mock('@/lib/server/domains/posts/post.public.search', () => ({
+  withPublicSearchMode: async <T>(params: T) => ({ ...params, searchMode: 'all' }),
+}))
 vi.mock('@/lib/server/domains/posts/post.public', () => ({
   listPublicPosts: vi.fn(),
   getAllUserVotedPostIds: vi.fn(),
@@ -372,7 +376,7 @@ describe('createPublicPostFn anonymous feature flag', () => {
     mockReserveAnonPostSlot.mockImplementation(async (ip: string) => ip !== '203.0.113.5')
 
     await expect(createPublicPostHandler({ data: POST_DATA })).rejects.toThrow(
-      'Too many ideas, please try again later'
+      'Too many posts, please try again later'
     )
     expect(mockReserveAnonPostSlot).toHaveBeenCalledWith('203.0.113.5')
     expect(mockCreatePost).not.toHaveBeenCalled()

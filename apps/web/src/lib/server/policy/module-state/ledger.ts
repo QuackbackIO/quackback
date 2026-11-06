@@ -560,6 +560,14 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the constructor and no request attaches per-caller headers.',
   },
   {
+    file: 'apps/web/src/lib/server/github-star-count.ts',
+    name: 'readStarCount',
+    category: 'fleet-wide',
+    reason:
+      "The public repo's star count and its backoff, shown on the star prompt's button. It is the " +
+      'same number for every workspace, so a cross-workspace hit returns the right answer.',
+  },
+  {
     file: 'apps/web/src/lib/server/functions/version.ts',
     name: 'lastFailureAt',
     category: 'fleet-wide',
@@ -631,6 +639,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "send behind another workspace's sends by at most the 30s wait cap, never read or alter them.",
   },
   {
+    file: 'apps/web/src/lib/server/dns/resolver.ts',
+    name: 'resolvers',
+    category: 'fleet-wide',
+    reason:
+      'DNS resolvers keyed by try count, each built from fixed options (two second timeout) and the system ' +
+      'nameservers. It holds no answers and no workspace: every lookup is a fresh public DNS ' +
+      'query, so a cross-workspace hit asks the same question of the same nameservers that ' +
+      'either workspace would have built a resolver to ask.',
+  },
+  {
     file: 'packages/email/src/ses-identity.ts',
     name: 'cachedClient',
     category: 'fleet-wide',
@@ -658,6 +676,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Holds a function pointer installed at boot. Each send awaits it, and the function reads ' +
       'live workspace cloud config through the scoped db Proxy, so sharing the pointer is not a ' +
       'cross-workspace cache.',
+  },
+  {
+    file: 'packages/email/src/tenant-hooks.ts',
+    name: 'hooks',
+    category: 'process-lifetime',
+    reason:
+      'Holds two function pointers installed at boot. Each send awaits the tenant lookup, which ' +
+      'derives the tenant name from getCurrentWorkspace() and reads that workspace row through ' +
+      'the scoped db Proxy, so two workspaces in one process get their own tenants. Nothing about ' +
+      'a workspace is kept in here.',
   },
   {
     file: 'packages/email/src/default-from.ts',
@@ -1098,6 +1126,21 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Per-workspace loop counters (passes, claimed, succeeded, failed, wake latency) keyed by ' +
       'workspace id, for the readiness and diagnostics surfaces. Shared, one workspace s throughput ' +
       'would be reported as another s, which is the kind of wrong number an operator acts on.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
+    name: 'scheduledWakes',
+    category: 'workspace-scoped-key',
+    keyedBy: 'workspaceKey',
+    reason:
+      'The next instant each parked workspace has clock-driven work, as the probe that parked it ' +
+      'found it, so the refresh pass can start that workspace loop when the work falls due. One ' +
+      'entry per parked workspace, deleted when the loop wakes or the workspace leaves the active ' +
+      'set. Per-process and safe to lose on restart: the dormancy marks are in memory too, so a ' +
+      'boot treats every idle workspace as unprobed and re-learns the schedule with one probe each. ' +
+      'Each replica holds the schedule for the loops it runs, so replicas never need to agree on it. ' +
+      'A wrong entry costs one extra probe if it is early, and delays that workspace clock-driven ' +
+      'work until the stored instant if it is late.',
   },
   {
     file: 'apps/web/src/lib/server/jobs/worker.ts',

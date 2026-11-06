@@ -125,7 +125,9 @@ export {
   generateChartColors,
 } from './expand'
 
-export { themePresets, presetNames, primaryPresetIds, getPreset } from './presets'
+// The presets are not re-exported here: building them runs at import time, so
+// a barrel re-export would put every palette in the entry chunk. The branding
+// screens import them from './presets' directly.
 
 export { hexToOklch, oklchToHex, isValidHex, isValidOklch } from './colors'
 

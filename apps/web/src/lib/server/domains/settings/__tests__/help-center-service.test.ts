@@ -9,6 +9,7 @@
  * - getWorkspaceSettings() includes helpCenterConfig
  */
 
+import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // --- Cache mocks ---
@@ -16,6 +17,10 @@ const mockCacheGet = vi.fn()
 const mockCacheSet = vi.fn()
 const mockCacheDel = vi.fn()
 
+const localeLimit = vi.hoisted(() => ({ cap: null as number | null }))
+vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
+  getTierLimits: async () => ({ maxHelpCenterLocales: localeLimit.cap }),
+}))
 vi.mock('@/lib/server/cache', () => ({
   cacheGet: (...args: unknown[]) => mockCacheGet(...args),
   cacheSet: (...args: unknown[]) => mockCacheSet(...args),
@@ -36,16 +41,17 @@ const mockSet = vi.fn()
 const mockWhere = vi.fn()
 const mockReturning = vi.fn()
 
-vi.mock('@/lib/server/db', async (importOriginal) => ({
-  // Spread the real db module so tables/operators stay current; override only what this suite drives.
-  ...(await importOriginal<typeof import('@/lib/server/db')>()),
-  db: {
+const mockExecute = vi.fn(async (..._args: unknown[]) => [])
+
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  const mockDb = {
     query: {
       settings: {
         findFirst: (...args: unknown[]) => mockFindFirst(...args),
       },
     },
     update: (...args: unknown[]) => mockUpdate(...args),
+    execute: (...args: unknown[]) => mockExecute(...args),
     select: () => ({
       from: () => ({
         where: () => Promise.resolve([]),
@@ -53,9 +59,15 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
         orderBy: () => Promise.resolve([]),
       }),
     }),
-  },
-  eq: vi.fn(),
-}))
+  }
+  return {
+    // Spread the real db module so tables/operators stay current; override only what this suite drives.
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
+    // The transaction runs on the same mock, so reads and writes share its recorders.
+    db: Object.assign(mockDb, { transaction: (fn: (tx: unknown) => unknown) => fn(mockDb) }),
+    eq: vi.fn(),
+  }
+})
 
 // --- S3 mock ---
 vi.mock('@/lib/server/storage/s3', () => ({
@@ -337,6 +349,70 @@ describe('enableHelpCenterLocale', () => {
 
     expect(result.additional).toEqual(['de'])
     expect(result.chrome.de.homepageTitle).toBe('New title')
+  })
+})
+
+describe('enableHelpCenterLocale plan cap', () => {
+  const chrome = { homepageTitle: 'Hallo', homepageDescription: '', searchPlaceholder: '' }
+  const withLocales = (additional: string[]) =>
+    JSON.stringify({
+      locales: { default: 'en', additional, chrome: {} },
+    })
+
+  beforeEach(() => {
+    localeLimit.cap = null
+  })
+
+  it('takes the locale slot lock before it reads the language count', async () => {
+    localeLimit.cap = 2
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: null }))
+
+    await enableHelpCenterLocale({ locale: 'de', chrome })
+
+    expect(mockExecute).toHaveBeenCalledOnce()
+    expect(mockExecute.mock.invocationCallOrder[0]).toBeLessThan(
+      mockFindFirst.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('refuses a new locale when the default is the only language the plan allows', async () => {
+    localeLimit.cap = 1
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: null }))
+
+    await expect(enableHelpCenterLocale({ locale: 'de', chrome })).rejects.toBeInstanceOf(
+      TierLimitError
+    )
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('counts the default language and allows a new locale below the cap', async () => {
+    localeLimit.cap = 2
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: null }))
+
+    const result = await enableHelpCenterLocale({ locale: 'de', chrome })
+    expect(result.additional).toEqual(['de'])
+  })
+
+  it('refuses a language past the cap once the plan is full', async () => {
+    localeLimit.cap = 3
+    mockFindFirst.mockResolvedValue(
+      makeSettingsRow({ helpCenterConfig: withLocales(['fr', 'de']) })
+    )
+
+    await expect(enableHelpCenterLocale({ locale: 'es', chrome })).rejects.toBeInstanceOf(
+      TierLimitError
+    )
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('does not refuse re-enabling a locale that is already on', async () => {
+    localeLimit.cap = 3
+    mockFindFirst.mockResolvedValue(
+      makeSettingsRow({ helpCenterConfig: withLocales(['fr', 'de']) })
+    )
+
+    const result = await enableHelpCenterLocale({ locale: 'fr', chrome })
+    expect(result.additional).toEqual(['fr', 'de'])
   })
 })
 

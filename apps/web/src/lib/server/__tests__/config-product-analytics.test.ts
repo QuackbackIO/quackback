@@ -21,6 +21,8 @@ beforeEach(() => {
     'POSTHOG_HOST',
     'POSTHOG_UI_HOST',
     'POSTHOG_SESSION_RECORDING',
+    'POSTHOG_SESSION_RECORDING_MASK_TEXT',
+    'POSTHOG_SESSION_RECORDING_MASK_INPUTS',
     'DISABLE_TELEMETRY',
   ]) {
     delete process.env[key]
@@ -56,6 +58,8 @@ describe('product analytics config', () => {
       host: 'https://us.i.posthog.com',
       uiHost: 'https://us.posthog.com',
       sessionRecording: true,
+      maskText: true,
+      maskInputs: true,
     })
   })
 
@@ -70,6 +74,8 @@ describe('product analytics config', () => {
       host: 'https://eu.i.posthog.com',
       uiHost: 'https://eu.posthog.com',
       sessionRecording: false,
+      maskText: true,
+      maskInputs: true,
     })
   })
 
@@ -88,6 +94,26 @@ describe('product analytics config', () => {
   it('leaves the app host unset for a proxy domain without POSTHOG_UI_HOST', async () => {
     Object.assign(process.env, { POSTHOG_KEY: 'phc_abc', POSTHOG_HOST: 'https://t.example.com' })
     expect(await load()).toMatchObject({ host: 'https://t.example.com', uiHost: null })
+  })
+
+  it('turns replay text masking off with POSTHOG_SESSION_RECORDING_MASK_TEXT=false', async () => {
+    Object.assign(process.env, {
+      POSTHOG_KEY: 'phc_abc',
+      POSTHOG_SESSION_RECORDING_MASK_TEXT: 'false',
+    })
+    expect(await load()).toMatchObject({
+      sessionRecording: true,
+      maskText: false,
+      maskInputs: true,
+    })
+  })
+
+  it('turns replay input masking off with POSTHOG_SESSION_RECORDING_MASK_INPUTS=false', async () => {
+    Object.assign(process.env, {
+      POSTHOG_KEY: 'phc_abc',
+      POSTHOG_SESSION_RECORDING_MASK_INPUTS: 'false',
+    })
+    expect(await load()).toMatchObject({ maskText: true, maskInputs: false })
   })
 
   it('is independent of DISABLE_TELEMETRY', async () => {

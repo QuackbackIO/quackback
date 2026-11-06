@@ -20,6 +20,7 @@ import { getAiBudgetStatus } from '@/lib/server/domains/ai/ai-budget'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
+import { hasEntitlement } from '@/lib/server/domains/settings/cloud/entitlements'
 import { getArticleById } from './help-center.article.service'
 import {
   getArticleTranslation,
@@ -117,6 +118,10 @@ export async function translateArticleForLocale(
   locale: string,
   opts: { guard?: ParkedTranslationGuard } = {}
 ): Promise<AutoTranslatePause | undefined> {
+  if (!(await hasEntitlement('aiArticleTranslation'))) {
+    log.debug({ article_id: articleId, locale }, 'auto-translate skipped: plan excludes it')
+    return
+  }
   const model = getChatModel('helpCenterTranslate')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
     log.debug({ article_id: articleId, locale }, 'auto-translate skipped: AI not configured')
@@ -214,6 +219,7 @@ export async function queueAutoTranslateOnPublish(
   try {
     const helpCenterConfig = await getHelpCenterConfig()
     if (!helpCenterConfig.autoTranslate?.enabled) return
+    if (!(await hasEntitlement('aiArticleTranslation'))) return
     const additionalLocales = helpCenterConfig.locales?.additional ?? []
     if (additionalLocales.length === 0) return
 

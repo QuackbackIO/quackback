@@ -49,6 +49,14 @@ describe('getAssistantPrincipal', () => {
     mockLimit.mockResolvedValue([])
     expect(await getAssistantPrincipal()).toBeNull()
   })
+
+  it('shows the product name when the row still carries the former default name', async () => {
+    mockLimit.mockResolvedValue([{ id: 'principal_assistant', displayName: 'Quinn' }])
+    expect(await getAssistantPrincipal()).toEqual({
+      id: 'principal_assistant',
+      displayName: 'Quackback AI',
+    })
+  })
 })
 
 describe('ensureAssistantPrincipal', () => {

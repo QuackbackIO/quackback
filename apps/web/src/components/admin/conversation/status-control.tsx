@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronDownIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
@@ -40,7 +40,7 @@ const WAKE_FORMAT: Intl.DateTimeFormatOptions = {
  * hidden in that state so the way out of spam is always the marker-clearing
  * restore, never a bare reopen that would leave the thread mislabeled.
  */
-export function StatusControl({
+export const StatusControl = memo(function StatusControl({
   conversationId,
   status,
   snoozedUntil,
@@ -127,4 +127,4 @@ export function StatusControl({
       <RequiredAttributesDialog messages={closeBlocked} onClose={() => setCloseBlocked(null)} />
     </>
   )
-}
+})

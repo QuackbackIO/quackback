@@ -10,8 +10,6 @@ import {
   postStatuses,
   postTagAssignments,
   userSegments,
-  principal,
-  user,
   eq,
   and,
   inArray,
@@ -31,6 +29,7 @@ import type {
   InboxPostListResult,
   InboxFilterCounts,
 } from './post.types'
+import { postSearchCondition, postSearchOrder, postSearchRank } from './post.search'
 
 /** Facet whose own filter is skipped when counting that facet's options. */
 export type InboxFilterFacet = 'status' | 'board' | 'tags' | 'segments' | 'responded' | 'deleted'
@@ -127,18 +126,21 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
     conditions.push(eq(posts.principalId, authorId))
   } else if (authorEmail) {
     const email = authorEmail.toLowerCase()
+    // Raw names for the inner tables: the relational query builder rewrites
+    // every column object onto the posts alias. Only the outer
+    // ${posts.principalId} should follow it.
     conditions.push(
       sql`exists (
-        select 1 from ${principal}
-        inner join ${user} on ${user.id} = ${principal.userId}
-        where ${principal.id} = ${posts.principalId}
-          and lower(${user.email}) = ${email}
+        select 1 from principal author_principal
+        inner join "user" author_user on author_user.id = author_principal.user_id
+        where author_principal.id = ${posts.principalId}
+          and lower(author_user.email) = ${email}
       )`
     )
   }
 
   if (search) {
-    conditions.push(sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`)
+    conditions.push(postSearchCondition(search, params.searchMode))
   }
 
   if (dateFrom) {
@@ -217,7 +219,9 @@ export async function listInboxPosts(
   params: InboxPostListParams,
   actor?: Actor
 ): Promise<InboxPostListResult> {
-  const { sort = 'newest', cursor, limit = 20 } = params
+  const { search, searchMode = 'all', cursor, limit = 20 } = params
+  // Best match ranks a search; without one there is nothing to rank by.
+  const sort = params.sort === 'relevance' && !search ? 'newest' : (params.sort ?? 'newest')
 
   const conditions = inboxFilterConditions(params)
   if (actor) conditions.push(postViewFilter(actor))
@@ -231,7 +235,24 @@ export async function listInboxPosts(
     if (cursorPost) {
       const cursorDate = cursorPost.createdAt.toISOString()
       const cursorUuid = toUuid(cursorPost.id)
-      if (sort === 'priority') {
+      if (sort === 'relevance' && search) {
+        // Keyset on the rank: read the cursor post's rank with the same
+        // expressions the ORDER BY uses. As float8, so each value survives
+        // the trip through JS exactly.
+        const keys = [...postSearchRank(search, searchMode), posts.voteCount].map(
+          (key) => sql<number>`(${key})::float8`
+        )
+        const [rankRow] = await db
+          .select(Object.fromEntries(keys.map((key, i) => [`k${i}`, key])))
+          .from(posts)
+          .where(eq(posts.id, cursor as PostId))
+        if (rankRow) {
+          const values = keys.map((_, i) => sql`${rankRow[`k${i}`]}::float8`)
+          conditions.push(
+            sql`(${sql.join(keys, sql`, `)}, ${posts.id}) < (${sql.join(values, sql`, `)}, ${cursorUuid}::uuid)`
+          )
+        }
+      } else if (sort === 'priority') {
         // Keyset on the computed score: look up the cursor post's score with
         // the same expression the ORDER BY uses.
         const [scoreRow] = await db
@@ -268,6 +289,7 @@ export async function listInboxPosts(
     oldest: [asc(posts.createdAt), asc(posts.id)],
     votes: [desc(posts.voteCount), desc(posts.createdAt), desc(posts.id)],
     priority: [desc(priorityScoreSql), desc(posts.createdAt), desc(posts.id)],
+    relevance: search ? postSearchOrder(search, searchMode) : [],
   }
 
   // Fetch limit+1 to determine hasMore without a COUNT query
@@ -347,8 +369,12 @@ export async function countInboxFilterFacets(
   params: InboxPostListParams
 ): Promise<InboxFilterCounts> {
   const countSql = sql<number>`count(*)::int`
-  const teamRespondedFilter = sql<number>`count(*) filter (where exists (select 1 from post_comments where post_comments.post_id = ${posts.id} and post_comments.is_team_member = true and post_comments.deleted_at is null))::int`
-  const teamUnrespondedFilter = sql<number>`count(*) filter (where not exists (select 1 from post_comments where post_comments.post_id = ${posts.id} and post_comments.is_team_member = true and post_comments.deleted_at is null))::int`
+  // Select-list SQL on a single-table query renders `${posts.id}` as a bare
+  // "id", which the subquery binds to post_comments.id, so the outer column
+  // is written out raw here.
+  const teamResponseExistsInSelect = sql`exists (select 1 from post_comments where post_comments.post_id = posts.id and post_comments.is_team_member = true and post_comments.deleted_at is null)`
+  const teamRespondedFilter = sql<number>`count(*) filter (where ${teamResponseExistsInSelect})::int`
+  const teamUnrespondedFilter = sql<number>`count(*) filter (where not ${teamResponseExistsInSelect})::int`
 
   const [statusRows, boardRows, tagRows, segmentRows, respondedRow, deletedRow] = await Promise.all(
     [

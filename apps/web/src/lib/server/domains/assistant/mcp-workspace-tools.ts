@@ -8,7 +8,6 @@
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { toolDefinition } from '@tanstack/ai'
 import { z } from 'zod'
-import { modelInputSchema } from './model-input-schema'
 import { db, principal, user, eq } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { Actor } from '@/lib/server/policy/types'
@@ -20,10 +19,7 @@ import { orderScopes, scopeForPermission, type ApiKeyScope } from '@/lib/shared/
 import { toolGroupFromAnnotations } from '@/lib/shared/assistant/connectors'
 import type { McpAuthContext } from '@/lib/server/mcp/types'
 import { workspaceNavigationInputSchema } from '@/lib/server/mcp/tools/navigation'
-import {
-  settingsAreaSchema,
-  settingsProposalInputSchema,
-} from '@/lib/shared/assistant/settings-proposals'
+import { settingsAreaSchema } from '@/lib/shared/assistant/settings-proposals'
 import {
   withGateEnvelope,
   type AssistantToolContext,
@@ -211,13 +207,11 @@ function buildWorkspaceMcpSpec(tool: DiscoveredMcpTool): AssistantToolSpec {
       name: tool.name,
       description,
       inputSchema:
-        tool.name === 'propose_settings_change'
-          ? modelInputSchema(settingsProposalInputSchema)
-          : tool.name === 'get_settings'
-            ? z.object({ area: settingsAreaSchema }).strict()
-            : tool.name === 'navigate_workspace'
-              ? workspaceNavigationInputSchema
-              : jsonSchemaToZod(tool.inputSchema),
+        tool.name === 'get_settings'
+          ? z.object({ area: settingsAreaSchema }).strict()
+          : tool.name === 'navigate_workspace'
+            ? workspaceNavigationInputSchema
+            : jsonSchemaToZod(tool.inputSchema),
       outputSchema: withGateEnvelope(connectorToolOutputSchema),
     }),
     execute: (args, ctx) => callWorkspaceMcpTool(tool.name, args, ctx),

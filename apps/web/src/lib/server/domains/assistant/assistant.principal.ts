@@ -13,6 +13,7 @@
 import { db, principal, and, eq, sql, type Principal } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
+import { displayAssistantName } from '@/lib/shared/assistant/config'
 
 /** Default display name; the messenger settings identity overrides it in the UI. */
 export const ASSISTANT_DEFAULT_NAME = 'Quackback AI'
@@ -36,7 +37,10 @@ export async function getAssistantPrincipal(exec: Executor = db): Promise<Princi
       )
     )
     .limit(1)
-  return row ?? null
+  if (!row) return null
+  return typeof row.displayName === 'string'
+    ? { ...row, displayName: displayAssistantName(row.displayName) }
+    : row
 }
 
 /**

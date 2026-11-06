@@ -104,7 +104,7 @@ describe("Home's launch plan card", () => {
     expect(rows(card)).toEqual([
       { step: 'Your board is live', state: 'done' },
       { step: 'Share your board link', state: 'current' },
-      { step: 'A customer posts an idea', state: 'waiting' },
+      { step: 'A customer creates a post', state: 'waiting' },
     ])
     expect(card).toHaveTextContent('Paste it wherever they already talk to you.')
     expect(actions(card)).toEqual(['Copy board link'])
@@ -176,7 +176,7 @@ describe("Home's launch plan card", () => {
 
   it('offers sharing the board again once only the first win is left', () => {
     mount({ ...status, publicBoardLinkCopiedAt: '2026-10-04T10:00:00.000Z' })
-    const card = screen.getByRole('region', { name: 'A customer posts an idea' })
+    const card = screen.getByRole('region', { name: 'A customer creates a post' })
     expect(card).toHaveTextContent('Launch plan · Step 3 of 3')
     expect(card).toHaveTextContent('Your own tests never count.')
     expect(rows(card).map((row) => row.state)).toEqual(['done', 'done', 'current'])
@@ -193,7 +193,7 @@ describe("Home's launch plan card", () => {
       hasWidgetInstalled: true,
       hasWidgetEnabled: true,
     })
-    expect(screen.getByRole('region', { name: 'A customer posts an idea' })).toBeVisible()
+    expect(screen.getByRole('region', { name: 'A customer creates a post' })).toBeVisible()
   })
 
   it('gives the help center its link to copy, again and again, while it waits for a reader', async () => {

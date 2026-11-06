@@ -259,4 +259,13 @@ describe('generateContentHTML', () => {
     expect(html).toContain('data-type="emoji"')
     expect(html).not.toContain(':crossed_fingers:')
   })
+
+  it('keeps the anchor id when the root node is itself a heading', () => {
+    const html = generateContentHTML({
+      type: 'heading',
+      attrs: { level: 2 },
+      content: [{ type: 'text', text: 'Getting started' }],
+    })
+    expect(html).toBe('<h2 id="getting-started">Getting started</h2>')
+  })
 })

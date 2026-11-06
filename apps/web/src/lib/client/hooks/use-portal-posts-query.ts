@@ -5,6 +5,7 @@
  * Mutations are in lib/mutations/portal-posts.ts
  */
 
+import { useRef } from 'react'
 import { useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-query'
 import {
   listPublicPostsFn,
@@ -12,6 +13,7 @@ import {
   getPostPermissionsFn,
 } from '@/lib/server/functions/public-posts'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
+import type { PublicPostFacetCounts, WidenedSearch } from '@/lib/shared/types/filters'
 import type { PublicPostListItem } from '@/lib/shared/types'
 import type { PostId, PostStatusId, PostTagId } from '@quackback/ids'
 
@@ -23,6 +25,10 @@ interface PublicPostListResult {
   items: PublicPostListItem[]
   total?: number
   hasMore: boolean
+  /** Filter panel counts; the portal's first page carries them. */
+  facets?: PublicPostFacetCounts
+  /** Set when the search was widened because nothing matched every word. */
+  searchMode?: WidenedSearch
 }
 
 interface PostPermissions {
@@ -36,6 +42,8 @@ interface UsePublicPostsOptions {
   filters: PublicFeedbackFilters
   initialData?: PublicPostListResult
   enabled?: boolean
+  /** Who is viewing; counts are only reused for the same viewer. */
+  viewerKey?: string
 }
 
 interface UseVotedPostsOptions {
@@ -72,10 +80,8 @@ export const postPermissionsKeys = {
 // Fetch Functions
 // ============================================================================
 
-async function fetchPublicPosts(
-  filters: PublicFeedbackFilters,
-  page: number
-): Promise<PublicPostListResult> {
+/** The filter inputs the feed list and its panel counts share. */
+function feedFilterInput(filters: PublicFeedbackFilters) {
   // Parse status filters - can be TypeIDs or slugs
   const statusIds: string[] = []
   const statusSlugs: string[] = []
@@ -86,22 +92,33 @@ async function fetchPublicPosts(
       statusSlugs.push(s)
     }
   }
+  return {
+    boardSlug: filters.board,
+    search: filters.search,
+    statusIds: statusIds.length > 0 ? (statusIds as PostStatusId[]) : undefined,
+    statusSlugs: statusSlugs.length > 0 ? statusSlugs : undefined,
+    tagIds: filters.tagIds as PostTagId[] | undefined,
+    minVotes: filters.minVotes,
+    dateFrom: filters.dateFrom,
+    responded: filters.responded,
+    owner: filters.owner,
+    segmentIds: filters.segmentIds,
+    view: filters.view,
+  }
+}
 
+async function fetchPublicPosts(
+  filters: PublicFeedbackFilters,
+  page: number,
+  withFacets = true
+): Promise<PublicPostListResult> {
   return (await listPublicPostsFn({
     data: {
-      boardSlug: filters.board,
-      search: filters.search,
-      statusIds: statusIds.length > 0 ? (statusIds as PostStatusId[]) : undefined,
-      statusSlugs: statusSlugs.length > 0 ? statusSlugs : undefined,
-      tagIds: filters.tagIds as PostTagId[] | undefined,
+      ...feedFilterInput(filters),
       sort: filters.sort || 'top',
       page,
       limit: 20,
-      minVotes: filters.minVotes,
-      dateFrom: filters.dateFrom,
-      responded: filters.responded,
-      owner: filters.owner,
-      segmentIds: filters.segmentIds,
+      ...(!withFacets && { facets: false }),
     },
   })) as unknown as PublicPostListResult
 }
@@ -115,10 +132,51 @@ export async function fetchVotedPosts(): Promise<Set<string>> {
 // Query Hooks
 // ============================================================================
 
-export function usePublicPosts({ filters, initialData, enabled = true }: UsePublicPostsOptions) {
+/**
+ * The feed's first page, which carries its counts. It drops out of the cache
+ * once enough later pages have loaded (maxPages), so the last one seen holds
+ * until a new first page arrives.
+ */
+export function useFirstPage<T>(data: InfiniteData<T> | undefined): T | undefined {
+  const firstPage = data?.pageParams[0] === 1 ? data.pages[0] : undefined
+  const last = useRef(firstPage)
+  if (firstPage) last.current = firstPage
+  return last.current
+}
+
+export function usePublicPosts({
+  filters,
+  initialData,
+  enabled = true,
+  viewerKey = '',
+}: UsePublicPostsOptions) {
+  // The panel counts don't depend on the sort, so a sort change reuses the
+  // last counts instead of recounting. Any other refetch (a filter change, or
+  // a vote invalidating the feed) counts again.
+  const lastCounts = useRef<{ key: string; sort?: string; facets: PublicPostFacetCounts }>(
+    initialData?.facets && {
+      key: JSON.stringify([viewerKey, feedFilterInput(filters)]),
+      sort: filters.sort,
+      facets: initialData.facets,
+    }
+  )
+
+  async function fetchPage(page: number): Promise<PublicPostListResult> {
+    if (page !== 1) return fetchPublicPosts(filters, page)
+    const key = JSON.stringify([viewerKey, feedFilterInput(filters)])
+    const last = lastCounts.current
+    if (last?.key === key && last.sort !== filters.sort) {
+      last.sort = filters.sort
+      return { ...(await fetchPublicPosts(filters, page, false)), facets: last.facets }
+    }
+    const result = await fetchPublicPosts(filters, page)
+    if (result.facets) lastCounts.current = { key, sort: filters.sort, facets: result.facets }
+    return result
+  }
+
   return useInfiniteQuery({
     queryKey: publicPostsKeys.list(filters),
-    queryFn: ({ pageParam }) => fetchPublicPosts(filters, pageParam),
+    queryFn: ({ pageParam }) => fetchPage(pageParam),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
     // Page number inverts trivially (page - 1) — visitor-facing feed, so the

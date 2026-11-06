@@ -131,5 +131,6 @@ export {
   countActiveSubscribersForComponents,
   addStatusSubscriberByEmail,
   importStatusSubscribersFromEmails,
+  removeStatusSubscriberByAdmin,
   listAllStatusSubscribersForExport,
 } from './status.subscription'

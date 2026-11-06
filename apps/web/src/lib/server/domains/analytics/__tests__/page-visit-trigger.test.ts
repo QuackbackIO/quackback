@@ -50,6 +50,13 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: mockIsFeatureEnabled,
 }))
 
+// The entitlement read has its own db lookup; these tests queue only the two
+// lookups the trigger makes, so the plan is granted here.
+vi.mock('../visitor-tracking', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../visitor-tracking')>()
+  return { ...actual, isVisitorAnalyticsEntitled: async () => true }
+})
+
 vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: mockIncrementBucket,
 }))

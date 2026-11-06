@@ -165,3 +165,30 @@ describe('listFlaggedMessages', () => {
     ])
   })
 })
+
+describe('listFlaggedMessages — assistant display name', () => {
+  const flaggedRow = (over: Record<string, unknown>) => ({
+    messageId: 'conversation_msg_2',
+    conversationId: 'conversation_1',
+    content: 'Here is how',
+    senderType: 'agent',
+    authorAccountName: null,
+    authorPublicName: 'Quinn',
+    authorIsAssistant: false,
+    visitorPrincipalId: 'principal_visitor',
+    flaggedAt: new Date('2026-07-01T00:00:00.000Z'),
+    ...over,
+  })
+
+  it('shows the product name for an assistant-authored flag stored under the former default name', async () => {
+    conversationRows = [flaggedRow({ authorIsAssistant: true })]
+    const [flag] = await listFlaggedMessages(agent)
+    expect(flag.authorName).toBe('Quackback AI')
+  })
+
+  it('keeps the public name of a teammate who has the same name', async () => {
+    conversationRows = [flaggedRow({ authorIsAssistant: false })]
+    const [flag] = await listFlaggedMessages(agent)
+    expect(flag.authorName).toBe('Quinn')
+  })
+})

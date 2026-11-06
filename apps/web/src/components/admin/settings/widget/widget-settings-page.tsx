@@ -1,6 +1,7 @@
 import { useRouter, useHydrated, Link, Outlet, useChildMatches } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState, useTransition, useMemo } from 'react'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { useTheme } from 'next-themes'
 import { SparklesIcon, TrashIcon, ArrowRightIcon, PhotoIcon } from '@heroicons/react/24/solid'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -109,6 +110,8 @@ function WidgetSettingsPage() {
             launcherGreeting={launcherGreeting}
             onGreetingChange={setLauncherGreeting}
           />
+
+          <VisitorTrackingCard config={config} />
 
           <HomeCustomizationCard
             home={homeDraft}
@@ -393,7 +396,7 @@ export function TabsCard({
           <TabRow
             id="tab-feedback"
             label="Feedback"
-            description="Search, vote and submit ideas"
+            description="Search, vote and create posts"
             checked={tabs.feedback}
             disabled={isBusy || lockFeedbackOff}
             disabledHint={bothContentProductsOn ? pairLockHint('Changelog') : lastSectionHint}
@@ -582,6 +585,95 @@ export function LayoutCard({
           Shown in a bubble beside the launcher to invite a chat. Leave blank for none.
         </p>
       </div>
+    </SettingsCard>
+  )
+}
+
+/**
+ * Whether the widget counts pageviews from the host page and remembers
+ * returning visitors. An absent switch shows as on, which is what the embed
+ * receives wherever the plan includes visitor analytics.
+ */
+export function VisitorTrackingCard({
+  config,
+}: {
+  config: { visitorAnalytics?: boolean; visitorDeviceTracking?: boolean }
+}) {
+  const intl = useIntl()
+  const router = useRouter()
+  const updateWidgetConfig = useUpdateWidgetConfig()
+  const [isPending, startTransition] = useTransition()
+  const [saving, setSaving] = useState(false)
+  const [analytics, setAnalytics] = useState(config.visitorAnalytics ?? true)
+  const [deviceId, setDeviceId] = useState(config.visitorDeviceTracking ?? true)
+  const isBusy = saving || isPending
+
+  async function save(key: 'visitorAnalytics' | 'visitorDeviceTracking', checked: boolean) {
+    const setLocal = key === 'visitorAnalytics' ? setAnalytics : setDeviceId
+    const previous = key === 'visitorAnalytics' ? analytics : deviceId
+    setLocal(checked)
+    setSaving(true)
+    try {
+      await updateWidgetConfig.mutateAsync({ [key]: checked })
+      startTransition(() => router.invalidate())
+    } catch {
+      setLocal(previous)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <SettingsCard
+      title={intl.formatMessage({
+        id: 'settings.widget.visitorTracking.title',
+        defaultMessage: 'Visitor tracking',
+      })}
+    >
+      <SettingRows>
+        <SettingRow
+          label={intl.formatMessage({
+            id: 'settings.widget.visitorTracking.pageViews.label',
+            defaultMessage: 'Count page views on your site',
+          })}
+          description={intl.formatMessage({
+            id: 'settings.widget.visitorTracking.pageViews.description',
+            defaultMessage: 'Shows page views from your site in Analytics.',
+          })}
+          htmlFor="widget-visitor-analytics"
+          control={
+            <Switch
+              id="widget-visitor-analytics"
+              checked={analytics}
+              onCheckedChange={(checked) => void save('visitorAnalytics', checked)}
+              disabled={isBusy}
+            />
+          }
+        />
+        <SettingRow
+          label={intl.formatMessage({
+            id: 'settings.widget.visitorTracking.deviceId.label',
+            defaultMessage: 'Remember returning visitors',
+          })}
+          description={
+            <FormattedMessage
+              id="settings.widget.visitorTracking.deviceId.description"
+              defaultMessage="Stores a device id in the visitor's browser. A consent banner can hold tracking with the SDK's <code>tracking: false</code> option."
+              values={{ code: (chunks) => <code>{chunks}</code> }}
+            />
+          }
+          htmlFor="widget-visitor-device"
+          disabled={!analytics}
+          control={
+            <Switch
+              id="widget-visitor-device"
+              checked={deviceId}
+              onCheckedChange={(checked) => void save('visitorDeviceTracking', checked)}
+              disabled={!analytics || isBusy}
+            />
+          }
+        />
+      </SettingRows>
     </SettingsCard>
   )
 }

@@ -68,6 +68,10 @@ export const Quackback = {
   metadata(patch: Record<string, string | null>): void {
     sdk.dispatch('metadata', patch)
   },
+  /** Allow or stop host-page visitor analytics; `false` also removes the stored device id. */
+  tracking(enabled: boolean): void {
+    sdk.dispatch('tracking', enabled)
+  },
   destroy(): void {
     sdk.dispatch('destroy')
   },

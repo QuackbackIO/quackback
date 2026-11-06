@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
+import { themePresets, primaryPresetIds } from '@/lib/shared/theme/presets'
 import {
-  themePresets,
-  primaryPresetIds,
   extractMinimal,
   unbrandedTheme,
   DEFAULT_FONT_SANS,

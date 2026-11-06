@@ -16,6 +16,7 @@ import {
 } from '@quackback/ids'
 import { tiptapContentSchema, type TiptapContent } from '@/lib/shared/schemas/posts'
 import { PageLimitSchema } from '@/lib/shared/schemas/taxonomy'
+import { INBOX_POST_SORTS } from '@/lib/shared/types/filters'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
@@ -25,6 +26,7 @@ import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { getMemberById } from '@/lib/server/domains/principals/principal.service'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import { countInboxFilterFacets } from '@/lib/server/domains/posts/post.inbox'
+import { withInboxSearchMode } from '@/lib/server/domains/posts/post.inbox.search'
 import { listAdminInboxPage } from '@/lib/server/domains/posts/post.admin-inbox'
 import {
   getPostWithDetails,
@@ -97,8 +99,10 @@ const listInboxPostsSchema = z.object({
   minComments: z.number().int().min(0).optional(),
   responded: z.enum(['all', 'responded', 'unresponded']).optional(),
   updatedBefore: z.string().optional(),
-  sort: z.enum(['newest', 'oldest', 'votes', 'priority']).optional().default('newest'),
+  sort: z.enum(INBOX_POST_SORTS).optional().default('newest'),
   showDeleted: z.boolean().optional(),
+  /** The page shows only posts with pending duplicates; the search widens within them. */
+  hasDuplicates: z.boolean().optional(),
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional().default(20),
 })
@@ -208,25 +212,28 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
     log.debug('fetch inbox posts for admin')
     await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
-    const result = await listAdminInboxPage({
-      boardIds: data.boardIds as BoardId[] | undefined,
-      statusIds: data.statusIds as PostStatusId[] | undefined,
-      statusSlugs: data.statusSlugs,
-      tagIds: data.tagIds as PostTagId[] | undefined,
-      segmentIds: data.segmentIds as SegmentId[] | undefined,
-      ownerId: data.ownerId as PrincipalId | null | undefined,
-      search: data.search,
-      dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
-      dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
-      minVotes: data.minVotes,
-      minComments: data.minComments,
-      responded: data.responded,
-      updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
-      sort: data.sort,
-      showDeleted: data.showDeleted,
-      cursor: data.cursor,
-      limit: data.limit,
-    })
+    const result = await listAdminInboxPage(
+      {
+        boardIds: data.boardIds as BoardId[] | undefined,
+        statusIds: data.statusIds as PostStatusId[] | undefined,
+        statusSlugs: data.statusSlugs,
+        tagIds: data.tagIds as PostTagId[] | undefined,
+        segmentIds: data.segmentIds as SegmentId[] | undefined,
+        ownerId: data.ownerId as PrincipalId | null | undefined,
+        search: data.search,
+        dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
+        dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
+        minVotes: data.minVotes,
+        minComments: data.minComments,
+        responded: data.responded,
+        updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
+        sort: data.sort,
+        showDeleted: data.showDeleted,
+        cursor: data.cursor,
+        limit: data.limit,
+      },
+      { pendingDuplicates: data.hasDuplicates }
+    )
     log.debug(
       { count: result.items.length, cursor: data.cursor ?? 'none' },
       'fetched inbox posts for admin'
@@ -250,22 +257,26 @@ export const fetchInboxFilterCounts = createServerFn({ method: 'GET' })
   .validator(inboxFilterCountsSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
-    return countInboxFilterFacets({
-      boardIds: data.boardIds as BoardId[] | undefined,
-      statusIds: data.statusIds as PostStatusId[] | undefined,
-      statusSlugs: data.statusSlugs,
-      tagIds: data.tagIds as PostTagId[] | undefined,
-      segmentIds: data.segmentIds as SegmentId[] | undefined,
-      ownerId: data.ownerId as PrincipalId | null | undefined,
-      search: data.search,
-      dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
-      dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
-      minVotes: data.minVotes,
-      minComments: data.minComments,
-      responded: data.responded,
-      updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
-      showDeleted: data.showDeleted,
-    })
+    const params = await withInboxSearchMode(
+      {
+        boardIds: data.boardIds as BoardId[] | undefined,
+        statusIds: data.statusIds as PostStatusId[] | undefined,
+        statusSlugs: data.statusSlugs,
+        tagIds: data.tagIds as PostTagId[] | undefined,
+        segmentIds: data.segmentIds as SegmentId[] | undefined,
+        ownerId: data.ownerId as PrincipalId | null | undefined,
+        search: data.search,
+        dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
+        dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
+        minVotes: data.minVotes,
+        minComments: data.minComments,
+        responded: data.responded,
+        updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
+        showDeleted: data.showDeleted,
+      },
+      { pendingDuplicates: data.hasDuplicates }
+    )
+    return countInboxFilterFacets(params)
   })
 
 /**

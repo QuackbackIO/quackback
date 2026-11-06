@@ -21,3 +21,11 @@ export function getOrCreateDeviceId(): string | null {
     return null
   }
 }
+
+export function clearDeviceId(): void {
+  try {
+    window.localStorage.removeItem(DEVICE_KEY)
+  } catch {
+    // Storage blocked: nothing was stored.
+  }
+}

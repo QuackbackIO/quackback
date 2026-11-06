@@ -7,11 +7,13 @@ vi.mock('@/components/admin/upgrade', () => ({
   UpgradeNotice: () => <p>Custom domains are a Pro feature. Upgrade to Pro to enable it.</p>,
 }))
 
+import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
+
 const { DomainsCard, QuackbackUrlCard } = await import('@/components/admin/settings/domains-cards')
 
-const PENDING = {
+const PENDING: CustomDomainInstruction = {
   hostname: 'feedback.acme.test',
-  readiness: 'pending' as const,
+  readiness: 'pending',
   isPrimary: false,
   updatedAt: '2026-08-15T12:00:00.000Z',
   cnameTarget: 'customers.quackback.co.uk',
@@ -60,8 +62,41 @@ describe('domains card', () => {
     expect(screen.queryByText(/token-1/)).not.toBeInTheDocument()
     expect(screen.queryByText(/TXT/)).not.toBeInTheDocument()
     expect(screen.queryByText(/ch_/)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify' }))
     expect(refresh).toHaveBeenCalledWith('feedback.acme.test')
+  })
+})
+
+describe('domains card badges', () => {
+  const renderWith = (domains: CustomDomainInstruction[]) =>
+    render(
+      <DomainsCard
+        entitled
+        domains={domains}
+        hostname=""
+        pending={false}
+        error={null}
+        onHostnameChange={vi.fn()}
+        onAdd={vi.fn()}
+        onRefresh={vi.fn()}
+        onMakePrimary={vi.fn()}
+        onRemove={vi.fn()}
+      />
+    )
+
+  it('shows no badge when ready and names the primary hostname', () => {
+    renderWith([{ ...PENDING, readiness: 'ready', isPrimary: true }])
+    expect(screen.getByText('Primary')).toBeInTheDocument()
+    expect(screen.queryByText('Pending')).not.toBeInTheDocument()
+    expect(screen.queryByText('Needs attention')).not.toBeInTheDocument()
+    expect(screen.queryByText('Ready')).not.toBeInTheDocument()
+  })
+
+  it('says Pending while pending and Needs attention when failed', () => {
+    renderWith([PENDING, { ...PENDING, hostname: 'portal.acme.test', readiness: 'failed' }])
+    expect(screen.getByText('Pending')).toBeInTheDocument()
+    expect(screen.getByText('Needs attention')).toBeInTheDocument()
+    expect(screen.queryByText('Primary')).not.toBeInTheDocument()
   })
 })
 

@@ -46,6 +46,17 @@ vi.mock('@quackback/email', () => ({
 }))
 
 vi.mock('@/lib/server/storage/s3', () => ({ getEmailSafeUrl: () => null }))
+// The monthly email cap is spent. Sign-in mail is exempt from it, so the send
+// below must still happen.
+vi.mock('@/lib/server/domains/settings/tier-enforce', async () => {
+  const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
+  return {
+    enforceEmailBudget: async () => {
+      throw new TierLimitError({ limit: 'emailsPerMonth', message: 'Email sending is used up.' })
+    },
+    emailBudgetAvailable: async () => false,
+  }
+})
 // No verified domains here: "Require SSO" has its own suite.
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
   listIdentityProviders: vi.fn(async () => []),

@@ -71,40 +71,53 @@ const CLOSED_CLOUD_FEATURES: TierLimits['features'] = {
   customColors: false,
   customCss: false,
   integrations: false,
+  visitorAnalytics: false,
 }
 
 /**
  * Feature flags that are not entitlements. Must match CP `definitions.ts`
  * for the same plan. Copied from `effectivePlan` because the projection
  * entitlements map does not carry these keys.
+ *
+ * `visitorAnalytics` is the exception to the CP-match rule: the control plane
+ * does not define it. Every plan includes it, so a cloud workspace keeps
+ * counting unless an operator tier-limits row switches it off. Changing a
+ * plan's grant here is the one place that controls it.
  */
 const PLAN_ONLY_FEATURES: Record<
   PlanId,
-  Pick<TierLimits['features'], 'analyticsExports' | 'customColors' | 'customCss' | 'integrations'>
+  Pick<
+    TierLimits['features'],
+    'analyticsExports' | 'customColors' | 'customCss' | 'integrations' | 'visitorAnalytics'
+  >
 > = {
   free: {
     analyticsExports: false,
     customColors: true,
     customCss: false,
     integrations: false,
+    visitorAnalytics: true,
   },
   pro: {
     analyticsExports: false,
     customColors: true,
     customCss: false,
     integrations: false,
+    visitorAnalytics: true,
   },
   business: {
     analyticsExports: true,
     customColors: true,
     customCss: true,
     integrations: true,
+    visitorAnalytics: true,
   },
   enterprise: {
     analyticsExports: true,
     customColors: true,
     customCss: true,
     integrations: true,
+    visitorAnalytics: true,
   },
 }
 
@@ -119,6 +132,9 @@ export function cloudProjectionFloor(limits: ProjectedLimits): TierLimits {
     maxSendingDomains: limits.maxSendingDomains,
     aiTokensPerMonth: limits.aiTokensPerMonth,
     emailsPerMonth: limits.emailsPerMonth,
+    maxInboundEmailAddresses: limits.maxInboundEmailAddresses,
+    maxHelpCenterLocales: limits.maxHelpCenterLocales,
+    maxStatusSubscribers: limits.maxStatusSubscribers,
     apiRequestsPerMonth: limits.apiRequestsPerMonth,
     apiRequestsPerMinute: limits.apiRequestsPerMinute,
     features: { ...CLOSED_CLOUD_FEATURES },

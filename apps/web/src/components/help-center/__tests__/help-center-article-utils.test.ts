@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { extractHeadings, computePrevNext } from '../help-center-article-utils'
+import type { JSONContent } from '@tiptap/core'
+import { generateContentHTML } from '@/lib/shared/content-html'
 
 // =============================================================================
 // extractHeadings
@@ -250,5 +252,70 @@ describe('computePrevNext', () => {
   it('returns both null for a single article', () => {
     const result = computePrevNext([{ id: 'a1', urlId: 1, slug: 'only', title: 'Only' }], 'only')
     expect(result).toEqual({ prev: null, next: null })
+  })
+})
+
+describe('extractHeadings with repeated heading text', () => {
+  const h = (level: number, text: string) => ({
+    type: 'heading',
+    attrs: { level },
+    content: [{ type: 'text', text }],
+  })
+  const doc = {
+    type: 'doc',
+    content: [
+      h(2, 'iOS'),
+      h(3, 'Configuration options'),
+      h(2, 'Android'),
+      h(3, 'Configuration options'),
+      h(3, 'Configuration options'),
+    ],
+  }
+
+  it('gives each repeated heading its own id', () => {
+    expect(extractHeadings(doc).map((heading) => heading.id)).toEqual([
+      'ios',
+      'configuration-options',
+      'android',
+      'configuration-options-1',
+      'configuration-options-2',
+    ])
+  })
+
+  it('matches the ids the article HTML renders, so the table of contents finds every heading', () => {
+    const html = generateContentHTML(doc as JSONContent)
+    const rendered = [...html.matchAll(/ id="([^"]+)"/g)].map((match) => match[1])
+    expect(extractHeadings(doc).map((heading) => heading.id)).toEqual(rendered)
+  })
+
+  it('counts headings at other levels so ids still line up with the HTML', () => {
+    const mixed = {
+      type: 'doc',
+      content: [h(4, 'Notes'), h(2, 'Notes'), h(3, 'Notes')],
+    }
+    const html = generateContentHTML(mixed as JSONContent)
+    const rendered = [...html.matchAll(/ id="([^"]+)"/g)].map((match) => match[1])
+    expect(rendered).toEqual(['notes', 'notes-1', 'notes-2'])
+    expect(extractHeadings(mixed).map((heading) => heading.id)).toEqual(['notes-1', 'notes-2'])
+  })
+
+  const setupDoc = {
+    type: 'doc',
+    content: [h(2, 'Setup'), h(2, 'Setup'), h(2, 'Setup-1')],
+  }
+
+  it('keeps a unique heading natural anchor when repeats precede it', () => {
+    expect(extractHeadings(setupDoc).map((heading) => heading.id)).toEqual([
+      'setup',
+      'setup-2',
+      'setup-1',
+    ])
+  })
+
+  it('renders the same anchors in the article HTML for that case', () => {
+    const html = generateContentHTML(setupDoc as JSONContent)
+    const rendered = [...html.matchAll(/ id="([^"]+)"/g)].map((match) => match[1])
+    expect(rendered).toEqual(['setup', 'setup-2', 'setup-1'])
+    expect(extractHeadings(setupDoc).map((heading) => heading.id)).toEqual(rendered)
   })
 })

@@ -31,6 +31,22 @@ export function resolveHelpCenterDomainRedirect(params: {
 }
 
 /**
+ * The origin the help center's public URLs are served from: the verified custom
+ * domain once one is verified, else the fallback. Unlike
+ * {@link resolveHelpCenterBaseUrl} this ignores the request's host, for links
+ * that name a help center URL wherever they are served.
+ */
+export function resolveHelpCenterPublicBaseUrl(params: {
+  domainConfig: HelpCenterDomainConfig | null | undefined
+  fallback: string
+}): string {
+  const { domainConfig, fallback } = params
+  if (!domainConfig?.domain || !domainConfig?.verifiedAt) return fallback
+
+  return `https://${domainConfig.domain}`
+}
+
+/**
  * Canonical-URL base for the current request: the verified custom domain
  * when the request actually arrived on it, else the fallback (global
  * BASE_URL). Pure for the same reason as {@link resolveHelpCenterDomainRedirect}.

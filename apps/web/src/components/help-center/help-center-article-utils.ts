@@ -3,6 +3,8 @@
  * Extracted for testability — no React dependencies.
  */
 
+import { collectHeadings, createHeadingIds, plainText } from '@/lib/shared/heading-ids'
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -17,13 +19,6 @@ export interface TocHeading {
 // extractHeadings — walks TipTap JSON and pulls out H2/H3 headings
 // =============================================================================
 
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
 interface TipTapNode {
   type?: string
   text?: string
@@ -31,38 +26,25 @@ interface TipTapNode {
   attrs?: Record<string, unknown>
 }
 
-function extractTextFromNode(node: TipTapNode | null | undefined): string {
-  if (!node) return ''
-  if (node.type === 'text') return node.text ?? ''
-  if (Array.isArray(node.content)) {
-    return node.content.map(extractTextFromNode).join('')
-  }
-  return ''
-}
-
 export function extractHeadings(
   contentJson: { type?: string; content?: TipTapNode[] } | null | undefined
 ): TocHeading[] {
   if (!contentJson || !Array.isArray(contentJson.content)) return []
 
-  const headings: TocHeading[] = []
-
-  for (const node of contentJson.content) {
-    if (node.type !== 'heading') continue
+  // Ids come from every heading in document order, as the article HTML assigns
+  // them, so repeated text gets the same suffix in both places. Only H2 and H3
+  // are listed.
+  const headings = collectHeadings(contentJson)
+  const ids = createHeadingIds(headings)
+  const listed: TocHeading[] = []
+  for (const node of headings) {
+    const id = ids.get(node)
     const level = node.attrs?.level
-    if (level !== 2 && level !== 3) continue
-
-    const text = extractTextFromNode(node).trim()
-    if (!text) continue
-
-    headings.push({
-      id: slugify(text),
-      text,
-      level,
-    })
+    if (id && (level === 2 || level === 3)) {
+      listed.push({ id, text: plainText(node).trim(), level })
+    }
   }
-
-  return headings
+  return listed
 }
 
 // =============================================================================

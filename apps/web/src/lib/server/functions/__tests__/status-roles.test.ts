@@ -79,6 +79,7 @@ describe('status subscriber permissions', () => {
     ['addStatusSubscriberFn'],
     ['importStatusSubscribersFn'],
     ['exportStatusSubscribersAdminFn'],
+    ['removeStatusSubscriberFn'],
   ])('%s gates on status_page.manage (reshaping the page, not posting)', (fnName) => {
     expect(fnPermissionFor(fnName)).toBe('STATUS_PAGE_MANAGE')
   })

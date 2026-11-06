@@ -35,8 +35,8 @@ export const Route = createFileRoute('/api/v1/settings/$area')({
 
       /**
        * PATCH /api/v1/settings/:area
-       * Merge patch with If-Match. Low risk applies (200 with a receipt); medium
-       * and above files an approval (202). ?dry_run=true previews the change.
+       * Merge patch with If-Match. Applies the change and answers with a
+       * receipt. ?dry_run=true previews the change.
        */
       PATCH: async ({ request, params }) => {
         try {

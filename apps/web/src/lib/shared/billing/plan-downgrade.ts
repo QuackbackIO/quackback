@@ -6,9 +6,9 @@ import {
 import type { PlanUsageLine } from './plan-usage'
 
 /**
- * Numeric caps a workspace must fit before switching to that plan.
- * Must match CP `PLAN_DEFINITIONS` / `FREE_TIER_LIMITS` (null = unlimited).
- * Usage meters (AI, email, API) are not deletable resources and are omitted.
+ * Numeric caps a workspace must fit before switching to that plan
+ * (null = unlimited). Usage meters (AI, email, API) are not deletable
+ * resources and are omitted.
  */
 export const PLAN_NUMERIC_CAPS: Record<
   PlanId,
@@ -19,6 +19,9 @@ export const PLAN_NUMERIC_CAPS: Record<
     maxStatusComponents: number | null
     maxCustomRoles: number | null
     maxSendingDomains: number | null
+    maxInboundEmailAddresses: number | null
+    maxHelpCenterLocales: number | null
+    maxStatusSubscribers: number | null
   }
 > = {
   free: {
@@ -28,6 +31,9 @@ export const PLAN_NUMERIC_CAPS: Record<
     maxStatusComponents: 3,
     maxCustomRoles: 0,
     maxSendingDomains: 0,
+    maxInboundEmailAddresses: 1,
+    maxHelpCenterLocales: 1,
+    maxStatusSubscribers: 100,
   },
   pro: {
     maxBoards: null,
@@ -36,14 +42,20 @@ export const PLAN_NUMERIC_CAPS: Record<
     maxStatusComponents: 10,
     maxCustomRoles: 0,
     maxSendingDomains: 1,
+    maxInboundEmailAddresses: 1,
+    maxHelpCenterLocales: 1,
+    maxStatusSubscribers: 250,
   },
   business: {
     maxBoards: null,
     maxPosts: null,
-    maxTeamSeats: null,
+    maxTeamSeats: 20,
     maxStatusComponents: 25,
     maxCustomRoles: 5,
     maxSendingDomains: 3,
+    maxInboundEmailAddresses: 2,
+    maxHelpCenterLocales: 3,
+    maxStatusSubscribers: 1000,
   },
   enterprise: {
     maxBoards: null,
@@ -52,6 +64,9 @@ export const PLAN_NUMERIC_CAPS: Record<
     maxStatusComponents: null,
     maxCustomRoles: null,
     maxSendingDomains: null,
+    maxInboundEmailAddresses: null,
+    maxHelpCenterLocales: null,
+    maxStatusSubscribers: null,
   },
 }
 
@@ -90,34 +105,46 @@ const RESOURCE: Record<PlanCapKey, { singular: string; plural: string; href: str
     plural: 'sending domains',
     href: '/admin/settings/domains',
   },
+  maxInboundEmailAddresses: {
+    singular: 'inbound email address',
+    plural: 'inbound email addresses',
+    href: '/admin/settings/channels/email',
+  },
+  maxHelpCenterLocales: {
+    singular: 'help center language',
+    plural: 'help center languages',
+    href: '/admin/settings/help-center?tab=domains-languages',
+  },
+  maxStatusSubscribers: {
+    singular: 'status subscriber',
+    plural: 'status subscribers',
+    href: '/admin/status?view=subscribers',
+  },
 }
 
-export const FREE_DISABLED_FEATURES: Record<string, string[]> = {
-  pro: [
-    'Custom domains will be disabled',
-    'AI assistant, drafts and insights will be disabled',
-    'API access will be revoked',
-    'Webhooks will be disabled',
-    'MCP access will be revoked',
-  ],
-  business: [
-    'Custom domains will be disabled',
-    'Workflows and automations will be disabled',
-    'AI assistant, drafts and insights will be disabled',
-    'API access will be revoked',
-    'Webhooks will be disabled',
-    'MCP access will be revoked',
-  ],
-  enterprise: [
-    'Custom domains will be disabled',
-    'Workflows and automations will be disabled',
-    'Single sign-on will be disabled',
-    'AI assistant, drafts and insights will be disabled',
-    'API access will be revoked',
-    'Webhooks will be disabled',
-    'MCP access will be revoked',
-    'The audit log will be disabled',
-  ],
+/**
+ * Plan features a downgrade can switch off, in display order, with the plans
+ * that include each. Copilot drafts and the REST API are on every plan, so no
+ * downgrade loses them.
+ */
+const PLAN_FEATURES: ReadonlyArray<{ lost: string; plans: readonly PlanId[] }> = [
+  { lost: 'Custom domains will be disabled', plans: ['pro', 'business', 'enterprise'] },
+  { lost: 'Workflows and automations will be disabled', plans: ['business', 'enterprise'] },
+  { lost: 'Single sign-on will be disabled', plans: ['enterprise'] },
+  { lost: 'AI assistant and insights will be disabled', plans: ['pro', 'business', 'enterprise'] },
+  { lost: 'AI article translation will be disabled', plans: ['business', 'enterprise'] },
+  { lost: 'Webhooks will be disabled', plans: ['pro', 'business', 'enterprise'] },
+  { lost: 'MCP access will be revoked', plans: ['pro', 'business', 'enterprise'] },
+  { lost: 'The audit log will be disabled', plans: ['enterprise'] },
+]
+
+function featuresLost(fromPlanId: string, toPlanId: string): string[] {
+  const from = canonicalPlanId(fromPlanId)
+  const to = canonicalPlanId(toPlanId)
+  if (!isPlanId(from) || !isPlanId(to)) return []
+  return PLAN_FEATURES.filter(
+    (feature) => feature.plans.includes(from) && !feature.plans.includes(to)
+  ).map((feature) => feature.lost)
 }
 
 export function usedByKey(lines: readonly PlanUsageLine[]): Record<string, number> {
@@ -158,13 +185,14 @@ export function freeDowngradeIssues(used: Record<string, number>): PlanDowngrade
 }
 
 export function featuresDisabledOnFree(planId: string | null | undefined): string[] {
-  if (!planId) return FREE_DISABLED_FEATURES.business
-  return FREE_DISABLED_FEATURES[canonicalPlanId(planId)] ?? FREE_DISABLED_FEATURES.business
+  const from = planId ? canonicalPlanId(planId) : 'business'
+  return featuresLost(isPlanId(from) ? from : 'business', 'free')
 }
 
 export function featuresDisabledOnDowngrade(
   fromPlanId: string | null | undefined,
   toPlanId: string
 ): string[] {
-  return canonicalPlanId(toPlanId) === 'free' ? featuresDisabledOnFree(fromPlanId) : []
+  if (canonicalPlanId(toPlanId) === 'free') return featuresDisabledOnFree(fromPlanId)
+  return fromPlanId ? featuresLost(fromPlanId, toPlanId) : []
 }

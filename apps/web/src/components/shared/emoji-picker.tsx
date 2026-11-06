@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { FaceSmileIcon } from '@heroicons/react/24/outline'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/shared/utils'
@@ -56,7 +56,7 @@ const EMOJIS = [
  * after a pick. Recently used glyphs sit in a Slack/WhatsApp-style row above
  * the curated popular set.
  */
-export function EmojiPicker({
+export const EmojiPicker = memo(function EmojiPicker({
   onSelect,
   className,
 }: {
@@ -117,7 +117,7 @@ export function EmojiPicker({
       </PopoverContent>
     </Popover>
   )
-}
+})
 
 function EmojiCell({ emoji, onPick }: { emoji: string; onPick: (emoji: string) => void }) {
   return (

@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { IntlProvider } from 'react-intl'
 import de from '@/locales/de.json'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
-import { BillingPlansView } from '../billing-settings'
+import { BillingPlansView, EmailsPausedNotice } from '../billing-settings'
 
 const catalogue: BillingCatalogue = {
   version: 1,
@@ -15,10 +15,7 @@ const catalogue: BillingCatalogue = {
   recommendedPlanId: 'pro',
   brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
   aiIncludedCentsPerMonth: { free: 0, pro: 1000, business: 3000, enterprise: 10000 },
-  aiTopUpPackCents: 1000,
   aiBlendedCentsPerMTok: 500,
-  emailTopUpPackCents: 1000,
-  emailTopUpPackUnits: 10_000,
   plans: [
     {
       id: 'free',
@@ -187,7 +184,7 @@ describe('BillingPlansView', () => {
     expect(screen.getByText('Emails')).toBeInTheDocument()
     expect(screen.getByText('Changelog and status-page mail this month.')).toBeInTheDocument()
     expect(screen.getByText('1,840 of 10,000')).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Top up' })).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'Top up' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Add-ons' })).toBeInTheDocument()
     expect(screen.getByText('Remove Quackback branding')).toBeInTheDocument()
     const addBranding = screen.getByRole('button', { name: 'Add' })
@@ -415,21 +412,25 @@ describe('BillingPlansView', () => {
     expect(document.querySelector('form input[name="billingPeriod"]')).toHaveValue('monthly')
   })
 
-  it('hides Top up when pack prices are missing', () => {
-    const { aiTopUpPackCents: _ai, emailTopUpPackCents: _email, ...rest } = catalogue
+  it('offers no top-up on any usage meter, even when the emails meter is at its limit', () => {
     renderView({
-      catalogue: rest,
-      usage: [{ key: 'emailsPerMonth', label: 'emails', used: 1840, limit: 10_000 }],
+      usage: [{ key: 'emailsPerMonth', label: 'emails', used: 10_000, limit: 10_000 }],
     })
+    expect(screen.getByText('Emails')).toBeInTheDocument()
+    expect(screen.getByText('AI usage')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Top up' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('hides email Top up when emails are unlimited', () => {
+  it('still shows purchased AI extra credit on the AI usage meter', () => {
     renderView({
-      usage: [{ key: 'emailsPerMonth', label: 'emails', used: 1840, limit: null }],
+      overview: {
+        ...paidOverview,
+        ai: { includedCents: 3000, usedCents: 3000, extraCents: 1000, resetsAt: null },
+      },
     })
-    expect(screen.queryByText('Emails')).not.toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Top up' })).toHaveLength(1)
+    expect(screen.getByText('Included usage is used first, then extra credit.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Top up' })).not.toBeInTheDocument()
   })
 
   it('shows API requests and finite plan limits for the current subscription', () => {
@@ -459,5 +460,64 @@ describe('BillingPlansView', () => {
     expect(within(usage as HTMLElement).queryByText('Seats')).not.toBeInTheDocument()
     expect(screen.queryByText('AI tokens this month')).not.toBeInTheDocument()
     expect(screen.queryByText('Boards')).not.toBeInTheDocument()
+  })
+})
+
+describe('the monthly reset date', () => {
+  const originalTz = process.env.TZ
+
+  afterEach(() => {
+    vi.useRealTimers()
+    if (originalTz === undefined) delete process.env.TZ
+    else process.env.TZ = originalTz
+  })
+
+  // The allowance resets at 00:00 UTC on the 1st. That instant is still the
+  // 31st in Los Angeles and already the 1st in Tokyo, so the label names the
+  // UTC day in every viewer's zone.
+  it.each([
+    ['America/Los_Angeles', '2026-10-19T02:00:00.000Z', 'Nov 1'],
+    ['Asia/Tokyo', '2026-10-31T23:30:00.000Z', 'Nov 1'],
+  ])('names the reset day in UTC for a viewer in %s', (zone, now, label) => {
+    process.env.TZ = zone
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(now))
+    renderView({ usage: [{ key: 'emailsPerMonth', label: 'emails', used: 1840, limit: 10_000 }] })
+    expect(screen.getByText(`Monthly meters reset ${label}`)).toBeInTheDocument()
+  })
+})
+
+describe('the emails allowance notice', () => {
+  it('says emails are paused until the reset once the month allowance is used up', () => {
+    renderView({
+      usage: [{ key: 'emailsPerMonth', label: 'emails', used: 10_000, limit: 10_000 }],
+    })
+    expect(screen.getByText('10,000 of 10,000')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /^Changelog and status page emails are paused until your allowance resets on [A-Z][a-z]{2} 1\. Sign-in and support emails still send\.$/
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('shows no pause notice while the month allowance has room left', () => {
+    renderView({
+      usage: [{ key: 'emailsPerMonth', label: 'emails', used: 1840, limit: 10_000 }],
+    })
+    expect(screen.getByText('1,840 of 10,000')).toBeInTheDocument()
+    expect(screen.queryByText(/paused until your allowance/)).not.toBeInTheDocument()
+  })
+
+  it('leaves the date out when the reset is not known', () => {
+    render(
+      <IntlProvider locale="en" messages={{}}>
+        <EmailsPausedNotice resetsOn={null} />
+      </IntlProvider>
+    )
+    expect(
+      screen.getByText(
+        'Changelog and status page emails are paused until your allowance resets. Sign-in and support emails still send.'
+      )
+    ).toBeInTheDocument()
   })
 })

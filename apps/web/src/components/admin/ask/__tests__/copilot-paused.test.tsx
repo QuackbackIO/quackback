@@ -51,6 +51,16 @@ describe('Copilot paused for the period', () => {
     expect(screen.queryByRole('textbox')).toBeNull()
   })
 
+  it('says the period is used up and to upgrade for more, with no price or top-up', () => {
+    show('2026-11-01T00:00:00.000Z')
+    const box = screen.getByRole('status')
+    expect(box).toHaveTextContent(
+      'AI usage for this period is used up. Upgrade your plan for more.'
+    )
+    expect(box).not.toHaveTextContent(/top[- ]?up/i)
+    expect(box.textContent).not.toMatch(/[$€£]/)
+  })
+
   it('links whoever manages billing to the usage, and never names a price', () => {
     show('2026-11-01T00:00:00.000Z')
     expect(screen.getByRole('link', { name: 'See usage' })).toHaveAttribute(

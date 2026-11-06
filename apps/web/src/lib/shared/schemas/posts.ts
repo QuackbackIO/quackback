@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { boardIdSchema, postStatusIdSchema, tagIdsSchema } from '@quackback/ids/zod'
 import type { TiptapContent as DbTiptapContent } from '@/lib/shared/db-types'
 import { PageLimitSchema } from './taxonomy'
+import { PUBLIC_FEED_VIEWS, PUBLIC_POST_SORTS } from '@/lib/shared/types/filters'
 
 /**
  * TipTap mark schema - validates mark types and their attributes
@@ -113,7 +114,7 @@ export const listPublicPostsSchema = z.object({
   statusIds: z.array(z.string()).optional(),
   statusSlugs: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
-  sort: z.enum(['top', 'new', 'trending']).optional().default('top'),
+  sort: z.enum(PUBLIC_POST_SORTS).optional().default('top'),
   page: z.number().int().min(1).optional().default(1),
   limit: z.number().int().min(1).max(100).optional().default(20),
   minVotes: z.number().int().min(1).optional(),
@@ -125,6 +126,9 @@ export const listPublicPostsSchema = z.object({
   responded: z.enum(['responded', 'unresponded']).optional(),
   owner: z.string().optional(),
   segmentIds: z.array(z.string()).optional(),
+  view: z.enum(PUBLIC_FEED_VIEWS).optional(),
+  /** False skips the panel counts, when the caller already holds them. */
+  facets: z.boolean().optional(),
 })
 export type ListPublicPostsInput = z.infer<typeof listPublicPostsSchema>
 

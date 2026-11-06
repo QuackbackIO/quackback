@@ -165,6 +165,11 @@ export const posts = pgTable(
       .where(sql`status_id IS NOT NULL`),
     // GIN index for full-text search
     index('posts_search_vector_idx').using('gin', table.searchVector),
+    // Trigram index for search's close-spelling fallback (`words <% title`).
+    // Built CONCURRENTLY after migrations (CONCURRENT_INDEX_SPECS).
+    index('posts_title_trgm_idx')
+      .using('gin', sql`${table.title} gin_trgm_ops`)
+      .where(sql`${table.deletedAt} IS NULL`),
     // Index for filtering deleted posts
     index('posts_deleted_at_idx').on(table.deletedAt),
     // Composite index for soft-delete queries (e.g., active posts by board)
