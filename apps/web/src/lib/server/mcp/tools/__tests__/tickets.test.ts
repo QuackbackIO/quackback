@@ -158,6 +158,21 @@ describe('ticket MCP tools', () => {
     expect(mockSetPriority).toHaveBeenCalledTimes(1)
   })
 
+  it('update_ticket refuses a ticket the caller cannot see, without changing it', async () => {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    mockAssertTicketVisible.mockRejectedValueOnce(
+      new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+    )
+    const out = await collect(teamAuth).get('update_ticket')!({
+      ticketId: 'ticket_1',
+      title: 'Renamed',
+      priority: 'high',
+    })
+    expect(out.isError).toBe(true)
+    expect(mockSetTitle).not.toHaveBeenCalled()
+    expect(mockSetPriority).not.toHaveBeenCalled()
+  })
+
   it('update_ticket refuses a call with nothing to change', async () => {
     const out = await collect(teamAuth).get('update_ticket')!({ ticketId: 'ticket_1' })
     expect(out.isError).toBe(true)

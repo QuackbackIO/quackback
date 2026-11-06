@@ -439,10 +439,12 @@ Example: update_ticket({ ticketId: "ticket_01abc...", title: "Cannot log in with
       if (args.title === undefined && args.priority === undefined) {
         throw new ValidationError('VALIDATION_ERROR', 'Pass a title, a priority, or both')
       }
-      const { getTicket, setTicketTitle, setTicketPriority } =
+      const { assertTicketVisible, getTicket, setTicketTitle, setTicketPriority } =
         await import('@/lib/server/domains/tickets/ticket.service')
       const ticketId = args.ticketId as TicketId
       const actor = mcpAgentActor(auth)
+      // A personal key acts only on tickets its creator can see.
+      await assertTicketVisible(ticketId, actor)
       if (args.title !== undefined) await setTicketTitle(ticketId, args.title, actor)
       if (args.priority !== undefined) await setTicketPriority(ticketId, args.priority, actor)
       const dto = await getTicket(ticketId)
