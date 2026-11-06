@@ -93,11 +93,21 @@ vi.mock('../hook-utils', () => ({
   truncate: vi.fn((s: string) => s),
 }))
 
+// The feedback surface's sender; which address it is is pinned in
+// sender-resolver.db.test.ts.
+const resolveSender = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({ resolveSender }))
+
 // Import after mocks
 const { getHookTargets } = await import('../targets')
 
 beforeEach(() => {
   vi.clearAllMocks()
+  resolveSender.mockResolvedValue({
+    from: 'ideas@acme.example',
+    source: 'default',
+    senderName: 'Acme Ideas',
+  })
   mockCacheGet.mockResolvedValue(null)
   mockCacheSet.mockResolvedValue(undefined)
   // Default: no integration mappings, no webhooks
@@ -190,7 +200,10 @@ describe('post.mentioned target resolution', () => {
       postTitle: 'A test post',
       postUrl: 'https://test.quackback.io/b/bugs/posts/post_1',
       workspaceName: 'Test Workspace',
+      from: 'ideas@acme.example',
+      fromDisplayName: 'Acme Ideas',
     })
+    expect(resolveSender).toHaveBeenCalledWith({ surface: 'feedback' })
     // Token was issued with action=unsubscribe_all (global mute) since the
     // user didn't subscribe to the post — they were tagged.
     expect(mockBatchGenerateUnsubscribeTokens).toHaveBeenCalledWith([
