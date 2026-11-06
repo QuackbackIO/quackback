@@ -152,16 +152,24 @@ interface MembersTabProps {
   currentMember: { id: PrincipalId; role: 'admin' | 'member'; userId: UserId }
   /** Holds member.manage: may add people to the team. */
   canManageMembers: boolean
+  /** Starts the roster filtered, as a teammate search result opens it. */
+  initialSearch?: string
 }
 
 /** The teammate roster + pending invitations (the Members tab of Members & Teams). */
-export function MembersTab({ currentMember, canManageMembers }: MembersTabProps) {
+export function MembersTab({ currentMember, canManageMembers, initialSearch }: MembersTabProps) {
   const session = useSessionContext()
   const workspaceName = useWorkspaceSettings()?.name
   const teamDataQuery = useSuspenseQuery(settingsQueries.teamMembersAndInvitations())
   const { members, avatarMap, formattedInvitations, seatUsage } = teamDataQuery.data
 
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch ?? '')
+  // A new teammate link (Ctrl+K, history) replaces the filter while open.
+  const [linked, setLinked] = useState(initialSearch)
+  if (linked !== initialSearch) {
+    setLinked(initialSearch)
+    setSearch(initialSearch ?? '')
+  }
   const [showAddPeople, setShowAddPeople] = useState(false)
   const addPeopleOpened = useOpenedOnce(showAddPeople)
   const [error, setError] = useState<string | null>(null)

@@ -182,14 +182,16 @@ Example: reply_to_conversation({ conversationId: "conversation_01abc...", conten
     scope: 'write:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { sendAgentMessage } =
+      const { assertConversationViewable, sendAgentMessage } =
         await import('@/lib/server/domains/conversation/conversation.service')
       const agent = agentFromMcpAuth(auth)
+      const actor = mcpAgentActor(auth)
+      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const result = await sendAgentMessage(
         args.conversationId as ConversationId,
         args.content,
         agent,
-        mcpAgentActor(auth),
+        actor,
         attachmentsFromFileIds(args.fileIds)
       )
       return jsonResult({
@@ -225,7 +227,11 @@ Example: suggest_post({ conversationId: "conversation_01...", boardId: "board_01
     teamOnly: true,
     handler: async (args) => {
       const { suggestPost } = await import('@/lib/server/domains/conversation/conversation.cards')
+      const { assertConversationViewable } =
+        await import('@/lib/server/domains/conversation/conversation.service')
       const agent = agentFromMcpAuth(auth)
+      const actor = mcpAgentActor(auth)
+      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const r = await suggestPost(
         {
           conversationId: args.conversationId as ConversationId,
@@ -233,7 +239,7 @@ Example: suggest_post({ conversationId: "conversation_01...", boardId: "board_01
           title: args.title,
           content: args.content,
         },
-        { agentActor: mcpAgentActor(auth), agentPrincipalId: auth.principalId, agent }
+        { agentActor: actor, agentPrincipalId: auth.principalId, agent }
       )
       return jsonResult({ messageId: r.messageId, conversationId: args.conversationId })
     },
@@ -255,10 +261,14 @@ Example: share_post({ conversationId: "conversation_01...", postId: "post_01..."
     teamOnly: true,
     handler: async (args) => {
       const { sharePost } = await import('@/lib/server/domains/conversation/conversation.cards')
+      const { assertConversationViewable } =
+        await import('@/lib/server/domains/conversation/conversation.service')
       const agent = agentFromMcpAuth(auth)
+      const actor = mcpAgentActor(auth)
+      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const r = await sharePost(
         { conversationId: args.conversationId as ConversationId, postId: args.postId as PostId },
-        { agentActor: mcpAgentActor(auth), agentPrincipalId: auth.principalId, agent }
+        { agentActor: actor, agentPrincipalId: auth.principalId, agent }
       )
       return jsonResult({ messageId: r.message.id })
     },
@@ -281,12 +291,14 @@ Example: set_conversation_status({ conversationId: "conversation_01abc...", stat
     scope: 'write:chat',
     teamOnly: true,
     handler: async (args) => {
-      const { setConversationStatus } =
+      const { assertConversationViewable, setConversationStatus } =
         await import('@/lib/server/domains/conversation/conversation.service')
+      const actor = mcpAgentActor(auth)
+      await assertConversationViewable(args.conversationId as ConversationId, actor)
       const updated = await setConversationStatus(
         args.conversationId as ConversationId,
         args.status,
-        mcpAgentActor(auth)
+        actor
       )
       return jsonResult({ id: updated.id, status: updated.status })
     },
