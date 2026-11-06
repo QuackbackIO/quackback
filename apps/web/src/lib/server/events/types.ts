@@ -79,11 +79,6 @@ export const EVENT_TYPES = [
   'assistant.resolved',
   // Timer-driven triggers (see TIMER_DRIVEN_EVENT_TYPES above for the rationale).
   ...TIMER_DRIVEN_EVENT_TYPES,
-  // Approvals: emitted natively by the pending-actions service. Webhook and
-  // notification surfaces only, never workflow triggers.
-  'approval.requested',
-  'approval.decided',
-  'approval.applied',
 ] as const
 
 export type EventType = (typeof EVENT_TYPES)[number]
@@ -769,42 +764,6 @@ export interface SlaBreachedEvent extends EventBase<'sla.breached'> {
 }
 
 /**
- * What every approval event says about its request: the server-written
- * summary and the risk tier, never the requested content itself.
- */
-export interface ApprovalRefPayload {
-  approvalId: string
-  toolName: string
-  summary: string
-  risk: 'low' | 'medium' | 'high' | 'critical'
-}
-export interface ApprovalRequestedPayload extends ApprovalRefPayload {
-  requestedVia: 'ui' | 'api' | 'mcp' | 'assistant' | 'workflow'
-  clientName?: string | null
-  conversationId: string | null
-  ticketId: string | null
-  expiresAt: string // ISO
-}
-export interface ApprovalDecidedPayload extends ApprovalRefPayload {
-  decision: 'approved' | 'rejected'
-  decidedById: string
-  decidedVia: 'app' | 'email' | 'assistant' | 'slack'
-  reason?: string | null
-}
-export interface ApprovalAppliedPayload extends ApprovalRefPayload {
-  appliedById: string | null
-}
-export interface ApprovalRequestedEvent extends EventBase<'approval.requested'> {
-  data: ApprovalRequestedPayload
-}
-export interface ApprovalDecidedEvent extends EventBase<'approval.decided'> {
-  data: ApprovalDecidedPayload
-}
-export interface ApprovalAppliedEvent extends EventBase<'approval.applied'> {
-  data: ApprovalAppliedPayload
-}
-
-/**
  * Event data - discriminated union of all event types.
  *
  * Use type narrowing to access event-specific data:
@@ -858,6 +817,3 @@ export type EventData =
   | ConversationTeammateUnresponsiveEvent
   | SlaApproachingBreachEvent
   | SlaBreachedEvent
-  | ApprovalRequestedEvent
-  | ApprovalDecidedEvent
-  | ApprovalAppliedEvent

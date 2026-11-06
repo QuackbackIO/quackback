@@ -92,9 +92,6 @@ export function getNotificationTarget(
     return { to: '/admin/inbox', search: { i: notification.ticketId } }
   }
 
-  // One approval bell counts every new request, so it opens the approvals queue.
-  if (notification.type === 'approval_requested') return { to: '/admin/approvals' }
-
   // Sending domain bells open the email channel settings, where the records are.
   if (
     notification.type === 'sending_domain_live' ||

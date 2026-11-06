@@ -426,10 +426,8 @@ describe('assembleAssistantToolset: write-tool pipeline (propose mode)', () => {
       args: { reason: 'resolved' },
       summary: 'Close conversation: resolved',
       originRole: 'customer_support',
-      // Filed by the assistant, which can never decide its own request, at
-      // the tier a teammate approves.
-      requester: expect.objectContaining({ via: 'assistant' }),
-      risk: 'medium',
+      // Filed by the assistant, which can never decide its own request.
+      requester: expect.objectContaining({ requestedById: expect.anything() }),
       // Same-shaped key as the autonomous branch's claim (S1); this context
       // has no latestCustomerMessageId override, so it threads through as
       // the literal "null" segment.
@@ -451,6 +449,30 @@ describe('assembleAssistantToolset: write-tool pipeline (propose mode)', () => {
         label: 'Close conversation',
       },
     ])
+  })
+
+  it('tells the customer a teammate will pick the conversation up, while a copilot proposal keeps the plain note', async () => {
+    mockProposePendingAction.mockResolvedValue({ id: 'assistant_action_1' })
+
+    const customer = ctx({ conversationId: 'conversation_1' as never, writeToolPolicy: 'propose' })
+    const customerTool = await findTool(customer, 'close_conversation', [makeFakeWriteSpec()])
+    const customerOut = (await customerTool.execute({ reason: 'resolved' }, toolCtx(customer))) as {
+      note: string
+    }
+
+    const copilot = ctx({
+      conversationId: 'conversation_1' as never,
+      role: 'copilot_qa',
+      writeToolPolicy: 'propose',
+    })
+    const copilotTool = await findTool(copilot, 'close_conversation', [makeFakeWriteSpec()])
+    const copilotOut = (await copilotTool.execute({ reason: 'resolved' }, toolCtx(copilot))) as {
+      note: string
+    }
+
+    expect(customerOut.note).toMatch(/teammate will pick/i)
+    expect(customerOut.note).not.toMatch(/\u2014/)
+    expect(copilotOut.note).not.toMatch(/pick/i)
   })
 
   it('computes the same-shaped idempotency key the autonomous branch claims with, so a retry can dedupe (S1)', async () => {
@@ -530,8 +552,7 @@ describe('assembleAssistantToolset: write-tool pipeline (propose mode)', () => {
       args: { reason: 'resolved' },
       summary: 'Close conversation: resolved',
       originRole: 'customer_support',
-      requester: expect.objectContaining({ via: 'assistant' }),
-      risk: 'medium',
+      requester: expect.objectContaining({ requestedById: expect.anything() }),
       // Falls back to ticketId (not the bare "null" a naive conversationId-only
       // key would produce) so two different tickets proposing the same tool
       // with the same args never collide — see resolveIdempotencyKey's doc.

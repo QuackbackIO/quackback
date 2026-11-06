@@ -3,22 +3,13 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HomeActions } from '@/components/admin/home-actions'
-import { WaitingOnYou } from '@/components/admin/approvals/waiting-on-you'
-import { HomeLoadingFrame } from '@/components/admin/home-frame'
-import {
-  copilotAvailabilityQuery,
-  homeCopilotState,
-  useCopilotHome,
-} from '@/components/admin/ask/copilot-on-home'
-import { CopilotPaused } from '@/components/admin/ask/copilot-paused'
-import { OverviewCounts, OverviewDashboard } from '@/components/admin/admin-overview'
+import { OverviewDashboard } from '@/components/admin/admin-overview'
 import { HomeLaunchArea, HomeTourArea } from '@/components/onboarding/home-try-it'
 import { HomeGreeting } from '@/components/onboarding/home-greeting'
 import { LaunchMessages } from '@/components/onboarding/launch-messages'
 import { launchStatusQuery } from '@/components/onboarding/use-launch-plan'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
-import { useHasPermission } from '@/lib/client/use-permissions'
 import { ensureOnboardingHomeReadyFn } from '@/lib/server/functions/onboarding'
 import { DEFAULT_LOCALE, loadLaunchMessages } from '@/lib/shared/i18n'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -30,20 +21,11 @@ import {
   useWorkspaceSettings,
   useSessionContext,
   useBaseUrl,
+  useGithubStarPrompt,
+  useHasPermission,
 } from '@/lib/client/hooks/use-root-context'
 
-// Only Home pays for the chat: its code loads with this chunk.
-const CopilotHome = lazy(() =>
-  import('@/components/admin/ask/copilot-home').then((module) => ({
-    default: module.CopilotHome,
-  }))
-)
-
 export const Route = createFileRoute('/admin/')({
-  validateSearch: (search: Record<string, unknown>): { copilotThread?: string } =>
-    typeof search.copilotThread === 'string' && search.copilotThread.startsWith('workspace:')
-      ? { copilotThread: search.copilotThread }
-      : {},
   loader: async ({ context }) => {
     // Home's own strings, which the admin seed leaves out.
     const launchMessages = loadLaunchMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE)
@@ -57,23 +39,17 @@ export const Route = createFileRoute('/admin/')({
     if (admin || (context.permissions ?? []).includes(PERMISSIONS.MEMBER_VIEW)) {
       await context.queryClient.ensureQueryData(adminQueries.onboardingStatus())
     }
-    // Home is the Copilot chat when it is available to this teammate, so the
-    // answer is known before Home renders.
-    const copilot =
-      context.settings?.featureFlags?.copilotHome === true &&
-      (context.permissions ?? []).includes(PERMISSIONS.COPILOT_USE)
-        ? await context.queryClient
-            .ensureQueryData(copilotAvailabilityQuery(context.principal?.id))
-            .catch(() => null)
-        : null
-    // Without Copilot on Home (no AI set up, or no AI allowance), Home is the overview.
-    if (homeCopilotState(copilot, true).kind === 'off') {
-      await context.queryClient.ensureQueryData(adminOverviewQueries.get())
-    }
+    await context.queryClient.ensureQueryData(adminOverviewQueries.get())
     return { modulesChanged, launchMessages: await launchMessages }
   },
   component: AdminOverviewPage,
 })
+
+const HomeGithubStarPrompt = lazy(() =>
+  import('@/components/admin/github-star-prompt').then((m) => ({
+    default: m.HomeGithubStarPrompt,
+  }))
+)
 
 function AdminOverviewPage() {
   const { launchMessages } = Route.useLoaderData()
@@ -87,7 +63,6 @@ function AdminOverviewPage() {
 function AdminHome() {
   const router = useRouter()
   const { modulesChanged } = Route.useLoaderData()
-  const { copilotThread } = Route.useSearch()
   useEffect(() => {
     if (modulesChanged) void router.invalidate()
   }, [modulesChanged, router])
@@ -95,11 +70,6 @@ function AdminHome() {
   const baseUrl = useBaseUrl()
   const userRole = useUserRole()
   const settings = useWorkspaceSettings()
-  const copilot = useCopilotHome()
-  const copilotOnHome = copilot.onHome
-  // With this period's AI allowance used, Copilot stays on Home and says until when.
-  const paused = copilot.state.kind === 'paused' ? copilot.state : null
-  const canUseCopilot = useHasPermission(PERMISSIONS.COPILOT_USE)
   const canSeeTeam = useHasPermission(PERMISSIONS.MEMBER_VIEW)
   const admin = isAdmin(userRole)
   const flags = settings?.featureFlags as FeatureFlags | undefined
@@ -136,30 +106,19 @@ function AdminHome() {
       </Suspense>
     ) : null
   // The tour offer is Home's last block, in the page, so it never covers the plan.
-  const tourOffer = admin || canSeeTeam ? <HomeTourArea member={!admin} /> : null
-
-  // A review link opens its thread even when new chats are unavailable.
-  if (canUseCopilot && (copilotOnHome || copilotThread))
-    return (
-      <Suspense fallback={copilotThread ? null : <HomeLoadingFrame header={header} />}>
-        <CopilotHome
-          threadKey={copilotThread}
-          canAsk={copilotOnHome && !paused}
-          header={header}
-          paused={
-            paused ? <CopilotPaused resetsAt={paused.resetsAt} trial={paused.trial} /> : undefined
-          }
-          waiting={<WaitingOnYou />}
-          below={
-            <>
-              {plan}
-              {planLeads ? null : <OverviewCounts />}
-              {tourOffer}
-            </>
-          }
-        />
-      </Suspense>
-    )
+  const githubStarPrompt = useGithubStarPrompt()
+  // Self-hosted only: the one-time GitHub star ask, for someone the card never reached.
+  const tourOffer =
+    admin || canSeeTeam ? (
+      <>
+        <HomeTourArea member={!admin} />
+        {githubStarPrompt ? (
+          <Suspense fallback={null}>
+            <HomeGithubStarPrompt />
+          </Suspense>
+        ) : null}
+      </>
+    ) : null
 
   return (
     <ScrollArea className="h-full">
@@ -168,12 +127,7 @@ function AdminHome() {
           <OverviewDashboard
             actions={<HomeActions flags={flags} />}
             header={header}
-            banner={
-              <>
-                <WaitingOnYou />
-                {plan}
-              </>
-            }
+            banner={plan}
             emptyStates={!planLeads}
           />
           {tourOffer}

@@ -17,9 +17,7 @@ checklist.
   - semantic (curated): `status_changed`, `assigned`, `owner_assigned`,
     `priority_changed`, `merged`, `unmerged`, `mentioned`, `published`,
     `replied`, `handed_off`, `resolved`, `csat_submitted`, `breached`, `voted`,
-    `external_status_changed` (a linked tracker issue moved upstream),
-    `requested` · `decided` · `applied` (an approval is asked for, decided by
-    a person, and its change applied), …
+    `external_status_changed` (a linked tracker issue moved upstream), …
     (add new ones to the list _on purpose_).
 - A new verb is a deliberate decision, not a drive-by string. Adding one and
   forgetting the list turns CI red.

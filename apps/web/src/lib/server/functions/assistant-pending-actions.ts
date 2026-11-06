@@ -33,7 +33,7 @@ const PendingActionInput = z.object({ pendingActionId: z.string() })
 // coupling the two files.
 function toDTO(
   row: AssistantPendingAction,
-  approval: Pick<AssistantPendingActionDTO, 'argsDigest' | 'risk'>
+  decision: Pick<AssistantPendingActionDTO, 'argsDigest'>
 ): AssistantPendingActionDTO {
   return {
     id: row.id,
@@ -52,7 +52,7 @@ function toDTO(
     decidedAt: row.decidedAt?.toISOString() ?? null,
     executedAt: row.executedAt?.toISOString() ?? null,
     result: (row.result as AssistantPendingActionDTO['result']) ?? null,
-    ...approval,
+    ...decision,
   }
 }
 
@@ -66,7 +66,7 @@ export const getAssistantPendingActionFn = createServerFn({ method: 'GET' })
     // Row-level authz (unified inbox §3.3): see this file's doc comment —
     // the base gate above only confirms conversation.view SOMEWHERE.
     const actor = await policyActorFromAuth(auth)
-    await assertPendingWorkspaceParent(row, actor)
+    assertPendingWorkspaceParent(row)
     if (row.conversationId) {
       await assertConversationViewable(row.conversationId, actor)
     } else if (row.ticketId) {
@@ -74,7 +74,7 @@ export const getAssistantPendingActionFn = createServerFn({ method: 'GET' })
     }
     // Showing a request stores the digest of what is shown, which is the one
     // a decision on it must name.
-    const { approvalFieldsForDisplay } =
-      await import('@/lib/server/domains/assistant/approvals.service')
-    return toDTO(row, await approvalFieldsForDisplay(row))
+    const { decisionFieldsForDisplay } =
+      await import('@/lib/server/domains/assistant/pending-action-decisions')
+    return toDTO(row, await decisionFieldsForDisplay(row))
   })

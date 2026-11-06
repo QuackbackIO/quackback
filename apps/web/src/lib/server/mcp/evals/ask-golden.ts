@@ -2,40 +2,15 @@ export interface AskGoldenCase {
   id: string
   request: string
   profile: 'owner' | 'no_settings'
-  tool: 'get_settings' | 'propose_settings_change' | 'navigate_workspace'
+  tool: 'get_settings' | 'navigate_workspace'
   arguments: Record<string, unknown>
-  expected: 'read' | 'proposal' | 'navigation' | 'denied'
+  expected: 'read' | 'navigation' | 'denied'
   denialReason?: 'permission' | 'unavailable'
-  expectedAreas?: string[]
   expectedHref?: string
-  operatorManagedName?: boolean
 }
 
 /** Requests pin the tool contract separately from configured-model selection. */
 export const ASK_GOLDEN_CASES: readonly AskGoldenCase[] = [
-  {
-    id: '01',
-    request: 'Set my brand color to #0F766E and turn on Messenger',
-    profile: 'owner',
-    tool: 'propose_settings_change',
-    arguments: {
-      changes: [
-        { area: 'branding', patch: { light: { primary: '#0F766E' } } },
-        { area: 'messenger', patch: { enabled: true } },
-      ],
-    },
-    expected: 'proposal',
-    expectedAreas: ['branding', 'messenger'],
-  },
-  {
-    id: '02',
-    request: 'Rename my workspace Acme team',
-    profile: 'owner',
-    tool: 'propose_settings_change',
-    arguments: { changes: [{ area: 'portal', patch: { displayName: 'Acme team' } }] },
-    expected: 'proposal',
-    expectedAreas: ['portal'],
-  },
   {
     id: '03',
     request: 'Set the portal header name to Ideas',
@@ -44,83 +19,6 @@ export const ASK_GOLDEN_CASES: readonly AskGoldenCase[] = [
     arguments: { destination: 'portal' },
     expected: 'navigation',
     expectedHref: '/admin/settings/portal',
-  },
-  {
-    id: '04',
-    request: 'Welcome customers with Hello from Acme',
-    profile: 'owner',
-    tool: 'propose_settings_change',
-    arguments: { changes: [{ area: 'messenger', patch: { welcomeMessage: 'Hello from Acme' } }] },
-    expected: 'proposal',
-    expectedAreas: ['messenger'],
-  },
-  {
-    id: '05',
-    request: 'Enable my Help Center and Status page',
-    profile: 'owner',
-    tool: 'propose_settings_change',
-    arguments: { changes: [{ area: 'modules', patch: { helpCenter: true, statusPage: true } }] },
-    expected: 'proposal',
-    expectedAreas: ['modules'],
-  },
-  {
-    id: '06',
-    request: 'Use a dark theme',
-    profile: 'owner',
-    tool: 'propose_settings_change',
-    arguments: { changes: [{ area: 'branding', patch: { themeMode: 'dark' } }] },
-    expected: 'proposal',
-    expectedAreas: ['branding'],
-  },
-  {
-    id: '07',
-    request: 'Set office hours to Monday 09:00 to 17:00 UTC',
-    profile: 'owner',
-    tool: 'propose_settings_change',
-    arguments: {
-      changes: [
-        {
-          area: 'office_hours',
-          patch: {
-            enabled: true,
-            timezone: 'UTC',
-            intervals: [{ day: 1, start: '09:00', end: '17:00' }],
-            holidays: [],
-          },
-        },
-      ],
-    },
-    expected: 'proposal',
-    expectedAreas: ['office_hours'],
-  },
-  {
-    id: '08',
-    request: 'Require sign in to view the changelog',
-    profile: 'owner',
-    tool: 'propose_settings_change',
-    arguments: { changes: [{ area: 'changelog', patch: { audience: 'authenticated' } }] },
-    expected: 'proposal',
-    expectedAreas: ['changelog'],
-  },
-  {
-    id: '09',
-    request: 'Stop automatically subscribing people to changelog emails',
-    profile: 'owner',
-    tool: 'propose_settings_change',
-    arguments: { changes: [{ area: 'changelog', patch: { autoSubscribe: false } }] },
-    expected: 'proposal',
-    expectedAreas: ['changelog'],
-  },
-  {
-    id: '10',
-    request: 'Turn on Support and support tickets',
-    profile: 'owner',
-    tool: 'propose_settings_change',
-    arguments: {
-      changes: [{ area: 'modules', patch: { supportInbox: true, supportTickets: true } }],
-    },
-    expected: 'proposal',
-    expectedAreas: ['modules'],
   },
   {
     id: '11',
@@ -255,22 +153,6 @@ export const ASK_GOLDEN_CASES: readonly AskGoldenCase[] = [
     expectedHref: '/admin/changelog',
   },
   {
-    id: '26',
-    request: 'Set my brand color to #0F766E',
-    profile: 'no_settings',
-    tool: 'propose_settings_change',
-    arguments: { changes: [{ area: 'branding', patch: { light: { primary: '#0F766E' } } }] },
-    expected: 'denied',
-  },
-  {
-    id: '27',
-    request: 'Turn on Messenger',
-    profile: 'no_settings',
-    tool: 'propose_settings_change',
-    arguments: { changes: [{ area: 'messenger', patch: { enabled: true } }] },
-    expected: 'denied',
-  },
-  {
     id: '28',
     request: 'Show me workspace settings',
     profile: 'no_settings',
@@ -295,15 +177,3 @@ export const ASK_GOLDEN_CASES: readonly AskGoldenCase[] = [
     expected: 'denied',
   },
 ]
-
-/** The base thirty requests remain unchanged; this covers the operator identity boundary. */
-export const ASK_OPERATOR_GOLDEN_CASE: AskGoldenCase = {
-  id: '31',
-  request: 'Rename my workspace to Acme team',
-  profile: 'owner',
-  tool: 'navigate_workspace',
-  arguments: { destination: 'general' },
-  expected: 'navigation',
-  expectedHref: '/admin/settings/general',
-  operatorManagedName: true,
-}

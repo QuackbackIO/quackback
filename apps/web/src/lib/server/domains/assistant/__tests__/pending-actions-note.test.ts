@@ -197,7 +197,7 @@ describe.skipIf(!fixture.available)('proposePendingAction: propose-time note', (
     expect(proposed.conversationId).toBeNull()
     expect(mockAddTicketNote).toHaveBeenCalledWith(
       expect.objectContaining({ principalId: 'principal_quinn' }),
-      { ticketId, content: 'Requested approval: Create a customer ticket: "x"' }
+      { ticketId, content: 'Waiting for a teammate to confirm: Create a customer ticket: "x"' }
     )
     expect(mockAppendNote).not.toHaveBeenCalled()
   })
