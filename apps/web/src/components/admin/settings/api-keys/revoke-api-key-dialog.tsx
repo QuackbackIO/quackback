@@ -4,16 +4,27 @@ import { useState, useTransition } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { revokeApiKeyFn } from '@/lib/server/functions/api-keys'
 import type { ApiKey } from '@/lib/shared/types'
+import type { ApiKeyRefusal } from '@/lib/shared/api-key-refusal'
+
+export type RevokeApiKeyAction = (
+  id: ApiKey['id']
+) => Promise<{ ok: true; id: ApiKey['id'] } | ApiKeyRefusal>
 
 interface RevokeApiKeyDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  apiKey: ApiKey
+  apiKey: Pick<ApiKey, 'id' | 'name'>
+  /** The server call that revokes this kind of key. */
+  revoke: RevokeApiKeyAction
 }
 
-export function RevokeApiKeyDialog({ open, onOpenChange, apiKey }: RevokeApiKeyDialogProps) {
+export function RevokeApiKeyDialog({
+  open,
+  onOpenChange,
+  apiKey,
+  revoke,
+}: RevokeApiKeyDialogProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [isPending, startTransition] = useTransition()
@@ -23,7 +34,11 @@ export function RevokeApiKeyDialog({ open, onOpenChange, apiKey }: RevokeApiKeyD
     setError(null)
 
     try {
-      await revokeApiKeyFn({ data: { id: apiKey.id } })
+      const result = await revoke(apiKey.id)
+      if (!result.ok) {
+        setError(result.message)
+        return
+      }
 
       startTransition(() => {
         queryClient.invalidateQueries({ queryKey: ['admin', 'api-keys'] })
@@ -32,7 +47,6 @@ export function RevokeApiKeyDialog({ open, onOpenChange, apiKey }: RevokeApiKeyD
 
       onOpenChange(false)
     } catch (err) {
-      console.error('Failed to revoke API key:', err)
       setError(err instanceof Error ? err.message : 'Failed to revoke API key')
     }
   }

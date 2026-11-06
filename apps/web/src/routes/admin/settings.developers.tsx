@@ -6,7 +6,8 @@ import { z } from 'zod'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { ApiKeysSettings } from '@/components/admin/settings/api-keys/api-keys-settings'
+import { WorkspaceKeysSettings } from '@/components/admin/settings/api-keys/workspace-keys-settings'
+import { PersonalKeysOversight } from '@/components/admin/settings/api-keys/personal-keys-oversight'
 import { ApiReferenceCard } from '@/components/admin/settings/api-keys/api-reference-card'
 import { WebhooksSettings } from '@/components/admin/settings/webhooks/webhooks-settings'
 import { WebhookVerificationGuide } from '@/components/admin/settings/webhooks/webhook-verification-guide'
@@ -39,6 +40,7 @@ export const Route = createFileRoute('/admin/settings/developers')({
     const [, entitlements] = await Promise.all([
       Promise.all([
         ensure(adminQueries.apiKeys()),
+        ensure(adminQueries.personalKeyPolicy()),
         ensure(adminQueries.webhooks()),
         ensure(settingsQueries.developerConfig()),
       ]),
@@ -57,6 +59,9 @@ function ApiPage() {
   const navigate = useNavigate()
 
   const apiKeysQuery = useSuspenseQuery(adminQueries.apiKeys())
+  const personalPolicyQuery = useSuspenseQuery(adminQueries.personalKeyPolicy())
+  const workspaceKeys = apiKeysQuery.data.filter((k) => k.kind === 'workspace')
+  const personalKeys = apiKeysQuery.data.filter((k) => k.kind === 'personal')
   const webhooksQuery = useSuspenseQuery(adminQueries.webhooks())
   const developerConfigQuery = useSuspenseQuery(settingsQueries.developerConfig())
 
@@ -88,7 +93,11 @@ function ApiPage() {
         </TabsList>
 
         <TabsContent value="keys" className="space-y-6">
-          <ApiKeysSettings apiKeys={apiKeysQuery.data} />
+          <WorkspaceKeysSettings apiKeys={workspaceKeys} />
+          <PersonalKeysOversight
+            apiKeys={personalKeys}
+            policyEnabled={personalPolicyQuery.data.enabled}
+          />
           <ApiReferenceCard apiBaseUrl={apiBaseUrl} />
         </TabsContent>
 

@@ -13,13 +13,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { rotateApiKeyFn } from '@/lib/server/functions/api-keys'
 import type { ApiKey } from '@/lib/shared/types'
+import type { ApiKeyRefusal } from '@/lib/shared/api-key-refusal'
+
+export type RotateApiKeyAction = (
+  id: ApiKey['id']
+) => Promise<{ ok: true; apiKey: ApiKey; plainTextKey: string } | ApiKeyRefusal>
 
 interface RotateApiKeyDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  apiKey: ApiKey
+  apiKey: Pick<ApiKey, 'id' | 'name'>
+  /** The server call that rotates this kind of key. */
+  rotate: RotateApiKeyAction
   onKeyRotated: (key: ApiKey, plainTextKey: string) => void
 }
 
@@ -27,6 +33,7 @@ export function RotateApiKeyDialog({
   open,
   onOpenChange,
   apiKey,
+  rotate,
   onKeyRotated,
 }: RotateApiKeyDialogProps) {
   const router = useRouter()
@@ -38,7 +45,11 @@ export function RotateApiKeyDialog({
     setError(null)
 
     try {
-      const result = await rotateApiKeyFn({ data: { id: apiKey.id } })
+      const result = await rotate(apiKey.id)
+      if (!result.ok) {
+        setError(result.message)
+        return
+      }
 
       // Invalidate queries to refresh the list
       startTransition(() => {
@@ -49,7 +60,6 @@ export function RotateApiKeyDialog({
       // Notify parent with new key
       onKeyRotated(result.apiKey, result.plainTextKey)
     } catch (err) {
-      console.error('Failed to rotate API key:', err)
       setError(err instanceof Error ? err.message : 'Failed to rotate API key')
     }
   }

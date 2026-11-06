@@ -48,6 +48,7 @@ export function DomainAccessPicker({
   disabled,
   className,
   allowed,
+  flagHighImpact,
 }: {
   levels: DomainAccessLevels
   onChange: (levels: DomainAccessLevels) => void
@@ -55,6 +56,8 @@ export function DomainAccessPicker({
   className?: string
   /** The most each domain may be given. Chips above it are disabled. */
   allowed?: DomainAccessLevels
+  /** Mark read and write on Settings as high impact (it can change the workspace). */
+  flagHighImpact?: boolean
 }) {
   const intl = useIntl()
   const within = (domain: AccessDomainId, chip: DomainAccessChip) =>
@@ -74,10 +77,20 @@ export function DomainAccessPicker({
           className={`flex items-center justify-between px-4 py-3 ${i > 0 ? 'border-t border-border/30' : ''}`}
         >
           <div className="min-w-0">
-            <p className="text-sm font-medium">
+            <p className="flex items-center gap-2 text-sm font-medium">
               {group.domain === 'settings'
                 ? intl.formatMessage({ id: 'apiKeys.scopes.settings', defaultMessage: 'Settings' })
                 : group.label}
+              {flagHighImpact &&
+                group.domain === 'settings' &&
+                levels.settings === 'read_write' && (
+                  <span className="rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-semibold text-warning">
+                    {intl.formatMessage({
+                      id: 'apiKeys.highImpact',
+                      defaultMessage: 'High impact',
+                    })}
+                  </span>
+                )}
             </p>
             <p className="text-xs text-muted-foreground">
               {group.domain === 'settings'

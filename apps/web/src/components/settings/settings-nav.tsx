@@ -1,6 +1,6 @@
 import { Link, useRouterState } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
-import { UserIcon, Cog6ToothIcon } from '@heroicons/react/24/solid'
+import { UserIcon, Cog6ToothIcon, KeyIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
 const navItems = [
@@ -16,8 +16,16 @@ const navItems = [
   },
 ]
 
-export function SettingsNav() {
+/** Team members only: personal API keys act as their creator. */
+const apiKeysItem = {
+  label: { id: 'portal.settings.apiKeys.title', defaultMessage: 'API keys' },
+  to: '/settings/api-keys',
+  icon: KeyIcon,
+}
+
+export function SettingsNav({ showApiKeys = false }: { showApiKeys?: boolean }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const items = showApiKeys ? [...navItems, apiKeysItem] : navItems
 
   return (
     <nav className="w-full md:w-56 md:shrink-0">
@@ -26,7 +34,7 @@ export function SettingsNav() {
           <FormattedMessage id="portal.settings.nav.personal" defaultMessage="Personal" />
         </h3>
         <ul className="space-y-0.5">
-          {navItems.map((item) => {
+          {items.map((item) => {
             const isActive = pathname === item.to || pathname.startsWith(item.to + '/')
             const Icon = item.icon
 
