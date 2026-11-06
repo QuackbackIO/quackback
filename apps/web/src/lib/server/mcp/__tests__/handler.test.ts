@@ -358,6 +358,7 @@ const MOCK_USER_ID = 'user_01h455vb4pex5vsknk084sn02s' as UserId
 const MOCK_API_KEY: ApiKey = {
   id: 'apikey_01h455vb4pex5vsknk084sn02q' as ApiKeyId,
   name: 'Test Key',
+  kind: 'personal' as const,
   keyPrefix: 'qb_test',
   principalId: MOCK_MEMBER_ID,
   createdById: MOCK_MEMBER_ID,
