@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockAuth = vi.fn()
 const mockListTickets = vi.fn()
 const mockGetTicket = vi.fn()
-const mockLoadTicket = vi.fn()
+const mockAssertVisible = vi.fn()
 const mockListMessages = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
@@ -15,7 +15,7 @@ vi.mock('@/lib/server/domains/api/auth', () => ({
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   listTickets: (...a: unknown[]) => mockListTickets(...a),
   getTicket: (...a: unknown[]) => mockGetTicket(...a),
-  loadTicketOr404: (...a: unknown[]) => mockLoadTicket(...a),
+  assertTicketVisible: (...a: unknown[]) => mockAssertVisible(...a),
 }))
 vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
   listTicketMessages: (...a: unknown[]) => mockListMessages(...a),
@@ -115,6 +115,7 @@ describe('GET /api/v1/tickets', () => {
 
 describe('GET /api/v1/tickets/:id', () => {
   it('returns the serialized ticket', async () => {
+    mockAssertVisible.mockResolvedValue({ id: TICKET_ID })
     mockGetTicket.mockResolvedValue(ticketDTO)
     const res = await getHandler(DetailRoute)({
       request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}`),
@@ -123,6 +124,27 @@ describe('GET /api/v1/tickets/:id', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.data).toMatchObject({ id: TICKET_ID, reference: '#42' })
+  })
+
+  it("checks the ticket against the key's own scope, and 404s one its creator cannot see", async () => {
+    mockAuth.mockResolvedValue({
+      principalId: 'principal_key',
+      role: 'member',
+      permissions: new Set(['ticket.view']),
+      scopePrincipalId: 'principal_creator',
+    })
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    mockAssertVisible.mockRejectedValue(new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found'))
+    const res = await getHandler(DetailRoute)({
+      request: new Request(`https://x.test/api/v1/tickets/${TICKET_ID}`),
+      params: { ticketId: TICKET_ID },
+    })
+    expect(res.status).toBe(404)
+    expect(mockAssertVisible).toHaveBeenCalledWith(
+      TICKET_ID,
+      expect.objectContaining({ principalType: 'service', scopePrincipalId: 'principal_creator' })
+    )
+    expect(mockGetTicket).not.toHaveBeenCalled()
   })
 
   it('rejects a malformed ticket id before hitting the domain', async () => {
@@ -137,7 +159,7 @@ describe('GET /api/v1/tickets/:id', () => {
 
 describe('GET /api/v1/tickets/:id/messages', () => {
   it('excludes internal notes by default and derives the older-page cursor', async () => {
-    mockLoadTicket.mockResolvedValue({ id: TICKET_ID })
+    mockAssertVisible.mockResolvedValue({ id: TICKET_ID })
     mockListMessages.mockResolvedValue({
       messages: [
         {
@@ -178,7 +200,7 @@ describe('GET /api/v1/tickets/:id/messages', () => {
   })
 
   it('opts into internal notes with includeInternal=true', async () => {
-    mockLoadTicket.mockResolvedValue({ id: TICKET_ID })
+    mockAssertVisible.mockResolvedValue({ id: TICKET_ID })
     mockListMessages.mockResolvedValue({ messages: [], hasMore: false })
     await getHandler(MessagesRoute)({
       request: new Request(

@@ -19,14 +19,14 @@ import { conversations } from '@/lib/server/db'
 import { can } from './authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { teamsForActor } from './tickets'
-import type { Actor } from './types'
+import { isUnscopedService, rowScopePrincipalId, type Actor } from './types'
 
 /**
  * SQL predicate for agent-side conversation list queries. Branches, in order:
  *
- * 1. Service principals (API keys, MCP, the AI agent) -> ALL conversations
- *    (workspace-wide, membership-independent). First so a service actor is never
- *    narrowed by team membership.
+ * 1. Unscoped service principals (workspace API keys, the AI agent, workflows)
+ *    -> ALL conversations (workspace-wide, membership-independent). A personal
+ *    API key carries `scopePrincipalId` and resolves as its creator below.
  * 2. `conversation.view_all` -> all conversations.
  * 3. `conversation.view` -> conversations assigned to one of the actor's teams
  *    OR to the actor. With no team memberships the team subquery is empty, so
@@ -34,14 +34,15 @@ import type { Actor } from './types'
  * 4. Anything else fails closed (no principal, or no conversation.view).
  */
 export function conversationFilter(actor: Actor): SQL {
-  // (1) Service principals first — workspace-wide, membership-independent.
-  if (actor.principalType === 'service') return sql`true`
+  // (1) Unscoped service principals first — workspace-wide, membership-independent.
+  // A personal API key carries its creator and falls through to their scope.
+  if (isUnscopedService(actor)) return sql`true`
 
   // (2) Workspace-wide viewers.
   if (can(actor, PERMISSIONS.CONVERSATION_VIEW_ALL)) return sql`true`
 
   // (3)/(4) A scoped viewer needs both conversation.view and an identity.
-  const principalId: string | null = actor.principalId ?? null
+  const principalId: string | null = rowScopePrincipalId(actor)
   if (!can(actor, PERMISSIONS.CONVERSATION_VIEW) || principalId === null) return sql`false`
 
   const assignedToMe = eq(conversations.assignedAgentPrincipalId, principalId as never)
