@@ -129,6 +129,12 @@ export const conversations = pgTable(
     // messenger; set to the workspace's inbound channel_account for
     // email. `set null` so a removed inbox leaves history rather than orphaning it.
     channelAccountId: typeIdColumnNullable('channel_account')('channel_account_id'),
+    // The bare address this thread's customer email first went out from (0310).
+    // Every later email on the thread sends from it again while the send guard
+    // still permits it, so reassigning the conversation never changes its From.
+    // Null until the first outbound email, and for a thread that has only ever
+    // sent from the platform default.
+    threadSenderAddress: text('thread_sender_address'),
     // The one active SLA applied to this conversation (§4.6 reserved seam), or
     // null. The Apply-SLA workflow action (a later slice) owns the shape.
     slaApplied: jsonb('sla_applied').$type<Record<string, unknown>>(),

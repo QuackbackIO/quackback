@@ -7,7 +7,8 @@
  */
 import type { ChannelAccountId, ConversationId, TeamId } from '@quackback/ids'
 import type { SendingIdentity } from '@quackback/email/sender'
-import { db, eq, conversations } from '@/lib/server/db'
+import { parseAddress } from '@quackback/email/ses'
+import { db, and, eq, isNull, conversations } from '@/lib/server/db'
 import { platformInboxAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import {
@@ -35,7 +36,7 @@ export function formatNamedSendingAddress(
 }
 
 /** Which step of the chain in {@link resolveSender} produced the From. */
-export type SenderSource = 'inbox' | 'team' | 'default_team' | 'platform_inbox'
+export type SenderSource = 'thread' | 'inbox' | 'team' | 'default_team' | 'platform_inbox'
 
 export interface ResolvedSender {
   /** The address to send as. Always one the send guard permitted. */
@@ -68,6 +69,13 @@ async function permittedTeamAddress(
  *
  * The chain, first match wins:
  *
+ * 0. `thread`: for a conversation, the address its first customer email went
+ *    out from (`conversations.thread_sender_address`, written by
+ *    {@link resolveConversationFrom}). One thread keeps one sender, so a
+ *    conversation reassigned to a team with an address of its own still
+ *    answers from the address the customer has been hearing from. Like every
+ *    other step it must pass the send guard: a stored address whose domain has
+ *    since been demoted gives way to the rest of the chain.
  * 1. `inbox`: for a conversation that arrived through a front door, the address
  *    the customer wrote to. Replying from the address that was written to is
  *    the point of a customer-owned sending domain: a customer forwards
@@ -120,12 +128,15 @@ export async function resolveSender(input: {
       .select({
         assignedTeamId: conversations.assignedTeamId,
         channelAccountId: conversations.channelAccountId,
+        threadSenderAddress: conversations.threadSenderAddress,
       })
       .from(conversations)
       .where(eq(conversations.id, input.conversationId))
       .limit(1)
     teamId = conv?.assignedTeamId ?? null
     channelAccountId = conv?.channelAccountId ?? null
+    const from = await permittedSendingIdentity(conv?.threadSenderAddress ?? null)
+    if (from) return { from, source: 'thread' }
   }
 
   if (channelAccountId) {
@@ -171,11 +182,27 @@ export async function resolveSendingAddress(
   return (await resolveSender({ module, teamId: assignedTeamId }))?.from ?? null
 }
 
+/** The bare addr-spec of a resolved identity, which is what a thread stores. */
+function bareSenderAddress(from: SendingIdentity): string {
+  const parsed = parseAddress(from)
+  return typeof parsed === 'string' ? parsed : parsed.address
+}
+
 /**
- * The From for an email on a conversation: the address the customer wrote to,
- * then the assigned team's address, then the default team's, then (for a
- * front-door conversation) the workspace's platform inbox address, else null
- * for the platform default. See {@link resolveSender}.
+ * The From for an email on a conversation, called by every send that emails the
+ * customer about it: the thread's own sender once it has one, else the address
+ * the customer wrote to, then the assigned team's address, then the default
+ * team's, then (for a front-door conversation) the workspace's platform inbox
+ * address, else null for the platform default. See {@link resolveSender}.
+ *
+ * The first answer is stored as the thread's sender, so every later email on
+ * the conversation leaves from the same address whoever it is assigned to by
+ * then. Stored only while the column is empty: two first sends racing each
+ * other converge on whichever wrote first, and a sender that falls through the
+ * guard for a while is not overwritten, so the thread returns to it when its
+ * domain is verified again. Nothing is stored for the platform default, which
+ * is the address a thread has before anything is configured rather than one it
+ * chose.
  *
  * A conversation with no channel account, such as a widget thread, still sends
  * from its team's or the default team's address when one is permitted; it only
@@ -185,5 +212,17 @@ export async function resolveConversationFrom(
   conversationId: ConversationId,
   module: SendingModule = 'support'
 ): Promise<SendingIdentity | null> {
+  const resolved = await resolveSender({ module, conversationId })
+  if (!resolved || resolved.source === 'thread') return resolved?.from ?? null
+
+  const [stored] = await db
+    .update(conversations)
+    .set({ threadSenderAddress: bareSenderAddress(resolved.from) })
+    .where(and(eq(conversations.id, conversationId), isNull(conversations.threadSenderAddress)))
+    .returning({ id: conversations.id })
+  if (stored) return resolved.from
+  // Either another send stored the thread's sender between the read and this
+  // write, or the stored one is refused for now. Asking again returns the
+  // former and falls through the same way for the latter.
   return (await resolveSender({ module, conversationId }))?.from ?? null
 }
