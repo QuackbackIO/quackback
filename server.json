@@ -180,6 +180,18 @@
     {
       "name": "widget_install_status",
       "description": "Read whether the Quackback widget is connected on the customer site"
+    },
+    {
+      "name": "get_settings",
+      "description": "Read workspace settings"
+    },
+    {
+      "name": "update_settings",
+      "description": "Change a workspace settings area"
+    },
+    {
+      "name": "navigate_workspace",
+      "description": "Get a link to a workspace page"
     }
   ]
 }
