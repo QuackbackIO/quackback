@@ -391,6 +391,13 @@ describe.skipIf(!fixture.available)('workspace search (real DB)', () => {
     ).toEqual([seeded['changelog.published'], seeded['changelog.draft']].sort())
   })
 
+  it('links a teammate to the members page filtered to their email', async () => {
+    const { results } = await search(member(PERMISSIONS.MEMBER_VIEW), { kind: 'teammate' })
+    expect(results.map((result) => result.href)).toEqual([
+      `/admin/settings/members?q=${encodeURIComponent(`other-${word}-x@example.org`)}`,
+    ])
+  })
+
   it('people, teammates and companies need their own view permissions', async () => {
     expect(await idsOf(member(), { kind: 'person' })).toEqual([])
     expect(await idsOf(member(), { kind: 'teammate' })).toEqual([])

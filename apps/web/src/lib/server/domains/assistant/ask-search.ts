@@ -127,13 +127,20 @@ export function changelogSearchScope(actor: Actor): SQL {
   )!
 }
 
-export const SEARCH_HREF: Record<Exclude<SearchKind, 'article'>, (id: string) => string> = {
+export const SEARCH_HREF: Record<
+  Exclude<SearchKind, 'article'>,
+  (id: string, row: Pick<Row, 'subtitle'>) => string
+> = {
   post: (id) => `/admin/feedback?post=${encodeURIComponent(id)}`,
   conversation: (id) => `/admin/inbox?i=${encodeURIComponent(id)}`,
   ticket: (id) => `/admin/inbox?i=${encodeURIComponent(id)}`,
   changelog: (id) => `/admin/changelog?entry=${encodeURIComponent(id)}`,
   person: (id) => `/admin/users?selected=${encodeURIComponent(id)}`,
-  teammate: () => '/admin/settings/members',
+  // The roster has no per-member page, so it opens filtered to their email.
+  teammate: (_id, row) =>
+    row.subtitle
+      ? `/admin/settings/members?q=${encodeURIComponent(row.subtitle)}`
+      : '/admin/settings/members',
   company: (id) => `/admin/users?lifecycle=companies&company=${encodeURIComponent(id)}`,
 }
 
@@ -380,7 +387,7 @@ export function toSearchResult(kind: SearchKind, row: Row, text: string): Search
     id: row.id,
     kind,
     title: row.title ?? '',
-    href: row.href ?? SEARCH_HREF[kind as Exclude<SearchKind, 'article'>](row.id),
+    href: row.href ?? SEARCH_HREF[kind as Exclude<SearchKind, 'article'>](row.id, row),
     ...(row.content ? { excerpt: searchExcerpt(row.content, text) } : {}),
     ...(row.subtitle ? { subtitle: row.subtitle } : {}),
     ...(row.updatedAt ? { updatedAt: new Date(row.updatedAt).toISOString() } : {}),

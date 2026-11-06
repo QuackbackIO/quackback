@@ -110,3 +110,21 @@ describe('MembersTab hydration', () => {
     expect(rowRenders.current).toBe(serverRenders)
   })
 })
+
+describe('MembersTab opened from search', () => {
+  it('starts filtered to the teammate a search result named', () => {
+    const html = renderToString(
+      <MembersTab
+        currentMember={{
+          id: 'principal_admin' as never,
+          role: 'admin',
+          userId: 'user_admin' as never,
+        }}
+        canManageMembers
+        initialSearch="max@example.com"
+      />
+    )
+    expect(html).toContain('Max Mate')
+    expect(html).not.toContain('Ada Admin')
+  })
+})
