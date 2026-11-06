@@ -75,9 +75,9 @@ import { isPlatformInboxRecipient, platformInboxAddress } from '../conversation.
 import { currentMailSlug } from '../conversation.mail-slug'
 import {
   addressesPlatformInbox,
-  resolveConversationFrom,
   setInboundForwardingTarget,
 } from '@/lib/server/domains/channel-accounts/channel-account.service'
+import { resolveConversationFrom } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-scope'
 
 const fixture = await createDbTestFixture({

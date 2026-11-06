@@ -46,7 +46,7 @@ vi.mock('../conversation.email-store', () => ({
   recordOutboundEmail: async () => undefined,
 }))
 
-vi.mock('@/lib/server/domains/channel-accounts/channel-account.service', () => ({
+vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({
   resolveConversationFrom: async () => null,
   formatNamedSendingAddress: (addr: string, name: string) => `"${name}" <${addr}>`,
 }))

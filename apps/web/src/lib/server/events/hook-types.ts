@@ -170,7 +170,7 @@ export interface TicketEmailConfig {
   closedGeneric?: boolean
   clockLabel?: string
   dueLabel?: string
-  /** Per-team From (resolveSendingAddress result); absent = EMAIL_FROM. */
+  /** Per-team From (resolveSendingAddress result, sender-resolver.ts); absent = EMAIL_FROM. */
   from?: string
   /** Signed per-ticket inbound reply address; absent = no reply-by-email. */
   replyTo?: string

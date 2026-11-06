@@ -40,9 +40,8 @@ import {
   createInboundRoute,
   createSendingAddress,
   createSendingDomain,
-  resolveConversationFrom,
-  resolveSendingAddress,
 } from '../channel-account.service'
+import { resolveConversationFrom, resolveSendingAddress } from '../sender-resolver'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
