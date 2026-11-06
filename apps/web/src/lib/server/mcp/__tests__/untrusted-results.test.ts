@@ -70,6 +70,7 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   listTickets: mocks.listTickets,
   getTicket: mocks.getTicket,
+  assertTicketVisible: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
   listTicketMessages: mocks.listTicketMessages,

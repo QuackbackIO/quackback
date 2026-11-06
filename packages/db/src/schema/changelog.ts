@@ -66,6 +66,13 @@ export const changelogEntries = pgTable(
     index('changelog_published_at_idx').on(table.publishedAt),
     index('changelog_principal_id_idx').on(table.principalId),
     index('changelog_deleted_at_idx').on(table.deletedAt),
+    // Full-text search (0309): the expression listChangelogs and workspace search match on.
+    index('changelog_entries_search_idx').using(
+      'gin',
+      sql`to_tsvector('english', coalesce(${table.title}, '') || ' ' || coalesce(${table.content}, ''))`
+    ),
+    // Workspace search: a title containing the query anywhere inside (0309).
+    index('changelog_entries_title_trgm_idx').using('gin', table.title.op('gin_trgm_ops')),
     index('changelog_embedding_hnsw_idx')
       .using('hnsw', sql`${table.embedding} vector_cosine_ops`)
       .where(sql`${table.embedding} IS NOT NULL`),

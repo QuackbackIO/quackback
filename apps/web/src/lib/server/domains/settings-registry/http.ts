@@ -28,18 +28,22 @@ export function assertSettingsScope(
 }
 
 /**
- * A key acts for the teammate who created it, with the authority the REST API
- * resolved for the key. The audit row of a change names the key.
+ * A personal key acts for the teammate who created it, and a workspace key for
+ * itself, with the authority the REST API resolved for the key. The audit row
+ * of a change names the key.
  */
 export function settingsCallerFromApiAuth(auth: ApiAuthContext): SettingsCaller {
-  const owner = auth.apiKey.createdById ?? auth.principalId
+  // A workspace key belongs to nobody, so it acts as its own principal and
+  // its own role; a personal key acts as the teammate who created it.
+  const workspace = auth.apiKey.kind === 'workspace'
+  const principalId = workspace ? auth.principalId : (auth.apiKey.createdById ?? auth.principalId)
   return {
     // A scoped key also needs the scope its area's permission maps to.
     assertAreaScope: (area) => assertApiPermissions(auth, [SETTINGS_AREA_META[area].permission]),
     actor: {
-      principalId: owner,
+      principalId,
       role: auth.role,
-      principalType: 'user',
+      principalType: workspace ? 'service' : 'user',
       segmentIds: new Set(),
       permissions: auth.permissions,
     },
