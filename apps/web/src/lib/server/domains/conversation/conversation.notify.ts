@@ -34,7 +34,7 @@ import {
 } from '@/lib/server/db'
 import {
   formatNamedSendingAddress,
-  resolveConversationFrom,
+  resolveConversationSender,
 } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { randomUUID } from 'node:crypto'
 import { agentReplyDisplayName, assembleOutboundThreading } from '@quackback/email'
@@ -471,11 +471,15 @@ export async function sendVisitorConversationEmail(opts: {
   // it may send as that domain, else the assigned team's sending address, else
   // the branded workspace default (EMAIL_FROM). A thread that arrived at the
   // customer's own support address should not change identity on the way back.
-  // Named after the agent and the workspace on every channel: a widget or
-  // messenger reply that reaches the customer's inbox is still a person
-  // answering them, and an unnamed address reads as a robot.
-  const resolvedFrom = (await resolveConversationFrom(opts.conversationId)) ?? undefined
-  const fromDisplayName = agentReplyDisplayName(opts.senderName, opts.ctx.workspaceName)
+  // Named after the agent and the address's sender name (else the workspace) on
+  // every channel: a widget or messenger reply that reaches the customer's inbox
+  // is still a person answering them, and an unnamed address reads as a robot.
+  const resolved = await resolveConversationSender(opts.conversationId)
+  const resolvedFrom = resolved?.from
+  const fromDisplayName = agentReplyDisplayName(
+    opts.senderName,
+    resolved?.senderName ?? opts.ctx.workspaceName
+  )
   const from = resolvedFrom ? formatNamedSendingAddress(resolvedFrom, fromDisplayName) : undefined
   const { sendConversationMessageEmail } = await import('@quackback/email')
   const resolvedBody = await resolvedMessageBody(opts.content, opts.contentJson, opts.attachments)

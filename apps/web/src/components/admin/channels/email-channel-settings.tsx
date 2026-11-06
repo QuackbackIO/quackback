@@ -246,7 +246,7 @@ function InboundRouteSection({
 type SendingAddress = {
   id: string
   address: string | null
-  module: string | null
+  module?: string | null
   config: Record<string, unknown>
   sendingDomainId?: string | null
   sendingDomain: { domain: string; status: string } | null
@@ -258,7 +258,7 @@ type SmtpConfig = { host?: string; port?: number; secure?: boolean; user?: strin
 /** The bare address inside a `Name <address>` From, or the string as given. */
 const bareAddress = (from: string): string => /<([^>]+)>/.exec(from)?.[1] ?? from
 
-const moduleLabel = (module: string | null): string =>
+const moduleLabel = (module: string | null | undefined): string =>
   MODULE_LABEL[(module ?? 'support') as (typeof MODULES)[number]] ?? module ?? ''
 
 /** "Feedback and Changelog", "Support, Feedback and Changelog". */
@@ -548,7 +548,7 @@ function SendingAddressesSection({
             onClick={() => {
               setActionError(null)
               create.mutate(
-                { address: address.trim(), module },
+                { address: address.trim(), senderName: null },
                 {
                   onSuccess: () => setAddress(''),
                   onError: showError("Couldn't add the address."),
