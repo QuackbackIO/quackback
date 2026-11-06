@@ -802,7 +802,7 @@
       "serverRequests": 1,
       "requests": 117,
       "jsRequests": 112,
-      "jsKB": 432,
+      "jsKB": 432.1,
       "htmlTransferKB": 31.6,
       "componentRenders": 569
     },
