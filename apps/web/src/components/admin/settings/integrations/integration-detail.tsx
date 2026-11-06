@@ -97,12 +97,14 @@ export function IntegrationDetail({
     ? (entry.getWorkspaceName?.(integration) ?? integration.workspaceName)
     : undefined
   const showDisconnect = isConnected || isPaused
-  const showConnect = !integration && canConnect
-  const showCredentials = hasCredentials && canEditCredentials && (showDisconnect || !integration)
+  const needsConnection = !integration || status === 'disconnected'
+  const showConnect = needsConnection && canConnect
+  const showCredentials =
+    hasCredentials && canEditCredentials && (showDisconnect || needsConnection)
   const credentialsPrimary = showCredentials && !showDisconnect && !showConnect
   // A connect that needs typed input lives in the setup card; a one-click
   // connect is the header's primary action.
-  const connectInSetup = entry.connectForm === true && !integration
+  const connectInSetup = entry.connectForm === true && needsConnection
   const health = integration?.health
     ? {
         ...integration.health,
@@ -111,7 +113,8 @@ export function IntegrationDetail({
     : emptyHealth
 
   const description =
-    (workspaceName ? `Connected to ${workspaceName}` : null) || catalog.description
+    (workspaceName && !needsConnection ? `Connected to ${workspaceName}` : null) ||
+    catalog.description
 
   const connection = (
     <Suspense fallback={null}>
@@ -172,7 +175,7 @@ export function IntegrationDetail({
         </Suspense>
       )}
 
-      {!integration && (
+      {needsConnection && (
         <IntegrationSetupCard
           title={setup.title}
           description={setup.description}
