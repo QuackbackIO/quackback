@@ -96,6 +96,35 @@ export type OpenOptions =
   | { postId: string }
   | { articleId: string }
 
+/** Options for `Quackback.attach(file, options)`. */
+export interface AttachOptions {
+  /**
+   * The file name the visitor and the team see. Defaults to `file.name` for a
+   * `File`; required for a plain `Blob`. 1–255 characters, no `/` or `\`,
+   * no control characters, no surrounding spaces, not only dots. The extension
+   * picks the size cap (100 MB for video, 25 MB otherwise).
+   */
+  name?: string
+}
+
+/** What `Quackback.attach` resolves with once the file is staged in the composer. */
+export interface AttachResult {
+  name: string
+  size: number
+}
+
+/**
+ * Why `Quackback.attach` rejected (the `Error`'s `message`):
+ * - `ATTACHMENT_INVALID` — not a Blob, empty, or a bad name;
+ * - `ATTACHMENT_TOO_LARGE` — over the per-file cap;
+ * - `ATTACHMENT_UNAVAILABLE` — no widget (before `init` or after `destroy`),
+ *   messages are off for this workspace, or the instance did not answer.
+ *
+ * Upload failures after staging (rate limit, a type the instance refuses)
+ * show on the composer's attachment tile, as for a file the visitor picked.
+ */
+export type AttachError = 'ATTACHMENT_INVALID' | 'ATTACHMENT_TOO_LARGE' | 'ATTACHMENT_UNAVAILABLE'
+
 export interface WidgetUser {
   id: string
   name: string

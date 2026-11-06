@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `Quackback.attach(file, { name })` hands a file from the host page (a screenshot or a screen recording, say) to the widget: it opens the chat view and stages the file in the messenger composer, where it uploads and sends like a file the visitor picked. It resolves with `{ name, size }` once staged and rejects with `ATTACHMENT_INVALID`, `ATTACHMENT_TOO_LARGE` or `ATTACHMENT_UNAVAILABLE`. The Blob crosses by `postMessage` structured clone.
 - `tracking: false` on `init` keeps host-page visitor analytics off (no pageview beacons, no new device id), and `Quackback.tracking(true | false)` switches it at runtime, so a site can wait for analytics consent while the launcher stays available. `tracking(false)` also removes the stored device id. A withdrawal made before `init` holds, and `init` without the option keeps the last choice.
 - `Quackback.open` types now include `{ view: 'messages' }` and `{ view: 'tickets' }`, the two views the iframe already accepts, and the `open` event's `view` type includes `chat`, `messages` and `tickets`.
 

@@ -53,6 +53,8 @@ export interface WidgetInboundMessages {
         articleId?: string // `article_…` TypeID or public slug
       }
     | undefined
+  /** A host-page file for the messenger composer (`Quackback.attach`); the Blob is structured-cloned. */
+  'quackback:attach': { requestId: string; file: Blob; name: string }
 }
 
 // ---- Iframe -> SDK Messages ----
@@ -73,4 +75,11 @@ export interface WidgetOutboundMessages {
     name: WidgetEventName
     payload: WidgetEventMap[WidgetEventName]
   }
+  'quackback:attach-result':
+    | { requestId: string; ok: true; name: string; size: number }
+    | {
+        requestId: string | null
+        ok: false
+        error: 'ATTACHMENT_INVALID' | 'ATTACHMENT_TOO_LARGE' | 'ATTACHMENT_UNAVAILABLE'
+      }
 }

@@ -6,6 +6,7 @@ export type InboundMessage =
   | { type: 'quackback:open'; data?: unknown }
   | { type: 'quackback:locale'; data: string }
   | { type: 'quackback:mobile'; data: boolean }
+  | { type: 'quackback:attach'; data: { requestId: string; file: Blob; name: string } }
 
 export type OutboundMessage =
   | { type: 'quackback:ready' }
@@ -16,6 +17,14 @@ export type OutboundMessage =
   | { type: 'quackback:auth-change'; user: unknown }
   | { type: 'quackback:event'; name: string; payload: unknown }
   | { type: 'quackback:unread'; count: number }
+  | {
+      type: 'quackback:attach-result'
+      requestId: string | null
+      ok: boolean
+      name?: string
+      size?: number
+      error?: string
+    }
 
 export interface BridgeOptions {
   getIframe: () => HTMLIFrameElement | null
