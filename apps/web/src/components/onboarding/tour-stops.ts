@@ -14,7 +14,6 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 export const MAX_TOUR_STOPS = 5
 
 export type TourStopId =
-  | 'copilot'
   | 'feedback'
   | 'feedback-private'
   | 'roadmap'
@@ -44,8 +43,6 @@ export interface TourStop {
 
 /** What the stops are chosen from. Gathered once, when the tour starts. */
 export interface TourContext {
-  /** Home leads with the Copilot chat. */
-  copilotOnHome?: boolean
   goals: readonly OnboardingOutcome[]
   feedbackPrivate: boolean
   /** The modules that are on now, so one switched on after setup is in the tour. */
@@ -64,13 +61,6 @@ export interface TourContext {
 }
 
 const COPY = {
-  copilot: {
-    lead: { id: 'onboarding.tour.stop.copilot.lead', defaultMessage: 'Quackback AI.' },
-    line: {
-      id: 'onboarding.tour.stop.copilot.line',
-      defaultMessage: 'Ask anything, or tell it what to change. Nothing changes until you apply.',
-    },
-  },
   feedback: {
     lead: { id: 'onboarding.tour.stop.feedback.lead', defaultMessage: 'Feedback.' },
     line: {

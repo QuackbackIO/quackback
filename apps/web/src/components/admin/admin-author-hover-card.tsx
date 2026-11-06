@@ -20,7 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { useHasPermission } from '@/lib/client/use-permissions'
+import { useHasPermission } from '@/lib/client/hooks/use-root-context'
 import {
   getPublicUserProfileFn,
   getProfileTeamContextFn,

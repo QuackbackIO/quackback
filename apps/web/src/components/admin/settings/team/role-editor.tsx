@@ -9,7 +9,7 @@ import {
   type PermissionKey,
 } from '@/lib/shared/permissions'
 import { CATEGORY_LABELS } from '@/lib/client/permission-labels'
-import { usePermissions, useHasPermission } from '@/lib/client/use-permissions'
+import { usePermissions, useHasPermission } from '@/lib/client/hooks/use-root-context'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { createRoleFn, updateRoleFn, deleteRoleFn, listRolesFn } from '@/lib/server/functions/roles'
 import { Badge } from '@/components/ui/badge'

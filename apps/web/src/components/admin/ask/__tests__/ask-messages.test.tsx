@@ -6,9 +6,9 @@ import { expect, it } from 'vitest'
 import { loadMessages, adminSeedMessages } from '@/lib/shared/i18n'
 import { AskMessages } from '../ask-messages'
 
-it('loads Copilot strings that the page seed leaves out', async () => {
+it('loads search strings that the page seed leaves out', async () => {
   const seeded = adminSeedMessages(await loadMessages('fr'))
-  expect(seeded['ask.chat.newChat']).toBeUndefined()
+  expect(seeded['ask.composer.jumpTo']).toBeUndefined()
   // React retries a suspended use() only inside act.
   await act(async () => {
     render(
@@ -16,7 +16,7 @@ it('loads Copilot strings that the page seed leaves out', async () => {
         <Suspense fallback={<p>Loading</p>}>
           <AskMessages>
             <p>
-              <FormattedMessage id="ask.chat.newChat" defaultMessage="New chat" />
+              <FormattedMessage id="ask.composer.jumpTo" defaultMessage="Jump to" />
             </p>
             <p>
               <FormattedMessage id="onboarding.launch.name" defaultMessage="Launch plan" />
@@ -26,6 +26,6 @@ it('loads Copilot strings that the page seed leaves out', async () => {
       </IntlProvider>
     )
   })
-  expect(await screen.findByText('Nouvelle discussion')).toBeTruthy()
+  expect(await screen.findByText('Aller à')).toBeTruthy()
   expect(screen.getByText(seeded['onboarding.launch.name']!)).toBeTruthy()
 })

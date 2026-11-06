@@ -8,7 +8,7 @@ import { PauseIcon, PlayIcon } from '@heroicons/react/24/solid'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { useUpdateWidgetAssistantDeployment } from '@/lib/client/mutations/assistant'
-import { useHasPermission } from '@/lib/client/use-permissions'
+import { useHasPermission } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
 export interface WidgetAssistantDeployment {
