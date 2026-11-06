@@ -196,7 +196,8 @@ describe('the GitHub star row on Home', () => {
     hoisted.visibleAtClaim = []
     render(wrap(<HomeGithubStarPrompt />))
     expect(await screen.findByText(/Founder of Quackback/)).toBeTruthy()
-    expect(hoisted.marks).toBe(1)
+    // The claim runs in an effect after the row is on screen.
+    await waitFor(() => expect(hoisted.marks).toBe(1))
     expect(hoisted.visibleAtClaim).toEqual([true])
     fireEvent.click(screen.getByRole('button', { name: 'No thanks' }))
     expect(screen.queryByText(/Founder of Quackback/)).toBeNull()
