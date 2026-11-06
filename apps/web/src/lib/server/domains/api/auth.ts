@@ -56,6 +56,12 @@ export interface ApiAuthContext {
    * single per-request lookup instead of re-querying.
    */
   principal: ApiKeyPrincipal | null
+  /**
+   * The teammate whose row scope this key follows (its creator, for a
+   * personal key). Service actors built from this context carry it, so the
+   * ticket and conversation filters treat the key as that teammate.
+   */
+  scopePrincipalId?: PrincipalId
   /** Whether the request is in import mode (suppresses side effects, raises rate limit) */
   importMode: boolean
 }
@@ -109,6 +115,7 @@ export async function requireApiKey(request: Request): Promise<ApiAuthContext | 
     role: authority.role,
     permissions: authority.permissions,
     principal: authority.principal,
+    scopePrincipalId: authority.scopePrincipalId ?? undefined,
     importMode: false,
   }
 }

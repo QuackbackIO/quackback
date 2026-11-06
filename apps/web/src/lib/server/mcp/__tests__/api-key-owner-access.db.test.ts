@@ -146,6 +146,18 @@ describe.skipIf(!fixture.available)(
       expect(actor.permissions?.has(PERMISSIONS.SETTINGS_MANAGE)).toBe(false)
     })
 
+    it('carries the creator as the row scope of every support-tool actor', async () => {
+      const { creator, token } = await seedAdminKey()
+
+      const auth = await authFor(token)
+      expect(auth.scopePrincipalId).toBe(creator)
+      expect(mcpAgentActor(auth)).toMatchObject({
+        principalType: 'service',
+        scopePrincipalId: creator,
+      })
+      expect(await mcpMemberActor(auth)).toMatchObject({ scopePrincipalId: creator })
+    })
+
     it('answers 401 like an unknown key once the creator is removed from the team', async () => {
       const { creator, manager, token } = await seedAdminKey()
       await removeTeamMember(creator, manager, null, undefined, { granterRole: 'admin' })

@@ -187,7 +187,12 @@ export async function auditActor(tx: Transaction, actor: Actor) {
     .leftJoin(user, eq(principal.userId, user.id))
     .where(eq(principal.id, actor.principalId!))
     .limit(1)
-  return { userId: person?.userId, email: person?.email, role: actor.role, type: 'user' as const }
+  return {
+    userId: person?.userId,
+    email: person?.email,
+    role: actor.role,
+    type: actor.principalType === 'service' ? ('service' as const) : ('user' as const),
+  }
 }
 
 /**
