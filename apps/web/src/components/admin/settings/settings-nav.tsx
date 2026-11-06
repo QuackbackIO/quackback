@@ -3,7 +3,6 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { cn } from '@/lib/shared/utils'
 import { NAV_ICON_CLASS, NAV_ITEM_CLASS } from '@/components/shared/nav-tokens'
 import { FilterSection } from '@/components/shared/filter-section'
-import { usePermissions } from '@/lib/client/use-permissions'
 import { AUTOMATION_PAGE_ICONS, SETTINGS_PAGE_ICONS } from './settings-page-icons'
 import {
   buildNavSections,
@@ -14,7 +13,11 @@ import {
   type NavModule,
 } from './settings-nav-sections'
 import { SettingsNavContext } from './settings-page'
-import { useBillingEnabled, useFeatureFlags } from '@/lib/client/hooks/use-root-context'
+import {
+  useBillingEnabled,
+  useFeatureFlags,
+  usePermissions,
+} from '@/lib/client/hooks/use-root-context'
 
 type IconComponent = ComponentType<{ className?: string }>
 

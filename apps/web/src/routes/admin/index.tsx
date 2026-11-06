@@ -10,7 +10,6 @@ import { LaunchMessages } from '@/components/onboarding/launch-messages'
 import { launchStatusQuery } from '@/components/onboarding/use-launch-plan'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
-import { useHasPermission } from '@/lib/client/use-permissions'
 import { ensureOnboardingHomeReadyFn } from '@/lib/server/functions/onboarding'
 import { DEFAULT_LOCALE, loadLaunchMessages } from '@/lib/shared/i18n'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -23,6 +22,7 @@ import {
   useSessionContext,
   useBaseUrl,
   useGithubStarPrompt,
+  useHasPermission,
 } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/admin/')({

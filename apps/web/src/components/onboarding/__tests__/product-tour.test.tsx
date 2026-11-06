@@ -47,8 +47,10 @@ vi.mock('@/lib/server/functions/onboarding-progress', () => ({
     return { ok: true }
   },
 }))
-vi.mock('@/lib/client/hooks/use-root-context', () => ({ useFeatureFlags: () => hoisted.flags }))
-vi.mock('@/lib/client/use-permissions', () => ({ usePermissions: () => hoisted.permissions }))
+vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  useFeatureFlags: () => hoisted.flags,
+  usePermissions: () => hoisted.permissions,
+}))
 
 import { ProductTourProvider, useProductTour, type TourEndAction } from '../product-tour'
 

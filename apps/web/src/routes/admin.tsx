@@ -20,7 +20,6 @@ import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
 import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
-import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import type { requireWorkspaceRole } from '@/lib/server/functions/workspace-utils'
@@ -28,6 +27,7 @@ import {
   useGithubStarPrompt,
   useFeatureFlag,
   useProductEnabled,
+  useHasPermission,
 } from '@/lib/client/hooks/use-root-context'
 import { useToasterLocale } from '@/components/ui/use-toaster-locale'
 
