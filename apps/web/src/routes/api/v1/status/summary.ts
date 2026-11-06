@@ -1,8 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import type { Actor } from '@/lib/server/policy'
-import type { SegmentId } from '@quackback/ids'
 import { serializePublicComponent, serializePublicIncident } from './-serialize'
 
 export const Route = createFileRoute('/api/v1/status/summary')({
@@ -28,13 +27,7 @@ export const Route = createFileRoute('/api/v1/status/summary')({
           // isTeamActor (policy/status.ts), so segmentIds is deliberately
           // left empty. Mirrors apps/boards.ts's convention for API-key
           // reads that need team-level visibility.
-          const actor: Actor = {
-            principalId: auth.principalId,
-            role: auth.role,
-            principalType: 'service',
-            segmentIds: new Set<SegmentId>(),
-            permissions: auth.permissions,
-          }
+          const actor = serviceActorFromApiAuth(auth)
 
           const settings = await getStatusSettings()
           const snapshot = await getStatusPageSnapshot(actor, settings)
