@@ -29,6 +29,7 @@ import {
   principal,
   rolePermissions,
   roles,
+  settings,
   teamMembers,
   ticketLinks,
   teams,
@@ -48,9 +49,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
-vi.mock('@/lib/server/cache', () => ({
+vi.mock('@/lib/server/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/cache')>()),
   cacheDel: vi.fn(),
-  CACHE_KEYS: { PRINCIPAL_BY_USER: (id: string) => `principal:user:${id}` },
 }))
 
 vi.mock('@/lib/server/domains/teams', () => ({
@@ -70,7 +71,7 @@ import { withApiKeyAuth } from '../auth'
 import { serviceActorFromApiAuth } from '../service-actor'
 import { createApiKey } from '@/lib/server/domains/api-keys/api-key.service'
 import { updateMemberRole } from '@/lib/server/domains/principals/principal.service'
-import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
+import { assertTicketVisible, createTicket } from '@/lib/server/domains/tickets/ticket.service'
 import { listLinkedTicketIds } from '@/lib/server/domains/tickets/ticket-links.service'
 import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
 import { ticketFilter } from '@/lib/server/policy/tickets'
@@ -207,7 +208,11 @@ async function visibleConversations(actor: Actor, world: World): Promise<Set<str
 
 /** Move the creator to a custom role that can view support items but not all of them. */
 async function demoteToTeamScope(world: World): Promise<void> {
-  const scoped = await seedCustomRole([PERMISSIONS.TICKET_VIEW, PERMISSIONS.CONVERSATION_VIEW])
+  const scoped = await seedCustomRole([
+    PERMISSIONS.TICKET_VIEW,
+    PERMISSIONS.TICKET_CREATE,
+    PERMISSIONS.CONVERSATION_VIEW,
+  ])
   await updateMemberRole(world.creator, 'member', world.manager, null, undefined, {
     assignRoleId: scoped,
     granterPermissions: ALL_PERMISSIONS,
@@ -281,6 +286,23 @@ describe.skipIf(!fixture.available)('a personal API key follows its creator row 
     expect(new Set(await listLinkedTicketIds(world.ticketIds.mine))).toEqual(
       new Set([world.ticketIds.teamX, world.ticketIds.teamY])
     )
+  })
+
+  it('assigns a ticket it creates to the creator, so it stays visible', async () => {
+    const world = await seedWorld()
+    await demoteToTeamScope(world)
+    const actor = serviceActorFromApiAuth(await withApiKeyAuth(bearer(world.token)))
+
+    if (!(await testDb.query.settings.findFirst())) {
+      await testDb
+        .insert(settings)
+        .values({ name: 'Acme', slug: `acme-${suffix()}`, createdAt: new Date() })
+    }
+
+    const created = await createTicket({ title: 'From the key', type: 'back_office' }, actor)
+
+    expect(created.assignee?.principalId).toBe(world.creator)
+    await expect(assertTicketVisible(created.id, actor)).resolves.toMatchObject({ id: created.id })
   })
 
   it('keeps an actor with no creator behind it (AI agent, workflow) workspace-wide', async () => {
