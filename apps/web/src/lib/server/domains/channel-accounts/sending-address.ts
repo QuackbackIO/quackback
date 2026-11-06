@@ -42,10 +42,9 @@ import {
   customSendingDomainsAvailable,
   provisionSendingDomain,
 } from './sending-identity'
+import { clearEmailSendersFor } from './email-senders'
 
 const log = logger.child({ component: 'sending-address' })
-
-type SendingModule = 'support' | 'feedback' | 'changelog'
 
 /**
  * Which addresses this server lets a workspace add.
@@ -84,7 +83,7 @@ function verifiedCovering(domains: EmailSendingDomain[], domain: string) {
 }
 
 /**
- * Add a sending address for an area, setting up its domain when it needs one.
+ * Add a sending address, setting up its domain when it needs one.
  *
  * - An address the workspace may already send as (a verified domain covers
  *   it, or it is the platform's own or this workspace's minted address) is
@@ -101,7 +100,8 @@ function verifiedCovering(domains: EmailSendingDomain[], domain: string) {
 export async function addSendingAddress(input: {
   owningTeamId: TeamId
   address: string
-  module: SendingModule
+  /** The name mail is sent under. Null or absent: the workspace name. */
+  senderName?: string | null
 }): Promise<ChannelAccount> {
   const address = input.address.trim().toLowerCase()
   const domain = domainOfAddress(address)
@@ -179,6 +179,8 @@ export async function removeSendingAddress(
   id: ChannelAccountId
 ): Promise<{ lastOnDomain: { id: SendingDomainId; domain: string } | null }> {
   const account = await getChannelAccount(id)
+  // Whatever sent from it sends from the default again (or the platform).
+  await clearEmailSendersFor(id)
   await softDeleteChannelAccount(id)
   if (!account) return { lastOnDomain: null }
 

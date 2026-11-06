@@ -131,7 +131,6 @@ describe.skipIf(!fixture.available)('sending-domain isolation (real DB, rolled b
     await createSendingAddress({
       owningTeamId: teamId,
       address: 'support@tenant-a.example',
-      module: 'support',
     })
 
     expect(await resolveSendingAddress(teamId)).toBeNull()
@@ -143,7 +142,6 @@ describe.skipIf(!fixture.available)('sending-domain isolation (real DB, rolled b
     await createSendingAddress({
       owningTeamId: teamId,
       address: 'support@tenant-a.example',
-      module: 'support',
     })
     await seedVerifiedDomain(teamId, 'tenant-a.example')
 
@@ -155,7 +153,6 @@ describe.skipIf(!fixture.available)('sending-domain isolation (real DB, rolled b
     await createSendingAddress({
       owningTeamId: teamId,
       address: 'support@tenant-a.example',
-      module: 'support',
     })
     // Added, records shown, nothing published yet.
     await createSendingDomain({ owningTeamId: teamId, domain: 'tenant-a.example' })
@@ -172,7 +169,6 @@ describe.skipIf(!fixture.available)('sending-domain isolation (real DB, rolled b
     await createSendingAddress({
       owningTeamId: teamId,
       address: 'team@tenant-a.example',
-      module: 'support',
     })
     await seedVerifiedDomain(teamId, 'tenant-a.example')
 
@@ -205,7 +201,6 @@ describe.skipIf(!fixture.available)('sending-domain isolation (real DB, rolled b
     await createSendingAddress({
       owningTeamId: teamId,
       address: 'team@tenant-b.example',
-      module: 'support',
     })
     await seedVerifiedDomain(teamId, 'tenant-b.example')
 
@@ -230,7 +225,6 @@ describe.skipIf(!fixture.available)('sending-domain isolation (real DB, rolled b
     await createSendingAddress({
       owningTeamId: teamId,
       address: 'support@tenant-a.example',
-      module: 'support',
     })
 
     expect(await resolveSendingAddress(teamId)).toBe('support@tenant-a.example')
