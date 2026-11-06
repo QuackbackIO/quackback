@@ -68,7 +68,10 @@ const ticketEmit = vi.hoisted(() => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
+  emitTicketUpdated: vi.fn().mockResolvedValue(undefined),
+  emitTicketPriorityChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketReplied: vi.fn().mockResolvedValue(undefined),
+  emitTicketRepliedAs: vi.fn().mockResolvedValue(undefined),
   emitTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
   emitTicketExternalStatusChanged: vi.fn().mockResolvedValue(undefined),
 }))
@@ -350,12 +353,11 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
       expect(emittedMessage.senderType).toBe('agent')
       expect(emittedConversation.id).toBe(conversationId)
       expect(isFirstMessage).toBe(false)
-      // …and the matrix's ticket-side `ticket.replied` fired ALONGSIDE it
-      // (watcher fan-out — the requester rides their subscription row, B18).
-      expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
-      expect(ticketEmit.emitTicketReplied.mock.calls[0][2].id).toBe(message.id)
-      // The presence-gated requester email on the conversation side also
-      // fires (both channels, no cross-channel dedupe in v1).
+      // …and the send path does NOT emit `ticket.replied` itself: the pair-reply
+      // reaction raises it off that `message.created` (ticket.event-hooks.ts),
+      // the one source for a pair's replies whichever surface wrote them.
+      expect(ticketEmit.emitTicketReplied).not.toHaveBeenCalled()
+      // The presence-gated requester email rides the conversation side.
       expect(convNotify.notifyAgentReply).toHaveBeenCalledTimes(1)
 
       // Realtime: the delegate's conversation-channel publish plus the
@@ -489,13 +491,11 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
       expect(ticketEmit.emitTicketStatusChanged.mock.calls[0][2]).toBe('pending')
       expect(ticketEmit.emitTicketStatusChanged.mock.calls[0][3]).toBe('open')
 
-      // The matrix: `ticket.replied` fires alongside `message.created` for the
-      // REQUESTER direction too (watchers other than the requester hear about
-      // customer replies).
+      // The REQUESTER direction likewise: `message.created` fires, and the
+      // pair-reply reaction (not this path) turns it into `ticket.replied`.
       expect(convEmit.emitMessageCreated).toHaveBeenCalledTimes(1)
       expect(convEmit.emitMessageCreated.mock.calls[0][2].senderType).toBe('visitor')
-      expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
-      expect(ticketEmit.emitTicketReplied.mock.calls[0][2].senderType).toBe('visitor')
+      expect(ticketEmit.emitTicketReplied).not.toHaveBeenCalled()
     })
   })
 

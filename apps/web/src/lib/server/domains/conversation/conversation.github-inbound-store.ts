@@ -56,6 +56,9 @@ export interface GitHubIssue {
   body?: string | null
   html_url?: string
   user?: GitHubUser
+  /** On a closed issue: `completed`, `not_planned` or (older payloads) null. */
+  state_reason?: string | null
+  updated_at?: string
   /** Present on pull-request payloads that reuse the issues/comment events. */
   pull_request?: unknown
 }
@@ -67,23 +70,56 @@ export interface GitHubComment {
   user?: GitHubUser
 }
 
+/** The hidden marker Quackback writes into the issues and comments it creates. */
+const QUACKBACK_MARKER = /<!--\s*quackback:[\s\S]*?-->/g
+
+export function hasQuackbackMarker(body: string | null | undefined): boolean {
+  return /<!--\s*quackback:/.test(body ?? '')
+}
+
+/**
+ * An issue body without what Quackback adds to the issues it writes: its
+ * hidden markers, and the footer that ends in a "View in Quackback" link
+ * (everything from the last `---` rule before that link).
+ */
+export function stripQuackbackFooter(body: string): string {
+  const unmarked = body.replace(QUACKBACK_MARKER, '').trimEnd()
+  const link = unmarked.search(/\n\[View in Quackback\]\([^)]+\)\s*$/)
+  if (link === -1) return unmarked
+  const rules = [...unmarked.slice(0, link).matchAll(/^---\s*$/gm)]
+  const rule = rules[rules.length - 1]
+  return rule?.index == null ? unmarked : unmarked.slice(0, rule.index).trimEnd()
+}
+
 export async function githubCommentExists(githubCommentId: string): Promise<boolean> {
   return !!(await findGitHubCommentMessage(githubCommentId))
 }
 
+/**
+ * Whether an issue belongs to tracker sync (an issue our bot opened or that
+ * carries our marker, or one a post or ticket links to) rather than to the
+ * inbox. Issue numbers repeat
+ * across repositories, so a link counts only when it names this repository:
+ * every GitHub link stores `owner/repo#number` as its display id.
+ */
 export async function isTrackerOwnedIssue(
+  ownerRepo: string,
   issueNumber: string,
   botLogin: string | undefined,
-  issueAuthorLogin: string | undefined
+  issueAuthorLogin: string | undefined,
+  issueBody?: string | null
 ): Promise<boolean> {
   if (githubLoginsMatch(botLogin, issueAuthorLogin)) return true
+  if (hasQuackbackMarker(issueBody)) return true
+  const reference = `${ownerRepo}#${issueNumber}`.toLowerCase()
   const [postLink] = await db
     .select({ id: postExternalLinks.id })
     .from(postExternalLinks)
     .where(
       and(
         eq(postExternalLinks.integrationType, 'github'),
-        eq(postExternalLinks.externalId, issueNumber)
+        eq(postExternalLinks.externalId, issueNumber),
+        sql`lower(${postExternalLinks.externalDisplayId}) = ${reference}`
       )
     )
     .limit(1)
@@ -94,7 +130,8 @@ export async function isTrackerOwnedIssue(
     .where(
       and(
         eq(ticketExternalLinks.integrationType, 'github'),
-        eq(ticketExternalLinks.externalId, issueNumber)
+        eq(ticketExternalLinks.externalId, issueNumber),
+        sql`lower(${ticketExternalLinks.externalDisplayId}) = ${reference}`
       )
     )
     .limit(1)
@@ -357,7 +394,7 @@ export function markdownBody(raw: string | null | undefined): {
   content: string
   contentJson: TiptapContent | null
 } {
-  const markdown = (raw ?? '').trim()
+  const markdown = stripQuackbackFooter((raw ?? '').trim()).trim()
   if (!markdown) return { content: '', contentJson: null }
   const contentJson = sanitizeTiptapContent(githubMarkdownToTiptapJson(markdown), {
     restrictImagesToTrustedOrigins: true,

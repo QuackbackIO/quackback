@@ -2,7 +2,8 @@
  * The admin post detail loads the side panels its caller asks for with the
  * post. Pins that only the requested panels are read, that each comes back in
  * the same shape its own server function returns (the client seeds those
- * queries with it), and that the owner roster stays behind post.set_owner.
+ * queries with it), that the owner roster stays behind post.set_owner, and
+ * that the follow status is the caller's own.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PostId, PrincipalId } from '@quackback/ids'
@@ -28,6 +29,16 @@ vi.mock('@/lib/server/domains/principals/principal.service', () => ({
   listTeamMembers: () => mockListTeamMembers(),
 }))
 
+const mockListPostSubscribers = vi.fn()
+vi.mock('../post.subscribers', () => ({
+  readPostSubscribers: (...args: unknown[]) => mockListPostSubscribers(...args),
+}))
+
+const mockGetSubscriptionStatus = vi.fn()
+vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
+  getSubscriptionStatus: (...args: unknown[]) => mockGetSubscriptionStatus(...args),
+}))
+
 const mockHasCustomerContextProvider = vi.fn()
 vi.mock('@/lib/server/integrations/context', () => ({
   hasCustomerContextProvider: () => mockHasCustomerContextProvider(),
@@ -43,6 +54,7 @@ const POST = 'post_01h00000000000000000000000' as PostId
 const VOTED_AT = new Date('2026-01-02T03:04:05.000Z')
 const SUGGESTED_AT = new Date('2026-02-03T04:05:06.000Z')
 const ALL = ['voters', 'mergeSuggestions', 'externalLinks', 'ownerCandidates'] as const
+const ME = 'principal_me' as PrincipalId
 
 beforeEach(() => {
   vi.resetAllMocks()
@@ -145,6 +157,44 @@ describe('loadAdminPostPanels', () => {
 
       expect(panels).toEqual({ customerContext: [] })
       expect(mockHasCustomerContextProvider).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('the subscriber list and follow status', () => {
+    const FOLLOW = ['subscribers', 'subscription'] as const
+
+    it("reads the subscribers as listPostSubscribersFn returns them and the caller's own status", async () => {
+      mockListPostSubscribers.mockResolvedValue([
+        { principalId: 'principal_s', reason: 'vote', createdAt: VOTED_AT },
+      ])
+      mockGetSubscriptionStatus.mockResolvedValue({ subscribed: false, level: 'none' })
+      const panels = await loadAdminPostPanels(POST, FOLLOW, [], ME)
+
+      expect(mockListPostSubscribers).toHaveBeenCalledWith(POST)
+      expect(mockGetSubscriptionStatus).toHaveBeenCalledWith(ME, POST)
+      expect(panels).toEqual({
+        subscribers: [
+          { principalId: 'principal_s', reason: 'vote', createdAt: '2026-01-02T03:04:05.000Z' },
+        ],
+        subscription: { subscribed: false, level: 'none' },
+      })
+    })
+
+    it('reads neither when neither is asked for', async () => {
+      await loadAdminPostPanels(POST, ['voters'], [], ME)
+
+      expect(mockListPostSubscribers).not.toHaveBeenCalled()
+      expect(mockGetSubscriptionStatus).not.toHaveBeenCalled()
+    })
+
+    it('leaves a subscriber list that fails for its own request', async () => {
+      mockListPostSubscribers.mockRejectedValueOnce(new Error('boom'))
+      mockGetSubscriptionStatus.mockResolvedValue({ subscribed: true, level: 'all' })
+
+      const panels = await loadAdminPostPanels(POST, FOLLOW, [], ME)
+
+      expect(panels).not.toHaveProperty('subscribers')
+      expect(panels.subscription).toEqual({ subscribed: true, level: 'all' })
     })
   })
 })

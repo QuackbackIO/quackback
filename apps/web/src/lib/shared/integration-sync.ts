@@ -55,6 +55,7 @@ export const SYNC_KIND_LABELS: Record<string, string> = {
   refresh: 'Update content',
   status: 'Update status',
   'receive-status': 'Status received',
+  assignee: 'Update assignee',
   'receive-webhook': 'Webhook received',
   membership: 'Segment membership',
   identify: 'Update user',
@@ -62,6 +63,9 @@ export const SYNC_KIND_LABELS: Record<string, string> = {
   'app-hook': 'App event',
   notify: 'Notification',
   link: 'Link existing item',
+  comment: 'Post reply as comment',
+  'comment-update': 'Update comment',
+  'comment-delete': 'Delete comment',
 }
 export interface SyncHistoryItem {
   id: string

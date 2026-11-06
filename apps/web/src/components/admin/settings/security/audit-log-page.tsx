@@ -87,6 +87,14 @@ const FILTER_EVENT_TYPES: FilterEventOption[] = [
   { group: 'Portal', label: 'Sign-in failed', value: 'auth.signin.failed' },
   { group: 'Portal', label: 'Visibility changed', value: 'portal.visibility.changed' },
   { group: 'Labs', label: 'Experiment changed', value: 'labs.experiment.changed' },
+  { group: 'Integrations', label: 'Repository added', value: 'integration.destination.added' },
+  { group: 'Integrations', label: 'Repository removed', value: 'integration.destination.removed' },
+  { group: 'Integrations', label: 'Account matched', value: 'integration.user_mapping.added' },
+  {
+    group: 'Integrations',
+    label: 'Account match removed',
+    value: 'integration.user_mapping.removed',
+  },
   // Changes made with an API key or an MCP client, recorded at the boundary.
   { group: 'API and MCP', label: 'API write', value: 'api.write' },
   { group: 'API and MCP', label: 'API import', value: 'api.import' },

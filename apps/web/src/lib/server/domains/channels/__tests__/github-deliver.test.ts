@@ -6,6 +6,7 @@ const findFirst = vi.hoisted(() => vi.fn())
 const warn = vi.hoisted(() => vi.fn())
 const persist = vi.hoisted(() => vi.fn(async () => {}))
 const recordLastError = vi.hoisted(() => vi.fn(async () => {}))
+const serves = vi.hoisted(() => vi.fn(async (_integration: unknown, _repo: string) => true))
 
 vi.mock('@/lib/server/domains/conversation/conversation.inbound-resolve', () => ({
   lookupChannelThreadByConversation: lookup,
@@ -54,6 +55,8 @@ vi.mock('@/lib/server/domains/conversation/conversation.channel-delivery', () =>
 vi.mock('@/lib/server/integrations/webhook-registration', () => ({
   recordIntegrationLastError: recordLastError,
 }))
+
+vi.mock('@/lib/server/integrations/destinations', () => ({ destinationServes: serves }))
 
 import {
   deleteGitHubIssueComment,
@@ -117,6 +120,41 @@ describe('github adapter delivery', () => {
       channel: 'github',
       externalId: '444',
       error: undefined,
+    })
+  })
+
+  // The thread key names the repository: a conversation from a second
+  // repository is answered there, not in the connection's default.
+  it('posts to the repository the conversation came from', async () => {
+    lookup.mockResolvedValue({
+      channelAccountId: 'channelaccount_1',
+      externalThreadKey: 'acme/web#7',
+    })
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 9 }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await deliverGitHubAgentMessage(agentCtx(conversationId, 'msg-web'))
+
+    expect(serves).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'integration_1' }),
+      'acme/web'
+    )
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/repos/acme/web/issues/7/comments')
+  })
+
+  it('fails the reply cleanly when its repository is no longer synced', async () => {
+    serves.mockResolvedValueOnce(false)
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await deliverGitHubAgentMessage(agentCtx(conversationId, 'msg-removed'))
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(persist).toHaveBeenCalledWith(expect.anything(), {
+      status: 'failed',
+      channel: 'github',
+      externalId: undefined,
+      error: 'acme/api is no longer synced. Add it back in the GitHub integration to reply.',
     })
   })
 

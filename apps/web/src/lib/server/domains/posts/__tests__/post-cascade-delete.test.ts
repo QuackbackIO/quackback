@@ -100,9 +100,11 @@ describe('archive review (PostgreSQL)', () => {
       where: eq(operations.sourceId, post.id),
     }))!
     expect(op.state).toBe('conflict')
+    // The repository the link was made on rides along, so the review can inspect it there.
     expect(readSyncPayload(op).data).toEqual({
       linkId: link.id,
       proposedStatus: 'Archive or close this remote item',
+      target: { channelId: 'acme/widgets' },
     })
     expect(JSON.stringify(readSyncPayload(op))).not.toContain('Private source')
     const history = await listSyncHistory({ provider: 'github', filter: 'attention' }, actor)
