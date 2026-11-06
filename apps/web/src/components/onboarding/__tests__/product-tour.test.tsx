@@ -268,7 +268,7 @@ describe('guided tour', () => {
     expect(screen.queryByRole('button', { name: 'Put Messenger on your site' })).toBeNull()
   })
 
-  it('has no stops on a phone without Copilot on Home', async () => {
+  it('has no stops on a phone', async () => {
     hoisted.narrow = true
     mount()
     await act(async () => {

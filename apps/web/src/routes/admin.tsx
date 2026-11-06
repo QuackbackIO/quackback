@@ -304,18 +304,11 @@ function AdminContent({
   | 'currentUser'
 >) {
   const githubStarPrompt = useGithubStarPrompt()
-  // An open Home chat sits above the corner launcher's spot; the launcher steps aside.
-  const canUseCopilot = useHasPermission(PERMISSIONS.COPILOT_USE)
-  const chatOpen = useRouterState({
-    select: (state) =>
-      /^\/admin\/?$/.test(state.location.pathname) &&
-      typeof (state.location.search as { copilotThread?: unknown }).copilotThread === 'string',
-  })
   return (
     <>
       {/* In the launch window the corner launcher stays hidden (it reads like the
           workspace's own Messenger); Help, Contact us opens it. */}
-      <CloudQuackbackWidget launcherHidden={inLaunchWindow || (canUseCopilot && chatOpen)} />
+      <CloudQuackbackWidget launcherHidden={inLaunchWindow} />
       <AdminWorkspaceFrame
         sidebar={
           initialUserData && (

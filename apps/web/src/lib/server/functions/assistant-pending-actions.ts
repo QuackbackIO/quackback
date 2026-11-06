@@ -66,7 +66,7 @@ export const getAssistantPendingActionFn = createServerFn({ method: 'GET' })
     // Row-level authz (unified inbox §3.3): see this file's doc comment —
     // the base gate above only confirms conversation.view SOMEWHERE.
     const actor = await policyActorFromAuth(auth)
-    await assertPendingWorkspaceParent(row, actor)
+    assertPendingWorkspaceParent(row)
     if (row.conversationId) {
       await assertConversationViewable(row.conversationId, actor)
     } else if (row.ticketId) {

@@ -70,12 +70,9 @@ function tourMessagesFor(messages: Record<string, unknown>, locale: string) {
  */
 export function ProductTourRunner({
   runId,
-  copilotOnHome = false,
   endAction,
 }: {
   runId: number
-  /** Home leads with the Copilot chat, so the tour opens on it. */
-  copilotOnHome?: boolean
   endAction?: TourEndAction
 }) {
   const intl = useIntl()
@@ -138,7 +135,6 @@ export function ProductTourRunner({
         tourMessagesFor(intl.messages, intl.locale),
       ])
       const tourContext: TourContext = {
-        copilotOnHome,
         goals: fetched?.goals ?? ['product_feedback'],
         feedbackPrivate: fetched?.feedbackPrivate ?? false,
         modules: {
@@ -174,7 +170,7 @@ export function ProductTourRunner({
     } finally {
       starting.current = false
     }
-  }, [copilotOnHome, flags, permissions, queryClient, intl.messages, intl.locale])
+  }, [flags, permissions, queryClient, intl.messages, intl.locale])
 
   const finish = useCallback(async () => {
     setTargetElement(null)
