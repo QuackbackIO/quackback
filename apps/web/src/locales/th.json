@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "ไม่มีโพสต์ที่ตรงกับ “{query}”",
   "portal.feedback.list.postSearchAsIdea": "สร้างโพสต์จากคำค้นนี้",
   "portal.feedback.list.searchWidenedMost": "ไม่มีโพสต์ที่มีคำของคุณครบทุกคำ กำลังแสดงโพสต์ที่มีคำส่วนใหญ่",
-  "portal.feedback.list.searchWidenedSimilar": "ไม่พบผลลัพธ์ที่ตรงกันทุกประการ กำลังแสดงโพสต์ที่สะกดคล้ายกัน"
+  "portal.feedback.list.searchWidenedSimilar": "ไม่พบผลลัพธ์ที่ตรงกันทุกประการ กำลังแสดงโพสต์ที่สะกดคล้ายกัน",
+  "settings.labs.empty.title": "ยังไม่มีการทดลองในตอนนี้",
+  "settings.labs.empty.description": "ฟีเจอร์ที่คุณลองใช้ได้ก่อนเปิดตัวจะแสดงที่นี่"
 }

@@ -29,9 +29,12 @@ const options = Route.options as unknown as RouteOptions
 describe('settings labs route', () => {
   it('renders the page with an empty state instead of redirecting', () => {
     expect(options.beforeLoad).toBeUndefined()
+    const Page = options.component
     render(
       <IntlProvider locale="en" defaultLocale="en">
-        <QueryClientProvider client={new QueryClient()}>{options.component()}</QueryClientProvider>
+        <QueryClientProvider client={new QueryClient()}>
+          <Page />
+        </QueryClientProvider>
       </IntlProvider>
     )
     expect(screen.getByRole('heading', { level: 1, name: 'Labs' })).toBeInTheDocument()

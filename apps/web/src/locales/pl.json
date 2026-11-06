@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "Brak wpisów pasujących do „{query}”.",
   "portal.feedback.list.postSearchAsIdea": "Utwórz z tego wpis",
   "portal.feedback.list.searchWidenedMost": "Żaden wpis nie zawiera wszystkich słów. Pokazujemy wpisy z większością z nich.",
-  "portal.feedback.list.searchWidenedSimilar": "Brak dokładnych wyników. Pokazujemy wpisy o podobnej pisowni."
+  "portal.feedback.list.searchWidenedSimilar": "Brak dokładnych wyników. Pokazujemy wpisy o podobnej pisowni.",
+  "settings.labs.empty.title": "Brak eksperymentów",
+  "settings.labs.empty.description": "Tutaj pojawiają się funkcje, które możesz wypróbować przed premierą."
 }

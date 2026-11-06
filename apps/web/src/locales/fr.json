@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "Aucune publication ne correspond à « {query} ».",
   "portal.feedback.list.postSearchAsIdea": "En faire une publication",
   "portal.feedback.list.searchWidenedMost": "Aucune publication ne contient tous vos mots. Voici celles qui en contiennent la plupart.",
-  "portal.feedback.list.searchWidenedSimilar": "Aucun résultat exact. Voici des publications à l’orthographe proche."
+  "portal.feedback.list.searchWidenedSimilar": "Aucun résultat exact. Voici des publications à l’orthographe proche.",
+  "settings.labs.empty.title": "Aucune expérience pour le moment",
+  "settings.labs.empty.description": "Les fonctionnalités que vous pouvez essayer avant leur sortie apparaissent ici."
 }

@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "Ninguna publicación coincide con “{query}”.",
   "portal.feedback.list.postSearchAsIdea": "Crear una publicación con esto",
   "portal.feedback.list.searchWidenedMost": "Ninguna publicación tiene todas tus palabras. Mostrando publicaciones con la mayoría.",
-  "portal.feedback.list.searchWidenedSimilar": "Sin coincidencias exactas. Mostrando publicaciones con una ortografía parecida."
+  "portal.feedback.list.searchWidenedSimilar": "Sin coincidencias exactas. Mostrando publicaciones con una ortografía parecida.",
+  "settings.labs.empty.title": "No hay experimentos por ahora",
+  "settings.labs.empty.description": "Aquí aparecen las funciones que puedes probar antes de su lanzamiento."
 }

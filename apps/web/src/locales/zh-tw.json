@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "沒有與「{query}」相符的貼文。",
   "portal.feedback.list.postSearchAsIdea": "用它建立貼文",
   "portal.feedback.list.searchWidenedMost": "沒有貼文包含你的所有詞語。顯示包含其中大部分詞語的貼文。",
-  "portal.feedback.list.searchWidenedSimilar": "沒有完全相符的結果。顯示拼寫相近的貼文。"
+  "portal.feedback.list.searchWidenedSimilar": "沒有完全相符的結果。顯示拼寫相近的貼文。",
+  "settings.labs.empty.title": "目前沒有實驗功能",
+  "settings.labs.empty.description": "可在正式推出前試用的功能會顯示在這裡。"
 }

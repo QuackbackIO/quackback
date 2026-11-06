@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "No posts match “{query}”.",
   "portal.feedback.list.postSearchAsIdea": "Create a post from it",
   "portal.feedback.list.searchWidenedMost": "No post has all your words. Showing posts with most of them.",
-  "portal.feedback.list.searchWidenedSimilar": "No exact matches. Showing posts with a similar spelling."
+  "portal.feedback.list.searchWidenedSimilar": "No exact matches. Showing posts with a similar spelling.",
+  "settings.labs.empty.title": "No experiments right now",
+  "settings.labs.empty.description": "Features you can try before they ship show up here."
 }

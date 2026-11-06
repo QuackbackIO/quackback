@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "Нет предложений по запросу «{query}».",
   "portal.feedback.list.postSearchAsIdea": "Создать из этого предложение",
   "portal.feedback.list.searchWidenedMost": "Ни одно предложение не содержит все ваши слова. Показаны предложения с большинством из них.",
-  "portal.feedback.list.searchWidenedSimilar": "Точных совпадений нет. Показаны предложения с похожим написанием."
+  "portal.feedback.list.searchWidenedSimilar": "Точных совпадений нет. Показаны предложения с похожим написанием.",
+  "settings.labs.empty.title": "Сейчас экспериментов нет",
+  "settings.labs.empty.description": "Здесь появляются функции, которые можно попробовать до выхода."
 }

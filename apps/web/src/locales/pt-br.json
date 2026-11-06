@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "Nenhum post corresponde a “{query}”.",
   "portal.feedback.list.postSearchAsIdea": "Criar um post com isso",
   "portal.feedback.list.searchWidenedMost": "Nenhum post tem todas as suas palavras. Mostrando posts com a maioria delas.",
-  "portal.feedback.list.searchWidenedSimilar": "Nenhum resultado exato. Mostrando posts com grafia parecida."
+  "portal.feedback.list.searchWidenedSimilar": "Nenhum resultado exato. Mostrando posts com grafia parecida.",
+  "settings.labs.empty.title": "Nenhum experimento no momento",
+  "settings.labs.empty.description": "Os recursos que você pode testar antes do lançamento aparecem aqui."
 }

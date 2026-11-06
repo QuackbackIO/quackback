@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "没有与“{query}”匹配的帖子。",
   "portal.feedback.list.postSearchAsIdea": "用它创建帖子",
   "portal.feedback.list.searchWidenedMost": "没有帖子包含你的所有词语。显示包含其中大部分词语的帖子。",
-  "portal.feedback.list.searchWidenedSimilar": "没有完全匹配的结果。显示拼写相近的帖子。"
+  "portal.feedback.list.searchWidenedSimilar": "没有完全匹配的结果。显示拼写相近的帖子。",
+  "settings.labs.empty.title": "暂无实验功能",
+  "settings.labs.empty.description": "可在正式发布前试用的功能会显示在这里。"
 }

@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "Geen posts gevonden voor “{query}”.",
   "portal.feedback.list.postSearchAsIdea": "Maak er een post van",
   "portal.feedback.list.searchWidenedMost": "Geen post bevat al je woorden. Posts met de meeste ervan worden getoond.",
-  "portal.feedback.list.searchWidenedSimilar": "Geen exacte resultaten. Posts met een vergelijkbare spelling worden getoond."
+  "portal.feedback.list.searchWidenedSimilar": "Geen exacte resultaten. Posts met een vergelijkbare spelling worden getoond.",
+  "settings.labs.empty.title": "Op dit moment geen experimenten",
+  "settings.labs.empty.description": "Functies die je kunt uitproberen voordat ze uitkomen, verschijnen hier."
 }

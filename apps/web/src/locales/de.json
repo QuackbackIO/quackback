@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "Keine Beiträge passen zu „{query}“.",
   "portal.feedback.list.postSearchAsIdea": "Daraus einen Beitrag erstellen",
   "portal.feedback.list.searchWidenedMost": "Kein Beitrag enthält alle deine Wörter. Angezeigt werden Beiträge mit den meisten davon.",
-  "portal.feedback.list.searchWidenedSimilar": "Keine genauen Treffer. Angezeigt werden Beiträge mit ähnlicher Schreibweise."
+  "portal.feedback.list.searchWidenedSimilar": "Keine genauen Treffer. Angezeigt werden Beiträge mit ähnlicher Schreibweise.",
+  "settings.labs.empty.title": "Gerade keine Experimente",
+  "settings.labs.empty.description": "Funktionen, die du vor dem Start ausprobieren kannst, erscheinen hier."
 }

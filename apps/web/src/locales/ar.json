@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "لا توجد منشورات تطابق “{query}”.",
   "portal.feedback.list.postSearchAsIdea": "أنشئ منشورًا منها",
   "portal.feedback.list.searchWidenedMost": "لا يوجد منشور يحتوي على كل كلماتك. نعرض المنشورات التي تحتوي على معظمها.",
-  "portal.feedback.list.searchWidenedSimilar": "لا توجد نتائج مطابقة تمامًا. نعرض منشورات بتهجئة مشابهة."
+  "portal.feedback.list.searchWidenedSimilar": "لا توجد نتائج مطابقة تمامًا. نعرض منشورات بتهجئة مشابهة.",
+  "settings.labs.empty.title": "لا توجد تجارب حاليًا",
+  "settings.labs.empty.description": "تظهر هنا الميزات التي يمكنك تجربتها قبل إطلاقها."
 }

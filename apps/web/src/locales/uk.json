@@ -2078,5 +2078,7 @@
   "portal.feedback.list.noSearchResults": "Немає дописів за запитом «{query}».",
   "portal.feedback.list.postSearchAsIdea": "Створити з цього допис",
   "portal.feedback.list.searchWidenedMost": "Жоден допис не містить усіх ваших слів. Показано дописи з більшістю з них.",
-  "portal.feedback.list.searchWidenedSimilar": "Точних збігів немає. Показано дописи зі схожим написанням."
+  "portal.feedback.list.searchWidenedSimilar": "Точних збігів немає. Показано дописи зі схожим написанням.",
+  "settings.labs.empty.title": "Зараз експериментів немає",
+  "settings.labs.empty.description": "Тут з’являються функції, які можна спробувати до випуску."
 }
