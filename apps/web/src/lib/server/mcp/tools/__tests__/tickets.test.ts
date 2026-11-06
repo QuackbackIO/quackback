@@ -3,6 +3,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 
 const mockListTickets = vi.fn()
 const mockGetTicket = vi.fn()
+const mockAssertTicketVisible = vi.fn()
 const mockCreateTicket = vi.fn()
 const mockListMessages = vi.fn()
 const mockSendMessage = vi.fn()
@@ -11,6 +12,7 @@ const mockAddNote = vi.fn()
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   listTickets: (...a: unknown[]) => mockListTickets(...a),
   getTicket: (...a: unknown[]) => mockGetTicket(...a),
+  assertTicketVisible: (...a: unknown[]) => mockAssertTicketVisible(...a),
   createTicket: (...a: unknown[]) => mockCreateTicket(...a),
 }))
 vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
@@ -167,6 +169,10 @@ describe('ticket MCP tools', () => {
       hasMore: true,
     })
     const out = await collect(teamAuth).get('get_ticket')!({ ticketId: 'ticket_1' })
+    expect(mockAssertTicketVisible).toHaveBeenCalledWith(
+      'ticket_1',
+      expect.objectContaining({ principalId: 'principal_key' })
+    )
     expect(mockGetTicket).toHaveBeenCalledWith('ticket_1')
     expect(mockListMessages).toHaveBeenCalledWith('ticket_1', {
       before: undefined,
@@ -179,6 +185,20 @@ describe('ticket MCP tools', () => {
     expect(body.messages.map((m: { content: string }) => m.content)).toEqual(['first', 'reply'])
     expect(body.hasMore).toBe(true)
     expect(body.nextCursor).toBe('m_old')
+  })
+
+  it('get_ticket refuses a ticket the caller cannot see, without reading it or its thread', async () => {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    mockAssertTicketVisible.mockRejectedValueOnce(
+      new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+    )
+    const out = await collect(teamAuth).get('get_ticket')!({
+      ticketId: 'ticket_1',
+      includeInternal: true,
+    })
+    expect(out.isError).toBe(true)
+    expect(mockGetTicket).not.toHaveBeenCalled()
+    expect(mockListMessages).not.toHaveBeenCalled()
   })
 
   it('get_ticket renders an image-bearing message as markdown, never empty', async () => {
