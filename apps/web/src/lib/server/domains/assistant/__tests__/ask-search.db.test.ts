@@ -574,6 +574,19 @@ describe.skipIf(!fixture.available)('workspace search (real DB)', () => {
       expect(results.map((result) => result.id)).toContain(seeded['post.exact'])
     })
 
+    it('keeps a failed embedding for the query, so every page ranks the same way', async () => {
+      // Page 1's embedding times out or fails; page 2 must not add meaning
+      // matches ahead of its offset, or results would repeat or be skipped.
+      const text = 'sluggish loading'
+      const keywordOnly = await search(admin, { limit: 50, offset: 1 }, text)
+      embedding.generate.mockResolvedValueOnce(null)
+      await search(admin, { semantic: true, limit: 1 }, text)
+      embedding.generate.mockResolvedValue(vector(1))
+      const second = await search(admin, { semantic: true, limit: 50, offset: 1 }, text)
+      expect(second.results).toEqual(keywordOnly.results)
+      expect(embedding.generate).toHaveBeenCalledTimes(1)
+    })
+
     it('keeps a title match past closer body-only matches at the per-kind limit', async () => {
       // Every seeded post is similarity 1 with no title match; this one is
       // similarity 0.6 but its title contains the query, so it scores 1.6.

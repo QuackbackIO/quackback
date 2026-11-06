@@ -50,7 +50,9 @@ const VECTOR_TTL_MS = 10 * 60_000
 
 interface CachedVector {
   at: number
-  vector: string
+  /** Null when the request failed or timed out: kept too, so a query's later
+   *  pages rank without meaning matches exactly as its first page did. */
+  vector: string | null
 }
 
 const vectors = new WorkspaceKeyedCache<CachedVector>(500)
@@ -64,12 +66,22 @@ async function queryVector(
   const key = `${model}\u0000${text.toLowerCase()}`
   const cached = vectors.get(key)
   if (cached && Date.now() - cached.at < VECTOR_TTL_MS) return cached.vector
-  const embedding = await generateEmbedding(
-    text,
-    { pipelineStep: 'workspace_search_query' },
-    { signal }
-  )
-  if (!embedding || signal?.aborted) return null
+  const miss = () => vectors.set(key, { at: Date.now(), vector: null })
+  let embedding: number[] | null
+  try {
+    embedding = await generateEmbedding(
+      text,
+      { pipelineStep: 'workspace_search_query' },
+      { signal }
+    )
+  } catch (err) {
+    miss()
+    throw err
+  }
+  if (!embedding || signal?.aborted) {
+    miss()
+    return null
+  }
   const vector = `[${embedding.join(',')}]`
   vectors.set(key, { at: Date.now(), vector })
   return vector

@@ -164,6 +164,12 @@ export function MembersTab({ currentMember, canManageMembers, initialSearch }: M
   const { members, avatarMap, formattedInvitations, seatUsage } = teamDataQuery.data
 
   const [search, setSearch] = useState(initialSearch ?? '')
+  // A new teammate link (Ctrl+K, history) replaces the filter while open.
+  const [linked, setLinked] = useState(initialSearch)
+  if (linked !== initialSearch) {
+    setLinked(initialSearch)
+    setSearch(initialSearch ?? '')
+  }
   const [showAddPeople, setShowAddPeople] = useState(false)
   const addPeopleOpened = useOpenedOnce(showAddPeople)
   const [error, setError] = useState<string | null>(null)

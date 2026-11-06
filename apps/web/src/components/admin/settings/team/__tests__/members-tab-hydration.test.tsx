@@ -128,3 +128,24 @@ describe('MembersTab opened from search', () => {
     expect(html).not.toContain('Ada Admin')
   })
 })
+
+describe('MembersTab when the search link changes', () => {
+  it('follows a new teammate link while already open', async () => {
+    const { render, cleanup } = await import('@testing-library/react')
+    const props = {
+      currentMember: {
+        id: 'principal_admin' as never,
+        role: 'admin' as const,
+        userId: 'user_admin' as never,
+      },
+      canManageMembers: true,
+    }
+    const view = render(<MembersTab {...props} initialSearch="max@example.com" />)
+    expect(view.container.textContent).toContain('Max Mate')
+    expect(view.container.textContent).not.toContain('Ada Admin')
+    view.rerender(<MembersTab {...props} initialSearch="ada@example.com" />)
+    expect(view.container.textContent).toContain('Ada Admin')
+    expect(view.container.textContent).not.toContain('Max Mate')
+    cleanup()
+  })
+})
