@@ -2269,7 +2269,7 @@ export async function appendAssistantPendingActionNote(
       principalId: author.principalId,
       senderType: 'agent',
       isInternal: true,
-      content: `Requested approval: ${pendingAction.summary}`,
+      content: `Waiting for a teammate to confirm: ${pendingAction.summary}`,
       metadata: { assistantPendingAction: pendingAction },
     })
     .returning()

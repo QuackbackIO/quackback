@@ -7,7 +7,6 @@ import {
 } from '@/lib/shared/schemas/settings'
 import { officeHoursScheduleSchema } from '@/lib/shared/office-hours'
 import { changelogSettingsSchema } from '@/lib/shared/changelog-settings'
-import { parseWebsiteInput } from '@/lib/shared/website-branding'
 
 export const SETTINGS_AREAS = [
   'branding',
@@ -45,38 +44,7 @@ export const settingsChangeInputSchema = z.discriminatedUnion('area', [
   z.object({ area: z.literal('office_hours'), patch: settingsPatchSchemas.office_hours }).strict(),
   z.object({ area: z.literal('changelog'), patch: settingsPatchSchemas.changelog }).strict(),
 ])
-const [, ...nonBrandingSettingsChangeInputs] = settingsChangeInputSchema.options
-export const websiteBrandingInputSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(2048)
-  .refine((site) => parseWebsiteInput(site) !== null)
-export const settingsProposalChangeInputSchema = z.discriminatedUnion('area', [
-  z
-    .object({
-      area: z.literal('branding'),
-      patch: settingsPatchSchemas.branding
-        .extend({
-          website: websiteBrandingInputSchema
-            .optional()
-            .describe('Fetch a website logo and safe brand color; never provide a logo key.'),
-        })
-        .strict(),
-    })
-    .strict(),
-  ...nonBrandingSettingsChangeInputs,
-])
-export const settingsProposalInputSchema = z
-  .object({ changes: z.array(settingsProposalChangeInputSchema).min(1).max(20) })
-  .strict()
-  .refine(
-    (input) =>
-      input.changes.filter((change) => change.area === 'branding' && change.patch.website).length <=
-      1
-  )
 export type SettingsChangeInput = z.infer<typeof settingsChangeInputSchema>
-export type SettingsProposalChangeInput = z.infer<typeof settingsProposalChangeInputSchema>
 const jsonValue: z.ZodType<unknown> = z.lazy(() =>
   z.union([
     z.string(),

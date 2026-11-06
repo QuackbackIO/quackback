@@ -87,13 +87,6 @@ vi.mock('@/lib/server/functions/notifications', () => ({
   getUnreadCountFn: async () => ({ count: 0 }),
   getNotificationsFn: async () => ({ notifications: [], total: 0, unreadCount: 0 }),
 }))
-vi.mock('@/lib/server/functions/approval-counts', () => ({
-  getRailCountsFn: async () => ({ unread: 0, waiting: { count: 0, latest: [] } }),
-}))
-vi.mock('@/lib/server/functions/approvals', () => ({
-  listApprovalsFn: async () => [],
-  getApprovalFn: async () => null,
-}))
 
 const { Route: AdminRouteImport } = await import('../admin')
 const { expireRouteContext } = await import('@/lib/client/route-context-memo')

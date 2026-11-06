@@ -317,6 +317,9 @@ describe('the real corpus', () => {
     // guarded by its existing definition already reading `<= 1`.
     // 0305 gives pending sending domains with no check window one; it fills
     // only NULL windows and leaves none, so a second run writes zero rows.
+    // 0308 archives only unarchived approval bells and strips approval.* only
+    // from webhooks and apps that still hold one; every row it updates leaves
+    // its predicate, so a second run writes zero rows.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -345,6 +348,7 @@ describe('the real corpus', () => {
       '0298_status_maintenance_started_at.sql',
       '0302_approvals_foundation.sql',
       '0305_sending_domain_setup.sql',
+      '0308_remove_approvals_leftovers.sql',
     ])
   })
 
