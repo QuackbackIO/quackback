@@ -78,10 +78,12 @@ describe('searchableKinds', () => {
       keys.includes(key)
 
   it('offers each record kind only with its product on and its page permission', () => {
-    expect(searchableKinds(holding(), all)).toEqual(['post', 'article', 'changelog'])
+    expect(searchableKinds(holding(), all)).toEqual(['article'])
     expect(
       searchableKinds(
         holding(
+          PERMISSIONS.POST_VIEW_PRIVATE,
+          PERMISSIONS.CHANGELOG_VIEW_DRAFT,
           PERMISSIONS.CONVERSATION_VIEW,
           PERMISSIONS.TICKET_VIEW,
           PERMISSIONS.PEOPLE_VIEW,
@@ -100,6 +102,14 @@ describe('searchableKinds', () => {
       'teammate',
       'company',
     ])
+  })
+
+  it('offers posts and changelog only to those who can open them in the admin', () => {
+    // The feedback modal needs post.view_private and the changelog editor
+    // changelog.view_draft, so without them a result would not open.
+    expect(searchableKinds(holding(PERMISSIONS.CHANGELOG_MANAGE), all)).toEqual(['article'])
+    expect(searchableKinds(holding(PERMISSIONS.POST_VIEW_PRIVATE), all)).toContain('post')
+    expect(searchableKinds(holding(PERMISSIONS.CHANGELOG_VIEW_DRAFT), all)).toContain('changelog')
   })
 
   it('needs people.view as well as company.view for companies, which open on the Users page', () => {

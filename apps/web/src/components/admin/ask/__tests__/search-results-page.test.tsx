@@ -25,7 +25,7 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
-  usePermissions: () => new Set(['people.view']),
+  usePermissions: () => new Set(['people.view', 'post.view_private']),
   usePrincipalId: () => 'owner-acme',
   useFeatureFlags: () => ({ feedback: true, helpCenter: false, changelog: false }),
 }))

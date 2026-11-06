@@ -69,10 +69,9 @@ export const MAX_SEARCH_DEPTH = 100
 
 /**
  * Which kinds this viewer may search: the product must be on and the viewer
- * must hold the permission that opens that kind's page. Posts, articles and
- * changelog entries need no extra permission here because their own
- * visibility rules decide which rows each viewer gets (a teammate who cannot
- * manage the help center still finds the articles their audience may read).
+ * must hold the permission that opens that kind's page, so every result opens.
+ * Articles need none: a teammate who cannot manage the help center still finds
+ * the articles their audience may read, linked to the public help center.
  */
 export function searchableKinds(
   has: (permission: PermissionKey) => boolean,
@@ -80,11 +79,12 @@ export function searchableKinds(
 ): SearchKind[] {
   const features = flags ?? {}
   const allowed: Record<SearchKind, boolean> = {
-    post: isProductEnabled(features, 'feedback'),
+    // Posts and changelog open in admin views that need these permissions.
+    post: isProductEnabled(features, 'feedback') && has(PERMISSIONS.POST_VIEW_PRIVATE),
     conversation: !!features.supportInbox && has(PERMISSIONS.CONVERSATION_VIEW),
     ticket: !!features.supportTickets && has(PERMISSIONS.TICKET_VIEW),
     article: isProductEnabled(features, 'helpCenter'),
-    changelog: isProductEnabled(features, 'changelog'),
+    changelog: isProductEnabled(features, 'changelog') && has(PERMISSIONS.CHANGELOG_VIEW_DRAFT),
     person: has(PERMISSIONS.PEOPLE_VIEW),
     teammate: has(PERMISSIONS.MEMBER_VIEW),
     company: has(PERMISSIONS.PEOPLE_VIEW) && has(PERMISSIONS.COMPANY_VIEW),

@@ -341,11 +341,12 @@ describe.skipIf(!fixture.available)('workspace search (real DB)', () => {
     expect(found).toContain(ids.contact)
   })
 
-  it('posts: a teammate without post.view_private gets published posts only', async () => {
+  it('posts: need post.view_private, which opens the feedback modal', async () => {
     expect(await idsOf(admin, { kind: 'post' })).toContain(seeded['post.pending'])
-    const found = await idsOf(member(), { kind: 'post' })
-    expect(found).toContain(seeded['post.exact'])
-    expect(found).not.toContain(seeded['post.pending'])
+    expect(await idsOf(member(), { kind: 'post' })).toEqual([])
+    expect(await idsOf(member(PERMISSIONS.POST_VIEW_PRIVATE), { kind: 'post' })).toContain(
+      seeded['post.exact']
+    )
   })
 
   it('conversations: conversation.view sees assigned-to-me only; none without it', async () => {
@@ -383,8 +384,8 @@ describe.skipIf(!fixture.available)('workspace search (real DB)', () => {
     expect(managed.results[0].href).toMatch(/^\/admin\/help-center\?article=/)
   })
 
-  it('changelog: drafts need the draft permission', async () => {
-    expect(await idsOf(member(), { kind: 'changelog' })).toEqual([seeded['changelog.published']])
+  it('changelog: needs changelog.view_draft, which opens the editor, and then includes drafts', async () => {
+    expect(await idsOf(member(), { kind: 'changelog' })).toEqual([])
     expect(
       (await idsOf(member(PERMISSIONS.CHANGELOG_VIEW_DRAFT), { kind: 'changelog' })).sort()
     ).toEqual([seeded['changelog.published'], seeded['changelog.draft']].sort())
@@ -540,7 +541,7 @@ describe.skipIf(!fixture.available)('workspace search (real DB)', () => {
 
     it('merges records that share no words, under the same visibility, with one embedding', async () => {
       const synonym = 'sluggish loading'
-      const viewer = member(PERMISSIONS.CONVERSATION_VIEW)
+      const viewer = member(PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.POST_VIEW_PRIVATE)
       const page = await searchWorkspace(synonym, viewer, flags, { semantic: true, limit: 2 })
       const next = await searchWorkspace(synonym, viewer, flags, {
         semantic: true,
@@ -551,7 +552,6 @@ describe.skipIf(!fixture.available)('workspace search (real DB)', () => {
       expect(found).toContain(seeded['post.exact'])
       expect(found).toContain(seeded['conversation.mine'])
       expect(found).not.toContain(seeded['conversation.theirs'])
-      expect(found).not.toContain(seeded['post.pending'])
       expect(found).not.toContain(seeded['post.deleted'])
       expect(embedding.generate).toHaveBeenCalledTimes(1)
     })
