@@ -19,16 +19,27 @@ import type { EventData } from '../types'
 
 // --- db: the pair lookup (pairConversationId) resolves the converged
 // Messages deep link; every select here returns the pair row. ---
+// The principal read (which recipients are customers) answers from
+// `principalRows`: the requester is a customer, everyone else a teammate.
+const principalRows = vi.hoisted(() => ({
+  rows: [{ id: 'principal_requester', type: 'user', role: 'user' }] as Array<{
+    id: string
+    type: string
+    role: string
+  }>,
+}))
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
-    select: () => {
+    select: (columns?: Record<string, unknown>) => {
       const chain: Record<string, unknown> = {}
       for (const m of ['from', 'innerJoin', 'leftJoin', 'where', 'limit', 'orderBy']) {
         chain[m] = () => chain
       }
+      const rows =
+        columns && 'role' in columns ? principalRows.rows : [{ conversationId: 'conversation_1' }]
       chain.then = (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
-        Promise.resolve([{ conversationId: 'conversation_1' }]).then(res, rej)
+        Promise.resolve(rows).then(res, rej)
       return chain
     },
   },
@@ -102,6 +113,7 @@ describe('getTicketStatusChangedTargets', () => {
         stageLabel: 'Resolved',
         previousStageLabel: 'Received',
         requesterPrincipalId: 'principal_requester',
+        portalPrincipalIds: ['principal_requester'],
       },
     })
     expect(getStageLabels).toHaveBeenCalledTimes(1)
@@ -126,6 +138,7 @@ describe('getTicketStatusChangedTargets', () => {
         stageLabel: 'Closed',
         previousStageLabel: 'Received',
         requesterPrincipalId: 'principal_requester',
+        portalPrincipalIds: ['principal_requester'],
       },
     })
   })

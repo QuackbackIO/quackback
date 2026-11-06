@@ -530,6 +530,8 @@ async function createAuth() {
             .update(userTable)
             .set({ emailVerified: true, updatedAt: new Date() })
             .where(eq(userTable.id, user.id as UserId))
+          // Now proven: tickets shared with this address become theirs.
+          await claimSharedTicketsOnVerify(user.id as UserId, user.email)
         }
       },
     },
@@ -644,6 +646,9 @@ async function createAuth() {
                 ensureAutoSubscribed(createdPrincipal.id as PrincipalId).catch((err) =>
                   logSettingsReadError(log, err, 'failed to auto-subscribe to changelog on signup')
                 )
+                // Tickets shared with this address before they had an account
+                // (a lead we minted) become theirs, once the address is proven.
+                if (user.emailVerified) await claimSharedTicketsOnVerify(userId, user.email)
               }
             }
           },
@@ -989,4 +994,25 @@ import { stashResolvedClaims } from '@/lib/server/auth/resolved-claims-stash'
 /** Check if role is in allowed list: canAccess('admin', ['admin']) → true */
 export function canAccess(role: Role, allowed: Role[]): boolean {
   return allowed.includes(role)
+}
+
+/**
+ * Hand the tickets shared with a verified address over to its new account
+ * (ticket-sharing.service). Best-effort: a failure must never fail sign-up.
+ */
+async function claimSharedTicketsOnVerify(userId: UserId, email: string): Promise<void> {
+  try {
+    const { db: database, principal: principalTable, eq: equals } = await import('@/lib/server/db')
+    const [row] = await database
+      .select({ id: principalTable.id })
+      .from(principalTable)
+      .where(equals(principalTable.userId, userId))
+      .limit(1)
+    if (!row) return
+    const { claimSharedTicketsForVerifiedEmail } =
+      await import('@/lib/server/domains/tickets/ticket-sharing.service')
+    await claimSharedTicketsForVerifiedEmail(row.id as PrincipalId, email)
+  } catch (err) {
+    log.warn({ err, user_id: userId }, 'claiming shared tickets failed')
+  }
 }

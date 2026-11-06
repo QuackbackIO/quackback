@@ -14,7 +14,8 @@ import { principal } from './auth'
  * past value means active. Per-type/channel preferences stay in the global
  * notification matrix; this table only answers "who follows this ticket".
  */
-export type TicketSubscriptionReason = 'requester' | 'assignee' | 'replier' | 'manual'
+export type TicketSubscriptionReason =
+  'requester' | 'assignee' | 'replier' | 'manual' | 'participant'
 
 export const ticketSubscriptions = pgTable(
   'ticket_subscriptions',
@@ -22,7 +23,8 @@ export const ticketSubscriptions = pgTable(
     id: typeIdWithDefault('ticket_sub')('id').primaryKey(),
     ticketId: typeIdColumn('ticket')('ticket_id').notNull(),
     principalId: typeIdColumn('principal')('principal_id').notNull(),
-    // Provenance: 'requester' | 'assignee' | 'replier' | 'manual'. The first
+    // Provenance: 'requester' | 'assignee' | 'replier' | 'manual' |
+    // 'participant' (a customer the ticket was shared with). The first
     // subscribe wins (onConflictDoNothing); unwatch-then-resubscribe refreshes it.
     reason: varchar('reason', { length: 20 }).notNull(),
     // Temporary mute: active while in the future; NULL = not muted.
