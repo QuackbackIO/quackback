@@ -171,11 +171,10 @@ export function requirePermissions(
 }
 
 /** Feature flags a tool can require before its scope/role guards run. */
-type ToolFeature = 'helpCenter' | 'copilotHome'
+type ToolFeature = 'helpCenter'
 
 const FEATURE_DENIALS: Record<ToolFeature, string> = {
   helpCenter: 'Error: Help center is not enabled. Enable it in Settings → General.',
-  copilotHome: 'Error: Settings tools follow Copilot on Home. Turn it on in Settings → Labs.',
 }
 
 /** Return an error if the help center feature is disabled. */
@@ -197,7 +196,6 @@ export async function requireHelpCenter(): Promise<CallToolResult | null> {
 // ============================================================================
 
 async function requireFeature(feature: ToolFeature): Promise<CallToolResult | null> {
-  if (feature === 'helpCenter') return requireHelpCenter()
   if (await isFeatureEnabled(feature)) return null
   return { isError: true, content: [{ type: 'text', text: FEATURE_DENIALS[feature] }] }
 }

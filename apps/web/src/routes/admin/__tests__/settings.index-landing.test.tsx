@@ -17,11 +17,11 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 vi.mock('@/lib/client/hooks/use-media-query', () => ({ useMediaQuery: () => true }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  usePermissions: () => hoisted.permissions,
   useFeatureFlags: () => hoisted.flags,
   useBillingEnabled: () => false,
   useCloudEnabled: () => false,
 }))
-vi.mock('@/lib/client/use-permissions', () => ({ usePermissions: () => hoisted.permissions }))
 vi.mock('@/components/admin/settings/settings-nav', () => ({ SettingsNav: () => null }))
 vi.mock('@/components/admin/settings/settings-page', () => ({
   SettingsPage: () => null,

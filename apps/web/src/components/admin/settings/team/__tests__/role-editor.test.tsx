@@ -51,7 +51,8 @@ vi.mock('@/lib/server/functions/roles', () => ({
 
 // The editor's ceiling: everything except billing.manage (an Admin-grade editor).
 const HELD = ALL_PERMISSIONS.filter((k) => k !== PERMISSIONS.BILLING_MANAGE)
-vi.mock('@/lib/client/use-permissions', () => ({
+vi.mock('@/lib/client/hooks/use-root-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/client/hooks/use-root-context')>()),
   usePermissions: () => new Set(HELD),
   useHasPermission: (k: string) => HELD.includes(k as (typeof HELD)[number]),
 }))

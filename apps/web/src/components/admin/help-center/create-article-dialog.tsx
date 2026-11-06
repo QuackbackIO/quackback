@@ -11,7 +11,7 @@ import {
   usePublishArticle,
   useUpdateArticle,
 } from '@/lib/client/mutations/help-center'
-import { useHasPermission } from '@/lib/client/use-permissions'
+import { useHasPermission } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { KbArticleId } from '@quackback/ids'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
