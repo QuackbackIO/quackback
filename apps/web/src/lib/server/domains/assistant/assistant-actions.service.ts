@@ -1,5 +1,5 @@
 import { assertPendingWorkspaceParent } from './pending-action-parent'
-import { agentKindForTurn, isConnectorTool, isHomeThreadKey } from './workspace-safety'
+import { agentKindForTurn } from './workspace-safety'
 import { toolPermissions } from './tool-permissions'
 import { db } from '@/lib/server/db'
 import type { AssistantPendingActionId, PrincipalId } from '@quackback/ids'
@@ -82,7 +82,7 @@ export async function decideAssistantAction(
   // A decision names the digest of the content the person was shown; every
   // caller sends the one its card or message carried.
   const { contentHash } = options
-  await assertPendingWorkspaceParent(pending, actor, verifiedThreadKey)
+  assertPendingWorkspaceParent(pending, verifiedThreadKey)
   // The agent that asked never decides its own request.
   if (approverPrincipalId === pending.requestedById)
     throw new ForbiddenError(
@@ -124,16 +124,6 @@ export async function decideAssistantAction(
   }
 
   const agentKind = agentKindForTurn(pending.originRole, pending.workspaceThreadKey)
-  if (isHomeThreadKey(pending.workspaceThreadKey)) {
-    // Home allows exactly one other decision: a connector read the teammate
-    // lets run. A connector write is never executed from Home.
-    if (!isConnectorTool(pending.toolName))
-      throw new ConflictError(
-        'ASSISTANT_ACTION_POLICY_CHANGED',
-        'Open the settings page to make this change'
-      )
-    return allowHomeConnectorRead(pending, approverPrincipalId, actor, agentKind, decideOptions)
-  }
 
   // Built-in specs resolve from the static registry; a custom action
   // (Phase 5) persists an `action_<slug>` toolName that lives only in the DB,
@@ -201,57 +191,5 @@ export async function decideAssistantAction(
     return (await markPendingActionFailed(pendingActionId, outcome.error)) ?? decided
   }
   // skipped_duplicate: a racing call already executed this proposal.
-  return decided
-}
-
-/**
- * Run a connector read the teammate allowed from Home. The spec is resolved
- * again so a tool the connector now marks as a write, or one since removed,
- * never runs.
- */
-async function allowHomeConnectorRead(
-  pending: AssistantPendingAction,
-  approverPrincipalId: PrincipalId,
-  actor: Actor,
-  agentKind: ReturnType<typeof agentKindForTurn>,
-  decideOptions: PendingActionDecisionOptions
-): Promise<AssistantPendingAction> {
-  const spec = await getConnectorSpecByToolName(pending.toolName, agentKind)
-  if (!spec) throw new ToolSpecGoneError(pending.toolName)
-  if (spec.risk !== 'read')
-    throw new ConflictError(
-      'ASSISTANT_ACTION_POLICY_CHANGED',
-      'Connector changes are never made from Home'
-    )
-  const parsedArgs = spec.definition.inputSchema.safeParse(pending.args)
-  if (!parsedArgs.success)
-    throw new ConflictError(
-      'ASSISTANT_ACTION_INPUT_CHANGED',
-      'This action no longer matches the current input contract'
-    )
-  const decided = await decidePendingAction(
-    pending.id,
-    'approved',
-    approverPrincipalId,
-    db,
-    decideOptions
-  )
-  if (!decided)
-    throw new ConflictError(
-      'PENDING_ACTION_NOT_DECIDABLE',
-      'This request was already decided or has expired'
-    )
-  const validated = { ...decided, args: parsedArgs.data as Record<string, unknown> }
-  const ctx = await buildExecutionContext(validated, actor)
-  const outcome = await executeApprovedPendingAction(spec, validated, ctx)
-  if (outcome.status === 'executed')
-    return (
-      (await markPendingActionExecuted(
-        pending.id,
-        (outcome.result as Record<string, unknown> | null) ?? null
-      )) ?? decided
-    )
-  if (outcome.status === 'failed')
-    return (await markPendingActionFailed(pending.id, outcome.error)) ?? decided
   return decided
 }
