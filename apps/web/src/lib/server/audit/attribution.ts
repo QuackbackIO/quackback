@@ -157,7 +157,7 @@ export const MCP_ATTRIBUTION: AuditAttribution = Object.freeze({ channel: 'mcp' 
 
 /** An API key acts for the teammate who created it. */
 export function apiKeyAttribution(
-  apiKey: { id: ApiKeyId; name: string; createdById: PrincipalId | null },
+  apiKey: { id: ApiKeyId; name: string; createdById: PrincipalId | null; kind?: string },
   channel: Extract<AuditChannel, 'api' | 'mcp'>
 ): AuditAttribution {
   return {
@@ -165,7 +165,8 @@ export function apiKeyAttribution(
     credentialKind: 'api_key',
     credentialId: apiKey.id,
     clientName: cleanName(apiKey.name),
-    onBehalfOfPrincipalId: apiKey.createdById,
+    // A workspace key acts for nobody; its creator is only an audit record.
+    onBehalfOfPrincipalId: apiKey.kind === 'workspace' ? null : apiKey.createdById,
   }
 }
 

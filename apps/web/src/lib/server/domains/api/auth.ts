@@ -115,7 +115,7 @@ export async function requireApiKey(request: Request): Promise<ApiAuthContext | 
     role: authority.role,
     permissions: authority.permissions,
     principal: authority.principal,
-    scopePrincipalId: authority.scopePrincipalId,
+    scopePrincipalId: authority.scopePrincipalId ?? undefined,
     importMode: false,
   }
 }
