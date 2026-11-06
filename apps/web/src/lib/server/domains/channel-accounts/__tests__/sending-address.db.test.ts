@@ -195,7 +195,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'Help@Acme.com',
-        module: 'support',
       })
 
       const [domain] = await domainsOf(teamId)
@@ -209,13 +208,11 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const first = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       createIdentity.mockClear()
       const second = await addSendingAddress({
         owningTeamId: teamId,
         address: 'news@acme.com',
-        module: 'changelog',
       })
 
       expect(createIdentity).not.toHaveBeenCalled()
@@ -229,7 +226,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       expect(createIdentity).not.toHaveBeenCalled()
       expect(account.sendingDomainId).toBe(verified.id)
@@ -241,11 +237,10 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@a.example',
-        module: 'support',
       })
 
       await expect(
-        addSendingAddress({ owningTeamId: teamId, address: 'help@b.example', module: 'feedback' })
+        addSendingAddress({ owningTeamId: teamId, address: 'help@b.example' })
       ).rejects.toThrow(/sending domains/i)
       expect((await liveAddresses(teamId)).map((a) => a.address)).toEqual(['help@a.example'])
     })
@@ -254,7 +249,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       vi.stubEnv('EMAIL_SES_IDENTITY_ACCESS_KEY_ID', '')
       const teamId = await seedTeam()
       await expect(
-        addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com', module: 'support' })
+        addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
       ).rejects.toThrow("Custom sending addresses aren't available on this server.")
       expect(await liveAddresses(teamId)).toEqual([])
       expect(await domainsOf(teamId)).toEqual([])
@@ -269,7 +264,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       expect(account).toMatchObject({ address: 'help@acme.com', sendingDomainId: null })
       expect(await domainsOf(teamId)).toEqual([])
@@ -281,7 +275,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       const [domain] = await domainsOf(teamId)
       expect(domain).toMatchObject({ domain: 'acme.com', status: 'pending' })
@@ -296,13 +289,11 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@a.example',
-        module: 'support',
       })
 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@b.example',
-        module: 'feedback',
       })
       expect(account).toMatchObject({ address: 'help@b.example', sendingDomainId: null })
       expect((await domainsOf(teamId)).map((d) => d.domain)).toEqual(['a.example'])
@@ -321,7 +312,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       expect(account).toMatchObject({ address: 'help@acme.com', sendingDomainId: null })
       expect(await domainsOf(teamId)).toEqual([])
@@ -339,7 +329,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
         preexisting: true,
       }))
       const teamId = await seedTeam()
-      await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com', module: 'support' })
+      await addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
       const [row] = await domainsOf(teamId)
       expect(row.dkimMode).toBe('shared')
     })
@@ -354,7 +344,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       expect(account.sendingDomainId).not.toBeNull()
       expect(createIdentity).toHaveBeenCalledWith('acme.com')
@@ -377,7 +366,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
         const account = await addSendingAddress({
           owningTeamId: teamId,
           address: 'help@acme.com',
-          module: 'support',
         })
         expect(winner).toBeDefined()
         expect(await domainsOf(teamId)).toHaveLength(1)
@@ -397,7 +385,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       expect(winner).toBeDefined()
       expect(await domainsOf(teamId)).toHaveLength(1)
@@ -411,7 +398,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
         await seedDomain(teamId, 'other.example', 'pending')
       })
       await expect(
-        addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com', module: 'support' })
+        addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
       ).rejects.toThrow(/sending domains/i)
       expect(await liveAddresses(teamId)).toEqual([])
     })
@@ -421,7 +408,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'notifications@mail.platform.test',
-        module: 'support',
       })
       expect(account.sendingDomainId).toBeNull()
       expect(createIdentity).not.toHaveBeenCalled()
@@ -435,7 +421,7 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
         address: 'help@acme.com',
       })
       await expect(
-        addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com', module: 'support' })
+        addSendingAddress({ owningTeamId: teamId, address: 'help@acme.com' })
       ).rejects.toThrow()
       expect(await domainsOf(teamId)).toEqual([])
     })
@@ -465,12 +451,10 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const a = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       const b = await addSendingAddress({
         owningTeamId: teamId,
         address: 'news@acme.com',
-        module: 'changelog',
       })
 
       expect(await removeSendingAddress(a.id)).toEqual({ lastOnDomain: null })
@@ -487,12 +471,10 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
         owningTeamId: teamId,
         role: 'sending',
         address: 'old@acme.com',
-        module: 'feedback',
       })
       const linked = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       expect(linked.sendingDomainId).toBe(verified.id)
       expect(await removeSendingAddress(linked.id)).toEqual({ lastOnDomain: null })
@@ -507,7 +489,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
           owningTeamId: teamId,
           role: 'sending',
           address: 'old@acme.com',
-          module: 'support',
         })
         .returning()
       expect(await removeSendingAddress(old.id)).toEqual({
@@ -520,7 +501,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       const { lastOnDomain } = await removeSendingAddress(account.id)
       if (!lastOnDomain) throw new Error('expected the domain to be flagged')
@@ -534,7 +514,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       if (!account.sendingDomainId) throw new Error('expected a linked domain')
       await expect(deleteSendingDomain(account.sendingDomainId)).rejects.toThrow(
@@ -548,7 +527,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'notifications@mail.platform.test',
-        module: 'support',
       })
       expect(await removeSendingAddress(account.id)).toEqual({ lastOnDomain: null })
     })
@@ -561,7 +539,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       accountEmails.set('user_admin', 'admin@example.com')
       accountEmails.set('user_other', 'other@example.com')
@@ -584,7 +561,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       accountEmails.set('user_admin', 'admin@example.com')
       await expect(
@@ -599,7 +575,6 @@ describe.skipIf(!fixture.available)('sending addresses (real DB, rolled back)', 
       const account = await addSendingAddress({
         owningTeamId: teamId,
         address: 'help@acme.com',
-        module: 'support',
       })
       accountEmails.set('user_admin', 'admin@example.com')
       guardRefuses.add('help@acme.com')

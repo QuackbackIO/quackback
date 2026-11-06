@@ -16,6 +16,7 @@ const hoisted = vi.hoisted(() => ({
   inboundReplyToAddress: vi.fn(() => 'reply+c1@mail.example'),
   mintOutboundMessageId: vi.fn(() => 'c.1.ack@mail.example'),
   resolveConversationFrom: vi.fn(async (_id: unknown): Promise<string | null> => null),
+  senderName: null as string | null,
 }))
 
 vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', async (importOriginal) => ({
@@ -23,6 +24,10 @@ vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', async (importOr
     typeof import('@/lib/server/domains/channel-accounts/sender-resolver')
   >()),
   resolveConversationFrom: (id: unknown) => hoisted.resolveConversationFrom(id),
+  resolveConversationSender: async (id: unknown) => {
+    const from = await hoisted.resolveConversationFrom(id)
+    return from ? { from, source: 'surface', senderName: hoisted.senderName } : null
+  },
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.email-auto-ack', () => ({
@@ -195,6 +200,22 @@ describe('maybeSendColdInboundAck', () => {
     const call = hoisted.sendConversationAutoAckEmail.mock.calls[0][0] as Record<string, unknown>
     expect(call.from).toBe('Acme <help@home.example>')
     expect(call.fromDisplayName).toBeUndefined()
+  })
+
+  it("sends under the address's sender name when it has one", async () => {
+    hoisted.resolveConversationFrom.mockResolvedValueOnce('help@home.example')
+    hoisted.senderName = 'Acme Support'
+    try {
+      await maybeSendColdInboundAck({
+        parsed: parsed(),
+        conversationId,
+        conversationSubject: 'Help',
+      })
+    } finally {
+      hoisted.senderName = null
+    }
+    const call = hoisted.sendConversationAutoAckEmail.mock.calls[0][0] as Record<string, unknown>
+    expect(call.from).toBe('Acme Support <help@home.example>')
   })
 
   it('names the platform default with the workspace when the thread has no address', async () => {

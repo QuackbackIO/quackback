@@ -259,6 +259,8 @@ export {
   channelThreads,
   emailSendingDomains,
   emailSesTenants,
+  emailSenders,
+  EMAIL_SENDER_SURFACES,
   // Schema tables - office hours + SLA (support platform §4.6)
   officeHoursSchedules,
   slaPolicies,
@@ -559,6 +561,9 @@ export type {
   ChannelAccount,
   EmailSendingDomain,
   EmailSesTenant,
+  EmailSender,
+  EmailSenderSurface,
+  EmailSenderMode,
   ChannelAccountConfig,
   SendingDomainDnsRecord,
   SendingDomainOwnershipRecord,

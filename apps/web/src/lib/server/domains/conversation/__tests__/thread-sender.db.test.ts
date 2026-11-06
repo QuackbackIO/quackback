@@ -9,8 +9,8 @@
  * listener this file runs, so the From, subject and threading headers asserted
  * here are the ones the message actually left with.
  *
- * Then the conversation is reassigned to a team with an address of its own, and
- * the next reply must still come from the address the thread started on.
+ * Then support is pointed at another address and the conversation reassigned,
+ * and the next reply must still come from the address the thread started on.
  *
  * Pooled tenancy is on so the send guard is live: on a single-workspace install
  * it permits every address and would prove nothing about which one is chosen.
@@ -80,6 +80,7 @@ import { maybeSendColdInboundAck } from '../conversation.auto-ack'
 import { notifyAgentReply, notifyCsatRequestEmail } from '../conversation.notify'
 import { notifyConversationClosed } from '../conversation.notify-closed'
 import { createSendingAddress } from '@/lib/server/domains/channel-accounts/channel-account.service'
+import { setEmailSender } from '@/lib/server/domains/channel-accounts/email-senders'
 import { resolveSendingAddress } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-scope'
 
@@ -272,17 +273,18 @@ describe.skipIf(!fixture.available)('one sender for a whole support thread (real
   it('sends the acknowledgement, a reply, the rating request and the closing notice as one thread from one address', async () => {
     const home = await defaultTeam()
     await verifyDomain(home, 'home.example')
+    // Named on its own, so every email below shows the address's sender name
+    // rather than the workspace's.
     await createSendingAddress({
       owningTeamId: home,
       address: 'help@home.example',
-      module: 'support',
+      senderName: 'Example Support',
     })
-    // A second team with its own live address, which the thread is later moved to.
+    // A second live address, which support is later pointed at.
     const [billing] = await testDb.insert(teams).values({ name: 'Billing' }).returning()
-    await createSendingAddress({
-      owningTeamId: billing.id,
+    const billingAddress = await createSendingAddress({
+      owningTeamId: home,
       address: 'billing@home.example',
-      module: 'support',
     })
     const agent = await seedAgent()
 
@@ -326,10 +328,10 @@ describe.skipIf(!fixture.available)('one sender for a whole support thread (real
 
     const mails = customerMail()
     expect(mails.map((m) => m.get('from'))).toEqual([
-      'Example Co <help@home.example>',
-      'Alex from Example Co <help@home.example>',
-      'Example Co <help@home.example>',
-      'Example Co <help@home.example>',
+      'Example Support <help@home.example>',
+      'Alex from Example Support <help@home.example>',
+      'Example Support <help@home.example>',
+      'Example Support <help@home.example>',
     ])
     expect(new Set(mails.map((m) => m.get('subject')))).toEqual(new Set(['Re: Help with billing']))
     // Every one answers the customer's message and replies on the conversation.
@@ -346,7 +348,9 @@ describe.skipIf(!fixture.available)('one sender for a whole support thread (real
       expect(referenceIds(mails[i])).toEqual(expect.arrayContaining(ids.slice(0, i)))
     }
 
-    // Reassigned to a team whose own address the resolver would otherwise pick.
+    // Support is pointed at another address, which a new thread would use, and
+    // the conversation is reassigned.
+    await setEmailSender('support', { mode: 'address', channelAccountId: billingAddress.id })
     expect(await asWorkspace(() => resolveSendingAddress(billing.id))).toBe('billing@home.example')
     await testDb
       .update(conversations)
@@ -365,7 +369,7 @@ describe.skipIf(!fixture.available)('one sender for a whole support thread (real
     )
 
     const [afterMove] = customerMail()
-    expect(afterMove.get('from')).toBe('Sam from Example Co <help@home.example>')
+    expect(afterMove.get('from')).toBe('Sam from Example Support <help@home.example>')
     expect(bareFrom(afterMove.get('from'))).toBe(bareFrom(mails[0].get('from')))
     expect(referenceIds(afterMove)).toEqual(expect.arrayContaining(ids))
   })
