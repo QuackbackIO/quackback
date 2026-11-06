@@ -18,8 +18,9 @@ function ownerRequired(): ForbiddenError {
 
 /**
  * Current assignments and key scopes cap every settings and navigation call.
- * An API key resolves to the teammate who created it, with the same authority
- * the REST API grants the key (see resolveApiKeyAuthority).
+ * A personal API key resolves to the teammate who created it, and a workspace
+ * key to itself, with the same authority the REST API grants the key (see
+ * resolveApiKeyAuthority).
  */
 export async function resolveMcpActor(
   auth: McpAuthContext,
@@ -63,5 +64,9 @@ export async function resolveMcpActor(
     throw ownerRequired()
   const authority = await resolveApiKeyAuthority(key)
   if (!authority) throw ownerRequired()
+  // A personal key acts as its creator; a workspace key acts as itself.
+  if (!authority.owner) {
+    return { ...actor(record.id, authority.role, authority.permissions), principalType: 'service' }
+  }
   return actor(authority.owner.id, authority.role, authority.permissions)
 }

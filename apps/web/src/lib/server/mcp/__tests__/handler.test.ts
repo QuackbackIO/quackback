@@ -46,7 +46,7 @@ const mockAuditInsertValues = vi.fn(async () => undefined)
 // row mockFindFirst serves: the mock key is a legacy human-backed key, so that
 // row is both the key's principal and the creator it acts for.
 const mockAuthority = vi.fn(async (_key: unknown) => {
-  const record = (await mockFindFirst()) as { role?: string } | null
+  const record = (await mockFindFirst()) as { id?: string; role?: string } | null
   if (!record || (record.role !== 'admin' && record.role !== 'member')) return null
   const { resolveActorPermissions } = await import('@/lib/server/policy/permissions')
   return {
@@ -54,6 +54,7 @@ const mockAuthority = vi.fn(async (_key: unknown) => {
     owner: record,
     role: record.role,
     permissions: resolveActorPermissions(record.role),
+    scopePrincipalId: record.id ?? null,
   }
 })
 vi.mock('@/lib/server/domains/api-keys/api-key-authority', () => ({
@@ -357,6 +358,7 @@ const MOCK_USER_ID = 'user_01h455vb4pex5vsknk084sn02s' as UserId
 const MOCK_API_KEY: ApiKey = {
   id: 'apikey_01h455vb4pex5vsknk084sn02q' as ApiKeyId,
   name: 'Test Key',
+  kind: 'personal' as const,
   keyPrefix: 'qb_test',
   principalId: MOCK_MEMBER_ID,
   createdById: MOCK_MEMBER_ID,
@@ -631,6 +633,16 @@ describe('MCP HTTP Handler', () => {
 
       expect(response.status).toBe(429)
       expect(response.headers.get('retry-after')).toBe('30')
+    })
+
+    it('carries the creator row scope on a legacy human-backed key context', async () => {
+      await setupValidAuth()
+
+      const { resolveAuthContext } = await import('../handler')
+      const auth = await resolveAuthContext(mcpRequest(jsonRpcRequest('initialize')))
+
+      expect(auth).not.toBeInstanceOf(Response)
+      expect((auth as { scopePrincipalId?: string }).scopePrincipalId).toBe(MOCK_MEMBER_RECORD.id)
     })
 
     it('should propagate unexpected errors from withApiKeyAuth instead of swallowing as 401', async () => {
