@@ -526,6 +526,11 @@ export interface DeveloperConfig {
    * toggle takes effect without a restart.
    */
   oauthDynamicClientRegistrationEnabled: boolean
+  /**
+   * Whether teammates may create personal API keys for themselves. Turning it
+   * off stops new keys only; existing keys keep working until revoked.
+   */
+  personalApiKeysEnabled: boolean
 }
 
 /**
@@ -536,6 +541,7 @@ export const DEFAULT_DEVELOPER_CONFIG: DeveloperConfig = {
   mcpEnabled: true,
   mcpPortalAccessEnabled: false,
   oauthDynamicClientRegistrationEnabled: true,
+  personalApiKeysEnabled: true,
 }
 
 /**
@@ -545,6 +551,7 @@ export interface UpdateDeveloperConfigInput {
   mcpEnabled?: boolean
   mcpPortalAccessEnabled?: boolean
   oauthDynamicClientRegistrationEnabled?: boolean
+  personalApiKeysEnabled?: boolean
 }
 
 // =============================================================================
