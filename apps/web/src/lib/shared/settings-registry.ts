@@ -1,8 +1,8 @@
 /**
- * The settings registry's pure half: what each area is, how risky a change to
- * it is, who may read and write it, and the shapes of its value and its patch.
+ * The settings registry's pure half: what each area is, who may read and
+ * write it, and the shapes of its value and its patch.
  *
- * The app, the REST API and MCP all read this one table, so an area's risk,
+ * The app, the REST API and MCP all read this one table, so an area's
  * permission and schemas cannot differ between them. The server half
  * (`domains/settings-registry`) adds the handlers that read, apply and undo.
  */
@@ -17,34 +17,21 @@ export {
   type SettingsArea,
 } from '@/lib/shared/assistant/settings-proposals'
 
-export const SETTINGS_RISKS = ['low', 'medium', 'high', 'critical'] as const
-export type SettingsRisk = (typeof SETTINGS_RISKS)[number]
-
 export interface SettingsAreaMeta {
   id: SettingsArea
   title: string
   description: string
-  /**
-   * A low-risk change applies at once. Medium and above is filed as an
-   * approval and applied when a qualified person decides it.
-   */
-  risk: SettingsRisk
   /** Needed to read the area and to write it. Reading is never wider than writing. */
   permission: PermissionKey
   /** The page in the app that edits the area. */
   href: string
 }
 
-/**
- * What customers see or are emailed about (Messenger, product modules,
- * changelog email) is medium. Branding, the workspace name and hours are low.
- */
 export const SETTINGS_AREA_META: Record<SettingsArea, SettingsAreaMeta> = {
   branding: {
     id: 'branding',
     title: 'Branding',
     description: 'Theme mode and the light and dark colors, font and radius.',
-    risk: 'low',
     permission: PERMISSIONS.SETTINGS_BRANDING,
     href: '/admin/settings/portal',
   },
@@ -52,7 +39,6 @@ export const SETTINGS_AREA_META: Record<SettingsArea, SettingsAreaMeta> = {
     id: 'portal',
     title: 'Workspace name',
     description: 'The name shown across the portal.',
-    risk: 'low',
     // Portal settings opens with the branding permission alone.
     permission: PERMISSIONS.SETTINGS_BRANDING,
     href: '/admin/settings/portal',
@@ -61,7 +47,6 @@ export const SETTINGS_AREA_META: Record<SettingsArea, SettingsAreaMeta> = {
     id: 'office_hours',
     title: 'Office hours',
     description: 'When the team is available: timezone, weekly intervals and holidays.',
-    risk: 'low',
     permission: PERMISSIONS.OFFICE_HOURS_MANAGE,
     href: '/admin/settings/office-hours',
   },
@@ -69,7 +54,6 @@ export const SETTINGS_AREA_META: Record<SettingsArea, SettingsAreaMeta> = {
     id: 'messenger',
     title: 'Messenger',
     description: 'Whether the customer Messenger is on, and its welcome message.',
-    risk: 'medium',
     permission: PERMISSIONS.SETTINGS_MANAGE,
     href: '/admin/settings/channels/messenger',
   },
@@ -77,7 +61,6 @@ export const SETTINGS_AREA_META: Record<SettingsArea, SettingsAreaMeta> = {
     id: 'modules',
     title: 'Modules',
     description: 'Which products are on: support inbox, tickets, help center and status page.',
-    risk: 'medium',
     permission: PERMISSIONS.SETTINGS_MANAGE,
     href: '/admin/settings/general',
   },
@@ -85,7 +68,6 @@ export const SETTINGS_AREA_META: Record<SettingsArea, SettingsAreaMeta> = {
     id: 'changelog',
     title: 'Changelog',
     description: 'Who can read the changelog and whether it sends email.',
-    risk: 'medium',
     permission: PERMISSIONS.CHANGELOG_MANAGE,
     href: '/admin/settings/changelog',
   },
@@ -145,10 +127,10 @@ export const settingsChangeEntrySchema = z.object({
 })
 export type SettingsChangeEntry = z.infer<typeof settingsChangeEntrySchema>
 
-/** A receipt id: an audit row for a direct write, an approval for one a person decided. */
+/** A receipt id: the audit row of a direct write. */
 export const settingsReceiptIdSchema = z
   .string()
-  .regex(/^(?:audit|assistant_action)_[0-9a-z]{26}$/, 'Not a settings receipt id')
+  .regex(/^audit_[0-9a-z]{26}$/, 'Not a settings receipt id')
 
 /** What a write did, with the values before and after. */
 export const settingsReceiptSchema = z.object({

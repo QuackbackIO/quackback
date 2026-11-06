@@ -31,7 +31,6 @@ import {
   getTicketExternalStatusChangedTargets,
   getTicketSubscriberAddedTargets,
   getMessageCreatedTargets,
-  getApprovalRequestedTargets,
   getTicketCreatedEmailTargets,
   getTicketRepliedEmailTargets,
   getTicketSharedEmailTargets,
@@ -77,7 +76,6 @@ const BELL_BUILDERS: Record<string, BellBuilder> = {
   'ticket.external_status_changed': getTicketExternalStatusChangedTargets,
   'ticket.subscriber_added': getTicketSubscriberAddedTargets,
   'message.created': getMessageCreatedTargets,
-  'approval.requested': getApprovalRequestedTargets,
   'ticket.due_soon': getTicketDueTargets,
   'ticket.overdue': getTicketDueTargets,
 }
