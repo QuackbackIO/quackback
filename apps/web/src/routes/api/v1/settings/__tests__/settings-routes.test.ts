@@ -98,33 +98,8 @@ describe('PATCH /settings/:area', () => {
       {
         area: 'messenger',
         input: { patch: { enabled: true }, expectedRevision: '"rev1"', dryRun: false },
-        caller: {
-          requester: { via: 'api', credentialId: 'api_key_1', requestedById: 'principal_key' },
-        },
       },
     ])
-  })
-
-  it('answers 202 with the approval in the propose_settings_change shape', async () => {
-    state.result = {
-      status: 'approval_required',
-      approval: {
-        proposed: true,
-        approvalId: 'assistant_action_1',
-        pendingActionId: 'assistant_action_1',
-        status: 'pending',
-        url: 'http://localhost/admin/approvals?id=assistant_action_1',
-        proposal: {},
-      },
-    }
-    const response = await patch({ 'if-match': 'rev1' })
-    expect(response.status).toBe(202)
-    expect((await response.json()).data).toMatchObject({
-      proposed: true,
-      approvalId: 'assistant_action_1',
-      status: 'pending',
-      url: expect.stringContaining('/admin/approvals?id='),
-    })
   })
 
   it('previews with dry_run and no If-Match', async () => {
@@ -190,18 +165,5 @@ describe('POST /settings/receipts/:id/undo', () => {
     expect((await undo.POST({ request: request(), params: { receiptId: 'audit_1' } })).status).toBe(
       403
     )
-  })
-
-  it('answers 202 when the undo was filed as an approval', async () => {
-    state.undo = {
-      status: 'approval_required',
-      approval: { proposed: true, approvalId: 'assistant_action_2', status: 'pending' },
-    }
-    const response = await undo.POST({
-      request: new Request('http://localhost/x', { method: 'POST' }),
-      params: { receiptId: 'assistant_action_1' },
-    })
-    expect(response.status).toBe(202)
-    expect((await response.json()).data).toMatchObject({ approvalId: 'assistant_action_2' })
   })
 })

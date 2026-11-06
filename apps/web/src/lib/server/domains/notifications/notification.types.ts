@@ -33,7 +33,6 @@ export type NotificationType =
   | 'sla_breach'
   | 'comment_mentioned'
   | 'assistant_handed_off'
-  | 'approval_requested'
   | 'sending_domain_live'
   | 'sending_domain_needs_attention'
 

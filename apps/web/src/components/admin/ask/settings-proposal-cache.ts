@@ -1,8 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
-import {
-  settingsProposalSchema,
-  type SettingsArea,
-} from '@/lib/shared/assistant/settings-proposals'
+import type { SettingsArea } from '@/lib/shared/assistant/settings-proposals'
 
 const AREA_QUERY_KEYS: Record<SettingsArea, readonly (readonly string[])[]> = {
   branding: [
@@ -29,22 +26,6 @@ const AREA_QUERY_KEYS: Record<SettingsArea, readonly (readonly string[])[]> = {
     ['changelogs', 'settings'],
     ['changelogs', 'public'],
   ],
-}
-
-export async function refreshSettingsProposalQueries(queryClient: QueryClient, receipt: unknown) {
-  const value =
-    receipt && typeof receipt === 'object' && !Array.isArray(receipt)
-      ? (receipt as Record<string, unknown>)
-      : null
-  const proposal = settingsProposalSchema.safeParse({
-    kind: value?.kind,
-    version: value?.version,
-    changes: value?.changes,
-  })
-  await refreshSettingsAreaQueries(
-    queryClient,
-    proposal.success ? proposal.data.changes.map((change) => change.area) : []
-  )
 }
 
 export async function refreshSettingsAreaQueries(queryClient: QueryClient, areas: SettingsArea[]) {
