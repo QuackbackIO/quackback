@@ -10,6 +10,7 @@ import {
   InboxArrowDownIcon,
   SparklesIcon,
   LinkIcon,
+  EyeIcon,
 } from '@heroicons/react/24/solid'
 import type { NotificationType } from '@/lib/shared/types'
 
@@ -22,7 +23,9 @@ export interface NotificationTypeConfig {
 // Color-coding strategy: @ symbol marks mention types (amber for posts, rose for chat,
 // fuchsia for comments); teal for support conversation, cyan for conversation assignment;
 // indigo separates ticket stage changes from violet ticket assignment and blue post status
-// changes; yellow marks AI-assistant handoffs as high-signal.
+// changes; yellow marks AI-assistant handoffs as high-signal. Ticket due-date alerts reuse
+// the SLA alerts' ticket icon, amber while due soon and red once overdue (a new icon here
+// would split into its own chunk on every page that loads the bell).
 export const notificationTypeConfigs: Record<NotificationType, NotificationTypeConfig> = {
   post_status_changed: {
     icon: CheckCircleIcon,
@@ -93,6 +96,21 @@ export const notificationTypeConfigs: Record<NotificationType, NotificationTypeC
     icon: LinkIcon,
     iconClass: 'text-slate-500',
     bgClass: 'bg-slate-500/10',
+  },
+  ticket_due_soon: {
+    icon: TicketIcon,
+    iconClass: 'text-amber-500',
+    bgClass: 'bg-amber-500/10',
+  },
+  ticket_overdue: {
+    icon: TicketIcon,
+    iconClass: 'text-red-500',
+    bgClass: 'bg-red-500/10',
+  },
+  ticket_subscriber_added: {
+    icon: EyeIcon,
+    iconClass: 'text-sky-500',
+    bgClass: 'bg-sky-500/10',
   },
   // Email-only types (never rendered as bells today; entries satisfy the
   // exhaustive map and future-proof an in-app channel).

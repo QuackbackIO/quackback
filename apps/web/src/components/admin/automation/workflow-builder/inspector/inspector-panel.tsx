@@ -21,6 +21,7 @@ import { MessageEditor } from './message-editor'
 import { StepPalette } from './palette'
 import { ReplyButtonsEditor } from './reply-buttons-editor'
 import { ReplyTimeEditor } from './reply-time-editor'
+import { TicketFormEditor } from './ticket-form-editor'
 import { TriggerEditor } from './trigger-editor'
 import { WaitEditor } from './wait-editor'
 import {
@@ -183,7 +184,7 @@ export function InspectorPanel({
           <MessageEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
         )}
         {step.kind === 'send_ticket_form' && (
-          <MessageEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
+          <TicketFormEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
         )}
         {step.kind === 'show_reply_time' && <ReplyTimeEditor />}
         {step.kind === 'disable_composer' && (

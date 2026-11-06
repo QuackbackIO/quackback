@@ -45,6 +45,7 @@ import {
   tickets,
   ticketStatuses,
   ticketConversations,
+  ticketSubscriptions,
   principal,
   user,
   settings,
@@ -241,6 +242,7 @@ describe.skipIf(!fixture.available)('inbox.query (real DB, rolled back)', () => 
         title: linkedTicket.title,
         statusName: linkedTicket.status.name,
         statusCategory: linkedTicket.status.category,
+        dueAt: null,
       })
 
       // The ticket's OWN row must not also appear.
@@ -420,6 +422,79 @@ describe.skipIf(!fixture.available)('inbox.query (real DB, rolled back)', () => 
     })
   })
 
+  describe('due date filter + sort (both branches)', () => {
+    const HOUR = 60 * 60 * 1000
+
+    async function setDueAt(ticketId: string, dueAt: Date | null) {
+      await testDb
+        .update(tickets)
+        .set({ dueAt })
+        .where(eq(tickets.id, ticketId as never))
+    }
+
+    /** A pair whose linked ticket is overdue, a standalone overdue ticket, a
+     *  standalone ticket due later, an undated standalone, and a plain
+     *  conversation. */
+    async function seedDueFixtures() {
+      await seedSettings()
+      await seedStatuses()
+      const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      const now = Date.now()
+      const visitor = await seedVisitor()
+      const pairConversation = await seedConversation(visitor)
+      const pairTicket = await createTicket({ type: 'customer', title: 'Pair' }, writeActor())
+      await linkTicketToConversation(pairTicket.id, pairConversation)
+      await setDueAt(pairTicket.id, new Date(now - 2 * HOUR))
+      const overdue = await createTicket({ type: 'customer', title: 'Overdue' }, writeActor())
+      await setDueAt(overdue.id, new Date(now - HOUR))
+      const later = await createTicket({ type: 'customer', title: 'Later' }, writeActor())
+      await setDueAt(later.id, new Date(now + 72 * HOUR))
+      const undated = await createTicket({ type: 'customer', title: 'Undated' }, writeActor())
+      const plainConversation = await seedConversation(visitor)
+      return { pairConversation, pairTicket, overdue, later, undated, plainConversation }
+    }
+
+    const rowIds = (items: Awaited<ReturnType<typeof listInboxItems>>['items']) =>
+      items.map((i) => (i.kind === 'conversation' ? i.conversation.id : i.ticket.id) as string)
+
+    it('the overdue filter reaches a linked ticket through its conversation row and a standalone ticket', async () => {
+      const f = await seedDueFixtures()
+
+      const page = await listInboxItems(serviceActor(), {
+        facet: 'all',
+        due: 'overdue',
+        limit: 100,
+      })
+      const ids = rowIds(page.items)
+
+      expect(ids).toContain(f.pairConversation)
+      expect(ids).toContain(f.overdue.id)
+      expect(ids).not.toContain(f.pairTicket.id)
+      expect(ids).not.toContain(f.later.id)
+      expect(ids).not.toContain(f.undated.id)
+      expect(ids).not.toContain(f.plainConversation)
+      // The conversation row carries its linked ticket's date for the marker.
+      const pairRow = page.items.find(
+        (i) => i.kind === 'conversation' && i.conversation.id === f.pairConversation
+      )
+      expect(pairRow?.kind === 'conversation' && pairRow.linkedTicket?.dueAt).toBeTruthy()
+    })
+
+    it('the due sort merges both branches soonest first, undated rows after dated ones', async () => {
+      const f = await seedDueFixtures()
+
+      const page = await listInboxItems(serviceActor(), { facet: 'all', sort: 'due', limit: 100 })
+      const ids = rowIds(page.items)
+      const at = (id: string) => ids.indexOf(id)
+
+      expect(at(f.pairConversation)).toBeGreaterThanOrEqual(0)
+      expect(at(f.pairConversation)).toBeLessThan(at(f.overdue.id))
+      expect(at(f.overdue.id)).toBeLessThan(at(f.later.id))
+      expect(at(f.later.id)).toBeLessThan(at(f.undated.id))
+      expect(at(f.later.id)).toBeLessThan(at(f.plainConversation))
+    })
+  })
+
   describe('alias semantics (convergence Phase 2)', () => {
     it('the customer-tickets scope lists the pair as its ONE conversation row, plus standalone tickets', async () => {
       await seedSettings()
@@ -485,6 +560,72 @@ describe.skipIf(!fixture.available)('inbox.query (real DB, rolled back)', () => 
       expect(page.items.some((i) => i.kind === 'ticket' && i.ticket.id === standalone.id)).toBe(
         true
       )
+    })
+  })
+
+  describe('the Watching view', () => {
+    it('lists only what the caller watches: a watched pair as its conversation row, a watched standalone ticket as its own', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      const visitor = await seedVisitor()
+      const watcher = await seedVisitor()
+
+      const watchedPairConversation = await seedConversation(visitor)
+      const watchedPair = await createTicket(
+        { type: 'customer', title: 'Watched pair' },
+        writeActor()
+      )
+      await linkTicketToConversation(watchedPair.id, watchedPairConversation)
+      const otherPairConversation = await seedConversation(visitor)
+      const otherPair = await createTicket({ type: 'customer', title: 'Other pair' }, writeActor())
+      await linkTicketToConversation(otherPair.id, otherPairConversation)
+      const watchedTracker = await createTicket(
+        { type: 'tracker', title: 'Watched tracker' },
+        writeActor()
+      )
+      const otherTicket = await createTicket({ type: 'customer', title: 'Other' }, writeActor())
+      await testDb.insert(ticketSubscriptions).values([
+        { ticketId: watchedPair.id, principalId: watcher, reason: 'manual' },
+        {
+          ticketId: watchedTracker.id,
+          principalId: watcher,
+          reason: 'manual',
+          mutedUntil: new Date(Date.now() + 86_400_000),
+        },
+      ])
+
+      // The tickets_watching view's param shape (buildInboxListParams).
+      const page = await listInboxItems(
+        buildActor({ principalId: watcher, principalType: 'service' }),
+        {
+          facet: 'all',
+          kinds: ['conversation', 'ticket'],
+          linkedPairsOnly: true,
+          watching: true,
+          limit: 20,
+        }
+      )
+      const ids = page.items.map((i) =>
+        i.kind === 'conversation' ? i.conversation.id : i.ticket.id
+      )
+      // A muted watch is still a watch.
+      expect(new Set(ids)).toEqual(new Set([watchedPairConversation, watchedTracker.id]))
+      expect(ids).not.toContain(otherPairConversation)
+      expect(ids).not.toContain(otherTicket.id)
+    })
+
+    it('lists nothing for a caller with no identity', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const page = await listInboxItems(buildActor({ principalType: 'service' }), {
+        facet: 'all',
+        kinds: ['conversation', 'ticket'],
+        linkedPairsOnly: true,
+        watching: true,
+        limit: 20,
+      })
+      expect(page.items).toEqual([])
     })
   })
 })

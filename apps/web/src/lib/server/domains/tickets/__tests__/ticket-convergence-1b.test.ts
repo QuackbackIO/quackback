@@ -520,9 +520,10 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(message.ticketId).toBeNull()
       expect(message.senderType).toBe('visitor')
       expect(assistant.runAssistantTurnForConversation).not.toHaveBeenCalled()
-      // The ticket side of the matrix still fires: ticket.replied alongside
-      // message.created (watcher fan-out preserved).
-      expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
+      // The ticket side of the matrix rides the conversation's message.created:
+      // the pair-reply reaction (not this path) raises ticket.replied, so the
+      // reply is announced once (watcher fan-out preserved).
+      expect(ticketEmit.emitTicketReplied).not.toHaveBeenCalled()
     })
   })
 
