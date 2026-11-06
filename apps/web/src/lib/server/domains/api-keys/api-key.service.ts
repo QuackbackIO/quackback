@@ -161,35 +161,45 @@ export async function createApiKey(
     workspaceRole?.legacyRole ??
     ((isAdmin(creator?.role) ? 'admin' : 'member') as 'admin' | 'member')
 
-  // Create service principal for this API key
-  const servicePrincipal = await createServicePrincipal({
-    role,
-    displayName: input.name.trim(),
-    serviceMetadata: { kind: 'api_key', apiKeyId: '' }, // Will be updated below
+  // The principal, the key row and (for a workspace key) its role grant are one
+  // transaction: a grant that fails, say because the role was just deleted,
+  // must not leave a live key behind on a fallback preset.
+  const apiKey = await db.transaction(async (tx) => {
+    const servicePrincipal = await createServicePrincipal(
+      {
+        role,
+        displayName: input.name.trim(),
+        serviceMetadata: { kind: 'api_key', apiKeyId: '' }, // Will be updated below
+      },
+      tx
+    )
+
+    const [row] = await tx
+      .insert(apiKeys)
+      .values({
+        name: input.name.trim(),
+        kind,
+        keyHash,
+        keyPrefix,
+        createdById,
+        principalId: servicePrincipal.id,
+        expiresAt: input.expiresAt ?? null,
+        scopes: storedScopes,
+      })
+      .returning()
+
+    // Update service principal with the actual apiKeyId
+    await updatePrincipalFields(
+      { principalId: servicePrincipal.id },
+      { serviceMetadata: { kind: 'api_key', apiKeyId: row.id } },
+      { executor: tx }
+    )
+
+    if (workspaceRole) {
+      await applyWorkspaceKeyRole(servicePrincipal.id, workspaceRole, createdById, tx)
+    }
+    return row
   })
-
-  // Store the key
-  const [apiKey] = await db
-    .insert(apiKeys)
-    .values({
-      name: input.name.trim(),
-      kind,
-      keyHash,
-      keyPrefix,
-      createdById,
-      principalId: servicePrincipal.id,
-      expiresAt: input.expiresAt ?? null,
-      scopes: storedScopes,
-    })
-    .returning()
-
-  // Update service principal with the actual apiKeyId
-  await updatePrincipalFields(
-    { principalId: servicePrincipal.id },
-    { serviceMetadata: { kind: 'api_key', apiKeyId: apiKey.id } }
-  )
-
-  if (workspaceRole) await applyWorkspaceKeyRole(servicePrincipal.id, workspaceRole, createdById)
 
   // EVENTING-V2 WO-6a: emit the audit-relevant creation event. A short tx since
   // this service has no surrounding one; exposure.audit writes the audit_log row
