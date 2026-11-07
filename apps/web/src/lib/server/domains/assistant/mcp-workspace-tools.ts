@@ -167,7 +167,11 @@ async function callWorkspaceMcpTool(
   }
 }
 
-/** Feedback the asking teammate can already do in the app — run as them, no extra approve. */
+/**
+ * What the asking teammate can already do in the app — run as them, no extra
+ * approve. Editing the portal design draft changes nothing visitors see;
+ * publishing it is a person's decision in the app.
+ */
 const WORKSPACE_USER_WRITES = new Set([
   'create_post',
   'triage_post',
@@ -175,6 +179,7 @@ const WORKSPACE_USER_WRITES = new Set([
   'add_comment',
   'update_comment',
   'react_to_comment',
+  'update_portal_design_draft',
 ])
 
 function workspaceWriteGuidance(name: string, description: string): string {

@@ -19,9 +19,8 @@
  * are thrown, not swallowed, so the editor can surface them.
  */
 import { chat } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
+import { createChatAdapter } from '@/lib/server/domains/ai/chat-adapter'
 import { z } from 'zod'
-import { config } from '@/lib/server/config'
 import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
@@ -86,7 +85,7 @@ export async function draftAttributeDescriptions(
   input: DraftAttributeDescriptionsInput
 ): Promise<DraftAttributeDescriptionsResult> {
   const model = getChatModel('classification')
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
+  if (!isAiClientConfigured() || !model) {
     throw new ValidationError('AI_NOT_CONFIGURED', 'AI is not configured')
   }
   await enforceAiTokenBudget()
@@ -105,10 +104,7 @@ export async function draftAttributeDescriptions(
   ].join('\n')
 
   const object = await chat({
-    adapter: openaiCompatibleText(model, {
-      baseURL: config.openaiBaseUrl!,
-      apiKey: config.openaiApiKey!,
-    }),
+    adapter: createChatAdapter(model),
     systemPrompts: [DRAFT_SYSTEM_PROMPT],
     messages: [{ role: 'user', content: userContent }],
     outputSchema: DraftDescriptionsSchema,

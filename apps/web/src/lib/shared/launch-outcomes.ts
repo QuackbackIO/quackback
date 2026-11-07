@@ -7,8 +7,8 @@ import type { MessageDescriptor } from 'react-intl'
 import type { LaunchTask } from './launch-checklist'
 
 const OUTCOMES: Record<string, string> = {
-  'create-board': 'Where customers post feedback',
-  'create-board.private': 'Where your team posts feedback',
+  'create-board': 'Where customers post and vote',
+  'create-board.private': 'Where your team posts and votes',
   'distribute-feedback': 'Customers find your board',
   'publish-changelog': 'Customers see what shipped',
   'connect-messenger': 'Customers reach you from your site',
@@ -38,10 +38,10 @@ export function launchTaskOutcome(task: LaunchTask): MessageDescriptor | null {
  * on a goal's path have one: Home never leads with anything else.
  */
 const WHY: Record<string, string> = {
-  'create-board': 'Give customers a place to post and vote on feedback.',
+  'create-board': 'Give customers a place to post and vote.',
   'distribute-feedback':
-    'Customers post and vote on feedback there. Paste it wherever they already talk to you.',
-  'invite-team': 'Only teammates can see this board. Bring them in so posts start coming in.',
+    'Customers post and vote there. Paste it wherever they already talk to you.',
+  'invite-team': 'Only teammates can see this board. Bring them in so posts start flowing.',
   'connect-messenger':
     'Customers reach you from any page. Paste one snippet, or send it to whoever runs your site.',
   'help-article': 'Write the answer customers ask for most, then publish it.',
@@ -49,7 +49,7 @@ const WHY: Record<string, string> = {
     'Customers subscribe to hear about incidents. Link it from your footer or docs.',
   'first-win.feedback':
     'This ticks itself when someone outside your team posts or votes. Your own tests never count.',
-  'first-win.private': 'This ticks itself when a teammate creates the first post.',
+  'first-win.private': 'This ticks itself when a teammate writes the first post.',
   'first-win.support':
     'This ticks itself when someone outside your team writes in. Your own tests never count.',
   'first-win.helpCenter':

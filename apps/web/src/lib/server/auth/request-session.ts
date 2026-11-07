@@ -29,7 +29,7 @@
  * repeat lookup in the same request would have found nothing left to do.
  */
 import type { PrincipalId, UserId } from '@quackback/ids'
-import { getRequestHeaders } from '@tanstack/react-start/server'
+import { getRequest, getRequestHeaders } from '@tanstack/react-start/server'
 import type { auth } from '@/lib/server/auth/index'
 import { db, principal, eq, type PermissionKey, type Principal } from '@/lib/server/db'
 import { CACHE_KEYS } from '@/lib/server/cache'
@@ -41,7 +41,12 @@ import {
   rememberPerRequest,
 } from '@/lib/server/request-memo'
 import { rememberTestOwner } from '@/lib/server/test-data'
-import type { Role } from '@/lib/shared/roles'
+import { toSessionScope, type Role } from '@/lib/shared/roles'
+import {
+  asksSignedOut,
+  maySeeSignedOut,
+  type AskingRequest,
+} from '@/lib/server/auth/preview-visitor'
 
 export type RequestSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>
 
@@ -62,8 +67,36 @@ export function getRequestSession(): Promise<RequestSession | null> {
     const { healStrandedPortalSession } = await import('@/lib/server/auth/session-audience')
     const headers = getRequestHeaders()
     const session = await auth.api.getSession({ headers })
-    return session ? healStrandedPortalSession(session, headers) : null
+    if (!session) return null
+    const healed = await healStrandedPortalSession(session, headers)
+    const asking = { headers, url: () => getRequest().url }
+    return (await drawnSignedOut(healed, asking)) ? null : healed
   })
+}
+
+/**
+ * The session for a request a server route handles itself, by the same rule
+ * as `getRequestSession`: the designer's signed-out frame has none. For
+ * routes that read the session from their own request, never memoized.
+ */
+export async function getSessionOfRequest(request: Request): Promise<RequestSession | null> {
+  const { auth } = await import('@/lib/server/auth/index')
+  const session = await auth.api.getSession({ headers: request.headers })
+  if (!session) return null
+  const asking = { headers: request.headers, url: () => request.url }
+  return (await drawnSignedOut(session, asking)) ? null : session
+}
+
+/**
+ * Whether the designer's frame asked for the signed-out view and its viewer
+ * may have it (see preview-visitor.ts): the request then has no session.
+ */
+async function drawnSignedOut(session: RequestSession, asking: AskingRequest): Promise<boolean> {
+  if (!asksSignedOut(asking)) return false
+  const record = await getRequestPrincipal(session.user.id as UserId)
+  if (!record) return false
+  const permissions = await getRequestPermissions(record)
+  return maySeeSignedOut(record.type, toSessionScope(session.session.scope), permissions)
 }
 
 /**

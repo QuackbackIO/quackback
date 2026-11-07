@@ -1416,6 +1416,27 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'are trusted.',
   },
   {
+    file: 'apps/web/src/lib/server/domains/design/site/capture-service.ts',
+    name: 'inFlight',
+    category: 'workspace-scoped-key',
+    keyedBy: 'inFlightKey',
+    reason:
+      'Keyed by inFlightKey: currentWorkspaceNamespace() and the host, so concurrent matches of one ' +
+      'site share one capture only within a workspace. Keyed by the host alone, a second workspace ' +
+      "would get a capture counted against the first workspace's limits and stored in its database " +
+      'and storage, which the second cannot read back.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/design/extract/colours.ts',
+    name: 'labCache',
+    category: 'content-addressed',
+    reason:
+      'A WeakMap from one decoded image’s pixel buffer to the OKLab values of those pixels. The ' +
+      'key is the buffer object itself, which only the request that decoded the image holds, and ' +
+      'the value is a pure function of its bytes, so a hit from any workspace is byte-identical ' +
+      'to recomputing it. Entries go with the buffer.',
+  },
+  {
     file: 'apps/web/src/lib/server/domains/design/extract/fonts/files.ts',
     name: 'source',
     category: 'fleet-wide',

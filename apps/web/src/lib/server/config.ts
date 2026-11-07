@@ -119,6 +119,13 @@ const configSchema = z
     baseUrl: z.string().url(),
     port: envInt.default(3000),
 
+    // Portal design engine. `legacy` keeps every workspace on today's theme,
+    // whatever the portalDesignV2 flag says.
+    portalDesignEngine: z.enum(['auto', 'legacy']).default('auto'),
+    // Quackback AI may write a portal design's CSS as well as its fields. Off
+    // until it is shown to design better with it.
+    portalDesignAiCss: envBoolean,
+
     // Database
     //
     // Optional because a pooled fleet has no fleet-wide database: the workspace
@@ -288,6 +295,8 @@ const configSchema = z
     // AI (optional)
     openaiApiKey: z.string().optional(),
     openaiBaseUrl: z.string().optional(),
+    anthropicApiKey: z.string().optional(),
+    anthropicVersion: z.string().optional(),
     aiChatModel: z.string().optional(),
     aiEmbeddingModel: z.string().optional(),
     aiSummaryModel: z.string().optional(),
@@ -299,6 +308,7 @@ const configSchema = z
     aiHelpCenterModel: z.string().optional(),
     aiHelpCenterTranslateModel: z.string().optional(),
     aiAssistantModel: z.string().optional(),
+    aiDesignModel: z.string().optional(),
     aiAssistantVision: z.string().optional(),
     aiInboxTranslationModel: z.string().optional(),
     aiClassificationModel: z.string().optional(),
@@ -312,6 +322,17 @@ const configSchema = z
 
     // Automatic website branding for new workspaces (optional)
     disableAutomaticBranding: envBoolean,
+
+    // Site captures for the portal designer's brand match (optional). Without
+    // an access key the match reads the site's code only. Server-only.
+    screenshotoneAccessKey: z.preprocess(emptyToUndefined, z.string().optional()),
+    screenshotoneSecretKey: z.preprocess(emptyToUndefined, z.string().optional()),
+    screenshotoneMonthlyLimit: envInt.pipe(z.number().int().min(0).max(1_000_000)).default(90),
+    screenshotoneWorkspaceDailyLimit: envInt.pipe(z.number().int().min(0).max(10_000)).default(5),
+    screenshotoneWorkspaceMonthlyLimit: envInt
+      .pipe(z.number().int().min(0).max(100_000))
+      .default(30),
+    screenshotoneUserHourlyLimit: envInt.pipe(z.number().int().min(0).max(10_000)).default(3),
 
     // Product analytics for the admin app (optional, off unless a key is set)
     posthogKey: z.preprocess(emptyToUndefined, z.string().optional()),
@@ -420,6 +441,8 @@ function buildConfigFromEnv(): unknown {
     nodeEnv: process.env.NODE_ENV,
     baseUrl: process.env.BASE_URL,
     port: env('PORT'),
+    portalDesignEngine: env('PORTAL_DESIGN_ENGINE'),
+    portalDesignAiCss: env('PORTAL_DESIGN_AI_CSS'),
 
     // Database
     databaseUrl: env('DATABASE_URL'),
@@ -475,6 +498,8 @@ function buildConfigFromEnv(): unknown {
     // AI
     openaiApiKey: env('OPENAI_API_KEY'),
     openaiBaseUrl: env('OPENAI_BASE_URL'),
+    anthropicApiKey: env('ANTHROPIC_API_KEY'),
+    anthropicVersion: env('ANTHROPIC_VERSION'),
     aiChatModel: env('AI_CHAT_MODEL'),
     aiEmbeddingModel: env('AI_EMBEDDING_MODEL'),
     aiSummaryModel: env('AI_SUMMARY_MODEL'),
@@ -486,6 +511,7 @@ function buildConfigFromEnv(): unknown {
     aiHelpCenterModel: env('AI_HELP_CENTER_MODEL'),
     aiHelpCenterTranslateModel: env('AI_HELP_CENTER_TRANSLATE_MODEL'),
     aiAssistantModel: env('AI_ASSISTANT_MODEL'),
+    aiDesignModel: env('AI_DESIGN_MODEL'),
     aiAssistantVision: env('AI_ASSISTANT_VISION'),
     aiInboxTranslationModel: env('AI_INBOX_TRANSLATION_MODEL'),
     aiClassificationModel: env('AI_CLASSIFICATION_MODEL'),
@@ -499,6 +525,14 @@ function buildConfigFromEnv(): unknown {
 
     // Automatic website branding
     disableAutomaticBranding: env('DISABLE_AUTOMATIC_BRANDING'),
+
+    // Site captures
+    screenshotoneAccessKey: env('SCREENSHOTONE_ACCESS_KEY'),
+    screenshotoneSecretKey: env('SCREENSHOTONE_SECRET_KEY'),
+    screenshotoneMonthlyLimit: env('SCREENSHOTONE_MONTHLY_LIMIT'),
+    screenshotoneWorkspaceDailyLimit: env('SCREENSHOTONE_WORKSPACE_DAILY_LIMIT'),
+    screenshotoneWorkspaceMonthlyLimit: env('SCREENSHOTONE_WORKSPACE_MONTHLY_LIMIT'),
+    screenshotoneUserHourlyLimit: env('SCREENSHOTONE_USER_HOURLY_LIMIT'),
 
     // Product analytics
     posthogKey: env('POSTHOG_KEY'),
@@ -613,6 +647,12 @@ export const config = {
   },
   get isPooledTenancy() {
     return loadConfig().tenancyMode === 'pooled'
+  },
+  get portalDesignEngine() {
+    return loadConfig().portalDesignEngine
+  },
+  get portalDesignAiCss() {
+    return loadConfig().portalDesignAiCss
   },
   get controlDatabaseUrl() {
     return loadConfig().controlDatabaseUrl
@@ -751,6 +791,12 @@ export const config = {
   get openaiBaseUrl() {
     return loadConfig().openaiBaseUrl
   },
+  get anthropicApiKey() {
+    return loadConfig().anthropicApiKey
+  },
+  get anthropicVersion() {
+    return loadConfig().anthropicVersion
+  },
   get aiChatModel() {
     return loadConfig().aiChatModel
   },
@@ -784,6 +830,9 @@ export const config = {
   get aiAssistantModel() {
     return loadConfig().aiAssistantModel
   },
+  get aiDesignModel() {
+    return loadConfig().aiDesignModel
+  },
   get aiAssistantVision() {
     return loadConfig().aiAssistantVision
   },
@@ -815,6 +864,28 @@ export const config = {
   // administrator's company website.
   get disableAutomaticBranding() {
     return loadConfig().disableAutomaticBranding
+  },
+
+  // Site captures for the brand match: the capture service's access key
+  // (absent: no captures, the match reads the site's code only), the secret
+  // that signs requests when set, and the usage limits.
+  get screenshotoneAccessKey() {
+    return loadConfig().screenshotoneAccessKey
+  },
+  get screenshotoneSecretKey() {
+    return loadConfig().screenshotoneSecretKey
+  },
+  get screenshotoneMonthlyLimit() {
+    return loadConfig().screenshotoneMonthlyLimit
+  },
+  get screenshotoneWorkspaceDailyLimit() {
+    return loadConfig().screenshotoneWorkspaceDailyLimit
+  },
+  get screenshotoneWorkspaceMonthlyLimit() {
+    return loadConfig().screenshotoneWorkspaceMonthlyLimit
+  },
+  get screenshotoneUserHourlyLimit() {
+    return loadConfig().screenshotoneUserHourlyLimit
   },
 
   /**

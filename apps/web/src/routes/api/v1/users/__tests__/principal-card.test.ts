@@ -35,6 +35,11 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   eq: vi.fn((col, val) => ({ _eq: [col, val] })),
 }))
 
+// The designer's signed-out frame asks for nobody; its viewer may change branding.
+vi.mock('@/lib/server/policy/permissions', () => ({
+  permissionsForPrincipal: async () => new Set(['settings.branding']),
+}))
+
 vi.mock('@/lib/server/storage/s3', () => ({
   getPublicUrlOrNull: (key: string | null | undefined) =>
     key ? `https://cdn.example.com/${key}` : null,
@@ -197,5 +202,20 @@ describe('GET /api/v1/users/:principalId/card', () => {
     // Caller-lookup happened but the target select was never invoked.
     expect(db.query.principal.findFirst).toHaveBeenCalledTimes(1)
     expect(selectChain.limit).not.toHaveBeenCalled()
+  })
+
+  it("answers the designer's signed-out frame as nobody", async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValue(callerPrincipal)
+    const framed = new Request('http://localhost/api/v1/users/principal_jane/card', {
+      headers: { 'x-qb-preview-visitor': 'out' },
+    })
+
+    const res = await handlePrincipalCard({
+      request: framed,
+      params: { principalId: 'principal_jane' },
+    })
+
+    expect(res.status).toBe(403)
   })
 })

@@ -54,6 +54,8 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
 
   // Bail early if AI is not configured — skip the candidate search entirely
   const model = getChatModel('merge')
+  // getOpenAI() is null on the Claude API, which has no embeddings: posts carry
+  // none there, so merge suggestions are off.
   if (!getOpenAI() || !model) return
 
   // Step 1: Hybrid search (pass already-fetched post to avoid redundant DB query)

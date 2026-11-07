@@ -49,7 +49,8 @@ vi.mock('@/lib/server/config', () => ({
   },
 }))
 
-const { getOpenAI, isAiClientConfigured } = await import('../domains/ai/config')
+const { getOpenAI } = await import('../domains/ai/config')
+const { resolveAiProvider } = await import('../domains/ai/provider')
 const { withWorkspace } = await import('./workspace-scope')
 
 beforeEach(() => {
@@ -81,9 +82,11 @@ describe('the AI client is fleet-wide, and that is checkable', () => {
     // The guard that makes "AI is fleet-wide" safe rather than merely true: a
     // workspace never supplies either half, so there is no per-workspace state
     // for the shared client to have got wrong.
-    expect(isAiClientConfigured(undefined, 'https://x')).toBe(false)
-    expect(isAiClientConfigured('sk', undefined)).toBe(false)
-    expect(isAiClientConfigured('sk', 'https://x')).toBe(true)
+    const on = (openaiApiKey?: string, openaiBaseUrl?: string) =>
+      resolveAiProvider({ openaiApiKey, openaiBaseUrl, anthropicApiKey: undefined }).provider
+    expect(on(undefined, 'https://x')).toBeNull()
+    expect(on('sk', undefined)).toBeNull()
+    expect(on('sk', 'https://x')).toBe('openai')
   })
 })
 

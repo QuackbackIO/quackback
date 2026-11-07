@@ -22,10 +22,9 @@
  * off entirely. The deterministic sender signals are not AI and still run.
  */
 import { chat } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
+import { createChatAdapter } from '@/lib/server/domains/ai/chat-adapter'
 import { z } from 'zod'
 import type { ConversationId } from '@quackback/ids'
-import { config } from '@/lib/server/config'
 import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
@@ -115,7 +114,7 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
   }
 
   const model = getChatModel('classification')
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return false
+  if (!isAiClientConfigured() || !model) return false
 
   try {
     await enforceAiTokenBudget()
@@ -130,10 +129,7 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
   let verdict: { spam: boolean }
   try {
     verdict = await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+      adapter: createChatAdapter(model),
       systemPrompts: [SYSTEM_PROMPT],
       messages: [
         {

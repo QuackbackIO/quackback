@@ -998,6 +998,11 @@ interface SendStatusChangeParams {
   logoUrl?: string
 }
 
+/** The status email's subject. */
+export function statusChangeSubject(newStatus: string): string {
+  return `Your post is now ${newStatus.replace(/_/g, ' ')}!`
+}
+
 export async function sendStatusChangeEmail(params: SendStatusChangeParams): Promise<EmailResult> {
   const {
     to,
@@ -1011,11 +1016,9 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
     logoUrl,
   } = params
 
-  const formattedNewStatus = newStatus.replace(/_/g, ' ')
-
   return sendEmail({
     to,
-    subject: `Your feedback is now ${formattedNewStatus}!`,
+    subject: statusChangeSubject(newStatus),
     react: StatusChangeEmail({
       postTitle,
       postUrl,

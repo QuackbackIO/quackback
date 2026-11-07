@@ -468,6 +468,18 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
     'Integration recovery requires INTEGRATION_MANAGE; anonymous principals cannot own these immutable action receipts.',
   'onboarding_emails.principal_id':
     'Setup emails go only to teammates; an anonymous merge source never received one.',
+  'portal_designs.draft_updated_by_principal_id':
+    'Portal design drafts are written by teammates with the branding permission; an anonymous principal never edits one.',
+  'portal_design_revisions.principal_id':
+    'Portal design revisions are published by teammates with the branding permission; an anonymous principal never publishes one.',
+  'portal_design_preview_links.created_by_principal_id':
+    'Portal design preview links are made by teammates with the branding permission; an anonymous principal never makes one.',
+  'portal_design_saved.created_by_principal_id':
+    'Saved portal design checkpoints and looks are made by teammates with the branding permission; an anonymous principal never makes one.',
+  'site_captures.captured_by_principal_id':
+    'Website captures for brand matching are taken by teammates with the branding permission; an anonymous principal never takes one.',
+  'site_capture_calls.principal_id':
+    'Website capture calls are made by teammates with the branding permission; an anonymous principal never makes one.',
   // Team/agent actor columns (anonymous principals can never occupy them)
   'tickets.assignee_principal_id':
     'ticket assignees are team members; the merge source is anonymous',

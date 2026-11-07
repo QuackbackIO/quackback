@@ -15,6 +15,18 @@
         "sensitive": false
       },
       {
+        "key": "ANTHROPIC_API_KEY",
+        "kind": "secret",
+        "group": "connection",
+        "sensitive": true
+      },
+      {
+        "key": "ANTHROPIC_VERSION",
+        "kind": "text",
+        "group": "connection",
+        "sensitive": false
+      },
+      {
         "key": "AI_CHAT_MODEL",
         "kind": "model",
         "group": "models",
@@ -76,6 +88,12 @@
       },
       {
         "key": "AI_ASSISTANT_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_DESIGN_MODEL",
         "kind": "model",
         "group": "models",
         "sensitive": false

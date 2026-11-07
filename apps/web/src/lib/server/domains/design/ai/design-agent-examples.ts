@@ -1,0 +1,311 @@
+/**
+ * The steps Ask AI's edit loop is shown as examples, kept valid by the
+ * tests: each parses with the step schema and applies to the eval's fixture
+ * without a refusal.
+ */
+import type { AgentStepAnswer } from '@/lib/shared/design/agent/step-schema'
+
+const blank = { target: '', key: '', value: '', says: '' }
+
+/**
+ * Steps answered well, kept valid by the tests: each parses with the
+ * schema and applies to the eval's fixture without a refusal.
+ */
+export const AGENT_EXAMPLES: Array<{ request: string; note?: string; answer: AgentStepAnswer }> = [
+  {
+    request: 'Make the buttons darker on hover and lift them a little',
+    answer: {
+      plan: 'Darken primary buttons on hover and lift them 2px, then check the hover is darker and its text still reads.',
+      ops: [],
+      styles: [
+        {
+          element: 'button',
+          state: 'hover',
+          block: '',
+          property: 'background',
+          value: 'darker 15%',
+          says: 'buttons darker on hover',
+        },
+        {
+          element: 'button',
+          state: 'hover',
+          block: '',
+          property: 'lift',
+          value: '2',
+          says: 'buttons lift on hover',
+        },
+      ],
+      checks: [
+        {
+          element: 'button',
+          state: 'hover',
+          block: '',
+          target: '',
+          property: 'background',
+          expect: 'darker',
+          value: 'base',
+        },
+        {
+          element: 'button',
+          state: 'hover',
+          block: '',
+          target: '',
+          property: 'lift',
+          expect: 'present',
+          value: '',
+        },
+      ],
+      read: [],
+      look: false,
+      read_website: '',
+      match_website: '',
+      done: true,
+      reply: 'Buttons now turn a shade darker and lift slightly on hover.',
+    },
+  },
+  {
+    request: 'Cards with a subtle shadow, and a thin border only on the roadmap block',
+    answer: {
+      plan: 'Give cards a subtle shadow and the roadmap block a 1px edge, then check both.',
+      ops: [],
+      styles: [
+        {
+          element: 'card',
+          state: 'base',
+          block: '',
+          property: 'shadow',
+          value: 'subtle',
+          says: 'cards a subtle shadow',
+        },
+        {
+          element: 'block',
+          state: 'base',
+          block: 'roadmap',
+          property: 'borderWidth',
+          value: '1',
+          says: 'the roadmap block a thin border',
+        },
+        {
+          element: 'block',
+          state: 'base',
+          block: 'roadmap',
+          property: 'borderColor',
+          value: 'border',
+          says: 'its border in the edge colour',
+        },
+      ],
+      checks: [
+        {
+          element: 'card',
+          state: 'base',
+          block: '',
+          target: '',
+          property: 'shadow',
+          expect: 'subtle',
+          value: '',
+        },
+        {
+          element: 'block',
+          state: 'base',
+          block: 'roadmap',
+          target: '',
+          property: 'borderWidth',
+          expect: 'is',
+          value: '1',
+        },
+      ],
+      read: [],
+      look: false,
+      read_website: '',
+      match_website: '',
+      done: true,
+      reply: 'Cards have a subtle shadow, and the roadmap block a thin border.',
+    },
+  },
+  {
+    request: 'Make it feel more like Tidewell: dark, tight, subtle borders',
+    note: 'a look described by another product, made of Theme settings and styles',
+    answer: {
+      plan: 'Dark mode on a near-black page, compact spacing, tight headlines, Inter, sharp-ish corners, cards as hairline-edged panels without shadows.',
+      ops: [
+        { ...blank, op: 'theme', key: 'mode', value: 'dark', says: 'the portal to dark' },
+        {
+          ...blank,
+          op: 'theme',
+          key: 'darkBackground',
+          value: '#0d0e12',
+          says: 'the page to near black',
+        },
+        {
+          ...blank,
+          op: 'theme',
+          key: 'darkText',
+          value: '#e6e6e9',
+          says: 'the text to soft white',
+        },
+        { ...blank, op: 'theme', key: 'density', value: 'compact', says: 'the feed tighter' },
+        {
+          ...blank,
+          op: 'theme',
+          key: 'headlineSpacing',
+          value: 'tight',
+          says: 'headlines tighter',
+        },
+        {
+          ...blank,
+          op: 'theme',
+          key: 'corners',
+          value: 'subtle',
+          says: 'corners to slightly rounded',
+        },
+        { ...blank, op: 'theme', key: 'cards', value: 'bordered', says: 'cards to edged' },
+      ],
+      styles: [
+        {
+          element: 'card',
+          state: 'base',
+          block: '',
+          property: 'shadow',
+          value: 'none',
+          says: 'cards without a shadow',
+        },
+        {
+          element: 'card',
+          state: 'base',
+          block: '',
+          property: 'borderColor',
+          value: '#24252b',
+          says: 'card edges to a faint line',
+        },
+        {
+          element: 'card',
+          state: 'hover',
+          block: '',
+          property: 'borderColor',
+          value: '#3a3b43',
+          says: 'card edges a touch brighter on hover',
+        },
+      ],
+      checks: [
+        {
+          element: 'page',
+          state: 'base',
+          block: '',
+          target: '',
+          property: 'background',
+          expect: 'dark',
+          value: '',
+        },
+        {
+          element: 'card',
+          state: 'base',
+          block: '',
+          target: '',
+          property: 'borderColor',
+          expect: 'subtle',
+          value: '',
+        },
+        {
+          element: 'card',
+          state: 'base',
+          block: '',
+          target: '',
+          property: 'shadow',
+          expect: 'none',
+          value: '',
+        },
+        {
+          element: 'body',
+          state: 'base',
+          block: '',
+          target: '',
+          property: 'color',
+          expect: 'readable',
+          value: '',
+        },
+      ],
+      read: [],
+      look: true,
+      read_website: '',
+      match_website: '',
+      done: false,
+      reply: '',
+    },
+  },
+  {
+    request: 'Make the buttons darker on hover',
+    note: 'a later step, after the check saw the hover only 1% darker',
+    answer: {
+      plan: 'The hover was only 1% darker; darken it by 25% instead.',
+      ops: [],
+      styles: [
+        {
+          element: 'button',
+          state: 'hover',
+          block: '',
+          property: 'background',
+          value: 'darker 25%',
+          says: 'buttons darker on hover',
+        },
+      ],
+      checks: [],
+      read: [],
+      look: false,
+      read_website: '',
+      match_website: '',
+      done: true,
+      reply: 'Buttons now turn clearly darker on hover.',
+    },
+  },
+  {
+    request: 'Match our site acme.test, but keep the buttons square',
+    note: 'a website named: read it first, then match it, then the rest',
+    answer: {
+      plan: 'Read acme.test first, to match the portal to it in the next step and keep the buttons square after.',
+      ops: [],
+      styles: [],
+      checks: [],
+      read: [],
+      look: false,
+      read_website: 'acme.test',
+      match_website: '',
+      done: false,
+      reply: '',
+    },
+  },
+  {
+    request: 'Only on the changelog, give the buttons a darker fill on hover, #312e81',
+    note: 'one page: an override, checked where it went',
+    answer: {
+      plan: 'Set the changelog page’s own hover fill for buttons; the other pages keep theirs.',
+      ops: [
+        {
+          op: 'override',
+          target: 'page:changelog',
+          key: 'button.hover.background',
+          value: '#312e81',
+          says: 'buttons on the changelog darker on hover',
+        },
+      ],
+      styles: [],
+      checks: [
+        {
+          element: 'button',
+          state: 'hover',
+          block: '',
+          target: 'page:changelog',
+          property: 'background',
+          expect: 'is',
+          value: '#312e81',
+        },
+      ],
+      read: [],
+      look: false,
+      read_website: '',
+      match_website: '',
+      done: true,
+      reply:
+        'Buttons on the changelog now turn deep indigo on hover; the other pages keep their look.',
+    },
+  },
+]

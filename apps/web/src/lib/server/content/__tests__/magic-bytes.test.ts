@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  sniffFontFormat,
   sniffImageMime,
   sniffVideoMime,
   canonicalizeVideoMime,
@@ -118,5 +119,24 @@ describe('canonicalizeImageMime', () => {
   it('leaves non-alias MIMEs untouched', () => {
     expect(canonicalizeImageMime('image/png')).toBe('image/png')
     expect(canonicalizeImageMime('image/x-icon')).toBe('image/x-icon')
+  })
+})
+
+describe('sniffFontFormat', () => {
+  const bytes = (head: number[]) => {
+    const b = new Uint8Array(16)
+    b.set(head)
+    return b
+  }
+  it('reads each font signature', () => {
+    expect(sniffFontFormat(bytes([0x77, 0x4f, 0x46, 0x32]))).toBe('woff2')
+    expect(sniffFontFormat(bytes([0x77, 0x4f, 0x46, 0x46]))).toBe('woff')
+    expect(sniffFontFormat(bytes([0x4f, 0x54, 0x54, 0x4f]))).toBe('otf')
+    expect(sniffFontFormat(bytes([0x00, 0x01, 0x00, 0x00]))).toBe('ttf')
+    expect(sniffFontFormat(bytes([0x74, 0x72, 0x75, 0x65]))).toBe('ttf')
+  })
+  it('refuses anything else', () => {
+    expect(sniffFontFormat(bytes([0x89, 0x50, 0x4e, 0x47]))).toBeNull()
+    expect(sniffFontFormat(new Uint8Array(2))).toBeNull()
   })
 })

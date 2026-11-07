@@ -32,10 +32,10 @@ export function NewCommentEmail({
       logoAlt={organizationName}
     >
       {/* Content */}
-      <Heading style={typography.h1}>New comment on your feedback</Heading>
+      <Heading style={typography.h1}>New comment on your post</Heading>
       <Text style={typography.text}>
         {commenterName}
-        {isTeamMember ? ' (Team)' : ''} commented on your feedback in {organizationName}.
+        {isTeamMember ? ' (Team)' : ''} commented on your post in {organizationName}.
       </Text>
 
       {/* Post Title */}
@@ -55,7 +55,7 @@ export function NewCommentEmail({
             color: colors.textMuted,
           }}
         >
-          Feedback
+          Post
         </Text>
         <Text style={{ ...typography.text, marginTop: '0', marginBottom: '0', fontWeight: '600' }}>
           {postTitle}
@@ -88,7 +88,7 @@ export function NewCommentEmail({
 
       {/* Footer */}
       <NotificationFooter
-        reason="You received this email because you submitted or subscribed to this feedback."
+        reason="You received this email because you submitted or subscribed to this post."
         unsubscribeUrl={unsubscribeUrl}
         preferencesUrl={preferencesUrl}
       />

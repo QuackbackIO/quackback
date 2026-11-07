@@ -128,3 +128,88 @@ describe('PUT /api/storage/* (proxy upload)', () => {
     )
   })
 })
+
+describe('PUT /api/storage/* for a portal font', () => {
+  const FONT_KEY = 'fonts/2026/10/abc123-brand-bold.woff2'
+  const FONT = 'font/woff2'
+  const woff2 = (size = 64) => {
+    const bytes = new Uint8Array(size)
+    bytes.set([0x77, 0x4f, 0x46, 0x32])
+    return bytes
+  }
+
+  it('stores a woff2 under fonts/', async () => {
+    const res = await handleProxyUpload({
+      request: makeRequest({ key: FONT_KEY, ct: FONT, body: woff2() }),
+    })
+    expect(res.status).toBe(200)
+    expect(mockUploadObject).toHaveBeenCalledWith(FONT_KEY, expect.anything(), FONT)
+  })
+
+  it('refuses a file that is not woff2 whatever its name says', async () => {
+    const res = await handleProxyUpload({
+      request: makeRequest({ key: FONT_KEY, ct: FONT, body: PNG_BYTES }),
+    })
+    expect(res.status).toBe(400)
+    expect(mockUploadObject).not.toHaveBeenCalled()
+  })
+
+  it('refuses a font anywhere but fonts/', async () => {
+    const res = await handleProxyUpload({
+      request: makeRequest({ key: 'logos/2026/10/abc123-x.woff2', ct: FONT, body: woff2() }),
+    })
+    expect(res.status).toBe(400)
+    expect(mockUploadObject).not.toHaveBeenCalled()
+  })
+
+  it('refuses a font over 400 KB', async () => {
+    const res = await handleProxyUpload({
+      request: makeRequest({ key: FONT_KEY, ct: FONT, body: woff2(400 * 1024 + 1) }),
+    })
+    expect(res.status).toBe(413)
+    expect(mockUploadObject).not.toHaveBeenCalled()
+  })
+
+  const signed = (head: number[], size = 64) => {
+    const bytes = new Uint8Array(size)
+    bytes.set(head)
+    return bytes
+  }
+
+  it.each([
+    ['woff', 'font/woff', [0x77, 0x4f, 0x46, 0x46]],
+    ['ttf', 'font/ttf', [0x00, 0x01, 0x00, 0x00]],
+    ['ttf', 'font/ttf', [0x74, 0x72, 0x75, 0x65]],
+    ['otf', 'font/otf', [0x4f, 0x54, 0x54, 0x4f]],
+  ])('stores a %s whose signature agrees with its name and type', async (ext, ct, head) => {
+    const key = `fonts/2026/10/abc123-brand-bold.${ext}`
+    const res = await handleProxyUpload({ request: makeRequest({ key, ct, body: signed(head) }) })
+    expect(res.status).toBe(200)
+    expect(mockUploadObject).toHaveBeenCalledWith(key, expect.anything(), ct)
+  })
+
+  it('refuses a font whose name, type and signature disagree', async () => {
+    for (const [key, ct, head] of [
+      ['fonts/2026/10/abc123-x.ttf', 'font/ttf', [0x4f, 0x54, 0x54, 0x4f]],
+      ['fonts/2026/10/abc123-x.otf', 'font/ttf', [0x00, 0x01, 0x00, 0x00]],
+      ['fonts/2026/10/abc123-x.woff', 'font/woff', [0x77, 0x4f, 0x46, 0x32]],
+    ] as const) {
+      const res = await handleProxyUpload({
+        request: makeRequest({ key, ct, body: signed([...head]) }),
+      })
+      expect(res.status).toBe(400)
+    }
+    expect(mockUploadObject).not.toHaveBeenCalled()
+  })
+
+  it('caps ttf and otf files at 1 MB', async () => {
+    const res = await handleProxyUpload({
+      request: makeRequest({
+        key: 'fonts/2026/10/abc123-x.otf',
+        ct: 'font/otf',
+        body: signed([0x4f, 0x54, 0x54, 0x4f], 1024 * 1024 + 1),
+      }),
+    })
+    expect(res.status).toBe(413)
+  })
+})

@@ -1,13 +1,24 @@
 import { z } from 'zod'
 import { MINIMAL_THEME_VARIABLE_KEYS } from '@/lib/shared/theme/expand'
+import { isSafeThemeValue } from '@/lib/shared/theme/safe-theme-value'
 
 /**
  * The branding page stores what its theme editor produces. Its values
- * include named colors, CSS functions and presets that later releases may
- * retire, so the page save keeps a loose object.
+ * include named colors, CSS functions, tokens and presets that later
+ * releases may retire, so the page save accepts any key and any value that
+ * cannot escape the declaration it is written into.
  */
+const savedThemeValue = z.string().refine(isSafeThemeValue, 'This value cannot be used in a theme.')
+const savedThemeVariables = z.record(z.string(), savedThemeValue.nullable())
 export const updateThemeSchema = z.object({
-  brandingConfig: z.record(z.string(), z.unknown()),
+  brandingConfig: z
+    .object({
+      preset: savedThemeValue.optional(),
+      themeMode: z.enum(['light', 'dark', 'user']).optional(),
+      light: savedThemeVariables.optional(),
+      dark: savedThemeVariables.optional(),
+    })
+    .loose(),
 })
 
 // Patches a model proposes are held to the narrow values the theme expander

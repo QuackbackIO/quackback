@@ -152,7 +152,7 @@ async function getCapabilityFeatures(): Promise<TelemetryPayload['features']> {
       oauth: !!activeSecretKey(),
       smtp: !!config.emailSmtpHost,
       s3: !!config.s3Bucket,
-      ai: !!config.openaiApiKey,
+      ai: !!config.openaiApiKey !== !!config.anthropicApiKey,
       widget: widgetConfig?.enabled ?? false,
       mcp: devConfig?.mcpEnabled ?? true,
     }
@@ -284,7 +284,7 @@ async function getPlatform(
       configFile,
     },
     emailProvider,
-    aiProvider: aiProviderOf(config.openaiApiKey, config.openaiBaseUrl),
+    aiProvider: aiProviderOf(config.openaiApiKey, config.openaiBaseUrl, config.anthropicApiKey),
   }
 }
 

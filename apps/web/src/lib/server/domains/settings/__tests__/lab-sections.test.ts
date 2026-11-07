@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_FEATURE_FLAGS,
+  LABS_FEATURE_FLAGS,
+  NEW_WORKSPACE_FEATURE_FLAGS,
   PRODUCT_DEFINITIONS,
   enableFlagsForUseCase,
   flagsForGoal,
@@ -13,10 +15,17 @@ import {
 } from '../settings.types'
 
 describe('feature flag settings layout', () => {
-  it('places every remaining flag on exactly one product', () => {
+  it('places every flag on exactly one product or in Labs', () => {
     const productFlags = PRODUCT_DEFINITIONS.flatMap((product) => [...product.featureFlags])
     expect(new Set(productFlags).size).toBe(productFlags.length)
-    expect([...productFlags].sort()).toEqual(Object.keys(DEFAULT_FEATURE_FLAGS).sort())
+    expect([...productFlags, ...LABS_FEATURE_FLAGS].sort()).toEqual(
+      Object.keys(DEFAULT_FEATURE_FLAGS).sort()
+    )
+  })
+
+  it('keeps the design engine off for existing workspaces and on for new ones', () => {
+    expect(DEFAULT_FEATURE_FLAGS.portalDesignV2).toBe(false)
+    expect(NEW_WORKSPACE_FEATURE_FLAGS).toEqual({ ...DEFAULT_FEATURE_FLAGS, portalDesignV2: true })
   })
 
   it('drops a stored Copilot on Home value from the retired Labs switch', () => {

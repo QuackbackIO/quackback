@@ -13,7 +13,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import type { UserId } from '@quackback/ids'
 import type { SQL } from 'drizzle-orm'
-import { auth } from '@/lib/server/auth'
+import { getSessionOfRequest } from '@/lib/server/auth/request-session'
 import { db, principal, user, eq, and, inArray, sql } from '@/lib/server/db'
 import type { Role } from '@/lib/shared/roles'
 import { incrementBucket } from '@/lib/server/utils/rate-bucket'
@@ -39,7 +39,8 @@ interface SuggestRow {
 // whose `avatar_*` columns drifted from the linked user record.
 
 export async function handleMentionSuggest({ request }: { request: Request }): Promise<Response> {
-  const session = await auth.api.getSession({ headers: request.headers })
+  // The designer's signed-out frame is answered as nobody, as every portal read is.
+  const session = await getSessionOfRequest(request)
   if (!session?.user) {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
   }

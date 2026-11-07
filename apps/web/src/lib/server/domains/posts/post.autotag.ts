@@ -35,7 +35,6 @@ import {
   postTagAssignments,
 } from '@/lib/server/db'
 import type { BoardId, PostId, PostTagId } from '@quackback/ids'
-import { config } from '@/lib/server/config'
 import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
 import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { getChatModel } from '@/lib/server/domains/ai/models'
@@ -93,7 +92,7 @@ async function evaluatePostAgainstTags(
   if (prompted.length === 0) return []
 
   const model = getChatModel('classification')
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return []
+  if (!isAiClientConfigured() || !model) return []
 
   try {
     await enforceAiTokenBudget()

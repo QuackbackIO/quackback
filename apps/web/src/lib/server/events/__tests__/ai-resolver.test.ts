@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { getOpenAI } = vi.hoisted(() => ({ getOpenAI: vi.fn<() => unknown>() }))
-vi.mock('@/lib/server/domains/ai/config', () => ({ getOpenAI }))
+const { isAiClientConfigured } = vi.hoisted(() => ({
+  isAiClientConfigured: vi.fn<() => boolean>(),
+}))
+vi.mock('@/lib/server/domains/ai/config', () => ({ isAiClientConfigured }))
 
 import { createId } from '@quackback/ids'
 import { aiResolver, summaryResolver } from '../resolvers/ai.resolver'
@@ -25,7 +27,7 @@ function evt(type: string): DomainEvent {
 }
 
 describe('ai + summary resolvers (WO-8d)', () => {
-  beforeEach(() => getOpenAI.mockReset())
+  beforeEach(() => isAiClientConfigured.mockReset())
 
   it('interestedIn matches the fixed type lists', () => {
     expect(aiResolver.interestedIn('post.created')).toBe(true)
@@ -36,7 +38,7 @@ describe('ai + summary resolvers (WO-8d)', () => {
   })
 
   it('yields a target only when an AI model is configured', async () => {
-    getOpenAI.mockReturnValue({})
+    isAiClientConfigured.mockReturnValue(true)
     expect(await aiResolver.resolve(evt('post.created'))).toEqual([
       { type: 'ai', target: { type: 'ai' }, config: {} },
     ])
@@ -46,7 +48,7 @@ describe('ai + summary resolvers (WO-8d)', () => {
   })
 
   it('yields nothing when no AI model is configured', async () => {
-    getOpenAI.mockReturnValue(undefined)
+    isAiClientConfigured.mockReturnValue(false)
     expect(await aiResolver.resolve(evt('post.created'))).toEqual([])
     expect(await summaryResolver.resolve(evt('post.created'))).toEqual([])
   })

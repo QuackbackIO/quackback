@@ -14,7 +14,6 @@ import type { Actor } from '@/lib/server/policy/types'
  */
 import { parsePartialJSON, maxIterations, type StreamChunk } from '@tanstack/ai'
 import { z } from 'zod'
-import { config } from '@/lib/server/config'
 import { db, conversations, principal, eq } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import { isAiClientConfigured, stripCodeFences } from '@/lib/server/domains/ai/config'
@@ -332,10 +331,7 @@ export class AssistantNotConfiguredError extends Error {
 
 /** Whether Quinn can run: AI client plus an effective chat model. */
 export function isAssistantConfigured(): boolean {
-  return (
-    isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) &&
-    getChatModel('assistant') !== null
-  )
+  return isAiClientConfigured() && getChatModel('assistant') !== null
 }
 
 /**

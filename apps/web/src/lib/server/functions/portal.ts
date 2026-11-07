@@ -55,7 +55,7 @@ import {
   getPublicRoadmapColumnsPosts,
   getPublicRoadmapDateBuckets,
 } from '@/lib/server/domains/roadmaps/roadmap.query'
-import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
+import { boardIdSchema, roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
 import {
   boardIdInputSchema,
   segmentIdInputSchema,
@@ -76,6 +76,9 @@ const fetchPublicPostsSchema = z.object({
   boardSlug: z.string().optional(),
   search: z.string().optional(),
   sort: sortSchema,
+  /** Home's Top posts: the public boards to draw from, and how many posts. */
+  boardIds: z.array(boardIdSchema).max(10).optional(),
+  limit: z.number().int().min(1).max(20).optional(),
 })
 
 const fetchPortalDataSchema = z.object({
@@ -434,7 +437,7 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
 
     const auth = await getOptionalAuth()
     const actor = await policyActorFromAuth(auth)
-    const result = await listPublicPosts({ ...data, page: 1, limit: 20, actor })
+    const result = await listPublicPosts({ ...data, page: 1, limit: data.limit ?? 20, actor })
     return {
       ...result,
       items: result.items.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() })),

@@ -8,9 +8,8 @@
  * never auto-published -- so a human always reviews before it goes live.
  */
 import { chat } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
+import { createChatAdapter } from '@/lib/server/domains/ai/chat-adapter'
 import { z } from 'zod'
-import { config } from '@/lib/server/config'
 import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
@@ -123,7 +122,7 @@ export async function translateArticleForLocale(
     return
   }
   const model = getChatModel('helpCenterTranslate')
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
+  if (!isAiClientConfigured() || !model) {
     log.debug({ article_id: articleId, locale }, 'auto-translate skipped: AI not configured')
     return
   }
@@ -160,10 +159,7 @@ export async function translateArticleForLocale(
   let parsed: z.infer<typeof TranslationResultSchema>
   try {
     parsed = await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+      adapter: createChatAdapter(model),
       systemPrompts: [system],
       messages: [{ role: 'user', content: user }],
       outputSchema: TranslationResultSchema,

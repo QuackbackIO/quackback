@@ -14,13 +14,19 @@
  * handling. The fallback's own parse and validation failures carry the same
  * `code`s `chat({ outputSchema })` uses, so `isStructuredOutputError` checks
  * in callers cover both paths.
+ *
+ * On the Claude API there is no fallback ladder: the schema always goes as
+ * `output_config.format` (see ./chat-adapter), which every current Claude
+ * model holds, and the answer is validated with the same zod schema.
  */
+import type { ContentPart } from '@tanstack/ai'
 import { chat, type ChatMiddleware } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
+import { createChatAdapter } from './chat-adapter'
 import { stripCodeFences, structuredOutputProviderOptions } from './config'
+import { getAiProvider } from './provider'
 
 const log = logger.child({ component: 'ai-structured-chat' })
 
@@ -87,7 +93,8 @@ function structuredError(code: string, message: string): Error {
 export interface StructuredChatInput<S extends z.ZodType> {
   model: string
   systemPrompts: string[]
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  /** Text, or text and images for a model that reads them. */
+  messages: Array<{ role: 'user' | 'assistant'; content: string | ContentPart[] }>
   schema: S
   maxTokens: number
   middleware?: ChatMiddleware[]
@@ -96,8 +103,20 @@ export interface StructuredChatInput<S extends z.ZodType> {
 export async function structuredChat<S extends z.ZodType>(
   input: StructuredChatInput<S>
 ): Promise<z.infer<S>> {
+  const adapter = createChatAdapter(input.model)
+  if (getAiProvider() === 'anthropic') {
+    return (await chat({
+      adapter,
+      messages: input.messages,
+      stream: false,
+      systemPrompts: input.systemPrompts,
+      outputSchema: input.schema,
+      modelOptions: { max_tokens: input.maxTokens },
+      ...(input.middleware ? { middleware: input.middleware } : {}),
+    } as never)) as z.infer<S>
+  }
+
   const baseURL = config.openaiBaseUrl!
-  const adapter = openaiCompatibleText(input.model, { baseURL, apiKey: config.openaiApiKey! })
   const common = {
     adapter,
     messages: input.messages,

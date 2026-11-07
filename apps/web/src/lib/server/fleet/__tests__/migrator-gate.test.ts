@@ -384,6 +384,13 @@ describe('replayGateVerdict', () => {
       '0307_drop_approval_bell_index',
       '0308_remove_approvals_leftovers',
       '0309_api_key_kinds',
+      '0310_portal_designs',
+      '0311_portal_design_draft_authors',
+      '0312_portal_design_preview_links',
+      '0313_portal_design_draft_version',
+      '0314_portal_design_saved',
+      '0315_design_publish_permission',
+      '0316_site_captures',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

@@ -23,7 +23,9 @@ const EMBEDDING_DIMENSIONS = 1536
 const DEFAULT_EMBEDDING_STEP = 'embedding_query'
 
 /**
- * Generate embedding for text using OpenAI.
+ * Generate embedding for text with the OpenAI-compatible endpoint. Null when
+ * embeddings are off, including on the Claude API, which has no embeddings
+ * endpoint; every caller falls back to keyword matching or skips.
  * Every call is recorded to ai_usage_log, under the caller's step when a
  * logContext is given. `signal` cancels the provider request and any retry,
  * and the call then returns null.
@@ -110,6 +112,9 @@ export async function generatePostEmbedding(
   content: string,
   tags?: string[]
 ): Promise<boolean> {
+  // No embedding model (unset, or the Claude API, which has none) is a quiet
+  // skip, not a failure: similar posts then match on keywords.
+  if (!getEmbeddingModel()) return false
   // A test customer's idea spends no embedding tokens.
   if (await isTestPost(postId)) return false
   const text = formatPostText(title, content, tags)

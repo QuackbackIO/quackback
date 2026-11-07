@@ -14,7 +14,6 @@
  * thrown errors so the editor can surface them (toast), rather than
  * silently returning an empty/null result.
  */
-import { config } from '@/lib/server/config'
 import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
@@ -55,7 +54,7 @@ export async function previewAttributeDetection(
   input: PreviewAttributeDetectionInput
 ): Promise<PreviewAttributeDetectionResult> {
   const model = getChatModel('classification')
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
+  if (!isAiClientConfigured() || !model) {
     throw new ValidationError('AI_NOT_CONFIGURED', 'AI is not configured')
   }
   // Propagates TierLimitError as-is (the caller/UI surfaces its message).
