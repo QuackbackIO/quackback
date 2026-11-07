@@ -84,6 +84,8 @@ export { setDefaultFromResolver, resetDefaultFromResolver } from './default-from
 import { createElement } from 'react'
 import { EmailPoweredByProvider, resolveEmailPoweredBy } from './powered-by'
 import { resolvedDefaultFrom } from './default-from'
+import { platformDisplayName } from './platform-name'
+export { platformDisplayName, QUACKBACK_DISPLAY_NAME } from './platform-name'
 
 /**
  * Get environment variable at runtime.
@@ -333,6 +335,9 @@ async function dispatch(
     preview?: Record<string, unknown>
     /** Display name wrapped around `from` (or EMAIL_FROM) as RFC 5322. */
     fromDisplayName?: string
+    /** The workspace the mail is about. Names a platform-address send that has
+     *  no `fromDisplayName` of its own; see ./platform-name. */
+    workspaceName?: string
     conversationId?: string | null
     ticketId?: string | null
     postId?: string | null
@@ -406,9 +411,12 @@ async function dispatch(
   }
 
   const resolvedFrom = options.from ?? getEmailFrom()
-  const from = options.fromDisplayName
-    ? applyDisplayName(resolvedFrom, options.fromDisplayName)
-    : resolvedFrom
+  // On the platform address the registry's display name names the platform, so
+  // the name is decided here for every sender rather than trusted to each one.
+  const displayName = options.from
+    ? options.fromDisplayName
+    : platformDisplayName(emailType, options.fromDisplayName ?? options.workspaceName)
+  const from = displayName ? applyDisplayName(resolvedFrom, displayName) : resolvedFrom
   const html = options.html ?? (options.react ? await render(options.react) : undefined)
   const text =
     options.text ?? (options.react ? await render(options.react, { plainText: true }) : undefined)
@@ -592,6 +600,8 @@ async function sendEmail(
     /** Extra identifying fields for the dev preview line (links, codes). */
     preview?: Record<string, unknown>
     fromDisplayName?: string
+    /** Names a platform-address send; see ./platform-name. */
+    workspaceName?: string
     conversationId?: string | null
     ticketId?: string | null
     postId?: string | null
@@ -662,6 +672,7 @@ export async function sendInvitationEmail(params: SendInvitationParams): Promise
       copy,
     }),
     emailType: 'InvitationEmail',
+    workspaceName,
     preview: { inviteLink },
   })
 }
@@ -686,6 +697,7 @@ export async function sendPortalInviteEmail(params: SendPortalInviteParams): Pro
     subject: `You've been invited to ${workspaceName}`,
     react: PortalInviteEmail({ workspaceName, inviteLink, logoUrl, personalMessage }),
     emailType: 'PortalInviteEmail',
+    workspaceName,
     preview: { inviteLink },
   })
 }
@@ -710,6 +722,7 @@ export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<Email
     subject: `Welcome to ${workspaceName} on Quackback!`,
     react: WelcomeEmail({ name, workspaceName, dashboardUrl, logoUrl }),
     emailType: 'WelcomeEmail',
+    workspaceName,
     preview: { dashboardUrl },
   })
 }
@@ -731,6 +744,7 @@ export async function sendMessengerInstallEmail(params: {
     subject: `Add ${workspaceName} Messenger to the website`,
     react: MessengerInstallEmail({ senderName, workspaceName, snippet, logoUrl }),
     emailType: 'MessengerInstallEmail',
+    workspaceName,
     preview: { workspaceName },
   })
 }
@@ -802,6 +816,7 @@ export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<E
     subject: magicLinkSubject(code, workspaceName),
     react: MagicLinkEmail({ signInUrl, code, logoUrl, workspaceName }),
     emailType: 'MagicLinkEmail',
+    workspaceName,
     preview: { signInUrl, code },
   })
 }
@@ -835,9 +850,10 @@ export async function sendSignupNotAllowedEmail(
   log.debug('sending sign-in refusal email')
   return sendEmail({
     to,
-    subject: 'About your Quackback sign-in request',
+    subject: `About your ${workspaceName?.trim() || 'Quackback'} sign-in request`,
     react: SignupNotAllowedEmail({ workspaceName, logoUrl }),
     emailType: 'SignupNotAllowedEmail',
+    workspaceName,
   })
 }
 
@@ -849,19 +865,22 @@ interface SendPasswordResetParams {
   to: SecureRecipient
   resetLink: string
   logoUrl?: string
+  /** The workspace the account belongs to; names the platform From. */
+  workspaceName?: string
 }
 
 export async function sendPasswordResetEmail(
   params: SendPasswordResetParams
 ): Promise<EmailResult> {
-  const { to, resetLink, logoUrl } = params
+  const { to, resetLink, logoUrl, workspaceName } = params
 
   log.debug('sending password reset email')
   return sendEmail({
     to,
-    subject: 'Reset your Quackback password',
-    react: PasswordResetEmail({ resetLink, logoUrl }),
+    subject: `Reset your ${workspaceName?.trim() || 'Quackback'} password`,
+    react: PasswordResetEmail({ resetLink, logoUrl, workspaceName }),
     emailType: 'PasswordResetEmail',
+    workspaceName,
     preview: { resetLink },
   })
 }
@@ -895,6 +914,7 @@ export async function sendRecoveryCodeUsedEmail(
     subject: 'A recovery code on your account was just used',
     react: RecoveryCodeUsedEmail({ workspaceName, ipAddress, userAgent, occurredAt, logoUrl }),
     emailType: 'RecoveryCodeUsedEmail',
+    workspaceName,
     preview: { occurredAt },
   })
 }
@@ -947,6 +967,7 @@ export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<E
       logoUrl,
     }),
     emailType: 'NewSignInEmail',
+    workspaceName,
     preview: { occurredAt },
   })
 }
@@ -1037,6 +1058,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
     from,
     fromDisplayName,
     emailType: 'StatusChangeEmail',
+    workspaceName,
     preview: { postUrl },
   })
 }
@@ -1097,6 +1119,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
     from,
     fromDisplayName,
     emailType: 'NewCommentEmail',
+    workspaceName,
     preview: { postUrl },
   })
 }
@@ -1230,6 +1253,7 @@ export async function sendConversationMessageEmail(
     conversationId,
     attachments,
     emailType: copy.useHumanTemplate ? 'ConversationReplyEmail' : 'ConversationMessageEmail',
+    workspaceName,
     preview: { ctaUrl },
   })
 }
@@ -1271,6 +1295,7 @@ export async function sendConversationClosedEmail(params: {
     references: params.references,
     conversationId: params.conversationId,
     emailType: 'ConversationClosedEmail',
+    workspaceName: params.workspaceName,
   })
 }
 
@@ -1312,6 +1337,7 @@ export async function sendConversationAutoAckEmail(params: {
       Precedence: 'auto_reply',
     },
     emailType: 'ConversationAutoAckEmail',
+    workspaceName: params.workspaceName,
   })
 }
 
@@ -1491,6 +1517,7 @@ export async function sendTicketEventEmail(
     inReplyTo: params.inReplyTo,
     references: params.references,
     emailType: 'TicketEventEmail',
+    workspaceName: params.workspaceName,
     preview: {
       kind: params.kind,
       ctaUrl: params.ctaUrl,
@@ -1555,6 +1582,7 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
     from,
     fromDisplayName,
     emailType: 'PostMentionEmail',
+    workspaceName,
     preview: { postUrl },
   })
 }
@@ -1614,6 +1642,7 @@ export async function sendNoteMentionEmail(args: SendNoteMentionEmailArgs): Prom
     inReplyTo,
     references,
     emailType: 'NoteMentionEmail',
+    workspaceName,
     preview: { conversationUrl },
   })
 }
@@ -1676,6 +1705,7 @@ export async function sendChangelogPublishedEmail(
     fromDisplayName,
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'ChangelogPublishedEmail',
+    workspaceName,
     preview: { changelogUrl },
   })
 }
@@ -1726,6 +1756,7 @@ export async function sendFeedbackLinkedEmail(
     }),
     extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
     emailType: 'FeedbackLinkedEmail',
+    workspaceName,
     preview: { postUrl },
   })
 }
@@ -1792,6 +1823,7 @@ export async function sendStatusIncidentPublishedEmail(
     from,
     fromDisplayName,
     emailType: 'StatusIncidentPublishedEmail',
+    workspaceName,
     preview: { incidentUrl },
   })
 }
@@ -1860,6 +1892,7 @@ export async function sendStatusMaintenanceScheduledEmail(
     from,
     fromDisplayName,
     emailType: 'StatusMaintenanceScheduledEmail',
+    workspaceName,
     preview: { incidentUrl },
   })
 }
@@ -1927,6 +1960,7 @@ export async function sendCsatRequestEmail(
     references: params.references,
     conversationId: params.conversationId,
     emailType: 'CsatRequestEmail',
+    workspaceName,
   })
 }
 
@@ -2000,5 +2034,6 @@ export async function sendVerifyAddressEmail(
     subject: 'Confirm your email address',
     react: VerifyAddressEmail({ code, workspaceName, logoUrl }),
     emailType: 'VerifyAddressEmail',
+    workspaceName,
   })
 }
