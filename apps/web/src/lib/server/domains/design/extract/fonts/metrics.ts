@@ -219,8 +219,7 @@ export function lineBands(m: Mask, floorShare = 0.04): Array<[number, number]> {
   // Merge slivers (dots, accents, underline fragments) into the nearest band.
   const tallest = Math.max(...bands.map(([a, b]) => b - a))
   const mh = median(bands.map(([a, b]) => b - a).filter((x) => x >= 0.5 * tallest))
-  for (let changed = true; changed && bands.length > 1;) {
-    changed = false
+  while (bands.length > 1) {
     const i = bands.findIndex(([a, b]) => b - a < 0.35 * mh)
     if (i < 0) break
     const [a, b] = bands[i]!
@@ -235,7 +234,6 @@ export function lineBands(m: Mask, floorShare = 0.04): Array<[number, number]> {
       next[0] = a
       bands.splice(i, 1)
     }
-    changed = true
   }
   // Split touching lines: a band much taller than the others splits at its emptiest row.
   const out: Array<[number, number]> = []
