@@ -39,7 +39,7 @@ import {
 } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { logger } from '@/lib/server/logger'
-import { NotFoundError, ConflictError } from '@/lib/shared/errors'
+import { ConflictError } from '@/lib/shared/errors'
 import { chooseInboxForSupportIfUnset } from './email-senders'
 
 const log = logger.child({ component: 'channel-accounts' })
@@ -406,26 +406,6 @@ export async function clearInboundForwarding(owningTeamId: TeamId): Promise<Chan
   const [row] = await db
     .update(channelAccounts)
     .set({ config: rest, updatedAt: new Date() })
-    .where(eq(channelAccounts.id, existing.id))
-    .returning()
-  return row
-}
-
-/** Per-address SMTP override on a sending identity. Pass null to clear. */
-export async function updateSendingAddressSmtp(input: {
-  id: ChannelAccountId
-  smtp: NonNullable<ChannelAccountConfig['smtp']> | null
-}): Promise<ChannelAccount> {
-  const existing = await getChannelAccount(input.id)
-  if (!existing || existing.role !== 'sending') {
-    throw new NotFoundError('SENDING_ADDRESS_NOT_FOUND', 'That sending address no longer exists.')
-  }
-  const config: ChannelAccountConfig = { ...existing.config }
-  if (input.smtp) config.smtp = input.smtp
-  else delete config.smtp
-  const [row] = await db
-    .update(channelAccounts)
-    .set({ config, updatedAt: new Date() })
     .where(eq(channelAccounts.id, existing.id))
     .returning()
   return row

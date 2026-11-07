@@ -46,7 +46,6 @@ import {
   resolveChannelAccountByRecipient,
   updateInboundTrust,
   clearInboundForwarding,
-  updateSendingAddressSmtp,
 } from '../channel-account.service'
 import { getEmailSenders } from '../email-senders'
 
@@ -204,26 +203,6 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
     expect(cleared?.config.forwardingTarget).toBeUndefined()
     expect(cleared?.inboundTrust).toBe('lenient')
     expect(await getInboundRoute(teamId)).not.toBeNull()
-  })
-
-  it('sets and clears a per-address SMTP override', async () => {
-    const teamId = await seedTeam()
-    const sending = await createSendingAddress({
-      owningTeamId: teamId,
-      address: 'help@acme.com',
-    })
-    const withSmtp = await updateSendingAddressSmtp({
-      id: sending.id,
-      smtp: { host: 'smtp.example.com', port: 587, secure: true, user: 'help' },
-    })
-    expect(withSmtp.config.smtp).toEqual({
-      host: 'smtp.example.com',
-      port: 587,
-      secure: true,
-      user: 'help',
-    })
-    const cleared = await updateSendingAddressSmtp({ id: sending.id, smtp: null })
-    expect(cleared.config.smtp).toBeUndefined()
   })
 
   it('resolves a channel account by a sending address or the inbound forwarding target', async () => {

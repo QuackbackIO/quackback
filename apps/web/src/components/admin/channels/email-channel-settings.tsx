@@ -21,7 +21,6 @@ import {
   useSendTestEmail,
   useUpdateInboundTrust,
   useClearInboundForwarding,
-  useUpdateSendingAddressSmtp,
 } from '@/lib/client/mutations/channel-accounts'
 import type { EmailSendersDTO, SendingDomainDTO } from '@/lib/server/functions/channel-accounts'
 import { DomainSetupPanel } from './domain-setup-panel'
@@ -39,15 +38,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { cn } from '@/lib/shared/utils'
 import { toastError } from '@/lib/client/error-notice'
 
@@ -287,8 +277,6 @@ type SendingAddress = {
   createdAt?: string
 }
 
-type SmtpConfig = { host?: string; port?: number; secure?: boolean; user?: string }
-
 /** The bare address inside a `Name <address>` From, or the string as given. */
 const bareAddress = (from: string): string => /<([^>]+)>/.exec(from)?.[1] ?? from
 
@@ -393,9 +381,6 @@ function SendingAddressesSection({
   guardPermitsAny: boolean
 }) {
   const [dialog, setDialog] = useState<SendingAddressDialogTarget | null>(null)
-  const [smtpFor, setSmtpFor] = useState<{ id: string; address: string; smtp?: SmtpConfig } | null>(
-    null
-  )
   const [domainRemoveTarget, setDomainRemoveTarget] = useState<{
     id: string
     domain: string
@@ -459,7 +444,6 @@ function SendingAddressesSection({
     <SettingsCard title="Sending addresses" description="Addresses email can be sent from." flush>
       <SettingsList>
         {rows.map(({ a, domain, phase }) => {
-          const smtp = a.config.smtp as SmtpConfig | undefined
           const first = firstOnDomain.has(a.id)
           // A live domain whose ownership record went missing still needs a record.
           const warned = !!domain && first && ownershipWarning(domain) !== null
@@ -482,10 +466,6 @@ function SendingAddressesSection({
                   },
                 ]
               : []),
-            {
-              label: 'SMTP override',
-              onSelect: () => setSmtpFor({ id: a.id, address, smtp }),
-            },
             {
               label: 'Remove',
               destructive: true,
@@ -588,7 +568,6 @@ function SendingAddressesSection({
         workspaceName={workspaceName}
         onClose={() => setDialog(null)}
       />
-      <SmtpOverrideDialog target={smtpFor} onClose={() => setSmtpFor(null)} />
       <ConfirmDialog
         open={removeTarget !== null}
         onOpenChange={(open) => !open && setRemoveTarget(null)}
@@ -641,123 +620,6 @@ function SendingAddressesSection({
         }}
       />
     </SettingsCard>
-  )
-}
-
-function SmtpOverrideDialog({
-  target,
-  onClose,
-}: {
-  target: {
-    id: string
-    address: string
-    smtp?: { host?: string; port?: number; secure?: boolean; user?: string }
-  } | null
-  onClose: () => void
-}) {
-  return (
-    <Dialog open={!!target} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
-        {target ? <SmtpOverrideForm key={target.id} target={target} onClose={onClose} /> : null}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function SmtpOverrideForm({
-  target,
-  onClose,
-}: {
-  target: {
-    id: string
-    address: string
-    smtp?: { host?: string; port?: number; secure?: boolean; user?: string }
-  }
-  onClose: () => void
-}) {
-  const save = useUpdateSendingAddressSmtp()
-  const [host, setHost] = useState(target.smtp?.host ?? '')
-  const [port, setPort] = useState(String(target.smtp?.port ?? 587))
-  const [user, setUser] = useState(target.smtp?.user ?? '')
-  const [secure, setSecure] = useState(target.smtp?.secure ?? true)
-
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>SMTP override</DialogTitle>
-        <DialogDescription>
-          Send from {target.address} through a dedicated SMTP server.
-        </DialogDescription>
-      </DialogHeader>
-      <div className="space-y-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="smtp-host">Host</Label>
-          <Input
-            id="smtp-host"
-            value={host}
-            onChange={(e) => setHost(e.target.value)}
-            placeholder="smtp.example.com"
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="smtp-port">Port</Label>
-            <Input
-              id="smtp-port"
-              inputMode="numeric"
-              value={port}
-              onChange={(e) => setPort(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="smtp-user">Username</Label>
-            <Input id="smtp-user" value={user} onChange={(e) => setUser(e.target.value)} />
-          </div>
-        </div>
-        <div className="flex items-center justify-between py-1">
-          <Label htmlFor="smtp-secure">Use TLS</Label>
-          <Switch id="smtp-secure" checked={secure} onCheckedChange={setSecure} />
-        </div>
-      </div>
-      <DialogFooter>
-        {target.smtp && (
-          <Button
-            variant="ghost"
-            disabled={save.isPending}
-            onClick={() =>
-              save.mutate(
-                { id: target.id, smtp: null },
-                {
-                  onSuccess: onClose,
-                  onError: reason('Could not clear the override'),
-                }
-              )
-            }
-          >
-            Clear
-          </Button>
-        )}
-        <Button
-          disabled={!host.trim() || !user.trim() || save.isPending}
-          onClick={() => {
-            const parsedPort = Number(port)
-            if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
-              toast.error('Enter a valid port.')
-              return
-            }
-            save.mutate(
-              {
-                id: target.id,
-                smtp: { host: host.trim(), port: parsedPort, secure, user: user.trim() },
-              },
-              { onSuccess: onClose, onError: reason('Could not save the override') }
-            )
-          }}
-        >
-          Save
-        </Button>
-      </DialogFooter>
-    </>
   )
 }
 
