@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, lazyRouteComponent, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import { portalLanding, previewsHome } from '@/lib/shared/design/paths'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -9,17 +9,17 @@ import {
   hasFeedSearch,
   loadFeed,
   portalPathsOf,
-  Route as FeedbackRoute,
-} from './feedback'
+} from '@/components/public/feedback/feed-route'
 
 /** Home's module: its page, and what its loader starts. One import serves both. */
 const importHome = () => import('@/components/public/home/portal-home')
 const PortalHome = lazy(() => importHome().then((module) => ({ default: module.PortalHome })))
 
-/** The feed route's own component, loaded from its chunk. */
-const FeedComponent = FeedbackRoute.options.component as NonNullable<
-  typeof FeedbackRoute.options.component
-> & { preload?: () => Promise<void> }
+/** The feed page, from its own chunk, as the feed route loads it. */
+const FeedComponent = lazyRouteComponent(
+  () => import('@/components/public/feedback/feed-page'),
+  'FeedPage'
+)
 
 /**
  * The portal's root. With Home on it is Home, and an old link to the feed

@@ -1,5 +1,5 @@
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import type { FeedSearch } from '@/routes/_portal/feedback'
+import type { FeedSearch } from '@/components/public/feedback/feed-route'
 import { useFeedbackPath } from '@/components/public/use-portal-paths'
 import { useMemo, useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'

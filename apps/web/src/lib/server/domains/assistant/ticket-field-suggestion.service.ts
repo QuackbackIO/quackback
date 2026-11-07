@@ -39,10 +39,9 @@
  * discipline).
  */
 import { chat } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
+import { createChatAdapter } from '@/lib/server/domains/ai/chat-adapter'
 import { z } from 'zod'
 import type { ConversationId, TicketTypeId } from '@quackback/ids'
-import { config } from '@/lib/server/config'
 import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
@@ -204,7 +203,7 @@ export async function suggestTicketFieldValues(
   ticketTypeId: TicketTypeId
 ): Promise<TicketFieldSuggestionResult> {
   const model = getChatModel('assistant')
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
+  if (!isAiClientConfigured() || !model) {
     return { unavailable: true }
   }
 
@@ -233,10 +232,7 @@ export async function suggestTicketFieldValues(
   let output: Record<string, unknown>
   try {
     output = (await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+      adapter: createChatAdapter(model),
       systemPrompts: [SYSTEM_PROMPT],
       messages: [
         {
