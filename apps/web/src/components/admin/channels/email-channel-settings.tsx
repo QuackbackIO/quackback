@@ -1,8 +1,8 @@
 /**
- * Email channel settings: inbound route (edit/remove + sender trust), the
- * sending addresses, and which of them each kind of email is sent from. An
- * address on a domain that is not live yet carries that domain's setup panel
- * under it.
+ * Email channel settings: the support inbox (its forwarding address and what
+ * happens to unverified senders), the sending addresses, and which of them each
+ * kind of email is sent from. An address on a domain that is not live yet
+ * carries that domain's setup panel under it.
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -56,8 +56,6 @@ const NO_SENDERS: EmailSendersDTO = {
   changelog: null,
   status: null,
 }
-
-const fail = (msg: string) => () => toast.error(msg)
 
 /**
  * Show what the server actually refused, falling back to the generic line.
@@ -126,6 +124,12 @@ function inboundTarget(
   return typeof t === 'string' ? t : null
 }
 
+/** How the two inbound trust settings are offered. */
+const TRUST_OPTIONS = [
+  { value: 'strict', label: 'Quarantine' },
+  { value: 'lenient', label: 'Accept' },
+] as const
+
 function InboundRouteSection({
   forwardingTarget,
   platformAddress,
@@ -138,16 +142,20 @@ function InboundRouteSection({
   const [value, setValue] = useState('')
   const [editing, setEditing] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  // One inline line for the last failed action, as on the Sending addresses card.
+  const [actionError, setActionError] = useState<string | null>(null)
   const create = useCreateInboundRoute()
   const clear = useClearInboundForwarding()
   const trust = useUpdateInboundTrust()
+  const showError = (fallback: string) => (error: unknown) =>
+    setActionError(errorText(error, fallback))
 
   const showEditor = !forwardingTarget || editing
 
   return (
     <SettingsCard
-      title="Inbound route"
-      description="Forward your support inbox here so replies become conversations."
+      title="Support inbox"
+      description="Forward your support address here so its email becomes conversations."
     >
       {platformAddress && (
         <p className="mb-4 text-[13px] text-muted-foreground">
@@ -201,17 +209,18 @@ function InboundRouteSection({
           <Button
             variant="outline"
             disabled={!value.trim() || create.isPending}
-            onClick={() =>
+            onClick={() => {
+              setActionError(null)
               create.mutate(value.trim(), {
                 onSuccess: () => {
                   setValue('')
                   setEditing(false)
                 },
-                onError: fail('Could not set the route'),
+                onError: showError("Couldn't save the forwarding address."),
               })
-            }
+            }}
           >
-            {forwardingTarget ? 'Save' : 'Set route'}
+            Save
           </Button>
           {editing && (
             <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
@@ -223,43 +232,54 @@ function InboundRouteSection({
 
       <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-4">
         <div className="pr-4">
-          <p className="text-sm font-medium">Sender trust</p>
+          <p className="text-sm font-medium">Unverified senders</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Strict quarantines mail that fails authentication. Lenient accepts it with an unverified
-            badge.
+            Quarantine moves email that fails authentication to Spam. Accept lets it in, marked
+            unverified.
           </p>
         </div>
         <div className="inline-flex shrink-0 rounded-lg border border-border p-0.5">
-          {(['strict', 'lenient'] as const).map((option) => (
+          {TRUST_OPTIONS.map((option) => (
             <button
-              key={option}
+              key={option.value}
               type="button"
               disabled={trust.isPending}
-              onClick={() =>
-                trust.mutate(option, { onError: reason('Could not update sender trust') })
-              }
+              onClick={() => {
+                setActionError(null)
+                trust.mutate(option.value, {
+                  onError: showError("Couldn't change unverified senders."),
+                })
+              }}
               className={cn(
-                'rounded-md px-2.5 py-1 text-[13px] font-medium capitalize transition-colors',
-                inboundTrust === option
+                'rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors',
+                inboundTrust === option.value
                   ? 'bg-primary/10 text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              {option}
+              {option.label}
             </button>
           ))}
         </div>
       </div>
+      {actionError && (
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          {actionError}
+        </p>
+      )}
       <ConfirmDialog
         open={confirmClear}
         onOpenChange={setConfirmClear}
-        title="Delete inbound route?"
-        description="Forwarded email stops becoming conversations until you set a route again."
-        confirmLabel="Delete route"
+        title="Remove the forwarding address?"
+        description="Forwarded email stops becoming conversations until you set an address again."
+        confirmLabel="Remove"
         variant="destructive"
         isPending={clear.isPending}
         onConfirm={() => {
-          clear.mutate(undefined, { onError: reason('Could not remove the route') })
+          setActionError(null)
+          clear.mutate(undefined, {
+            onError: showError("Couldn't remove the forwarding address."),
+          })
           setConfirmClear(false)
         }}
       />
