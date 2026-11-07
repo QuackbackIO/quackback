@@ -4,7 +4,7 @@ import { colourName, plainWords } from '@/lib/shared/design/colour-names'
 import { matchSummary } from '@/lib/shared/design/step-summary'
 import { overrideChangeLines } from '@/lib/shared/design/override-cascade'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
-import { MATCH_BRAND } from '@/lib/shared/design/match-brand'
+import { MATCH_BRAND, type UnmatchedFont } from '@/lib/shared/design/match-brand'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -246,6 +246,8 @@ export function AskAiPanel({
   onChip,
   onHeroPhoto,
   onRecapture,
+  onUploadFont,
+  onFonts,
 }: {
   available: boolean
   turns: DesignAiTurn[]
@@ -267,6 +269,10 @@ export function AskAiPanel({
   onHeroPhoto?: (key: string) => void
   /** Captures a brand's site again, from the capture a match was made from. */
   onRecapture?: (url: string) => void
+  /** Opens the font upload for the brand's own face a match could not match. */
+  onUploadFont?: (font: UnmatchedFont) => void
+  /** Opens the fonts in Theme's Brand kit. */
+  onFonts?: () => void
 }) {
   if (!available) {
     return (
@@ -329,6 +335,20 @@ export function AskAiPanel({
                   <SiteCapture capture={turn.capture} busy={busy} onRecapture={onRecapture} />
                 )}
                 {turn.brand && renderBrand?.(turn, index)}
+                {turn.font && onUploadFont && onFonts && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button variant="outline" size="sm" onClick={() => onUploadFont(turn.font!)}>
+                      Upload {turn.font.family}
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={onFonts}
+                      className="rounded text-xs text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                    >
+                      Fonts in Theme
+                    </button>
+                  </div>
+                )}
                 {turn.asks?.map((question) => (
                   <p key={question} className="text-[13px] text-muted-foreground">
                     {plainWords(question)}

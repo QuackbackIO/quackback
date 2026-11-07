@@ -396,3 +396,28 @@ describe('the capture a match was made from', () => {
     expect(onRecapture).toHaveBeenCalledWith('acme.test')
   })
 })
+
+describe('a brand match that could not match a font', () => {
+  const matched: DesignAiTurn = {
+    role: 'assistant',
+    text: 'I matched your brand from your screenshot: green as the brand colour.',
+    matched: true,
+    changes: [],
+    font: { family: 'Acme Grotesk', slot: 'heading' },
+  }
+
+  it('offers its upload and a way to the fonts, under the one line', () => {
+    const onUploadFont = vi.fn()
+    const onFonts = vi.fn()
+    mount({ turns: [matched], onUploadFont, onFonts })
+    fireEvent.click(screen.getByRole('button', { name: 'Upload Acme Grotesk' }))
+    expect(onUploadFont).toHaveBeenCalledWith({ family: 'Acme Grotesk', slot: 'heading' })
+    fireEvent.click(screen.getByRole('button', { name: 'Fonts in Theme' }))
+    expect(onFonts).toHaveBeenCalledOnce()
+  })
+
+  it('offers nothing where the panel cannot open the fonts', () => {
+    mount({ turns: [matched] })
+    expect(screen.queryByRole('button', { name: 'Upload Acme Grotesk' })).toBeNull()
+  })
+})

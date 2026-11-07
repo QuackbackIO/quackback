@@ -5,6 +5,7 @@ import type { AppliedDesignChange, UntrustedChanges } from '@/lib/shared/design/
 import type { Fingerprint } from '@/lib/shared/design/fingerprint'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { UnmatchedFont } from '@/lib/shared/design/match-brand'
 import type { FoundElements } from '../extract/finder'
 import type { MeasuredDesign } from '../extract/measured-design'
 import type { Image } from '../extract/png'
@@ -90,4 +91,6 @@ export type BrandMatchResult = Extract<DesignAiResult, { ok: true }> & {
   } | null
   /** What the brand's site gave, when it was read. */
   site?: SiteUse | null
+  /** The site's own face no bundled face is, for the reply's "Upload <family>". */
+  font?: UnmatchedFont
 }

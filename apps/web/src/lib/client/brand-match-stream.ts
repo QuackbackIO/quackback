@@ -10,6 +10,7 @@ import type { ShotBox } from '@/lib/shared/design/brand-shots'
 import type { DesignAdjustment } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { Fingerprint } from '@/lib/shared/design/fingerprint'
+import type { UnmatchedFont } from '@/lib/shared/design/match-brand'
 
 /** The colours a match measured and their roles, as far as the check needs them. */
 interface MeasuredRoles {
@@ -62,6 +63,8 @@ export type BrandMatchOutcome =
       report?: { adjustments: DesignAdjustment[]; errors: string[]; css: never[] }
       revision?: string
       capture?: BrandMatchCapture
+      /** The brand's own face drawn in the nearest bundled one, for the reply's upload. */
+      font?: UnmatchedFont
       /** What was measured, for the check that follows the match. */
       target?: {
         fingerprint: Fingerprint

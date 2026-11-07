@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -178,8 +178,25 @@ function problem(family: string, files: PendingFile[]): string | null {
  * where to use it and the licence to. Needs file storage; the plan's custom
  * CSS covers it.
  */
+/** A family and slot to open the upload with, as a brand match's "Upload <family>" asks. */
+export interface OwnFontRequest {
+  family: string
+  slot: Slot | 'both'
+}
+
+const OWN_FONT_REQUEST = 'quackback:own-font'
+// Kept until the upload draws, for a request made as the sheet holding it opens.
+let pendingRequest: OwnFontRequest | null = null
+
+/** Opens the upload with the family and slot filled in, now or as soon as it draws. */
+export function requestOwnFont(request: OwnFontRequest): void {
+  pendingRequest = request
+  window.dispatchEvent(new Event(OWN_FONT_REQUEST))
+}
+
 export function OwnFont({ update }: { update: Update }) {
   const [open, setOpen] = useState(false)
+  const details = useRef<HTMLDetailsElement>(null)
   const storage = useQuery({
     queryKey: ['settings', 'storage'],
     queryFn: () => checkS3ConfiguredFn(),
@@ -194,6 +211,21 @@ export function OwnFont({ update }: { update: Update }) {
   const [refusal, setRefusal] = useState<string | null>(null)
   // A file input keeps its own list; a new one starts empty after a font is added.
   const [picker, setPicker] = useState(0)
+  useEffect(() => {
+    const take = () => {
+      const request = pendingRequest
+      if (!request || !details.current) return
+      pendingRequest = null
+      setFamily(request.family)
+      setUse(request.slot)
+      details.current.open = true
+      setOpen(true)
+      details.current.scrollIntoView({ block: 'nearest' })
+    }
+    take()
+    window.addEventListener(OWN_FONT_REQUEST, take)
+    return () => window.removeEventListener(OWN_FONT_REQUEST, take)
+  }, [])
   const issue = problem(family, files)
   const ready = files.length > 0 && FAMILY.test(family.trim()) && licensed && !issue && !busy
 
@@ -249,6 +281,7 @@ export function OwnFont({ update }: { update: Update }) {
 
   return (
     <details
+      ref={details}
       id={OWN_FONT_ID}
       className="rounded-lg border border-border/60"
       onToggle={(event) => setOpen(event.currentTarget.open)}

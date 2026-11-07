@@ -32,6 +32,15 @@ export const MATCH_BRAND = {
   adjustCropHint: 'Drag the box over the part of the photo to show; drag its corner to size it.',
 } as const
 
+/**
+ * The brand's own face a match could only draw in the nearest bundled one,
+ * and the slot it is for, so the reply can offer its upload.
+ */
+export interface UnmatchedFont {
+  family: string
+  slot: 'heading' | 'body' | 'both'
+}
+
 /** Words that ask to start from the images, rather than to change something in them. */
 const ASKS_TO_MATCH =
   /\b(match|brand|branding|look like|looks like|like (our|my) (site|website|app)|from (these|this|my|our)|use (these|this)|screenshots?)\b/i

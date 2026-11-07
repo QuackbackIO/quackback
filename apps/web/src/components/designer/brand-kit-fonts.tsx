@@ -6,7 +6,12 @@
  */
 import { useState } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { OwnFont, uploadedFonts } from '@/components/admin/settings/appearance/fonts-section'
+import {
+  OwnFont,
+  requestOwnFont,
+  uploadedFonts,
+  type OwnFontRequest,
+} from '@/components/admin/settings/appearance/fonts-section'
 import { loadFontPreviews } from '@/components/admin/settings/appearance/font-previews'
 import type { Update } from '@/components/admin/settings/appearance/section-controls'
 import { FONT_PAIRS, fontPairOf, takeFontPair } from '@/lib/shared/design/curated'
@@ -21,6 +26,21 @@ import { FONT_NAMES, THEME, WORDS } from './properties/words'
 
 /** The id the brand kit's fonts sit under, in Theme, for a font row elsewhere to go to. */
 export const THEME_FONTS_ID = 'theme-fonts'
+
+/**
+ * Brings the Brand kit's fonts into view once Theme has drawn them, or opens
+ * their upload with a font's name and slot filled in, which shows itself.
+ */
+export function revealThemeFonts(font?: OwnFontRequest): void {
+  if (font) return requestOwnFont(font)
+  const reveal = (tries: number) =>
+    requestAnimationFrame(() => {
+      const fonts = document.getElementById(THEME_FONTS_ID)
+      if (fonts) fonts.scrollIntoView({ block: 'start' })
+      else if (tries > 0) reveal(tries - 1)
+    })
+  reveal(20)
+}
 
 type DesignFont = PortalDesign['brand']['fonts']['body']
 type HeadingWeight = PortalDesign['brand']['fonts']['headingWeight']

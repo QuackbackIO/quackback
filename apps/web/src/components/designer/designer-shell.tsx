@@ -25,6 +25,7 @@ import { CanvasLayer } from './canvas-layer'
 import { DesignerAi } from './designer-ai'
 import { DesignerCanvas } from './designer-canvas'
 import { ElementPanel, elementPanelKey } from './element-panel'
+import { revealThemeFonts } from './brand-kit-fonts'
 import { usePickReach } from './use-pick-reach'
 import { backgroundPageOf } from '@/lib/shared/design/page-background'
 import { partOf, partSelector } from '@/lib/shared/design/parts-registry'
@@ -384,6 +385,11 @@ export function DesignerShell({
                 onClearSelection={() => setSelection(null)}
                 onCollapse={aiPane.collapse}
                 gates={gates}
+                onFonts={(font) => {
+                  openTheme()
+                  setPane('settings')
+                  revealThemeFonts(font)
+                }}
               />
             </AiPane>
           )}
