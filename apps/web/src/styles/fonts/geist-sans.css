@@ -4,6 +4,7 @@
    from dynamic imports into its own stylesheet). Keep weights in sync with
    the FONT_OPTIONS entry in use-branding-state.ts. @fontsource publishes
    Geist as the "Geist Sans" family. */
+@import "@fontsource/geist-sans/300.css";
 @import "@fontsource/geist-sans/400.css";
 @import "@fontsource/geist-sans/500.css";
 @import "@fontsource/geist-sans/600.css";

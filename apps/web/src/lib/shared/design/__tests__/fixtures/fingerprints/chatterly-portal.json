@@ -1,0 +1,82 @@
+{
+  "page": "rgb(255, 255, 255)",
+  "headline": {
+    "family": "Outfit, ui-sans-serif, system-ui, sans-serif",
+    "size": 58,
+    "weight": 400,
+    "tracking": -0.019999999999999997,
+    "leading": 1.17,
+    "transform": "none",
+    "color": "oklch(0.985 0 0)"
+  },
+  "heading": {
+    "family": "Outfit, ui-sans-serif, system-ui, sans-serif",
+    "size": 20,
+    "weight": 600,
+    "tracking": -0.01,
+    "leading": 1.15,
+    "transform": "none",
+    "color": "rgb(29, 28, 29)"
+  },
+  "body": {
+    "family": "\"Inter Variable\", Inter, ui-sans-serif, system-ui, sans-serif",
+    "size": 17.7984,
+    "weight": 400,
+    "tracking": 0,
+    "leading": 1.375,
+    "transform": "none",
+    "color": "oklch(0.985 0 0)"
+  },
+  "button": {
+    "bg": "rgb(255, 255, 255)",
+    "color": "rgb(24, 24, 24)",
+    "radius": 999,
+    "height": 40,
+    "borderWidth": 0,
+    "borderColor": "rgb(212, 212, 212)",
+    "shadow": false,
+    "size": 13,
+    "weight": 500,
+    "transform": "none",
+    "family": "\"Inter Variable\", Inter, ui-sans-serif, system-ui, sans-serif",
+    "padX": 18
+  },
+  "buttonText": "Sign up",
+  "link": {
+    "family": "\"Inter Variable\", Inter, ui-sans-serif, system-ui, sans-serif",
+    "size": 14,
+    "weight": 500,
+    "tracking": 0.06,
+    "leading": 1.4285714285714286,
+    "transform": "uppercase",
+    "color": "rgb(29, 28, 29)"
+  },
+  "card": {
+    "bg": "rgb(255, 255, 255)",
+    "color": "rgb(29, 28, 29)",
+    "radius": 10,
+    "height": 57,
+    "borderWidth": 1,
+    "borderColor": "oklab(0.869938 0.0000396967 0.0000174046 / 0.4)",
+    "shadow": false,
+    "size": 16,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"Inter Variable\", Inter, ui-sans-serif, system-ui, sans-serif",
+    "padX": 16
+  },
+  "field": {
+    "bg": "rgb(255, 255, 255)",
+    "color": "rgb(29, 28, 29)",
+    "radius": 28,
+    "height": 62,
+    "borderWidth": 1,
+    "borderColor": "rgb(212, 212, 212)",
+    "shadow": false,
+    "size": 16,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"Inter Variable\", Inter, ui-sans-serif, system-ui, sans-serif",
+    "padX": 0
+  }
+}

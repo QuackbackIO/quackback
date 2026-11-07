@@ -1,0 +1,221 @@
+{
+  "version": 2,
+  "mode": "auto",
+  "brand": {
+    "light": {
+      "accent": "#191521",
+      "background": "#fdfcfe",
+      "ink": "#14111c"
+    },
+    "dark": {
+      "accent": "oklch(0.886 0.176 86)",
+      "background": "#0a0a0a",
+      "ink": "#fafafa"
+    },
+    "fonts": {
+      "heading": {
+        "kind": "bundled",
+        "id": "fira-code"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "inter"
+      },
+      "headingWeight": 500,
+      "scale": "display",
+      "headlineCase": "sentence"
+    },
+    "logo": {
+      "mark": {
+        "light": null,
+        "dark": null
+      },
+      "wordmark": {
+        "light": {
+          "key": "logos/fixture/logo-dc2716df408a453daef6fc52.svg"
+        },
+        "dark": null
+      },
+      "display": "wordmark",
+      "tone": "dark",
+      "oneInk": true
+    },
+    "logoColours": ["#19151f"],
+    "favicon": {
+      "key": "logos/fixture/favicon-2bb9539a0919077bf9f542a5.png"
+    },
+    "shareImage": {
+      "key": "logos/fixture/share-c0c126c06198a228c8b0a426.png"
+    }
+  },
+  "shape": {
+    "corners": "subtle",
+    "buttons": "rounded",
+    "fill": "ink"
+  },
+  "layout": {
+    "header": "inline",
+    "menuAlign": "start",
+    "nav": "underline",
+    "navText": "ink",
+    "band": "none",
+    "bandAlign": "left",
+    "headerOnBand": false,
+    "status": "ink",
+    "tint": "neutral",
+    "pageTitles": "plain",
+    "bandArt": "none",
+    "cards": "bordered",
+    "density": "comfortable",
+    "width": "default",
+    "filters": "end"
+  },
+  "pages": {
+    "home": {
+      "headline": {
+        "title": {
+          "en": "Fixture words"
+        },
+        "subtitle": {
+          "en": "Fixture words"
+        }
+      },
+      "blocks": [
+        {
+          "type": "composer",
+          "id": "yu7da6lizv",
+          "grid": {
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 1
+          }
+        },
+        {
+          "type": "roadmap",
+          "id": "vzuu9h7r3m",
+          "grid": {
+            "x": 0,
+            "y": 1,
+            "w": 12,
+            "h": 1
+          },
+          "roadmapId": null
+        },
+        {
+          "type": "updates",
+          "id": "qfu99hg0pj",
+          "grid": {
+            "x": 0,
+            "y": 2,
+            "w": 6,
+            "h": 1
+          },
+          "count": 3
+        },
+        {
+          "type": "ideas",
+          "id": "7v9x4ujq2p",
+          "grid": {
+            "x": 6,
+            "y": 2,
+            "w": 6,
+            "h": 1
+          },
+          "sort": "trending",
+          "count": 3
+        }
+      ],
+      "composer": "band"
+    },
+    "feedback": {
+      "headline": {
+        "title": {
+          "en": "Fixture words"
+        },
+        "subtitle": {
+          "en": "Fixture words"
+        }
+      },
+      "welcome": {
+        "show": false,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph"
+            }
+          ]
+        }
+      },
+      "defaultSort": "trending",
+      "copy": {
+        "prompt": {
+          "en": "Fixture words"
+        },
+        "submit": {
+          "en": "Fixture words"
+        }
+      }
+    }
+  },
+  "nav": {
+    "home": {
+      "on": true,
+      "tab": true
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": true
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true
+      },
+      {
+        "type": "help",
+        "shown": true
+      },
+      {
+        "type": "support",
+        "shown": true
+      },
+      {
+        "type": "status",
+        "shown": true
+      }
+    ]
+  },
+  "tune": {
+    "headline": {
+      "size": 54,
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.05
+    },
+    "subtitle": {
+      "colour": "#716f73"
+    },
+    "heading": {
+      "size": 25,
+      "leading": 1.05,
+      "colour": "#17131e"
+    },
+    "label": {
+      "size": 12
+    },
+    "button": {
+      "radius": 4,
+      "height": 34,
+      "case": "upper"
+    },
+    "link": {
+      "colour": "#14111c"
+    }
+  }
+}

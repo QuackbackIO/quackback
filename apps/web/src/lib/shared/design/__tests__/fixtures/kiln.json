@@ -1,0 +1,175 @@
+{
+  "version": 2,
+  "mode": "auto",
+  "brand": {
+    "light": {
+      "accent": "#f5b301",
+      "background": "#fffaf0",
+      "ink": "#1c1408",
+      "surface": "#ffffff",
+      "support": "#2b2a28"
+    },
+    "fonts": {
+      "heading": {
+        "kind": "uploaded",
+        "family": "Unbounded",
+        "files": [
+          {
+            "key": "fonts/kiln/unbounded-700.woff2",
+            "weight": 700,
+            "style": "normal"
+          }
+        ],
+        "fallback": "space-grotesk"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "inter"
+      },
+      "headingWeight": 700,
+      "scale": "display",
+      "tracking": "tight",
+      "headlineCase": "upper",
+      "headlineColour": "accent"
+    },
+    "logo": {
+      "mark": {
+        "light": {
+          "key": "fixtures/kiln/mark-light.png"
+        },
+        "dark": {
+          "key": "fixtures/kiln/mark-dark.png"
+        }
+      },
+      "wordmark": {
+        "light": null,
+        "dark": null
+      },
+      "display": "mark",
+      "name": "Kiln"
+    },
+    "favicon": {
+      "key": "fixtures/kiln/favicon.png"
+    },
+    "shareImage": null,
+    "dark": {
+      "accent": "#f5b301"
+    }
+  },
+  "shape": {
+    "corners": "subtle",
+    "buttons": "square",
+    "hover": "arrow"
+  },
+  "layout": {
+    "header": "centered",
+    "nav": "tabs",
+    "band": "support",
+    "cards": "bordered",
+    "density": "compact",
+    "width": "default",
+    "filters": "end",
+    "bandShape": "inset",
+    "status": "ink",
+    "bandArt": "lines",
+    "pageTitles": "plain",
+    "postCardHides": ["meta"]
+  },
+  "pages": {
+    "home": {
+      "headline": null,
+      "blocks": []
+    },
+    "feedback": {
+      "headline": {
+        "title": {
+          "en": "Build the next season with us"
+        },
+        "subtitle": {
+          "en": "Ideas from players shape every update."
+        },
+        "accent": {
+          "style": "colour",
+          "text": {
+            "en": "next season"
+          }
+        }
+      },
+      "welcome": {
+        "show": false,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph"
+            }
+          ]
+        }
+      },
+      "defaultSort": "trending",
+      "copy": {}
+    },
+    "titles": {
+      "help": {
+        "title": {
+          "en": "How can we help?"
+        },
+        "subtitle": {
+          "en": "Guides for every firing."
+        }
+      },
+      "support": {
+        "title": {
+          "en": "Talk to the studio"
+        },
+        "subtitle": {
+          "en": "Your conversations with our team."
+        }
+      }
+    },
+    "changelog": {
+      "entries": "compact",
+      "images": "thumbnail",
+      "subscribe": "under"
+    },
+    "roadmap": {
+      "board": "list",
+      "votes": false
+    }
+  },
+  "nav": {
+    "home": {
+      "on": false,
+      "tab": false
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": true,
+        "label": "Ideas"
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true,
+        "label": "Patch notes"
+      },
+      {
+        "type": "help",
+        "shown": true,
+        "label": "Help"
+      },
+      {
+        "type": "support",
+        "shown": false
+      },
+      {
+        "type": "status",
+        "shown": true
+      }
+    ]
+  }
+}

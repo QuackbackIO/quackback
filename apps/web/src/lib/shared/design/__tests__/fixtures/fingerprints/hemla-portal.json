@@ -1,0 +1,82 @@
+{
+  "page": "rgb(254, 254, 252)",
+  "headline": {
+    "family": "\"Noto Sans\", ui-sans-serif, system-ui, sans-serif",
+    "size": 48,
+    "weight": 700,
+    "tracking": -0.02,
+    "leading": 1.0999999999999999,
+    "transform": "none",
+    "color": "oklch(0.145 0 0)"
+  },
+  "heading": {
+    "family": "\"Noto Sans\", ui-sans-serif, system-ui, sans-serif",
+    "size": 24,
+    "weight": 700,
+    "tracking": -0.01,
+    "leading": 1.1500000000000001,
+    "transform": "none",
+    "color": "rgb(17, 17, 17)"
+  },
+  "body": {
+    "family": "\"Noto Sans\", ui-sans-serif, system-ui, sans-serif",
+    "size": 18,
+    "weight": 400,
+    "tracking": 0,
+    "leading": 1.375,
+    "transform": "none",
+    "color": "oklch(0.145 0 0)"
+  },
+  "button": {
+    "bg": "rgb(17, 17, 17)",
+    "color": "rgb(254, 254, 252)",
+    "radius": 999,
+    "height": 32,
+    "borderWidth": 0,
+    "borderColor": "rgb(212, 212, 212)",
+    "shadow": false,
+    "size": 13,
+    "weight": 500,
+    "transform": "none",
+    "family": "\"Noto Sans\", ui-sans-serif, system-ui, sans-serif",
+    "padX": 12
+  },
+  "buttonText": "Sign up",
+  "link": {
+    "family": "\"Noto Sans\", ui-sans-serif, system-ui, sans-serif",
+    "size": 14,
+    "weight": 500,
+    "tracking": 0,
+    "leading": 1.4285714285714286,
+    "transform": "none",
+    "color": "rgb(17, 17, 17)"
+  },
+  "card": {
+    "bg": "rgb(255, 255, 255)",
+    "color": "rgb(17, 17, 17)",
+    "radius": 8,
+    "height": 61.59375,
+    "borderWidth": 1,
+    "borderColor": "rgba(0, 0, 0, 0)",
+    "shadow": true,
+    "size": 16,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"Noto Sans\", ui-sans-serif, system-ui, sans-serif",
+    "padX": 16
+  },
+  "field": {
+    "bg": "rgb(255, 255, 255)",
+    "color": "rgb(17, 17, 17)",
+    "radius": 28,
+    "height": 62,
+    "borderWidth": 1,
+    "borderColor": "rgb(212, 212, 212)",
+    "shadow": true,
+    "size": 16,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"Noto Sans\", ui-sans-serif, system-ui, sans-serif",
+    "padX": 0
+  }
+}

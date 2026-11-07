@@ -15,6 +15,7 @@ export const PERMISSIONS = {
   // workspace
   SETTINGS_MANAGE: 'settings.manage',
   SETTINGS_BRANDING: 'settings.branding',
+  DESIGN_PUBLISH: 'design.publish',
   SETTINGS_MODERATION: 'settings.moderation',
   SETTINGS_NOTIFICATIONS: 'settings.notifications',
   SETTINGS_CUSTOM_DOMAIN: 'settings.custom_domain',
@@ -174,6 +175,7 @@ export type SystemRoleKey = (typeof SYSTEM_ROLES)[keyof typeof SYSTEM_ROLES]
 export const WORKSPACE_ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   PERMISSIONS.SETTINGS_MANAGE,
   PERMISSIONS.SETTINGS_BRANDING,
+  PERMISSIONS.DESIGN_PUBLISH,
   PERMISSIONS.SETTINGS_MODERATION,
   PERMISSIONS.SETTINGS_NOTIFICATIONS,
   PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
@@ -275,6 +277,7 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
   { key: PERMISSIONS.AUTH_MANAGE, category: 'workspace' },
   { key: PERMISSIONS.AUDIT_VIEW, category: 'workspace' },
   { key: PERMISSIONS.SETTINGS_BRANDING, category: 'workspace' },
+  { key: PERMISSIONS.DESIGN_PUBLISH, category: 'workspace' },
   { key: PERMISSIONS.SETTINGS_MODERATION, category: 'workspace' },
   { key: PERMISSIONS.SETTINGS_NOTIFICATIONS, category: 'workspace' },
   { key: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN, category: 'workspace' },

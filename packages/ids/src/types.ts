@@ -289,6 +289,18 @@ export type TeamMemberId = TypeId<'team_member'>
 /** Macro (canned reply with actions) ID - e.g., macro_01h455vb4pex5vsknk084sn02q */
 export type MacroId = TypeId<'macro'>
 
+/** Portal design (draft and published revision per site) ID - e.g., portal_design_01h455vb4pex5vsknk084sn02q */
+export type PortalDesignId = TypeId<'portal_design'>
+
+/** Published portal design revision ID - e.g., portal_design_revision_01h455vb4pex5vsknk084sn02q */
+export type PortalDesignRevisionId = TypeId<'portal_design_revision'>
+
+/** Shared portal design preview link ID - e.g., portal_design_preview_01h455vb4pex5vsknk084sn02q */
+export type PortalDesignPreviewId = TypeId<'portal_design_preview'>
+
+/** A saved portal design checkpoint or look - e.g., portal_design_saved_01h455vb4pex5vsknk084sn02q */
+export type PortalDesignSavedId = TypeId<'portal_design_saved'>
+
 /** Saved inbox view ID - e.g., conversation_view_01h455vb4pex5vsknk084sn02q */
 export type ConversationViewId = TypeId<'conversation_view'>
 
@@ -478,6 +490,10 @@ export interface EntityIdMap {
   team: TeamId
   team_member: TeamMemberId
   macro: MacroId
+  portal_design: PortalDesignId
+  portal_design_revision: PortalDesignRevisionId
+  portal_design_preview: PortalDesignPreviewId
+  portal_design_saved: PortalDesignSavedId
   conversation_view: ConversationViewId
   post_view: PostViewId
   conversation_attribute: ConversationAttributeId

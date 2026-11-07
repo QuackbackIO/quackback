@@ -23,6 +23,13 @@ import {
   extractYoutubeId,
 } from '@/lib/shared/utils/sanitize'
 import { collectHeadings, createHeadingIds } from './heading-ids'
+import { isColourRole, RICH_ALIGNS, wordsColour } from './design/rich-words'
+
+/** A paragraph's or heading's alignment, as a style, when it is one rich words keep. */
+function alignStyle(node: JSONContent): string {
+  const align = node.attrs?.textAlign
+  return (RICH_ALIGNS as readonly unknown[]).includes(align) ? ` style="text-align: ${align}"` : ''
+}
 
 // Emoji nodes carry their Unicode character; reading never needs the dataset.
 
@@ -38,7 +45,7 @@ export function generateContentHTML(content: JSONContent): string {
 
       case 'paragraph': {
         const pContent = node.content?.map(renderNode).join('') ?? ''
-        return pContent ? `<p>${pContent}</p>` : '<p></p>'
+        return `<p${alignStyle(node)}>${pContent}</p>`
       }
 
       case 'heading': {
@@ -47,7 +54,7 @@ export function generateContentHTML(content: JSONContent): string {
         const headingContent = node.content?.map(renderNode).join('') ?? ''
         const id = headingIds.get(node) ?? ''
         const idAttr = id ? ` id="${escapeHtmlAttr(id)}"` : ''
-        return `<h${level}${idAttr}>${headingContent}</h${level}>`
+        return `<h${level}${idAttr}${alignStyle(node)}>${headingContent}</h${level}>`
       }
 
       case 'text': {
@@ -73,6 +80,13 @@ export function generateContentHTML(content: JSONContent): string {
               case 'code':
                 text = `<code class="bg-muted px-1 py-0.5 rounded text-sm">${text}</code>`
                 break
+              case 'colour': {
+                // Words in one of the brand's colour roles, never a free colour.
+                const role = mark.attrs?.role
+                if (isColourRole(role))
+                  text = `<span data-qb-colour="${role}" style="color: ${wordsColour(role)}">${text}</span>`
+                break
+              }
               case 'link': {
                 const rawHref = mark.attrs?.href ?? ''
                 const href = escapeHtmlAttr(sanitizeUrl(rawHref))

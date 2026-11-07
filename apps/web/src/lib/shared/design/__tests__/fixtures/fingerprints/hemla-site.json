@@ -1,0 +1,82 @@
+{
+  "page": "rgb(255, 255, 255)",
+  "headline": {
+    "family": "\"Omani Rial\", \"Emirati Dirham\", \"Saudi Riyal\", \"Noto Hemla\", \"Noto Sans JP\", \"Noto Sans KR\", \"Noto Sans SC\", \"Noto Sans TC\", \"Noto Sans\", Roboto, \"Open Sans\", system-ui, sans-serif",
+    "size": 24,
+    "weight": 700,
+    "tracking": -0.022321416666666666,
+    "leading": 1.25,
+    "transform": "none",
+    "color": "rgb(255, 255, 255)"
+  },
+  "heading": {
+    "family": "\"Omani Rial\", \"Emirati Dirham\", \"Saudi Riyal\", \"Noto Hemla\", \"Noto Sans JP\", \"Noto Sans KR\", \"Noto Sans SC\", \"Noto Sans TC\", \"Noto Sans\", Roboto, \"Open Sans\", system-ui, sans-serif",
+    "size": 12,
+    "weight": 700,
+    "tracking": 0.008928583333333334,
+    "leading": 1.25,
+    "transform": "none",
+    "color": "rgb(17, 17, 17)"
+  },
+  "body": {
+    "family": "\"Omani Rial\", \"Emirati Dirham\", \"Saudi Riyal\", \"Noto Hemla\", \"Noto Sans JP\", \"Noto Sans KR\", \"Noto Sans SC\", \"Noto Sans TC\", \"Noto Sans\", Roboto, \"Open Sans\", system-ui, sans-serif",
+    "size": 14,
+    "weight": 400,
+    "tracking": 0,
+    "leading": 1.5,
+    "transform": "none",
+    "color": "rgb(17, 17, 17)"
+  },
+  "button": {
+    "bg": "rgb(245, 245, 245)",
+    "color": "rgb(72, 72, 72)",
+    "radius": 999,
+    "height": 48,
+    "borderWidth": 1,
+    "borderColor": "rgba(0, 0, 0, 0)",
+    "shadow": false,
+    "size": 14,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"Omani Rial\", \"Emirati Dirham\", \"Saudi Riyal\", \"Noto Hemla\", \"Noto Sans JP\", \"Noto Sans KR\", \"Noto Sans SC\", \"Noto Sans TC\", \"Noto Sans\", Roboto, \"Open Sans\", system-ui, sans-serif",
+    "padX": 12
+  },
+  "buttonText": "Offers",
+  "link": {
+    "family": "\"Omani Rial\", \"Emirati Dirham\", \"Saudi Riyal\", \"Noto Hemla\", \"Noto Sans JP\", \"Noto Sans KR\", \"Noto Sans SC\", \"Noto Sans TC\", \"Noto Sans\", Roboto, \"Open Sans\", system-ui, sans-serif",
+    "size": 14,
+    "weight": 400,
+    "tracking": 0,
+    "leading": 1.571,
+    "transform": "none",
+    "color": "rgb(255, 255, 255)"
+  },
+  "card": {
+    "bg": "rgb(255, 255, 255)",
+    "color": "rgb(17, 17, 17)",
+    "radius": 2.5,
+    "height": 386.84375,
+    "borderWidth": 0,
+    "borderColor": "rgb(17, 17, 17)",
+    "shadow": true,
+    "size": 14,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"Omani Rial\", \"Emirati Dirham\", \"Saudi Riyal\", \"Noto Hemla\", \"Noto Sans JP\", \"Noto Sans KR\", \"Noto Sans SC\", \"Noto Sans TC\", \"Noto Sans\", Roboto, \"Open Sans\", system-ui, sans-serif",
+    "padX": 0
+  },
+  "field": {
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(17, 17, 17)",
+    "radius": 0,
+    "height": 48,
+    "borderWidth": 0,
+    "borderColor": "rgb(17, 17, 17)",
+    "shadow": true,
+    "size": 16,
+    "weight": 400,
+    "transform": "none",
+    "family": "\"Omani Rial\", \"Emirati Dirham\", \"Saudi Riyal\", \"Noto Hemla\", \"Noto Sans JP\", \"Noto Sans KR\", \"Noto Sans SC\", \"Noto Sans TC\", \"Noto Sans\", Roboto, \"Open Sans\", system-ui, sans-serif",
+    "padX": 48
+  }
+}

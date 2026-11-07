@@ -1,0 +1,171 @@
+{
+  "version": 2,
+  "mode": "light",
+  "brand": {
+    "light": {
+      "accent": "#7a1f35",
+      "background": "#ffffff",
+      "ink": "#1c1917",
+      "extra": ["#c8a24a", "#1f3a5f"]
+    },
+    "fonts": {
+      "heading": {
+        "kind": "bundled",
+        "id": "merriweather"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "lato"
+      },
+      "headingWeight": 400
+    },
+    "logo": {
+      "mark": {
+        "light": {
+          "key": "fixtures/ledger/mark-light.png"
+        },
+        "dark": {
+          "key": "fixtures/ledger/mark-dark.png"
+        }
+      },
+      "wordmark": {
+        "light": {
+          "key": "fixtures/ledger/wordmark-light.png"
+        },
+        "dark": {
+          "key": "fixtures/ledger/wordmark-dark.png"
+        }
+      },
+      "display": "wordmark",
+      "name": "Ledger",
+      "tone": "dark"
+    },
+    "favicon": {
+      "key": "fixtures/ledger/favicon.png"
+    },
+    "shareImage": null,
+    "bandImage": {
+      "key": "portal-images/ledger-skyline.png"
+    }
+  },
+  "shape": {
+    "corners": "sharp",
+    "fill": "ink"
+  },
+  "layout": {
+    "header": "stacked",
+    "nav": "tabs",
+    "band": "tint",
+    "bandColour": "extra1",
+    "cards": "bordered",
+    "density": "comfortable",
+    "width": "narrow",
+    "filters": "end",
+    "imagePlace": "edge",
+    "bandArt": "grid",
+    "imageFocus": "centre",
+    "bandHeight": "compact"
+  },
+  "pages": {
+    "home": {
+      "headline": {
+        "title": {
+          "en": "How can we help?"
+        },
+        "subtitle": {
+          "en": "Search the help centre, check our status or tell us what to improve."
+        }
+      },
+      "blocks": [
+        {
+          "type": "help_search",
+          "width": "two_thirds",
+          "look": {
+            "tone": "brand",
+            "align": "centre",
+            "colour": "extra2"
+          }
+        },
+        {
+          "type": "status",
+          "width": "third"
+        },
+        {
+          "type": "help_topics",
+          "width": "full",
+          "categoryIds": []
+        },
+        {
+          "type": "updates",
+          "width": "two_thirds",
+          "count": 2
+        },
+        {
+          "type": "contact",
+          "width": "third"
+        }
+      ]
+    },
+    "feedback": {
+      "headline": {
+        "title": {
+          "en": "Product feedback"
+        },
+        "subtitle": {
+          "en": "Tell us what to improve. The product team reviews every request each week."
+        }
+      },
+      "welcome": {
+        "show": false,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph"
+            }
+          ]
+        }
+      },
+      "defaultSort": "new",
+      "copy": {}
+    },
+    "help": {
+      "topics": "list",
+      "popular": false
+    }
+  },
+  "nav": {
+    "home": {
+      "on": true,
+      "tab": false
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": true
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true,
+        "label": "Release notes"
+      },
+      {
+        "type": "help",
+        "shown": true,
+        "label": "Help"
+      },
+      {
+        "type": "support",
+        "shown": false
+      },
+      {
+        "type": "status",
+        "shown": true
+      }
+    ]
+  }
+}

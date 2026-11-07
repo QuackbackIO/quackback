@@ -1,0 +1,134 @@
+{
+  "version": 2,
+  "mode": "light",
+  "brand": {
+    "light": {
+      "accent": "#a21caf",
+      "background": "#fcfaff",
+      "ink": "#1e1530",
+      "surface": "#ffffff",
+      "support": "#ec4899"
+    },
+    "fonts": {
+      "heading": {
+        "kind": "bundled",
+        "id": "lora"
+      },
+      "body": {
+        "kind": "bundled",
+        "id": "dm-sans"
+      },
+      "headingWeight": 500,
+      "tracking": "normal",
+      "headlineCase": "sentence",
+      "labelCase": "sentence",
+      "scale": "standard"
+    },
+    "logo": {
+      "mark": {
+        "light": {
+          "key": "fixtures/plume/mark-light.png"
+        },
+        "dark": {
+          "key": "fixtures/plume/mark-dark.png"
+        }
+      },
+      "wordmark": {
+        "light": null,
+        "dark": null
+      },
+      "display": "mark_and_name",
+      "name": "Plume"
+    },
+    "favicon": {
+      "key": "fixtures/plume/favicon.png"
+    },
+    "shareImage": null,
+    "bandImage": {
+      "key": "portal-images/plume-desk.jpg"
+    }
+  },
+  "shape": {
+    "corners": "rounded",
+    "action": "support"
+  },
+  "layout": {
+    "header": "inline",
+    "menuAlign": "centre",
+    "nav": "pills",
+    "band": "blend",
+    "cards": "list",
+    "density": "spacious",
+    "width": "default",
+    "filters": "start",
+    "imagePlace": "cover",
+    "tint": "support",
+    "bandArt": "confetti",
+    "imageFocus": "right",
+    "postCardHides": ["excerpt", "tags"]
+  },
+  "pages": {
+    "home": {
+      "headline": null,
+      "blocks": []
+    },
+    "feedback": {
+      "headline": {
+        "title": {
+          "en": "Help shape how Plume teaches"
+        },
+        "subtitle": {
+          "en": "Share an idea for a course, a feature or a fix."
+        }
+      },
+      "welcome": {
+        "show": false,
+        "body": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph"
+            }
+          ]
+        }
+      },
+      "defaultSort": "trending",
+      "copy": {}
+    }
+  },
+  "nav": {
+    "home": {
+      "on": false,
+      "tab": false
+    },
+    "items": [
+      {
+        "type": "feedback",
+        "shown": true,
+        "label": "Suggestions"
+      },
+      {
+        "type": "roadmap",
+        "shown": true
+      },
+      {
+        "type": "changelog",
+        "shown": true,
+        "label": "What’s new"
+      },
+      {
+        "type": "help",
+        "shown": true,
+        "label": "Guides"
+      },
+      {
+        "type": "support",
+        "shown": false
+      },
+      {
+        "type": "status",
+        "shown": false
+      }
+    ]
+  }
+}
