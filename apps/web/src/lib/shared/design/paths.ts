@@ -101,3 +101,51 @@ export function portalFeedbackPath(
 ): '/' | '/feedback' {
   return portalLanding(settings, gates).kind === 'feed' ? '/' : '/feedback'
 }
+
+/** A page the designer can show: Home, one of the portal's own pages, or a post. */
+export type DesignerPage = 'home' | PortalPageType | 'post'
+
+// Kept here, not in the designer's outline, so the portal shell can read a
+// path's page without loading the outline.
+/** Where the canvas is: a page, and the item it shows, such as a post or an entry, if any. */
+export interface CanvasLocation {
+  page: DesignerPage
+  /** The item's own address; null for the page itself. */
+  item: string | null
+}
+
+/** The page a portal path shows and its item, or null for one the designer does not draw. */
+export function locationOfPath(path: string, homeOn: boolean): CanvasLocation | null {
+  const pathname = path.split(/[?#]/)[0]!.replace(/\/+$/, '') || '/'
+  if (pathname === '/') return { page: homeOn ? 'home' : 'feedback', item: null }
+  if (/^\/b\/[^/]+\/posts\/[^/]+$/.test(pathname)) return { page: 'post', item: pathname }
+  const found = (Object.entries(PAGE_PATHS) as Array<[PortalPageType, string]>).find(
+    ([, at]) => pathname === at || pathname.startsWith(`${at}/`)
+  )
+  if (!found) return null
+  const [page, at] = found
+  return { page, item: pathname === at ? null : pathname }
+}
+
+/** The page a portal path shows, a detail page under its own, or null for one the designer does not draw. */
+export function pageOfPath(path: string, homeOn: boolean): DesignerPage | null {
+  return locationOfPath(path, homeOn)?.page ?? null
+}
+
+/** The address the canvas loads a page at: the item it shows, else the page's own. */
+export function pagePath(page: DesignerPage, item: string | null = null): string {
+  if (item) return item
+  if (page === 'post') return '/'
+  return page === 'home' ? '/' : PAGE_PATHS[page]
+}
+
+/**
+ * The page a designer page's background is kept under, or null for one with
+ * none: Home, a post, or one of the portal's own pages (an item page is kept
+ * under its own page). The same pages as DESIGN_OPTIONS.backgroundPage, kept
+ * here so the portal's shell does not load the background drawing code.
+ */
+export function backgroundPageOf(page: string | null | undefined): DesignerPage | null {
+  if (page === 'home' || page === 'post') return page
+  return page && Object.hasOwn(PAGE_PATHS, page) ? (page as PortalPageType) : null
+}

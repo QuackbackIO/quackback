@@ -14,38 +14,22 @@
  *   No word has a size of its own: type stays consistent.
  */
 import { DESIGN_OPTIONS } from './options'
+import { isColourRole, RICH_ALIGNS, wordsColour, type ColourRole } from '../content-html'
+
+export { isColourRole, RICH_ALIGNS, wordsColour, type ColourRole }
 
 export type WordsKind = 'headline' | 'plain' | 'rich'
 export type AccentStyle = (typeof DESIGN_OPTIONS.headlineAccent)[number]
-export type ColourRole = (typeof DESIGN_OPTIONS.colourRole)[number]
 export type RichMark = 'bold' | 'italic' | 'link' | 'colour'
 /** Where a paragraph or heading sits: the start (left unset), the centre or the end. */
 export type WordsAlign = 'start' | 'center' | 'end'
 
 /** The heading levels rich words hold. */
 export const RICH_HEADINGS = [2, 3] as const
-/** The alignments rich words keep; the start is the default and left unset. */
-export const RICH_ALIGNS = ['center', 'end'] as const
-
-/** Whether a value is one of the brand's colour roles. */
-export const isColourRole = (value: unknown): value is ColourRole =>
-  (DESIGN_OPTIONS.colourRole as readonly unknown[]).includes(value)
 
 const isRichHeading = (level: unknown) => (RICH_HEADINGS as readonly unknown[]).includes(level)
 export const isRichAlign = (align: unknown): align is 'center' | 'end' =>
   (RICH_ALIGNS as readonly unknown[]).includes(align)
-
-/**
- * The colour words in a role are drawn in: the design's colour for words in
- * that role, moved until it reads where the words sit (words-colour.ts),
- * else the role's own colour, else the brand colour.
- */
-export function wordsColour(role: ColourRole): string {
-  const brand = 'var(--qb-accent-text, var(--primary))'
-  return role === 'accent'
-    ? `var(--qb-words-accent, ${brand})`
-    : `var(--qb-words-${role}, var(--qb-role-${role}, ${brand}))`
-}
 
 /** The words an accent phrase holds at most. */
 export const ACCENT_MAX = 60
