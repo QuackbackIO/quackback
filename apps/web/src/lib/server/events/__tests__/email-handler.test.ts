@@ -654,6 +654,20 @@ describe('emailHook — ticket + SLA lifecycle', () => {
     }
   })
 
+  it('sends agent-facing ticket mail from the platform address, carrying the workspace name', async () => {
+    // No From and no name of its own: the platform address, which the email
+    // package names for the workspace it is handed.
+    await emailHook.run(evt('ticket.assigned'), baseTarget, ticketConfig({ kind: 'assigned' }))
+    expect(permittedSendingIdentity).not.toHaveBeenCalled()
+    expect(mockTicketEventEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: undefined,
+        fromDisplayName: undefined,
+        workspaceName: 'Acme',
+      })
+    )
+  })
+
   it('still rejects a genuinely unsupported type', async () => {
     const result = await emailHook.run(
       { id: 'x', type: 'post.created', timestamp: '', actor: { type: 'user' } } as EventData,
