@@ -29,6 +29,8 @@ export async function bustWorkspaceSettings(sql: postgres.Sql): Promise<void> {
 
 /**
  * Delete cache rows by logical key, across every workspace in this database.
+ * A key also matches its per-build copies (`settings:workspace:<build>`), so
+ * busting the workspace settings reaches whichever build the server runs.
  *
  * Not filtered by `workspace_key`: e2e runs one workspace, and a filter here would
  * need the namespace rule (`'_'` single-workspace, the workspace id otherwise)
@@ -40,7 +42,9 @@ export async function deleteCacheKeys(sql: postgres.Sql, keys: string[]): Promis
   // postgres.js `IN ${sql(keys)}` expands to `IN ('a', 'b')`. `= ANY(sql.array())`
   // serializes as a scalar here and Postgres rejects it with
   // "op ANY/ALL (array) requires array on right side".
-  const rows = await sql`DELETE FROM kv_store WHERE key IN ${sql(keys)} RETURNING key`
+  const prefixes = keys.map((key) => `${key}:%`)
+  const rows =
+    await sql`DELETE FROM kv_store WHERE key IN ${sql(keys)} OR key LIKE ANY (${prefixes}::text[]) RETURNING key`
   return rows.length
 }
 
