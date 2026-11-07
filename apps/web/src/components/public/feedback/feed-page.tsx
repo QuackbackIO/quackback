@@ -15,29 +15,8 @@ import { portalQueries, useSeedPortalStatusesCache } from '@/lib/client/queries/
 import type { PortalWelcomeCard as PortalWelcomeCardData } from '@/lib/shared/types/settings'
 import { portalDefaultSort, savedWelcomeCard } from '@/lib/shared/design/view'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-import type { FeedSearch } from '@/routes/_portal/feedback'
-
-/** Build the portalData query params from the current search + session. */
-export function portalDataParams(
-  searchParams: FeedSearch,
-  userId: string | undefined,
-  defaultSort: 'trending' | 'top' | 'new'
-) {
-  return {
-    boardSlug: searchParams.board,
-    search: searchParams.search,
-    sort: searchParams.sort ?? defaultSort,
-    statusSlugs: searchParams.status?.length ? searchParams.status : undefined,
-    tagIds: searchParams.tagIds?.length ? searchParams.tagIds : undefined,
-    userId,
-    minVotes: searchParams.minVotes,
-    dateFrom: searchParams.dateFrom,
-    responded: searchParams.responded,
-    owner: searchParams.owner,
-    segmentIds: searchParams.segmentIds?.length ? searchParams.segmentIds : undefined,
-    view: searchParams.view,
-  }
-}
+import type { FeedSearch } from '@/components/public/feedback/feed-route'
+import { portalDataParams } from '@/components/public/feedback/portal-data-params'
 
 /** The feed's search, wherever the feed shows. */
 const useFeedSearch = () => useSearch({ strict: false }) as FeedSearch
