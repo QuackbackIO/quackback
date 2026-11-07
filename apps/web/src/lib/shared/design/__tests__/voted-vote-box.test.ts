@@ -29,7 +29,7 @@ const designs: Array<{ name: string; doc: PortalDesign }> = [
   { name: 'a yellow accent', doc: accented('#facc15') },
   ...DESIGN_PRESETS.map((preset) => ({
     name: `look ${preset.id}`,
-    doc: both(withLook(defaultDesign(), preset.look)),
+    doc: both(withLook(defaultDesign(), preset.look, { itsColours: true })),
   })),
   ...Object.entries(fixtures).map(([path, doc]) => ({
     name: `reference ${path.replace(/^.*\//, '')}`,

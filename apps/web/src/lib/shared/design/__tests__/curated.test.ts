@@ -68,7 +68,7 @@ describe('the curated sets', () => {
 
   it('names every preset’s band and fonts, so a look from the picker is never Custom', () => {
     for (const preset of DESIGN_PRESETS) {
-      const design = withLook(defaultDesign(), preset.look)
+      const design = withLook(defaultDesign(), preset.look, { itsColours: true })
       expect(bandLookOf(design), preset.id).not.toBeNull()
       expect(fontPairOf(design), preset.id).not.toBeNull()
     }
