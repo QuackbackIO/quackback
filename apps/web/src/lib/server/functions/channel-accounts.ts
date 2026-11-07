@@ -23,7 +23,6 @@ import {
   deleteSendingDomain,
   updateInboundTrust,
   clearInboundForwarding,
-  updateSendingAddressSmtp,
   updateSendingAddressName,
 } from '@/lib/server/domains/channel-accounts/channel-account.service'
 import {
@@ -432,30 +431,6 @@ export const clearInboundForwardingFn = createServerFn({ method: 'POST' }).handl
   const row = await clearInboundForwarding(teamId)
   return row ? toAccount(row) : null
 })
-
-const smtpOverrideSchema = z.object({
-  host: z.string().min(1).max(255),
-  port: z.number().int().min(1).max(65535),
-  secure: z.boolean(),
-  user: z.string().min(1).max(255),
-})
-
-export const updateSendingAddressSmtpFn = createServerFn({ method: 'POST' })
-  .validator(
-    z.object({
-      id: z.string(),
-      smtp: smtpOverrideSchema.nullable(),
-    })
-  )
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
-    return toAccount(
-      await updateSendingAddressSmtp({
-        id: data.id as ChannelAccountId,
-        smtp: data.smtp,
-      })
-    )
-  })
 
 export const deleteChannelAccountFn = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.string() }))
