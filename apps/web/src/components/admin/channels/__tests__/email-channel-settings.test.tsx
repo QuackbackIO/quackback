@@ -34,7 +34,6 @@ vi.mock('@/lib/client/mutations/channel-accounts', () => {
     useCreateSendingAddress: () => ({ mutate: createAddress, isPending: false }),
     useUpdateInboundTrust: idle,
     useClearInboundForwarding: () => ({ mutate: clearRoute, isPending: false }),
-    useUpdateSendingAddressSmtp: idle,
     useDeleteChannelAccount: () => ({ mutate: deleteAccount, isPending: false }),
     useDeleteSendingDomain: () => ({ mutate: deleteDomain, isPending: false }),
     useRestartSendingDomainChecks: () => ({ mutate: restartChecks, isPending: false }),
@@ -315,6 +314,7 @@ describe('address rows', () => {
     expect(screen.queryByRole('menuitem', { name: /DNS records/ })).toBeNull()
     expect(screen.getByRole('menuitem', { name: 'Edit name' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /SMTP/ })).toBeNull()
   })
 
   it('edits the sender name from the row menu', async () => {
