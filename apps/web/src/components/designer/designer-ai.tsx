@@ -17,7 +17,7 @@ import type { Selection } from '@/lib/shared/design/outline'
 import { heroOf, writeHero } from '@/lib/shared/design/hero'
 import { isMenuSelection } from '@/lib/shared/design/menu'
 import { siteCaptureUsageFn } from '@/lib/server/functions/site-capture'
-import { aiStarters, hasBrand, MATCH_HINT, MATCH_STARTER } from '@/lib/shared/design/ai-starters'
+import { aiStarters, hasMatched, MATCH_HINT, MATCH_STARTER } from '@/lib/shared/design/ai-starters'
 import { websiteIn } from '@/lib/shared/design/match-brand'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -71,7 +71,7 @@ function AiEmpty({
         <SparklesIcon className="size-5 text-amber-700" aria-hidden="true" />
       </span>
       <p className="max-w-60 text-sm font-medium">Ask for a change</p>
-      {!hasBrand(design) && (
+      {!hasMatched(design) && (
         <p className="max-w-60 text-xs text-muted-foreground">
           Paste your website or screenshots to match your brand.
         </p>

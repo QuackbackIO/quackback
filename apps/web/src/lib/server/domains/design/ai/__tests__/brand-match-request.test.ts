@@ -81,6 +81,17 @@ describe('runBrandMatchRequest', () => {
     expect(result).toMatchObject({ ok: true, revision: 'r2' })
   })
 
+  it('stamps the saved draft and the design it returns with when the match ran', async () => {
+    const result = await runBrandMatchRequest(data, auth, () => {})
+    const saved = mocks.save.mock.calls[0]![0] as {
+      changed: boolean
+      brand: { matchedAt?: string }
+    }
+    expect(saved.changed).toBe(true)
+    expect(saved.brand.matchedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    expect(result).toMatchObject({ design: { brand: { matchedAt: saved.brand.matchedAt } } })
+  })
+
   it('saves nothing once the builder has gone', async () => {
     const gone = new AbortController()
     mocks.brandMatch.mockImplementation(async () => {
@@ -203,6 +214,10 @@ describe('a website', () => {
     expect(mocks.siteOnly).toHaveBeenCalledTimes(1)
     expect(mocks.siteOnly.mock.calls[0]![2]).toBe('Captures are used up for this month.')
     expect(result).toMatchObject({ ok: true, reply: 'From the site.' })
+    // A match from the site's code is a match too: the saved draft and the result say so.
+    const saved = mocks.save.mock.calls[0]![0] as { brand: { matchedAt?: string } }
+    expect(saved.brand.matchedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    expect(result).toMatchObject({ design: { brand: { matchedAt: saved.brand.matchedAt } } })
   })
 
   it('says so plainly when neither a capture nor the site’s code can be had', async () => {

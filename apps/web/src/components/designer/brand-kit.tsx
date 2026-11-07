@@ -13,6 +13,7 @@ import { designAssetUrl } from '@/lib/shared/design/design-view'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { BrandKitColours } from './brand-kit-colours'
 import { BrandKitFonts } from './brand-kit-fonts'
+import { BrandMatchRow } from './brand-match-row'
 import { KitImageTile } from './kit-image-tile'
 import { PropertyRow, PropertySection } from './properties/properties-panel'
 import { THEME, WORDS, resetToValue } from './properties/words'
@@ -29,8 +30,8 @@ const presignLogo = presignWith(getWordmarkUploadUrlFn)
 const url = (asset: Asset | undefined) => (asset ? designAssetUrl(asset.key) : null)
 
 /**
- * The brand kit: what the customer brings: the icon and title, then the
- * colours and fonts as variables. Everything here goes into the draft; the
+ * The brand kit: what the customer brings: Match your brand first, the icon
+ * and title, then the colours and fonts as variables. Everything here goes into the draft; the
  * admin and emails keep the workspace logo unless a publish says otherwise,
  * which the icon says on hover.
  */
@@ -49,6 +50,7 @@ export function BrandKit({
   return (
     <>
       <PropertySection title={THEME.sections.brandKit}>
+        <BrandMatchRow design={design} update={update} />
         <PropertyRow
           label={THEME.icon}
           set={!!own}

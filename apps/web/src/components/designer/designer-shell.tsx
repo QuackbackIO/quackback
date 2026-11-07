@@ -19,6 +19,8 @@ import { AiPane } from './ai-pane'
 import { BuilderColumns, type Pane } from './builder-columns'
 import { useBuilderDialogs } from './builder-dialogs'
 import { BuilderSettings } from './builder-settings'
+import { BrandMatchProvider, type BrandMatchControl } from './brand-match-row'
+import { useBrandWebsite } from './use-brand-website'
 import { BuilderTopBar } from './builder-top-bar'
 import { CanvasBar } from './canvas-bar'
 import { CanvasLayer } from './canvas-layer'
@@ -226,6 +228,21 @@ export function DesignerShell({
     },
   })
   const coach = useMenuCoach()
+  // Theme's Match your brand runs the match Ask AI runs, its reply shown in the pane.
+  const brandWebsite = useBrandWebsite()
+  const { reveal } = aiPane
+  const { startBrandMatch } = ai
+  const brandMatch = useMemo<BrandMatchControl>(
+    () => ({
+      busy: ai.busy,
+      website: brandWebsite,
+      start: (input) => {
+        reveal()
+        void startBrandMatch({ ...input, from: 'brand_kit' })
+      },
+    }),
+    [ai.busy, brandWebsite, reveal, startBrandMatch]
+  )
 
   useDesignerEvents({
     page,
@@ -492,69 +509,71 @@ export function DesignerShell({
             </ClientOnly>
           </main>
           {!previewing && (
-            <BuilderSettings
-              hidden={column !== 'settings'}
-              open={settingsOpen}
-              shown={shown}
-              route={route}
-              panel={panel}
-              selection={selection}
-              page={page}
-              pages={pages.length}
-              nodes={nodes}
-              design={design}
-              update={update}
-              gates={gates}
-              locale={locale}
-              phone={size === 'phone'}
-              onPhone={(next) => canvas.setSize(next ? 'phone' : 'desktop')}
-              checks={checks}
-              logoUrl={logoUrl}
-              cssWarnings={draft.report.css}
-              menu={menu}
-              pickedBlock={pickedBlock}
-              onSelect={pick}
-              onAdd={addBlock}
-              drag={addDrag}
-              onTheme={(more) => openTheme(more)}
-              say={say}
-              onOverride={jumpTo}
-              onBlock={(id) => {
-                if (page !== 'home' && pages.includes('home')) setPage('home')
-                panel.close()
-                pick(`block-${id}`)
-              }}
-              element={
-                pickedElement && route.panel === 'element' ? (
-                  <ElementPanel
-                    key={elementPanelKey(pickedElement)}
-                    pick={pickedElement}
-                    page={page}
-                    blockName={
-                      pickedElement.section
-                        ? (nameOf(pickedElement.section as Selection) ?? null)
-                        : null
-                    }
-                    design={design}
-                    update={update}
-                    state={elementState}
-                    onState={setElementState}
-                    screen={size === 'phone' ? 'phone' : 'all'}
-                    onScreen={(next) => canvas.setSize(next === 'phone' ? 'phone' : 'desktop')}
-                    onUp={() => picking.pickElement(null)}
-                    reach={pickReach.reach}
-                    measure={pickReach.measure}
-                    onJump={(place) => {
-                      if (place.block) return pick(`block-${place.block}` as Selection)
-                      const to =
-                        place.page ?? (place.part ? partOf(design, place.part)?.pages[0] : null)
-                      if (to && to !== page && pages.includes(to as DesignerPage))
-                        setPage(to as DesignerPage)
-                    }}
-                  />
-                ) : undefined
-              }
-            />
+            <BrandMatchProvider value={brandMatch}>
+              <BuilderSettings
+                hidden={column !== 'settings'}
+                open={settingsOpen}
+                shown={shown}
+                route={route}
+                panel={panel}
+                selection={selection}
+                page={page}
+                pages={pages.length}
+                nodes={nodes}
+                design={design}
+                update={update}
+                gates={gates}
+                locale={locale}
+                phone={size === 'phone'}
+                onPhone={(next) => canvas.setSize(next ? 'phone' : 'desktop')}
+                checks={checks}
+                logoUrl={logoUrl}
+                cssWarnings={draft.report.css}
+                menu={menu}
+                pickedBlock={pickedBlock}
+                onSelect={pick}
+                onAdd={addBlock}
+                drag={addDrag}
+                onTheme={(more) => openTheme(more)}
+                say={say}
+                onOverride={jumpTo}
+                onBlock={(id) => {
+                  if (page !== 'home' && pages.includes('home')) setPage('home')
+                  panel.close()
+                  pick(`block-${id}`)
+                }}
+                element={
+                  pickedElement && route.panel === 'element' ? (
+                    <ElementPanel
+                      key={elementPanelKey(pickedElement)}
+                      pick={pickedElement}
+                      page={page}
+                      blockName={
+                        pickedElement.section
+                          ? (nameOf(pickedElement.section as Selection) ?? null)
+                          : null
+                      }
+                      design={design}
+                      update={update}
+                      state={elementState}
+                      onState={setElementState}
+                      screen={size === 'phone' ? 'phone' : 'all'}
+                      onScreen={(next) => canvas.setSize(next === 'phone' ? 'phone' : 'desktop')}
+                      onUp={() => picking.pickElement(null)}
+                      reach={pickReach.reach}
+                      measure={pickReach.measure}
+                      onJump={(place) => {
+                        if (place.block) return pick(`block-${place.block}` as Selection)
+                        const to =
+                          place.page ?? (place.part ? partOf(design, place.part)?.pages[0] : null)
+                        if (to && to !== page && pages.includes(to as DesignerPage))
+                          setPage(to as DesignerPage)
+                      }}
+                    />
+                  ) : undefined
+                }
+              />
+            </BrandMatchProvider>
           )}
         </div>
 

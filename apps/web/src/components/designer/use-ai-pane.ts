@@ -17,6 +17,8 @@ export interface AiPane {
   resizing: boolean
   /** Opens the pane, if collapsed, with the request box focused. */
   expand: () => void
+  /** Opens the pane, if collapsed, leaving focus where it is, such as for a match started elsewhere. */
+  reveal: () => void
   collapse: () => void
   /** A width while the edge is dragged; `done` remembers it. */
   resize: (width: number, done?: boolean) => void
@@ -63,6 +65,10 @@ export function useAiPane(previewing: boolean, onShow: () => void = () => {}): A
     show.current()
     requestAnimationFrame(() => document.getElementById(AI_BOX_ID)?.focus())
   }, [remember])
+  const reveal = useCallback(() => {
+    if (latest.current.collapsed) remember({ ...latest.current, collapsed: false })
+    show.current()
+  }, [remember])
   const collapse = useCallback(() => remember({ ...latest.current, collapsed: true }), [remember])
   const resize = useCallback(
     (width: number, done = true) =>
@@ -80,5 +86,5 @@ export function useAiPane(previewing: boolean, onShow: () => void = () => {}): A
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [previewing, expand])
-  return { ...state, resizing, expand, collapse, resize, setResizing }
+  return { ...state, resizing, expand, reveal, collapse, resize, setResizing }
 }

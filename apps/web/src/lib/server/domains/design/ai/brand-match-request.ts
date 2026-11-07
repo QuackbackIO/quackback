@@ -139,18 +139,21 @@ export async function runBrandMatchRequest(
           onStep
         )
       : await siteOnly(website!, current.design, allows, deps)
+  // Stamped on every path (screenshots, a capture, the site's code alone), so the
+  // builder knows a match has run (brand.matchedAt) and offers it more quietly.
+  const stamped = matched.ok ? stampMatched(matched, new Date()) : matched
   // A capture is not the person's screenshot: the reply names the site it came from.
   const result =
-    matched.ok && website?.capture
+    stamped.ok && website?.capture
       ? {
-          ...matched,
-          reply: matched.reply.replace(
+          ...stamped,
+          reply: stamped.reply.replace(
             /from your screenshots?\b/,
             `from a capture of ${website.capture.view.host}`
           ),
           capture: website.capture.view,
         }
-      : matched
+      : stamped
   if (!result.ok || result.applied.length === 0) return result
   if (signal?.aborted)
     return {
@@ -171,6 +174,15 @@ export async function runBrandMatchRequest(
         }
       : saved
   return { ...result, report: saved.report, revision: saved.revision }
+}
+
+/** A match's design, recording when the match ran (brand.matchedAt). */
+function stampMatched<T extends { design: PortalDesign }>(result: T, at: Date): T {
+  const { design } = result
+  return {
+    ...result,
+    design: { ...design, brand: { ...design.brand, matchedAt: at.toISOString() } },
+  }
 }
 
 type Website =
