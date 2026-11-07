@@ -125,19 +125,17 @@ const log = logger.child({ component: 'email' })
  * claim is checked; the enqueue-time resolution stays because it decides WHICH
  * address to try, and this decides whether it may be used.
  *
- * The address's sender name goes with the address: mail that falls back to the
- * platform address goes under the workspace name.
+ * The address's sender name goes with the address. Mail that falls back to the
+ * platform address carries no name from here: the email package names it for
+ * the `workspaceName` every sender is already given.
  */
 async function checkedSender(cfg: {
   from?: string
   fromDisplayName?: string
   workspaceName: string
-}): Promise<{ from: SendingIdentity | undefined; fromDisplayName: string }> {
+}): Promise<{ from: SendingIdentity | undefined; fromDisplayName: string | undefined }> {
   const from = (await permittedSendingIdentity(cfg.from ?? null)) ?? undefined
-  return {
-    from,
-    fromDisplayName: from ? (cfg.fromDisplayName ?? cfg.workspaceName) : cfg.workspaceName,
-  }
+  return { from, fromDisplayName: from ? (cfg.fromDisplayName ?? cfg.workspaceName) : undefined }
 }
 
 const BROADCAST_EMAIL_EVENTS = new Set([
