@@ -155,8 +155,8 @@ describe.each(senders)('%s email', (_name, send) => {
     expect(resendSend.mock.calls[0][0].from).toBe('Acme <noreply@platform.test>')
   })
 
-  it('sends from the platform address as configured with neither', async () => {
+  it('names the platform address for the workspace with neither', async () => {
     await send({})
-    expect(resendSend.mock.calls[0][0].from).toBe('Platform <noreply@platform.test>')
+    expect(resendSend.mock.calls[0][0].from).toBe('Acme <noreply@platform.test>')
   })
 })
