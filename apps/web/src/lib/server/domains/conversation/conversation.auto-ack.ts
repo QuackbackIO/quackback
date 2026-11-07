@@ -99,7 +99,6 @@ export async function maybeSendColdInboundAck(opts: {
       conversationSubject: opts.conversationSubject,
       replyTo: replyTo ?? undefined,
       from,
-      fromDisplayName: from ? undefined : workspaceName,
       messageId: minted,
       inReplyTo: inboundId ?? undefined,
       references: inboundId ? [inboundId] : undefined,

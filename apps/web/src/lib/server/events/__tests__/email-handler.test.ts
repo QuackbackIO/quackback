@@ -184,8 +184,9 @@ describe('emailHook', () => {
         workspaceName: 'TestWorkspace',
         unsubscribeUrl: 'https://example.com/unsubscribe',
         logoUrl: 'https://example.com/logo.png',
-        // Named after the workspace even on the platform address.
-        fromDisplayName: 'TestWorkspace',
+        // No name for the platform address: the email package names it for
+        // `workspaceName` (platform-display-name.test.ts).
+        fromDisplayName: undefined,
       })
     })
 
@@ -210,8 +211,9 @@ describe('emailHook', () => {
         workspaceName: 'TestWorkspace',
         unsubscribeUrl: 'https://example.com/unsubscribe',
         logoUrl: 'https://example.com/logo.png',
-        // Named after the workspace even on the platform address.
-        fromDisplayName: 'TestWorkspace',
+        // No name for the platform address: the email package names it for
+        // `workspaceName` (platform-display-name.test.ts).
+        fromDisplayName: undefined,
       })
     })
     it('sends changelog published email with the full rendered body and returns success', async () => {
@@ -476,8 +478,9 @@ describe('emailHook — post.mentioned', () => {
       workspaceName: 'TestWorkspace',
       unsubscribeUrl: 'https://example.com/unsubscribe',
       logoUrl: 'https://example.com/logo.png',
-      // Named after the workspace even on the platform address.
-      fromDisplayName: 'TestWorkspace',
+      // No name for the platform address: the email package names it for
+      // `workspaceName` (platform-display-name.test.ts).
+      fromDisplayName: undefined,
     })
   })
 
@@ -634,8 +637,8 @@ describe('emailHook — ticket + SLA lifecycle', () => {
   })
 
   it("keeps the workspace's display name through the send-time re-check", async () => {
-    // Named on both sides of the guard: on the address it permits, and on the
-    // platform sender it falls back to when it refuses.
+    // Named on both sides of the guard: here on the address it permits, and by
+    // the email package on the platform sender it falls back to.
     for (const answer of ['support@tenant-a.example', null]) {
       mockTicketEventEmail.mockClear()
       permittedSendingIdentity.mockResolvedValue(answer)
@@ -649,7 +652,12 @@ describe('emailHook — ticket + SLA lifecycle', () => {
         })
       )
       expect(mockTicketEventEmail).toHaveBeenCalledWith(
-        expect.objectContaining({ from: answer ?? undefined, fromDisplayName: 'Acme' })
+        expect.objectContaining({
+          from: answer ?? undefined,
+          // The platform sender is named for `workspaceName` by the email package.
+          fromDisplayName: answer ? 'Acme' : undefined,
+          workspaceName: 'Acme',
+        })
       )
     }
   })
@@ -818,7 +826,11 @@ describe('emailHook: feedback, changelog and status senders', () => {
       permittedSendingIdentity.mockResolvedValue(null)
       await emailHook.run(event(type), baseTarget, config)
       expect(mocks[type as keyof typeof mocks]).toHaveBeenCalledWith(
-        expect.objectContaining({ from: undefined, fromDisplayName: 'Acme' })
+        expect.objectContaining({
+          from: undefined,
+          fromDisplayName: undefined,
+          workspaceName: 'Acme',
+        })
       )
     }
   )
@@ -829,7 +841,11 @@ describe('emailHook: feedback, changelog and status senders', () => {
       const { from: _from, fromDisplayName: _name, ...withoutSender } = config
       await emailHook.run(event(type), baseTarget, withoutSender)
       expect(mocks[type as keyof typeof mocks]).toHaveBeenCalledWith(
-        expect.objectContaining({ from: undefined, fromDisplayName: 'Acme' })
+        expect.objectContaining({
+          from: undefined,
+          fromDisplayName: undefined,
+          workspaceName: 'Acme',
+        })
       )
     }
   )

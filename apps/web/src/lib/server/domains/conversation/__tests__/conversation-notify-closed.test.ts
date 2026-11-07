@@ -118,6 +118,35 @@ describe('notifyConversationClosed', () => {
     })
   })
 
+  it('leaves the platform address to be named for the workspace when no address resolves', async () => {
+    // The email package names the platform address for `workspaceName`
+    // (platform-display-name.test.ts), so nothing here names it again.
+    limitQueue = [
+      [
+        {
+          id: 'conversation_1',
+          channel: 'email',
+          subject: 'Billing',
+          visitorPrincipalId: 'principal_v' as PrincipalId,
+          visitorEmail: 'priya@x.com',
+          endReason: null,
+        },
+      ],
+      [{ type: 'user', email: 'priya@x.com', contactEmail: null }],
+    ]
+
+    await notifyConversationClosed({
+      conversationId: 'conversation_1' as ConversationId,
+      variant: 'closed',
+      closerPrincipalId: 'principal_agent' as PrincipalId,
+    })
+
+    const call = sendConversationClosedEmail.mock.calls[0][0] as Record<string, unknown>
+    expect(call.from).toBeUndefined()
+    expect(call.workspaceName).toBe('Acme')
+    expect('fromDisplayName' in call).toBe(false)
+  })
+
   it('is invoked through the email adapter lifecycle seam', async () => {
     limitQueue = [
       [

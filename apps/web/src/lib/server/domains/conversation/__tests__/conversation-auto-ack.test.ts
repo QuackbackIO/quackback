@@ -218,11 +218,14 @@ describe('maybeSendColdInboundAck', () => {
     expect(call.from).toBe('Acme Support <help@home.example>')
   })
 
-  it('names the platform default with the workspace when the thread has no address', async () => {
+  it('leaves the platform default to be named for the workspace when the thread has no address', async () => {
+    // No name of its own: the email package names the platform address for
+    // `workspaceName` (platform-display-name.test.ts).
     await maybeSendColdInboundAck({ parsed: parsed(), conversationId, conversationSubject: 'Help' })
 
     const call = hoisted.sendConversationAutoAckEmail.mock.calls[0][0] as Record<string, unknown>
     expect(call.from).toBeUndefined()
-    expect(call.fromDisplayName).toBe('Acme')
+    expect(call.workspaceName).toBe('Acme')
+    expect('fromDisplayName' in call).toBe(false)
   })
 })

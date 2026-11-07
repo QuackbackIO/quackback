@@ -59,7 +59,6 @@ export const emailAdapter: ChannelAdapter = {
       workspaceName: ctx.workspaceName,
       logoUrl: ctx.logoUrl ?? undefined,
       from,
-      fromDisplayName: from ? undefined : ctx.workspaceName,
       conversationSubject: ctx.conversationSubject ?? undefined,
       replyTo,
       messageId: messageId ?? undefined,
