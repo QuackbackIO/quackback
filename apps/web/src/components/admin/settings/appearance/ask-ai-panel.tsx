@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/16/solid'
-import { colourName, plainWords } from '@/lib/shared/design/colour-names'
+import { plainWords } from '@/lib/shared/design/colour-names'
 import { matchSummary } from '@/lib/shared/design/step-summary'
 import { overrideChangeLines } from '@/lib/shared/design/override-cascade'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
@@ -14,69 +14,33 @@ import {
 } from '@/lib/shared/design/apply-changes'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
-import { ChangeValue, changeLabel, shownValue } from './change-list'
+import { changeRows, type ChangeRow, type RowSide } from './change-rows'
 import { HeroPhotoChip } from './hero-photo-chip'
 import type { DesignAiTurn } from './use-design-ai'
 
 /** Changes the draft, naming the change for undo when a name is given. */
 type Update = (change: (draft: PortalDesign) => void, label?: string) => void
 
-/** A value as a row says it: a colour by its name beside a swatch, never its code. */
-function RowValue({ value }: { value: unknown }) {
-  if (typeof value === 'string' && isColour(value))
-    return (
-      <span className="inline-flex items-center gap-1">
-        <span
-          aria-hidden="true"
-          className="size-3 rounded-sm border border-border"
-          style={{ background: value }}
-        />
-        {capital(colourName(value))}
-      </span>
-    )
-  return <ChangeValue value={value} />
+/** One side of a row: its words, beside a swatch only when it is an actual colour. */
+function RowValue({ side }: { side: RowSide }) {
+  if (!side.swatch) return <span>{side.words}</span>
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Swatch colour={side.swatch} />
+      {side.words}
+    </span>
+  )
 }
 
-const isColour = (value: string) => /^(#[0-9a-f]{3}|#[0-9a-f]{6}|oklch\()/i.test(value)
-const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
-
-/** What a value reads as, for leaving out a row whose two sides read the same. */
-const readAs = (value: unknown) =>
-  typeof value === 'string' && isColour(value) ? colourName(value) : JSON.stringify(value ?? null)
-
-type Row = { key: string; label: string; before: unknown; after: unknown }
-
-/**
- * A value a person cannot read as a change: a list or object that would only
- * say "Changed", or an exact size the builder set (sizes show on the page).
- */
-const technical = (value: unknown) =>
-  (!!value && typeof value === 'object') ||
-  (typeof value === 'string' && /^-?[\d.]+ (px|em)$/.test(value))
-
-/**
- * The rows a change makes: one for a plain value, one for each value inside
- * an object that reads only as "Changed", and none where both sides read the same.
- */
-function rowsOf(path: string, before: unknown, after: unknown, label?: string, depth = 0): Row[] {
-  const was = shownValue(path, before)
-  const now = shownValue(path, after)
-  const nested = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v)
-  if (depth < 4 && (nested(was) || nested(now))) {
-    const keys = new Set([
-      ...Object.keys(nested(before) ? (before as object) : {}),
-      ...Object.keys(nested(after) ? (after as object) : {}),
-    ])
-    const at = (v: unknown, key: string) =>
-      nested(v) ? (v as Record<string, unknown>)[key] : undefined
-    return [...keys].flatMap((key) =>
-      rowsOf(`${path}.${key}`, at(before, key), at(after, key), undefined, depth + 1)
-    )
-  }
-  if (readAs(was) === readAs(now) || [was, now].some(technical)) return []
-  return [
-    { key: path, label: (label ?? changeLabel(path)).replace(': ', ' '), before: was, after: now },
-  ]
+function Swatch({ colour }: { colour: string }) {
+  return (
+    <span
+      data-swatch=""
+      aria-hidden="true"
+      className="size-3 rounded-sm border border-border"
+      style={{ background: colour }}
+    />
+  )
 }
 
 /**
@@ -114,18 +78,22 @@ function StepResult({
   }
   const holding = changes.filter((change) => changeState(design, change) === 'applied')
   const undone = changes.every((change) => changeState(design, change) === 'undone')
-  const lines = changes.flatMap((change): Array<{ key: string; line?: string; row?: Row }> =>
-    change.path === 'overrides'
-      ? overrideChangeLines(
+  // One row per operation, in words; an override's lines say what it set where.
+  const lines: Array<{ key: string; line?: string; row?: ChangeRow }> = [
+    ...changeRows(changes.filter((change) => change.path !== 'overrides')).map((row) => ({
+      key: row.key,
+      row,
+    })),
+    ...changes
+      .filter((change) => change.path === 'overrides')
+      .flatMap((change) =>
+        overrideChangeLines(
           design,
           change.before as StyleOverride[] | null,
           change.after as StyleOverride[] | null
         ).map((line) => ({ key: line, line }))
-      : rowsOf(change.path, change.before, change.after, change.label).map((row) => ({
-          key: row.key,
-          row,
-        }))
-  )
+      ),
+  ]
   const details = lines.length > 0 || readability.length > 0 || notes.length > 0
   return (
     <div className="space-y-1.5">
@@ -164,12 +132,17 @@ function StepResult({
             <ul className="space-y-1">
               {lines.map((each) => (
                 <li key={each.key} className="flex flex-wrap items-center gap-x-1">
-                  {each.row ? (
+                  {each.row && 'text' in each.row ? (
+                    <>
+                      {each.row.swatch && <Swatch colour={each.row.swatch} />}
+                      {each.row.text}
+                    </>
+                  ) : each.row ? (
                     <>
                       <span className="text-muted-foreground">{each.row.label}:</span>
-                      <RowValue value={each.row.before} />
+                      <RowValue side={each.row.before} />
                       <span aria-hidden="true">→</span>
-                      <RowValue value={each.row.after} />
+                      <RowValue side={each.row.after} />
                     </>
                   ) : (
                     each.line
