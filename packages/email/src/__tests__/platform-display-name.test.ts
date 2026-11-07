@@ -96,13 +96,6 @@ const workspaceSenders: Record<string, Drive> = {
     }),
   sendPortalInviteEmail: (w) =>
     email.sendPortalInviteEmail({ to, workspaceName: w!, inviteLink: 'https://acme.test/i' }),
-  sendWelcomeEmail: (w) =>
-    email.sendWelcomeEmail({
-      to,
-      name: 'Sam',
-      workspaceName: w!,
-      dashboardUrl: 'https://acme.test/admin',
-    }),
   sendMessengerInstallEmail: (w) =>
     email.sendMessengerInstallEmail({
       to,
@@ -192,14 +185,6 @@ const workspaceSenders: Record<string, Drive> = {
       changelogTitle: 'May release',
       changelogUrl: 'https://acme.test/changelog',
       contentPreview: 'New things',
-      workspaceName: w!,
-      unsubscribeUrl: 'https://acme.test/u',
-    }),
-  sendFeedbackLinkedEmail: (w) =>
-    email.sendFeedbackLinkedEmail({
-      to,
-      postTitle: 'Dark mode',
-      postUrl: 'https://acme.test/p/1',
       workspaceName: w!,
       unsubscribeUrl: 'https://acme.test/u',
     }),
