@@ -467,10 +467,9 @@ export async function sendVisitorConversationEmail(opts: {
   const quotedPrevious = correspondence
     ? ((await loadQuotedPreviousMessage(opts.conversationId)) ?? undefined)
     : undefined
-  // Reply from the address the customer wrote to when this workspace has proved
-  // it may send as that domain, else the assigned team's sending address, else
-  // the branded workspace default (EMAIL_FROM). A thread that arrived at the
-  // customer's own support address should not change identity on the way back.
+  // Reply from the thread's sender, else the address chosen for support in
+  // settings (resolveSender has the order), else the platform default. A
+  // thread keeps one sender, so it does not change identity on the way back.
   // Named after the agent and the address's sender name (else the workspace) on
   // every channel: a widget or messenger reply that reaches the customer's inbox
   // is still a person answering them, and an unnamed address reads as a robot.
