@@ -1443,7 +1443,7 @@ export function setBackground(
       writeBackground(draft, where, light as PageBackground)
       return finishBackground(design, draft, backgroundLabel(where, 'automatic in dark'), world)
     }
-    if (typeof value !== 'object' || !value || !('kind' in value))
+    if (typeof value !== 'object' || !('kind' in value))
       return refuse(
         'Dark mode’s own background is written with its kind, such as {"kind":"tint","colour":"accent"}'
       )
