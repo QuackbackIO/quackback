@@ -232,6 +232,23 @@ describe('Copilot pause control', () => {
     expect(screen.queryByRole('button', { name: 'Pause Copilot' })).not.toBeInTheDocument()
   })
 
+  it('says AI is off when both provider keys are set', async () => {
+    vi.mocked(getAssistantSettingsFn).mockResolvedValue({
+      config,
+      revision: 4,
+      managedFieldPaths: [],
+      aiAvailable: false,
+      aiConfigIssue: 'multiple-providers',
+    } as never)
+    renderWithProviders(<CopilotHeader />)
+    await waitFor(() =>
+      expect(screen.getByTestId('line')).toHaveTextContent(
+        'AI is off because both OPENAI_API_KEY and ANTHROPIC_API_KEY are set. Keep one.'
+      )
+    )
+    expect(screen.queryByRole('button', { name: 'Pause Copilot' })).not.toBeInTheDocument()
+  })
+
   it('offers the control when the settings report a configured model', async () => {
     vi.mocked(getAssistantSettingsFn).mockResolvedValue({
       config,

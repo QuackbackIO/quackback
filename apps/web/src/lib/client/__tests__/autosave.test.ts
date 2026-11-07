@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MutationCache, QueryClient } from '@tanstack/react-query'
 
@@ -30,7 +31,7 @@ describe('autosave mutation errors', () => {
   })
 
   it('loads sonner lazily so it stays out of the entry chunk', () => {
-    const source = readFileSync(new URL('../autosave.ts', import.meta.url), 'utf8')
+    const source = readFileSync(resolve(__dirname, '../autosave.ts'), 'utf8')
     expect(source).not.toMatch(/^import .* from 'sonner'/m)
     expect(source).toContain("import('sonner')")
   })
@@ -114,7 +115,7 @@ describe('revision conflict detection', () => {
 })
 
 describe('settings autosave hooks', () => {
-  const source = readFileSync(new URL('../mutations/settings.ts', import.meta.url), 'utf8')
+  const source = readFileSync(resolve(__dirname, '../mutations/settings.ts'), 'utf8')
   const body = (hook: string) => {
     const start = source.indexOf(`export function ${hook}(`)
     expect(start, hook).toBeGreaterThan(-1)

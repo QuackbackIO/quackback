@@ -159,6 +159,24 @@ describe('parts of a new answer', () => {
   })
 })
 
+describe('keys', () => {
+  it('asks again for a different key, such as a preview link, and keeps one answer', async () => {
+    const context = memo.createRouteContextMemo<string>()
+    const load = vi.fn().mockResolvedValueOnce('live').mockResolvedValueOnce('preview')
+
+    expect(await context.get(load)).toBe('live')
+    expect(await context.get(load, 'share:a')).toBe('preview')
+    expect(await context.get(load, 'share:a')).toBe('preview')
+    expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it('serves a seeded answer only to its own key', async () => {
+    const context = memo.createRouteContextMemo<string>()
+    context.seed('preview', 'share:a')
+    expect(await context.get(async () => 'live')).toBe('live')
+  })
+})
+
 describe('seed', () => {
   it('serves the server-rendered context to the first navigation', async () => {
     const context = memo.createRouteContextMemo<string>()

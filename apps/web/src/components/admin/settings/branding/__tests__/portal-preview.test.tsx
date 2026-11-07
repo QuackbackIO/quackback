@@ -29,13 +29,13 @@ const saved: Props = {
 }
 
 /** Swap the frame's window for a recorder (happy-dom never loads the page). */
+let frameWindow: { postMessage: ReturnType<typeof vi.fn> } | null = null
 function recordFrame() {
   const postMessage = vi.fn()
+  frameWindow = { postMessage }
   const iframe = screen.getByTitle<HTMLIFrameElement>('Portal preview')
-  Object.defineProperty(iframe, 'contentWindow', {
-    configurable: true,
-    get: () => ({ postMessage }),
-  })
+  const recorder = frameWindow
+  Object.defineProperty(iframe, 'contentWindow', { configurable: true, get: () => recorder })
   return postMessage
 }
 
@@ -47,6 +47,7 @@ function frameReady() {
       new MessageEvent('message', {
         data: { type: 'quackback:preview-ready' },
         origin: window.location.origin,
+        source: frameWindow as unknown as Window,
       })
     )
   })
