@@ -37,6 +37,7 @@ export const SETTINGS_PAGES = {
   // Workspace
   '/admin/settings/general': { label: 'General' },
   '/admin/settings/domains': { label: 'Domains' },
+  '/admin/settings/email': { label: 'Email' },
   '/admin/settings/notifications': { label: 'Notifications' },
   '/admin/settings/portal': { label: 'Portal' },
   '/admin/settings/widget': { label: 'Widget' },

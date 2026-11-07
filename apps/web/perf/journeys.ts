@@ -203,6 +203,7 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
     'copilot',
     'developers',
     'domains',
+    'email',
     'general',
     'help-center',
     'imports',

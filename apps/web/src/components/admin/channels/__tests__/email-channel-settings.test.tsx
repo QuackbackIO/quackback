@@ -44,7 +44,7 @@ vi.mock('@/lib/client/mutations/channel-accounts', () => {
   }
 })
 
-const { EmailChannelSettings } = await import('../email-channel-settings')
+const { WorkspaceEmailSettings, SupportInboxSettings } = await import('../email-channel-settings')
 const { emailChannelConfigQuery } = await import('@/lib/client/queries/channel-accounts')
 
 const HOUR = 60 * 60 * 1000
@@ -133,6 +133,11 @@ function renderSettings({
   sendingPaused = null as { cause: string | null } | null,
   senders = {} as Partial<EmailSendersDTO>,
   forwardingTargetPermitted = null as boolean | null,
+  view = 'both' as 'both' | 'workspace' | 'support',
+  surfaces = ['support', 'feedback', 'changelog', 'status'] as Array<
+    'support' | 'feedback' | 'changelog' | 'status'
+  >,
+  canManageSending = true,
 } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
   client.setQueryData(emailChannelConfigQuery().queryKey, {
@@ -156,7 +161,8 @@ function renderSettings({
   } as never)
   return render(
     <QueryClientProvider client={client}>
-      <EmailChannelSettings />
+      {view !== 'support' && <WorkspaceEmailSettings surfaces={surfaces} />}
+      {view !== 'workspace' && <SupportInboxSettings canManageSending={canManageSending} />}
     </QueryClientProvider>
   )
 }
@@ -1066,16 +1072,52 @@ describe('a paused workspace', () => {
   })
 
   it('shows one line with the provider reason when sending is paused', () => {
-    renderSettings({ sendingPaused: { cause: 'Bounce rate above threshold.' } })
+    renderSettings({ view: 'workspace', sendingPaused: { cause: 'Bounce rate above threshold.' } })
     const line = screen.getByText(LINE)
     expect(line.textContent).toContain('Bounce rate above threshold.')
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
   it('shows the line without a reason when none is kept', () => {
-    renderSettings({ sendingPaused: { cause: null } })
+    renderSettings({ view: 'support', sendingPaused: { cause: null } })
     expect(screen.getByText(LINE).textContent).toBe(
       'Sending is paused by the email provider because of bounces or complaints.'
     )
+  })
+})
+
+describe('where each part lives', () => {
+  it('the workspace page has the addresses and every sender, but no support inbox', () => {
+    renderSettings({ view: 'workspace', surfaces: ['feedback', 'changelog'] })
+    expect(screen.getByText('Sending addresses')).toBeTruthy()
+    expect(screen.getByText('Send from')).toBeTruthy()
+    expect(screen.queryByText('Support inbox')).toBeNull()
+    expect(screen.getByLabelText('Default')).toBeTruthy()
+    expect(screen.getByLabelText('Feedback board')).toBeTruthy()
+    expect(screen.getByLabelText('Changelog')).toBeTruthy()
+    expect(screen.queryByLabelText('Support')).toBeNull()
+    expect(screen.queryByLabelText('Status page')).toBeNull()
+  })
+
+  it('the support page has the inbox and the support sender only', () => {
+    renderSettings({ view: 'support' })
+    expect(screen.getByText('Support inbox')).toBeTruthy()
+    expect(screen.getByText('Replies')).toBeTruthy()
+    expect(screen.queryByText('Sending addresses')).toBeNull()
+    expect(screen.getByLabelText('Support')).toBeTruthy()
+    expect(screen.queryByLabelText('Default')).toBeNull()
+    expect(screen.queryByLabelText('Changelog')).toBeNull()
+  })
+
+  it('links an admin from the support page to the sending addresses', () => {
+    renderSettings({ view: 'support' })
+    expect(
+      screen.getByRole('link', { name: 'Manage sending addresses' }).getAttribute('href')
+    ).toBe('/admin/settings/email')
+  })
+
+  it('offers no link to someone who cannot manage sending', () => {
+    renderSettings({ view: 'support', canManageSending: false })
+    expect(screen.queryByRole('link', { name: 'Manage sending addresses' })).toBeNull()
   })
 })

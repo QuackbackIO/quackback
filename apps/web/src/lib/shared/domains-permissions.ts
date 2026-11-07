@@ -1,4 +1,5 @@
 import { PERMISSIONS, type PermissionKey } from './permissions'
+import { EMAIL_SENDING_PERMISSION } from './email-sending-permissions'
 
 /**
  * Who can open the Domains page: a holder of any permission that owns one of
@@ -8,6 +9,6 @@ import { PERMISSIONS, type PermissionKey } from './permissions'
  */
 export const DOMAINS_PAGE_PERMISSIONS = [
   PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
-  PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+  EMAIL_SENDING_PERMISSION,
   PERMISSIONS.AUTH_MANAGE,
 ] as const satisfies readonly PermissionKey[]

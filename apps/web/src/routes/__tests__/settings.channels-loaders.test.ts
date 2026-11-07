@@ -10,6 +10,7 @@ import { githubChannelStatusQuery } from '@/integrations/github/ui/github-channe
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { Route as HubRoute } from '../admin/settings.channels'
 import { Route as EmailRoute } from '../admin/settings.channels_.email'
+import { Route as WorkspaceEmailRoute } from '../admin/settings.email'
 import { Route as GitHubRoute } from '../admin/settings.channels_.github'
 
 type LoaderFn = (ctx: { context: Record<string, unknown> }) => Promise<unknown>
@@ -51,7 +52,6 @@ describe('channels settings loaders', () => {
     expect(keys).toEqual(
       expect.arrayContaining([
         key('settings', 'spamFilterConfig'),
-        key('settings', 'email-channel-status'),
         key('email-channel-config'),
         key('email-auto-ack'),
         key('email-activity'),
@@ -59,10 +59,20 @@ describe('channels settings loaders', () => {
     )
   })
 
-  it('email: leaves the transport status to its card without settings.manage', async () => {
-    const keys = await warmedKeys(EmailRoute, [PERMISSIONS.CHANNEL_ACCOUNT_MANAGE])
+  it('email: leaves the transport status to Settings → Email, where its card now is', async () => {
+    const keys = await warmedKeys(EmailRoute, [
+      PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+      PERMISSIONS.SETTINGS_MANAGE,
+    ])
     expect(keys).not.toContain(key('settings', 'email-channel-status'))
     expect(keys).toContain(key('email-activity'))
+  })
+
+  it('workspace email: warms the addresses and the transport status', async () => {
+    const keys = await warmedKeys(WorkspaceEmailRoute, [PERMISSIONS.SETTINGS_MANAGE])
+    expect(keys).toEqual(
+      expect.arrayContaining([key('email-channel-config'), key('settings', 'email-channel-status')])
+    )
   })
 
   it('GitHub: warms the connection status with settings.manage only', async () => {

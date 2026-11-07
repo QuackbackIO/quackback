@@ -15,24 +15,25 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { LocalDate, NUMERIC_DATE_TIME } from '@/components/ui/local-date'
 import { TrustedSendersCard } from '@/components/admin/settings/trusted-senders-card'
-import { EmailChannelSettings } from '@/components/admin/channels/email-channel-settings'
-import { EmailTransportCard } from '@/components/admin/channels/email-transport-card'
+import { SupportInboxSettings } from '@/components/admin/channels/email-channel-settings'
+import { useHasPermission } from '@/lib/client/hooks/use-root-context'
+import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
 
 /** Rows of email activity shown before "View all activity". */
 const ACTIVITY_PREVIEW_ROWS = 5
 
 export function EmailChannelPage() {
+  const canManageSending = useHasPermission(EMAIL_SENDING_PERMISSION)
   return (
     <SettingsPage
       page="/admin/settings/channels/email"
-      description="Receive and send support conversations from the customer's mailbox."
+      description="Turn email to your support address into conversations, and choose where replies come from."
       crumbs={[
         moduleCrumb('/admin/settings/support'),
         { label: 'Channels', to: '/admin/settings/channels' },
       ]}
     >
-      <EmailTransportCard />
-      <EmailChannelSettings />
+      <SupportInboxSettings canManageSending={canManageSending} />
       <AiSpamFilterCard />
       <TrustedSendersSection />
       <AutoAckCard />

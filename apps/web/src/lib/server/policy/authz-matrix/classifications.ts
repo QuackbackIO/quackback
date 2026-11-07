@@ -97,6 +97,26 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/personal-api-keys.ts::revokeMyApiKeyFn': END_USER(
     'self-service: revokes one of personal API keys of the caller; team members only (inline isTeamMember), and the key is filtered to kind personal and createdById = caller'
   ),
+  // Email senders: sending is a workspace setting (settings.manage), and whoever
+  // runs the support inbox may still choose where support replies come from.
+  'lib/server/functions/channel-accounts.ts::getEmailChannelConfigFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE],
+    'read by the workspace Email page and the support inbox page; either permission opens it'
+  ),
+  'lib/server/functions/channel-accounts.ts::setEmailSenderFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE],
+    'the support sender takes either permission; every other sender requires settings.manage'
+  ),
+  'lib/server/functions/channel-accounts.ts::getSurfaceSenderFn': DYNAMIC_PERMISSION(
+    [
+      PERMISSIONS.SETTINGS_MANAGE,
+      PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+      PERMISSIONS.BOARD_MANAGE,
+      PERMISSIONS.CHANGELOG_MANAGE,
+      PERMISSIONS.STATUS_PAGE_MANAGE,
+    ],
+    'read-only From line: an admin, or the manager of the product that sends that kind of email'
+  ),
   'lib/server/functions/assistant-connectors.ts::createConnectorFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.AI_CUSTOMER_MANAGE, PERMISSIONS.AI_TEAMMATE_MANAGE],
     'either AI permission opens it, and assigning to an agent also requires that agent AI permission'

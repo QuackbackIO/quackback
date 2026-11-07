@@ -24,7 +24,7 @@ import {
   type SendingDomainDnsRecord,
 } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
-import { PERMISSIONS } from '@/lib/shared/permissions'
+import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
 import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 import { createNotificationsBatch } from '@/lib/server/domains/notifications/notification.service'
 import type { NotificationType } from '@/lib/server/domains/notifications/notification.types'
@@ -40,7 +40,7 @@ interface Manager {
   userId: UserId | null
 }
 
-/** Every teammate who may manage email channels, and so is told about their domains. */
+/** Every teammate who may manage how the workspace sends email, and so is told about its domains. */
 export async function sendingDomainManagers(): Promise<Manager[]> {
   const people = await db
     .select({ id: principal.id, role: principal.role, userId: principal.userId })
@@ -49,7 +49,7 @@ export async function sendingDomainManagers(): Promise<Manager[]> {
   const managers: Manager[] = []
   for (const person of people) {
     const held = await permissionsForPrincipal(person.id, person.role as 'admin' | 'member')
-    if (held.has(PERMISSIONS.CHANNEL_ACCOUNT_MANAGE)) {
+    if (held.has(EMAIL_SENDING_PERMISSION)) {
       managers.push({ principalId: person.id, userId: person.userId as UserId | null })
     }
   }

@@ -64,7 +64,7 @@ describe('Email sending section', () => {
     expect(live).toHaveTextContent('billing@, help@ · Ownership verified')
     expect(live).not.toHaveTextContent('Pending')
     expect(live).not.toHaveTextContent('Needs attention')
-    expect(live).toHaveAttribute('href', '/admin/settings/channels/email')
+    expect(live).toHaveAttribute('href', '/admin/settings/email')
 
     const pending = rowOf('acme.co.uk')
     expect(pending).toHaveTextContent('updates@')
@@ -132,7 +132,7 @@ describe('empty state', () => {
   it('is one quiet line', () => {
     render(<NoDomains />)
     expect(
-      screen.getByText('No domains yet. Add one from Email, Help center or Security.')
+      screen.getByText('No domains yet. Add one from Email, Help Center or Access & Security.')
     ).toBeInTheDocument()
   })
 })

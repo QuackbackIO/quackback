@@ -585,6 +585,19 @@
       "htmlTransferKB": 29.7,
       "componentRenders": 346
     },
+    "sweep:doc:admin:/admin/settings/email": {
+      "dbQueries": 13,
+      "htmlKB": 95.2
+    },
+    "sweep:ui:admin:/admin/settings/email": {
+      "dbQueries": 13,
+      "serverRequests": 1,
+      "requests": 128,
+      "jsRequests": 124,
+      "jsKB": 431.5,
+      "htmlTransferKB": 32.5,
+      "componentRenders": 464
+    },
     "sweep:doc:admin:/admin/settings/general": {
       "dbQueries": 8,
       "htmlKB": 78.6
