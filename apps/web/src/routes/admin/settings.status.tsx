@@ -1,3 +1,4 @@
+import { warmQuery } from '@/lib/client/queries/warm-query'
 import { useState } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
@@ -25,7 +26,12 @@ export const Route = createFileRoute('/admin/settings/status')({
   },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.STATUS_PAGE_MANAGE)
-    await context.queryClient.ensureQueryData(statusSettingsQueries.get())
+    const { surfaceSenderQuery } = await import('@/lib/client/queries/channel-accounts')
+    await Promise.all([
+      context.queryClient.ensureQueryData(statusSettingsQueries.get()),
+      // The Notifications card's "Sent from" line, so it renders from the document.
+      warmQuery(context.queryClient, surfaceSenderQuery('status')),
+    ])
     return {}
   },
   component: StatusSettingsPage,

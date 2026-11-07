@@ -469,15 +469,15 @@
       "componentRenders": 426
     },
     "sweep:doc:admin:/admin/settings/changelog": {
-      "dbQueries": 8,
-      "htmlKB": 77.2
+      "dbQueries": 13,
+      "htmlKB": 78.5
     },
     "sweep:ui:admin:/admin/settings/changelog": {
-      "dbQueries": 8,
+      "dbQueries": 13,
       "serverRequests": 1,
       "requests": 124,
       "jsRequests": 119,
-      "jsKB": 424.3,
+      "jsKB": 432.6,
       "htmlTransferKB": 31.9,
       "componentRenders": 399
     },
@@ -501,8 +501,8 @@
     "sweep:ui:admin:/admin/settings/channels/email": {
       "dbQueries": 13,
       "serverRequests": 1,
-      "requests": 128,
-      "jsRequests": 124,
+      "requests": 129,
+      "jsRequests": 125,
       "jsKB": 431.5,
       "htmlTransferKB": 32.5,
       "componentRenders": 464
