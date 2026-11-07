@@ -1,6 +1,6 @@
 import {
   formatNamedSendingAddress,
-  resolveConversationFrom,
+  resolveConversationSender,
 } from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { deliverAgentMessageOnChannel } from './deliver-agent-message'
 import type { ChannelAdapter } from './types'
@@ -46,9 +46,9 @@ export const emailAdapter: ChannelAdapter = {
     const inReplyTo = thread?.inbound.at(-1) ?? thread?.outbound.at(-1)
     const references = thread && thread.merged.length > 0 ? thread.merged : undefined
 
-    const resolvedFrom = await resolveConversationFrom(ctx.conversationId)
-    const from = resolvedFrom
-      ? formatNamedSendingAddress(resolvedFrom, ctx.workspaceName)
+    const resolved = await resolveConversationSender(ctx.conversationId)
+    const from = resolved
+      ? formatNamedSendingAddress(resolved.from, resolved.senderName ?? ctx.workspaceName)
       : undefined
 
     const { sendCsatRequestEmail } = await import('@quackback/email')

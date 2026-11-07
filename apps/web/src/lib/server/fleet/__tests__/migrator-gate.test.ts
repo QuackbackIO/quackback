@@ -385,6 +385,7 @@ describe('replayGateVerdict', () => {
       '0308_remove_approvals_leftovers',
       '0309_api_key_kinds',
       '0310_conversation_thread_sender',
+      '0311_email_senders',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

@@ -31,6 +31,27 @@ const hoisted = vi.hoisted(() => ({
   addressMode: vi.fn(),
   getInboundRoute: vi.fn(),
   listChannelAccounts: vi.fn(),
+  getEmailSenders: vi.fn(),
+  setEmailSender: vi.fn(),
+  updateName: vi.fn(),
+  permitted: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/channel-accounts/email-senders', () => ({
+  getEmailSenders: hoisted.getEmailSenders,
+  setEmailSender: hoisted.setEmailSender,
+}))
+
+vi.mock('@/lib/server/domains/channel-accounts/outbound-identity', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('@/lib/server/domains/channel-accounts/outbound-identity')
+  >()),
+  permittedSendingIdentity: hoisted.permitted,
+}))
+
+vi.mock('@/lib/server/domains/settings/settings.helpers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/settings/settings.helpers')>()),
+  requireSettingsCached: async () => ({ name: 'Acme' }),
 }))
 
 vi.mock('@/lib/server/domains/channel-accounts/sending-address', () => ({
@@ -53,6 +74,7 @@ vi.mock(
     listSendingDomains: hoisted.listSendingDomains,
     getInboundRoute: hoisted.getInboundRoute,
     listChannelAccounts: hoisted.listChannelAccounts,
+    updateSendingAddressName: hoisted.updateName,
   })
 )
 
@@ -70,7 +92,11 @@ const {
   deleteChannelAccountFn,
   sendTestEmailFn,
   getEmailChannelConfigFn,
+  setEmailSenderFn,
+  updateSendingAddressNameFn,
 } = await import('../channel-accounts')
+const setSender = setEmailSenderFn as unknown as AnyHandler
+const updateName = updateSendingAddressNameFn as unknown as AnyHandler
 const getConfig = getEmailChannelConfigFn as unknown as AnyHandler
 const createAddress = createSendingAddressFn as unknown as AnyHandler
 const deleteAccount = deleteChannelAccountFn as unknown as AnyHandler
@@ -86,6 +112,7 @@ beforeEach(() => {
     user: { id: 'user_1', email: 'admin@example.com' },
   })
   hoisted.defaultTeamId.mockResolvedValue('team_1')
+  hoisted.getEmailSenders.mockResolvedValue(new Map())
 })
 
 describe('restartSendingDomainChecksFn and deleteSendingDomainFn', () => {
@@ -168,12 +195,14 @@ const ACCOUNT = {
 describe('createSendingAddressFn', () => {
   it('adds the address through the domain-aware path for the default team', async () => {
     hoisted.addAddress.mockResolvedValue(ACCOUNT)
-    const result = await createAddress({ data: { address: 'help@acme.com', module: 'support' } })
+    const result = await createAddress({
+      data: { address: 'help@acme.com', senderName: 'Acme Support' },
+    })
     expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'channel_account.manage' })
     expect(hoisted.addAddress).toHaveBeenCalledWith({
       owningTeamId: 'team_1',
       address: 'help@acme.com',
-      module: 'support',
+      senderName: 'Acme Support',
     })
     expect(result).toMatchObject({
       id: 'channel_account_1',
@@ -187,7 +216,7 @@ describe('createSendingAddressFn', () => {
       new SesIdentityError('SES refused', 400, 'AccessDeniedException', false)
     )
     await expect(
-      createAddress({ data: { address: 'help@acme.com', module: 'support' } })
+      createAddress({ data: { address: 'help@acme.com', senderName: 'Acme Support' } })
     ).rejects.toThrow(
       "Custom sending domains aren't set up correctly on this server. Nothing was added."
     )
@@ -198,7 +227,7 @@ describe('createSendingAddressFn failures', () => {
   it('names the address, not a domain, when an unknown failure stops the add', async () => {
     hoisted.addAddress.mockRejectedValue(new Error('connection reset'))
     await expect(
-      createAddress({ data: { address: 'help@acme.com', module: 'support' } })
+      createAddress({ data: { address: 'help@acme.com', senderName: 'Acme Support' } })
     ).rejects.toThrow(
       "Couldn't add the address. Try again, and if it keeps failing, contact your workspace's operator."
     )
@@ -307,5 +336,82 @@ describe('the sending domain DTO', () => {
     const config = (await getConfig()) as { domains: unknown[] }
     expect(config.domains).toMatchObject([{ dkimMode }])
     expect(JSON.stringify(config)).not.toMatch(/PRIVATE|privateKey/i)
+  })
+})
+
+describe('choosing which address each kind of email sends from', () => {
+  it('reports every surface, the workspace name, and whether the forwarded address may send', async () => {
+    hoisted.addressMode.mockResolvedValue('verified-domains')
+    hoisted.listChannelAccounts.mockResolvedValue([])
+    hoisted.listSendingDomains.mockResolvedValue([])
+    hoisted.getInboundRoute.mockResolvedValue({
+      id: 'channel_account_route',
+      role: 'inbound',
+      address: null,
+      senderName: null,
+      config: { forwardingTarget: 'support@acme.com' },
+      inboundTrust: 'strict',
+      sendingDomainId: null,
+      createdAt: new Date('2026-11-01T09:00:00.000Z'),
+    })
+    hoisted.getEmailSenders.mockResolvedValue(
+      new Map<string, unknown>([
+        ['default', { mode: 'address', account: { id: 'channel_account_1' } }],
+        ['support', { mode: 'inbox', account: null }],
+      ])
+    )
+    hoisted.permitted.mockResolvedValue(null)
+
+    const config = (await getConfig()) as Record<string, unknown>
+    expect(config.workspaceName).toBe('Acme')
+    expect(config.senders).toEqual({
+      default: { mode: 'address', id: 'channel_account_1' },
+      support: { mode: 'inbox' },
+      feedback: null,
+      changelog: null,
+      status: null,
+    })
+    expect(hoisted.permitted).toHaveBeenCalledWith('support@acme.com')
+    expect(config.forwardingTargetPermitted).toBe(false)
+  })
+
+  it('says nothing about a forwarded address when none is forwarded', async () => {
+    hoisted.addressMode.mockResolvedValue('verified-domains')
+    hoisted.listChannelAccounts.mockResolvedValue([])
+    hoisted.listSendingDomains.mockResolvedValue([])
+    hoisted.getInboundRoute.mockResolvedValue(null)
+    const config = (await getConfig()) as Record<string, unknown>
+    expect(config.forwardingTargetPermitted).toBeNull()
+    expect(hoisted.permitted).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      { mode: 'address', id: 'channel_account_1' },
+      { mode: 'address', channelAccountId: 'channel_account_1' },
+    ],
+    [{ mode: 'inbox' }, { mode: 'inbox' }],
+    [null, null],
+  ])('passes the choice %j on behind the permission gate', async (choice, stored) => {
+    await setSender({ data: { surface: 'support', choice } })
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'channel_account.manage' })
+    expect(hoisted.setEmailSender).toHaveBeenCalledWith('support', stored)
+  })
+
+  it('renames an address behind the permission gate', async () => {
+    hoisted.updateName.mockResolvedValue({
+      id: 'channel_account_1',
+      role: 'sending',
+      address: 'help@acme.com',
+      senderName: 'Acme',
+      config: {},
+      inboundTrust: 'strict',
+      sendingDomainId: null,
+      createdAt: new Date('2026-11-01T09:00:00.000Z'),
+    })
+    const result = await updateName({ data: { id: 'channel_account_1', senderName: 'Acme' } })
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'channel_account.manage' })
+    expect(hoisted.updateName).toHaveBeenCalledWith({ id: 'channel_account_1', senderName: 'Acme' })
+    expect(result).toMatchObject({ senderName: 'Acme' })
   })
 })

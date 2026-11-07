@@ -2,7 +2,8 @@
  * Channel accounts + sending domains (support platform §4.8 Layer 2). The email
  * channel's connected instances: one `inbound` route per workspace (the front
  * door a conversation's channel_account_id points at) and N `sending` addresses
- * (the verified From identities per module), plus the SPF/DKIM sending domains.
+ * (the From identities each kind of email can be sent from), plus the SPF/DKIM
+ * sending domains.
  *
  * Mostly CRUD + resolvers, with no permission gate: the settings UX that creates
  * these gates at the fn layer, like the other domains. The one rule that is not
@@ -17,11 +18,11 @@ import {
   isNull,
   isNotNull,
   inArray,
-  asc,
   desc,
   sql,
   channelAccounts,
   emailSendingDomains,
+  emailSenders,
   teams,
   type ChannelAccount,
   type EmailSendingDomain,
@@ -38,10 +39,9 @@ import {
 } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { logger } from '@/lib/server/logger'
+import { chooseInboxForSupportIfUnset } from './email-senders'
 
 const log = logger.child({ component: 'channel-accounts' })
-
-export type SendingModule = 'support' | 'feedback' | 'changelog'
 
 // ---------------------------------------------------------------------------
 // Sending domains (SPF/DKIM verified)
@@ -163,7 +163,7 @@ export async function createInboundRoute(input: {
   inboundTrust?: 'strict' | 'lenient'
 }): Promise<ChannelAccount> {
   const limit = (await getTierLimits()).maxInboundEmailAddresses
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     await tierEnforce.enforceInboundEmailAddressLimit(limit, tx)
     const [row] = await tx
       .insert(channelAccounts)
@@ -176,6 +176,9 @@ export async function createInboundRoute(input: {
       .returning()
     return row
   })
+  // A workspace that receives email replies from the address it was written to.
+  await chooseInboxForSupportIfUnset()
+  return created
 }
 
 /**
@@ -311,7 +314,11 @@ export async function ensurePlatformInboundRoute(
       where: sql`role = 'inbound' AND channel = 'email' AND deleted_at IS NULL`,
     })
     .returning()
-  if (created) return created
+  if (created) {
+    // A workspace that receives email replies from the address it was written to.
+    await chooseInboxForSupportIfUnset()
+    return created
+  }
 
   // Two deliveries can race here. The loser inserts nothing and reads the
   // winner's row, so both messages bind to one front door.
@@ -435,15 +442,18 @@ export class ChannelAddressInUseError extends Error {
 }
 
 /**
- * A verified sending address for a module (the outbound From identity).
+ * A sending address: an identity the workspace can choose to send each kind of
+ * email from (`email-senders.ts`), under its own sender name.
  *
- * `channel_accounts_sending_address_uq` covers (team, channel, address) and does
- * NOT include the module, so an address a workspace already holds cannot simply
- * be inserted again for a second module: that is a 23505, and unhandled it
- * reaches a person as a 500 from a settings button. Re-adding an address MOVES
- * it, which is both the readable outcome and an idempotent one — a double
- * submit, or a person changing their mind about which module answers from an
- * address, both land where they meant to.
+ * `channel_accounts_sending_address_uq` covers (team, channel, address), so an
+ * address a workspace already holds cannot simply be inserted again: that is a
+ * 23505, and unhandled it reaches a person as a 500 from a settings button.
+ * Re-adding an address updates it instead, which is both the readable outcome
+ * and an idempotent one: a double submit lands where it meant to.
+ *
+ * An address added while no default sender is chosen becomes the default, so
+ * adding the first address is enough to start using it. One added beside a
+ * chosen default changes nothing until it is chosen.
  *
  * `setWhere` keeps the update to `sending` rows. The index spans roles, so a
  * workspace whose inbound route was configured by hand to name this address
@@ -453,18 +463,20 @@ export class ChannelAddressInUseError extends Error {
 export async function createSendingAddress(input: {
   owningTeamId: TeamId
   address: string
-  module: SendingModule
+  /** The name mail is sent under. Null or absent: the workspace name. */
+  senderName?: string | null
   sendingDomainId?: SendingDomainId
   config?: ChannelAccountConfig
 }): Promise<ChannelAccount> {
   const address = input.address.trim().toLowerCase()
+  const senderName = cleanSenderName(input.senderName)
   const [row] = await db
     .insert(channelAccounts)
     .values({
       owningTeamId: input.owningTeamId,
       role: 'sending',
       address,
-      module: input.module,
+      senderName,
       sendingDomainId: input.sendingDomainId ?? null,
       config: input.config ?? {},
     })
@@ -472,7 +484,7 @@ export async function createSendingAddress(input: {
       target: [channelAccounts.owningTeamId, channelAccounts.channel, channelAccounts.address],
       targetWhere: sql`address IS NOT NULL AND deleted_at IS NULL`,
       set: {
-        module: input.module,
+        senderName,
         sendingDomainId: input.sendingDomainId ?? null,
         config: input.config ?? {},
         updatedAt: new Date(),
@@ -481,7 +493,37 @@ export async function createSendingAddress(input: {
     })
     .returning()
   if (!row) throw new ChannelAddressInUseError(address)
+  await db
+    .insert(emailSenders)
+    .values({ surface: 'default', channelAccountId: row.id })
+    .onConflictDoNothing({
+      target: [emailSenders.surface, emailSenders.scopeType],
+      where: sql`scope_id IS NULL`,
+    })
   return row
+}
+
+/** Rename a sending address. A blank name means the workspace name. */
+export async function updateSendingAddressName(input: {
+  id: ChannelAccountId
+  senderName: string | null
+}): Promise<ChannelAccount> {
+  const existing = await getChannelAccount(input.id)
+  if (!existing || existing.role !== 'sending') {
+    throw new Error('That sending address no longer exists.')
+  }
+  const [row] = await db
+    .update(channelAccounts)
+    .set({ senderName: cleanSenderName(input.senderName), updatedAt: new Date() })
+    .where(eq(channelAccounts.id, existing.id))
+    .returning()
+  return row
+}
+
+/** A blank name means "use the workspace name", which is stored as null. */
+function cleanSenderName(name: string | null | undefined): string | null {
+  const trimmed = name?.trim()
+  return trimmed ? trimmed : null
 }
 
 /**
@@ -519,49 +561,6 @@ export async function getInboundRoute(owningTeamId: TeamId): Promise<ChannelAcco
       )
     )
     .limit(1)
-  return row ?? null
-}
-
-/**
- * A team's sending addresses for a module, in the one order every choice
- * between them is made in: oldest first, then by id.
- *
- * Fixed rather than left to the planner, because two rows for the same team
- * and module are a normal state (a second address added beside a live one) and
- * a query with no ORDER BY is free to hand back either. The From a customer sees
- * would then change between two replies on the same thread for no reason anyone
- * could find. Oldest first means a newly added address never takes over from
- * the one that was already in use.
- */
-export async function listSendingAddresses(
-  owningTeamId: TeamId,
-  module: SendingModule
-): Promise<ChannelAccount[]> {
-  return db
-    .select()
-    .from(channelAccounts)
-    .where(
-      and(
-        eq(channelAccounts.owningTeamId, owningTeamId),
-        eq(channelAccounts.role, 'sending'),
-        eq(channelAccounts.module, module),
-        isNull(channelAccounts.deletedAt)
-      )
-    )
-    .orderBy(asc(channelAccounts.createdAt), asc(channelAccounts.id))
-}
-
-/**
- * The first sending address configured for a team and module, in the fixed
- * order (oldest first, then id). Says nothing about whether it may be sent as:
- * the From is chosen by `resolveSender` (`sender-resolver.ts`), which skips rows the send guard
- * refuses.
- */
-export async function getSendingAddress(
-  owningTeamId: TeamId,
-  module: SendingModule
-): Promise<ChannelAccount | null> {
-  const [row] = await listSendingAddresses(owningTeamId, module)
   return row ?? null
 }
 
