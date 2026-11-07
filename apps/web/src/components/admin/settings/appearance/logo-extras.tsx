@@ -55,10 +55,30 @@ export function PortalLogoRow({
   )
 }
 
-/** An uploaded icon into the draft, with its ink so it reads on any header. */
+/** A logo as it is uploaded: its ink, and its own colours (up to six), read once. */
+export async function readLogo(file: File) {
+  const [ink, colours] = await Promise.all([
+    imageInk(file),
+    imagePalette(file, 6).catch(() => [] as string[]),
+  ])
+  return { ink, colours: colours.map((colour) => colour.toLowerCase()).slice(0, 6) }
+}
+
+/** A new logo's colours as the brand's logo colours, which the brand colour row offers. */
+export function setLogoColours(draft: PortalDesign, colours: readonly string[]) {
+  if (colours.length) draft.brand.logoColours = [...colours]
+}
+
+/**
+ * An uploaded icon into the draft, with its ink so it reads on any header
+ * and its colours as the logo colours, in one step.
+ */
 export async function draftIcon(update: Update, key: string, file: File) {
-  const ink = await imageInk(file)
-  update((draft) => setIcon(draft, { key }, ink))
+  const { ink, colours } = await readLogo(file)
+  update((draft) => {
+    setIcon(draft, { key }, ink)
+    setLogoColours(draft, colours)
+  })
 }
 
 /** The title beside the icon, in the theme's font; empty shows the workspace's name. */
@@ -108,10 +128,11 @@ export function FullLogoChoice({ design, update }: { design: PortalDesign; updat
           accept="image/svg+xml,image/png,image/jpeg,image/webp"
           presign={presignWith(getWordmarkUploadUrlFn)}
           onUploaded={(key, upload) =>
-            void imageInk(upload).then((ink) =>
+            void readLogo(upload).then(({ ink, colours }) =>
               update((draft) => {
                 draft.brand.logo.wordmark.light = { key }
                 setLogoInk(draft.brand.logo, ink)
+                setLogoColours(draft, colours)
               })
             )
           }

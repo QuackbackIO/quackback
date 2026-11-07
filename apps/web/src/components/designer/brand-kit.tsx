@@ -1,7 +1,10 @@
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { draftIcon } from '@/components/admin/settings/appearance/logo-extras'
-import { imageInk } from '@/lib/client/image-palette'
+import {
+  draftIcon,
+  readLogo,
+  setLogoColours,
+} from '@/components/admin/settings/appearance/logo-extras'
 import { setIcon, setLogoInk, setTitle, showFullLogo } from '@/lib/shared/design/logo'
 import type { Update } from '@/components/admin/settings/appearance/section-controls'
 import {
@@ -165,10 +168,11 @@ export function BrandKitImages({
             presign={presignLogo}
             backdrop={design.brand.light.background}
             onUploaded={(key, upload) =>
-              void imageInk(upload).then((ink) =>
+              void readLogo(upload).then(({ ink, colours }) =>
                 update((draft) => {
                   draft.brand.logo.wordmark.light = { key }
                   setLogoInk(draft.brand.logo, ink)
+                  setLogoColours(draft, colours)
                 })
               )
             }
