@@ -167,7 +167,7 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
       const seeded = await seedAskGoldenFixture(database, 'owner')
       for (const permission of [
         PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
-        PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+        PERMISSIONS.SETTINGS_MANAGE,
         PERMISSIONS.AUTH_MANAGE,
       ]) {
         const sdk = await openAskSdkHarness({
@@ -188,7 +188,8 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
       const none = await openAskSdkHarness({
         ...seeded.auth,
         scopes: ['read:settings'],
-        permissions: new Set([PERMISSIONS.COPILOT_USE, PERMISSIONS.SETTINGS_MANAGE]),
+        // The support permission alone no longer manages sending domains.
+        permissions: new Set([PERMISSIONS.COPILOT_USE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE]),
       })
       try {
         expect((await none.call('navigate_workspace', { destination: 'domains' })).isError).toBe(
