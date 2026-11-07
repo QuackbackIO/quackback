@@ -4,15 +4,20 @@
  * `data-qb-section` the portal marks it with, so a click on the canvas and a
  * row in the outline select the same thing.
  */
-import { PAGE_PATHS, type PortalPageGates, type PortalPageType } from './paths'
+import { PAGE_PATHS, type DesignerPage, type PortalPageGates, type PortalPageType } from './paths'
+
+export {
+  locationOfPath,
+  pageOfPath,
+  pagePath,
+  type CanvasLocation,
+  type DesignerPage,
+} from './paths'
 import type { PortalDesign } from './schema'
 import type { HomeBlock, HomeBlockType } from './home'
 import { BLOCK_NAMES, PAGE_NAMES } from './names'
 
 export { BLOCK_NAMES, PAGE_NAMES }
-
-/** A page the designer can show: Home, one of the portal's own pages, or a post. */
-export type DesignerPage = 'home' | PortalPageType | 'post'
 
 /** What is selected: the site's styles, or a part of the page. */
 export type Selection =
@@ -76,38 +81,6 @@ export function designerPages(design: PortalDesign, gates: PortalPageGates): Des
   // A post shows how the feed's cards open, so it comes with Feedback.
   if (gates.feedback) pages.splice(pages.indexOf('feedback') + 1, 0, 'post')
   return design.nav.home.on ? ['home', ...pages] : pages
-}
-
-/** Where the canvas is: a page, and the item it shows, such as a post or an entry, if any. */
-export interface CanvasLocation {
-  page: DesignerPage
-  /** The item's own address; null for the page itself. */
-  item: string | null
-}
-
-/** The page a portal path shows and its item, or null for one the designer does not draw. */
-export function locationOfPath(path: string, homeOn: boolean): CanvasLocation | null {
-  const pathname = path.split(/[?#]/)[0]!.replace(/\/+$/, '') || '/'
-  if (pathname === '/') return { page: homeOn ? 'home' : 'feedback', item: null }
-  if (/^\/b\/[^/]+\/posts\/[^/]+$/.test(pathname)) return { page: 'post', item: pathname }
-  const found = (Object.entries(PAGE_PATHS) as Array<[PortalPageType, string]>).find(
-    ([, at]) => pathname === at || pathname.startsWith(`${at}/`)
-  )
-  if (!found) return null
-  const [page, at] = found
-  return { page, item: pathname === at ? null : pathname }
-}
-
-/** The page a portal path shows, a detail page under its own, or null for one the designer does not draw. */
-export function pageOfPath(path: string, homeOn: boolean): DesignerPage | null {
-  return locationOfPath(path, homeOn)?.page ?? null
-}
-
-/** The address the canvas loads a page at: the item it shows, else the page's own. */
-export function pagePath(page: DesignerPage, item: string | null = null): string {
-  if (item) return item
-  if (page === 'post') return '/'
-  return page === 'home' ? '/' : PAGE_PATHS[page]
 }
 
 /** Each page's own sections under its title, in the order a visitor meets them. */

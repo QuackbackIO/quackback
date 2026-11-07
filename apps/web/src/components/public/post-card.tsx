@@ -28,7 +28,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn } from '@/lib/shared/utils'
-import { TAG_TINT, useTagStyle } from './tag-tint'
+import { TAG_TINT, useTagStyle } from '@/components/ui/status-badge'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import type { ChangelogId, PostId, PostStatusId, PrincipalId } from '@quackback/ids'
@@ -266,7 +266,7 @@ export function PostCard({
       disabled={isVotePending || isAnonSigningIn}
       className={cn(
         'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border transition-colors duration-200',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+        'qb-focus-ring',
         'w-12 py-2 gap-0.5',
         shownVoted
           ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding'
@@ -507,7 +507,7 @@ export function PostCard({
   )
 
   const cardContent = (
-    <div className="flex items-start p-[var(--qb-card-padding,1rem)] gap-4">
+    <div className="qb-card-body flex items-start gap-4">
       {/* Vote column */}
       {voteButton}
 
@@ -536,7 +536,7 @@ export function PostCard({
         <h2
           data-qb-part="post-title"
           className={cn(
-            'font-semibold [font-size:var(--qb-title-size,1rem)] leading-normal line-clamp-1',
+            'qb-card-title font-semibold line-clamp-1',
             isDone ? 'text-foreground/75' : 'text-foreground'
           )}
         >
@@ -547,7 +547,7 @@ export function PostCard({
         {content && (
           <p
             data-qb-part="post-excerpt"
-            className="text-sm text-muted-foreground line-clamp-1 mt-1 [[data-qb-card-excerpt=off]_&]:hidden"
+            className="text-sm text-muted-foreground line-clamp-1 mt-1 qb-card-excerpt"
           >
             {contentPreview(content)}
           </p>
@@ -555,7 +555,7 @@ export function PostCard({
 
         {/* Tags */}
         {tags.length > 0 && (
-          <div className="flex items-center gap-1 mt-1.5 [[data-qb-card-tags=off]_&]:hidden">
+          <div className="flex items-center gap-1 mt-1.5 qb-card-tags">
             {tags.slice(0, 3).map((tag) => {
               const style = tagStyle(tag.color)
               return onTagClick ? (
@@ -567,7 +567,7 @@ export function PostCard({
                   className={cn(
                     tagClassName,
                     // A 24px target around a small chip.
-                    'relative after:absolute after:-inset-y-1 after:inset-x-0 hover:brightness-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                    'qb-hit-24 hover:brightness-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
                   )}
                   style={style}
                 >
@@ -586,7 +586,7 @@ export function PostCard({
         )}
 
         {/* Meta row */}
-        <div className="flex items-center text-muted-foreground gap-2 text-xs mt-2.5 [[data-qb-card-meta=off]_&]:hidden">
+        <div className="flex items-center text-muted-foreground gap-2 text-xs mt-2.5 qb-card-meta">
           {authorMeta}
           <span className="text-muted-foreground">·</span>
           <TimeAgo date={createdAtDate} className="text-muted-foreground" />

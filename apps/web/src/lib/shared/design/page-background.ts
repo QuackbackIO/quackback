@@ -166,12 +166,8 @@ export function hasPageBackground(doc: PortalDesign): boolean {
   return all.some((bg) => bg && (bg.kind !== 'solid' || (bg.dark && bg.dark.kind !== 'solid')))
 }
 
-/** The page a designer page's background is kept under: an item page under its own page. */
-export function backgroundPageOf(page: string | null | undefined): BackgroundPage | null {
-  return (DESIGN_OPTIONS.backgroundPage as readonly string[]).includes(page ?? '')
-    ? (page as BackgroundPage)
-    : null
-}
+/** The page a designer page's background is kept under (paths.ts, so the portal shell need not load this). */
+export { backgroundPageOf } from './paths'
 
 /* Drawing a fill */
 
