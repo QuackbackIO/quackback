@@ -178,4 +178,4 @@ Full documentation: https://quackback.io/docs/widget
 
 ## License
 
-AGPL-3.0
+[MIT](LICENSE). This package and the `sdk.js` script built from it are MIT, so you can ship them in closed-source apps. The Quackback server is AGPL-3.0.

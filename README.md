@@ -139,3 +139,5 @@ With the demo data, sign in as `demo@example.com` with the password `password`.
 ## License
 
 [AGPL-3.0](LICENSE). Self-hosting is free and complete. If you run a modified version as a service or distribute it, publish your changes under the AGPL. Contributions need a signed [CLA](CLA.md).
+
+The widget SDK ([`packages/widget`](packages/widget), published as `@quackback/widget`) is [MIT](packages/widget/LICENSE), so you can embed it in closed-source apps.

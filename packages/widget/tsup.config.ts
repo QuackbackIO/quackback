@@ -24,6 +24,8 @@ export default defineConfig([
     format: ['iife'],
     globalName: 'QuackbackBundle',
     minify: true,
+    // Keeps the license notice on the served sdk.js (a different license from the server).
+    banner: { js: '/*! @quackback/widget | MIT License | Copyright (c) 2026 Quackback Ltd */' },
     sourcemap: false,
     target: 'es2020',
     outExtension: () => ({ js: '.js' }),
