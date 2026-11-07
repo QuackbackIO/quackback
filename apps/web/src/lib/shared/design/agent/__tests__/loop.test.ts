@@ -286,9 +286,9 @@ describe('the edit loop', () => {
     if (!result.ok) throw new Error(result.message)
     expect(step).toHaveBeenCalledTimes(3)
     expect(result.stopped).toBe('steps')
-    expect(result.reply).toMatch(
-      /^I changed main buttons on hover: background periwinkle\. Some of it did not come out as asked, so ask again to finish\./
-    )
+    // One sentence; what did not come out as asked is under Show changes.
+    expect(result.reply).toBe('I changed main buttons on hover: background periwinkle.')
+    expect(result.notes).toContain('Some of it did not come out as asked, so ask again to finish.')
   })
 
   it('starts no step the time budget cannot fit', async () => {
@@ -317,7 +317,7 @@ describe('the edit loop', () => {
     // 9s, 18s; a third would end at 27s.
     expect(step).toHaveBeenCalledTimes(2)
     expect(result.stopped).toBe('time')
-    expect(result.reply).toContain('I stopped before checking everything.')
+    expect(result.reply).toMatch(/, but I stopped before checking everything\.$/)
   })
 
   it('reads the design before the request for a check that compares with it', async () => {
@@ -403,6 +403,138 @@ describe('the edit loop', () => {
       },
     })
     expect(result).toEqual({ ok: false, code: 'AI_FAILED', message: 'Try rephrasing.' })
+  })
+
+  it('keeps what an earlier step applied when a later step throws, with its Undo', async () => {
+    const original = start()
+    const design = { current: original }
+    const { step } = scripted(
+      [
+        answer({
+          plan: 'Darken buttons on hover',
+          styles: [hoverStyle('#c7d2fe')],
+          checks: [darkerCheck],
+          done: false,
+        }),
+      ],
+      design
+    )
+    const flaky: LoopDeps['step'] = async (request) => {
+      if (request.step > 0) throw new Error('network')
+      return step(request)
+    }
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step: flaky, read: reader(design, original) },
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.stopped).toBe('failed')
+    // The first step's change is the request's one Undo, and the reply says it stopped.
+    expect(result.applied.map((c) => c.path)).toEqual(['style'])
+    expect(result.design).toEqual(design.current)
+    expect(result.reply).toMatch(/^I changed .*, but I stopped before checking everything\.$/)
+  })
+
+  it('keeps what an earlier step applied when a later step is refused', async () => {
+    const original = start()
+    const design = { current: original }
+    const { step } = scripted(
+      [answer({ plan: 'Try', styles: [hoverStyle('#c7d2fe')], checks: [darkerCheck] })],
+      design
+    )
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.stopped).toBe('failed')
+    expect(result.applied).toHaveLength(1)
+  })
+
+  it('throws as before when a step throws with nothing changed', async () => {
+    const original = start()
+    await expect(
+      runEditLoop({
+        registry: R,
+        design: original,
+        targets: [],
+        deps: {
+          step: async () => {
+            throw new Error('network')
+          },
+          read: async () => ({}),
+        },
+      })
+    ).rejects.toThrow('network')
+  })
+
+  it('says how far the changes reached beyond the page shown, in the same sentence', async () => {
+    const original = start()
+    const design = { current: original }
+    const { step } = scripted(
+      [
+        answer({
+          plan: 'Calm the hero',
+          ops: [{ op: 'set', target: 'hero', key: 'look', value: 'tint', says: '' }],
+          done: true,
+          reply: 'The hero is calmer. It is a soft tint now.',
+        }),
+      ],
+      design
+    )
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+      pick: { scope: 'band', page: 'home' },
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.reply).toBe('The hero is calmer, on every page.')
+  })
+
+  it('reports styles left outside the pick under Show changes, and to the next step', async () => {
+    const original = start()
+    const design = { current: original }
+    const asked: StepRequest[] = []
+    const step: LoopDeps['step'] = async (request) => {
+      asked.push(request)
+      const a =
+        request.step === 0
+          ? answer({
+              plan: 'Cards',
+              styles: [
+                { ...hoverStyle('darker'), element: 'card', property: 'shadow', value: 'soft' },
+              ],
+            })
+          : answer({ plan: 'Done', done: true })
+      const out = applyStep(design.current, world, R, [], a.styles, {
+        scope: 'band',
+        reach: 'every',
+        page: 'home',
+      })
+      design.current = out.design
+      const { design: next, ...outcome } = out
+      return { ok: true, answer: a, outcome, design: next }
+    }
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+      pick: { scope: 'band', page: 'home' },
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.applied).toEqual([])
+    expect(result.reply).toBe('That is outside what was picked, so nothing changed.')
+    expect(result.notes).toEqual(['Left alone, as it is outside what was picked: cards on hover.'])
+    expect(asked[1]!.turns[0]!.refused).toEqual([
+      { what: 'Cards on hover', reason: 'outside what was picked: left alone' },
+    ])
   })
 
   it('hands what a step asked to read to the next one', async () => {

@@ -22,6 +22,7 @@ import {
 } from '@/lib/shared/design/agent/style-registry'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { AiElementPick, DesignAiScope } from '@/lib/shared/design/apply-changes'
+import type { AiReach } from '@/lib/shared/design/ai-reach'
 import type { DesignerPage } from '@/lib/shared/design/outline'
 import type { SupportedLocale } from '@/lib/shared/i18n'
 import type { CheckFrame } from './check-frame'
@@ -35,6 +36,8 @@ export interface EditLoopRequest {
   blockId?: string
   /** An element picked on the canvas, which "just this" names. */
   element?: AiElementPick
+  /** How far the request may reach from the pick, as the composer's chip says. */
+  within?: AiReach
   images?: Array<{ palette: string[]; image?: string }>
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   page?: DesignerPage
@@ -92,6 +95,7 @@ export async function runBuilderEditLoop(
       design: original,
       targets,
       budget,
+      pick: { scope: request.scope, ...(request.page ? { page: request.page } : {}) },
       deps: {
         progress: deps.progress,
         step: async (step) => {
