@@ -182,3 +182,32 @@ describe('BrandMatchRow without Quackback AI', () => {
     expect(screen.getByLabelText('Your website')).toBeTruthy()
   })
 })
+
+describe('the first-open coach mark at Match your brand', () => {
+  it('points at the website field until closed by Got it', async () => {
+    const dismiss = vi.fn()
+    renderRow(defaultDesign(), { coach: { show: true, dismiss } })
+    const note = await screen.findByRole('note')
+    expect(note.textContent).toContain('Paste your website to match your brand')
+    fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
+    expect(dismiss).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes on Escape, and once a match starts', async () => {
+    const dismiss = vi.fn()
+    renderRow(defaultDesign(), { coach: { show: true, dismiss } })
+    await screen.findByRole('note')
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(dismiss).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Match' }))
+    expect(dismiss).toHaveBeenCalledTimes(2)
+  })
+
+  it('never shows once a match has run', async () => {
+    const design = defaultDesign()
+    design.brand.matchedAt = '2026-11-07T12:00:00.000Z'
+    renderRow(design, { coach: { show: true, dismiss: vi.fn() } })
+    await screen.findByRole('button', { name: 'Match again' })
+    expect(screen.queryByRole('note')).toBeNull()
+  })
+})

@@ -118,7 +118,7 @@ export const BUILDER_EVENTS = {
   /** A change to the menu, or Go to, from a menu item on the page or the header's panel. */
   designer_menu_changed: { change: MENU_CHANGES, from: MENU_FROM },
   /** A one-time coach mark dismissed. */
-  designer_coach_dismissed: { coach: ['menu'] },
+  designer_coach_dismissed: { coach: ['menu', 'brand'] },
   designer_preview_link_shared: {},
   designer_versions_opened: {},
   designer_version_restored: { how: ['restore', 'copy'] },

@@ -32,6 +32,7 @@ import {
   type SiteBrandPick,
 } from '@/lib/shared/design/site-brand'
 import { cn } from '@/lib/shared/utils'
+import { useEscapeToDismiss } from './menu-coach-mark'
 import { PropertyRow } from './properties/properties-panel'
 
 /** The row's words. */
@@ -62,6 +63,8 @@ export const MATCH_ROW = {
     colour: 'Brand colour',
   } satisfies Record<SiteBrandPick, string>,
   failed: 'That website could not be read.',
+  coach: 'Paste your website to match your brand',
+  coachDone: 'Got it',
 } as const
 
 /** Changes the draft as one step, named for its undo. */
@@ -74,6 +77,8 @@ export interface BrandMatchControl {
   website: string | null
   /** Starts a brand match (see useDesignAi's startBrandMatch). */
   start: (input: { website?: string; screenshots: File[] }) => void
+  /** The first-open coach mark, which points here while no match has run. */
+  coach?: { show: boolean; dismiss: () => void }
 }
 
 const BrandMatchContext = createContext<BrandMatchControl | null>(null)
@@ -244,13 +249,44 @@ function ShotDrop({
   )
 }
 
+/**
+ * The first-open coach mark, under the website field it points at, in the
+ * panel's own order so the keyboard reaches it. Got it or Escape closes it.
+ */
+function BrandCoach({ onDismiss }: { onDismiss: () => void }) {
+  useEscapeToDismiss(true, onDismiss)
+  return (
+    <div
+      role="note"
+      aria-label={MATCH_ROW.coach}
+      className="relative mt-2.5 flex items-center gap-2 rounded-lg border border-border bg-popover py-1.5 ps-3 pe-1.5 text-popover-foreground shadow-sm"
+    >
+      <span
+        aria-hidden="true"
+        className="absolute -top-1.5 start-4 size-3 rotate-45 border-s border-t border-border bg-popover"
+      />
+      <p className="min-w-0 flex-1 text-xs">{MATCH_ROW.coach}</p>
+      <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2 text-xs" onClick={onDismiss}>
+        {MATCH_ROW.coachDone}
+      </Button>
+    </div>
+  )
+}
+
+/** The coach mark, while it should show: only before any match has run. */
+function coachOf(control: BrandMatchControl, design: PortalDesign) {
+  return control.coach?.show && !hasMatched(design) ? control.coach : null
+}
+
 /** The website field, the screenshots and Match, as one small form. */
 function MatchForm({
   control,
+  coach,
   onCancel,
   onSent,
 }: {
   control: BrandMatchControl
+  coach: { dismiss: () => void } | null
   /** With it, a Cancel beside Match, for a form opened from Match again. */
   onCancel?: () => void
   onSent?: () => void
@@ -272,6 +308,7 @@ function MatchForm({
       screenshots: waiting.shots.map((shot) => shot.file),
     })
     waiting.clear()
+    coach?.dismiss()
     onSent?.()
   }
   return (
@@ -312,6 +349,7 @@ function MatchForm({
           </Button>
         )}
       </div>
+      {coach && <BrandCoach onDismiss={coach.dismiss} />}
       <ShotDrop
         shots={waiting.shots}
         note={waiting.note}
@@ -381,11 +419,13 @@ function PickChip({
  */
 function SiteUseForm({
   control,
+  coach,
   update,
   onCancel,
   onUsed,
 }: {
   control: BrandMatchControl
+  coach: { dismiss: () => void } | null
   update: NamedUpdate
   onCancel?: () => void
   onUsed?: () => void
@@ -403,6 +443,7 @@ function SiteUseForm({
   }, [opened])
   const read = async () => {
     if (!website.trim() || reading) return
+    coach?.dismiss()
     setReading(true)
     setSaid('')
     setOffer(null)
@@ -476,6 +517,7 @@ function SiteUseForm({
           </Button>
         )}
       </div>
+      {coach && <BrandCoach onDismiss={coach.dismiss} />}
       {offer && (
         <div className="space-y-1.5">
           <div
@@ -523,11 +565,13 @@ export function BrandMatchRow({ design, update }: { design: PortalDesign; update
     return withAi ? (
       <MatchForm
         control={control}
+        coach={coachOf(control, design)}
         {...(again ? { ...close, onSent: () => setAgain(false) } : {})}
       />
     ) : (
       <SiteUseForm
         control={control}
+        coach={coachOf(control, design)}
         update={update}
         {...(again ? { ...close, onUsed: () => setAgain(false) } : {})}
       />

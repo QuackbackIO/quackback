@@ -40,7 +40,8 @@ import type { DesignerPage } from '@/lib/shared/design/outline'
 import { useCanvasDesign } from './look-preview'
 import { MenuLayer } from './menu-layer'
 import { WordsLayer } from './words/words-layer'
-import { useMenuCoach } from './menu-coach-mark'
+import { useCoach, useMenuCoach } from './menu-coach-mark'
+import { hasMatched } from '@/lib/shared/design/ai-starters'
 import { PreviewBar } from './preview-bar'
 import { usePublishFlow } from './publish-flow'
 import { ReturnVisitNote } from './return-visit-note'
@@ -228,6 +229,16 @@ export function DesignerShell({
     },
   })
   const coach = useMenuCoach()
+  // Until a match has run, the first open points at Match your brand, first in Theme.
+  const brandCoach = useCoach('brand')
+  const brandCoachOn = brandCoach.show && !hasMatched(design)
+  const { dispatch: panelDispatch } = panel
+  const coachedOpen = useRef(false)
+  useEffect(() => {
+    if (!brandCoachOn || previewing || coachedOpen.current) return
+    coachedOpen.current = true
+    panelDispatch({ type: 'open', sheet: 'theme', more: false })
+  }, [brandCoachOn, previewing, panelDispatch])
   // Theme's Match your brand runs the match Ask AI runs, its reply shown in the pane.
   const brandWebsite = useBrandWebsite()
   const { reveal } = aiPane
@@ -240,8 +251,9 @@ export function DesignerShell({
         reveal()
         void startBrandMatch({ ...input, from: 'brand_kit' })
       },
+      coach: { show: brandCoach.show, dismiss: brandCoach.dismiss },
     }),
-    [ai.busy, brandWebsite, reveal, startBrandMatch]
+    [ai.busy, brandWebsite, reveal, startBrandMatch, brandCoach.show, brandCoach.dismiss]
   )
 
   useDesignerEvents({
@@ -292,6 +304,7 @@ export function DesignerShell({
     pick(key)
     focusSettings()
   }
+  const menuHot = picking.hovered === 'header' || selection === 'header'
   const pickedBlock = selection?.startsWith('block-') ? (nameOf(selection) ?? null) : null
   const caption = deviceCaption(size)
 
@@ -460,6 +473,8 @@ export function DesignerShell({
                   onKey={(key) => (key === 'undo' ? undo() : redo())}
                   onEscape={() => {
                     if (previewing) leavePreview()
+                    // The menu's hint shows while the menu is in play; Escape there closes it first.
+                    else if (coach.show && (menuHot || !!menu.hovered)) coach.dismiss()
                     else if (!menu.dismiss()) stepBack()
                   }}
                   onLoad={picking.reload}
@@ -496,7 +511,7 @@ export function DesignerShell({
                           settings={view.settings}
                           update={update}
                           editing={menu}
-                          headerHot={picking.hovered === 'header' || selection === 'header'}
+                          headerHot={menuHot}
                           coach={coach}
                           onSample={view.showSample}
                         />
