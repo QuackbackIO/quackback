@@ -139,7 +139,7 @@ describe("Home's launch plan card", () => {
       'Put Messenger on your site',
       'Publish your first article',
       'Publish your first update',
-      'Add your logo',
+      'Make the portal look like your brand',
       'Invite your team',
       'Connect an integration',
     ])
@@ -170,7 +170,7 @@ describe("Home's launch plan card", () => {
       },
     })
     expect(screen.getByText(/^Later:/).textContent).toBe(
-      'Later: Add your logo and connect an integration'
+      'Later: Make the portal look like your brand and connect an integration'
     )
   })
 
@@ -292,8 +292,10 @@ describe("Home's launch plan card", () => {
       </IntlProvider>
     )
     // German keeps its capitals and joins with "und".
-    // Branding comes before invites, so the logo is first and the team last.
-    expect(screen.getByText(/^Später:/).textContent).toMatch(/^Später: Logo hinzufügen und /)
+    // Branding comes before invites, so the brand is first and the team last.
+    expect(screen.getByText(/^Später:/).textContent).toMatch(
+      /^Später: Portal an deine Marke anpassen und /
+    )
     // The region says which language it is in; the admin document stays English.
     expect(screen.getByText(/^Später:/).closest('[lang]')).toHaveAttribute('lang', 'de')
   })

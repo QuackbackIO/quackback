@@ -116,7 +116,7 @@ describe('Launch plan page', () => {
       within(row('Share your board link')).getByRole('button', { name: 'Copy board link' })
     ).toBeVisible()
     expect(screen.getByRole('heading', { level: 2, name: 'Later' })).toBeVisible()
-    expect(within(row('Add your logo')).getByText('Done')).toBeVisible()
+    expect(within(row('Make the portal look like your brand')).getByText('Done')).toBeVisible()
   })
 
   it('leaves out a step setup did itself', () => {

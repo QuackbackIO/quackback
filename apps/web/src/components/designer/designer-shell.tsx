@@ -54,6 +54,7 @@ import { useCanvasView } from './use-canvas-view'
 import { useCountedUpdate, useDesignerEvents } from './use-designer-events'
 import { useDesignerAi } from './use-designer-ai'
 import { useDesignerPage } from './use-designer-page'
+import { useMatchOnArrival } from './use-match-on-arrival'
 import { useMenuEditing } from './use-menu-editing'
 import { usePreviewFollow } from './use-preview-follow'
 import { usePreviewMode } from './use-preview-mode'
@@ -271,6 +272,8 @@ export function DesignerShell({
     setPane('settings')
   }
   const openTheme = (more = false) => panel.dispatch({ type: 'open', sheet: 'theme', more })
+  // Onboarding's /design?match=<site>: the brand match runs into the draft; or the Brand kit opens.
+  useMatchOnArrival({ ask: ai.ask, expandAi: aiPane.expand, openBrandKit: () => openTheme() })
   const pickAndFocus = (key: Selection) => {
     pick(key)
     focusSettings()

@@ -34,6 +34,10 @@ import { CURRENT_WIDGET_SDK_VERSION, widgetSdkNeedsUpdate } from '@/lib/shared/w
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { Role } from '@/lib/shared/roles'
 import { logger } from '@/lib/server/logger'
+import { parseJsonOrNull, parsePortalConfig } from '@/lib/server/domains/settings/settings.helpers'
+import type { BrandingConfig } from '@/lib/server/domains/settings/settings.types'
+import { lookupFromRow } from '@/lib/server/domains/assistant/automatic-website-branding.state'
+import { brandStepOf } from '@/lib/server/domains/design/brand-step'
 
 const log = logger.child({ component: 'launch-status' })
 
@@ -98,7 +102,24 @@ export async function loadLaunchStatus(caller: LaunchStatusCaller) {
   const launchWindow = launchWindowFor({ setupState, workspaceCreatedAt: orgSettings?.createdAt })
   const flags = resolveFeatureFlags(orgSettings?.featureFlags)
   const permissions = permissionsForLegacyRole(caller.role)
-  const hasBranding = Boolean(orgSettings?.logoKey)
+  // In the builder the brand is the design's; on the legacy theme, the workspace logo.
+  const brandStep = orgSettings
+    ? await brandStepOf({
+        flagOn: flags.portalDesignV2,
+        legacy: {
+          ...orgSettings,
+          brandingConfig: parseJsonOrNull<BrandingConfig>(orgSettings.brandingConfig ?? null),
+          portalConfig: parsePortalConfig(orgSettings.portalConfig ?? null),
+        },
+      }).catch((error: unknown) => {
+        // The plan still shows, with the logo rule, rather than failing Home.
+        log.warn({ err: error }, 'portal design could not be read for the branding step')
+        return null
+      })
+    : null
+  const hasBranding = brandStep ? brandStep.done : Boolean(orgSettings?.logoKey)
+  // The website the logo lookup used, for the builder's brand match to start from.
+  const brandDomain = (orgSettings && lookupFromRow(orgSettings)?.domain) || null
   const hasWidgetEnabled = widgetConfig.enabled === true
   // Messenger is "live" when the widget is on and the Messages tab is shown.
   const hasMessengerEnabled = hasWidgetEnabled && (widgetConfig.tabs?.messenger ?? true)
@@ -145,6 +166,8 @@ export async function loadLaunchStatus(caller: LaunchStatusCaller) {
     memberCount: humanMembers.length,
     hasTeamInvite: humanMembers.some((member) => member.teamInvited),
     hasBranding,
+    brandInBuilder: Boolean(brandStep),
+    brandDomain,
     hasWidgetInstalled: Boolean(orgSettings?.widgetInstalledFirstSeenAt),
     widgetOriginHost: orgSettings?.widgetInstalledOriginHost ?? null,
     widgetLastDetectedAt: orgSettings?.widgetInstalledLastSeenAt

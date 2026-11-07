@@ -35,7 +35,15 @@ export interface LaunchStatus {
   memberCount: number
   /** A teammate has been invited, whether or not they have joined yet. */
   hasTeamInvite?: boolean
+  /**
+   * The portal carries the brand: in the builder, a brand match has run or the
+   * Brand kit has an icon, colour and font; otherwise the workspace has a logo.
+   */
   hasBranding: boolean
+  /** The portal's look is edited in the builder (the portal design engine). */
+  brandInBuilder?: boolean
+  /** The brand's website, for the builder's brand match, when known. */
+  brandDomain?: string | null
   hasWidgetInstalled?: boolean
   widgetOriginHost?: string | null
   widgetLastDetectedAt?: string | null
@@ -86,6 +94,7 @@ export type LaunchTaskHref =
   | '/admin/changelog'
   | '/admin/status'
   | '/admin'
+  | '/design'
 
 export type LaunchTaskAvailability = 'available' | 'blocked' | 'complete'
 export type LaunchTaskClassification = 'prerequisite' | 'polish' | 'first_win'
@@ -421,16 +430,29 @@ function buildOutcomeTasks(
     actionLabel: 'Invite teammate',
     completedLabel: 'Manage team',
   }
+  // In the builder the step hands off to the brand match on the brand's website.
   const branding: LaunchTaskInput = {
     id: 'customize-branding',
-    title: 'Add your logo',
-    description: 'Make your portal, widget, and emails feel like your brand.',
+    title: 'Make the portal look like your brand',
+    description: 'Your logo, colours and fonts, so customers know it is you.',
     completed: status.hasBranding,
     canAct: permissions.brandingManage,
     classification: 'polish',
-    href: '/admin/settings/general',
-    actionLabel: 'Add logo',
-    completedLabel: 'Edit branding',
+    ...(status.brandInBuilder
+      ? {
+          href: '/design' as const,
+          search: {
+            ...(status.brandDomain ? { match: status.brandDomain } : {}),
+            from: 'onboarding',
+          },
+          actionLabel: 'Match your brand',
+          completedLabel: 'Edit brand',
+        }
+      : {
+          href: '/admin/settings/general' as const,
+          actionLabel: 'Add logo',
+          completedLabel: 'Edit branding',
+        }),
   }
   const integration: LaunchTaskInput = {
     id: 'connect-integration',

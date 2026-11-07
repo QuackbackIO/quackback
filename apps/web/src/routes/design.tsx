@@ -14,7 +14,9 @@ export const Route = createFileRoute('/design')({
   validateSearch: z.object({
     path: z.string().optional(),
     /** Where the builder was opened from, for product analytics. */
-    from: z.enum(['portal', 'appearance']).optional().catch(undefined),
+    from: z.enum(['portal', 'appearance', 'onboarding']).optional().catch(undefined),
+    /** A website to match the brand from on arrival, as onboarding's branding step links it. */
+    match: z.string().max(253).optional().catch(undefined),
   }),
   beforeLoad: async ({ search, context }) => {
     const returnPath = designerReturnPath(search.path)
