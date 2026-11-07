@@ -12,6 +12,7 @@ import type { WidgetTranslations } from '@/lib/shared/widget/translations'
 import type { StatusSettings } from '@/lib/shared/status-settings'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 import type { OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
+import type { PortalDesignView } from '@/lib/shared/design/view'
 // Vite aliases this to a no-op stub for the client bundle (see
 // logger.client-stub.ts), so it is safe for this otherwise client-bundled
 // module to import it for the one server-side parse-failure log below.
@@ -1116,6 +1117,10 @@ export interface WorkspaceSettings {
   publicWidgetConfig: PublicWidgetConfig
   /** Product availability flags */
   featureFlags: FeatureFlags
+  /** The design portal pages render with. Absent means today's theme. */
+  portalDesign?: PortalDesignView
+  /** On today's theme only for its own CSS: Settings › Portal offers the switch. */
+  portalDesignSwitchable?: true
   brandingData: SettingsBrandingData
   faviconData: { url: string } | null
   /** Dot-paths managed by `/etc/quackback/config.yaml`. Matching in-app
@@ -1157,6 +1162,17 @@ export interface FeatureFlags {
   /** Status page: public/private/segment-scoped service status with incidents,
    *  maintenance windows, uptime history, and subscriber notifications. */
   statusPage: boolean
+  /** The portal design engine: portal pages render from a design document
+   *  (published, or converted from the branding settings) instead of today's
+   *  theme. A Labs switch; off by default. */
+  portalDesignV2: boolean
+  /** The portal designer: a Customise button in the portal header that opens
+   *  the page in a full-page designer. Needs the portal design engine. A Labs
+   *  switch; off by default. */
+  /** After a brand match from screenshots, check the drawn preview against what
+   *  was measured and keep only revisions that measure better (up to three
+   *  rounds, about 40s more). A Labs switch; off by default. */
+  brandCheckLoop: boolean
 }
 
 /**
@@ -1232,12 +1248,30 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   supportInbox: false,
   supportTickets: false,
   statusPage: false,
+  portalDesignV2: false,
+  brandCheckLoop: false,
+}
+
+/** Flags that are Labs switches rather than products (Settings › Labs). */
+export const LABS_FEATURE_FLAGS = [
+  'portalDesignV2',
+  'brandCheckLoop',
+] as const satisfies readonly (keyof FeatureFlags)[]
+
+/**
+ * Flags a workspace is created with: the defaults plus the portal design
+ * engine. Existing workspaces turn the design engine on in Labs.
+ */
+export const NEW_WORKSPACE_FEATURE_FLAGS: FeatureFlags = {
+  ...DEFAULT_FEATURE_FLAGS,
+  portalDesignV2: true,
 }
 
 /**
  * A new workspace's flags when its row was created bare (by an operator):
- * Changelog follows the goals when the row never stored it. A stored choice
- * always stands.
+ * each Labs flag new workspaces start with that the row never stored is
+ * filled from NEW_WORKSPACE_FEATURE_FLAGS, and Changelog follows the goals
+ * when the row never stored it. A stored choice always stands.
  */
 export function withNewWorkspaceFlags(
   storedJson: string | null | undefined,
@@ -1246,6 +1280,9 @@ export function withNewWorkspaceFlags(
 ): FeatureFlags {
   const stored = parseStoredFeatureFlags(storedJson)
   const next = { ...flags }
+  for (const key of LABS_FEATURE_FLAGS) {
+    if (typeof stored[key] !== 'boolean') next[key] = NEW_WORKSPACE_FEATURE_FLAGS[key]
+  }
   if (goals && typeof stored.changelog !== 'boolean') {
     next.changelog = newWorkspaceBaseFlags(goals).changelog
   }
@@ -1255,7 +1292,7 @@ export function withNewWorkspaceFlags(
 /** A new workspace's flags before its goals add their modules. */
 export function newWorkspaceBaseFlags(goals: readonly FeatureFlagUseCase[]): FeatureFlags {
   return {
-    ...DEFAULT_FEATURE_FLAGS,
+    ...NEW_WORKSPACE_FEATURE_FLAGS,
     changelog: goals.length === 0 || goals.includes('product_feedback'),
   }
 }
@@ -1327,7 +1364,7 @@ export const PRODUCT_DEFINITIONS = [
   {
     id: 'feedback',
     label: 'Feedback & Roadmaps',
-    description: 'Collect ideas, votes, and comments from customers and share your roadmap.',
+    description: 'Collect posts, votes and comments from customers and share your roadmap.',
     featureFlags: ['feedback'],
     adminPath: '/admin/feedback',
   },

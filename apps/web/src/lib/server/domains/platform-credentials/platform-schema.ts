@@ -144,12 +144,12 @@ export function envKeyFor(integrationType: string, fieldKey: string): string {
 // =============================================================================
 
 /**
- * Every AI variable name is either `OPENAI_*` or `AI_*`. The derivation asserts
+ * Every AI variable name is `OPENAI_*`, `ANTHROPIC_*` or `AI_*`. The derivation asserts
  * this in both directions so a key filed under the wrong comment section, or an
  * AI-shaped key added outside the AI section, fails rather than quietly dropping
  * out of the artifact.
  */
-const AI_KEY_PATTERN = /^(?:AI|OPENAI)_/
+const AI_KEY_PATTERN = /^(?:AI|OPENAI|ANTHROPIC)_/
 
 /** Body of `function name(...) { ... }`, matched on the closing brace at column 0. */
 function extractFunctionBody(source: string, name: string): string {
@@ -212,7 +212,9 @@ export function deriveAiKeys(configSource: string): AiKeySchema[] {
   // be shaped otherwise. Either direction would silently shrink the artifact.
   for (const { envKey } of mapping) {
     if (!AI_KEY_PATTERN.test(envKey)) {
-      throw new Error(`config.ts: ${envKey} is in the AI section but is not an AI_/OPENAI_ key`)
+      throw new Error(
+        `config.ts: ${envKey} is in the AI section but is not an AI_/OPENAI_/ANTHROPIC_ key`
+      )
     }
   }
   const inAiSection = new Set(mapping.map((e) => e.envKey))

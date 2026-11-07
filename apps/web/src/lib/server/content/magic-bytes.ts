@@ -125,3 +125,20 @@ export function sniffVideoMime(buf: Buffer): SniffedVideoMime | null {
 
   return null
 }
+
+/**
+ * The font format the bytes are, by signature: woff2 (`wOF2`), woff
+ * (`wOFF`), an OpenType font with CFF outlines (`OTTO`), or a TrueType
+ * one (version 1.0, or `true`); null for anything else.
+ */
+export function sniffFontFormat(buf: Uint8Array): 'woff2' | 'woff' | 'ttf' | 'otf' | null {
+  if (startsWithAt(buf, 0, [0x77, 0x4f, 0x46, 0x32])) return 'woff2'
+  if (startsWithAt(buf, 0, [0x77, 0x4f, 0x46, 0x46])) return 'woff'
+  if (startsWithAt(buf, 0, [0x4f, 0x54, 0x54, 0x4f])) return 'otf'
+  if (
+    startsWithAt(buf, 0, [0x00, 0x01, 0x00, 0x00]) ||
+    startsWithAt(buf, 0, [0x74, 0x72, 0x75, 0x65])
+  )
+    return 'ttf'
+  return null
+}

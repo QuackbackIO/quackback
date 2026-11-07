@@ -1,10 +1,11 @@
 import { defineConfig } from 'vitest/config'
 import path from 'path'
 import { serverWorkers } from './apps/web/src/lib/build/server-workers'
+import { fontManifest } from './apps/web/src/lib/build/font-manifest'
 
 export default defineConfig({
   // Server code imports its worker-thread scripts with `?server-worker`.
-  plugins: [serverWorkers()],
+  plugins: [serverWorkers(), fontManifest(path.resolve(__dirname, 'apps/web/src'))],
   test: {
     globals: true,
     environment: 'node',
