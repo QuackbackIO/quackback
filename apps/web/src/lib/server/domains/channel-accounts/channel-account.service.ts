@@ -411,26 +411,6 @@ export async function clearInboundForwarding(owningTeamId: TeamId): Promise<Chan
   return row
 }
 
-/** Per-address SMTP override on a sending identity. Pass null to clear. */
-export async function updateSendingAddressSmtp(input: {
-  id: ChannelAccountId
-  smtp: NonNullable<ChannelAccountConfig['smtp']> | null
-}): Promise<ChannelAccount> {
-  const existing = await getChannelAccount(input.id)
-  if (!existing || existing.role !== 'sending') {
-    throw new Error('That sending address no longer exists.')
-  }
-  const config: ChannelAccountConfig = { ...existing.config }
-  if (input.smtp) config.smtp = input.smtp
-  else delete config.smtp
-  const [row] = await db
-    .update(channelAccounts)
-    .set({ config, updatedAt: new Date() })
-    .where(eq(channelAccounts.id, existing.id))
-    .returning()
-  return row
-}
-
 /** Thrown when an address a workspace already uses for something else is added
  *  as a sending identity. Readable, because the only caller is a person who
  *  typed it into a settings form. */

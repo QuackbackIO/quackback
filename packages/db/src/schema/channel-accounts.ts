@@ -2,7 +2,7 @@
  * Email channel accounts (support platform §4.8 Layer 2). `channelAccounts` holds
  * two row roles for email — one `inbound` route per workspace (the front door,
  * config in JSONB) that a conversation's `channel_account_id` points at, and N
- * `sending` addresses (the verified From identities per module). `emailSendingDomains`
+ * `sending` addresses (the From identities `email_senders` chooses between). `emailSendingDomains`
  * are the SPF/DKIM-verified domains a sending address belongs to. Per-workspace DB
  * connection, so no workspace column. Inert until the cold-inbound/outbound slices.
  */
@@ -209,8 +209,9 @@ export const emailSendingDomains = pgTable(
   ]
 )
 
-/** JSONB config, role-shaped: inbound routes carry the transport + poll cursor;
- *  sending addresses carry their optional per-address SMTP override. */
+/** JSONB config, role-shaped: inbound routes carry the transport + poll cursor.
+ *  Some sending rows still hold a `smtp` key from a per-address override that
+ *  was saved but never used for sending; nothing reads or writes it now. */
 export interface ChannelAccountConfig {
   // inbound role
   forwardingTarget?: string
@@ -222,8 +223,6 @@ export interface ChannelAccountConfig {
   provider?: 'imap' | 'resend' | 'cloudflare'
   imap?: { host: string; port: number; secure: boolean; user: string }
   cursor?: { uidValidity: number; lastUid: number }
-  // sending role
-  smtp?: { host: string; port: number; secure: boolean; user: string }
   // connection role: reference to an integration-framework credential.
   // Secrets stay on the integration row, never in this JSONB.
   integrationId?: string

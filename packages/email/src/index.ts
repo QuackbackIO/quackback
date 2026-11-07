@@ -49,7 +49,6 @@ import { MagicLinkEmail } from './templates/magic-link'
 import { SignupNotAllowedEmail } from './templates/signup-not-allowed'
 import { InvitationEmail, type InvitationEmailCopy } from './templates/invitation'
 import { PortalInviteEmail } from './templates/portal-invite'
-import { WelcomeEmail } from './templates/welcome'
 import { MessengerInstallEmail } from './templates/messenger-install'
 import { OnboardingEmail, type OnboardingEmailContent } from './templates/onboarding-email'
 import { StatusChangeEmail } from './templates/status-change'
@@ -63,7 +62,6 @@ import { PostMentionEmail } from './templates/post-mention'
 import { NoteMentionEmail } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
-import { FeedbackLinkedEmail } from './templates/feedback-linked'
 import { PasswordResetEmail } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 import {
@@ -593,7 +591,7 @@ async function sendEmail(
     react: React.ReactElement
     /** Conversation-specific reply address (e.g. plus-addressed inbound). */
     replyTo?: string
-    /** Override the workspace EMAIL_FROM (e.g. a per-team sending address). */
+    /** Override the workspace EMAIL_FROM (a sending address the guard permitted). */
     from?: SendingIdentity
     /** Template name, for the dev preview line. */
     emailType?: string
@@ -699,31 +697,6 @@ export async function sendPortalInviteEmail(params: SendPortalInviteParams): Pro
     emailType: 'PortalInviteEmail',
     workspaceName,
     preview: { inviteLink },
-  })
-}
-
-// ============================================================================
-// Welcome Email
-// ============================================================================
-
-interface SendWelcomeParams {
-  to: string
-  name: string
-  workspaceName: string
-  dashboardUrl: string
-  logoUrl?: string
-}
-
-export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<EmailResult> {
-  const { to, name, workspaceName, dashboardUrl, logoUrl } = params
-
-  return sendEmail({
-    to,
-    subject: `Welcome to ${workspaceName} on Quackback!`,
-    react: WelcomeEmail({ name, workspaceName, dashboardUrl, logoUrl }),
-    emailType: 'WelcomeEmail',
-    workspaceName,
-    preview: { dashboardUrl },
   })
 }
 
@@ -1711,57 +1684,6 @@ export async function sendChangelogPublishedEmail(
 }
 
 // ============================================================================
-// Feedback Linked Email
-// ============================================================================
-
-interface SendFeedbackLinkedParams {
-  to: string
-  recipientName?: string
-  postTitle: string
-  postUrl: string
-  workspaceName: string
-  unsubscribeUrl: string
-  preferencesUrl?: string
-  attributedByName?: string
-  logoUrl?: string
-}
-
-export async function sendFeedbackLinkedEmail(
-  params: SendFeedbackLinkedParams
-): Promise<EmailResult> {
-  const {
-    to,
-    recipientName,
-    postTitle,
-    postUrl,
-    workspaceName,
-    unsubscribeUrl,
-    preferencesUrl,
-    attributedByName,
-    logoUrl,
-  } = params
-
-  return sendEmail({
-    to,
-    subject: `Your feedback has been linked to "${postTitle}"`,
-    react: FeedbackLinkedEmail({
-      recipientName,
-      postTitle,
-      postUrl,
-      workspaceName,
-      unsubscribeUrl,
-      preferencesUrl,
-      attributedByName,
-      logoUrl,
-    }),
-    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
-    emailType: 'FeedbackLinkedEmail',
-    workspaceName,
-    preview: { postUrl },
-  })
-}
-
-// ============================================================================
 // Status Incident Published Email
 // ============================================================================
 
@@ -1970,7 +1892,6 @@ export async function sendCsatRequestEmail(
 
 export { InvitationEmail } from './templates/invitation'
 export { PortalInviteEmail } from './templates/portal-invite'
-export { WelcomeEmail } from './templates/welcome'
 export { MessengerInstallEmail } from './templates/messenger-install'
 export { OnboardingEmail } from './templates/onboarding-email'
 export { MagicLinkEmail } from './templates/magic-link'
@@ -1979,7 +1900,6 @@ export { StatusChangeEmail } from './templates/status-change'
 export { NewCommentEmail } from './templates/new-comment'
 export { PostMentionEmail } from './templates/post-mention'
 export { ChangelogPublishedEmail } from './templates/changelog-published'
-export { FeedbackLinkedEmail } from './templates/feedback-linked'
 export { PasswordResetEmail } from './templates/password-reset'
 export { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 export {

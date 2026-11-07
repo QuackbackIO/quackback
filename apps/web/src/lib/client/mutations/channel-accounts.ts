@@ -8,7 +8,6 @@ import {
   deleteChannelAccountFn,
   updateInboundTrustFn,
   clearInboundForwardingFn,
-  updateSendingAddressSmtpFn,
   sendTestEmailFn,
   updateSendingAddressNameFn,
   setEmailSenderFn,
@@ -69,11 +68,3 @@ export const useUpdateInboundTrust = () =>
   )
 
 export const useClearInboundForwarding = () => useConfigMutation(() => clearInboundForwardingFn())
-
-export const useUpdateSendingAddressSmtp = () =>
-  useConfigMutation(
-    (data: {
-      id: string
-      smtp: { host: string; port: number; secure: boolean; user: string } | null
-    }) => updateSendingAddressSmtpFn({ data })
-  )
