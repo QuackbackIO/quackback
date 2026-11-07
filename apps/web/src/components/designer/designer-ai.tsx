@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import type { AiElementPick, DesignAiScope } from '@/lib/shared/design/apply-changes'
-import type { Selection } from '@/lib/shared/design/outline'
+import type { DesignerPage, Selection } from '@/lib/shared/design/outline'
 import { heroOf, writeHero } from '@/lib/shared/design/hero'
 import { isMenuSelection } from '@/lib/shared/design/menu'
 import { siteCaptureUsageFn } from '@/lib/server/functions/site-capture'
@@ -54,17 +54,21 @@ export function aiScopeOf(selection: Selection | null): {
 /** The id of Ask AI's request box, which "/" focuses. */
 export const AI_BOX_ID = 'designer-ai-box'
 
-/** Before the first request: one line, and what to start from for this portal. */
+/** Before the first request: one line, and what to start from for this portal, page and pick. */
 function AiEmpty({
   design,
   gates,
+  page,
+  selection,
   onStarter,
 }: {
   design: PortalDesign
   gates?: Partial<PortalPageGates>
+  page?: DesignerPage
+  selection: Selection | null
   onStarter: (text: string) => void
 }) {
-  const starters = aiStarters(design, gates)
+  const starters = aiStarters(design, gates, { ...(page ? { page } : {}), selection })
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-3 py-8 text-center">
       <span className="grid size-10 place-items-center rounded-full border border-border">
@@ -133,6 +137,7 @@ export function DesignerAi({
   selectionName,
   element = null,
   elementName = null,
+  page,
   pageName,
   update,
   onClearSelection,
@@ -150,6 +155,8 @@ export function DesignerAi({
   element?: AiElementPick | null
   /** The picked element's own name, "Call to action", which the chip leads with. */
   elementName?: string | null
+  /** The page shown, which the starters keep to with nothing picked. */
+  page?: DesignerPage
   /** The page shown, which the picked part is on. */
   pageName: string
   update: Update
@@ -212,7 +219,13 @@ export function DesignerAi({
         className="min-h-0 flex-1 overflow-y-auto px-4 py-3"
       >
         {available && ai.turns.length === 0 ? (
-          <AiEmpty design={draft.design} gates={gates} onStarter={fill} />
+          <AiEmpty
+            design={draft.design}
+            gates={gates}
+            page={page}
+            selection={selection}
+            onStarter={fill}
+          />
         ) : (
           <AskAiPanel
             available={available}

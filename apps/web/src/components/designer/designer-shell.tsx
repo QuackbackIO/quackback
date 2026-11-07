@@ -410,6 +410,7 @@ export function DesignerShell({
                 elementName={
                   pickedElement ? pickLabel(pickedElement, design, backgroundPageOf(page)) : null
                 }
+                page={page}
                 pageName={PAGE_NAMES[page]}
                 update={update}
                 onClearSelection={() => setSelection(null)}
