@@ -2,7 +2,7 @@
  * Email channel accounts (support platform §4.8 Layer 2). `channelAccounts` holds
  * two row roles for email — one `inbound` route per workspace (the front door,
  * config in JSONB) that a conversation's `channel_account_id` points at, and N
- * `sending` addresses (the verified From identities per module). `emailSendingDomains`
+ * `sending` addresses (the From identities `email_senders` chooses between). `emailSendingDomains`
  * are the SPF/DKIM-verified domains a sending address belongs to. Per-workspace DB
  * connection, so no workspace column. Inert until the cold-inbound/outbound slices.
  */

@@ -1411,7 +1411,7 @@ function agentFacingConfig(
 
 /**
  * One target per recipient, routing the requester to requesterFacingConfig
- * (portal CTA, per-team From, reply-by-email) and every other watcher to
+ * (portal CTA, the ticket's sender, reply-by-email) and every other watcher to
  * agentFacingConfig (inbox CTA, branded From). Shared by the replied + resolved
  * builders, whose only differences are `kind` and the carried facts.
  */
@@ -1522,7 +1522,7 @@ export async function getTicketCreatedEmailTargets(
  * the emailable (customer-ticket) requester while they watch, minus the actor,
  * filtered by email preference. Each recipient gets kind `reply` with the
  * full reply body; the requester's target is requester-facing (portal CTA,
- * per-team From, reply-by-email), agent watchers get the inbox CTA and branded
+ * the ticket's sender, reply-by-email), agent watchers get the inbox CTA and branded
  * From (D3 sequencing note).
  */
 export async function getTicketRepliedEmailTargets(
