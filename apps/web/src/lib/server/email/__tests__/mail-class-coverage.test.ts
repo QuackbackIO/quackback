@@ -58,10 +58,7 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
   // public script tag every visitor's browser already loads; it grants nothing.
   sendMessengerInstallEmail: 'contact',
 
-  // Exported with no production caller. Classified rather than deleted so the
-  // decision to remove them is a separate, deliberate change.
-  sendWelcomeEmail: 'unused',
-  sendFeedbackLinkedEmail: 'unused',
+  // No template and no recipient of its own: the caller picks both.
   sendRawEmail: 'unused',
 }
 
