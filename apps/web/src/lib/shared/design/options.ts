@@ -1,4 +1,3 @@
-import { COLOUR_ROLES } from '../content-html'
 import { COMPOSER_WIDTHS } from './composer-width'
 
 /**
@@ -45,7 +44,8 @@ export const DESIGN_OPTIONS = {
   /** How a blend band runs: in a line, as a soft mesh beside the words, or as a diagonal ribbon beside them. */
   blend: ['linear', 'mesh', 'ribbon'],
   /** A colour of the brand's: the brand colour, the second, or one of up to two more. */
-  colourRole: COLOUR_ROLES,
+  /** The same list as content-html's COLOUR_ROLES (kept apart so neither loads the other). */
+  colourRole: ['accent', 'support', 'extra1', 'extra2'],
   /** Where the band's words sit. */
   bandAlign: ['left', 'centre'],
   /**
