@@ -7,6 +7,8 @@ import type { ThemeConfig } from '@/lib/shared/theme/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import type { AutomaticBrandingStatus } from '@/lib/shared/website-branding'
+import type { DesignAuthor } from '@/lib/server/domains/design/design.service'
+import { logger } from '@/lib/server/logger'
 import { settingsProposalSchema } from '@/lib/shared/assistant/settings-proposals'
 import {
   applySettingsChangesInTransaction,
@@ -36,6 +38,8 @@ import {
   type BrandingLookup,
   type BrandingOffer,
 } from './automatic-website-branding.state'
+
+const log = logger.child({ component: 'automatic-website-branding' })
 
 /** An explicit appearance or custom CSS keeps the administrator's chosen theme. */
 function hasDefaultTheme(row: SettingsRecord): boolean {
@@ -133,12 +137,16 @@ async function lockedLookup(tx: Transaction, actor: Actor) {
   return { row, person, lookup: lookupFromRow(row) }
 }
 
-/** "Use it": apply an offered logo, with Undo after. */
+/**
+ * "Use it": apply an offered logo, with Undo after. On a portal drawn from a
+ * published design the logo and colour also go into the design's draft,
+ * where the portal reads its brand; the settings alone would not show.
+ */
 export async function acceptWebsiteBrandingOffer(
   actor: Actor
 ): Promise<AutomaticBrandingStatus | null> {
   const customColors = await customColorsAllowed()
-  const result = await db.transaction(async (tx) => {
+  const { status, draft } = await db.transaction(async (tx) => {
     const { row, person, lookup } = await lockedLookup(tx, actor)
     if (lookup?.status !== 'offered' || row.logoKey) throw automaticBrandingUnavailable()
     const receipt = await applyOffer(tx, person, row, lookup.offer, {
@@ -153,10 +161,33 @@ export async function acceptWebsiteBrandingOffer(
     })
     await auditAutomaticBranding(tx, person, 'branding.website.applied', row.id, next, receipt)
     const [after] = await tx.select().from(settings).limit(1)
-    return presentLookup(after, next, person.permissions)
+    return {
+      status: presentLookup(after, next, person.permissions),
+      draft: {
+        found: {
+          logoKey: after.logoKey ?? null,
+          colour:
+            customColors && person.permissions.has(PERMISSIONS.SETTINGS_BRANDING)
+              ? lookup.offer.color
+              : null,
+        },
+        author: {
+          principalId: person.actor.principalId!,
+          actor: { userId: person.userId, email: person.email, role: person.role, type: 'user' },
+        } satisfies DesignAuthor,
+      },
+    }
   })
   await invalidateSettingsCache()
-  return result
+  try {
+    const { websiteBrandingIntoDraft } =
+      await import('@/lib/server/domains/design/website-branding-draft')
+    await websiteBrandingIntoDraft(draft.found, draft.author)
+  } catch (error) {
+    // The settings are applied; the draft is a second home, so its failure is logged, not thrown.
+    log.error({ err: error }, 'website branding could not reach the design draft')
+  }
+  return status
 }
 
 /** "Not now": keep the default logo and stop offering this one. */

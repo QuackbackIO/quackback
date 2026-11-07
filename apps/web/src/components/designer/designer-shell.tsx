@@ -27,6 +27,7 @@ import { CanvasLayer } from './canvas-layer'
 import { DesignerAi } from './designer-ai'
 import { DesignerCanvas } from './designer-canvas'
 import { ElementPanel, elementPanelKey } from './element-panel'
+import { revealThemeFonts } from './brand-kit-fonts'
 import { usePickReach } from './use-pick-reach'
 import { backgroundPageOf } from '@/lib/shared/design/page-background'
 import { partOf, partSelector } from '@/lib/shared/design/parts-registry'
@@ -57,6 +58,7 @@ import { useCanvasView } from './use-canvas-view'
 import { useCountedUpdate, useDesignerEvents } from './use-designer-events'
 import { useDesignerAi } from './use-designer-ai'
 import { useDesignerPage } from './use-designer-page'
+import { useMatchOnArrival } from './use-match-on-arrival'
 import { useMenuEditing } from './use-menu-editing'
 import { usePreviewFollow } from './use-preview-follow'
 import { usePreviewMode } from './use-preview-mode'
@@ -300,6 +302,12 @@ export function DesignerShell({
     setPane('settings')
   }
   const openTheme = (more = false) => panel.dispatch({ type: 'open', sheet: 'theme', more })
+  // Onboarding's /design?match=<site>: the brand match runs into the draft; or the Brand kit opens.
+  useMatchOnArrival({
+    start: (site) => void startBrandMatch({ website: site, from: 'onboarding' }),
+    showAi: aiPane.expand,
+    openBrandKit: () => openTheme(),
+  })
   const pickAndFocus = (key: Selection) => {
     pick(key)
     focusSettings()
@@ -407,6 +415,11 @@ export function DesignerShell({
                 onClearSelection={() => setSelection(null)}
                 onCollapse={aiPane.collapse}
                 gates={gates}
+                onFonts={(font) => {
+                  openTheme()
+                  setPane('settings')
+                  revealThemeFonts(font)
+                }}
               />
             </AiPane>
           )}

@@ -53,7 +53,7 @@ export const PART_IDS: readonly PartId[] = [
 ]
 
 const PAGES = Object.keys(PAGE_NAMES) as Array<keyof typeof PAGE_NAMES>
-export const ENTRIES = ['portal', 'appearance', 'direct'] as const
+export const ENTRIES = ['portal', 'appearance', 'onboarding', 'direct'] as const
 export const PANELS = [
   'overview',
   'settings',

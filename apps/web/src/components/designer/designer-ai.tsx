@@ -18,7 +18,7 @@ import { heroOf, writeHero } from '@/lib/shared/design/hero'
 import { isMenuSelection } from '@/lib/shared/design/menu'
 import { siteCaptureUsageFn } from '@/lib/server/functions/site-capture'
 import { aiStarters, hasMatched, MATCH_HINT, MATCH_STARTER } from '@/lib/shared/design/ai-starters'
-import { websiteIn } from '@/lib/shared/design/match-brand'
+import { websiteIn, type UnmatchedFont } from '@/lib/shared/design/match-brand'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { BrandLogoCard } from './brand-logo-card'
@@ -138,6 +138,7 @@ export function DesignerAi({
   onClearSelection,
   onCollapse,
   gates,
+  onFonts,
 }: {
   /** The conversation, kept by the designer so a match made in the inspector joins it. */
   ai: ReturnType<typeof useDesignAi>
@@ -157,6 +158,8 @@ export function DesignerAi({
   onCollapse: () => void
   /** Which pages the workspace has, so a suggestion never asks for one it lacks. */
   gates?: Partial<PortalPageGates>
+  /** Opens Theme's Brand kit fonts, with the upload for a font a brand match could not match. */
+  onFonts?: (font?: UnmatchedFont) => void
 }) {
   const { available } = useSuspenseQuery(portalDesignQueries.aiStatus()).data
   const { scope, blockId } = aiScopeOf(selection)
@@ -233,6 +236,10 @@ export function DesignerAi({
             }}
             onChip={fill}
             onRecapture={(url) => void ai.recapture(url)}
+            {...(onFonts && {
+              onUploadFont: (font: UnmatchedFont) => onFonts(font),
+              onFonts: () => onFonts(),
+            })}
             onHeroPhoto={(key) =>
               update((draft) => writeHero(draft, { ...heroOf(draft), image: { key } }, 'image'))
             }

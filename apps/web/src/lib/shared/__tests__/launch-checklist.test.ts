@@ -303,3 +303,35 @@ describe('launchPlanLeadsHome', () => {
     expect(launchPlanLeadsHome(undefined)).toBe(false)
   })
 })
+
+describe('the branding step', () => {
+  const branding = (status: Partial<LaunchStatus>) =>
+    buildLaunchTasks({ ...base, ...status }).find((task) => task.id === 'customize-branding')!
+
+  it('is about the portal looking like the brand, not a logo', () => {
+    expect(branding({}).title).toBe('Make the portal look like your brand')
+  })
+
+  it('hands off to the builder brand match with the website when the portal is in the builder', () => {
+    const task = branding({ brandInBuilder: true, brandDomain: 'acme.com' })
+    expect(task.href).toBe('/design')
+    expect(task.search).toEqual({ match: 'acme.com', from: 'onboarding' })
+  })
+
+  it('opens the builder without a match when the website is not known', () => {
+    const task = branding({ brandInBuilder: true, brandDomain: null })
+    expect(task.href).toBe('/design')
+    expect(task.search).toEqual({ from: 'onboarding' })
+  })
+
+  it('keeps the workspace logo page for a portal not in the builder', () => {
+    const task = branding({ brandInBuilder: false, brandDomain: 'acme.com' })
+    expect(task.href).toBe('/admin/settings/general')
+    expect(task.search).toBeUndefined()
+  })
+
+  it('is done when the brand is set', () => {
+    expect(branding({ hasBranding: true }).isCompleted).toBe(true)
+    expect(branding({ hasBranding: false }).isCompleted).toBe(false)
+  })
+})

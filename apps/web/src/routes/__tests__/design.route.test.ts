@@ -53,6 +53,23 @@ describe('/design', () => {
   })
 })
 
+describe('/design search', () => {
+  const validate = (
+    Route as unknown as { options: { validateSearch: { parse: (s: object) => object } } }
+  ).options.validateSearch
+
+  it("keeps onboarding's brand match and where it came from", () => {
+    expect(validate.parse({ match: 'acme.com', from: 'onboarding' })).toEqual({
+      match: 'acme.com',
+      from: 'onboarding',
+    })
+  })
+
+  it('drops an entry it does not know', () => {
+    expect(validate.parse({ from: 'elsewhere' })).toEqual({})
+  })
+})
+
 describe('/design head', () => {
   type Head = (ctx: object) => { links?: Array<{ rel: string; href: string }> }
   const head = (Route as unknown as { options: { head: Head } }).options.head

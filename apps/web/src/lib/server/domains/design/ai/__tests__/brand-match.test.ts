@@ -622,6 +622,35 @@ describe('brandMatch with the brand’s site read', () => {
     expect(voice.prompt).not.toContain('Parcels delivered the same day')
   })
 
+  it('names the site’s own face it could only draw in the nearest, for the reply’s upload', async () => {
+    const { deps, input } = setup({ storeAsset: vi.fn(async () => 'logos/x.png') })
+    const own = { family: 'Acme Grotesk', stack: ['Acme Grotesk', 'sans-serif'] }
+    const result = (await brandMatch(
+      {
+        ...input,
+        site: {
+          ...site,
+          facts: {
+            ...site.facts,
+            fonts: {
+              ...site.facts.fonts,
+              heading: { ...site.facts.fonts.heading, ...own },
+              body: { ...site.facts.fonts.body, ...own },
+            },
+          },
+        },
+      },
+      deps
+    )) as BrandMatchResult
+    expect(result.font).toEqual({ family: 'Acme Grotesk', slot: 'both' })
+  })
+
+  it('names no face to upload when the site’s faces are bundled', async () => {
+    const { deps, input } = setup({ storeAsset: vi.fn(async () => 'logos/x.png') })
+    const result = (await brandMatch({ ...input, site }, deps)) as BrandMatchResult
+    expect(result.font ?? null).toBeNull()
+  })
+
   it('leaves a site read that met a bot wall out', async () => {
     const { deps, input } = setup({ storeAsset: vi.fn(async () => 'logos/x.png') })
     const result = (await brandMatch(

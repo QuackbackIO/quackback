@@ -23,6 +23,7 @@ import {
   siteName,
   svgAspect,
   svgColours,
+  unmatchedSiteFont,
   withSiteColours,
 } from '../brand-site'
 
@@ -334,5 +335,50 @@ describe('siteName', () => {
       siteName(facts({ url: 'https://www.acme.co.uk/', nameFrom: 'title', name: 'acme' }))
     ).toBe('acme')
     expect(siteName(null)).toBeNull()
+  })
+})
+
+describe('unmatchedSiteFont', () => {
+  const planOf = (heading: FontFact | null, body: FontFact | null) =>
+    siteFontPlan(facts({ fonts: { heading, body, faces: [], hosted: [] } }))
+
+  it('names a heading face the portal does not bundle, for its upload', () => {
+    const plan = planOf(fact(['Acme Display', 'Georgia', 'serif'], 'serif'), fact(['Inter']))
+    expect(unmatchedSiteFont(plan, defaultDesign())).toEqual({
+      family: 'Acme Display',
+      slot: 'heading',
+    })
+  })
+
+  it('names a body face alone when the headings are bundled', () => {
+    const plan = planOf(fact(['Fraunces'], 'serif'), fact(['Acme Text', 'sans-serif']))
+    expect(unmatchedSiteFont(plan, defaultDesign())).toEqual({ family: 'Acme Text', slot: 'body' })
+  })
+
+  it('uses one face for both when the site does', () => {
+    const plan = planOf(null, fact(['Acme Sans', 'sans-serif']))
+    expect(unmatchedSiteFont(plan, defaultDesign())).toEqual({ family: 'Acme Sans', slot: 'both' })
+  })
+
+  it('names nothing when every face is bundled, or none was named', () => {
+    expect(
+      unmatchedSiteFont(planOf(fact(['Fraunces']), fact(['Inter'])), defaultDesign())
+    ).toBeNull()
+    expect(unmatchedSiteFont(planOf(null, null), defaultDesign())).toBeNull()
+    expect(
+      unmatchedSiteFont(planOf(fact(['system-ui', 'sans-serif']), null), defaultDesign())
+    ).toBeNull()
+  })
+
+  it('names nothing once that family is uploaded', () => {
+    const design = defaultDesign()
+    design.brand.fonts.heading = {
+      kind: 'uploaded',
+      family: 'Acme Display',
+      files: [{ key: 'fonts/acme.woff2', weight: 400, style: 'normal' }],
+      fallback: 'inter',
+    }
+    const plan = planOf(fact(['Acme Display', 'serif'], 'serif'), fact(['Inter']))
+    expect(unmatchedSiteFont(plan, design)).toBeNull()
   })
 })

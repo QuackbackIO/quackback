@@ -24,6 +24,7 @@ import {
   readAsWordmark,
   titleToSet,
   websiteIn,
+  type UnmatchedFont,
 } from '@/lib/shared/design/match-brand'
 import type {
   AiElementPick,
@@ -140,6 +141,8 @@ export type DesignAiTurn =
       trail?: string[]
       /** The capture of the brand's site a match was made from, with the address to capture again. */
       capture?: BrandMatchCapture & { url: string }
+      /** The brand's own face a match drew in the nearest bundled one, offered for upload. */
+      font?: UnmatchedFont
     }
 
 /** The logo a brand match placed: cut from one screenshot, as an icon and title or a full logo. */
@@ -324,6 +327,7 @@ export function useDesignAi({
           ...(result.capture && website
             ? { capture: { ...result.capture, url: website.url } }
             : {}),
+          ...(result.font ? { font: result.font } : {}),
         })
         if (!checking || !target) return
         // The verified critic loop: read the drawn preview, score it against what was

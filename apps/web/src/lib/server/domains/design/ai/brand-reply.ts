@@ -119,7 +119,7 @@ export function brandReply(input: BrandReplyInput): BrandReply {
   const notes = [
     ...input.failed,
     input.faceClose === false
-      ? 'Your headline font is not one we have, so I used the closest match. You can upload your own fonts in Brand.'
+      ? 'Your headline font is not one we have, so I used the closest match. You can upload yours in Theme > Brand kit > Fonts.'
       : '',
     input.logo === 'not_found' ? 'I could not find your logo, so it is as it was.' : '',
     input.logo === 'not_stored' ? 'I could not store the logo, so it is as it was.' : '',

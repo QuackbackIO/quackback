@@ -93,6 +93,7 @@ import {
   siteAssetChanges,
   siteFontChanges,
   siteFontPlan,
+  unmatchedSiteFont,
   siteName,
   withSiteColours,
 } from './brand-site'
@@ -429,6 +430,8 @@ export async function brandMatch(
     faceClose: type?.headline ? type.headline.close : null,
     ...heroPhoto.photoSaid(photo, applied.design),
   })
+  // The site's own face no bundled face is, offered for upload under the reply.
+  const unmatched = site ? unmatchedSiteFont(plan, applied.design) : null
   const siteUse = site
     ? siteUseOf(site, applied.applied, {
         logo: siteLogo ? 'site' : logoKey ? 'cut' : null,
@@ -446,6 +449,7 @@ export async function brandMatch(
     reply: said.reply,
     design: applied.design,
     ...(siteUse && { site: siteUse }),
+    ...(unmatched && { font: unmatched }),
     applied: applied.applied.map((c) => ({ ...c, why: why.get(c.path) })),
     skipped: applied.skipped,
     outOfScope: false,
