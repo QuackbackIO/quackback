@@ -131,6 +131,13 @@ export const BUILDER_EVENTS = {
     website: 'flag',
     screenshots: 'count',
   },
+  /** Use from your website (no Quackback AI): which of what the site gave were used. */
+  designer_site_brand_used: {
+    logo: 'flag',
+    favicon: 'flag',
+    shareImage: 'flag',
+    colour: 'flag',
+  },
   /** A brand matched from screenshots sent in Ask AI: how many, and the settings it changed. */
   designer_brand_matched: { images: 'count', changes: 'count' },
   /** The check after a brand match: revision rounds tried, changes kept, and why it stopped. */

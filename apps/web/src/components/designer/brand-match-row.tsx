@@ -15,14 +15,22 @@ import {
   type ReactNode,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { PhotoIcon, XMarkIcon } from '@heroicons/react/16/solid'
+import { CheckIcon, PhotoIcon, XMarkIcon } from '@heroicons/react/16/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { Update } from '@/components/admin/settings/appearance/section-controls'
 import { MAX_MATCH_SHOTS } from '@/components/admin/settings/appearance/match-shots'
+import { trackBuilder } from '@/lib/client/builder-events'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
+import { readSiteBrandFn } from '@/lib/server/functions/site-brand'
 import { hasMatched } from '@/lib/shared/design/ai-starters'
+import { designAssetUrl } from '@/lib/shared/design/design-view'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import {
+  applySiteBrand,
+  offeredPicks,
+  type SiteBrandOffer,
+  type SiteBrandPick,
+} from '@/lib/shared/design/site-brand'
 import { cn } from '@/lib/shared/utils'
 import { PropertyRow } from './properties/properties-panel'
 
@@ -39,7 +47,25 @@ export const MATCH_ROW = {
   tooMany: `Up to ${MAX_MATCH_SHOTS} screenshots.`,
   imagesOnly: 'Only PNG, JPEG or WebP images.',
   cancel: 'Cancel',
+  /** Without Quackback AI. */
+  useTitle: 'Use from your website',
+  read: 'Read',
+  reading: 'Reading…',
+  use: 'Use',
+  useAgain: 'Use again',
+  useRowLabel: 'Your website',
+  found: (host: string) => `From ${host}`,
+  picks: {
+    logo: 'Logo',
+    favicon: 'Favicon',
+    shareImage: 'Share image',
+    colour: 'Brand colour',
+  } satisfies Record<SiteBrandPick, string>,
+  failed: 'That website could not be read.',
 } as const
+
+/** Changes the draft as one step, named for its undo. */
+type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
 
 /** What the builder lends the row: whether a match runs, the website it knows, and the start. */
 export interface BrandMatchControl {
@@ -296,24 +322,218 @@ function MatchForm({
   )
 }
 
+/** One thing the site gave, as a chip that is checked or not. */
+function PickChip({
+  pick,
+  offer,
+  checked,
+  onToggle,
+}: {
+  pick: SiteBrandPick
+  offer: SiteBrandOffer
+  checked: boolean
+  onToggle: () => void
+}) {
+  const image =
+    pick === 'logo'
+      ? offer.logo?.key
+      : pick === 'favicon'
+        ? offer.favicon?.key
+        : pick === 'shareImage'
+          ? offer.shareImage?.key
+          : null
+  return (
+    <button
+      type="button"
+      aria-pressed={checked}
+      onClick={onToggle}
+      className={cn(
+        'flex h-7 items-center gap-1.5 rounded-full border px-2 text-xs focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+        checked
+          ? 'border-foreground/40 bg-muted text-foreground'
+          : 'border-border text-muted-foreground hover:bg-muted'
+      )}
+    >
+      {checked && <CheckIcon className="size-3.5" aria-hidden="true" />}
+      {image && (
+        <img
+          src={designAssetUrl(image)}
+          alt=""
+          className="size-4 rounded-sm border border-border object-contain"
+        />
+      )}
+      {pick === 'colour' && offer.colour && (
+        <span
+          aria-hidden="true"
+          className="size-3.5 rounded-[4px] border border-border"
+          style={{ background: offer.colour }}
+        />
+      )}
+      {MATCH_ROW.picks[pick]}
+    </button>
+  )
+}
+
+/**
+ * Use from your website, for a workspace without Quackback AI: the site read
+ * from its code, what it gave offered as checked chips, and the checked ones
+ * used as one undo step. Font names are never offered.
+ */
+function SiteUseForm({
+  control,
+  update,
+  onCancel,
+  onUsed,
+}: {
+  control: BrandMatchControl
+  update: NamedUpdate
+  onCancel?: () => void
+  onUsed?: () => void
+}) {
+  const [typed, setTyped] = useState<string | null>(null)
+  const website = typed ?? control.website ?? ''
+  const [reading, setReading] = useState(false)
+  const [offer, setOffer] = useState<SiteBrandOffer | null>(null)
+  const [picks, setPicks] = useState<ReadonlySet<SiteBrandPick>>(new Set())
+  const [said, setSaid] = useState('')
+  const field = useRef<HTMLInputElement>(null)
+  const opened = !!onCancel
+  useEffect(() => {
+    if (opened) field.current?.focus()
+  }, [opened])
+  const read = async () => {
+    if (!website.trim() || reading) return
+    setReading(true)
+    setSaid('')
+    setOffer(null)
+    try {
+      const result = await readSiteBrandFn({ data: { url: website.trim() } })
+      if (!result.ok) {
+        setSaid(result.message)
+        return
+      }
+      setOffer(result.offer)
+      setPicks(new Set(offeredPicks(result.offer)))
+    } catch {
+      setSaid(MATCH_ROW.failed)
+    } finally {
+      setReading(false)
+    }
+  }
+  const use = () => {
+    if (!offer || !picks.size) return
+    const used = offer
+    const chosen = picks
+    update((draft) => applySiteBrand(draft, used, chosen, new Date()), MATCH_ROW.useTitle)
+    trackBuilder('designer_site_brand_used', {
+      logo: chosen.has('logo'),
+      favicon: chosen.has('favicon'),
+      shareImage: chosen.has('shareImage'),
+      colour: chosen.has('colour'),
+    })
+    setOffer(null)
+    onUsed?.()
+  }
+  const toggle = (pick: SiteBrandPick) =>
+    setPicks((now) => {
+      const next = new Set(now)
+      if (next.has(pick)) next.delete(pick)
+      else next.add(pick)
+      return next
+    })
+  return (
+    <div data-site-use="" className="space-y-1.5 pb-1.5">
+      <p className="text-xs font-medium">{MATCH_ROW.useTitle}</p>
+      <div className="flex items-center gap-1.5">
+        <Input
+          ref={field}
+          id="brand-match-website"
+          aria-label={MATCH_ROW.website}
+          value={website}
+          placeholder={MATCH_ROW.placeholder}
+          inputMode="url"
+          autoComplete="url"
+          onChange={(event) => setTyped(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return
+            event.preventDefault()
+            void read()
+          }}
+          className="h-7 min-w-0 flex-1 px-1.5 text-xs"
+        />
+        <Button
+          size="sm"
+          variant={offer ? 'outline' : 'default'}
+          className="h-7 px-2.5 text-xs"
+          disabled={!website.trim() || reading}
+          onClick={() => void read()}
+        >
+          {reading ? MATCH_ROW.reading : MATCH_ROW.read}
+        </Button>
+        {onCancel && (
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onCancel}>
+            {MATCH_ROW.cancel}
+          </Button>
+        )}
+      </div>
+      {offer && (
+        <div className="space-y-1.5">
+          <div
+            role="group"
+            aria-label={MATCH_ROW.found(offer.host)}
+            className="flex flex-wrap gap-1.5"
+          >
+            {offeredPicks(offer).map((pick) => (
+              <PickChip
+                key={pick}
+                pick={pick}
+                offer={offer}
+                checked={picks.has(pick)}
+                onToggle={() => toggle(pick)}
+              />
+            ))}
+          </div>
+          <Button size="sm" className="h-7 px-2.5 text-xs" disabled={!picks.size} onClick={use}>
+            {MATCH_ROW.use}
+          </Button>
+        </div>
+      )}
+      {said && (
+        <p role="status" className="text-[11px] text-muted-foreground">
+          {said}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /**
  * Match your brand, first in the Brand kit: the form until a match has run,
- * then a quiet row whose Match again opens it.
+ * then a quiet row whose Match again opens it. Without Quackback AI it is
+ * Use from your website, the same way round.
  */
-export function BrandMatchRow({ design }: { design: PortalDesign; update: Update }) {
+export function BrandMatchRow({ design, update }: { design: PortalDesign; update: NamedUpdate }) {
   const control = useContext(BrandMatchContext)
   const status = useQuery({ ...portalDesignQueries.aiStatus(), enabled: !!control })
   const [again, setAgain] = useState(false)
-  if (!control || !status.data?.available) return null
+  if (!control || !status.data) return null
+  const withAi = status.data.available
+  const close = { onCancel: () => setAgain(false) }
   if (!hasMatched(design) || again)
-    return (
+    return withAi ? (
       <MatchForm
         control={control}
-        {...(again ? { onCancel: () => setAgain(false), onSent: () => setAgain(false) } : {})}
+        {...(again ? { ...close, onSent: () => setAgain(false) } : {})}
+      />
+    ) : (
+      <SiteUseForm
+        control={control}
+        update={update}
+        {...(again ? { ...close, onUsed: () => setAgain(false) } : {})}
       />
     )
   return (
-    <PropertyRow label={MATCH_ROW.rowLabel}>
+    <PropertyRow label={withAi ? MATCH_ROW.rowLabel : MATCH_ROW.useRowLabel}>
       <Button
         variant="ghost"
         size="sm"
@@ -321,7 +541,7 @@ export function BrandMatchRow({ design }: { design: PortalDesign; update: Update
         disabled={control.busy}
         onClick={() => setAgain(true)}
       >
-        {MATCH_ROW.again}
+        {withAi ? MATCH_ROW.again : MATCH_ROW.useAgain}
       </Button>
     </PropertyRow>
   )
