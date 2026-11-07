@@ -258,6 +258,7 @@ describe('sendTestEmailFn', () => {
     expect(hoisted.sendTest).toHaveBeenCalledWith({
       addressId: 'channel_account_1',
       userId: 'user_1',
+      workspaceName: 'Acme',
     })
     expect(result).toEqual({ from: 'help@acme.com', to: 'admin@example.com' })
   })

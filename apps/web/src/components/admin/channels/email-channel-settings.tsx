@@ -451,7 +451,9 @@ function SendingAddressesSection({
           const open = domain ? phase !== 'live' || (expanded[domain.id] ?? warned) : false
           const address = a.address ?? ''
           const title = senderLabel(a, workspaceName)
-          const verified = !!domain && phase === 'live'
+          // Testable wherever real sends would use the address: a live domain,
+          // or any address on a server whose guard permits every From.
+          const testable = guardPermitsAny || (!!domain && phase === 'live')
           const items = [
             {
               label: 'Edit name',
@@ -490,7 +492,7 @@ function SendingAddressesSection({
                 wrapMeta={phase !== 'live' || warned}
                 badges={<PhaseBadge phase={phase} />}
                 trailing={
-                  verified ? (
+                  testable ? (
                     <Button
                       size="sm"
                       variant="outline"
@@ -498,12 +500,7 @@ function SendingAddressesSection({
                       onClick={() => {
                         setActionError(null)
                         sendTest.mutate(a.id, {
-                          onSuccess: (r) =>
-                            toast.success(
-                              bareAddress(r.from) === address
-                                ? `Test sent to ${r.to}`
-                                : `Test sent to ${r.to} from ${bareAddress(r.from)}`
-                            ),
+                          onSuccess: (r) => toast.success(`Test sent to ${r.to}`),
                           onError: showError("Couldn't send the test email."),
                         })
                       }}

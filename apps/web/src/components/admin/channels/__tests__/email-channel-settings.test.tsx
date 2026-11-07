@@ -317,6 +317,26 @@ describe('address rows', () => {
     expect(screen.queryByRole('menuitem', { name: /SMTP/ })).toBeNull()
   })
 
+  it('offers Send test on a domain still being set up where the guard permits any address', () => {
+    // One workspace: email already sends from the address, so it can be tested.
+    renderSettings({
+      addresses: [address('a1', 'help@acme.com')],
+      domains: [domain()],
+      addressMode: 'any',
+    })
+    fireEvent.click(within(row('Acme <help@acme.com>')).getByRole('button', { name: 'Send test' }))
+    expect(sendTest).toHaveBeenCalledWith('a1', expect.anything())
+  })
+
+  it('says who the test went to once it is sent', () => {
+    sendTest.mockImplementation((_id, opts) =>
+      opts.onSuccess({ from: 'Acme <help@acme.com>', to: 'admin@example.com' })
+    )
+    renderSettings({ addresses: [address('a1', 'help@acme.com')], domains: [LIVE] })
+    fireEvent.click(within(row('Acme <help@acme.com>')).getByRole('button', { name: 'Send test' }))
+    expect(toastSuccess).toHaveBeenCalledWith('Test sent to admin@example.com')
+  })
+
   it('edits the sender name from the row menu', async () => {
     renderSettings({
       addresses: [address('a1', 'help@acme.com', 'dom_1', 'Acme Help')],

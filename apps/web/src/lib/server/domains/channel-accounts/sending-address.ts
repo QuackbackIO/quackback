@@ -10,7 +10,7 @@
  * A domain lives while an address uses it. Removing the last address on one
  * says so, and the person decides whether the domain goes too.
  */
-import { getEmailFrom, sendRawEmail } from '@quackback/email'
+import { sendRawEmail } from '@quackback/email'
 import { addressDomain } from '@quackback/email/ses'
 import { getSesDomainIdentity } from '@quackback/email/ses-identity'
 import type { ChannelAccountId, SendingDomainId, TeamId, UserId } from '@quackback/ids'
@@ -34,6 +34,7 @@ import {
   permittedSendingIdentity,
   sendingIdentityContext,
   toAsciiDomain,
+  withSendingDisplayName,
   type SendingIdentityContext,
 } from './outbound-identity'
 import {
@@ -201,8 +202,16 @@ export async function removeSendingAddress(
 }
 
 /**
- * Send a short test from an address to the person asking, through the same
- * guard and provider path a reply takes, and report the From that went out.
+ * Send a short test from an address to the person asking, the way a real send
+ * from it would go out, and report the From that did.
+ *
+ * The send guard alone decides whether the address may be used, as it does for
+ * every real send: on a shared server that means its domain is verified, and on
+ * a single-workspace server it permits any address, so a domain still being set
+ * up is tested there too, since replies already leave from it. A refused
+ * address is refused here rather than swapped for the default, because a test
+ * that arrived from somewhere else would say nothing about this one. The From
+ * is named `senderName ?? workspaceName`, as real sends name it.
  *
  * The recipient is always the caller's own account address, never an input,
  * so this cannot be used to mail anyone else.
@@ -210,17 +219,19 @@ export async function removeSendingAddress(
 export async function sendTestEmail(input: {
   addressId: ChannelAccountId
   userId: UserId
+  /** Names the From when the address has no sender name of its own. */
+  workspaceName: string
 }): Promise<{ from: string; to: string }> {
   const account = await getChannelAccount(input.addressId)
   if (!account || account.role !== 'sending' || !account.address) {
     throw new SendingDomainRefusedError('That address no longer exists.')
   }
   const address = account.address
-  const domain = domainOfAddress(address)
-  const domains = await listSendingDomains(account.owningTeamId)
-  if (!domain || !verifiedCovering(domains, domain)) {
+
+  const permitted = await permittedSendingIdentity(address)
+  if (!permitted) {
     throw new SendingDomainRefusedError(
-      `${domain ?? address} isn't live yet. Send a test once its records are found.`
+      `${domainOfAddress(address) ?? address} isn't live yet. Send a test once its records are found.`
     )
   }
 
@@ -229,9 +240,8 @@ export async function sendTestEmail(input: {
     throw new SendingDomainRefusedError('Your account has no email address to send the test to.')
   }
 
-  const from =
-    (await permittedSendingIdentity(address)) ?? (await permittedSendingIdentity(getEmailFrom()))
-  if (!from) throw new SendingDomainRefusedError("The test email couldn't be sent.")
+  const name = (account.senderName ?? input.workspaceName).trim()
+  const from = name ? withSendingDisplayName(permitted, name) : permitted
 
   const text = `This is a test from ${address}. If it arrived, replies can be sent from this address.`
   const result = await sendRawEmail({
