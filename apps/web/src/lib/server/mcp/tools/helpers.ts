@@ -10,7 +10,10 @@ import type { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/m
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import type { SegmentId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
+import {
+  getWorkspaceSettings,
+  isFeatureEnabled,
+} from '@/lib/server/domains/settings/settings.service'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 import { DomainException } from '@/lib/shared/errors'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
@@ -171,10 +174,12 @@ export function requirePermissions(
 }
 
 /** Feature flags a tool can require before its scope/role guards run. */
-type ToolFeature = 'helpCenter'
+type ToolFeature = 'helpCenter' | 'portalDesign'
 
 const FEATURE_DENIALS: Record<ToolFeature, string> = {
   helpCenter: 'Error: Help center is not enabled. Enable it in Settings → General.',
+  portalDesign:
+    'Error: The portal design tools need the new portal design. Turn it on in Settings → Labs.',
 }
 
 /** Return an error if the help center feature is disabled. */
@@ -195,8 +200,14 @@ export async function requireHelpCenter(): Promise<CallToolResult | null> {
 // Tool registration
 // ============================================================================
 
+/** Whether the portal renders with the design document, so its draft shows somewhere. */
+async function portalDesignActive(): Promise<boolean> {
+  return (await getWorkspaceSettings())?.portalDesign?.engine === 'v2'
+}
+
 async function requireFeature(feature: ToolFeature): Promise<CallToolResult | null> {
-  if (await isFeatureEnabled(feature)) return null
+  if (feature === 'portalDesign' ? await portalDesignActive() : await isFeatureEnabled(feature))
+    return null
   return { isError: true, content: [{ type: 'text', text: FEATURE_DENIALS[feature] }] }
 }
 

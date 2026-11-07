@@ -308,6 +308,9 @@ export const UNTRUSTED_TOOL_FIELDS = {
   widget_install_status: ['originHost'],
   get_settings: NONE,
   update_settings: NONE,
+  // Design text is written by teammates with the branding permission.
+  get_portal_design: NONE,
+  update_portal_design_draft: NONE,
   navigate_workspace: NONE,
 } satisfies Record<string, UntrustedSpec>
 
