@@ -17,6 +17,12 @@ const hoisted = vi.hoisted(() => ({
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => (options: object) => ({ options }),
   redirect: (options: object) => ({ redirect: options }),
+  lazyRouteComponent: () =>
+    Object.assign(() => null, {
+      preload: async () => {
+        hoisted.preloaded++
+      },
+    }),
 }))
 vi.mock('@/components/public/home/portal-home', () => ({
   loadHome: async (...args: unknown[]) => {
@@ -25,7 +31,7 @@ vi.mock('@/components/public/home/portal-home', () => ({
     return {}
   },
 }))
-vi.mock('../feedback', async () => {
+vi.mock('@/components/public/feedback/feed-route', async () => {
   const paths = await import('@/lib/shared/design/paths')
   return {
     feedHead: () => ({}),
@@ -47,15 +53,6 @@ vi.mock('../feedback', async () => {
           false
         ),
       }
-    },
-    Route: {
-      options: {
-        component: Object.assign(() => null, {
-          preload: async () => {
-            hoisted.preloaded++
-          },
-        }),
-      },
     },
   }
 })

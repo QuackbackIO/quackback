@@ -103,7 +103,8 @@ vi.mock('@/components/public/feedback/feedback-container', () => ({
   },
 }))
 
-import { hasFeedSearch, Route } from '../feedback'
+import { Route } from '../feedback'
+import { hasFeedSearch } from '@/components/public/feedback/feed-route'
 
 const Page = (Route as unknown as { component: React.ComponentType }).component
 
