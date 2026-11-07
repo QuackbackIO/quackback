@@ -28,11 +28,11 @@ test.describe('Portal search', () => {
     )
   })
 
-  test('a search that finds nothing offers to create a post from it', async ({ page }) => {
+  test('a search that finds nothing offers to post it as an idea', async ({ page }) => {
     await page.getByRole('searchbox', { name: 'Search posts' }).fill('xyzzyplugh')
     await expect(page.getByText('No posts match “xyzzyplugh”.')).toBeVisible({ timeout: 5000 })
-    await page.getByRole('button', { name: 'Create a post from it' }).click()
-    await expect(page.getByRole('textbox', { name: 'Feedback title' })).toHaveValue('xyzzyplugh')
+    await page.getByRole('button', { name: 'Make it a new post' }).click()
+    await expect(page.getByRole('textbox', { name: 'Post title' })).toHaveValue('xyzzyplugh')
   })
 })
 
