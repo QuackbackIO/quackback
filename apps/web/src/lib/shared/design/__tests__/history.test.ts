@@ -170,3 +170,95 @@ describe('createHistory groups', () => {
     expect(history.getState().past).toHaveLength(2)
   })
 })
+
+describe('createHistory while the AI works', () => {
+  function edit(
+    history: ReturnType<typeof createHistory>,
+    doc: Doc,
+    label: string,
+    by?: 'ai' | 'person'
+  ) {
+    const [next, patches, inverse] = change(doc, (draft) => void (draft.count += 1))
+    history.getState().push(label, patches, inverse, 0, by)
+    return next
+  }
+
+  it('keeps the AI’s changes one step, its own nested steps included', () => {
+    const history = createHistory()
+    history.getState().begin('Make it calmer', 'ai')
+    let doc = edit(history, start, 'Make it calmer', 'ai')
+    history.getState().begin('Make it calmer', 'ai')
+    doc = edit(history, doc, 'Make it calmer', 'ai')
+    history.getState().end('ai')
+    history.getState().end('ai')
+    expect(history.getState().past.map((step) => step.label)).toEqual(['Make it calmer'])
+    expect(history.getState().undo(doc)?.doc).toEqual(start)
+  })
+
+  it('makes a change by hand while the AI works its own step, never part of the AI’s', () => {
+    const history = createHistory()
+    history.getState().begin('Make it calmer', 'ai')
+    const one = edit(history, start, 'Make it calmer', 'ai')
+    const two = edit(history, one, 'Headline')
+    const three = edit(history, two, 'Make it calmer', 'ai')
+    expect(history.getState().group?.label).toBe('Make it calmer')
+    history.getState().end('ai')
+    expect(history.getState().past.map((step) => step.label)).toEqual([
+      'Make it calmer',
+      'Headline',
+      'Make it calmer',
+    ])
+    // Undo takes back the AI's last part, then the hand's change on its own.
+    const back = history.getState().undo(three)!
+    expect(back.doc).toEqual(two)
+    expect(history.getState().undo(back.doc)?.doc).toEqual(one)
+    expect(history.getState().group).toBeNull()
+  })
+
+  it('keeps a drag made by hand while the AI works one step of its own', () => {
+    const history = createHistory()
+    history.getState().begin('Make it calmer', 'ai')
+    let doc = edit(history, start, 'Make it calmer', 'ai')
+    history.getState().begin('Move block')
+    doc = edit(history, doc, 'Step')
+    doc = edit(history, doc, 'Make it calmer', 'ai')
+    doc = edit(history, doc, 'Step')
+    history.getState().end()
+    history.getState().end('ai')
+    expect(history.getState().past.map((step) => step.label)).toEqual([
+      'Make it calmer',
+      'Move block',
+      'Make it calmer',
+    ])
+    expect(history.getState().past[1]!.patches).toHaveLength(2)
+    expect(history.getState().group).toBeNull()
+  })
+
+  it('still folds a person’s changes into a person’s own group, as a drag does', () => {
+    const history = createHistory()
+    history.getState().begin('Move block')
+    edit(history, start, 'Step')
+    edit(history, start, 'Step')
+    history.getState().end()
+    expect(history.getState().past.map((step) => step.label)).toEqual(['Move block'])
+  })
+})
+
+describe('createHistory when the AI finishes mid-drag', () => {
+  it('keeps the rest of the drag in the drag’s own step', () => {
+    const history = createHistory()
+    const push = (label: string, by?: 'ai') => {
+      const [, patches, inverse] = change(start, (draft) => void (draft.count += 1))
+      history.getState().push(label, patches, inverse, 0, by)
+    }
+    history.getState().begin('Ask', 'ai')
+    push('Ask', 'ai')
+    history.getState().begin('Move block')
+    push('Step')
+    history.getState().end('ai')
+    push('Step')
+    history.getState().end()
+    expect(history.getState().past.map((step) => step.label)).toEqual(['Ask', 'Move block'])
+    expect(history.getState().past[1]!.patches).toHaveLength(2)
+  })
+})

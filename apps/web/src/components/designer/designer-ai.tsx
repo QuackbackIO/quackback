@@ -268,6 +268,7 @@ export function DesignerAi({
             context={context}
             busy={ai.busy}
             limited={ai.limited}
+            onStop={ai.stop}
             onClearScope={onClearSelection}
             onAsk={(text, images, brand) =>
               // An element picked inside the selection rides along, so "just this" names it.

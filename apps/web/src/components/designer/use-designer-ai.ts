@@ -50,9 +50,10 @@ export function useDesignerAi(
       workspaceName,
       view,
       check: {
-        begin: draft.begin,
-        end: draft.end,
-        replace: draft.replace,
+        // The AI's own group, so a change made by hand while it works is a step of its own.
+        begin: (label) => draft.begin(label, 'ai'),
+        end: () => draft.end('ai'),
+        replace: (design, label) => draft.replace(design, label, 'ai'),
         frame: canvasFrame,
         open: openHome(view.locale),
         current: () => latest.current,

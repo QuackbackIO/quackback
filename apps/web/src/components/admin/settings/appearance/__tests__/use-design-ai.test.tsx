@@ -522,3 +522,62 @@ describe('startBrandMatch', () => {
     expect(result.current.turns).toEqual([])
   })
 })
+
+describe('Stop', () => {
+  it('aborts the request it sent and says so, nothing changed', async () => {
+    let seen: AbortSignal | undefined
+    server.ask.mockImplementation(
+      ({ signal }: { signal?: AbortSignal }) =>
+        new Promise((_, reject) => {
+          seen = signal
+          signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          )
+        })
+    )
+    const { result } = hook()
+    let asked: Promise<void> | undefined
+    act(() => {
+      asked = result.current.ask('Warmer', 'site')
+    })
+    await vi.waitFor(() => expect(seen).toBeDefined())
+    expect(result.current.busy).toBe(true)
+    act(() => result.current.stop())
+    await act(() => asked!)
+    expect(seen?.aborted).toBe(true)
+    expect(result.current.busy).toBe(false)
+    expect(result.current.turns.at(-1)).toEqual({
+      role: 'assistant',
+      text: 'Stopped. Nothing changed.',
+    })
+  })
+
+  it('does nothing when nothing is running', () => {
+    const { result } = hook()
+    act(() => result.current.stop())
+    expect(result.current.turns).toEqual([])
+  })
+
+  it('aborts a brand match’s stream', async () => {
+    let seen: AbortSignal | undefined
+    stream.match.mockImplementation(
+      (_body: unknown, _onStep: unknown, _fetcher: unknown, signal?: AbortSignal) =>
+        new Promise((_, reject) => {
+          seen = signal
+          signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          )
+        })
+    )
+    const { result } = hook()
+    let asked: Promise<void> | undefined
+    act(() => {
+      asked = result.current.ask('Match https://example.com', 'site')
+    })
+    await vi.waitFor(() => expect(seen).toBeDefined())
+    act(() => result.current.stop())
+    await act(() => asked!)
+    expect(seen?.aborted).toBe(true)
+    expect(result.current.turns.at(-1)?.text).toBe('Stopped. Nothing changed.')
+  })
+})

@@ -98,17 +98,29 @@ export interface StructuredChatInput<S extends z.ZodType> {
   schema: S
   maxTokens: number
   middleware?: ChatMiddleware[]
+  /** Ends the model call when the caller has gone, such as a request stopped in the builder. */
+  signal?: AbortSignal
+}
+
+/** An abort controller that aborts with the signal, as the chat call takes one. */
+function followed(signal: AbortSignal): AbortController {
+  const controller = new AbortController()
+  if (signal.aborted) controller.abort(signal.reason)
+  else signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
+  return controller
 }
 
 export async function structuredChat<S extends z.ZodType>(
   input: StructuredChatInput<S>
 ): Promise<z.infer<S>> {
   const adapter = createChatAdapter(input.model)
+  const abort = input.signal ? { abortController: followed(input.signal) } : {}
   if (getAiProvider() === 'anthropic') {
     return (await chat({
       adapter,
       messages: input.messages,
       stream: false,
+      ...abort,
       systemPrompts: input.systemPrompts,
       outputSchema: input.schema,
       modelOptions: { max_tokens: input.maxTokens },
@@ -121,6 +133,7 @@ export async function structuredChat<S extends z.ZodType>(
     adapter,
     messages: input.messages,
     stream: false as const,
+    ...abort,
     ...(input.middleware ? { middleware: input.middleware } : {}),
   }
 

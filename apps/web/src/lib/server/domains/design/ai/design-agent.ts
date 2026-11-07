@@ -126,6 +126,8 @@ export interface AgentStepInput {
   request: StepRequest
   maxSteps: number
   registry?: StyleRegistry
+  /** The builder's Stop: the model call ends with it. */
+  signal?: AbortSignal
 }
 
 /** One step of the loop: the model's calls, applied. */
@@ -200,6 +202,7 @@ export async function agentStep(input: AgentStepInput): Promise<StepReply> {
       schema: agentStepSchema(registry),
       maxTokens: 3000,
       middleware: designUsage(model, 'edit'),
+      ...(input.signal ? { signal: input.signal } : {}),
     })
   let answer: AgentStepAnswer
   try {

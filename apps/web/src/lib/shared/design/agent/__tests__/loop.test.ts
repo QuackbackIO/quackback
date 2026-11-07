@@ -497,3 +497,77 @@ describe('the tool schemas', () => {
     expect(text).not.toContain('- font-size:')
   })
 })
+
+describe('the edit loop, stopped', () => {
+  it('takes no step after Stop, keeping what the steps before applied', async () => {
+    const original = start()
+    const design = { current: original }
+    const stop = new AbortController()
+    const { step } = scripted(
+      [
+        answer({ plan: 'Darken buttons on hover', styles: [hoverStyle('darker')], done: false }),
+        answer({ plan: 'Correct', styles: [hoverStyle('#000000')], done: true }),
+      ],
+      design
+    )
+    const read = vi.fn(async (targets: Parameters<LoopDeps['read']>[0], which: 'before' | 'now') => {
+      // Stop lands while the first step's result is checked.
+      if (which === 'now') stop.abort()
+      return staticReadings(which === 'before' ? original : design.current, R, targets)
+    })
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read },
+      signal: stop.signal,
+    })
+    expect(step).toHaveBeenCalledTimes(1)
+    if (!result.ok) throw new Error(result.message)
+    expect(result.stopped).toBe('stopped')
+    expect(result.applied.map((c) => c.path)).toEqual(['style'])
+  })
+
+  it('keeps what applied when a step is cut off by Stop', async () => {
+    const original = start()
+    const design = { current: original }
+    const stop = new AbortController()
+    const { step: first } = scripted(
+      [answer({ plan: 'Darken buttons on hover', styles: [hoverStyle('darker')] })],
+      design
+    )
+    const step = vi.fn(async (request: StepRequest): Promise<StepReply> => {
+      if (request.step === 0) return first(request)
+      stop.abort()
+      throw new DOMException('The operation was aborted.', 'AbortError')
+    })
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader(design, original) },
+      signal: stop.signal,
+    })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.stopped).toBe('stopped')
+    expect(result.applied.map((c) => c.path)).toEqual(['style'])
+  })
+
+  it('says it stopped when Stop came before any step', async () => {
+    const stop = new AbortController()
+    stop.abort()
+    const original = start()
+    const { step } = scripted([answer({ done: true })], { current: original })
+    const result = await runEditLoop({
+      registry: R,
+      design: original,
+      targets: [],
+      deps: { step, read: reader({ current: original }, original) },
+      signal: stop.signal,
+    })
+    expect(step).not.toHaveBeenCalled()
+    if (!result.ok) throw new Error(result.message)
+    expect(result.stopped).toBe('stopped')
+    expect(result.applied).toEqual([])
+  })
+})
