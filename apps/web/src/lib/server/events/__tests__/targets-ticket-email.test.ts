@@ -55,9 +55,12 @@ vi.mock('@/lib/server/domains/teams', () => ({
 }))
 
 // --- channel-account From resolution ---
-const resolveSendingAddress = vi.fn<() => Promise<string | null>>()
+// A ticket's From: its linked conversation's thread sender, else the team's
+// address. Which of the two it is is pinned in sender-resolver.db.test.ts; this
+// suite pins what the requester's config does with the answer.
+const resolveTicketFrom = vi.fn<(...args: unknown[]) => Promise<string | null>>()
 vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({
-  resolveSendingAddress: () => resolveSendingAddress(),
+  resolveTicketFrom: (...args: unknown[]) => resolveTicketFrom(...args),
 }))
 
 // --- reply-to minting ---
@@ -100,7 +103,7 @@ beforeEach(() => {
   isSupportTicketsEnabled.mockReset().mockResolvedValue(true)
   getTicketWatchersForEvent.mockReset().mockResolvedValue([])
   listTeamMemberPrincipalIds.mockReset().mockResolvedValue([])
-  resolveSendingAddress.mockReset().mockResolvedValue(null)
+  resolveTicketFrom.mockReset().mockResolvedValue(null)
   inboundTicketReplyToAddress.mockReset().mockReturnValue(null)
   getStageLabels.mockReset().mockResolvedValue({ received: 'Received', resolved: 'Resolved' })
   batchGetNotificationPreferences.mockReset().mockResolvedValue(new Map())
@@ -199,12 +202,30 @@ describe('getTicketCreatedEmailTargets', () => {
 
   it('carries the per-team From and signed reply-to when configured', async () => {
     queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
-    resolveSendingAddress.mockResolvedValue('support@team.example')
+    resolveTicketFrom.mockResolvedValue('support@team.example')
     inboundTicketReplyToAddress.mockReturnValue('reply+tkt-1.sig@inbound.example')
     const targets = await getTicketCreatedEmailTargets(createdEvent(), context)
+    expect(resolveTicketFrom).toHaveBeenCalledWith('ticket_1', null)
     expect(targets[0].config).toMatchObject({
       from: 'support@team.example',
       replyTo: 'reply+tkt-1.sig@inbound.example',
+    })
+  })
+
+  it("names the requester's email after the workspace, with or without an address", async () => {
+    // Kept apart from `from` so the name survives the send-time re-check, and
+    // still applies when that re-check falls back to the platform default.
+    queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
+    let targets = await getTicketCreatedEmailTargets(createdEvent(), context)
+    expect(targets[0].config).toMatchObject({ fromDisplayName: 'W' })
+    expect((targets[0].config as Record<string, unknown>).from).toBeUndefined()
+
+    queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
+    resolveTicketFrom.mockResolvedValue('support@team.example')
+    targets = await getTicketCreatedEmailTargets(createdEvent(), context)
+    expect(targets[0].config).toMatchObject({
+      from: 'support@team.example',
+      fromDisplayName: 'W',
     })
   })
 

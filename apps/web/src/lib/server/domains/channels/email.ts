@@ -1,4 +1,7 @@
-import { resolveConversationFrom } from '@/lib/server/domains/channel-accounts/sender-resolver'
+import {
+  formatNamedSendingAddress,
+  resolveConversationFrom,
+} from '@/lib/server/domains/channel-accounts/sender-resolver'
 import { deliverAgentMessageOnChannel } from './deliver-agent-message'
 import type { ChannelAdapter } from './types'
 
@@ -22,17 +25,50 @@ export const emailAdapter: ChannelAdapter = {
     })
   },
 
+  // The same envelope as the closing notice (conversation.notify-closed.ts): the
+  // thread's From under the workspace name, the conversation's Reply-To, the
+  // threading headers, and the outbound id recorded so a reply routes home. A
+  // rating request that arrived as a fresh message from another address would
+  // read as a different sender and land outside the thread being rated.
   async deliverCsatRequest(ctx) {
-    const from = (await resolveConversationFrom(ctx.conversationId)) ?? undefined
+    const { inboundReplyToAddress, isEmailInboundConfigured, mintOutboundMessageId } =
+      await import('@/lib/server/domains/conversation/conversation.email-channel')
+    const { currentMailSlug } =
+      await import('@/lib/server/domains/conversation/conversation.mail-slug')
+    const { recordOutboundEmail, threadIdsForOutbound } =
+      await import('@/lib/server/domains/conversation/conversation.email-store')
+
+    const replyTo = isEmailInboundConfigured()
+      ? (inboundReplyToAddress(ctx.conversationId, currentMailSlug()) ?? undefined)
+      : undefined
+    const messageId = mintOutboundMessageId(ctx.conversationId)
+    const thread = messageId ? await threadIdsForOutbound(ctx.conversationId) : null
+    const inReplyTo = thread?.inbound.at(-1) ?? thread?.outbound.at(-1)
+    const references = thread && thread.merged.length > 0 ? thread.merged : undefined
+
+    const resolvedFrom = await resolveConversationFrom(ctx.conversationId)
+    const from = resolvedFrom
+      ? formatNamedSendingAddress(resolvedFrom, ctx.workspaceName)
+      : undefined
+
     const { sendCsatRequestEmail } = await import('@quackback/email')
-    await sendCsatRequestEmail({
+    const result = await sendCsatRequestEmail({
       to: ctx.recipient,
       promptText: ctx.promptText,
       ratingUrls: ctx.ratingUrls,
       workspaceName: ctx.workspaceName,
       logoUrl: ctx.logoUrl ?? undefined,
       from,
+      fromDisplayName: from ? undefined : ctx.workspaceName,
+      conversationSubject: ctx.conversationSubject ?? undefined,
+      replyTo,
+      messageId: messageId ?? undefined,
+      inReplyTo,
+      references,
       conversationId: ctx.conversationId,
     })
+    const outboundMessageId =
+      result?.messageId === undefined ? messageId : (result.messageId ?? undefined)
+    if (outboundMessageId) await recordOutboundEmail(outboundMessageId, ctx.conversationId)
   },
 }
