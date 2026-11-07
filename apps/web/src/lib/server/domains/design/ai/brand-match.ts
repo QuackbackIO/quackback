@@ -444,7 +444,8 @@ export async function brandMatch(
   return {
     ok: true,
     reply: said.reply,
-    design: applied.design,
+    // Stamped, so the builder knows a match has run (brand.matchedAt).
+    design: { ...applied.design, brand: { ...applied.design.brand, matchedAt: new Date(now()).toISOString() } },
     ...(siteUse && { site: siteUse }),
     applied: applied.applied.map((c) => ({ ...c, why: why.get(c.path) })),
     skipped: applied.skipped,
