@@ -591,7 +591,7 @@ async function sendEmail(
     react: React.ReactElement
     /** Conversation-specific reply address (e.g. plus-addressed inbound). */
     replyTo?: string
-    /** Override the workspace EMAIL_FROM (e.g. a per-team sending address). */
+    /** Override the workspace EMAIL_FROM (a sending address the guard permitted). */
     from?: SendingIdentity
     /** Template name, for the dev preview line. */
     emailType?: string

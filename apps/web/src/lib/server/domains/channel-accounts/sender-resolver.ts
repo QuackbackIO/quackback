@@ -35,8 +35,6 @@ export function formatNamedSendingAddress(
 
 /** The kinds of customer email that choose their own sender. */
 export type SenderSurface = 'support' | 'feedback' | 'changelog' | 'status'
-/** The name callers already use for {@link SenderSurface}. */
-export type SendingModule = SenderSurface
 
 /** Which step of the chain in {@link resolveSender} produced the From. */
 export type SenderSource = 'thread' | 'inbox' | 'surface' | 'default' | 'platform_inbox'
@@ -91,12 +89,10 @@ export interface ResolvedSender {
  */
 export async function resolveSender(input: {
   surface?: SenderSurface
-  /** Former name of `surface`, still accepted. */
-  module?: SenderSurface
   teamId?: TeamId | null
   conversationId?: ConversationId
 }): Promise<ResolvedSender | null> {
-  const surface = input.surface ?? input.module ?? 'support'
+  const surface = input.surface ?? 'support'
   // The guard's context, gathered at most once per resolution and only when a
   // candidate needs checking: it loads every verified domain, and this runs on
   // every outbound email.
