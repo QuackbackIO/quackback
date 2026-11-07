@@ -58,7 +58,7 @@ export const WORDS_EXAMPLES: WordsExample[] = [
           'Suggest what we roast next, see what is coming and find help with your subscription.',
         feedback_headline: 'Tell us how to roast it better',
         feedback_subtitle:
-          "Share ideas for beans, blends and subscriptions, and vote for the ones you'd like to taste.",
+          "Post about beans, blends and subscriptions, and vote for the ones you'd like to taste.",
         prompt: 'Suggest a bean or a blend',
         submit: 'Send to the roasters',
       },
@@ -67,10 +67,10 @@ export const WORDS_EXAMPLES: WordsExample[] = [
         home_layout: 'portal',
         home_headline: 'Help us roast what you love',
         home_subtitle:
-          'Share ideas for beans and blends, see what is coming next and get help with your subscription.',
+          'Post feedback on beans and blends, see what is coming next and get help with your subscription.',
         feedback_headline: 'What should Harbor roast next?',
         feedback_subtitle:
-          'Tell us the beans, blends and brews you would like, and vote for the ideas you want in your cup.',
+          'Tell us the beans, blends and brews you would like, and vote for the posts you want in your cup.',
         prompt: 'A bean or a better subscription',
         submit: 'Pass it to the roasters',
       },
@@ -121,7 +121,7 @@ export const WORDS_EXAMPLES: WordsExample[] = [
           'Tell us what to cook next, see what is coming from our kitchen and find help with your orders.',
         feedback_headline: 'What should Nonna make next?',
         feedback_subtitle:
-          'Share ideas for shapes, sauces and deliveries, and vote for the ones you want on your table.',
+          'Post about shapes, sauces and deliveries, and vote for the ones you want on your table.',
         prompt: 'Suggest a shape or a sauce',
         submit: 'Send to the kitchen',
       },
@@ -130,10 +130,10 @@ export const WORDS_EXAMPLES: WordsExample[] = [
         home_layout: 'portal',
         home_headline: 'Help us cook your favourite pasta',
         home_subtitle:
-          'Share ideas, see what is coming from our kitchen and get help with your orders.',
+          'Post feedback, see what is coming from our kitchen and get help with your orders.',
         feedback_headline: 'What should Nonna Rosa make next?',
         feedback_subtitle:
-          'Tell us what would make your pasta nights better, and vote for the ideas you like.',
+          'Tell us what would make your pasta nights better, and vote for the posts you like.',
         prompt: 'A pasta shape or a better box',
         submit: 'Tell Nonna',
       },
@@ -197,7 +197,7 @@ export const WORDS_EXAMPLES: WordsExample[] = [
           'Suggest new notebooks, pens and papers, see what is coming and find help with your orders.',
         feedback_headline: 'What should Petalpost make next?',
         feedback_subtitle:
-          'Tell us what you would love to write with, and vote for the ideas you like.',
+          'Tell us what you would love to write with, and vote for the posts you like.',
         prompt: 'A notebook you would love',
         submit: 'Send it our way',
       },
@@ -242,24 +242,24 @@ export const WORDS_EXAMPLES: WordsExample[] = [
     answers: {
       signature: {
         evidence:
-          'Their cheerful hello leads; the site offers sending, so the portal asks for ideas about it.',
+          'Their cheerful hello leads; the site offers sending, so the portal asks for feedback about it.',
         home_layout: 'portal',
         home_headline: 'Hello! What would make sending easier?',
         home_subtitle:
-          'Share ideas for sending, tracking and drop-offs, see what is coming and get help with your parcels.',
+          'Post about sending, tracking and drop-offs, see what is coming and get help with your parcels.',
         feedback_headline: 'How should Larkpost deliver better?',
         feedback_subtitle:
-          'Tell us what would make sending and tracking easier, and vote for the ideas you like.',
-        prompt: 'A tracking or drop-off idea',
+          'Tell us what would make sending and tracking easier, and vote for the posts you like.',
+        prompt: 'Tracking or drop-off feedback',
         submit: 'Send it our way',
       },
       plain: {
         evidence:
-          'Friendly and plain, in their words for parcels; ideas about the service, not the service.',
+          'Friendly and plain, in their words for parcels; feedback about the service, not the service.',
         home_layout: 'portal',
         home_headline: 'Help us make your deliveries better',
         home_subtitle:
-          'Suggest ideas for sending and tracking, vote for the ones you want and get help with your parcels.',
+          'Post about sending and tracking, vote for the ones you want and get help with your parcels.',
         feedback_headline: 'What should Larkpost improve next?',
         feedback_subtitle:
           'Tell us how sending, tracking and drop-offs could work better, and vote for your favourites.',
@@ -269,13 +269,13 @@ export const WORDS_EXAMPLES: WordsExample[] = [
       playful: {
         evidence: 'Postal play that still says what it means, with their cheerful hello.',
         home_layout: 'portal',
-        home_headline: 'Post us your ideas',
+        home_headline: 'Post us your feedback',
         home_subtitle:
-          'Suggest what we should deliver better, vote on ideas and see what is on its way.',
-        feedback_headline: 'Special delivery: your ideas',
+          'Suggest what we should deliver better, vote on posts and see what is on its way.',
+        feedback_headline: 'Special delivery: your posts',
         feedback_subtitle:
-          'Tell us the tracking, drop-off or parcel idea you would love, and vote for the ones you like.',
-        prompt: 'A parcel idea for us?',
+          'Tell us the tracking, drop-off or parcel feedback you would love, and vote for the ones you like.',
+        prompt: 'Parcel feedback for us?',
         submit: 'Post it to us',
       },
     },

@@ -342,7 +342,7 @@ export interface OffPart {
 }
 
 const DOES: Record<PortalPageType, string> = {
-  feedback: 'Visitors post ideas and vote on them.',
+  feedback: 'Visitors write posts and vote on them.',
   roadmap: 'Shows what is planned, in progress and done.',
   changelog: 'Tells visitors what has shipped.',
   help: 'Articles visitors can search and read.',

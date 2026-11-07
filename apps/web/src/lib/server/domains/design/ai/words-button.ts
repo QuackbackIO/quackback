@@ -14,7 +14,7 @@ const norm = (s: string) =>
     .replace(/\s+/g, ' ')
     .trim()
 
-/** A button's verbs that send the idea on, in any voice ("Pitch it", "Post your idea"). */
+/** A button's verbs that send the idea on, in any voice ("Pitch it", "Post it"). */
 const SENDING = new Set(
   (
     'send post share pass pitch suggest submit drop hand tell ship push file raise add propose ' +
@@ -74,7 +74,7 @@ export function unclearButton(text: string, ev: { language?: string | null }): s
  * of weak button (a stock one, or one a customer must guess at).
  */
 export const BUTTON_RULE =
-  'A button says plainly, in a few words (under 24 characters) and in their voice, that it sends the idea on: a sending verb, or one of theirs that sends. It names the company\'s people only by a word their own words use (for a coffee roaster whose pages say "Meet the roasters", "Send to the roasters"); where they have none it names no one ("Post it", "Share it"). Never "the team" or a word for their people they never use ("the builders"), never a verb that does something else ("Put it to work"), never to their customers ("Send to the drivers" for a ride company), and never their name after "Send to"'
+  'A button says plainly, in a few words (under 24 characters) and in their voice, that it sends their post on: a sending verb, or one of theirs that sends. It names the company\'s people only by a word their own words use (for a coffee roaster whose pages say "Meet the roasters", "Send to the roasters"); where they have none it names no one ("Post it", "Share it"). Never "the team" or a word for their people they never use ("the builders"), never a verb that does something else ("Put it to work"), never to their customers ("Send to the drivers" for a ride company), and never their name after "Send to"'
 
 /** Words for a company's people that any company could put on its button ("the team", "the crew"). */
 const ANYONE = new Set(

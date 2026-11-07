@@ -32,6 +32,7 @@ import type { HeroDecision } from './hero-rules'
 import type { HeroLayout } from './hero-geometry'
 import type { HomeArrangement, WordsAnswer } from './words-family'
 import { lowerCaseChanges } from './words-case'
+import { postsInWords } from './words-posts'
 
 export interface BrandChange {
   path: string
@@ -370,11 +371,13 @@ const plainFit = (text: string, max: number) => fit(plainWords(text), max)
 
 /** Composition and wording, last: Home's blocks, its headline in the band with the composer, and the words. */
 export function wordsChanges(
-  words: WordsAnswer,
+  written: WordsAnswer,
   design: PortalDesign,
   gates: PortalPageGates,
   language = 'en'
 ): Change[] {
+  // The portal is a feedback board: English words that still say "idea" say "post".
+  const words = postsInWords(written, language)
   const why = `in the brand's voice: ${words.evidence}`
   const out: Change[] = [
     ...headlineChanges('feedback', words.feedback_headline, language, why),

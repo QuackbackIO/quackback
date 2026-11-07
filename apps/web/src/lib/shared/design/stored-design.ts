@@ -55,10 +55,29 @@ const lookup = (root: unknown, path: Path): unknown =>
 const pathText = (path: Path) => path.map(String).join('.')
 
 /**
+ * Whether the design stays valid at this path once its key is gone, which is
+ * so only for an optional field: a required one fails again where it was.
+ */
+function isOptionalField(doc: unknown, path: Path): boolean {
+  const parent = lookup(doc, path.slice(0, -1))
+  if (!isRecord(parent)) return false
+  const trial = structuredClone(doc)
+  delete (lookup(trial, path.slice(0, -1)) as Record<PropertyKey, unknown>)[path.at(-1)!]
+  const rest = portalDesign.safeParse(trial)
+  return (
+    rest.success ||
+    !rest.error.issues.some(
+      (other) => other.path.length === path.length && other.path.every((key, i) => key === path[i])
+    )
+  )
+}
+
+/**
  * Applies the one repair an issue allows, or returns false when it allows
  * none. An unknown key is dropped. A list item that does not parse, such as a
- * menu item of a newer kind, is dropped from its list. An option value this
- * build does not offer goes back to the default design's value.
+ * menu item of a newer kind, is dropped from its list. An optional field that
+ * does not parse, such as an option a newer build added, is dropped on its own.
+ * A required option value this build does not offer goes back to the default design's value.
  */
 function repair(
   doc: unknown,
@@ -86,6 +105,12 @@ function repair(
     const list = lookup(doc, issue.path.slice(0, index)) as unknown[]
     list.splice(issue.path[index] as number, 1)
     dropped.push(pathText(issue.path.slice(0, index + 1)))
+    return true
+  }
+  if (issue.path.length > 0 && issue.path[0] !== 'version' && isOptionalField(doc, issue.path)) {
+    const parent = lookup(doc, issue.path.slice(0, -1)) as Record<PropertyKey, unknown>
+    delete parent[issue.path.at(-1)!]
+    dropped.push(pathText(issue.path))
     return true
   }
   if (issue.code !== 'invalid_value' || issue.path[0] === 'version') return false
