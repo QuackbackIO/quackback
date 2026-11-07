@@ -1,7 +1,6 @@
 import { useRouteContext, useRouterState } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
-import { backgroundPageOf } from '@/lib/shared/design/page-background'
-import { locationOfPath } from '@/lib/shared/design/outline'
+import { backgroundPageOf, locationOfPath } from '@/lib/shared/design/paths'
 import { usePreviewDesignNav } from './preview-draft-context'
 
 /** A turned-off page's sample, which the builder shows at /design-sample/<page>. */

@@ -37,7 +37,7 @@ import {
   type VotersQuerySource,
 } from '@/components/admin/feedback/voters-avatar-stack'
 import { cn, formatMonthYear } from '@/lib/shared/utils'
-import { TAG_EDGE, TAG_TINT, useTagStyle } from '@/components/public/tag-tint'
+import { TAG_EDGE, TAG_TINT, useTagStyle } from '@/components/ui/status-badge'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import type { OwnerRef } from '@/lib/server/functions/post-owner-context'
 import type { PostId, PostStatusId, PostTagId, BoardId, PrincipalId } from '@quackback/ids'

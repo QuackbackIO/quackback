@@ -8,10 +8,15 @@
  * Left out, it draws as it always has: a measure beside an image or when
  * centred, else the words' full width.
  */
-import { DESIGN_OPTIONS } from './options'
 import type { PortalDesign } from './schema'
 
-export type ComposerWidth = (typeof DESIGN_OPTIONS.composerWidth)[number]
+/**
+ * The steps, narrowest first. DESIGN_OPTIONS reads them from here, so the
+ * portal's hero can size its composer without loading every design option.
+ */
+export const COMPOSER_WIDTHS = ['narrow', 'medium', 'wide', 'full'] as const
+
+export type ComposerWidth = (typeof COMPOSER_WIDTHS)[number]
 
 /** Each step's measure; the full step is the words' own width. */
 const MEASURE_REM: Record<ComposerWidth, number | null> = {
@@ -75,7 +80,7 @@ export function composerWidthMeasures(
   room: number,
   rem: number
 ): Array<{ step: ComposerWidth; px: number }> {
-  return DESIGN_OPTIONS.composerWidth.map((step) => {
+  return COMPOSER_WIDTHS.map((step) => {
     const measure = MEASURE_REM[step]
     return { step, px: measure === null ? room : Math.min(measure * rem, room) }
   })
