@@ -1,6 +1,7 @@
 import { Button, Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
 import { typography, button, colors } from './shared-styles'
+import { emailBodyHtml } from './email-body-html'
 
 interface ChangelogPublishedEmailProps {
   changelogTitle: string
@@ -65,7 +66,7 @@ export function ChangelogPublishedEmail({
             fontSize: '16px',
             lineHeight: '26px',
           }}
-          dangerouslySetInnerHTML={{ __html: bodyHtml }}
+          dangerouslySetInnerHTML={{ __html: emailBodyHtml(bodyHtml) }}
         />
       ) : (
         contentPreview && (
