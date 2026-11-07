@@ -1,12 +1,40 @@
-import {
-  LIFT_TABLE,
-  LIFT_UNDO,
-  LOGO_FILTER,
-  LUMINANCE_MATRIX,
-  REVERSE_MATRIX,
-  SINK_TABLE,
-  SINK_UNDO,
-} from '@/lib/shared/design/logo'
+/**
+ * The filters' ids, as LOGO_FILTER in lib/shared/design/logo.ts names them for
+ * the design's --qb-logo-filter. Written out here so the header does not load
+ * the logo measuring code; a test keeps the two the same.
+ */
+export const LOGO_FILTER_IDS = {
+  reverse: 'qb-logo-reverse',
+  lift: 'qb-logo-lift',
+  sink: 'qb-logo-sink',
+  ink: 'qb-logo-ink',
+} as const
+const LOGO_FILTER = LOGO_FILTER_IDS
+
+/** Relative luminance weights, in sRGB as the filters work. */
+const Y = [0.2126, 0.7152, 0.0722] as const
+const row = (channel: number, scale: number, offset: number) =>
+  [0, 1, 2].map((i) => (i === channel ? 1 : 0) + scale * Y[i]!).join(' ') + ` 0 ${offset}`
+
+/** Each colour less twice its luminance, plus one: lightness turned over, colour kept. */
+const REVERSE_MATRIX = [row(0, -2, 1), row(1, -2, 1), row(2, -2, 1), '0 0 0 1 0'].join(' ')
+/** The luminance in every channel, alpha kept. */
+const LUMINANCE_MATRIX = [
+  Y.join(' ') + ' 0 0',
+  Y.join(' ') + ' 0 0',
+  Y.join(' ') + ' 0 0',
+  '0 0 0 1 0',
+].join(' ')
+/**
+ * By luminance from black to white: how far lift raises a colour (all the
+ * way for black, none from mid grey up), and one less how far sink lowers it.
+ * Averaged with the logo, then doubled back (less one for sink), as
+ * arithmetic compositing would otherwise double the logo's alpha.
+ */
+const LIFT_TABLE = '1 0 0'
+const SINK_TABLE = '1 1 0'
+const LIFT_UNDO = '2 0 0 0 0 0 2 0 0 0 0 0 2 0 0 0 0 0 1 0'
+const SINK_UNDO = '2 0 0 0 -1 0 2 0 0 -1 0 0 2 0 -1 0 0 0 1 0'
 
 /** Moves each colour by a table of its luminance, keeping its hue (lift and sink). */
 function ShiftFilter({ id, table, undo }: { id: string; table: string; undo: string }) {

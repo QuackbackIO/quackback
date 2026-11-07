@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { portalUtility } from '@/test/portal-utilities'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
@@ -114,7 +115,8 @@ describe('the header logo a design chooses', () => {
     const logo = await mount(design({ display: 'name', name: 'Harbor & Pine' }))
     const name = logo.querySelector('.portal-header__name')!
     expect(logo.textContent).toBe('Harbor & Pine')
-    expect(name.className).toContain('[font-family:var(--qb-font-heading)]')
+    expect(name.className).toContain('qb-header-title')
+    expect(portalUtility('qb-header-title')).toContain('font-family: var(--qb-font-heading)')
     expect(name.className).not.toContain('hidden')
   })
 
@@ -158,8 +160,9 @@ describe('the header logo a design chooses', () => {
     )
     const name = logo.querySelector('.portal-header__name')!
     expect(name.textContent).toBe('Voltline')
-    expect(name.className).toContain('[font-family:var(--qb-font-heading)]')
-    expect(name.className).toContain('[font-weight:var(--qb-heading-weight)]')
+    expect(name.className).toContain('qb-header-title')
+    expect(portalUtility('qb-header-title')).toContain('font-family: var(--qb-font-heading)')
+    expect(portalUtility('qb-header-title')).toContain('font-weight: var(--qb-heading-weight)')
     expect(name.querySelector('span')).toBeNull()
   })
 

@@ -315,7 +315,7 @@ function PostDetailPage() {
       {/* Where the design sets page titles on the band, a post opens on a calm row on the page,
           with the way back to its board: the band's colour or art squeezed into a strip this short
           reads as a stray stripe, not a hero. */}
-      <div data-qb-part="post-band" className="hidden [[data-qb-page-titles=band]_&]:block">
+      <div data-qb-part="post-band" className="qb-band-title-only">
         <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 pt-5 sm:px-6">
           <BackLink to="/" search={{ board: slug }} className="font-medium">
             {board.name}
@@ -328,11 +328,7 @@ function PostDetailPage() {
       >
         <UnsubscribeBanner postId={post.id as PostId} />
 
-        <BackLink
-          to="/"
-          search={{ board: slug }}
-          className="mb-6 [[data-qb-page-titles=band]_&]:hidden"
-        >
+        <BackLink to="/" search={{ board: slug }} className="mb-6 qb-band-title-off">
           {board.name}
         </BackLink>
 

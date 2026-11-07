@@ -5,8 +5,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
-import { StatusColourContext } from '@/components/ui/status-badge'
-import { TAG_TINT, useTagStyle } from '../tag-tint'
+import { portalUtility } from '@/test/portal-utilities'
+import { StatusColourContext, TAG_TINT, useTagStyle } from '@/components/ui/status-badge'
 
 function Chip({ colour }: { colour: string | null }) {
   const style = useTagStyle()
@@ -33,6 +33,10 @@ describe('a tag chip', () => {
     const { container } = render(<Chip colour={null} />)
     expect(chip(container).style.getPropertyValue('--qb-tag')).toBe('var(--muted-foreground)')
     expect(TAG_TINT).toContain('text-foreground')
-    expect(TAG_TINT).toContain('[[data-qb-status=ink]_&]:[background:var(--muted)]')
+    expect(TAG_TINT).toContain('qb-tag-tint')
+    // The tint and its plain ink fallback are one named utility in the stylesheet.
+    const rule = portalUtility('qb-tag-tint')
+    expect(rule).toContain("[data-qb-status='ink'] &")
+    expect(rule).toContain('background: var(--muted)')
   })
 })

@@ -45,11 +45,8 @@ export function NavScroller({ className, children }: { className?: string; child
         ref={ref}
         data-qb-nav-row=""
         className={cn(
-          'overflow-x-auto scrollbar-none',
           // The end fades out before the chevron, so the last word dissolves rather than stops.
-          'data-more-end:[mask-image:linear-gradient(to_right,black_calc(100%-4.5rem),transparent_calc(100%-1.25rem))]',
-          'data-more-start:[mask-image:linear-gradient(to_left,black_calc(100%-3rem),transparent)]',
-          'data-more-start:data-more-end:[mask-image:linear-gradient(to_right,transparent,black_3rem,black_calc(100%-4.5rem),transparent_calc(100%-1.25rem))]'
+          'overflow-x-auto scrollbar-none qb-nav-fade'
         )}
       >
         {children}

@@ -1,5 +1,5 @@
 import { nameInitial } from '@/lib/shared/utils/initial'
-import { memo, useEffect, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useEffect, useRef, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
 import { isHelpPath, isTabActive, type PortalNavItem } from './portal-header-nav'
@@ -47,9 +47,13 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { usePreviewDesignAttributes, usePreviewLogo } from './preview-draft-context'
-import { CustomiseButton } from './customise-button'
 import { LogoFilters } from './logo-filters'
 import { PORTAL_LANDING } from '@/lib/shared/design/paths'
+
+// Only team members see it, so visitors never load it or the design queries behind it.
+const CustomiseButton = lazy(() =>
+  import('./customise-button').then((m) => ({ default: m.CustomiseButton }))
+)
 
 /**
  * A logo image where the design says its ink would vanish into the header:
@@ -57,14 +61,11 @@ import { PORTAL_LANDING } from '@/lib/shared/design/paths'
  */
 const ICON_TILE = '[border-radius:calc(var(--radius)*0.6)] [filter:var(--qb-logo-filter,none)]'
 /** The title, in the theme's heading font and weight, in the header's text colour. */
-const TITLE =
-  'portal-header__name max-w-[18ch] truncate leading-none text-[var(--header-foreground)] [font-family:var(--qb-font-heading)] [font-weight:var(--qb-heading-weight)] [letter-spacing:var(--qb-headline-tracking,normal)]'
+const TITLE = 'portal-header__name qb-header-title max-w-[18ch] truncate leading-none'
 
 /** On the band, the header's button takes the colour the design picks to read there. */
-const ON_BAND_ACTION =
-  '[[data-qb-header-band=on]_&]:bg-[var(--qb-header-action-bg)] [[data-qb-header-band=on]_&]:text-[var(--qb-header-action-ink)] [[data-qb-header-band=on]_&]:hover:opacity-90'
-const ON_BAND_GHOST =
-  '[[data-qb-header-band=on]_&]:text-[var(--header-foreground)] [[data-qb-header-band=on]_&]:hover:bg-[var(--nav-active-background)]'
+const ON_BAND_ACTION = 'qb-band-action'
+const ON_BAND_GHOST = 'qb-band-ghost'
 
 interface PortalHeaderProps {
   orgName: string
@@ -211,7 +212,11 @@ export function PortalHeader({
   // render of the header would tear these menus down and build them again.
   // Each is its own element, so a centred header can lay them on both sides.
   const themeToggle = showThemeToggle && <ThemeToggle />
-  const customise = canAccessAdmin && <CustomiseButton />
+  const customise = canAccessAdmin && (
+    <Suspense fallback={null}>
+      <CustomiseButton />
+    </Suspense>
+  )
   // Admin Button (visible for team members)
   const adminButton = canAccessAdmin && (
     <Button variant="outline" size="sm" asChild className="ms-1 me-2">
@@ -373,6 +378,8 @@ export function PortalHeader({
       {nameInitial(orgName)}
     </div>
   )
+  // The logo filters only act on the design's own logo images.
+  const filtered = display === 'wordmark' || !!ownMark
   const logo = (
     <Link
       to={PORTAL_LANDING}
@@ -385,7 +392,7 @@ export function PortalHeader({
       data-qb-menu="logo"
       data-qb-logo={display}
     >
-      <LogoFilters />
+      {filtered ? <LogoFilters /> : null}
       {display === 'wordmark' ? (
         <>
           {/* The light file shows in dark mode too when there is no dark one. */}
@@ -427,18 +434,9 @@ export function PortalHeader({
     />
   )
   const menuFolded = useMenuFold(inlineRow, headerLayout === 'inline')
+  // How the header meets the design's band (qb-header in globals.css).
   const headerClassName =
-    'portal-header sticky top-0 z-40 w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm [[data-qb-header-band=on]_&]:shadow-none ' +
-    // On a gradient band, the band's own background runs up behind the header: one surface, the header its top.
-    '[[data-qb-header-span=on]_&]:[background:var(--qb-header-surface-narrow,var(--qb-header-surface))] sm:[[data-qb-header-span=on]_&]:[background:var(--qb-header-surface)] [[data-qb-header-span=on]_&]:![background-size:100%_calc(100%+var(--portal-band-height,0px))] [[data-qb-header-span=on]_&]:![background-position:top] ' +
-    // On a page with no band, such as a post's, the header is its own colour alone: the shared
-    // surface squeezed into the header would end on a hard edge.
-    '[[data-qb-header-span=on]:not(:has([data-qb-part=band]))_&]:![background:var(--qb-header-bg)] ' +
-    // On the hero's photo, the top of the band's picture under a veil deepest at the top, easing into
-    // the band's at its foot (the band measures where the picture sits, portal-band). The veil is
-    // laid from the border's edge: from the padding's, it repeats into the transparent bottom
-    // border, its deepest top row drawn there as a faint line over the picture.
-    '[[data-qb-header-span=photo]_&]:border-transparent [[data-qb-header-span=photo]_&]:shadow-none [[data-qb-header-span=photo]_&]:[background:linear-gradient(var(--qb-header-veil),var(--qb-band-scrim))_border-box,var(--portal-band-image,none)_var(--portal-band-image-at,center_top)/var(--portal-band-image-size,cover)_no-repeat,var(--qb-header-bg)]'
+    'portal-header qb-header sticky top-0 z-40 w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm'
 
   // A design can put the menu beside the logo or centre both. Below md an
   // inline header folds back to two rows, so the menu always has room; wider,
@@ -547,9 +545,9 @@ export function PortalHeader({
 
 const navItemClass = (isActive: boolean) =>
   cn(
-    'portal-nav__item px-3 py-2 text-sm font-medium transition-colors [border-radius:var(--qb-nav-radius,calc(var(--radius)*0.8))]',
+    'portal-nav__item qb-nav-item px-3 py-2 text-sm font-medium transition-colors',
     isActive
-      ? 'portal-nav__item--active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)] [[data-qb-nav=underline]_&]:rounded-none [[data-qb-nav=underline]_&]:shadow-[inset_0_-2px_0_var(--qb-accent)] [[data-qb-nav=plain]_&]:font-bold'
+      ? 'portal-nav__item--active qb-nav-active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)]'
       : 'text-[var(--nav-inactive-color)] hover:text-[var(--nav-active-foreground)] hover:bg-[var(--nav-active-background)]/50'
   )
 
