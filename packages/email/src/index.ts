@@ -850,7 +850,7 @@ export async function sendSignupNotAllowedEmail(
   log.debug('sending sign-in refusal email')
   return sendEmail({
     to,
-    subject: 'About your Quackback sign-in request',
+    subject: `About your ${workspaceName?.trim() || 'Quackback'} sign-in request`,
     react: SignupNotAllowedEmail({ workspaceName, logoUrl }),
     emailType: 'SignupNotAllowedEmail',
     workspaceName,
@@ -877,8 +877,8 @@ export async function sendPasswordResetEmail(
   log.debug('sending password reset email')
   return sendEmail({
     to,
-    subject: 'Reset your Quackback password',
-    react: PasswordResetEmail({ resetLink, logoUrl }),
+    subject: `Reset your ${workspaceName?.trim() || 'Quackback'} password`,
+    react: PasswordResetEmail({ resetLink, logoUrl, workspaceName }),
     emailType: 'PasswordResetEmail',
     workspaceName,
     preview: { resetLink },
