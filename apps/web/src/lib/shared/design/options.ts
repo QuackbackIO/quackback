@@ -1,3 +1,6 @@
+import { COLOUR_ROLES } from '../content-html'
+import { COMPOSER_WIDTHS } from './composer-width'
+
 /**
  * Every choice a portal design offers, in one place. The design schema, the
  * reference-brand coverage test and Appearance's tiles all read these lists,
@@ -42,7 +45,7 @@ export const DESIGN_OPTIONS = {
   /** How a blend band runs: in a line, as a soft mesh beside the words, or as a diagonal ribbon beside them. */
   blend: ['linear', 'mesh', 'ribbon'],
   /** A colour of the brand's: the brand colour, the second, or one of up to two more. */
-  colourRole: ['accent', 'support', 'extra1', 'extra2'],
+  colourRole: COLOUR_ROLES,
   /** Where the band's words sit. */
   bandAlign: ['left', 'centre'],
   /**
@@ -71,7 +74,7 @@ export const DESIGN_OPTIONS = {
   /** Home's composer: a block on the grid, or in the band under the headline. */
   composerPlace: ['block', 'band'],
   /** How wide Home's composer is in the band, narrowest first; full is the words' own width. */
-  composerWidth: ['narrow', 'medium', 'wide', 'full'],
+  composerWidth: COMPOSER_WIDTHS,
   /** Home's hero's one main action: the composer, the help search, a call to action, or none. */
   mainAction: ['composer', 'search', 'button', 'none'],
   /** Where the hero's call to action goes: it opens the composer, or goes to the roadmap. */
