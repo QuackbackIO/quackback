@@ -56,16 +56,16 @@ describe('arrivalAction', () => {
 })
 
 describe('useMatchOnArrival', () => {
-  const hooks = () => ({ ask: vi.fn(), expandAi: vi.fn(), openBrandKit: vi.fn() })
+  const hooks = () => ({ start: vi.fn(), showAi: vi.fn(), openBrandKit: vi.fn() })
 
   it('runs the brand match once, into Ask AI, and clears the address so a reload does not', () => {
     router.search = { match: 'acme.com', from: 'onboarding' }
     const on = hooks()
     const { rerender } = renderHook(() => useMatchOnArrival(on))
     rerender()
-    expect(on.ask).toHaveBeenCalledOnce()
-    expect(on.ask).toHaveBeenCalledWith('acme.com', 'site')
-    expect(on.expandAi).toHaveBeenCalledOnce()
+    expect(on.start).toHaveBeenCalledOnce()
+    expect(on.start).toHaveBeenCalledWith('acme.com')
+    expect(on.showAi).toHaveBeenCalledOnce()
     expect(on.openBrandKit).not.toHaveBeenCalled()
     expect(router.navigate).toHaveBeenCalledOnce()
     const call = router.navigate.mock.calls[0]![0] as {
@@ -85,7 +85,7 @@ describe('useMatchOnArrival', () => {
     ai.available = false
     const on = hooks()
     renderHook(() => useMatchOnArrival(on))
-    expect(on.ask).not.toHaveBeenCalled()
+    expect(on.start).not.toHaveBeenCalled()
     expect(on.openBrandKit).toHaveBeenCalledOnce()
   })
 
@@ -93,7 +93,7 @@ describe('useMatchOnArrival', () => {
     router.search = { from: 'portal' }
     const on = hooks()
     renderHook(() => useMatchOnArrival(on))
-    expect(on.ask).not.toHaveBeenCalled()
+    expect(on.start).not.toHaveBeenCalled()
     expect(on.openBrandKit).not.toHaveBeenCalled()
     expect(router.navigate).not.toHaveBeenCalled()
   })

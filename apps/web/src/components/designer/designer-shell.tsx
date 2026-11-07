@@ -273,7 +273,11 @@ export function DesignerShell({
   }
   const openTheme = (more = false) => panel.dispatch({ type: 'open', sheet: 'theme', more })
   // Onboarding's /design?match=<site>: the brand match runs into the draft; or the Brand kit opens.
-  useMatchOnArrival({ ask: ai.ask, expandAi: aiPane.expand, openBrandKit: () => openTheme() })
+  useMatchOnArrival({
+    start: (site) => ai.ask(site, 'site'),
+    showAi: aiPane.expand,
+    openBrandKit: () => openTheme(),
+  })
   const pickAndFocus = (key: Selection) => {
     pick(key)
     focusSettings()

@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
-import type { DesignAiScope } from '@/lib/shared/design/apply-changes'
 import { websiteIn } from '@/lib/shared/design/match-brand'
 
 export type ArrivalAction = { kind: 'match'; site: string } | { kind: 'brand-kit' }
@@ -24,17 +23,19 @@ export function arrivalAction(input: {
 }
 
 /**
- * Runs the arrival action once, through Ask AI's own brand match so it lands
- * in the draft as one step with its Undo, then clears the address so a
- * reload does not run it again.
+ * Runs the arrival action once, then clears the address so a reload does not
+ * run it again. `start` is the builder's own brand match (Ask AI's, so it
+ * lands in the draft as one step with its Undo); this hook only decides.
  */
 export function useMatchOnArrival({
-  ask,
-  expandAi,
+  start,
+  showAi,
   openBrandKit,
 }: {
-  ask: (text: string, scope: DesignAiScope) => unknown
-  expandAi: () => void
+  /** Starts the brand match from a website. */
+  start: (website: string) => unknown
+  /** Shows Ask AI's pane, where the match reports as it runs. */
+  showAi: () => void
   openBrandKit: () => void
 }) {
   const search = useSearch({ from: '/design' })
@@ -51,8 +52,8 @@ export function useMatchOnArrival({
       replace: true,
     })
     if (action.kind === 'match') {
-      expandAi()
-      void ask(action.site, 'site')
+      showAi()
+      void start(action.site)
     } else openBrandKit()
   }, [])
 }
