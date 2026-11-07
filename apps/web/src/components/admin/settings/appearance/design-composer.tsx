@@ -15,6 +15,7 @@ import { readBrandShot, type BrandShot } from '@/lib/client/brand-shots'
 import { imageForModel, imagePalette } from '@/lib/client/image-palette'
 import { MATCH_BRAND } from '@/lib/shared/design/match-brand'
 import type { DesignAiScope } from '@/lib/shared/design/apply-changes'
+import type { AiReach, ReachChoice } from '@/lib/shared/design/ai-reach'
 import type { BrandContext, ChatImage } from './use-design-ai'
 import { useShotChecks } from './use-shot-checks'
 
@@ -405,28 +406,67 @@ export function DesignComposer({
 
 /**
  * What rides along with a request: the picked block, section or element by
- * name, the page it is on, and for an element the section it is in.
+ * name, the page it is on, and for an element the section it is in. Its
+ * reach says how far a request may change it, the panel's own scope first,
+ * and goes with the request as its `within`.
  */
 export interface ChatContext {
   name: string
   page: string
   /** The section an element picked inside it is in: "Hero". */
   section?: string
+  /** How far a request may reach: the choices, the one chosen, and a way to choose another. */
+  reach?: {
+    choices: readonly ReachChoice[]
+    value: AiReach
+    onChange: (reach: AiReach) => void
+  }
+}
+
+const capital = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`
+
+/** Where the picked part is and how far a request reaches: "Hero · every main button", "Every page (4)". */
+function reachLine(context: ChatContext): string {
+  const chosen = context.reach?.choices.find((choice) => choice.reach === context.reach!.value)
+  if (!chosen)
+    return context.section ? `${context.section} on ${context.page}` : `On ${context.page}`
+  return context.section ? `${context.section} · ${chosen.words}` : capital(chosen.words)
 }
 
 /**
- * The picked block or element riding along with a request: its name and
- * where it is, and an X that takes it out of the chat and lets go of it on
- * the page.
+ * The picked block or element riding along with a request: its name, where
+ * it is and how far a request reaches (a click takes the next reach, where
+ * there is more than one), and an X that takes it out of the chat and lets
+ * go of it on the page.
  */
 export function ContextChip({ context, onClear }: { context: ChatContext; onClear: () => void }) {
+  const line = reachLine(context)
+  const choices = context.reach?.choices ?? []
+  const next = () => {
+    const at = choices.findIndex((choice) => choice.reach === context.reach!.value)
+    context.reach!.onChange(choices[(at + 1) % choices.length]!.reach)
+  }
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 rounded-lg bg-muted py-0.5 ps-2 pe-0.5 text-xs">
       <span className="min-w-0 leading-tight">
         <span className="block truncate font-medium text-foreground">{context.name}</span>
-        <span className="block truncate text-muted-foreground">
-          {context.section ? `${context.section} on ${context.page}` : `On ${context.page}`}
-        </span>
+        {choices.length > 1 ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={`How far a request reaches: ${line}`}
+                className="block max-w-full truncate rounded text-start text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+                onClick={next}
+              >
+                {line}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>How far a request reaches</TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="block truncate text-muted-foreground">{line}</span>
+        )}
       </span>
       <Tooltip>
         <TooltipTrigger asChild>

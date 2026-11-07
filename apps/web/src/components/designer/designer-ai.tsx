@@ -13,7 +13,8 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import type { AiElementPick, DesignAiScope } from '@/lib/shared/design/apply-changes'
-import type { Selection } from '@/lib/shared/design/outline'
+import type { DesignerPage, Selection } from '@/lib/shared/design/outline'
+import { reachChoices, type AiReach } from '@/lib/shared/design/ai-reach'
 import { heroOf, writeHero } from '@/lib/shared/design/hero'
 import { isMenuSelection } from '@/lib/shared/design/menu'
 import { siteCaptureUsageFn } from '@/lib/server/functions/site-capture'
@@ -134,6 +135,7 @@ export function DesignerAi({
   element = null,
   elementName = null,
   pageName,
+  page = 'home',
   update,
   onClearSelection,
   onCollapse,
@@ -152,6 +154,8 @@ export function DesignerAi({
   elementName?: string | null
   /** The page shown, which the picked part is on. */
   pageName: string
+  /** The page shown, by its id, which a request kept to one page keeps to. */
+  page?: DesignerPage
   update: Update
   onClearSelection: () => void
   /** Folds the pane to its rail. */
@@ -170,13 +174,29 @@ export function DesignerAi({
       // Match my brand points at the box: the website or screenshots go there.
       ...(text === MATCH_STARTER ? { text: '', hint: MATCH_HINT } : { text }),
     }))
+  // How far a request may reach: the panel's own scope first, until another is chosen
+  // for this pick on this page.
+  const choices = reachChoices(draft.design, { scope, blockId, element }, page, gates)
+  const pickKey = `${selection}|${element?.element ?? ''}|${element?.part ?? ''}|${page}`
+  const [chosen, setChosen] = useState<{ key: string; reach: AiReach } | null>(null)
+  const within: AiReach | undefined =
+    chosen?.key === pickKey && choices.some((choice) => choice.reach === chosen.reach)
+      ? chosen.reach
+      : choices[0]?.reach
+  const reach = within
+    ? {
+        choices,
+        value: within,
+        onChange: (next: AiReach) => setChosen({ key: pickKey, reach: next }),
+      }
+    : undefined
   // A block, a section of the page or an item of the menu; never the site's own settings.
   // An element picked inside it leads, with the section it is in beside it.
   const context: ChatContext | null =
     selection && selectionName && selection !== 'site' && !selection.startsWith('site:')
       ? element && elementName
-        ? { name: elementName, section: selectionName, page: pageName }
-        : { name: selectionName, page: pageName }
+        ? { name: elementName, section: selectionName, page: pageName, ...(reach && { reach }) }
+        : { name: selectionName, page: pageName, ...(reach && { reach }) }
       : null
   return (
     <section
@@ -257,10 +277,13 @@ export function DesignerAi({
             limited={ai.limited}
             onClearScope={onClearSelection}
             onAsk={(text, images, brand) =>
-              // An element picked inside the selection rides along, so "just this" names it.
-              void (element
-                ? ai.ask(text, scope, images, blockId, brand, element)
-                : ai.ask(text, scope, images, blockId, brand))
+              // An element picked inside the selection rides along, so "just this" names it,
+              // and the chip's reach with it, which the server holds every change to.
+              void (context && within
+                ? ai.ask(text, scope, images, blockId, brand, element ?? undefined, within)
+                : element
+                  ? ai.ask(text, scope, images, blockId, brand, element)
+                  : ai.ask(text, scope, images, blockId, brand))
             }
             prefill={prefill}
             below={(text) => <CapturesLeft text={text} />}

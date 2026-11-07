@@ -86,7 +86,16 @@ describe('the AI context chip', () => {
     const box = screen.getByLabelText('Ask Quackback AI')
     fireEvent.change(box, { target: { value: 'fewer posts' } })
     fireEvent.keyDown(box, { key: 'Enter' })
-    expect(ask).toHaveBeenCalledWith('fewer posts', 'home', undefined, 'topposts1', undefined)
+    // A Home block keeps to itself: the chip's reach goes with the request.
+    expect(ask).toHaveBeenCalledWith(
+      'fewer posts',
+      'home',
+      undefined,
+      'topposts1',
+      undefined,
+      undefined,
+      'one'
+    )
   })
 
   it('sends the element picked inside the selection, so "just this" names it', () => {
@@ -103,7 +112,8 @@ describe('the AI context chip', () => {
       {
         element: 'button',
         part: 'hero.home.cta',
-      }
+      },
+      'every'
     )
   })
 
@@ -116,7 +126,8 @@ describe('the AI context chip', () => {
       'Call to action'
     )
     expect(screen.getByText('Call to action')).toBeTruthy()
-    expect(screen.getByText('Hero on Home')).toBeTruthy()
+    // Shared by default, as the element's own panel starts.
+    expect(screen.getByText('Hero · every main button')).toBeTruthy()
     expect(screen.getByLabelText('Ask Quackback AI').getAttribute('placeholder')).toBe(
       'Ask about Call to action'
     )
@@ -124,6 +135,41 @@ describe('the AI context chip', () => {
       screen.getByRole('button', { name: 'Remove Call to action from the chat and deselect it' })
     )
     expect(onClearSelection).toHaveBeenCalledOnce()
+  })
+
+  it('says how far a request about the hero reaches, every page first, and sends it', () => {
+    const design = defaultDesign()
+    design.nav.home.on = true
+    const { ask } = show('hero', 'Hero', [], null, null, design)
+    const reach = screen.getByRole('button', { name: 'How far a request reaches: Every page (6)' })
+    const box = screen.getByLabelText('Ask Quackback AI')
+    fireEvent.change(box, { target: { value: 'Make this calmer' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(ask).toHaveBeenLastCalledWith(
+      'Make this calmer',
+      'band',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'every'
+    )
+    // Narrowed to this page, a request is held to it.
+    fireEvent.click(reach)
+    expect(
+      screen.getByRole('button', { name: 'How far a request reaches: This page' })
+    ).toBeTruthy()
+    fireEvent.change(box, { target: { value: 'Make this calmer' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(ask).toHaveBeenLastCalledWith(
+      'Make this calmer',
+      'band',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'page'
+    )
   })
 
   it('carries nothing when nothing is picked', () => {

@@ -9,8 +9,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { defaultDesign } from '@/lib/shared/design/schema'
 
-const server = vi.hoisted(() => ({ ask: vi.fn() }))
-vi.mock('@/lib/server/functions/portal-design-ai', () => ({ askPortalDesignAiFn: server.ask }))
+const server = vi.hoisted(() => ({ ask: vi.fn(), step: vi.fn() }))
+vi.mock('@/lib/server/functions/portal-design-ai', () => ({
+  askPortalDesignAiFn: server.ask,
+  designAgentStepFn: server.step,
+}))
+const loop = vi.hoisted(() => ({ run: vi.fn() }))
+vi.mock('@/lib/client/edit-loop', () => ({ runBuilderEditLoop: loop.run }))
 const logo = vi.hoisted(() => ({ change: vi.fn() }))
 vi.mock('@/lib/client/brand-logo', () => ({ brandLogoChange: logo.change }))
 const stream = vi.hoisted(() => ({ match: vi.fn() }))
@@ -266,6 +271,118 @@ describe('useDesignAi', () => {
     await act(() => result.current.ask('Warmer', 'site'))
     expect(server.ask.mock.calls[0]![0].data).toMatchObject({ page: 'roadmap', locale: 'de' })
     expect(result.current.limited).toBeNull()
+  })
+})
+
+describe('how far a request reaches, and what its reply leaves to Show changes', () => {
+  const checkHooks = () => ({
+    begin: vi.fn(),
+    end: vi.fn(),
+    replace: vi.fn(),
+    frame: () => null,
+    current: () => defaultDesign(),
+  })
+  const loopHook = () =>
+    renderHook(() =>
+      useDesignAi({
+        flush: async () => {},
+        adopt: vi.fn(),
+        update,
+        workspaceName: 'Acme',
+        check: checkHooks(),
+      })
+    )
+  const looped = (over: object = {}) => ({
+    ok: true,
+    reply: 'The hero’s button is darker on hover.',
+    design: defaultDesign(),
+    applied: [{ path: 'overrides', before: null, after: [] }],
+    steps: [],
+    unmet: [],
+    refused: [],
+    notes: ['Left alone, as it is outside what was picked: cards.'],
+    stopped: 'done',
+    ms: 10,
+    ...over,
+  })
+
+  beforeEach(() => loop.run.mockReset())
+
+  it('sends the chip’s reach with a request about one part, and never for the whole site', async () => {
+    server.ask.mockResolvedValue({ ok: false, code: 'AI_FAILED', message: 'No.' })
+    const { result } = hook({ page: 'home', locale: 'en' })
+    await act(() =>
+      result.current.ask('Calmer', 'band', undefined, undefined, undefined, undefined, 'page')
+    )
+    expect(server.ask.mock.calls[0]![0].data).toMatchObject({ scope: 'band', within: 'page' })
+    await act(() =>
+      result.current.ask('Calmer', 'site', undefined, undefined, undefined, undefined, 'page')
+    )
+    expect(server.ask.mock.calls[1]![0].data).not.toHaveProperty('within')
+  })
+
+  it('keeps a one-call reply’s notes for Show changes', async () => {
+    server.ask.mockResolvedValue({
+      ok: true,
+      reply: 'I changed the contact heading.',
+      applied: [],
+      readability: [],
+      notes: ['Part of that is outside the Contact block on Home and was left alone.'],
+      outOfScope: false,
+      design: defaultDesign(),
+    })
+    const { result } = hook()
+    await act(() => result.current.ask('Friendlier', 'home', undefined, 'contactbbb'))
+    const reply = result.current.turns.at(-1)
+    expect(reply).toMatchObject({
+      text: 'I changed the contact heading.',
+      notes: ['Part of that is outside the Contact block on Home and was left alone.'],
+    })
+    expect(reply).not.toHaveProperty('widen')
+  })
+
+  it('offers match_website to the loop only for the whole site', async () => {
+    loop.run.mockResolvedValue(looped())
+    const { result } = loopHook()
+    await act(() =>
+      result.current.ask(
+        'Make the main button feel like stripe.com when hovered',
+        'band',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'every'
+      )
+    )
+    const [request, deps] = loop.run.mock.calls[0]!
+    expect(request).toMatchObject({ scope: 'band', within: 'every' })
+    expect(deps.matchWebsite).toBeUndefined()
+    expect(deps.readWebsite).toBeTypeOf('function')
+    // What the loop left alone goes under Show changes, not into the reply.
+    expect(result.current.turns.at(-1)).toMatchObject({
+      text: 'The hero’s button is darker on hover.',
+      notes: ['Left alone, as it is outside what was picked: cards.'],
+    })
+    await act(() => result.current.ask('Make it feel like stripe.com on hover', 'site'))
+    expect(loop.run.mock.calls[1]![1].matchWebsite).toBeTypeOf('function')
+  })
+
+  it('shows a loop that stopped after a change with its changes and Undo, never as failed', async () => {
+    loop.run.mockResolvedValue(
+      looped({
+        reply: 'I changed main buttons on hover, but I stopped before checking everything.',
+        stopped: 'failed',
+        notes: [],
+      })
+    )
+    const { result } = loopHook()
+    await act(() => result.current.ask('Make the buttons darker on hover', 'site'))
+    const reply = result.current.turns.at(-1)
+    expect(reply).toMatchObject({
+      text: 'I changed main buttons on hover, but I stopped before checking everything.',
+      changes: [{ path: 'overrides' }],
+    })
   })
 })
 

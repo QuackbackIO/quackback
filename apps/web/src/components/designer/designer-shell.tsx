@@ -411,6 +411,7 @@ export function DesignerShell({
                   pickedElement ? pickLabel(pickedElement, design, backgroundPageOf(page)) : null
                 }
                 pageName={PAGE_NAMES[page]}
+                page={page}
                 update={update}
                 onClearSelection={() => setSelection(null)}
                 onCollapse={aiPane.collapse}

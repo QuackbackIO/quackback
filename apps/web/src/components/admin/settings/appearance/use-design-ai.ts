@@ -32,6 +32,7 @@ import type {
   DesignAiScope,
 } from '@/lib/shared/design/apply-changes'
 import type { DesignerPage } from '@/lib/shared/design/outline'
+import type { AiReach } from '@/lib/shared/design/ai-reach'
 import type { DesignAdjustment } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { SupportedLocale } from '@/lib/shared/i18n'
@@ -397,7 +398,9 @@ export function useDesignAi({
       /** Screenshots as the browser read them, for a brand matched from them. */
       brand?: BrandContext,
       /** An element picked on the canvas, which "just this" names. */
-      element?: AiElementPick
+      element?: AiElementPick,
+      /** How far the request may reach from the pick, as the composer's chip says. */
+      within?: AiReach
     ) => {
       const images = attachments?.length ?? 0
       // A website named with screenshots is read beside them; named alone, it is captured.
@@ -434,6 +437,7 @@ export function useDesignAi({
                 scope,
                 ...(blockId ? { blockId } : {}),
                 ...(element ? { element } : {}),
+                ...(within && scope !== 'site' ? { within } : {}),
                 history,
                 ...(attachments?.length ? { images: attachments } : {}),
                 ...(seen.current ?? {}),
@@ -453,34 +457,41 @@ export function useDesignAi({
                   found.push(readingSummary(read.reading))
                   return read
                 },
-                matchWebsite: async (url) => {
-                  const matched = await streamBrandMatch({ message: '', images: [], url }, () => {})
-                  if (!matched.ok)
+                // A whole brand match restyles the whole site: offered only when the
+                // request is about the whole site. One part borrows with read_website.
+                ...(scope === 'site' && {
+                  matchWebsite: async (url: string) => {
+                    const matched = await streamBrandMatch(
+                      { message: '', images: [], url },
+                      () => {}
+                    )
+                    if (!matched.ok)
+                      return {
+                        match: {
+                          ok: false,
+                          host: url,
+                          reply: matched.message,
+                          changed: [],
+                          notes: [],
+                        },
+                        design: null,
+                        applied: [],
+                      }
+                    if (matched.report && matched.revision && matched.applied.length > 0)
+                      adopt(matched.design, matched.report, requestLabel(text), matched.revision)
                     return {
                       match: {
-                        ok: false,
-                        host: url,
-                        reply: matched.message,
-                        changed: [],
-                        notes: [],
+                        ok: true,
+                        host: matched.capture?.host ?? url,
+                        reply: matched.reply,
+                        changed: matched.applied.map((c) => c.path),
+                        notes: matched.notes ?? [],
                       },
-                      design: null,
-                      applied: [],
+                      design: matched.design,
+                      applied: matched.applied,
                     }
-                  if (matched.report && matched.revision && matched.applied.length > 0)
-                    adopt(matched.design, matched.report, requestLabel(text), matched.revision)
-                  return {
-                    match: {
-                      ok: true,
-                      host: matched.capture?.host ?? url,
-                      reply: matched.reply,
-                      changed: matched.applied.map((c) => c.path),
-                      notes: matched.notes ?? [],
-                    },
-                    design: matched.design,
-                    applied: matched.applied,
-                  }
-                },
+                  },
+                }),
                 progress: (line) => {
                   setStage(`${line}…`)
                   setSteps((now) => [...now, line])
@@ -498,7 +509,9 @@ export function useDesignAi({
               text: result.reply,
               changes: result.applied,
               trail: trailOf(result.steps),
-              ...(found.length ? { notes: found } : {}),
+              ...(result.notes.length || found.length
+                ? { notes: [...result.notes, ...found] }
+                : {}),
               ...(shown && {
                 capture: {
                   host: shown[0],
@@ -522,6 +535,7 @@ export function useDesignAi({
             scope,
             ...(blockId ? { blockId } : {}),
             ...(element ? { element } : {}),
+            ...(within && scope !== 'site' ? { within } : {}),
             history,
             ...(attachments?.length ? { images: attachments } : {}),
             ...(seen.current ?? {}),
@@ -540,10 +554,12 @@ export function useDesignAi({
           text: result.reply,
           changes: result.applied,
           readability: result.readability,
+          ...('notes' in result && result.notes?.length ? { notes: result.notes } : {}),
           ...(scope !== 'site' ? { where: SCOPE_LABEL[scope] } : {}),
           ...(result.outOfScope ? { widen: text } : {}),
         })
       } catch {
+        // Only when nothing changed: a loop that fails after a step applied keeps it, with its Undo.
         say({ role: 'assistant', text: FAILED })
       } finally {
         setBusy(false)
