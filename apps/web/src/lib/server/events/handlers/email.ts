@@ -295,8 +295,8 @@ async function deliverEmail(
       result = await sendTicketEventEmail({
         to: email,
         ...t,
-        // Agent-facing ticket mail carries no From and no name: it stays the
-        // platform's branded sender, as it always was.
+        // Agent-facing ticket mail carries no From and no name: it goes from the
+        // platform address, which the email package names for `workspaceName`.
         ...(t.from || t.fromDisplayName
           ? await checkedSender(t)
           : { from: undefined, fromDisplayName: undefined }),
