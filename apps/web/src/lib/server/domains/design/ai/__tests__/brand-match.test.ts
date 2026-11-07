@@ -28,8 +28,13 @@ import type { HeroAnswer } from '../hero-family'
 import type { VoiceAnswer, WordsAnswer } from '../words-family'
 import type { WordsPick } from '../words-pick'
 import { colourName, followUps } from '../brand-reply'
-import { matchType } from '../brand-fonts'
+import { matchType, type TypeMatches } from '../brand-fonts'
 import { BUDGET } from '../brand-match'
+
+// Each match measures full-size screenshots in plain JS (about 2s of CPU a run
+// here, several times that on a shared CI runner), so the default 20s cap
+// fails on load rather than on behaviour.
+vi.setConfig({ testTimeout: 60_000 })
 
 type Fill = [number, number, number]
 const W = 1200
@@ -201,6 +206,13 @@ const ALLOWS = {
   checkCss: () => 'no CSS',
 }
 
+/**
+ * The type match for each kind of page, worked out once: it is the same CPU
+ * work on the same pixels in every test (brand-fonts.test.ts covers the
+ * worker that runs it in production).
+ */
+const typeMatches = new Map<string, TypeMatches>()
+
 function setup(
   over: Partial<BrandMatchDeps> = {},
   thin = false,
@@ -230,6 +242,11 @@ function setup(
       order.push(request.family)
       return answerOf(request.family) as T
     }) as unknown as BrandMatchDeps['family'],
+    matchType: async (shot) => {
+      const key = JSON.stringify([thin, secondLine, ground])
+      if (!typeMatches.has(key)) typeMatches.set(key, matchType(shot))
+      return typeMatches.get(key)!
+    },
     storeLogo: vi.fn(async () => 'header-logos/2026/11/logo.png'),
     fallback: vi.fn(async () => ({
       ok: true as const,

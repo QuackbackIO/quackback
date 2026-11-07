@@ -554,6 +554,208 @@ a svg,
   scrollbar-gutter: stable both-edges;
 }
 
+/*
+ * Portal parts the design reaches through attributes on the page. Each is
+ * named once here rather than spelled out as arbitrary variants on every card,
+ * nav item and header, which every portal document would otherwise carry.
+ * They stay utilities, so they cascade exactly as those variants did.
+ */
+
+/* A 24px target around a small inline control, such as a tag chip. */
+@utility qb-hit-24 {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    inset-block: -0.25rem;
+  }
+}
+
+/* The neutral focus ring a portal control draws. */
+@utility qb-focus-ring {
+  &:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--background),
+      0 0 0 4px var(--ring);
+  }
+}
+
+/* A tag chip tinted with its colour (--qb-tag); plain where statuses are drawn in the ink. */
+@utility qb-tag-tint {
+  background: color-mix(in oklch, var(--qb-tag) 14%, transparent);
+
+  [data-qb-status='ink'] & {
+    background: var(--muted);
+  }
+}
+
+@utility qb-tag-edge {
+  border-color: color-mix(in oklch, var(--qb-tag) 28%, transparent);
+
+  [data-qb-status='ink'] & {
+    border-color: var(--border);
+  }
+}
+
+/* A post card's body, title and the rows the design can turn off. */
+@utility qb-card-body {
+  padding: var(--qb-card-padding, 1rem);
+}
+
+@utility qb-card-title {
+  font-size: var(--qb-title-size, 1rem);
+  line-height: 1.5;
+}
+
+@utility qb-card-excerpt {
+  [data-qb-card-excerpt='off'] & {
+    display: none;
+  }
+}
+
+@utility qb-card-tags {
+  [data-qb-card-tags='off'] & {
+    display: none;
+  }
+}
+
+@utility qb-card-meta {
+  [data-qb-card-meta='off'] & {
+    display: none;
+  }
+}
+
+/* A menu item: the design's corner, and its active look (pill, underline or plain). */
+@utility qb-nav-item {
+  border-radius: var(--qb-nav-radius, calc(var(--radius) * 0.8));
+}
+
+@utility qb-nav-active {
+  [data-qb-nav='underline'] & {
+    border-radius: 0;
+    box-shadow: inset 0 -2px 0 var(--qb-accent);
+  }
+
+  [data-qb-nav='plain'] & {
+    font-weight: 700;
+  }
+}
+
+/* The menu row fades out at whichever end has more to scroll to. */
+@utility qb-nav-fade {
+  &[data-more-end] {
+    mask-image: linear-gradient(to right, black calc(100% - 4.5rem), transparent calc(100% - 1.25rem));
+  }
+
+  &[data-more-start] {
+    mask-image: linear-gradient(to left, black calc(100% - 3rem), transparent);
+  }
+
+  &[data-more-start][data-more-end] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 3rem,
+      black calc(100% - 4.5rem),
+      transparent calc(100% - 1.25rem)
+    );
+  }
+}
+
+/*
+ * The header on the design's band. On a gradient band, the band's background
+ * runs up behind the header: one surface, the header its top. On a page with
+ * no band, such as a post's, the header is its own colour alone, since the
+ * shared surface squeezed into it would end on a hard edge. On the hero's
+ * photo, the top of the band's picture shows under a veil deepest at the top,
+ * easing into the band's at its foot (portal-band measures where the picture
+ * sits). The veil is laid from the border's edge: from the padding's, it would
+ * repeat into the transparent bottom border as a faint line over the picture.
+ */
+@utility qb-header {
+  [data-qb-header-band='on'] & {
+    box-shadow: none;
+  }
+
+  [data-qb-header-span='on'] & {
+    background: var(--qb-header-surface-narrow, var(--qb-header-surface));
+    background-size: 100% calc(100% + var(--portal-band-height, 0px)) !important;
+    background-position: top !important;
+  }
+
+  @media (width >= 40rem) {
+    [data-qb-header-span='on'] & {
+      background: var(--qb-header-surface);
+    }
+  }
+
+  [data-qb-header-span='on']:not(:has([data-qb-part='band'])) & {
+    background: var(--qb-header-bg) !important;
+  }
+
+  [data-qb-header-span='photo'] & {
+    border-color: transparent;
+    box-shadow: none;
+    background:
+      linear-gradient(var(--qb-header-veil), var(--qb-band-scrim)) border-box,
+      var(--portal-band-image, none) var(--portal-band-image-at, center top) /
+        var(--portal-band-image-size, cover) no-repeat,
+      var(--qb-header-bg);
+  }
+}
+
+/* The header's title, in the theme's heading font, weight and tracking. */
+@utility qb-header-title {
+  color: var(--header-foreground);
+  font-family: var(--qb-font-heading);
+  font-weight: var(--qb-heading-weight);
+  letter-spacing: var(--qb-headline-tracking, normal);
+}
+
+/* On the band, the header's buttons take the colours the design picks to read there. */
+@utility qb-band-action {
+  [data-qb-header-band='on'] & {
+    background-color: var(--qb-header-action-bg);
+    color: var(--qb-header-action-ink);
+  }
+
+  @media (hover: hover) {
+    [data-qb-header-band='on'] &:hover {
+      opacity: 0.9;
+    }
+  }
+}
+
+@utility qb-band-ghost {
+  [data-qb-header-band='on'] & {
+    color: var(--header-foreground);
+  }
+
+  @media (hover: hover) {
+    [data-qb-header-band='on'] &:hover {
+      background-color: var(--nav-active-background);
+    }
+  }
+}
+
+/* A post page's title where the design draws page titles on the band, and where it does not. */
+@utility qb-band-title-only {
+  display: none;
+
+  [data-qb-page-titles='band'] & {
+    display: block;
+  }
+}
+
+@utility qb-band-title-off {
+  [data-qb-page-titles='band'] & {
+    display: none;
+  }
+}
+
 /* Legacy class aliases for backward compatibility */
 .custom-scrollbar {
   @apply scrollbar-thin;

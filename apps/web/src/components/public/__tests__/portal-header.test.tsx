@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { portalUtility } from '@/test/portal-utilities'
 import { defaultDesign } from '@/lib/shared/design/schema'
 import { useState, type ReactNode } from 'react'
 import { act, render, screen, fireEvent, cleanup } from '@testing-library/react'
@@ -418,23 +419,19 @@ describe('PortalHeader — design layouts', () => {
   it('lays the veil on a hero photo from the border’s edge, so no line shows under the header', () => {
     const { container } = mountWith(design('inline'))
     const header = container.querySelector('header')!
-    const photo = header.className
-      .split(' ')
-      .find((c) => c.startsWith('[[data-qb-header-span=photo]_&]:[background:'))
-    expect(photo).toBeTruthy()
+    expect(header.className.split(' ')).toContain('qb-header')
+    const rule = portalUtility('qb-header')
+    const photo = rule.slice(rule.indexOf("[data-qb-header-span='photo'] &"))
+    expect(photo).toContain('border-color: transparent')
     // The first layer (the veil) carries its box: from the padding's edge it would repeat
     // into the 1px transparent bottom border and draw its deepest row there.
-    const value = photo!.slice(photo!.indexOf('[background:') + 12)
+    const value = photo.slice(photo.indexOf('background:') + 11)
     let depth = 0
     const end = [...value].findIndex((c) => {
       depth += c === '(' ? 1 : c === ')' ? -1 : 0
       return c === ',' && depth === 0
     })
-    const veil = value.slice(0, end)
-    expect(veil).toMatch(/^linear-gradient\(.*\)_border-box$/)
-    expect(header.className.split(' ')).toContain(
-      '[[data-qb-header-span=photo]_&]:border-transparent'
-    )
+    expect(value.slice(0, end).trim()).toMatch(/^linear-gradient\(.*\) border-box$/)
   })
 
   describe('a centred header', () => {
