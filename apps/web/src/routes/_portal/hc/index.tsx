@@ -12,10 +12,8 @@ import {
 } from '@/lib/server/functions/help-center'
 import { HC_LOCALE_COOKIE, resolveHcLandingLocale } from '@/lib/shared/help-center-url'
 import type { HelpCenterConfig } from '@/lib/shared/types/settings'
-import {
-  HelpCenterLandingView,
-  landingCopy,
-} from '@/components/help-center/help-center-landing-view'
+import { HelpCenterLandingView } from '@/components/help-center/help-center-landing-view'
+import { landingCopy } from '@/components/help-center/landing-copy'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
