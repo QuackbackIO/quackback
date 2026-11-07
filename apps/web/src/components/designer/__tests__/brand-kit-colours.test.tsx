@@ -40,6 +40,25 @@ function typeHex(name: string, hex: string) {
   fireEvent.blur(field)
 }
 
+describe('From your logo', () => {
+  it('offers the logo colours beside the brand colour; one sets it', () => {
+    const design = defaultDesign()
+    design.brand.light.accent = '#0058a3'
+    design.brand.logoColours = ['#0058a3', '#e4002b', '#111111']
+    render(<Harness start={design} />)
+    const group = screen.getByRole('group', { name: 'From your logo' })
+    // The colour already in use is not offered again.
+    expect(within(group).queryByRole('button', { name: /#0058a3/ })).toBeNull()
+    fireEvent.click(within(group).getByRole('button', { name: 'Use #e4002b as brand colour' }))
+    expect(seen.design?.brand.light.accent).toBe('#e4002b')
+  })
+
+  it('shows nothing until the logo has colours', () => {
+    render(<Harness start={defaultDesign()} />)
+    expect(screen.queryByRole('group', { name: 'From your logo' })).toBeNull()
+  })
+})
+
 describe('BrandKitColours', () => {
   it('says every pair reads well when they do', () => {
     render(<Harness start={defaultDesign()} />)

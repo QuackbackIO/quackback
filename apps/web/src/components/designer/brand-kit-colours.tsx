@@ -18,7 +18,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ColourField, toHex } from '@/components/admin/settings/appearance/colour-field'
-import type { Update } from '@/components/admin/settings/appearance/section-controls'
 import { imagePalette } from '@/lib/client/image-palette'
 import { colourPairs, colourRowIssues, type ColourRowIssue } from '@/lib/shared/design/colour-pairs'
 import { resolveDesign } from '@/lib/shared/design/resolve'
@@ -28,6 +27,8 @@ import { PropertyMore, PropertyRow, PropertySection } from './properties/propert
 import { COLOUR_NAMES, THEME, WORDS, resetToValue } from './properties/words'
 
 type Palette = PortalDesign['brand']['light']
+/** Changes the draft as one step, named for its undo where a name is given. */
+type Update = (change: (draft: PortalDesign) => void, label?: string) => void
 type DarkRole = 'accent' | 'support' | 'ink' | 'background'
 type MoreKey = 'surface' | 'raised' | 'muted' | 'border'
 
@@ -161,12 +162,12 @@ export function BrandKitColours({
     muted: worked?.mutedForeground,
     border: worked?.border,
   }
-  const set = (key: keyof Palette, value: string | undefined) =>
+  const set = (key: keyof Palette, value: string | undefined, label?: string) =>
     update((draft) => {
       const palette = draft.brand.light as Record<string, unknown>
       if (value) palette[key] = value
       else if (key !== 'accent' && key !== 'ink' && key !== 'background') delete palette[key]
-    })
+    }, label)
   // What "+ Add colour" adds next: the second colour, then up to two extras.
   const next = !light.support ? 'support' : extra.length < 2 ? 'extra' : null
   const nextName =
@@ -242,6 +243,11 @@ export function BrandKitColours({
       }
     >
       {row('accent', COLOUR_NAMES.accent)}
+      <FromLogo
+        colours={design.brand.logoColours ?? []}
+        accent={light.accent}
+        onPick={(colour) => set('accent', colour, THEME.brandFromLogo)}
+      />
       {row('ink', COLOUR_NAMES.ink)}
       <RowIssue name={COLOUR_NAMES.ink} issue={issues.ink} onFix={(fix) => set('ink', fix)} />
       {row('background', COLOUR_NAMES.page)}
@@ -294,6 +300,45 @@ export function BrandKitColours({
       {design.mode !== 'light' && <DarkValues design={design} update={update} />}
       <LogoColourRow design={design} update={update} logoUrl={logoUrl} />
     </PropertySection>
+  )
+}
+
+/**
+ * The logo's own colours under the brand colour, each a swatch that makes
+ * it the brand colour in one step. Quiet: nothing until the logo has colours,
+ * and never the colour already in use.
+ */
+function FromLogo({
+  colours,
+  accent,
+  onPick,
+}: {
+  colours: readonly string[]
+  accent: string
+  onPick: (colour: string) => void
+}) {
+  const offered = colours.filter((colour) => colour.toLowerCase() !== accent.toLowerCase())
+  if (!offered.length) return null
+  return (
+    <div
+      role="group"
+      aria-label={THEME.fromLogo}
+      className="flex min-h-7 items-center gap-1.5 ps-[100px]"
+    >
+      <span className="me-0.5 text-[11px] text-muted-foreground">{THEME.fromLogo}</span>
+      {offered.map((colour) => (
+        <button
+          key={colour}
+          type="button"
+          aria-label={THEME.useAsBrand(colour)}
+          title={colour}
+          onClick={() => onPick(colour)}
+          className="grid size-6 place-items-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+        >
+          <Swatch colour={colour} className="size-4" />
+        </button>
+      ))}
+    </div>
   )
 }
 
