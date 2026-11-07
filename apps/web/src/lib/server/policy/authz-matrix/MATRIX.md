@@ -101,7 +101,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 762 surfaces
+### Server functions (`requireAuth`) — 764 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -296,17 +296,19 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/changelog.ts`::listChangelogsFn | changelog.view_draft |
 | `lib/server/functions/changelog.ts`::searchShippedPostsFn | changelog.manage |
 | `lib/server/functions/changelog.ts`::topViewedChangelogsFn | changelog.view_draft |
-| `lib/server/functions/channel-accounts.ts`::getEmailChannelConfigFn | channel_account.manage |
+| `lib/server/functions/channel-accounts.ts`::getEmailChannelConfigFn | DYNAMIC (settings.manage | channel_account.manage) |
 | `lib/server/functions/channel-accounts.ts`::createInboundRouteFn | channel_account.manage |
-| `lib/server/functions/channel-accounts.ts`::createSendingAddressFn | channel_account.manage |
-| `lib/server/functions/channel-accounts.ts`::updateSendingAddressNameFn | channel_account.manage |
-| `lib/server/functions/channel-accounts.ts`::setEmailSenderFn | channel_account.manage |
-| `lib/server/functions/channel-accounts.ts`::restartSendingDomainChecksFn | channel_account.manage |
-| `lib/server/functions/channel-accounts.ts`::deleteSendingDomainFn | channel_account.manage |
+| `lib/server/functions/channel-accounts.ts`::createSendingAddressFn | settings.manage |
+| `lib/server/functions/channel-accounts.ts`::updateSendingAddressNameFn | settings.manage |
+| `lib/server/functions/channel-accounts.ts`::setEmailSenderFn | DYNAMIC (settings.manage | channel_account.manage) |
+| `lib/server/functions/channel-accounts.ts`::setEmailSenderFn | settings.manage |
+| `lib/server/functions/channel-accounts.ts`::getSurfaceSenderFn | DYNAMIC (settings.manage | channel_account.manage | board.manage | changelog.manage | status_page.manage) |
+| `lib/server/functions/channel-accounts.ts`::restartSendingDomainChecksFn | settings.manage |
+| `lib/server/functions/channel-accounts.ts`::deleteSendingDomainFn | settings.manage |
 | `lib/server/functions/channel-accounts.ts`::updateInboundTrustFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::clearInboundForwardingFn | channel_account.manage |
-| `lib/server/functions/channel-accounts.ts`::deleteChannelAccountFn | channel_account.manage |
-| `lib/server/functions/channel-accounts.ts`::sendTestEmailFn | channel_account.manage |
+| `lib/server/functions/channel-accounts.ts`::deleteChannelAccountFn | settings.manage |
+| `lib/server/functions/channel-accounts.ts`::sendTestEmailFn | settings.manage |
 | `lib/server/functions/channel-accounts.ts`::listRecentEmailLogFn | channel_account.manage |
 | `lib/server/functions/cloud-identity.ts`::getCloudIdentityFn | settings.manage |
 | `lib/server/functions/cloud-identity.ts`::markCloudWorkspaceDetailsSeenFn | settings.manage |
@@ -420,7 +422,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/data-runs.ts`::listImportRunsFn | ADMIN-ONLY |
 | `lib/server/functions/device-auth.ts`::lookupDeviceCodeFn | END_USER (any authenticated) |
 | `lib/server/functions/device-auth.ts`::decideDeviceCodeFn | END_USER (any authenticated) |
-| `lib/server/functions/domains-overview.ts`::getSendingDomainSummariesFn | channel_account.manage |
+| `lib/server/functions/domains-overview.ts`::getSendingDomainSummariesFn | settings.manage |
 | `lib/server/functions/domains-overview.ts`::getSignInDomainSummariesFn | auth.manage |
 | `lib/server/functions/domains-overview.ts`::getHelpCenterDomainSummaryFn | settings.custom_domain |
 | `lib/server/functions/external-item-search.ts`::searchExternalItemsFn | integration.manage |
@@ -1084,7 +1086,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-228 of 1100 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+228 of 1101 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

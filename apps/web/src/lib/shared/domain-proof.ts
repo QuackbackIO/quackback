@@ -4,6 +4,7 @@
  * `domains/domain-proof/proven-zones.ts`).
  */
 import { PERMISSIONS, type PermissionKey } from './permissions'
+import { EMAIL_SENDING_PERMISSION } from './email-sending-permissions'
 
 /**
  * - `email-sending`: a verified sending domain, proven by its own ownership
@@ -24,7 +25,7 @@ export type ShownProofSource = ProvenZoneSource | 'workspace'
 
 /** The permission that shows each kind of proof. */
 const SOURCE_PERMISSION: Record<ProvenZoneSource, PermissionKey> = {
-  'email-sending': PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+  'email-sending': EMAIL_SENDING_PERMISSION,
   sso: PERMISSIONS.AUTH_MANAGE,
   'web-address': PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
 }

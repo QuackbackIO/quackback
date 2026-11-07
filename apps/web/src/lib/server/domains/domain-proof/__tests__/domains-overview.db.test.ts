@@ -107,7 +107,7 @@ describe.skipIf(!fixture.available)('Domains page rows (real DB, rolled back)', 
       Object.fromEntries(
         (await listSignInDomainSummaries(viewer)).map((r) => [r.name, [r.verified, r.provenBy]])
       )
-    expect(await shown([PERMISSIONS.AUTH_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE])).toEqual({
+    expect(await shown([PERMISSIONS.AUTH_MANAGE, PERMISSIONS.SETTINGS_MANAGE])).toEqual({
       'acme.com': [true, 'email-sending'],
       'eu.acme.com': [false, 'email-sending'],
       'example.net': [false, null],

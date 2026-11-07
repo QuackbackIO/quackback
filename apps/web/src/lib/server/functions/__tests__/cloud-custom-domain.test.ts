@@ -168,7 +168,7 @@ describe('getCloudCustomDomainsFn', () => {
       }),
     ]
 
-    h.permissions = [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE]
+    h.permissions = [PERMISSIONS.SETTINGS_CUSTOM_DOMAIN, PERMISSIONS.SETTINGS_MANAGE]
     const named = (await getCustomDomains({})) as { hostname: string; provenBy: unknown }[]
     expect(named.map((d) => [d.hostname, d.provenBy])).toEqual([
       ['feedback.acme.com', null],

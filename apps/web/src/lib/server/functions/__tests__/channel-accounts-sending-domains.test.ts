@@ -35,6 +35,7 @@ const hoisted = vi.hoisted(() => ({
   setEmailSender: vi.fn(),
   updateName: vi.fn(),
   permitted: vi.fn(),
+  resolveSender: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/channel-accounts/email-senders', () => ({
@@ -61,7 +62,19 @@ vi.mock('@/lib/server/domains/channel-accounts/sending-address', () => ({
   sendingAddressMode: hoisted.addressMode,
 }))
 
-vi.mock('@/lib/server/functions/auth-helpers', () => ({ requireAuth: hoisted.requireAuth }))
+vi.mock('@/lib/server/functions/auth-helpers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/functions/auth-helpers')>()),
+  requireAuth: hoisted.requireAuth,
+}))
+
+vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({
+  resolveSender: hoisted.resolveSender,
+}))
+
+vi.mock('@quackback/email', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@quackback/email')>()),
+  getEmailFrom: () => 'Quackback Cloud <noreply@mail.quackback.test>',
+}))
 
 vi.mock(
   '@/lib/server/domains/channel-accounts/channel-account.service',
@@ -94,6 +107,8 @@ const {
   getEmailChannelConfigFn,
   setEmailSenderFn,
   updateSendingAddressNameFn,
+  createInboundRouteFn,
+  getSurfaceSenderFn,
 } = await import('../channel-accounts')
 const setSender = setEmailSenderFn as unknown as AnyHandler
 const updateName = updateSendingAddressNameFn as unknown as AnyHandler
@@ -103,14 +118,28 @@ const deleteAccount = deleteChannelAccountFn as unknown as AnyHandler
 const sendTest = sendTestEmailFn as unknown as AnyHandler
 const restartChecks = restartSendingDomainChecksFn as unknown as AnyHandler
 const deleteDomain = deleteSendingDomainFn as unknown as AnyHandler
+const createInbound = createInboundRouteFn as unknown as AnyHandler
+const surfaceSender = getSurfaceSenderFn as unknown as AnyHandler
+
+/** A caller holding exactly these permissions, as requireAuth checks them. */
+function actingWith(...held: string[]) {
+  hoisted.requireAuth.mockImplementation(async (options?: { permission?: string }) => {
+    if (options?.permission && !held.includes(options.permission)) {
+      throw new Error(`Access denied: Requires permission '${options.permission}'`)
+    }
+    return {
+      principal: { id: 'principal_1', role: 'admin' },
+      user: { id: 'user_1', email: 'admin@example.com' },
+      permissions: held,
+      scope: 'dashboard',
+    }
+  })
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
   vi.unstubAllEnvs()
-  hoisted.requireAuth.mockResolvedValue({
-    principal: { id: 'principal_1', role: 'admin' },
-    user: { id: 'user_1', email: 'admin@example.com' },
-  })
+  actingWith('settings.manage', 'channel_account.manage')
   hoisted.defaultTeamId.mockResolvedValue('team_1')
   hoisted.getEmailSenders.mockResolvedValue(new Map())
 })
@@ -198,7 +227,7 @@ describe('createSendingAddressFn', () => {
     const result = await createAddress({
       data: { address: 'help@acme.com', senderName: 'Acme Support' },
     })
-    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'channel_account.manage' })
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'settings.manage' })
     expect(hoisted.addAddress).toHaveBeenCalledWith({
       owningTeamId: 'team_1',
       address: 'help@acme.com',
@@ -249,12 +278,12 @@ describe('deleteChannelAccountFn', () => {
 })
 
 describe('sendTestEmailFn', () => {
-  it('needs the channel permission and sends to the caller, never to an input', async () => {
+  it('needs the workspace settings permission and sends to the caller, never to an input', async () => {
     hoisted.sendTest.mockResolvedValue({ from: 'help@acme.com', to: 'admin@example.com' })
     const result = await sendTest({
       data: { addressId: 'channel_account_1', to: 'someone@example.net' },
     })
-    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'channel_account.manage' })
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'settings.manage' })
     expect(hoisted.sendTest).toHaveBeenCalledWith({
       addressId: 'channel_account_1',
       userId: 'user_1',
@@ -395,7 +424,6 @@ describe('choosing which address each kind of email sends from', () => {
     [null, null],
   ])('passes the choice %j on behind the permission gate', async (choice, stored) => {
     await setSender({ data: { surface: 'support', choice } })
-    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'channel_account.manage' })
     expect(hoisted.setEmailSender).toHaveBeenCalledWith('support', stored)
   })
 
@@ -411,8 +439,132 @@ describe('choosing which address each kind of email sends from', () => {
       createdAt: new Date('2026-11-01T09:00:00.000Z'),
     })
     const result = await updateName({ data: { id: 'channel_account_1', senderName: 'Acme' } })
-    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'channel_account.manage' })
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: 'settings.manage' })
     expect(hoisted.updateName).toHaveBeenCalledWith({ id: 'channel_account_1', senderName: 'Acme' })
     expect(result).toMatchObject({ senderName: 'Acme' })
+  })
+})
+
+describe('who may change sending', () => {
+  it.each([
+    ['add an address', () => createAddress({ data: { address: 'help@acme.com' } })],
+    ['rename an address', () => updateName({ data: { id: 'channel_account_1', senderName: 'A' } })],
+    ['remove an address', () => deleteAccount({ data: { id: 'channel_account_1' } })],
+    ['send a test', () => sendTest({ data: { addressId: 'channel_account_1' } })],
+    ['re-check a domain', () => restartChecks({ data: { id: 'sending_domain_1' } })],
+    ['remove a domain', () => deleteDomain({ data: { id: 'sending_domain_1' } })],
+  ])('a support lead may not %s', async (_, act) => {
+    actingWith('channel_account.manage')
+    await expect(act()).rejects.toThrow('Access denied')
+    expect(hoisted.addAddress).not.toHaveBeenCalled()
+    expect(hoisted.removeAddress).not.toHaveBeenCalled()
+    expect(hoisted.sendTest).not.toHaveBeenCalled()
+    expect(hoisted.restart).not.toHaveBeenCalled()
+    expect(hoisted.deleteDomain).not.toHaveBeenCalled()
+  })
+
+  it.each(['default', 'feedback', 'changelog', 'status'])(
+    'a support lead may not choose the %s sender',
+    async (surface) => {
+      actingWith('channel_account.manage')
+      await expect(setSender({ data: { surface, choice: null } })).rejects.toThrow('Access denied')
+      expect(hoisted.setEmailSender).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([['channel_account.manage'], ['settings.manage']])(
+    'the support sender may be chosen with %s',
+    async (permission) => {
+      actingWith(permission)
+      await setSender({ data: { surface: 'support', choice: { mode: 'inbox' } } })
+      expect(hoisted.setEmailSender).toHaveBeenCalledWith('support', { mode: 'inbox' })
+    }
+  )
+
+  it('nobody without either permission chooses the support sender', async () => {
+    actingWith('changelog.manage')
+    await expect(
+      setSender({ data: { surface: 'support', choice: { mode: 'inbox' } } })
+    ).rejects.toThrow('Access denied')
+    expect(hoisted.setEmailSender).not.toHaveBeenCalled()
+  })
+
+  it('an admin without the support permission chooses every sender', async () => {
+    actingWith('settings.manage')
+    await setSender({ data: { surface: 'changelog', choice: null } })
+    expect(hoisted.setEmailSender).toHaveBeenCalledWith('changelog', null)
+  })
+
+  it.each([['channel_account.manage'], ['settings.manage']])(
+    'the email config reads with %s',
+    async (permission) => {
+      actingWith(permission)
+      hoisted.addressMode.mockResolvedValue('verified-domains')
+      hoisted.defaultTeamId.mockResolvedValue(null)
+      await expect(getConfig()).resolves.toMatchObject({ addressMode: 'verified-domains' })
+    }
+  )
+
+  it('the email config does not read without either', async () => {
+    actingWith('changelog.manage')
+    await expect(getConfig()).rejects.toThrow('Access denied')
+  })
+
+  it('the support inbox stays with the support permission', async () => {
+    actingWith('settings.manage')
+    await expect(createInbound({ data: { forwardingTarget: 'support@acme.com' } })).rejects.toThrow(
+      'Access denied'
+    )
+  })
+})
+
+describe('getSurfaceSenderFn', () => {
+  it('names the address a kind of email sends from', async () => {
+    actingWith('changelog.manage')
+    hoisted.resolveSender.mockResolvedValue({
+      from: 'Updates <hello@updates.acme.com>',
+      source: 'surface',
+      senderName: 'Acme Updates',
+    })
+    const result = await surfaceSender({ data: { surface: 'changelog' } })
+    expect(hoisted.resolveSender).toHaveBeenCalledWith({ surface: 'changelog' })
+    expect(result).toEqual({ from: 'Acme Updates <hello@updates.acme.com>' })
+  })
+
+  it('uses the workspace name for an address with none of its own', async () => {
+    actingWith('status_page.manage')
+    hoisted.resolveSender.mockResolvedValue({
+      from: 'hello@acme.com',
+      source: 'default',
+      senderName: null,
+    })
+    expect(await surfaceSender({ data: { surface: 'status' } })).toEqual({
+      from: 'Acme <hello@acme.com>',
+    })
+  })
+
+  it('falls back to the platform address under the workspace name', async () => {
+    actingWith('changelog.manage')
+    hoisted.resolveSender.mockResolvedValue(null)
+    expect(await surfaceSender({ data: { surface: 'changelog' } })).toEqual({
+      from: 'Acme <noreply@mail.quackback.test>',
+    })
+  })
+
+  it.each([
+    ['changelog', 'status_page.manage'],
+    ['status', 'changelog.manage'],
+  ])('keeps the %s sender from a caller holding only %s', async (surface, permission) => {
+    actingWith(permission)
+    await expect(surfaceSender({ data: { surface } })).rejects.toThrow('Access denied')
+    expect(hoisted.resolveSender).not.toHaveBeenCalled()
+  })
+
+  it('reads for an admin on any surface', async () => {
+    actingWith('settings.manage')
+    hoisted.resolveSender.mockResolvedValue(null)
+    await expect(surfaceSender({ data: { surface: 'feedback' } })).resolves.toEqual({
+      from: 'Acme <noreply@mail.quackback.test>',
+    })
   })
 })
