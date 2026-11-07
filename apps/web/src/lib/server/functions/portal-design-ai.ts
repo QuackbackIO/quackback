@@ -7,6 +7,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { DESIGN_AI_SCOPES } from '@/lib/shared/design/apply-changes'
+import { AI_REACHES } from '@/lib/shared/design/ai-reach'
 import { BLOCK_ID } from '@/lib/shared/design/schema'
 import { STYLE_ELEMENT_NAMES, type StyleElement } from '@/lib/shared/design/style-tokens'
 import { PART_ID } from '@/lib/shared/design/style-overrides'
@@ -54,6 +55,8 @@ export const askPortalDesignAiFn = createServerFn({ method: 'POST' })
         blockId: z.string().regex(BLOCK_ID).optional(),
         /** An element picked on the canvas, which "just this" names. */
         element: elementPick.optional(),
+        /** How far the request may reach from the pick, as the composer's chip says: just it, the page shown, or everywhere it is. */
+        within: z.enum(AI_REACHES).optional(),
         history: z
           .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(2000) }))
           .max(12),
@@ -120,6 +123,8 @@ export const designAgentStepFn = createServerFn({ method: 'POST' })
         blockId: z.string().regex(BLOCK_ID).optional(),
         /** An element picked on the canvas, which "just this" names. */
         element: elementPick.optional(),
+        /** How far the request may reach from the pick, as the composer's chip says: just it, the page shown, or everywhere it is. */
+        within: z.enum(AI_REACHES).optional(),
         history: z
           .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(2000) }))
           .max(12),

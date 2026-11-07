@@ -13,7 +13,8 @@
 import { mixColor, normaliseColor } from '../color'
 import { resolveDesign } from '../resolve'
 import type { PortalDesign } from '../schema'
-import type { DesignAiScope } from '../apply-changes'
+import { pathInScope } from '../apply-changes'
+import { pickedParts } from '../override-ops'
 import {
   applyOps,
   blockTypeOf,
@@ -26,7 +27,13 @@ import type { AppliedDesignChange, DesignValue } from '../apply-changes'
 import type { ThemeVariables } from '@/lib/shared/theme/types'
 import { lightness, parseCssColour } from './css-values'
 import { shownMode, staticReading } from './static-reading'
-import { BLOCK_STYLE_ELEMENTS, COLOUR_ROLES, readStyleValue, type StyleProp } from '../style-tokens'
+import {
+  BLOCK_STYLE_ELEMENTS,
+  COLOUR_ROLES,
+  readStyleValue,
+  type StyleElement,
+  type StyleProp,
+} from '../style-tokens'
 import {
   elementOf,
   propertyOf,
@@ -45,8 +52,17 @@ export interface StyleOp extends StyleTarget {
   says?: string
 }
 
-/** A style worked out: the operations that set it (an exact value, or tokens), and their path. */
-type Planned = { kind: 'field' | 'token'; ops: FlatOp[]; path: string; label: string }
+/**
+ * A style worked out: the operations that set it (an exact value, or
+ * tokens), their path, and its value as a token or an override takes it.
+ */
+type Planned = {
+  kind: 'field' | 'token'
+  ops: FlatOp[]
+  path: string
+  label: string
+  token: string
+}
 
 /** The exact values a style at rest reaches, by element and property. */
 const FIELDS: Record<string, Record<string, string>> = {
@@ -300,6 +316,7 @@ export function planStyle(
     }
   }
   const label = `${words}: ${property.id} ${shownValue}`
+  const token = JSON.stringify(readStyleValue(property.id as StyleProp, tokenValue))
 
   // An exact value where the design has one, at rest, for the whole portal, in the mode it reaches.
   const fieldKey = FIELDS[element.id]?.[property.id]
@@ -341,16 +358,17 @@ export function planStyle(
         ops: [{ op: 'theme', key, value: JSON.stringify(fieldValue) }],
         path,
         label,
+        token,
       },
     }
   }
   // A token: the whole portal's, or each Home block of the type named.
-  const value = JSON.stringify(readStyleValue(property.id as StyleProp, tokenValue))
+  const value = token
   const key = `style.${element.id}.${state}.${property.id}`
   if (!block)
     return {
       ok: true,
-      plan: { kind: 'token', ops: [{ op: 'theme', key, value }], path: key, label },
+      plan: { kind: 'token', ops: [{ op: 'theme', key, value }], path: key, label, token },
     }
   const own =
     element.id === 'block' || (BLOCK_STYLE_ELEMENTS as readonly string[]).includes(element.id)
@@ -367,6 +385,7 @@ export function planStyle(
       ops: ids.map((id) => ({ op: 'set', target: id, key, value })),
       path: 'pages.home.blocks',
       label,
+      token,
     },
   }
 }
@@ -403,49 +422,81 @@ export function stylesAsOps(
   return out
 }
 
-/** The elements a picked part's styles may reach; every one for the whole site and brand. */
-const SCOPE_ELEMENTS: Partial<Record<DesignAiScope, readonly string[]>> = {
-  header: ['header', 'navItem'],
-  band: ['hero', 'headline', 'subtitle', 'button'],
-  headline: ['headline'],
-  subtitle: ['subtitle'],
-  heading: ['heading'],
-  menu: ['navItem'],
-  button: ['button'],
-  secondary: ['secondary', 'ghost'],
-  card: ['card'],
-  vote: ['vote'],
-  field: ['input'],
-  status: ['badge', 'chip'],
-  link: ['link'],
-  body: ['body'],
-  feed: ['card', 'vote', 'chip', 'badge'],
-  home: [
-    'block',
-    'card',
-    'heading',
-    'link',
-    'button',
-    'body',
-    'chip',
-    'badge',
-    'vote',
-    'input',
-    'secondary',
-    'ghost',
-  ],
-}
+/** Where a style goes for what was picked. */
+export type StylePlace =
+  /** As the style says: the site's token or exact value, the pick being the site or every one of its kind. */
+  | { as: 'written' }
+  /** As overrides on the pick's own parts, page or block. */
+  | { as: 'override'; targets: string[] }
+  /** Nowhere: it would change something the pick does not hold. */
+  | { as: 'outside' }
 
-/** Whether a style stays within what was picked. */
-export function styleInScope(style: StyleOp, within: OpScope, design: PortalDesign): boolean {
-  if (within.scope === 'site' || within.scope === 'brand') return true
-  const allowed = SCOPE_ELEMENTS[within.scope]
-  if (!allowed?.includes(style.element)) return false
+/**
+ * Where a style goes for what was picked and how far the request may reach.
+ * A style is written for the whole site only when the whole site, or every
+ * one of an element's kind, is what was picked; otherwise it lands as an
+ * override on the pick (its parts holding that element, the page shown, the
+ * Home block picked) or not at all. A hover asked of the hero darkens the
+ * hero's own buttons, never every main button.
+ */
+export function stylePlace(
+  design: PortalDesign,
+  registry: StyleRegistry,
+  style: StyleOp,
+  within: OpScope
+): StylePlace {
+  const reach = within.reach ?? 'every'
+  const { page } = within
+  if (within.scope === 'site' || (within.scope === 'brand' && reach === 'every'))
+    return { as: 'written' }
+  const element = style.element
+  if (within.element) {
+    if (element !== within.element.element) return { as: 'outside' }
+    if (reach === 'every') return style.block ? { as: 'outside' } : { as: 'written' }
+    if (reach === 'one')
+      return within.element.part
+        ? { as: 'override', targets: [`part:${within.element.part}`] }
+        : { as: 'outside' }
+    return page ? { as: 'override', targets: [`page:${page}`] } : { as: 'outside' }
+  }
   if (within.blockId) {
     const picked = design.pages.home.blocks.find((b) => b.id === within.blockId)
-    return !!picked && blockTypeOf(style.block) === picked.type
+    if (!picked || (style.block && blockTypeOf(style.block) !== picked.type))
+      return { as: 'outside' }
+    return { as: 'override', targets: [`block:${within.blockId}`] }
   }
-  return true
+  if (reach !== 'every' && !page) return { as: 'outside' }
+  if (style.block) {
+    // One Home block type's look: each such block's own, where Home is what was picked.
+    const type = blockTypeOf(style.block)
+    const ids = design.pages.home.blocks.filter((b) => b.type === type && b.id).map((b) => b.id!)
+    return within.scope === 'home' && (reach === 'every' || page === 'home') && ids.length
+      ? { as: 'override', targets: ids.map((id) => `block:${id}`) }
+      : { as: 'outside' }
+  }
+  if (reach === 'every') {
+    const planned = planStyle(design, registry, style)
+    if (planned.ok && pathInScope(planned.plan.path, within.scope)) return { as: 'written' }
+  }
+  const parts = pickedParts(
+    design,
+    within.scope,
+    element as StyleElement,
+    reach === 'every' ? undefined : page
+  )
+  return parts.length
+    ? { as: 'override', targets: parts.map((part) => `part:${part.id}`) }
+    : { as: 'outside' }
+}
+
+/** Whether a style stays within what was picked, written or as overrides. */
+export function styleInScope(
+  style: StyleOp,
+  within: OpScope,
+  design: PortalDesign,
+  registry: StyleRegistry
+): boolean {
+  return stylePlace(design, registry, style, within).as !== 'outside'
 }
 
 const read = (doc: unknown, path: string): DesignValue =>
@@ -499,6 +550,8 @@ export interface LoopApplyOutcome {
   already: string[]
   refused: Array<{ what: string; reason: string }>
   outOfScope: string[]
+  /** Notes for Show changes, such as the language words were written in. */
+  notes?: string[]
 }
 
 const opWords = (op: FlatOp) =>
@@ -518,13 +571,47 @@ export function applyStep(
   within: OpScope = { scope: 'site' }
 ): LoopApplyOutcome {
   const first: OpsOutcome = applyOps(design, world, ops, within)
-  const scoped = styles.filter((style) => styleInScope(style, within, first.design))
+  const written: StyleOp[] = []
+  const outside: StyleOp[] = []
+  // Styles that land on the pick as overrides: each one's operations, and the style they came from.
+  const placed: Array<{ style: StyleOp; ops: FlatOp[] }> = []
+  const planRefused: Array<{ what: string; reason: string }> = []
+  for (const style of styles) {
+    const place = stylePlace(first.design, registry, style, within)
+    if (place.as === 'written') written.push(style)
+    else if (place.as === 'outside') outside.push(style)
+    else {
+      // Its value worked out as for the site (a relative colour from what it shows now).
+      const planned = planStyle(first.design, registry, { ...style, block: '' })
+      if (!planned.ok) {
+        planRefused.push({ what: targetWords(registry, style), reason: planned.refusal })
+        continue
+      }
+      const key = `${style.element}.${style.state || 'base'}.${style.property}`
+      placed.push({
+        style,
+        ops: place.targets.map((target) => ({
+          op: 'override',
+          target,
+          key,
+          value: planned.plan.token,
+        })),
+      })
+    }
+  }
   const outOfScope = [
     ...first.outOfScope.map(opWords),
-    ...styles.filter((s) => !scoped.includes(s)).map((s) => targetWords(registry, s)),
+    ...outside.map((s) => targetWords(registry, s)),
   ]
-  const asOps = stylesAsOps(first.design, registry, scoped)
+  const asOps = stylesAsOps(first.design, registry, written)
   const second = applyOps(first.design, world, asOps.ops)
+  // Overrides are held to the pick and its reach as the model's own operations are.
+  const third = applyOps(
+    second.design,
+    world,
+    placed.flatMap((each) => each.ops),
+    within
+  )
   const styleLabels = new Map<string, string[]>()
   const done: string[] = first.done.map((each) => each.label)
   const refused = [
@@ -533,6 +620,7 @@ export function applyStep(
       what: targetWords(registry, each.style),
       reason: each.reason,
     })),
+    ...planRefused,
   ]
   for (const planned of asOps.planned) {
     const failed = second.refused.find((each) => planned.ops.includes(each.op))
@@ -543,6 +631,15 @@ export function applyStep(
     done.push(planned.label)
     styleLabels.set(planned.path, [...(styleLabels.get(planned.path) ?? []), planned.label])
   }
+  const styleOf = (op: FlatOp) => placed.find((each) => each.ops.includes(op))!.style
+  done.push(...third.done.map((each) => each.label))
+  refused.push(
+    ...third.refused.map((each) => ({
+      what: targetWords(registry, styleOf(each.op)),
+      reason: each.reason,
+    }))
+  )
+  outOfScope.push(...new Set(third.outOfScope.map((op) => targetWords(registry, styleOf(op)))))
   const relabelled = second.applied.map((change) => {
     // Every style this change holds: one token, or a whole sheet written at once.
     const own = [...styleLabels.entries()]
@@ -551,10 +648,10 @@ export function applyStep(
     return own.length ? { ...change, label: own.join('; ') } : change
   })
   return {
-    design: second.design,
-    applied: mergeChanges(design, second.design, [first.applied, relabelled]),
+    design: third.design,
+    applied: mergeChanges(design, third.design, [first.applied, relabelled, third.applied]),
     done,
-    already: [...first.already, ...second.already].map((each) => each.label),
+    already: [...first.already, ...second.already, ...third.already].map((each) => each.label),
     refused,
     outOfScope,
   }

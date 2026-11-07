@@ -102,7 +102,10 @@ import {
   type StyleElement,
   type StyleProp,
 } from './style-tokens'
+import { changePages, type AiReach } from './ai-reach'
+import type { OverridePage } from './style-overrides'
 import {
+  overrideInReach,
   overrideInScope,
   overrideLabel,
   readOverrideOp,
@@ -1636,12 +1639,20 @@ export interface OpScope {
   blockId?: string
   /** An element picked on the canvas: its kind, and the part it is (null for one of many). */
   element?: { element: StyleElement; part: string | null }
+  /**
+   * How far the request may reach from the pick, as the composer's chip says
+   * it: just the part, the page shown, or everywhere the pick is (the default).
+   */
+  reach?: AiReach
+  /** The page shown, which a reach of one page or one part keeps to. */
+  page?: OverridePage
 }
 
-/** Whether an operation stays within what was picked. */
+/** Whether an operation stays within what was picked, and as far as the request may reach. */
 function opInScope(
   op: FlatOp,
   before: PortalDesign,
+  after: PortalDesign,
   fields: readonly string[],
   within: OpScope
 ): boolean {
@@ -1654,13 +1665,35 @@ function opInScope(
       : named
         ? readOverrideOp(before, named.target, named.key, readValue(named.value))
         : null
-  if (override?.ok) return overrideInScope(override.read, within)
+  if (override?.ok)
+    return overrideInScope(override.read, within) && overrideInReach(override.read, within)
   if (within.blockId) {
     if (!['set', 'move', 'resize', 'remove'].includes(op.op)) return false
     const found = findBlock(before, op.target)
     return found.ok && found.block.id === within.blockId
   }
-  return fields.every((field) => pathInScope(field, within.scope))
+  if (!fields.every((field) => pathInScope(field, within.scope))) return false
+  return fieldsInReach(before, after, fields, within)
+}
+
+/**
+ * Whether changed fields stay as near as the request may reach: anywhere
+ * for every page; for one page or one part, only fields drawn on the page
+ * shown, never one every page shares.
+ */
+function fieldsInReach(
+  before: PortalDesign,
+  after: PortalDesign,
+  fields: readonly string[],
+  within: OpScope
+): boolean {
+  if (!within.reach || within.reach === 'every') return true
+  const page = within.page
+  if (!page) return false
+  return fields.every((path) => {
+    const pages = changePages(after, { path, before: read(before, path), after: read(after, path) })
+    return pages !== 'every' && [...pages].every((each) => each === page)
+  })
 }
 
 export interface OpsOutcome {
@@ -1708,7 +1741,7 @@ export function applyOps(
       continue
     }
     const fields = changedFields(current, result.design)
-    if (!opInScope(op, current, fields, within)) {
+    if (!opInScope(op, current, result.design, fields, within)) {
       outcome.outOfScope.push(op)
       continue
     }

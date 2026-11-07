@@ -179,7 +179,9 @@ describe('askDesignAi', () => {
     })
     if (!result.ok) throw new Error('expected a result')
     expect(result.design.pages.feedback.headline?.title).toEqual({ de: 'Hilf uns' })
-    expect(result.reply).toBe('Done. The words are in German, the language shown.')
+    // One sentence; the language is said under Show changes.
+    expect(result.reply).toBe('Done.')
+    expect(result.notes).toEqual(['The words are in German, the language shown.'])
     expect(model.calls[0]!.systemPrompts[1]).toContain(
       'The person is looking at the Feedback page. The page is shown in German: write any words they ask for in German.'
     )
@@ -201,11 +203,11 @@ describe('askDesignAi', () => {
       history: [],
       allows: ALLOWS,
     })
-    // What was left alone is named with why, so the reply never overclaims.
+    // What was left alone is named with why, under Show changes, so the reply never overclaims.
     expect(result).toMatchObject({
       ok: true,
-      reply:
-        'I changed the brand colour to teal. I left the rest: cards can be bordered, raised, list or filled.',
+      reply: 'I changed the brand colour to teal.',
+      notes: ['I left the rest: cards can be bordered, raised, list or filled.'],
       skipped: 1,
     })
     expect(result.ok && result.applied.map((change) => [change.path, change.label])).toEqual([
@@ -338,9 +340,12 @@ describe('askDesignAi', () => {
       undefined,
       { en: 'Talk to us' },
     ])
-    expect(result.reply).toBe(
-      'I changed the contact heading. Part of that is outside the Contact block on Home and was left alone.'
-    )
+    expect(result.reply).toBe('I changed the contact heading.')
+    expect(result.notes).toEqual([
+      'Part of that is outside the Contact block on Home and was left alone.',
+    ])
+    // The request is about the block picked: no offer to ask about the whole site.
+    expect(result.outOfScope).toBe(false)
     expect(model.calls.at(-1)!.systemPrompts[1]).toContain(
       'The person picked Contact (contactbbb); "this" and "it" mean it.'
     )
@@ -999,5 +1004,71 @@ describe('a logo or a screenshot', () => {
     ).toMatchObject({ ok: false, code: 'AI_FAILED' })
     // Each look is asked for twice before it is given up.
     expect(model.calls.filter(first)).toHaveLength(2)
+  })
+})
+
+describe('a request keeps as near as the chip says it reaches', () => {
+  const calmer = {
+    reply: 'The hero is calmer now. I softened its colour.',
+    outOfScope: false,
+    ops: [op({ op: 'set', target: 'hero', key: 'look', value: 'tint' }, 'the hero to a tint')],
+  }
+  const ask = (message: string, within: 'page' | 'every') => {
+    const design = defaultDesign()
+    design.nav.home.on = true
+    design.layout.band = 'brand'
+    return askDesignAi({
+      message,
+      design,
+      scope: 'band',
+      within,
+      page: 'home',
+      history: [],
+      allows: ALLOWS,
+    })
+  }
+
+  for (const message of ['Make this calmer', 'Mach das ruhiger'])
+    it(`with the hero picked for this page only, “${message}” changes no other page`, async () => {
+      model.answer = calmer
+      const result = await ask(message, 'page')
+      if (!result.ok) throw new Error('expected an answer')
+      expect(result.applied).toEqual([])
+      expect(result.design.layout.band).toBe('brand')
+      expect(result.reply).toBe('That reaches beyond this page, so nothing changed.')
+      // About the hero itself: no offer to ask about the whole site.
+      expect(result.outOfScope).toBe(false)
+    })
+
+  it('with the hero picked for every page, says in one sentence that it changed every page', async () => {
+    model.answer = calmer
+    const result = await ask('Make this calmer', 'every')
+    if (!result.ok) throw new Error('expected an answer')
+    expect(result.design.layout.band).toBe('tint')
+    expect(result.reply).toBe('The hero is calmer now, on every page.')
+  })
+
+  it('says what else a shared field changes under Show changes', async () => {
+    model.answer = {
+      reply: 'Rounder corners.',
+      outOfScope: false,
+      ops: [op({ op: 'theme', key: 'corners', value: 'pill' }, 'the corners')],
+    }
+    const result = await askDesignAi({
+      message: 'Rounder',
+      design: defaultDesign(),
+      scope: 'card',
+      page: 'feedback',
+      history: [],
+      allows: ALLOWS,
+    })
+    if (!result.ok) throw new Error('expected an answer')
+    expect(result.notes).toContain('Also changes the corners of cards, fields and buttons.')
+  })
+
+  it('tells the model how far it may reach', async () => {
+    model.answer = calmer
+    await ask('Make this calmer', 'page')
+    expect(model.calls[0]!.systemPrompts[1]).toContain('Change it only on the Home page')
   })
 })

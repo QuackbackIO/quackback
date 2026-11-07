@@ -38,6 +38,7 @@ import {
 import { BLOCK_NAMES } from '@/lib/shared/design/outline'
 import { scopeNote as requestScopeNote, scopeOf } from '@/lib/shared/design/agent/router'
 import type { StyleElement } from '@/lib/shared/design/style-tokens'
+import { reachNote, type AiReach } from '@/lib/shared/design/ai-reach'
 
 const log = logger.child({ module: 'design-agent' })
 
@@ -114,6 +115,8 @@ export interface AgentStepInput {
   blockId?: string
   /** An element picked on the canvas: its kind and the part it is, which "just this" names. */
   element?: { element: StyleElement; part: string | null }
+  /** How far the request may reach from the pick, as the composer's chip says; every place the pick is when not given. */
+  within?: AiReach
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   images?: Array<{ palette: string[]; image?: string }>
   allows: Omit<UntrustedChanges, 'links'> & {
@@ -146,12 +149,17 @@ export async function agentStep(input: AgentStepInput): Promise<StepReply> {
     scope: input.scope,
     ...(block ? { blockId: input.blockId } : {}),
     ...(input.element ? { element: input.element } : {}),
+    ...(input.scope !== 'site' && input.within ? { reach: input.within } : {}),
+    ...(input.page ? { page: input.page } : {}),
   }
+  // The request's own words are a hint for the model; the chip's reach is what holds.
   const reads = requestScopeNote(input.message)
+  const reach =
+    input.scope === 'site' ? '' : reachNote(input.within, input.page, input.element?.part)
   const scopeNote =
     input.scope === 'site'
       ? ''
-      : `\nThe person picked the ${block ? `${BLOCK_NAMES[block.type]} block on Home` : SCOPE_NAMES[input.scope as keyof typeof SCOPE_NAMES]} in the preview${input.element ? '' : ': every one of them, not one in particular'}. Change only ${input.element ? 'it' : 'them'}.`
+      : `\nThe person picked the ${block ? `${BLOCK_NAMES[block.type]} block on Home` : SCOPE_NAMES[input.scope as keyof typeof SCOPE_NAMES]} in the preview${input.element ? '' : ': every one of them, not one in particular'}. Change only ${input.element ? 'it' : 'them'}.${reach ? ` ${reach}` : ''} match_website is not offered: it restyles the whole site; use read_website to borrow from a site.`
   const view = viewNote(input.page, input.locale)
   const attached = (input.images ?? []).filter((each) => each.palette.length > 0)
   const colours = attached.length
@@ -253,16 +261,18 @@ export async function agentStep(input: AgentStepInput): Promise<StepReply> {
   )
   const { design, ...outcome } = out
   const words = input.locale && input.locale !== 'en' && answer.ops.some((op) => op.op === 'words')
+  // match_website restyles the whole site: never for a request about one part.
+  const scoped =
+    input.scope !== 'site' && answer.match_website ? { ...answer, match_website: '' } : answer
   return {
     ok: true,
-    answer: words
+    answer: scoped,
+    outcome: words
       ? {
-          ...answer,
-          reply:
-            `${answer.reply} The words are in ${languageName(input.locale!)}, the language shown.`.trim(),
+          ...outcome,
+          notes: [`The words are in ${languageName(input.locale!)}, the language shown.`],
         }
-      : answer,
-    outcome,
+      : outcome,
     design,
   }
 }
