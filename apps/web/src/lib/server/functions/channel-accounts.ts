@@ -448,8 +448,14 @@ export const sendTestEmailFn = createServerFn({ method: 'POST' })
     const { user } = await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
     // To the person asking and nobody else: the recipient is their own
     // account address, never something the request names.
+    const { requireSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')
+    const workspaceName = (await requireSettingsCached()).name
     return withDomainActionMessage('test', () =>
-      sendTestEmail({ addressId: data.addressId as ChannelAccountId, userId: user.id })
+      sendTestEmail({
+        addressId: data.addressId as ChannelAccountId,
+        userId: user.id,
+        workspaceName,
+      })
     )
   })
 
