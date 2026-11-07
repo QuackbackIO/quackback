@@ -21,6 +21,7 @@ import {
 } from '@/lib/client/queries/portal-support'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
 export const Route = createFileRoute('/_portal/support/$conversationId')({
   component: SupportThreadPage,
@@ -83,13 +84,14 @@ function SupportThreadPage() {
   )
 
   if (!supportEnabled) {
-    return <Navigate to="/" />
+    return <Navigate to={PORTAL_LANDING} />
   }
 
   return (
-    // Same container as the feedback/roadmap pages (max-w-6xl), sized to the
-    // viewport so the thread fills the page instead of floating in a strip.
-    <div className="mx-auto flex h-[calc(100dvh-7rem)] min-h-0 w-full max-w-6xl flex-col px-4 py-6 sm:px-6">
+    // Same container as the feedback/roadmap pages (the page width), sized to the
+    // viewport, less the header and footer, so the thread fills the page
+    // instead of floating in a strip.
+    <div className="mx-auto flex h-[calc(100dvh-7rem-var(--portal-footer-height,0px))] min-h-0 w-full max-w-[var(--qb-page-max,72rem)] flex-col px-4 py-6 sm:px-6">
       <div className="mb-3 shrink-0">
         <BackLink to="/support">
           <FormattedMessage id="portal.support.back" defaultMessage="All conversations" />

@@ -78,6 +78,23 @@ describe('FeedbackSidebar', () => {
     }
   })
 
+  it('gives the column the room it has once stuck, wherever it sits on the page', async () => {
+    const root = document.documentElement
+    root.style.setProperty('--portal-header-height', '60px')
+    try {
+      const column = renderSidebar().parentElement!
+      // Under a hero, the column starts low on the screen; a fold at the screen's edge
+      // would cut its rows there, so it keeps its stuck height and runs on with the page.
+      column.getBoundingClientRect = () => ({ top: 480, bottom: 980 }) as DOMRect
+      window.dispatchEvent(new Event('resize'))
+      fireEvent.scroll(window)
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+      expect(column.style.maxHeight).toBe(`${window.innerHeight - 60 - 24 - 24}px`)
+    } finally {
+      root.style.removeProperty('--portal-header-height')
+    }
+  })
+
   it('shows no fade when the panel fits', () => {
     const panel = renderSidebar()
     sizePanel(panel, { scrollHeight: 400, clientHeight: 400 })

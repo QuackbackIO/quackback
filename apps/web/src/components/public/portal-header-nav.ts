@@ -11,9 +11,14 @@ import type {
   PortalNavItemConfig,
   PortalNavItemType,
 } from '@/lib/shared/types/settings'
+import type { PortalDesign } from '@/lib/shared/design/schema'
+import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
-/** Built-in tab types (everything except admin-defined links). */
-export type PortalBuiltInNavType = Exclude<PortalNavItemType, 'link'>
+/** Built-in pages a menu can list (everything except admin-defined links). */
+type PortalPageNavType = Exclude<PortalNavItemType, 'link'>
+
+/** Built-in tab types: the pages, and Home on the design engine. */
+export type PortalBuiltInNavType = PortalPageNavType | 'home'
 
 interface BuiltInNavDefinition {
   to: string
@@ -22,7 +27,12 @@ interface BuiltInNavDefinition {
 }
 
 const BUILT_IN_NAV_ITEMS: Record<PortalBuiltInNavType, BuiltInNavDefinition> = {
-  feedback: { to: '/', messageId: 'portal.header.nav.feedback', defaultMessage: 'Feedback' },
+  home: { to: PORTAL_LANDING, messageId: 'portal.header.nav.home', defaultMessage: 'Home' },
+  feedback: {
+    to: PORTAL_LANDING,
+    messageId: 'portal.header.nav.feedback',
+    defaultMessage: 'Feedback',
+  },
   roadmap: { to: '/roadmap', messageId: 'portal.header.nav.roadmap', defaultMessage: 'Roadmap' },
   changelog: {
     to: '/changelog',
@@ -35,7 +45,7 @@ const BUILT_IN_NAV_ITEMS: Record<PortalBuiltInNavType, BuiltInNavDefinition> = {
 }
 
 /** Default order, matching the nav before it became configurable. */
-export const DEFAULT_NAV_ORDER: readonly PortalBuiltInNavType[] = [
+export const DEFAULT_NAV_ORDER: readonly PortalPageNavType[] = [
   'feedback',
   'roadmap',
   'changelog',
@@ -80,9 +90,35 @@ export type PortalNavItem =
       newTab: boolean
     }
 
-function builtInItem(type: PortalBuiltInNavType, id?: string, label?: string): PortalNavItem {
+function builtInItem(
+  type: PortalBuiltInNavType,
+  id?: string,
+  label?: string,
+  to?: string
+): PortalNavItem {
   const def = BUILT_IN_NAV_ITEMS[type]
-  return { kind: 'builtin', id: id ?? type, type, ...def, label }
+  return { kind: 'builtin', id: id ?? type, type, ...def, ...(to ? { to } : {}), label }
+}
+
+/** How the design engine's menu differs from the saved navigation. */
+export interface PortalNavOptions {
+  /** The feed's address; `/` unless Home or another page leads. */
+  feedbackTo?: string
+  /** The design's menu can hide Feedback; the saved navigation cannot. */
+  feedbackHideable?: boolean
+  /** A Home tab first, with its label override. */
+  homeTab?: { label?: string } | null
+}
+
+/** The design's menu in the shape the saved navigation uses. */
+export function designNavConfig(nav: PortalDesign['nav']): PortalNavConfig {
+  return {
+    items: nav.items.map((item) =>
+      item.type === 'link'
+        ? { id: item.id, type: 'link', label: item.label, url: item.url, newTab: item.newTab }
+        : { id: item.type, type: item.type, enabled: item.shown, label: item.label }
+    ),
+  }
 }
 
 function isSafeLinkUrl(url: string | undefined): url is string {
@@ -102,15 +138,20 @@ function isSafeLinkUrl(url: string | undefined): url is string {
  */
 export function resolvePortalNavItems(
   gates: PortalNavGates,
-  nav?: PortalNavConfig | null
+  nav?: PortalNavConfig | null,
+  options: PortalNavOptions = {}
 ): PortalNavItem[] {
+  const page = (type: PortalPageNavType, id?: string, label?: string) =>
+    builtInItem(type, id, label, type === 'feedback' ? options.feedbackTo : undefined)
+  const items: PortalNavItem[] = options.homeTab
+    ? [builtInItem('home', 'home', options.homeTab.label)]
+    : []
   const configured = nav?.items
   if (!configured || configured.length === 0) {
-    return DEFAULT_NAV_ORDER.filter((type) => gates[type]).map((type) => builtInItem(type))
+    return [...items, ...DEFAULT_NAV_ORDER.filter((type) => gates[type]).map((type) => page(type))]
   }
 
-  const items: PortalNavItem[] = []
-  const seenTypes = new Set<PortalBuiltInNavType>()
+  const seenTypes = new Set<PortalPageNavType>()
 
   for (const item of configured) {
     if (item.type === 'link') {
@@ -127,15 +168,16 @@ export function resolvePortalNavItems(
     }
 
     seenTypes.add(item.type)
-    // Feedback is always on: a stored enabled:false is ignored. Other built-ins
-    // still honor their visibility switch (and every built-in still needs its gate).
-    const hidden = item.type !== 'feedback' && item.enabled === false
+    // In the saved navigation Feedback is always on: a stored enabled:false is
+    // ignored. The design's menu can hide it. Every built-in still needs its gate.
+    const hidden =
+      item.enabled === false && (item.type !== 'feedback' || options.feedbackHideable === true)
     if (hidden || !gates[item.type]) continue
-    items.push(builtInItem(item.type, item.id, item.label?.trim() || undefined))
+    items.push(page(item.type, item.id, item.label?.trim() || undefined))
   }
 
   for (const type of DEFAULT_NAV_ORDER) {
-    if (!seenTypes.has(type) && gates[type]) items.push(builtInItem(type))
+    if (!seenTypes.has(type) && gates[type]) items.push(page(type))
   }
 
   return items
@@ -151,7 +193,7 @@ export function seedNavEditorItems(nav?: PortalNavConfig | null): PortalNavItemC
   const items: PortalNavItemConfig[] = nav?.items?.length
     ? nav.items.map((item) => ({ ...item }))
     : []
-  const seenTypes = new Set(items.filter((i) => i.type !== 'link').map((i) => i.type))
+  const seenTypes = new Set<string>(items.filter((i) => i.type !== 'link').map((i) => i.type))
   for (const type of DEFAULT_NAV_ORDER) {
     if (!seenTypes.has(type)) items.push({ id: type, type })
   }
@@ -167,10 +209,15 @@ export const isHelpPath = (pathname: string) => pathname === '/hc' || pathname.s
 
 /**
  * Whether a built-in tab is the current page. A post (/b/<board>/posts/<id>)
- * belongs to Feedback, so the tab stays lit while one is open.
+ * belongs to Feedback, so its tab stays lit while one is open; Home is lit
+ * only at the root.
  */
-export function isTabActive(to: string, pathname: string): boolean {
-  if (to === '/') return pathname === '/' || /^\/b\/[^/]+\/posts\//.test(pathname)
-  if (to === '/hc') return isHelpPath(pathname)
-  return pathname.startsWith(to)
+export function isTabActive(
+  item: { type: PortalBuiltInNavType; to: string },
+  pathname: string
+): boolean {
+  if (item.type === 'home') return pathname === '/'
+  if (item.type === 'feedback') return pathname === item.to || /^\/b\/[^/]+\/posts\//.test(pathname)
+  if (item.type === 'help') return isHelpPath(pathname)
+  return pathname.startsWith(item.to)
 }

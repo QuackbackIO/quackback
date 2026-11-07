@@ -37,7 +37,7 @@ const options = [
   {
     id: 'product_feedback',
     label: 'Feedback & roadmap',
-    description: 'Collect ideas and votes',
+    description: 'Collect posts and votes',
     icon: LightBulbIcon,
   },
   {

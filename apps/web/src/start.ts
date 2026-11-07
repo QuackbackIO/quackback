@@ -18,6 +18,10 @@ import { serverFnLogMiddleware } from '@/lib/server/middleware/server-fn-log'
 import { workspaceContextMiddleware } from '@/lib/server/middleware/workspace-context'
 import { auditAttributionMiddleware } from '@/lib/server/middleware/audit-attribution'
 import { expireRouteContextOnWrite } from '@/lib/client/route-context-middleware'
+import {
+  designerFrameCallMiddleware,
+  designerFrameRequestMiddleware,
+} from '@/lib/server/middleware/designer-frame'
 
 /**
  * Same-origin protection for server functions, matching the framework default.
@@ -51,6 +55,8 @@ export const startInstance = createStart(() => {
       oauthCorsMiddleware,
       workspaceContextMiddleware,
       csrfMiddleware,
+      // The designer's frame changes nothing (designer-frame.ts).
+      designerFrameRequestMiddleware,
       auditAttributionMiddleware,
     ],
     // Server-function failures never reach the request middleware's error
@@ -58,6 +64,11 @@ export const startInstance = createStart(() => {
     // `requestMiddleware` above, this list replaces no framework default.
     // In the browser, a POST server function drops the route context kept
     // between navigations, so the next one sees what it changed.
-    functionMiddleware: [serverFnLogMiddleware, expireRouteContextOnWrite],
+    // The designer's frame marks its calls, and its writes are refused.
+    functionMiddleware: [
+      serverFnLogMiddleware,
+      expireRouteContextOnWrite,
+      designerFrameCallMiddleware,
+    ],
   }
 })

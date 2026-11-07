@@ -1,0 +1,476 @@
+/**
+ * The brand's colours as variables, Figma style: each a row with its name,
+ * its swatch and its value, opening a picker. The few every portal has show
+ * first; a second and extra colours are added with "+ Add colour"; the
+ * worked-out ones (cards, raised parts, secondary text, borders) wait under
+ * More, each Auto until set, then marked with a dot and Reset. Dark mode
+ * names the same colours as light, and the logo's own colours close it.
+ */
+import { useMemo, useState } from 'react'
+import {
+  CheckCircleIcon,
+  ChevronRightIcon,
+  ExclamationTriangleIcon,
+  EyeDropperIcon,
+  MinusIcon,
+  PlusIcon,
+} from '@heroicons/react/16/solid'
+import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ColourField, toHex } from '@/components/admin/settings/appearance/colour-field'
+import type { Update } from '@/components/admin/settings/appearance/section-controls'
+import { imagePalette } from '@/lib/client/image-palette'
+import { colourPairs, colourRowIssues, type ColourRowIssue } from '@/lib/shared/design/colour-pairs'
+import { resolveDesign } from '@/lib/shared/design/resolve'
+import type { PortalDesign } from '@/lib/shared/design/schema'
+import { cn } from '@/lib/shared/utils'
+import { PropertyMore, PropertyRow, PropertySection } from './properties/properties-panel'
+import { COLOUR_NAMES, THEME, WORDS, resetToValue } from './properties/words'
+
+type Palette = PortalDesign['brand']['light']
+type DarkRole = 'accent' | 'support' | 'ink' | 'background'
+type MoreKey = 'surface' | 'raised' | 'muted' | 'border'
+
+const MORE: ReadonlyArray<{ key: MoreKey; label: string }> = [
+  { key: 'surface', label: COLOUR_NAMES.surface },
+  { key: 'raised', label: COLOUR_NAMES.raised },
+  { key: 'muted', label: COLOUR_NAMES.muted },
+  { key: 'border', label: COLOUR_NAMES.border },
+]
+/** Dark's colours, named as light's are. */
+const DARK: ReadonlyArray<{ key: DarkRole; label: string }> = [
+  { key: 'background', label: COLOUR_NAMES.page },
+  { key: 'ink', label: COLOUR_NAMES.ink },
+  { key: 'accent', label: COLOUR_NAMES.accent },
+  { key: 'support', label: COLOUR_NAMES.support },
+]
+const RESET_TO_AUTO = resetToValue(WORDS.auto.toLowerCase())
+
+/** One extra colour; clearing the first moves the second up. */
+function setExtra(draft: PortalDesign, index: number, value: string | undefined) {
+  const next = [...(draft.brand.light.extra ?? [])]
+  if (value) next[index] = value
+  else next.splice(index, 1)
+  const kept = next.filter(Boolean)
+  if (kept.length) draft.brand.light.extra = kept
+  else delete draft.brand.light.extra
+}
+
+function Swatch({ colour, className }: { colour: string | undefined; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'size-3.5 shrink-0 rounded-[4px] border border-border',
+        !colour &&
+          'bg-[repeating-linear-gradient(45deg,var(--muted)_0_3px,var(--background)_3px_6px)]',
+        className
+      )}
+      style={colour ? { background: toHex(colour) } : undefined}
+    />
+  )
+}
+
+/**
+ * A colour variable's value: its swatch and hex, or Auto with the colour it
+ * is worked out as. Clicking opens the picker and hex field.
+ */
+export function ColourValue({
+  id,
+  name,
+  value,
+  auto,
+  onChange,
+  startOpen = false,
+  onClosed,
+}: {
+  id: string
+  name: string
+  value: string | undefined
+  /** What it is while unset; with it, clearing the hex goes back to Auto. */
+  auto?: string
+  onChange: (value: string | undefined) => void
+  /** Opens at once, for a colour being added. */
+  startOpen?: boolean
+  onClosed?: () => void
+}) {
+  const [open, setOpen] = useState(startOpen)
+  const shown = value ?? (auto || undefined)
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) onClosed?.()
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          id={id}
+          type="button"
+          aria-label={`${name}: ${value ?? (auto !== undefined ? WORDS.auto : WORDS.none)}`}
+          data-colour-state={value ? 'set' : 'auto'}
+          className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-xs hover:border-border hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+        >
+          <Swatch colour={shown} />
+          <span
+            className={cn(
+              'ms-auto text-muted-foreground',
+              value && 'font-mono text-[11px] uppercase'
+            )}
+          >
+            {value ?? (auto !== undefined ? WORDS.auto : WORDS.none)}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72 p-3" aria-label={name}>
+        <ColourField
+          id={`${id}-hex`}
+          label={name}
+          value={value}
+          placeholder={auto}
+          onChange={onChange}
+        />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/**
+ * The brand's colours by the job each does, the dark values worked out from
+ * them (or set by hand), and the logo's own colours.
+ */
+export function BrandKitColours({
+  design,
+  update,
+  logoUrl,
+}: {
+  design: PortalDesign
+  update: Update
+  logoUrl: string | null
+}) {
+  const { light } = design.brand
+  const extra = light.extra ?? []
+  const [adding, setAdding] = useState(false)
+  const failing = useMemo(() => colourPairs(design).filter((pair) => !pair.passes).length, [design])
+  const issues = useMemo(() => colourRowIssues(design), [design])
+  const worked = useMemo(() => resolveDesign({ ...design, mode: 'light' }).light, [design])
+  const autoOf: Record<MoreKey, string | undefined> = {
+    surface: worked?.card,
+    raised: worked?.muted,
+    muted: worked?.mutedForeground,
+    border: worked?.border,
+  }
+  const set = (key: keyof Palette, value: string | undefined) =>
+    update((draft) => {
+      const palette = draft.brand.light as Record<string, unknown>
+      if (value) palette[key] = value
+      else if (key !== 'accent' && key !== 'ink' && key !== 'background') delete palette[key]
+    })
+  // What "+ Add colour" adds next: the second colour, then up to two extras.
+  const next = !light.support ? 'support' : extra.length < 2 ? 'extra' : null
+  const nextName =
+    next === 'support'
+      ? COLOUR_NAMES.support
+      : extra.length
+        ? COLOUR_NAMES.extra2
+        : COLOUR_NAMES.extra1
+  const added = [
+    ...(light.support
+      ? [
+          {
+            id: 'kit-support',
+            name: COLOUR_NAMES.support,
+            value: light.support,
+            write: (v: string | undefined) => set('support', v),
+          },
+        ]
+      : []),
+    ...extra.map((value, index) => ({
+      id: `kit-extra-${index + 1}`,
+      name: index === 0 ? COLOUR_NAMES.extra1 : COLOUR_NAMES.extra2,
+      value,
+      write: (v: string | undefined) => update((draft) => setExtra(draft, index, v)),
+    })),
+  ]
+  const row = (key: 'accent' | 'ink' | 'background', name: string) => (
+    <PropertyRow label={name} htmlFor={`kit-${key}`}>
+      <ColourValue
+        id={`kit-${key}`}
+        name={name}
+        value={light[key]}
+        onChange={(v) => v && set(key, v)}
+      />
+    </PropertyRow>
+  )
+  const moreRow = ({ key, label }: { key: MoreKey; label: string }) => (
+    <div key={key}>
+      <PropertyRow
+        label={label}
+        htmlFor={`kit-${key}`}
+        set={light[key] !== undefined}
+        source={THEME.automatic}
+        resetLabel={RESET_TO_AUTO}
+        onReset={() => set(key, undefined)}
+      >
+        <ColourValue
+          id={`kit-${key}`}
+          name={label}
+          value={light[key]}
+          auto={autoOf[key] ?? light.background}
+          onChange={(v) => set(key, v)}
+        />
+      </PropertyRow>
+      {key === 'muted' && (
+        <RowIssue name={label} issue={issues.muted} onFix={(fix) => set('muted', fix)} />
+      )}
+    </div>
+  )
+  const status = failing === 0 ? THEME.readable : THEME.hardToRead(failing)
+  return (
+    <PropertySection
+      title={THEME.sections.colours}
+      aside={
+        <span className="flex items-center gap-1 text-[11px] text-muted-foreground" title={status}>
+          {failing === 0 ? (
+            <CheckCircleIcon className="size-3.5 text-success" aria-hidden="true" />
+          ) : (
+            <ExclamationTriangleIcon className="size-3.5 text-warning" aria-hidden="true" />
+          )}
+          <span className={failing === 0 ? 'sr-only' : undefined}>{status}</span>
+        </span>
+      }
+    >
+      {row('accent', COLOUR_NAMES.accent)}
+      {row('ink', COLOUR_NAMES.ink)}
+      <RowIssue name={COLOUR_NAMES.ink} issue={issues.ink} onFix={(fix) => set('ink', fix)} />
+      {row('background', COLOUR_NAMES.page)}
+      {added.map(({ id, name, value, write }) => (
+        <PropertyRow key={id} label={name} htmlFor={id}>
+          <ColourValue id={id} name={name} value={value} onChange={(v) => v && write(v)} />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-6 shrink-0"
+            aria-label={`Remove ${name.toLowerCase()}`}
+            onClick={() => write(undefined)}
+          >
+            <MinusIcon className="size-3.5" aria-hidden="true" />
+          </Button>
+        </PropertyRow>
+      ))}
+      {/* Secondary text leaves More while it is hard to read. */}
+      {issues.muted && moreRow(MORE[2]!)}
+      {adding && next && (
+        <PropertyRow label={nextName} htmlFor="kit-adding">
+          <ColourValue
+            id="kit-adding"
+            name={nextName}
+            value={undefined}
+            startOpen
+            onClosed={() => setAdding(false)}
+            onChange={(v) => {
+              if (!v) return
+              setAdding(false)
+              if (next === 'support') set('support', v)
+              else update((draft) => setExtra(draft, extra.length, v))
+            }}
+          />
+        </PropertyRow>
+      )}
+      {next && !adding && (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="flex h-7 items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+        >
+          <PlusIcon className="size-3.5" aria-hidden="true" />
+          {THEME.addColour}
+        </button>
+      )}
+      <PropertyMore>
+        {MORE.filter(({ key }) => !(key === 'muted' && issues.muted)).map(moreRow)}
+      </PropertyMore>
+      {design.mode !== 'light' && <DarkValues design={design} update={update} />}
+      <LogoColourRow design={design} update={update} logoUrl={logoUrl} />
+    </PropertySection>
+  )
+}
+
+/** On a colour row that is hard to read: on what, and the nearest colour that reads, in one click. */
+function RowIssue({
+  name,
+  issue,
+  onFix,
+}: {
+  /** The row's name, such as Text. */
+  name: string
+  issue: ColourRowIssue | undefined
+  onFix: (colour: string) => void
+}) {
+  if (!issue) return null
+  return (
+    <p className="flex min-h-7 items-center gap-1.5 ps-[100px] text-[11px] text-muted-foreground">
+      <ExclamationTriangleIcon className="size-3.5 shrink-0 text-warning" aria-hidden="true" />
+      <span className="me-auto">{THEME.hardOn(issue.on.join(', '))}</span>
+      {issue.fix && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          aria-label={`${THEME.fix} ${name}`}
+          onClick={() => onFix(issue.fix!)}
+        >
+          <Swatch colour={issue.fix} className="size-3" />
+          {THEME.fix}
+        </Button>
+      )}
+    </p>
+  )
+}
+
+/**
+ * Dark's colours, made from light's automatically, or set by hand: a row
+ * with the three that matter most, opening to the same names as light.
+ */
+function DarkValues({ design, update }: { design: PortalDesign; update: Update }) {
+  const own = design.brand.dark ?? {}
+  const custom = Object.keys(own).length > 0
+  const worked = useMemo(() => resolveDesign({ ...design, mode: 'auto' }).dark, [design])
+  const auto: Partial<Record<DarkRole, string>> = {
+    background: worked?.background,
+    ink: worked?.foreground,
+    accent: worked?.primary,
+    support: design.brand.light.support,
+  }
+  const write = (key: DarkRole, value: string | undefined) =>
+    update((draft) => {
+      const dark = { ...draft.brand.dark }
+      if (value) dark[key] = value
+      else delete dark[key]
+      if (Object.keys(dark).length) draft.brand.dark = dark
+      else delete draft.brand.dark
+    })
+  return (
+    <details className="group/dark" data-dark-values="">
+      <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2 rounded focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+        <span className="w-[92px] shrink-0 truncate text-xs text-muted-foreground">
+          {THEME.darkMode}
+        </span>
+        <span role="img" aria-label="Dark colours" className="flex gap-1">
+          {(['background', 'ink', 'accent'] as const).map((key) => (
+            <Swatch key={key} colour={own[key] ?? auto[key]} />
+          ))}
+        </span>
+        <span className="ms-auto text-xs text-muted-foreground">
+          {custom ? THEME.custom : WORDS.auto}
+        </span>
+        <ChevronRightIcon
+          className="size-3.5 text-muted-foreground transition-transform group-open/dark:rotate-90"
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="space-y-0.5 pt-0.5">
+        {DARK.filter(({ key }) => key !== 'support' || design.brand.light.support).map(
+          ({ key, label }) => (
+            <PropertyRow
+              key={key}
+              label={label}
+              htmlFor={`kit-dark-${key}`}
+              set={own[key] !== undefined}
+              resetLabel={RESET_TO_AUTO}
+              onReset={() => write(key, undefined)}
+            >
+              <ColourValue
+                id={`kit-dark-${key}`}
+                name={`${THEME.darkMode}: ${label}`}
+                value={own[key]}
+                auto={auto[key] ?? ''}
+                onChange={(value) => write(key, value)}
+              />
+            </PropertyRow>
+          )
+        )}
+        {custom && (
+          <button
+            type="button"
+            onClick={() => update((draft) => void delete draft.brand.dark)}
+            className="ms-[100px] rounded text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          >
+            {THEME.resetAllToAuto}
+          </button>
+        )}
+      </div>
+    </details>
+  )
+}
+
+/**
+ * The logo's own colours, taken from the logo, for status markers drawn in
+ * the brand's colours: swatches, a pick from the logo, and Clear.
+ */
+function LogoColourRow({
+  design,
+  update,
+  logoUrl,
+}: {
+  design: PortalDesign
+  update: Update
+  logoUrl: string | null
+}) {
+  const colours = design.brand.logoColours ?? []
+  const [busy, setBusy] = useState(false)
+  const take = async () => {
+    if (!logoUrl) return
+    setBusy(true)
+    try {
+      const blob = await (await fetch(logoUrl)).blob()
+      const found = (await imagePalette(blob, 6)).map((colour) => colour.toLowerCase())
+      update((draft) => {
+        if (found.length) draft.brand.logoColours = found.slice(0, 6)
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <PropertyRow label={THEME.logoColours} source={THEME.logoColoursHelp}>
+      {colours.length > 0 ? (
+        <span
+          role="img"
+          className="flex gap-1 px-1.5"
+          aria-label={`${THEME.logoColours}: ${colours.join(', ')}`}
+        >
+          {colours.map((colour) => (
+            <Swatch key={colour} colour={colour} />
+          ))}
+        </span>
+      ) : (
+        <span className="px-1.5 text-xs text-muted-foreground">{WORDS.none}</span>
+      )}
+      <span className="ms-auto flex items-center gap-0.5">
+        {logoUrl && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-6"
+            disabled={busy}
+            aria-label={busy ? THEME.reading : THEME.pickFromLogo}
+            onClick={() => void take()}
+          >
+            <EyeDropperIcon className="size-3.5" aria-hidden="true" />
+          </Button>
+        )}
+        {colours.length > 0 && (
+          <button
+            type="button"
+            onClick={() => update((draft) => void delete draft.brand.logoColours)}
+            className="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          >
+            {THEME.clear}
+          </button>
+        )}
+      </span>
+    </PropertyRow>
+  )
+}

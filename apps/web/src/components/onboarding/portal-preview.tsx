@@ -197,7 +197,7 @@ function ExampleBoard({ name }: { name: string }) {
       <div className="flex h-[42px] items-center rounded-[10px] border border-zinc-200 bg-white px-3.5 text-sm text-zinc-500">
         {intl.formatMessage({
           id: 'onboarding.preview.shareIdea',
-          defaultMessage: 'Create a post…',
+          defaultMessage: 'Share a post…',
         })}
       </div>
       {IDEAS.map((idea) => (
@@ -239,7 +239,7 @@ function EmptyBoard({ name }: { name: string }) {
         <p className="text-[15px] font-semibold">
           {intl.formatMessage({
             id: 'onboarding.preview.emptyTitle',
-            defaultMessage: 'No posts yet. Be the first to post',
+            defaultMessage: 'Got something to say? Be the first to post',
           })}
         </p>
         <p className="text-[13px] text-zinc-500">
@@ -247,13 +247,13 @@ function EmptyBoard({ name }: { name: string }) {
             ? intl.formatMessage(
                 {
                   id: 'onboarding.preview.emptyBody',
-                  defaultMessage: 'The {name} team reads every request.',
+                  defaultMessage: 'The {name} team reads every post.',
                 },
                 { name }
               )
             : intl.formatMessage({
                 id: 'onboarding.preview.emptyBodyUnnamed',
-                defaultMessage: 'Your team reads every request.',
+                defaultMessage: 'Your team reads every post.',
               })}
         </p>
       </div>

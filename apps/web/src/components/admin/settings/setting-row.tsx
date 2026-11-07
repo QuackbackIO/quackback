@@ -1,3 +1,4 @@
+import { cloneElement, isValidElement, useId } from 'react'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/shared/utils'
 
@@ -25,6 +26,14 @@ export function SettingRow({
   disabled,
   className,
 }: SettingRowProps) {
+  // The description is read with the control, as well as shown under the label.
+  const describedId = `${useId()}-description`
+  const described =
+    description && isValidElement<{ 'aria-describedby'?: string }>(control)
+      ? cloneElement(control, {
+          'aria-describedby': control.props['aria-describedby'] ?? describedId,
+        })
+      : control
   return (
     <div
       data-slot="setting-row"
@@ -38,10 +47,14 @@ export function SettingRow({
           </Label>
           {badge}
         </div>
-        {description && <p className="mt-0.5 text-[13px] text-muted-foreground">{description}</p>}
+        {description && (
+          <p id={describedId} className="mt-0.5 text-[13px] text-muted-foreground">
+            {description}
+          </p>
+        )}
       </div>
       <div data-slot="setting-row-control" className="flex shrink-0 items-center gap-2">
-        {control}
+        {described}
       </div>
     </div>
   )

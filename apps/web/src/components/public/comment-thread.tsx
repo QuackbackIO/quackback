@@ -260,7 +260,7 @@ export function CommentThread({
             {replyPolicy === 'author-only'
               ? intl.formatMessage({
                   id: 'portal.commentThread.authorOnlyReplies',
-                  defaultMessage: 'Only the post author and team members can reply on this board',
+                  defaultMessage: 'Only the author and team members can reply on this board',
                 })
               : intl.formatMessage({
                   id: 'portal.commentThread.noAccess',
@@ -709,7 +709,7 @@ function CommentItem({
             <span className="text-muted-foreground text-xs">·</span>
             <TimeAgo date={comment.createdAt} className="text-xs text-muted-foreground" />
             {comment.isEdited && (
-              <span className="text-xs text-muted-foreground/60">
+              <span className="text-xs text-muted-foreground">
                 {intl.formatMessage({
                   id: 'portal.commentThread.edited',
                   defaultMessage: '(edited)',

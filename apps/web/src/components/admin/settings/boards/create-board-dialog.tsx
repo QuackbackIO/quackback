@@ -113,7 +113,7 @@ export function CreateBoardDialog({
             <DialogHeader>
               <DialogTitle>New board</DialogTitle>
               <DialogDescription>
-                Create a new feedback board to collect ideas from your users.
+                Create a new feedback board to collect posts from your users.
               </DialogDescription>
             </DialogHeader>
 
@@ -144,7 +144,7 @@ export function CreateBoardDialog({
                     <FormLabel>Description</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Share your ideas and vote on features"
+                        placeholder="Share feedback and vote on posts"
                         rows={3}
                         {...field}
                       />

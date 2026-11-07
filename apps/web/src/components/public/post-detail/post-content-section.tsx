@@ -188,7 +188,7 @@ export function PostContentSection({
             onChange={(e) => setEditTitle(e.target.value)}
             placeholder={intl.formatMessage({
               id: 'portal.postDetail.edit.titlePlaceholder',
-              defaultMessage: 'Title',
+              defaultMessage: "What's on your mind?",
             })}
             maxLength={200}
             autoFocus
@@ -197,7 +197,7 @@ export function PostContentSection({
               id: 'portal.postDetail.edit.titleLabel',
               defaultMessage: 'Post title',
             })}
-            className="w-full bg-transparent border-0 outline-none text-xl sm:text-2xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-4"
+            className="w-full bg-transparent border-0 outline-none text-xl sm:text-2xl font-semibold text-foreground placeholder:text-muted-foreground placeholder:font-normal caret-primary mb-4"
           />
 
           {/* Rich text editor — lazy-loaded so its chunk never lands in the
@@ -266,7 +266,13 @@ export function PostContentSection({
         </div>
       </div>
 
-      <h1 className="text-xl sm:text-2xl font-semibold text-foreground mb-4">{post.title}</h1>
+      {/* On the design's scale for page titles, held short of it for a long title. */}
+      <h1
+        data-qb-part="post-heading"
+        className="text-xl sm:text-2xl sm:[font-size:min(var(--qb-page-title-size,1.5rem),2.25rem)] [line-height:1.2] font-semibold text-foreground mb-4"
+      >
+        {post.title}
+      </h1>
 
       {post.moderationState === 'pending' && (
         <InlineModerationActions
@@ -279,11 +285,14 @@ export function PostContentSection({
         />
       )}
 
-      <PostContent
-        content={post.content}
-        contentJson={post.contentJson}
-        className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-foreground/90"
-      />
+      {/* Marked, so the designer picks body text from a click on it. */}
+      <div data-qb-part="post-body">
+        <PostContent
+          content={post.content}
+          contentJson={post.contentJson}
+          className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-foreground/90"
+        />
+      </div>
 
       {!isEditing && (
         <SimilarPostsSection postTitle={post.title} currentPostId={post.id as PostId} />

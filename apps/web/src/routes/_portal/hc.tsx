@@ -2,6 +2,7 @@ import { createFileRoute, notFound, redirect, Outlet, useRouterState } from '@ta
 import { createIsomorphicFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { resolveHelpCenterDomainRedirect } from '@/lib/shared/help-center-domain'
+import { isPreviewSearch } from '@/lib/shared/design/paths'
 import { HelpCenterLocaleSwitcher } from '@/components/help-center/help-center-locale-switcher'
 import { parseHcLocalePath } from '@/lib/shared/help-center-url'
 import { AreaMessages } from '@/components/shared/area-messages'
@@ -37,7 +38,10 @@ export const Route = createFileRoute('/_portal/hc')({
 
     // Full-coverage 301: every /hc/* route is nested under this layout, so
     // this is the single place the default-host -> verified-custom-domain
-    // redirect needs to live (domains/languages §1).
+    // redirect needs to live (domains/languages §1). The preview frame stays
+    // put: it is drawn same-origin for the designer, and another origin cuts
+    // its bridge.
+    if (isPreviewSearch(location.search)) return
     const currentHost = currentRequestHost()
     const target = resolveHelpCenterDomainRedirect({
       domainConfig: helpCenterConfig?.domain,

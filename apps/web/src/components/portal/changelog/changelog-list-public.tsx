@@ -8,8 +8,27 @@ import { cn } from '@/lib/shared/utils'
 import { publicChangelogQueries, changelogCategoryQueries } from '@/lib/client/queries/changelog'
 import { DocumentTextIcon } from '@heroicons/react/24/outline'
 import type { ChangelogCategoryId } from '@quackback/ids'
+import type { PageChoices } from '@/lib/shared/design/page-choices'
 
-export function ChangelogListPublic() {
+/** How the entries run together, and the room each takes, for each layout. */
+const LIST_CLASS = {
+  timeline: 'divide-y divide-border/40',
+  cards: 'space-y-6',
+  compact: 'divide-y divide-border/40',
+} as const
+const ROW_CLASS = { timeline: 'py-10 first:pt-0', cards: '', compact: 'py-5 first:pt-0' } as const
+
+/**
+ * The public changelog: its label filters and its entries, laid out as the
+ * design chooses; without a choice, dates in a column and no images.
+ */
+export function ChangelogListPublic({
+  entries: layout = 'timeline',
+  images = 'none',
+}: {
+  entries?: PageChoices['changelog']['entries']
+  images?: PageChoices['changelog']['images']
+} = {}) {
   const intl = useIntl()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
     publicChangelogQueries.list()
@@ -41,7 +60,7 @@ export function ChangelogListPublic() {
   }
 
   return (
-    <div>
+    <div data-qb-section="entries">
       {categoriesInUse.length > 0 && (
         <div className="mb-8 flex flex-wrap items-center gap-1.5">
           <button
@@ -94,11 +113,14 @@ export function ChangelogListPublic() {
           })}
         />
       ) : (
-        <div className="divide-y divide-border/40">
+        <div className={LIST_CLASS[layout]}>
           {entries.map((entry, index) => (
             <div
               key={entry.id}
-              className="py-10 first:pt-0 animate-in fade-in duration-200 fill-mode-backwards"
+              className={cn(
+                ROW_CLASS[layout],
+                'animate-in fade-in duration-200 fill-mode-backwards'
+              )}
               style={{ animationDelay: `${index * 50}ms` }}
             >
               <ChangelogEntryCard
@@ -109,6 +131,9 @@ export function ChangelogListPublic() {
                 publishedAt={entry.publishedAt}
                 linkedPosts={entry.linkedPosts}
                 categories={entry.categories}
+                layout={layout}
+                featuredImageUrl={entry.featuredImageUrl}
+                image={images}
               />
             </div>
           ))}

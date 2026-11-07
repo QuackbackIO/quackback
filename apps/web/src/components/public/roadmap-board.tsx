@@ -3,7 +3,6 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { MapIcon } from '@heroicons/react/24/solid'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   usePublicRoadmaps,
   useRoadmapDateBuckets,
@@ -12,6 +11,7 @@ import {
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
 import { portalQueries } from '@/lib/client/queries/portal'
+import type { PageChoices } from '@/lib/shared/design/page-choices'
 import { RoadmapColumn } from './roadmap-column'
 import {
   PublicRoadmapFiltersBar,
@@ -26,12 +26,18 @@ interface RoadmapBoardProps {
   initialRoadmaps?: RoadmapView[]
   initialSelectedRoadmapId?: string | null
   isTeamMember?: boolean
+  /** A column per status across the page, or one list grouped by status. */
+  layout?: PageChoices['roadmap']['board']
+  /** The vote box on the cards. */
+  votes?: boolean
 }
 
 export function RoadmapBoard({
   initialRoadmaps,
   initialSelectedRoadmapId,
   isTeamMember,
+  layout = 'columns',
+  votes = true,
 }: RoadmapBoardProps): React.ReactElement {
   const intl = useIntl()
   const { selectedRoadmapId, setSelectedRoadmap } = usePublicRoadmapSelection()
@@ -101,7 +107,7 @@ export function RoadmapBoard({
   }
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-4">
+    <div data-qb-section="board" className="flex-1 min-h-0 flex flex-col gap-4">
       {availableRoadmaps.length > 1 && (
         <div className="space-y-2">
           <RoadmapTabs
@@ -109,12 +115,9 @@ export function RoadmapBoard({
             selectedId={effectiveSelectedId}
             onSelect={setSelectedRoadmap}
           />
+          {/* A line under the tabs, not a card of its own around a few words. */}
           {selectedRoadmap?.description && (
-            <Card className="border-none">
-              <CardContent className="py-3 px-4">
-                <p className="text-sm text-muted-foreground">{selectedRoadmap.description}</p>
-              </CardContent>
-            </Card>
+            <p className="px-1 text-sm text-muted-foreground">{selectedRoadmap.description}</p>
           )}
         </div>
       )}
@@ -148,7 +151,26 @@ export function RoadmapBoard({
         onToggleSegment={isTeamMember ? toggleSegment : undefined}
       />
 
-      {effectiveSelectedId && (
+      {effectiveSelectedId && layout === 'list' && (
+        <div className="space-y-8 pb-4">
+          {columns.map((column) => (
+            <RoadmapColumn
+              key={column.id}
+              roadmapId={effectiveSelectedId as `roadmap_${string}`}
+              statusId={column.statusId}
+              bucketId={column.bucketId}
+              title={column.name}
+              icon={column.icon}
+              color={column.color}
+              filters={filters}
+              layout="group"
+              votes={votes}
+            />
+          ))}
+        </div>
+      )}
+
+      {effectiveSelectedId && layout === 'columns' && (
         <div className="relative flex-1 min-h-[24rem] sm:min-h-0">
           <div
             ref={columnsScroll.ref}
@@ -157,7 +179,8 @@ export function RoadmapBoard({
             {columns.map((column, index) => (
               <div
                 key={column.id}
-                className="snap-center sm:snap-start flex flex-col animate-in fade-in duration-200 fill-mode-backwards"
+                // Columns share the width, never narrower than a card reads well.
+                className="snap-center sm:snap-start flex flex-1 basis-0 min-w-[min(300px,85vw)] flex-col animate-in fade-in duration-200 fill-mode-backwards"
                 style={{ animationDelay: `${index * 75}ms` }}
               >
                 <RoadmapColumn
@@ -168,6 +191,7 @@ export function RoadmapBoard({
                   icon={column.icon}
                   color={column.color}
                   filters={filters}
+                  votes={votes}
                 />
               </div>
             ))}
@@ -183,7 +207,7 @@ export function RoadmapBoard({
               })}
               className="absolute start-0 top-0 bottom-4 flex items-center ps-1 pe-10 bg-gradient-to-r from-background/70 to-transparent z-10"
             >
-              <ChevronLeftIcon className="w-5 h-5 text-muted-foreground/70" />
+              <ChevronLeftIcon className="w-5 h-5 text-muted-foreground" />
             </button>
           )}
           {columnsScroll.canScrollRight && (
@@ -196,7 +220,7 @@ export function RoadmapBoard({
               })}
               className="absolute end-0 top-0 bottom-4 flex items-center pe-1 ps-10 bg-gradient-to-l from-background/70 to-transparent z-10"
             >
-              <ChevronRightIcon className="w-5 h-5 text-muted-foreground/70" />
+              <ChevronRightIcon className="w-5 h-5 text-muted-foreground" />
             </button>
           )}
         </div>

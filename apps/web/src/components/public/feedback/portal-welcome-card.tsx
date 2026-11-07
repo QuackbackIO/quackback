@@ -11,8 +11,12 @@ function PortalWelcomeCardImpl({ welcomeCard }: PortalWelcomeCardProps) {
   if (!welcomeCard || isEmptyTiptapDoc(welcomeCard.body)) return null
 
   return (
-    <section className="mb-6 rounded-xl border border-border/60 bg-card/60 p-5 sm:p-6">
-      <RichTextContent content={welcomeCard.body} />
+    <section
+      data-qb-section="welcome"
+      data-qb-surface="card"
+      className="mb-6 rounded-xl border border-border/60 bg-card/60 p-5 sm:p-6"
+    >
+      <RichTextContent content={welcomeCard.body} words="feedback.welcome" />
     </section>
   )
 }

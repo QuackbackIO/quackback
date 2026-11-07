@@ -172,7 +172,7 @@ describe('AuthDialog: team sign-in', () => {
     renderDialog({ callbackUrl: '/b/roadmap', workspaceName: 'Acme' })
     await screen.findByText('FORM_BODY')
 
-    expect(screen.getByText('Sign in to vote and comment on feedback.')).toBeTruthy()
+    expect(screen.getByText('Sign in to vote and comment on posts.')).toBeTruthy()
     expect(screen.queryByText(/Acme admin/)).toBeNull()
   })
 })
@@ -230,7 +230,7 @@ describe('AuthDialog: why the visitor is signing in', () => {
     expect(await screen.findByText('Sign in to get status updates.')).toBeTruthy()
     fireEvent.click(screen.getByText('close-it'))
     fireEvent.click(screen.getByText('open-plain'))
-    expect(await screen.findByText('Sign in to vote and comment on feedback.')).toBeTruthy()
+    expect(await screen.findByText('Sign in to vote and comment on posts.')).toBeTruthy()
   })
 })
 

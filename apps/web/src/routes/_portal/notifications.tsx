@@ -83,7 +83,7 @@ function NotificationsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-8">
+    <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-8">
       {/* Page Header */}
       <header className="mb-8 animate-in fade-in duration-200 fill-mode-backwards">
         <div className="flex items-start justify-between gap-4">
@@ -103,7 +103,7 @@ function NotificationsPage() {
               <p className="text-sm text-muted-foreground mt-0.5">
                 <FormattedMessage
                   id="portal.notifications.subtitle"
-                  defaultMessage="Updates on posts you've subscribed to"
+                  defaultMessage={"Updates on posts you've subscribed to"}
                 />
               </p>
             </div>

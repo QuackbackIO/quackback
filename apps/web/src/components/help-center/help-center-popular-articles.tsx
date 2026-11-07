@@ -3,6 +3,8 @@ import { FormattedMessage } from 'react-intl'
 import { DocumentTextIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
+import { useDesignTitles } from '@/components/public/portal-page-title'
+import { popularSectionClass } from './help-center-sections'
 
 export interface PopularArticle {
   id: string
@@ -18,14 +20,26 @@ interface HelpCenterPopularArticlesProps {
 }
 
 export function HelpCenterPopularArticles({ articles }: HelpCenterPopularArticlesProps) {
+  const designTitles = useDesignTitles()
   if (articles.length === 0) return null
 
   return (
-    <section aria-labelledby="hc-popular" className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
-      <h2 id="hc-popular" className="mb-5 text-2xl font-semibold tracking-tight text-foreground">
+    <section
+      aria-labelledby="hc-popular"
+      data-qb-section="popular"
+      className={popularSectionClass(designTitles)}
+    >
+      <h2
+        id="hc-popular"
+        data-qb-part="section-heading"
+        className="mb-5 text-2xl font-semibold tracking-tight text-foreground"
+      >
         <FormattedMessage id="portal.hc.popularArticles.title" defaultMessage="Popular articles" />
       </h2>
-      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+      <div
+        data-qb-surface="card"
+        className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card"
+      >
         {articles.map((article) => (
           <Link
             key={article.id}

@@ -1,9 +1,11 @@
 import { nameInitial } from '@/lib/shared/utils/initial'
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { usePreviewPosting } from './use-preview-posting'
 import { cn } from '@/lib/shared/utils'
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
+import type { PortalDesign } from '@/lib/shared/design/schema'
 
-interface PortalPreviewProps {
+export interface PortalPreviewProps {
   /** Forced preview theme — forwarded to the portal iframe as `?theme=`. */
   theme: 'light' | 'dark'
   /**
@@ -27,15 +29,46 @@ interface PortalPreviewProps {
   workspaceName: string
   /** Browser-tab icon slot — the workspace logo (the portal's favicon). */
   faviconUrl?: string | null
+  /**
+   * Lay the desktop preview out at desktop width and scale it to fit, so
+   * desktop layouts (an inline header, the filter panel) show as visitors see them.
+   */
+  scaleToDesktop?: boolean
+  /** The feed's sort in the frame; a design's default sort, which changes by reloading it. */
+  sort?: 'trending' | 'top' | 'new'
+  /** A draft portal design, resolved: applied in the frame in place of the saved one. */
+  design?: {
+    css: string
+    attributes: Record<string, string>
+    fontIds: string[]
+    headline: { title: Record<string, string>; subtitle: Record<string, string> } | null
+    home?: PortalDesign['pages']['home']
+    nav?: PortalDesign['nav']
+    copy?: PortalDesign['pages']['feedback']['copy']
+  } | null
+  /** The page the frame shows: the root, Home or the feed at its own address. */
+  page?: PreviewPage
+  /** Draw the portal as it would be after switching to the design. */
+  switched?: boolean
 }
+
+export type PreviewPage = 'root' | 'home' | 'feedback'
+
+/** The width a desktop visitor's browser lays the portal out at. */
+const DESKTOP_WIDTH = 1280
 
 /**
  * The framed portal home, spelled the way the portal canonicalizes it (the
  * preview flag as a boolean, the default sort included) so the frame loads
  * without a redirect first.
  */
-export function portalPreviewSrc(theme: 'light' | 'dark') {
-  return `/?theme=${theme}&preview=true&sort=trending`
+export function portalPreviewSrc(
+  theme: 'light' | 'dark',
+  sort: 'trending' | 'top' | 'new' = 'trending',
+  page: PreviewPage = 'root'
+) {
+  if (page === 'home') return `/?theme=${theme}&preview=true&page=home`
+  return `${page === 'feedback' ? '/feedback' : '/'}?theme=${theme}&preview=true&sort=${sort}`
 }
 
 /**
@@ -55,52 +88,28 @@ export function PortalPreview({
   viewport,
   workspaceName,
   faviconUrl,
+  design = null,
+  scaleToDesktop = false,
+  sort = 'trending',
+  page = 'root',
+  switched = false,
 }: PortalPreviewProps) {
+  const frameBox = useRef<HTMLDivElement>(null)
+  const [boxWidth, setBoxWidth] = useState(0)
+  useEffect(() => {
+    const box = frameBox.current
+    if (!box || !scaleToDesktop) return
+    const observer = new ResizeObserver(([entry]) => setBoxWidth(entry.contentRect.width))
+    observer.observe(box)
+    return () => observer.disconnect()
+  }, [scaleToDesktop])
+  const frameHeight = viewport === 'mobile' ? 640 : 720
+  const scale =
+    scaleToDesktop && viewport === 'desktop' && boxWidth > 0
+      ? Math.min(1, boxWidth / DESKTOP_WIDTH)
+      : 1
   const iframeRef = useRef<HTMLIFrameElement>(null)
-  // What the current frame document holds on each channel: no stylesheet and
-  // no structural draft while it shows the saved config. Every message
-  // re-renders the portal page inside the frame, so a channel's draft goes in
-  // only while it holds an unsaved edit, and only when it changes. A discard
-  // puts the saved values back: an empty stylesheet, the saved structure.
-  const frameCss = useRef('')
-  const frameDraft = useRef<PortalPreviewDraft | null>(null)
-
-  const postDrafts = useCallback(() => {
-    const target = iframeRef.current?.contentWindow
-    if (!target) return
-    const origin = window.location.origin
-    const css = cssDirty ? draftCss : ''
-    if (css !== frameCss.current) {
-      target.postMessage({ type: 'quackback:preview-css', css }, origin)
-      frameCss.current = css
-    }
-    if ((draftDirty || frameDraft.current) && draft !== frameDraft.current) {
-      target.postMessage({ type: 'quackback:preview-draft', draft }, origin)
-      frameDraft.current = draft
-    }
-  }, [draftCss, cssDirty, draft, draftDirty])
-
-  // Debounced push on draft changes (typing in the CSS editor / title field).
-  useEffect(() => {
-    const timer = window.setTimeout(postDrafts, 150)
-    return () => window.clearTimeout(timer)
-  }, [postDrafts])
-
-  // The portal announces readiness from each document the frame loads (a
-  // save-triggered reload, a theme switch); that document starts from the
-  // saved config, so re-send any unsaved edits to keep them on screen.
-  useEffect(() => {
-    function onMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin) return
-      if ((event.data as { type?: string } | null)?.type === 'quackback:preview-ready') {
-        frameCss.current = ''
-        frameDraft.current = null
-        postDrafts()
-      }
-    }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-  }, [postDrafts])
+  usePreviewPosting(iframeRef, { draftCss, cssDirty, draft, draftDirty, design })
 
   return (
     <div
@@ -130,16 +139,25 @@ export function PortalPreview({
         </div>
       </div>
 
-      <iframe
-        key={refreshKey}
-        ref={iframeRef}
-        src={portalPreviewSrc(theme)}
-        title="Portal preview"
-        className={cn(
-          'w-full border-0 bg-background',
-          viewport === 'mobile' ? 'h-[640px]' : 'h-[720px]'
-        )}
-      />
+      <div ref={frameBox} className="overflow-hidden" style={{ height: frameHeight }}>
+        <iframe
+          key={refreshKey}
+          ref={iframeRef}
+          src={`${portalPreviewSrc(theme, sort, page)}${switched ? '&design=switch' : ''}`}
+          title="Portal preview"
+          className="w-full border-0 bg-background"
+          style={
+            scale < 1
+              ? {
+                  width: DESKTOP_WIDTH,
+                  height: frameHeight / scale,
+                  transform: `scale(${scale})`,
+                  transformOrigin: 'top left',
+                }
+              : { height: frameHeight }
+          }
+        />
+      </div>
     </div>
   )
 }

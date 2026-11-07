@@ -74,3 +74,11 @@ describe('robots.txt sitemap lines', () => {
     ])
   })
 })
+
+describe('robots.txt private pages', () => {
+  it('keeps crawlers out of the portal designer', async () => {
+    state.domain = { domain: null, verifiedAt: null }
+    const response = await GET({ request: new Request('https://feedback.example.com/robots.txt') })
+    expect((await response.text()).split('\n')).toContain('Disallow: /design')
+  })
+})

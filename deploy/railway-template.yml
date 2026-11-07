@@ -64,3 +64,4 @@ services:
       - GOOGLE_CLIENT_SECRET
       - OPENAI_API_KEY
       - OPENAI_BASE_URL
+      - ANTHROPIC_API_KEY

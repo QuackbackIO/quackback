@@ -1059,8 +1059,8 @@ export function VisitorConversationThread({
       case 'empty':
         return (
           <div className="flex flex-col items-center justify-center text-center py-8 px-4">
-            <ChatBubbleLeftRightIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
-            <p className="text-sm font-medium text-muted-foreground/70">
+            <ChatBubbleLeftRightIcon className="w-8 h-8 text-muted-foreground mb-2" />
+            <p className="text-sm font-medium text-muted-foreground">
               <FormattedMessage
                 id="widget.messenger.startPrompt"
                 defaultMessage="Send us a message and we'll get back to you."
@@ -1070,7 +1070,7 @@ export function VisitorConversationThread({
         )
       case 'seen':
         return (
-          <p className="text-end text-xs text-muted-foreground/50 pe-1">
+          <p className="text-end text-xs text-muted-foreground pe-1">
             <FormattedMessage id="widget.messenger.seen" defaultMessage="Seen" />
           </p>
         )
@@ -1110,7 +1110,7 @@ export function VisitorConversationThread({
                       onClick={() => submitRating(n)}
                       // Brand colour rather than a fixed amber: the stars are
                       // the only element in the thread that ignored the theme.
-                      className="rounded text-lg leading-none text-muted-foreground/50 transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      className="rounded text-lg leading-none text-muted-foreground transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                       aria-label={intl.formatMessage(
                         {
                           id: 'widget.messenger.csat.rateAria',
@@ -1256,7 +1256,7 @@ export function VisitorConversationThread({
       {/* Help-center deflection: suggested articles as the visitor types. */}
       {helpResults.length > 0 && (
         <div className="px-3 pb-1">
-          <p className="px-1 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/60">
+          <p className="px-1 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             <FormattedMessage
               id="widget.messenger.suggestedArticles"
               defaultMessage="Suggested articles"
@@ -1282,7 +1282,7 @@ export function VisitorConversationThread({
           message only when a reply can actually reach them; otherwise a neutral
           "reply here" note. */}
       {showOfflineHint && (
-        <div className="px-4 pt-2 text-center text-[11px] text-muted-foreground/70">
+        <div className="px-4 pt-2 text-center text-[11px] text-muted-foreground">
           <p>
             {canEmailReply ? (
               offlineMessage
@@ -1359,7 +1359,7 @@ export function VisitorConversationThread({
               // pending block resolves.
               <div
                 role="status"
-                className="min-h-[1.5rem] select-none py-1 text-sm text-muted-foreground/50"
+                className="min-h-[1.5rem] select-none py-1 text-sm text-muted-foreground"
               >
                 {composerLockHint}
               </div>
@@ -1368,7 +1368,7 @@ export function VisitorConversationThread({
                 fallback={
                   <div
                     aria-hidden="true"
-                    className="min-h-[1.5rem] select-none py-1 text-sm text-muted-foreground/50"
+                    className="min-h-[1.5rem] select-none py-1 text-sm text-muted-foreground"
                   >
                     {composerPlaceholder}
                   </div>

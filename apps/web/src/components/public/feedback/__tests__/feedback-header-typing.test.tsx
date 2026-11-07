@@ -132,7 +132,7 @@ function renderHeader(draft?: { title: string; key: number }) {
 }
 
 function typeTitle(value: string) {
-  fireEvent.change(screen.getByRole('textbox', { name: 'Feedback title' }), {
+  fireEvent.change(screen.getByRole('textbox', { name: 'Post title' }), {
     target: { value },
   })
 }
@@ -185,7 +185,7 @@ describe('feedback header title', () => {
     try {
       renderHeader({ title: 'zapier', key: 1 })
       await screen.findByTestId('editor')
-      const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' })
+      const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Post title' })
       expect(field.value).toBe('zapier')
       expect(document.activeElement).toBe(field)
       expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
@@ -200,7 +200,7 @@ describe('feedback header title', () => {
     try {
       renderHeader({ title: 'x'.repeat(250), key: 1 })
       await screen.findByTestId('editor')
-      const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' })
+      const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Post title' })
       expect(field.value).toHaveLength(200)
     } finally {
       Element.prototype.scrollIntoView = scrollIntoView
@@ -218,7 +218,7 @@ describe('feedback header title', () => {
 
     expect(editor.renders).toBe(0)
     expect(boardPicker.renders).toBe(0)
-    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' }).value).toBe(
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Post title' }).value).toBe(
       'Dark mode'
     )
   })
@@ -247,7 +247,7 @@ describe('feedback header title', () => {
     typeTitleByKey('ark mode', 'D')
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    const title = screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' })
+    const title = screen.getByRole<HTMLInputElement>('textbox', { name: 'Post title' })
     expect(title.value).toBe('')
 
     typeTitleByKey('Light mode')
@@ -332,7 +332,7 @@ describe('feedback header post composer', () => {
   // The server refuses a longer title, and retrying cannot fix that.
   it('caps the title at the length the server accepts', () => {
     renderHeader()
-    expect(screen.getByLabelText('Feedback title')).toHaveAttribute('maxLength', '200')
+    expect(screen.getByLabelText('Post title')).toHaveAttribute('maxLength', '200')
     const post = { boardId: BOARD.id, title: '', content: '' }
     expect(createPublicPostSchema.safeParse({ ...post, title: 'x'.repeat(200) }).success).toBe(true)
     expect(createPublicPostSchema.safeParse({ ...post, title: 'x'.repeat(201) }).success).toBe(
@@ -367,9 +367,33 @@ describe('feedback header post composer', () => {
     await screen.findByTestId('editor')
     fireEvent.click(screen.getByRole('button', { name: 'Post' }))
 
-    expect(
-      await screen.findByText('Could not submit your feedback. Please try again.')
-    ).toBeTruthy()
+    expect(await screen.findByText('Could not submit your post. Please try again.')).toBeTruthy()
     expect(screen.queryByText(/invalid_type|expected object/)).toBeNull()
+  })
+})
+
+describe('the composer in the band', () => {
+  it('lets its button go under the field when the row has no room, at every width', () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <IntlProvider locale="en" messages={{}} onError={() => {}}>
+          <FeedbackHeaderAnimated
+            workspaceName="Acme"
+            boards={[BOARD]}
+            defaultBoardId={BOARD.id}
+            boardPermissions={{ [BOARD.id]: { canSubmit: true, canVote: true } }}
+            place="band"
+          />
+        </IntlProvider>
+      </QueryClientProvider>
+    )
+    const button = screen.getByRole('button', { name: 'Continue' })
+    const row = button.parentElement!
+    // A row held on one line (sm:flex-nowrap) cut a brand's larger or capital label at the
+    // composer's clipped edge in a narrow band.
+    expect(row.className.split(' ')).toContain('flex-wrap')
+    expect(row.className).not.toMatch(/flex-nowrap/)
+    // The button is never wider than the row: a long label wraps inside it.
+    expect(button.className.split(' ')).toContain('max-w-full')
   })
 })

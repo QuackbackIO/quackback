@@ -1,0 +1,264 @@
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react'
+import { Toolbar } from '@base-ui/react/toolbar'
+import { DocumentDuplicateIcon, TrashIcon } from '@heroicons/react/16/solid'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { chipPlacement, outlineBox, type Rect } from '@/lib/shared/design/layer-geometry'
+
+/** The picked block's outline and chip: blue, edged in white, so it reads on any brand colour. */
+const PICKED = '#2563eb'
+
+/** A chip size to place it by until it has been measured. */
+const CHIP_GUESS = { width: 220, height: 28 }
+
+/** How the outline and chip glide from one pick to the next. */
+const GLIDE = 'left 160ms ease-out, top 160ms ease-out, width 160ms ease-out, height 160ms ease-out'
+
+/**
+ * Whether the picked outline is gliding to a new pick: true for a moment
+ * after the pick changes, so it moves smoothly between picks yet follows
+ * scrolling and dragging exactly.
+ */
+export function useGlide(key: string | null | undefined, ms = 200): boolean {
+  const [gliding, setGliding] = useState(false)
+  const last = useRef(key)
+  useEffect(() => {
+    const before = last.current
+    last.current = key
+    if (!before || !key || before === key) return
+    setGliding(true)
+    const timer = setTimeout(() => setGliding(false), ms)
+    return () => clearTimeout(timer)
+  }, [key, ms])
+  return gliding
+}
+
+/** Six dots: the handle a block is dragged by. */
+function GripIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true" fill="currentColor">
+      {[5, 11].map((x) =>
+        [3.5, 8, 12.5].map((y) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.25" />)
+      )}
+    </svg>
+  )
+}
+
+const BUTTON =
+  'inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-white ' +
+  'hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 ' +
+  'data-[disabled]:cursor-default data-[disabled]:opacity-50 data-[disabled]:hover:bg-transparent'
+
+function ChipButton({
+  label,
+  tip,
+  disabled,
+  onClick,
+  children,
+  ...rest
+}: {
+  label: string
+  tip: string
+  disabled?: boolean
+  onClick?: () => void
+  onPointerDown?: (event: ReactPointerEvent) => void
+  onKeyDown?: (event: ReactKeyboardEvent) => void
+  className?: string
+  children: ReactNode
+} & Record<`data-${string}` | `aria-${string}`, string | undefined>) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Toolbar.Button
+          aria-label={label}
+          className={BUTTON}
+          disabled={disabled}
+          onClick={onClick}
+          {...rest}
+        >
+          {children}
+        </Toolbar.Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">{tip}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/**
+ * What the builder draws over the canvas: a quiet outline on the block under
+ * the pointer, and on the picked block an outline and a chip on its top edge
+ * (inside it when there is no room above) with its grip, its name and
+ * Remove; right-clicking the chip copies it, as Ctrl+D does. Open belongs to
+ * the link or item it opens, on that element's own chip. The page under it
+ * still takes the pointer; only the chip does not let it through.
+ */
+export function EditingLayer({
+  room,
+  hovered,
+  picked,
+  pickedKey,
+  name,
+  onDuplicate,
+  onRemove,
+  onSettings,
+  onDown,
+  grip,
+  children,
+}: {
+  /** The canvas's visible size on the layer. */
+  room: { width: number; height: number }
+  hovered: Rect | null
+  picked: Rect | null
+  /** Which block is picked, so the outline and chip glide to a new pick. */
+  pickedKey?: string | null
+  /** The picked block's name. */
+  name: string | null
+  /** Copies or removes the picked block; absent for parts of a page that cannot be. */
+  onDuplicate?: () => void
+  onRemove?: () => void
+  /** Leads to the picked block's settings. */
+  onSettings: () => void
+  /** Goes down from the block to its first element (Down arrow on its name). */
+  onDown?: () => void
+  /**
+   * The picked block's grip, for a block on Home's grid: dragged, it moves
+   * the block; focused, the arrow keys move it and Shift and the arrows resize it.
+   */
+  grip?: {
+    onPointerDown: (event: ReactPointerEvent) => void
+    onKeyDown: (event: ReactKeyboardEvent) => void
+  }
+  /** More for the layer to draw, such as a block's resize handles. */
+  children?: ReactNode
+}) {
+  const chip = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState(CHIP_GUESS)
+  useLayoutEffect(() => {
+    const element = chip.current
+    if (!element) return
+    const next = { width: element.offsetWidth, height: element.offsetHeight }
+    if (next.width && (next.width !== size.width || next.height !== size.height)) setSize(next)
+  })
+  const place = picked && name ? chipPlacement(picked, size, room) : null
+  const glide = useGlide(pickedKey) ? GLIDE : undefined
+  return (
+    <div data-editing-layer="" className="pointer-events-none absolute inset-0 overflow-hidden">
+      {hovered && (
+        <div
+          data-hover-outline=""
+          aria-hidden="true"
+          className="absolute rounded-[3px]"
+          style={{ ...outlineBox(hovered, 1, room), outline: `1px solid ${PICKED}66` }}
+        />
+      )}
+      {picked && (
+        <div
+          data-picked-outline=""
+          aria-hidden="true"
+          className="absolute rounded-[3px]"
+          style={{
+            ...outlineBox(picked, 2, room),
+            outline: `2px solid ${PICKED}`,
+            boxShadow: '0 0 0 1px #fff, inset 0 0 0 1px #fff',
+            transition: glide,
+          }}
+        />
+      )}
+      {children}
+      {place && name && (
+        <ChipMenu name={name} onDuplicate={onDuplicate}>
+          <Toolbar.Root
+            ref={chip}
+            aria-label={`${name}, picked`}
+            data-chip-inside={place.inside ? '' : undefined}
+            // Words edited on the page take the chip's place for their format bar.
+            className="pointer-events-auto absolute flex items-center gap-px rounded-lg p-0.5 shadow-md [[data-words-editing]_&]:hidden"
+            style={{ left: place.left, top: place.top, background: PICKED, transition: glide }}
+          >
+            {grip && (
+              <ChipButton
+                label={`Move ${name}`}
+                tip="Drag to move. Arrow keys move it, Shift and arrow keys resize it"
+                data-drag-handle=""
+                aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"
+                className={`${BUTTON} cursor-grab touch-none active:cursor-grabbing`}
+                onPointerDown={grip.onPointerDown}
+                onKeyDown={grip.onKeyDown}
+              >
+                <GripIcon />
+              </ChipButton>
+            )}
+            <ChipButton
+              label={`${name}: settings`}
+              tip={
+                onDown
+                  ? 'Its settings are on the right. Down arrow picks what is in it'
+                  : 'Its settings are on the right'
+              }
+              onClick={onSettings}
+              data-chip-name=""
+              onKeyDown={
+                onDown
+                  ? (event) => {
+                      if (event.key !== 'ArrowDown') return
+                      event.preventDefault()
+                      onDown()
+                    }
+                  : undefined
+              }
+            >
+              <span className="max-w-48 truncate">{name}</span>
+            </ChipButton>
+            {onRemove && (
+              <>
+                <Toolbar.Separator className="mx-0.5 h-3.5 w-px bg-white/40" />
+                <ChipButton label={`Remove ${name}`} tip="Remove" onClick={onRemove}>
+                  <TrashIcon className="size-3.5" aria-hidden="true" />
+                </ChipButton>
+              </>
+            )}
+          </Toolbar.Root>
+        </ChipMenu>
+      )}
+    </div>
+  )
+}
+
+/** The picked block chip's right-click menu: copying the block, as Ctrl+D does. */
+function ChipMenu({
+  name,
+  onDuplicate,
+  children,
+}: {
+  name: string
+  onDuplicate?: () => void
+  children: ReactNode
+}) {
+  if (!onDuplicate) return children
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger className="contents">{children}</ContextMenuTrigger>
+      <ContextMenuContent aria-label={`${name}: more`}>
+        <ContextMenuItem onClick={onDuplicate}>
+          <DocumentDuplicateIcon aria-hidden="true" />
+          Duplicate
+          <ContextMenuShortcut>Ctrl+D</ContextMenuShortcut>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}

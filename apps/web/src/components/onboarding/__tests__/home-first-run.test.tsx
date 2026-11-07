@@ -309,9 +309,9 @@ describe('Home changing in place', () => {
     const copy = await screen.findByRole('button', { name: 'Copy board link' })
     copy.focus()
     fireEvent.click(copy)
-    const next = await screen.findByRole('heading', { name: 'A customer creates a post' })
+    const next = await screen.findByRole('heading', { name: 'A customer writes a post' })
     await waitFor(() => expect(document.activeElement).toBe(next))
-    expect(politeText()).toBe('Share your board link done. Next: A customer creates a post')
+    expect(politeText()).toBe('Share your board link done. Next: A customer writes a post')
   })
 
   it('moves focus to the first win when it arrives while focus is in the plan', async () => {

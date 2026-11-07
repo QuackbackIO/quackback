@@ -178,7 +178,9 @@ export function PortalModerationSection({
         <span className="font-medium text-amber-800 dark:text-amber-200">
           <FormattedMessage
             id="portal.moderation.banner.count"
-            defaultMessage="{count, plural, one {# post is} other {# posts are}} waiting for approval"
+            defaultMessage={
+              '{count, plural, one {# post is} other {# posts are}} waiting for approval'
+            }
             values={{ count }}
           />
         </span>
@@ -234,7 +236,7 @@ export function PortalModerationSection({
             <DialogTitle>
               <FormattedMessage
                 id="portal.moderation.reject.dialogTitle"
-                defaultMessage="Reject this post?"
+                defaultMessage={'Reject this post?'}
               />
             </DialogTitle>
             <DialogDescription>
@@ -275,7 +277,7 @@ export function PortalModerationSection({
             <Button variant="destructive" onClick={confirmReject}>
               <FormattedMessage
                 id="portal.moderation.reject.confirm"
-                defaultMessage="Reject post"
+                defaultMessage={'Reject post'}
               />
             </Button>
           </DialogFooter>
@@ -338,12 +340,12 @@ function PendingPostCard({
             <span className="text-foreground/80">{post.authorName || authorFallback}</span>
             {post.boardName && (
               <>
-                <span className="text-muted-foreground/40">·</span>
+                <span className="text-muted-foreground">·</span>
                 <span>{post.boardName}</span>
               </>
             )}
-            <span className="text-muted-foreground/40">·</span>
-            <TimeAgo date={new Date(post.createdAt)} className="text-muted-foreground/70" />
+            <span className="text-muted-foreground">·</span>
+            <TimeAgo date={new Date(post.createdAt)} className="text-muted-foreground" />
           </div>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -358,7 +360,7 @@ function PendingPostCard({
       <p className="mt-2.5 text-xs text-amber-700/80 dark:text-amber-500/70">
         <FormattedMessage
           id="portal.moderation.card.hiddenNote"
-          defaultMessage="Customers cannot see this post yet."
+          defaultMessage={'Customers cannot see this post yet.'}
         />
       </p>
     </div>

@@ -10,6 +10,7 @@ import {
   fetchPublicRoadmaps,
   fetchPublicRoadmapPosts,
   fetchPortalData,
+  fetchBoardCapabilitiesFn,
 } from '@/lib/server/functions/portal'
 
 /**
@@ -135,6 +136,16 @@ export const portalQueries = {
     }),
 
   /**
+   * Whether the viewer may submit and vote on each board. Under the board
+   * list's key, so it goes with the viewer on sign-in and sign-out.
+   */
+  boardCapabilities: () =>
+    queryOptions({
+      queryKey: ['portal', 'boards', 'capabilities'],
+      queryFn: () => fetchBoardCapabilitiesFn(),
+    }),
+
+  /**
    * List posts for a board with filtering
    */
   posts: (filters: { boardSlug?: string; search?: string; sort: PublicPostSort }) =>
@@ -142,6 +153,22 @@ export const portalQueries = {
       queryKey: ['portal', 'posts', filters],
       queryFn: () => fetchPublicPosts({ data: filters }),
     }),
+
+  /**
+   * The posts Home's Top posts block shows: its sort, from the boards it was
+   * set to (none is every board), and no more than it displays.
+   */
+  homeIdeas: (block: { sort: PublicPostSort; count: number; boardIds?: readonly string[] }) => {
+    const input = {
+      sort: block.sort,
+      limit: block.count,
+      ...(block.boardIds?.length && { boardIds: [...block.boardIds] }),
+    }
+    return queryOptions({
+      queryKey: ['portal', 'posts', 'home-ideas', input],
+      queryFn: () => fetchPublicPosts({ data: input }),
+    })
+  },
 
   /**
    * List all public statuses

@@ -1,8 +1,25 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { extractCssVariables, normalizeFontSans } from '@/lib/shared/theme'
-import { PreviewDraftProvider, type PortalPreviewDraft } from './preview-draft-context'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { extractCssVariables, loadBrandingFont, normalizeFontSans } from '@/lib/shared/theme'
+import { BrandStatusColours } from './brand-status-colours'
+import {
+  PreviewDraftProvider,
+  PreviewAttributesContext,
+  PreviewLogoContext,
+  PreviewBandImageContext,
+  PreviewHeadlineContext,
+  PreviewPagesContext,
+  PreviewSamplesContext,
+  FeedCopyContext,
+  type FeedCopy,
+  type PreviewDesignPages,
+  type PortalPreviewDraft,
+} from './preview-draft-context'
 
 type StructuralDraft = Omit<PortalPreviewDraft, 'css'>
+
+type DesignChannel = typeof import('./portal-preview-design')
+type DesignerChannel = typeof import('./portal-preview-designer')
+type DesignPreview = import('./portal-preview-design').DesignPreview
 
 const sameContent = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b)
 
@@ -69,6 +86,12 @@ export function PortalPreviewProvider({
 }) {
   const [css, setCss] = useState('')
   const [draft, setDraft] = useState<StructuralDraft | null>(null)
+  const [design, setDesign] = useState<DesignPreview | null>(null)
+  const designChannel = useRef<DesignChannel | null>(null)
+  // In the designer: its own click handling; the builder draws what is picked.
+  const [designer, setDesigner] = useState<DesignerChannel | null>(null)
+  // Trying the page as a visitor: clicks act, nothing is picked or written.
+  const [trying, setTrying] = useState(false)
 
   // Only a framed, explicitly preview-flagged document listens.
   const active = enabled && typeof window !== 'undefined' && window.self !== window.top
@@ -76,9 +99,20 @@ export function PortalPreviewProvider({
   useEffect(() => {
     if (!active) return
     function onMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin) return
-      const msg = event.data as { type?: string; css?: unknown; draft?: unknown } | null | undefined
-      if (msg?.type === 'quackback:preview-css' && typeof msg.css === 'string') {
+      // Only the page that frames this one may draw into it, not another tab or frame.
+      if (event.origin !== window.location.origin || event.source !== window.parent) return
+      const msg = event.data as
+        { type?: string; css?: unknown; draft?: unknown; design?: unknown } | null | undefined
+      if (msg?.type === 'quackback:preview-designer') {
+        setTrying((msg as { trying?: unknown }).trying === true)
+        void import('./portal-preview-designer').then((channel) => setDesigner(() => channel))
+      } else if (msg?.type === 'quackback:preview-design') {
+        const value = msg.design
+        void import('./portal-preview-design').then((channel) => {
+          designChannel.current = channel
+          setDesign(channel.readDesignPreview(value))
+        })
+      } else if (msg?.type === 'quackback:preview-css' && typeof msg.css === 'string') {
         setCss(msg.css)
       } else if (msg?.type === 'quackback:preview-draft' && msg.draft) {
         const incoming = msg.draft as StructuralDraft
@@ -86,19 +120,107 @@ export function PortalPreviewProvider({
       }
     }
     window.addEventListener('message', onMessage)
-    // Tell the parent we're ready so it re-sends current drafts after a remount.
-    window.parent.postMessage({ type: 'quackback:preview-ready' }, window.location.origin)
+    // Tell the parent we're ready so it re-sends current drafts after a remount,
+    // and where the page is, so Preview can follow it from the first moment.
+    window.parent.postMessage(
+      { type: 'quackback:preview-ready', path: window.location.pathname },
+      window.location.origin
+    )
     return () => window.removeEventListener('message', onMessage)
   }, [active])
 
   const stylesheet = useMemo(() => (css ? previewStylesheet(css) : ''), [css])
+  // While a draft is previewed: its attributes on <html> (the saved ones come
+  // back when it changes), and a click on a section tells Appearance which.
+  useEffect(() => {
+    const channel = designChannel.current
+    if (!design || !channel) return
+    const restore = channel.applyDesignAttributes(design.attributes)
+    const stopPicking = active && !designer ? channel.startSectionPicking() : () => {}
+    return () => {
+      restore()
+      stopPicking()
+    }
+  }, [design, active, designer])
+  useEffect(
+    () =>
+      active && designer
+        ? trying
+          ? designer.startTrying()
+          : designer.startDesigning()
+        : undefined,
+    [active, designer, trying]
+  )
+  // The designer's frame says so in its address: until designing starts, a click
+  // or a form does nothing, so nothing navigates or posts in the first moment.
+  useEffect(() => {
+    if (!active || designer || !new URLSearchParams(window.location.search).has('designer')) return
+    const hold = (event: Event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      // Escape still reaches the designer, so Preview can be left while this loads.
+      if (event instanceof KeyboardEvent && event.key === 'Escape')
+        window.parent.postMessage(
+          { type: 'quackback:preview-key', key: 'escape' },
+          window.location.origin
+        )
+    }
+    for (const type of ['click', 'submit', 'keydown'] as const)
+      document.addEventListener(type, hold, true)
+    return () => {
+      for (const type of ['click', 'submit', 'keydown'] as const)
+        document.removeEventListener(type, hold, true)
+    }
+  }, [active, designer])
+  // The channel checks their shape; the admin drafted them through the schema.
+  const pages = useMemo<PreviewDesignPages | undefined>(
+    () =>
+      design
+        ? {
+            home: design.home as PreviewDesignPages['home'],
+            titles: design.titles,
+            nav: design.nav as PreviewDesignPages['nav'],
+          }
+        : undefined,
+    [design]
+  )
+  const fontIds = design?.fontIds.join(' ') ?? ''
+  useEffect(() => {
+    for (const id of fontIds.split(' ').filter(Boolean)) loadBrandingFont(id).catch(() => {})
+  }, [fontIds])
 
   if (!enabled) return <>{children}</>
 
   return (
     <PreviewDraftProvider draft={draft} css={css}>
-      {children}
+      <PreviewHeadlineContext.Provider value={design ? design.headline : undefined}>
+        <PreviewPagesContext.Provider value={pages}>
+          <PreviewAttributesContext.Provider value={design?.attributes}>
+            <PreviewLogoContext.Provider value={design?.logo ?? undefined}>
+              <BrandStatusColours colours={design?.statusColours}>
+                <PreviewBandImageContext.Provider value={design ? design.bandImage : undefined}>
+                  <PreviewSamplesContext.Provider value={!!designer && !trying}>
+                    <DraftCopy copy={design?.copy}>{children}</DraftCopy>
+                  </PreviewSamplesContext.Provider>
+                </PreviewBandImageContext.Provider>
+              </BrandStatusColours>
+            </PreviewLogoContext.Provider>
+          </PreviewAttributesContext.Provider>
+        </PreviewPagesContext.Provider>
+      </PreviewHeadlineContext.Provider>
       {stylesheet ? <style data-preview-override="">{stylesheet}</style> : null}
+      {design?.css ? <style data-preview-design="">{design.css}</style> : null}
+      {designer ? <style data-preview-designer="">{designer.DESIGNER_CSS}</style> : null}
+      {/* Appearance's own hover outline; in the designer the builder draws it. */}
+      {design && designChannel.current && !designer ? (
+        <style data-preview-sections="">{designChannel.current.SECTION_OUTLINE_CSS}</style>
+      ) : null}
     </PreviewDraftProvider>
   )
+}
+
+/** The draft's own wording in place of the saved design's, while previewing a design. */
+function DraftCopy({ copy, children }: { copy: FeedCopy | null | undefined; children: ReactNode }) {
+  if (!copy) return children
+  return <FeedCopyContext.Provider value={copy}>{children}</FeedCopyContext.Provider>
 }

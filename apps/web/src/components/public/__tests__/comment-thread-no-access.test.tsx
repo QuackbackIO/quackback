@@ -33,7 +33,7 @@ import { CommentThread } from '../comment-thread'
 afterEach(cleanup)
 
 const POST_ID = 'post_01h00000000000000000000000' as PostId
-const AUTHOR_ONLY = 'Only the post author and team members can reply on this board'
+const AUTHOR_ONLY = 'Only the author and team members can reply on this board'
 const NO_ACCESS = "You don't have access to comment on this board"
 
 function renderDenied(replyPolicy?: ReplyPolicy) {

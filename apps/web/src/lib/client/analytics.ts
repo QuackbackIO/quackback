@@ -6,9 +6,23 @@ import type { PostHog } from 'posthog-js'
  * nothing is started, so a call is a no-op and never fetches the SDK.
  */
 let client: PostHog | null = null
+// Sends waiting for the SDK to start; dropped when tracking pauses instead.
+let starting: Array<() => void> = []
 
 export function setAnalyticsClient(next: PostHog | null): void {
   client = next
+  const waiting = starting
+  starting = []
+  if (next) for (const send of waiting) send()
+}
+
+/**
+ * For an event a page sends as it opens, before the SDK has loaded: sent once
+ * it starts, and never where it does not (no key, or the browser opted out).
+ */
+export function trackOnceStarted(event: string, properties?: Record<string, unknown>): void {
+  if (client) void track(event, properties)
+  else starting = [...starting, () => void track(event, properties)].slice(-20)
 }
 
 export async function track(event: string, properties?: Record<string, unknown>): Promise<void> {

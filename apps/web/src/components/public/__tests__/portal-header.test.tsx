@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { defaultDesign } from '@/lib/shared/design/schema'
 import { useState, type ReactNode } from 'react'
 import { act, render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
@@ -82,6 +83,7 @@ vi.mock('@/components/auth/oauth-buttons', () => ({
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: null }),
+  queryOptions: <T,>(options: T) => options,
   useQueryClient: () => ({
     invalidateQueries: mockInvalidateQueries,
     removeQueries: mockRemoveQueries,
@@ -110,7 +112,12 @@ vi.mock('@/components/shared/user-stats', () => ({
 }))
 
 import { PortalHeader } from '../portal-header'
-import { PreviewDraftProvider, type PortalPreviewDraft } from '../preview-draft-context'
+import { foldMenu } from '../use-menu-fold'
+import {
+  PreviewAttributesContext,
+  PreviewDraftProvider,
+  type PortalPreviewDraft,
+} from '../preview-draft-context'
 import { VIEWER_SCOPED_PORTAL_QUERY_KEYS } from '@/lib/client/queries/portal'
 import { DEFAULT_FEATURE_FLAGS, getProductFlagUpdate } from '@/lib/shared/types/settings'
 
@@ -353,5 +360,225 @@ describe('PortalHeader — first paint', () => {
       </IntlProvider>
     )
     expect(html).toContain('Toggle theme')
+  })
+})
+
+describe('PortalHeader — design layouts', () => {
+  const mountWith = (portalDesign: unknown, attributes?: Record<string, string>) => {
+    mockGetRouteContext.mockReturnValue({
+      session: null,
+      settings: { name: 'Acme', portalDesign },
+      registeredAuthProviders: [],
+    })
+    return render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PreviewAttributesContext.Provider value={attributes}>
+          <PortalHeader orgName="Acme" userRole={null} showThemeToggle={false} />
+        </PreviewAttributesContext.Provider>
+      </IntlProvider>
+    )
+  }
+  const design = (header: string) => ({
+    engine: 'v2',
+    attributes: { 'data-qb-header': header },
+    nav: defaultDesign().nav,
+  })
+
+  it('keeps two rows on the legacy theme and for a stacked design', () => {
+    for (const portalDesign of [undefined, design('stacked')]) {
+      const { container, unmount } = mountWith(portalDesign)
+      const header = container.querySelector('header')!
+      expect(header.querySelector('.md\\:block nav')).toBeNull()
+      expect(header.querySelector('.justify-center nav')).toBeNull()
+      unmount()
+    }
+  })
+
+  it('puts the menu beside the logo for inline, with the two-row menu below md', () => {
+    const { container } = mountWith(design('inline'))
+    const header = container.querySelector('header')!
+    expect(header.getAttribute('data-qb-section')).toBe('header')
+    const rowMenu = header.querySelector('.md\\:block nav')
+    const narrowMenu = header.querySelector('.md\\:hidden nav')
+    expect(rowMenu).toBeTruthy()
+    expect(narrowMenu).toBeTruthy()
+  })
+
+  it('follows the draft layout in the preview over the saved one', () => {
+    const { container } = mountWith(design('stacked'), { 'data-qb-header': 'centered' })
+    expect(container.querySelector('header .justify-center nav')).toBeTruthy()
+  })
+
+  it('never lets a wide wordmark shrink under the menu, and caps it to the header', () => {
+    const { container } = mountWith(design('inline'))
+    const logo = container.querySelector('[data-qb-part=logo]')!
+    expect(logo.className.split(' ')).toContain('md:shrink-0')
+  })
+
+  it('lays the veil on a hero photo from the border’s edge, so no line shows under the header', () => {
+    const { container } = mountWith(design('inline'))
+    const header = container.querySelector('header')!
+    const photo = header.className
+      .split(' ')
+      .find((c) => c.startsWith('[[data-qb-header-span=photo]_&]:[background:'))
+    expect(photo).toBeTruthy()
+    // The first layer (the veil) carries its box: from the padding's edge it would repeat
+    // into the 1px transparent bottom border and draw its deepest row there.
+    const value = photo!.slice(photo!.indexOf('[background:') + 12)
+    let depth = 0
+    const end = [...value].findIndex((c) => {
+      depth += c === '(' ? 1 : c === ')' ? -1 : 0
+      return c === ',' && depth === 0
+    })
+    const veil = value.slice(0, end)
+    expect(veil).toMatch(/^linear-gradient\(.*\)_border-box$/)
+    expect(header.className.split(' ')).toContain(
+      '[[data-qb-header-span=photo]_&]:border-transparent'
+    )
+  })
+
+  describe('a centred header', () => {
+    const mountCentred = ({
+      isLoggedIn = false,
+      signup = true,
+      role = null as 'admin' | null,
+    } = {}) => {
+      mockHasAny.mockReturnValue(true)
+      mockHasDistinctSignup.mockReturnValue(signup)
+      mockGetRouteContext.mockReturnValue({
+        session: isLoggedIn ? loggedInSession : null,
+        settings: { name: 'Acme', portalDesign: design('centered') },
+        registeredAuthProviders: [],
+      })
+      const { container } = render(
+        <IntlProvider locale="en" defaultLocale="en">
+          <PortalHeader orgName="Acme" userRole={role} />
+        </IntlProvider>
+      )
+      const row = container.querySelector('[data-qb-header-row]')!
+      return {
+        row,
+        lead: row.querySelector('[data-qb-header-lead]')!,
+        actions: row.querySelector('[data-qb-header-actions]')!,
+      }
+    }
+    afterEach(() => {
+      cleanup()
+      mockHasAny.mockReturnValue(false)
+      mockHasDistinctSignup.mockReturnValue(true)
+    })
+    const labels = (el: Element) =>
+      [...el.querySelectorAll('button, a')].map(
+        (b) => b.getAttribute('aria-label') || b.textContent?.trim()
+      )
+
+    it('balances its row: the toggle and Log in lead at the start, Sign up ends it', () => {
+      const { row, lead, actions } = mountCentred()
+      // Three columns from md: start, the logo, end; each edge on the content column's.
+      expect(row.className.split(' ')).toEqual(
+        expect.arrayContaining(['md:grid', 'md:grid-cols-[1fr_auto_1fr]'])
+      )
+      expect(labels(lead)).toEqual([expect.stringMatching(/theme/i), 'Log in'])
+      expect(labels(actions)).toEqual(['Sign up'])
+      expect(lead.className.split(' ')).toContain('md:justify-self-start')
+      expect(actions.className.split(' ')).toContain('md:justify-self-end')
+      // The logo sits between the two, in the middle column.
+      const order = [...row.children]
+      expect(order.indexOf(lead)).toBeLessThan(
+        order.indexOf(row.querySelector('[data-qb-part=logo]')!)
+      )
+      expect(order.indexOf(row.querySelector('[data-qb-part=logo]')!)).toBeLessThan(
+        order.indexOf(actions)
+      )
+    })
+
+    it('on a phone keeps the logo first and every button together at the end', () => {
+      const { lead, actions } = mountCentred()
+      // Below md the row is a flex line: the logo (order 0), then the lead pushed to the end.
+      expect(lead.className.split(' ')).toEqual(
+        expect.arrayContaining(['order-1', 'ms-auto', 'md:order-none', 'md:ms-0'])
+      )
+      expect(actions.className.split(' ')).toEqual(
+        expect.arrayContaining(['order-2', 'md:order-none'])
+      )
+    })
+
+    it('ends with the sole Log in when sign-up is the same, the toggle still leading', () => {
+      const { lead, actions } = mountCentred({ signup: false })
+      expect(labels(lead)).toEqual([expect.stringMatching(/theme/i)])
+      expect(labels(actions)).toEqual(['Log in'])
+    })
+
+    it('keeps the account menu at the end when signed in, the admin tools leading', () => {
+      const { lead, actions } = mountCentred({ isLoggedIn: true, role: 'admin' })
+      expect(labels(actions)).toContain('Open account menu')
+      expect(labels(lead)).toContain('Admin')
+      expect(labels(lead)).not.toContain('Open account menu')
+    })
+  })
+
+  describe('an inline menu wider than the room beside the logo', () => {
+    let observers: Array<() => void> = []
+    const size = (el: Element, sizes: Record<string, number>) => {
+      for (const [k, v] of Object.entries(sizes))
+        Object.defineProperty(el, k, { configurable: true, get: () => v })
+    }
+    beforeEach(() => {
+      observers = []
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          constructor(private cb: () => void) {
+            observers.push(() => this.cb())
+          }
+          observe() {}
+          disconnect() {}
+        }
+      )
+    })
+    afterEach(() => vi.unstubAllGlobals())
+    const resize = () => act(() => observers.forEach((run) => run()))
+
+    it('moves to its own row at every width, and comes back once the row has room', () => {
+      const { container } = mountWith(design('inline'))
+      const header = container.querySelector('header')!
+      const row = header.querySelector('[data-qb-header-row]')!
+      // A wide wordmark and six pages: the menu needs 640px and is given 300.
+      size(row, { clientWidth: 1000 })
+      size(row.querySelector('[data-qb-part=logo]')!, { offsetWidth: 260 })
+      size(row.querySelector('[data-qb-header-actions]')!, { offsetWidth: 240 })
+      size(row.querySelector('[data-qb-nav-row]')!, { scrollWidth: 640, clientWidth: 300 })
+      resize()
+      expect(row.querySelector('nav')).toBeNull()
+      const own = [...header.querySelectorAll('[data-qb-nav-row]')]
+      expect(own).toHaveLength(1)
+      expect(own[0]!.className).not.toContain('md:hidden')
+      // Wider: 1400 - 260 - 240 - 32 = 868 of room for 640: beside the logo again.
+      size(row, { clientWidth: 1400 })
+      resize()
+      expect(row.querySelector('nav')).toBeTruthy()
+    })
+  })
+
+  it("folds by the menu's own width against the room beside the logo", () => {
+    const read = (content: number, given: number, row = 1000) => ({
+      menu: { content, given },
+      row,
+      logo: 260,
+      actions: 240,
+    })
+    expect(foldMenu({ folded: false, needed: 0 }, read(400, 450))).toEqual({
+      folded: false,
+      needed: 0,
+    })
+    expect(foldMenu({ folded: false, needed: 0 }, read(640, 300))).toEqual({
+      folded: true,
+      needed: 640,
+    })
+    // Folded, it stays while 1000 - 260 - 240 - 32 = 468 is short of 640.
+    expect(foldMenu({ folded: true, needed: 640 }, { ...read(0, 0), menu: null }).folded).toBe(true)
+    expect(
+      foldMenu({ folded: true, needed: 640 }, { ...read(0, 0, 1200), menu: null }).folded
+    ).toBe(false)
   })
 })

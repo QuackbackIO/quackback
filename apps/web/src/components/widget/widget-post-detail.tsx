@@ -173,7 +173,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
         <p className="text-sm text-muted-foreground">
           <FormattedMessage
             id="widget.postDetail.error.couldNotLoad"
-            defaultMessage="Could not load post"
+            defaultMessage={'Could not load this post'}
           />
         </p>
         <p
@@ -183,7 +183,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
           {notFound ? (
             <FormattedMessage
               id="widget.postDetail.error.notFound"
-              defaultMessage="This post may have been removed or made private."
+              defaultMessage={'This post may have been removed or made private.'}
             />
           ) : (
             <FormattedMessage
@@ -307,12 +307,12 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
               {post.replyPolicy === 'author-only' ? (
                 <FormattedMessage
                   id="widget.postDetail.authorOnlyReplies"
-                  defaultMessage="Only the post author and team members can reply on this board"
+                  defaultMessage={'Only the author and team members can reply on this board'}
                 />
               ) : (
                 <FormattedMessage
                   id="widget.postDetail.commentNoAccess"
-                  defaultMessage="You don't have access to comment on this board"
+                  defaultMessage={"You don't have access to comment on this board"}
                 />
               )}
             </p>
@@ -346,7 +346,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
             <p className="text-xs text-muted-foreground/50 mb-3">
               <FormattedMessage
                 id="widget.postDetail.commentsLocked"
-                defaultMessage="Comments are locked on this post"
+                defaultMessage={'Comments are locked on this post'}
               />
             </p>
           )}

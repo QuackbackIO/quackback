@@ -21,11 +21,12 @@ import {
  * The team's own path through the product: signing up, onboarding and the
  * admin app. Portal, widget, help center and status visitors are the
  * workspace's customers and are never tracked, and neither is the shared
- * sign-in page they use. Neither are pages whose URL is a credential (the
+ * sign-in page they use. The builder (`/design`) is the team's too; the
+ * portal it draws is a frame of its own, never tracked. Neither are pages whose URL is a credential (the
  * sign-in handoff, an invitation link): identity by email joins the funnel
  * without them.
  */
-const TRACKED_ROUTE_PREFIXES = ['/admin', '/onboarding']
+const TRACKED_ROUTE_PREFIXES = ['/admin', '/onboarding', '/design']
 
 /** The same paths as URLs, matched on a segment boundary. */
 function isTrackedPath(pathname: string): boolean {

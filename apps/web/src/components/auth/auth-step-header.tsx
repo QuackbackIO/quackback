@@ -165,12 +165,12 @@ export function headerForStep(
       (mode === 'login' ? (
         <FormattedMessage
           id="portal.auth.login.tagline"
-          defaultMessage="Sign in to vote and comment on feedback."
+          defaultMessage={'Sign in to vote and comment on posts.'}
         />
       ) : (
         <FormattedMessage
           id="portal.auth.signup.tagline"
-          defaultMessage="Sign up to vote and comment on feedback."
+          defaultMessage={'Sign up to vote and comment on posts.'}
         />
       )),
   }

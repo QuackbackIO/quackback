@@ -1,4 +1,6 @@
 /// <reference types="vite/client" />
+import { asVisitorInDesigner } from '@/lib/shared/design/designer-visitor'
+import { rootContextRequest } from '@/lib/shared/design/preview-link'
 import { Component, lazy, Suspense, useEffect, type ReactNode } from 'react'
 import type { Role } from '@/lib/shared/roles'
 import type { QueryClient } from '@tanstack/react-query'
@@ -16,7 +18,12 @@ import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/boo
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { ThemeProvider } from '@/components/theme-provider'
-import { resolveDocumentTheme, SYSTEM_THEME_SCRIPT } from '@/lib/shared/theme'
+import {
+  PORTAL_THEME_COOKIE_NAME,
+  resolveDocumentTheme,
+  SYSTEM_THEME_SCRIPT,
+  THEME_COOKIE_NAME,
+} from '@/lib/shared/theme'
 import { MinimalDocument } from '@/components/shared/minimal-document'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { DocumentHead, DocumentScripts } from '@/components/shared/document-head'
@@ -29,6 +36,7 @@ import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/sha
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { rssAlternateLink } from '@/lib/shared/rss-alternate'
 import { isStatusFeedReadable } from '@/lib/shared/status-settings'
+import { portalThemeMode } from '@/lib/shared/design/view'
 
 // The toast renderer is its own chunk: the root module ships with every
 // document (the embedded widget included), and a toast fired before it mounts
@@ -42,6 +50,7 @@ export interface RouterContext {
   settings?: WorkspaceSettings | null
   userRole?: Role | null
   themeCookie?: BootstrapData['themeCookie']
+  portalThemeCookie?: BootstrapData['portalThemeCookie']
   prefersColorScheme?: BootstrapData['prefersColorScheme']
   managedFieldPaths?: string[]
   registeredAuthProviders?: string[]
@@ -51,6 +60,7 @@ export interface RouterContext {
   cloudEnabled?: boolean
   githubStarPrompt?: boolean
   productAnalytics?: BootstrapData['productAnalytics']
+  sharedPreview?: BootstrapData['sharedPreview']
 }
 
 // Paths that are allowed before onboarding is complete
@@ -72,9 +82,12 @@ export function isOnboardingExempt(pathname: string): boolean {
 }
 
 // The settings arrive already redacted: getBootstrapData scrubs them on the
-// server, since its response also answers client-side navigations.
-async function loadRootContext() {
-  const { settings, ...bootstrap } = await getBootstrapData()
+// server, since its response also answers client-side navigations. The
+// switch preview frame (`?design=switch`) asks for the portal drawn as it
+// would be after switching to the design, and a shared preview link
+// (`?share=<token>`) for the design the link holds.
+async function loadRootContext(data: ReturnType<typeof rootContextRequest>['data']) {
+  const { settings, ...bootstrap } = await getBootstrapData({ data })
   return { ...bootstrap, settings }
 }
 
@@ -89,7 +102,8 @@ const rootContext = createRouteContextMemo<RootContext>()
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ location }) => {
-    const context = await rootContext.get(loadRootContext)
+    const request = rootContextRequest(location.search)
+    const context = await rootContext.get(() => loadRootContext(request.data), request.key)
     const { session, userRole, onboarding } = context
 
     if (!isOnboardingExempt(location.pathname)) {
@@ -104,7 +118,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       }
     }
 
-    return context
+    return asVisitorInDesigner(context, location.search)
   },
   head: ({ matches }) => ({
     meta: [
@@ -156,10 +170,15 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
 function RootComponent() {
   return (
-    <RootDocument>
-      <OttHandler />
-      <VisitorBeacon />
-      <ProductAnalytics />
+    <RootDocument
+      effects={
+        <>
+          <OttHandler />
+          <VisitorBeacon />
+          <ProductAnalytics />
+        </>
+      }
+    >
       <Outlet />
     </RootDocument>
   )
@@ -188,7 +207,13 @@ class SafeRootDocument extends Component<{ children: ReactNode }, { hasError: bo
 // is intentionally treated as portal-adjacent — its login / signup /
 // reset pages match the public portal's branding so visitors don't
 // feel like they crossed into a different product.
-const NON_PORTAL_PREFIXES = ['/admin', '/onboarding', '/api', '/complete-signup']
+// The builder is the team's own screen: it follows the admin's theme, not the portal's.
+const NON_PORTAL_PREFIXES = ['/admin', '/onboarding', '/api', '/complete-signup', '/design']
+
+/** Whether a path is one of the portal's own pages, which wear the portal's theme. */
+export function isPortalPath(pathname: string): boolean {
+  return !NON_PORTAL_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
 
 /**
  * The first navigation after hydration reuses the context this document was
@@ -203,15 +228,30 @@ function useSeedRootContext() {
     if (!root) return
     const { queryClient: _queryClient, ...rendered } = root.context as RouterContext &
       Partial<RootContext>
-    if (rendered.onboarding) rootContext.seed(rendered as RootContext)
+    if (rendered.onboarding) {
+      rootContext.seed(
+        rendered as RootContext,
+        rootContextRequest(router.state.location.search).key
+      )
+    }
   }, [router])
 }
 
-function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
+function RootDocument({
+  children,
+  effects,
+}: Readonly<{
+  children: ReactNode
+  /** Rendered outside the theme provider, so they mount once per document. */
+  effects?: ReactNode
+}>) {
   // Every read below is selected: the context and the location are new after
   // every navigation, and the document changes only when what it shows does.
   const settings = useWorkspaceSettings()
   const themeCookie = Route.useRouteContext({ select: (context) => context.themeCookie })
+  const portalThemeCookie = Route.useRouteContext({
+    select: (context) => context.portalThemeCookie,
+  })
   const prefersColorScheme = Route.useRouteContext({
     select: (context) => context.prefersColorScheme,
   })
@@ -222,7 +262,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // Portal routes can force a specific theme (light/dark) via branding config.
   // Admin and other non-portal routes always respect the user's preference.
   const isPortalRoute = useRouterState({
-    select: (s) => !NON_PORTAL_PREFIXES.some((prefix) => s.location.pathname.startsWith(prefix)),
+    select: (s) => isPortalPath(s.location.pathname),
   })
   const isWidgetRoute = useRouterState({
     select: (s) => s.matches.some((m) => m.routeId === '/widget'),
@@ -240,7 +280,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     select: (s) => (s.location.search as { theme?: string }).theme,
   })
 
-  const themeMode = settings?.brandingConfig?.themeMode ?? 'user'
+  const themeMode = portalThemeMode(settings)
   const searchForcedTheme =
     (isWidgetRoute || isPortalRoute) && (themeParam === 'light' || themeParam === 'dark')
       ? themeParam
@@ -250,7 +290,11 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
 
   // next-themes' inline script sets the class on <html> before first paint.
   // We pass the resolved default so the script knows what to apply.
-  const defaultTheme = forcedTheme ?? themeCookie ?? 'system'
+  // The portal and the admin each keep their own choice. Crossing between them
+  // remounts the provider, which reads its storage key only when it mounts.
+  const themeStorageKey = isPortalRoute ? PORTAL_THEME_COOKIE_NAME : THEME_COOKIE_NAME
+  const defaultTheme =
+    forcedTheme ?? (isPortalRoute ? (portalThemeCookie ?? themeCookie) : themeCookie) ?? 'system'
 
   // ...but that script sits in <body>, after content that may paint first, so
   // when the theme is known we also commit the class and color-scheme on the
@@ -285,12 +329,20 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // (a first visit, Firefox/Safari) the server can't know the OS preference,
   // so the SSR markup and the hydrated DOM differ by design. This silences
   // that one expected mismatch (one element, one level).
+  // A portal page rendered by the design engine scopes its theme to this
+  // attribute, so dialogs portaled to <body> carry it and the admin never does.
+  const portalDesign = isPortalRoute ? settings?.portalDesign : undefined
+  const portalThemeScope = portalDesign?.engine === 'v2' ? '' : undefined
+  const portalThemeAttributes = portalDesign?.engine === 'v2' ? portalDesign.attributes : undefined
+
   return (
     <html
       lang={lang}
       dir={dir}
       className={themeClass}
       style={{ colorScheme }}
+      data-portal-theme={portalThemeScope}
+      {...portalThemeAttributes}
       suppressHydrationWarning
     >
       <head>
@@ -298,7 +350,10 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <DocumentHead />
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
+        {effects}
         <ThemeProvider
+          key={themeStorageKey}
+          storageKey={themeStorageKey}
           attribute="class"
           defaultTheme={defaultTheme}
           enableSystem={!forcedTheme}

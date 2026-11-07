@@ -1,0 +1,344 @@
+import { useMemo, useState } from 'react'
+import { Link } from '@tanstack/react-router'
+import { useInfiniteQuery } from '@tanstack/react-query'
+import { useIntl, FormattedMessage } from 'react-intl'
+import { RssIcon } from '@heroicons/react/24/outline'
+import { Button } from '@/components/ui/button'
+import { PortalPageHeader } from '@/components/public/portal-page-header'
+import { publicStatusHistoryQueries } from '@/lib/client/queries/status'
+import type { getStatusPageFn } from '@/lib/server/functions/status'
+import {
+  StatusHero,
+  StatusComponentsList,
+  StatusIncidentCard,
+  StatusIncidentTimeline,
+  StatusSubscribeButton,
+  useStatusFeedOffered,
+  LIFECYCLE_STYLE,
+  LIFECYCLE_LABEL,
+  formatMaintenanceWindow,
+  statusIncidentDate,
+} from '.'
+import type { StatusUptimeDay } from '.'
+
+/** What the status page draws: the snapshot, its settings and uptime. */
+export type StatusPageData = Awaited<ReturnType<typeof getStatusPageFn>>
+
+function formatUtcDayLong(dateStr: string, locale: string): string {
+  return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString(locale, {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+/**
+ * The status page as a visitor sees it, drawn from its data: the live page's,
+ * or the designer's sample, whose history stays closed (it has none to load).
+ */
+export function StatusPageView({
+  data,
+  sample = false,
+}: {
+  data: StatusPageData
+  sample?: boolean
+}) {
+  const intl = useIntl()
+  const feedOffered = useStatusFeedOffered() && !sample
+  const { snapshot, settings, uptime } = data
+
+  const uptimeByComponentId = useMemo(() => {
+    const map = new Map<string, StatusUptimeDay[]>()
+    for (const series of uptime ?? []) {
+      map.set(series.componentId, series.days)
+    }
+    return map
+  }, [uptime])
+
+  const lastUpdatedAt = useMemo(() => {
+    const timestamps = [...snapshot.activeIncidents, ...snapshot.upcomingMaintenance].flatMap(
+      (incident) => incident.updates.map((u) => u.createdAt)
+    )
+    if (timestamps.length === 0) return null
+    return timestamps.reduce((latest, ts) => (ts > latest ? ts : latest))
+  }, [snapshot])
+
+  const [historyExpanded, setHistoryExpanded] = useState(false)
+  const {
+    data: historyPages,
+    isSuccess: historyLoaded,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    ...publicStatusHistoryQueries.list(snapshot.recentWindow.start),
+    enabled: historyExpanded && !sample,
+  })
+  const historyItems = historyPages?.pages.flatMap((page) => page.items) ?? []
+
+  return (
+    <div className="mx-auto w-full max-w-[var(--qb-page-max,72rem)] px-4 py-8 sm:px-6">
+      <PortalPageHeader
+        size="large"
+        title={intl.formatMessage({ id: 'portal.status.title', defaultMessage: 'Status' })}
+        description={
+          settings.pageDescription ??
+          intl.formatMessage({
+            id: 'portal.status.description',
+            defaultMessage:
+              'Live status for our services. Subscribe to get notified about incidents and maintenance.',
+          })
+        }
+        action={
+          <div className="flex items-center gap-2">
+            <StatusSubscribeButton />
+            {feedOffered && (
+              <Button variant="outline" size="sm" asChild className="shrink-0 gap-1.5">
+                <a href="/status/feed" target="_blank" rel="noopener noreferrer">
+                  <RssIcon className="h-4 w-4" />
+                  <span className="sr-only sm:not-sr-only">
+                    {intl.formatMessage({
+                      id: 'portal.status.rssFeed',
+                      defaultMessage: 'RSS Feed',
+                    })}
+                  </span>
+                </a>
+              </Button>
+            )}
+          </div>
+        }
+        animate
+        className="mb-6"
+      />
+
+      {/* Status-page convention: when something is active, the incident itself
+          is the banner — no separate summary banner restating the outage. */}
+      {snapshot.activeIncidents.length === 0 ? (
+        <StatusHero status={snapshot.topLevel.status} lastUpdatedAt={lastUpdatedAt} />
+      ) : (
+        <section className="flex flex-col gap-3">
+          {/* The cards are the banner, so the section's heading is for
+              screen readers only: it keeps the cards' h3s under an h2. */}
+          <h2 className="sr-only">
+            <FormattedMessage
+              id="portal.status.section.activeIncidents"
+              defaultMessage="Active incidents and maintenance"
+            />
+          </h2>
+          {snapshot.activeIncidents.map((incident) => (
+            <StatusIncidentCard key={incident.id} incident={incident} />
+          ))}
+        </section>
+      )}
+
+      <section className="mt-8">
+        <h2 className="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          <FormattedMessage
+            id="portal.status.section.components"
+            defaultMessage="Current status by service"
+          />
+        </h2>
+        <StatusComponentsList
+          groups={snapshot.groups}
+          ungroupedComponents={snapshot.ungroupedComponents}
+          uptimeByComponentId={uptimeByComponentId}
+        />
+      </section>
+
+      {snapshot.upcomingMaintenance.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            <FormattedMessage
+              id="portal.status.section.scheduledMaintenance"
+              defaultMessage="Scheduled maintenance"
+            />
+          </h2>
+          <div
+            data-qb-surface="card"
+            className="overflow-hidden rounded-lg border border-border/50 bg-card shadow-xs"
+          >
+            <div className="divide-y divide-border/40">
+              {snapshot.upcomingMaintenance.map((incident) => {
+                const style = LIFECYCLE_STYLE[incident.status]
+                const latestUpdate = incident.updates[incident.updates.length - 1]
+                const start = new Date(incident.scheduledStartAt ?? incident.startedAt)
+                return (
+                  <div key={incident.id} className="flex gap-3.5 p-4 sm:p-5">
+                    <div className="w-11 shrink-0 overflow-hidden rounded-md border border-border/60 text-center">
+                      <div className="bg-blue-500/15 py-0.5 text-[11px] font-semibold tracking-wide text-blue-700 uppercase dark:text-blue-400">
+                        {start.toLocaleDateString(intl.locale, { month: 'short', timeZone: 'UTC' })}
+                      </div>
+                      <div className="py-0.5 text-sm font-semibold">
+                        {start.toLocaleDateString(intl.locale, { day: 'numeric', timeZone: 'UTC' })}
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-semibold">
+                          <Link
+                            to="/status/$incidentId"
+                            params={{ incidentId: incident.id }}
+                            className="hover:text-primary"
+                          >
+                            {incident.title}
+                          </Link>
+                        </h3>
+                        <span className={cnLifecycle(style.text)}>
+                          {intl.formatMessage(LIFECYCLE_LABEL[incident.status])}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[13px] text-muted-foreground">
+                        {formatMaintenanceWindow(
+                          incident.scheduledStartAt,
+                          incident.scheduledEndAt,
+                          intl.locale
+                        )}
+                        {latestUpdate ? ` · ${latestUpdate.body}` : ''}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {incident.affectedComponents.map((component) => (
+                          <span
+                            key={component.id}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                          >
+                            {component.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="mt-8">
+        <div className="mb-2.5 flex items-center justify-between">
+          <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            <FormattedMessage
+              id="portal.status.section.pastIncidents"
+              defaultMessage="Past incidents"
+            />
+          </h2>
+          {!historyExpanded && !sample && (
+            <button
+              type="button"
+              onClick={() => setHistoryExpanded(true)}
+              className="text-xs font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            >
+              <FormattedMessage
+                id="portal.status.section.history"
+                defaultMessage="Incident history →"
+              />
+            </button>
+          )}
+        </div>
+
+        {/* Only days with an incident are listed, so a quiet window is an
+            empty list, not a run of empty days. */}
+        {snapshot.recentIncidents.length === 0 ? (
+          <p className="text-[13px] text-muted-foreground">
+            <FormattedMessage
+              id="portal.status.noRecentIncidents"
+              defaultMessage="No incidents in the last {days} days."
+              values={{ days: snapshot.recentWindow.days }}
+            />
+          </p>
+        ) : (
+          <div className="divide-y divide-border/40">
+            {snapshot.recentIncidents.map((day) => (
+              <div key={day.date} className="py-3.5 first:pt-0">
+                <p className="mb-1.5 text-[13px] font-semibold text-muted-foreground">
+                  {formatUtcDayLong(day.date, intl.locale)}
+                </p>
+                <div className="flex flex-col gap-3.5">
+                  {day.incidents.map((incident) => (
+                    <div key={incident.id}>
+                      <h3 className="text-sm font-semibold">
+                        <Link
+                          to="/status/$incidentId"
+                          params={{ incidentId: incident.id }}
+                          className="hover:text-primary"
+                        >
+                          {incident.title}
+                        </Link>
+                      </h3>
+                      <StatusIncidentTimeline
+                        updates={incident.updates}
+                        compact
+                        className="mt-1.5"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {historyExpanded && historyItems.length > 0 && (
+          <div className="mt-4 flex flex-col gap-3.5 border-t border-border/40 pt-4">
+            {historyItems.map((incident) => (
+              <div key={incident.id}>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(statusIncidentDate(incident)).toLocaleDateString(intl.locale, {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric',
+                    timeZone: 'UTC',
+                  })}
+                </p>
+                <h3 className="text-sm font-semibold">
+                  <Link
+                    to="/status/$incidentId"
+                    params={{ incidentId: incident.id }}
+                    className="hover:text-primary"
+                  >
+                    {incident.title}
+                  </Link>
+                </h3>
+                <StatusIncidentTimeline updates={incident.updates} compact className="mt-1.5" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {historyExpanded && historyLoaded && historyItems.length === 0 && !hasNextPage && (
+          <p className="mt-4 border-t border-border/40 pt-4 text-[13px] text-muted-foreground">
+            <FormattedMessage
+              id="portal.status.history.empty"
+              defaultMessage="No earlier incidents."
+            />
+          </p>
+        )}
+
+        {historyExpanded && hasNextPage && (
+          <div className="mt-4 flex justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+            >
+              {isFetchingNextPage ? (
+                <FormattedMessage
+                  id="portal.status.history.loadingMore"
+                  defaultMessage="Loading..."
+                />
+              ) : (
+                <FormattedMessage id="portal.status.history.loadMore" defaultMessage="Load more" />
+              )}
+            </Button>
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function cnLifecycle(textClass: string): string {
+  return `text-[11px] font-semibold uppercase tracking-wide ${textClass}`
+}

@@ -43,6 +43,8 @@ interface UseSimilarPostsResult {
   isFetching: boolean
   /** Any error that occurred */
   error: Error | null
+  /** Whether the search has answered for the title as it is now, matches or none. */
+  settled: boolean
 }
 
 /** One empty list for every render that has found nothing, so it compares equal. */
@@ -58,7 +60,8 @@ export function useSimilarPosts({
   debounceMs = 400,
   minLength = 5,
 }: UseSimilarPostsOptions): UseSimilarPostsResult {
-  const debouncedTitle = useDebouncedValue(title.trim(), debounceMs)
+  const typed = title.trim()
+  const debouncedTitle = useDebouncedValue(typed, debounceMs)
   const shouldSearch = enabled && debouncedTitle.length >= minLength
 
   const { data, isLoading, isFetching, error } = useQuery({
@@ -76,6 +79,7 @@ export function useSimilarPosts({
     isLoading: shouldSearch && isLoading,
     isFetching: shouldSearch && isFetching,
     error: error as Error | null,
+    settled: shouldSearch && debouncedTitle === typed && !isFetching,
   }
 }
 

@@ -308,7 +308,7 @@ function TitleInput({
       value={value}
       aria-label={intl.formatMessage({
         id: 'widget.home.input.label',
-        defaultMessage: 'Feedback title',
+        defaultMessage: 'Post title',
       })}
       onChange={(e) => {
         title.set(e.target.value)
@@ -413,7 +413,7 @@ function SimilarIdeas({
           <div className="px-3 pb-2">
             <p className="text-[11px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
               <LightBulbIcon className="w-3 h-3" />
-              <FormattedMessage id="widget.home.similar.heading" defaultMessage="Similar posts" />
+              <FormattedMessage id="widget.home.similar.heading" defaultMessage={'Similar posts'} />
             </p>
             <div className="space-y-0.5">
               {similarPostResults.posts.slice(0, 3).map((post) => (
@@ -1003,14 +1003,14 @@ export function WidgetHomeAnimated({
                         {submitNoAccess ? (
                           <FormattedMessage
                             id="widget.home.posting.noAccess"
-                            defaultMessage="You don't have access to post on this board"
+                            defaultMessage={"You don't have access to post on this board"}
                           />
                         ) : boards.length > 0 && !selectedBoardId ? (
                           // Submit is disabled until a board is picked; say so
                           // rather than leaving a dead button unexplained.
                           <FormattedMessage
                             id="widget.home.posting.chooseBoard"
-                            defaultMessage="Choose a board to post"
+                            defaultMessage={'Choose a board to post'}
                           />
                         ) : user ? (
                           <FormattedMessage
@@ -1027,7 +1027,7 @@ export function WidgetHomeAnimated({
                         ) : signInRequired ? (
                           <FormattedMessage
                             id="widget.home.posting.signInRequired"
-                            defaultMessage="Sign in to post on this board"
+                            defaultMessage={'Sign in to post on this board'}
                           />
                         ) : (
                           <FormattedMessage
@@ -1114,7 +1114,7 @@ export function WidgetHomeAnimated({
                   <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
                     <FormattedMessage
                       id="widget.home.popular.heading"
-                      defaultMessage="Popular posts"
+                      defaultMessage={'Popular posts'}
                     />
                   </p>
                   <button
@@ -1210,7 +1210,7 @@ export function WidgetHomeAnimated({
                     <p className="text-sm font-medium text-muted-foreground/70">
                       <FormattedMessage
                         id="widget.home.popular.search.noResults"
-                        defaultMessage="No posts found"
+                        defaultMessage={'No posts found'}
                       />
                     </p>
                     <p className="text-xs text-muted-foreground/50 mt-0.5">
@@ -1261,12 +1261,12 @@ export function WidgetHomeAnimated({
                       {activeBoardSlug ? (
                         <FormattedMessage
                           id="widget.home.popular.emptyBoard"
-                          defaultMessage="No posts in this board yet"
+                          defaultMessage={'No posts on this board yet'}
                         />
                       ) : (
                         <FormattedMessage
                           id="widget.home.popular.empty"
-                          defaultMessage="No posts yet"
+                          defaultMessage={'No posts yet'}
                         />
                       )}
                     </p>

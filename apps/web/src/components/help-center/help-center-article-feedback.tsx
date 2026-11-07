@@ -85,7 +85,10 @@ export function HelpCenterArticleFeedback({
   const showReasonBox = feedback === 'not-helpful' && feedbackId !== null && !reasonSent
 
   return (
-    <div className="mt-10 rounded-xl border border-border/50 bg-card px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+    <div
+      data-qb-surface="card"
+      className="mt-10 rounded-xl border border-border/50 bg-card px-5 py-4 flex items-center justify-between gap-4 flex-wrap"
+    >
       <div>
         <p className="text-sm font-semibold text-foreground">
           <FormattedMessage

@@ -1,0 +1,62 @@
+import { useRef } from 'react'
+import { useDesignAi } from '@/components/admin/settings/appearance/use-design-ai'
+import {
+  designPreview,
+  type useDesignDraft,
+} from '@/components/admin/settings/appearance/use-design-draft'
+import { openCheckFrame } from '@/lib/client/check-frame'
+import type { PortalDesign } from '@/lib/shared/design/schema'
+import { canvasSrc } from './designer-canvas'
+import type { DesignerPage } from '@/lib/shared/design/outline'
+import type { SupportedLocale } from '@/lib/shared/i18n'
+
+/** The designer's own canvas, which the brand match's check reads the drawn preview from. */
+const canvasFrame = () => document.querySelector<HTMLIFrameElement>('iframe[data-designer-canvas]')
+
+/**
+ * The check's own frame: Home (the page a brand match changes), signed out
+ * as visitors see it, in the design's own theme and the language shown.
+ */
+const openHome = (locale: SupportedLocale) => (design: PortalDesign) =>
+  openCheckFrame({
+    src: canvasSrc({
+      page: 'home',
+      theme: design.mode === 'dark' ? 'dark' : 'light',
+      locale,
+      sort: 'trending',
+      visitor: 'out',
+    }),
+    design,
+    preview: designPreview,
+  })
+
+/** Quackback AI's conversation for the designer, told the page and language shown. */
+export function useDesignerAi(
+  draft: Pick<
+    ReturnType<typeof useDesignDraft>,
+    'flush' | 'adopt' | 'update' | 'replace' | 'begin' | 'end' | 'design'
+  >,
+  view: { page: DesignerPage; locale: SupportedLocale },
+  workspaceName: string
+) {
+  // The draft as it is when a request starts, read without re-rendering on every change.
+  const latest = useRef(draft.design)
+  latest.current = draft.design
+  return {
+    ai: useDesignAi({
+      flush: draft.flush,
+      adopt: draft.adopt,
+      update: draft.update,
+      workspaceName,
+      view,
+      check: {
+        begin: draft.begin,
+        end: draft.end,
+        replace: draft.replace,
+        frame: canvasFrame,
+        open: openHome(view.locale),
+        current: () => latest.current,
+      },
+    }),
+  }
+}

@@ -63,7 +63,7 @@ export function CompactPostCard({
         {(label || statusName) && (
           <div className="flex items-center gap-1.5 mb-0.5">
             {label && (
-              <span className="text-[11px] font-medium px-1.5 py-0 rounded-sm bg-muted text-muted-foreground/70">
+              <span className="text-[11px] font-medium px-1.5 py-0 rounded-sm bg-muted text-muted-foreground">
                 {label}
               </span>
             )}
@@ -74,26 +74,26 @@ export function CompactPostCard({
         )}
         <p className="text-sm font-semibold text-foreground line-clamp-1">{title}</p>
         {description && (
-          <p className="text-xs text-muted-foreground/60 line-clamp-1 mt-0.5">{description}</p>
+          <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{description}</p>
         )}
         {hasMetaRow && (
-          <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60 mt-1.5">
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1.5">
             {boardName && (
               <>
-                <Squares2X2Icon className="h-3 w-3 shrink-0 text-muted-foreground/40 -mr-1 mb-0.5" />
+                <Squares2X2Icon className="h-3 w-3 shrink-0 text-muted-foreground -mr-1 mb-0.5" />
                 <span className="truncate">{boardName}</span>
               </>
             )}
             {authorName && (
               <>
-                {boardName && <span className="text-muted-foreground/30">&middot;</span>}
+                {boardName && <span className="text-muted-foreground">&middot;</span>}
                 <span className="truncate">{authorName}</span>
               </>
             )}
             {createdAt && (
               <>
                 {(boardName || authorName) && (
-                  <span className="text-muted-foreground/30">&middot;</span>
+                  <span className="text-muted-foreground">&middot;</span>
                 )}
                 <TimeAgo date={createdAt} className="shrink-0" />
               </>

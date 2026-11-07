@@ -26,7 +26,7 @@ export function PortalMergeBanner({
       <p className="text-sm text-amber-800 dark:text-amber-200">
         <FormattedMessage
           id="portal.postDetail.mergeBanner.mergedInto"
-          defaultMessage="This feedback has been merged into"
+          defaultMessage={'This post has been merged into'}
         />{' '}
         <Link
           to="/b/$slug/posts/$postId"

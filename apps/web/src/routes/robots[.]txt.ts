@@ -33,6 +33,7 @@ export const Route = createFileRoute('/robots.txt')({
           'Disallow: /admin/',
           'Disallow: /auth/',
           'Disallow: /onboarding/',
+          'Disallow: /design',
           'Disallow: /api/',
           'Disallow: /widget',
           ...(helpCenterEnabled && !helpCenterIndexable ? ['Disallow: /hc'] : []),

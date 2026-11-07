@@ -51,6 +51,19 @@ async function openPage(token: string | undefined) {
 }
 
 describe('/unsubscribe', () => {
+  it('calls the post a post', async () => {
+    fns.preview.mockResolvedValue({
+      status: 'confirm',
+      action: 'unsubscribe_post',
+      postTitle: 'Dark mode',
+    })
+
+    await openPage(TOKEN)
+
+    expect(screen.getByRole('heading', { name: 'Unsubscribe from this post?' })).toBeTruthy()
+    expect(screen.getByText(/Post:/)).toBeTruthy()
+  })
+
   it('opening the link reads the token and changes nothing', async () => {
     fns.preview.mockResolvedValue({ status: 'confirm', action: 'unsubscribe_onboarding' })
 

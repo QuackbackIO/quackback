@@ -1,8 +1,7 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { FormattedMessage } from 'react-intl'
 import { z } from 'zod'
-import { RoadmapBoard } from '@/components/public/roadmap-board'
+import { RoadmapPageView } from '@/components/public/roadmap-page'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { isProductEnabled } from '@/lib/shared/types/settings'
@@ -15,6 +14,9 @@ const searchSchema = z.object({
   segments: z.array(z.string()).optional(),
   sort: z.enum(['votes', 'newest', 'oldest']).optional(),
 })
+
+/** The roadmap's search: the roadmap shown and its filters, kept in the URL. */
+export type RoadmapSearch = z.infer<typeof searchSchema>
 
 export const Route = createFileRoute('/_portal/roadmap/')({
   validateSearch: searchSchema,
@@ -63,42 +65,13 @@ export const Route = createFileRoute('/_portal/roadmap/')({
 function RoadmapPage() {
   const { firstRoadmapId, userRole } = Route.useLoaderData()
   const { roadmap: selectedRoadmapFromUrl } = Route.useSearch()
-
   const { data: roadmaps } = useSuspenseQuery(portalQueries.roadmaps())
-
-  // Use URL param if present, otherwise fall back to first roadmap
-  const initialSelectedId = selectedRoadmapFromUrl ?? firstRoadmapId
-
-  const isTeamMember = userRole === 'admin' || userRole === 'member'
-
   return (
-    // From sm up, cap at viewport height so a column with many cards scrolls
-    // internally instead of pushing the body taller. 7rem ≈ PortalHeader. On a
-    // phone the title and toolbar leave too little of that height, so the
-    // page grows and the columns keep a usable height instead of clipping.
-    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-8 min-h-[calc(100dvh-7rem)] sm:h-[calc(100dvh-7rem)] flex flex-col sm:min-h-0">
-      <div className="mb-6 animate-in fade-in duration-200 fill-mode-backwards">
-        <h1 className="text-3xl font-bold mb-2">
-          <FormattedMessage id="portal.roadmap.title" defaultMessage="Roadmap" />
-        </h1>
-        <p className="text-muted-foreground">
-          <FormattedMessage
-            id="portal.roadmap.description"
-            defaultMessage="See what we're working on and what's coming next."
-          />
-        </p>
-      </div>
-
-      <div
-        className="flex-1 min-h-0 flex flex-col animate-in fade-in duration-300 fill-mode-backwards"
-        style={{ animationDelay: '100ms' }}
-      >
-        <RoadmapBoard
-          initialRoadmaps={roadmaps}
-          initialSelectedRoadmapId={initialSelectedId}
-          isTeamMember={isTeamMember}
-        />
-      </div>
-    </div>
+    <RoadmapPageView
+      roadmaps={roadmaps}
+      // The URL's roadmap, else the first.
+      selectedId={selectedRoadmapFromUrl ?? firstRoadmapId}
+      isTeamMember={userRole === 'admin' || userRole === 'member'}
+    />
   )
 }

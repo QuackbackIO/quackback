@@ -1,5 +1,6 @@
-import { useNavigate } from '@tanstack/react-router'
-import { Route } from '@/routes/_portal/index'
+import { useNavigate, useSearch } from '@tanstack/react-router'
+import type { FeedSearch } from '@/routes/_portal/feedback'
+import { useFeedbackPath } from '@/components/public/use-portal-paths'
 import { useMemo, useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 
@@ -28,7 +29,9 @@ function setOptimistic(filters: PublicFeedbackFilters | null) {
 
 export function usePublicFilters() {
   const navigate = useNavigate()
-  const routerSearch = Route.useSearch()
+  // The feed shows at `/feedback`, and at `/` while it is the landing page.
+  const routerSearch = useSearch({ strict: false }) as FeedSearch
+  const feedbackPath = useFeedbackPath()
 
   const optimistic = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 
@@ -80,7 +83,7 @@ export function usePublicFilters() {
       setOptimistic(newFilters)
 
       void navigate({
-        to: '/',
+        to: feedbackPath,
         search: {
           board: newFilters.board,
           search: newFilters.search,
@@ -98,7 +101,7 @@ export function usePublicFilters() {
         resetScroll: false,
       })
     },
-    [navigate, filters]
+    [navigate, filters, feedbackPath]
   )
 
   const clearFilters = useCallback(() => {

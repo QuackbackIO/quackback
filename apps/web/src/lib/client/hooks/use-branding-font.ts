@@ -20,16 +20,20 @@ import { loadBrandingFont, resolveBrandingFontId } from '@/lib/shared/theme'
  */
 export function useBrandingFont(
   customCss: string | null | undefined,
-  configFontSans: string | null | undefined
+  configFontSans: string | null | undefined,
+  /** Families a portal design names directly: its body and heading fonts. */
+  designFontIds: readonly string[] = []
 ): void {
   const fontId = resolveBrandingFontId(customCss, configFontSans)
+  const ids = [...new Set([fontId, ...designFontIds].filter(Boolean))].join(' ')
 
   useEffect(() => {
-    if (!fontId) return
-    loadBrandingFont(fontId).catch(() => {
-      // Best-effort: a failed font fetch (offline, blocked asset host) just
-      // leaves the --font-sans generic fallback stack rendering — never
-      // throw out of a layout effect over a stylesheet.
-    })
-  }, [fontId])
+    for (const id of ids.split(' ').filter(Boolean)) {
+      loadBrandingFont(id).catch(() => {
+        // Best-effort: a failed font fetch (offline, blocked asset host) just
+        // leaves the --font-sans generic fallback stack rendering — never
+        // throw out of a layout effect over a stylesheet.
+      })
+    }
+  }, [ids])
 }

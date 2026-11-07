@@ -118,7 +118,7 @@ function renderHome(props: Partial<WidgetHomeProps> = {}) {
 }
 
 function typeTitle(value: string) {
-  fireEvent.change(screen.getByRole('textbox', { name: 'Feedback title' }), {
+  fireEvent.change(screen.getByRole('textbox', { name: 'Post title' }), {
     target: { value },
   })
 }
@@ -190,7 +190,7 @@ describe('widget home title', () => {
     typeTitleByKey('ark mode', 'D')
 
     expect(editor.renders).toBe(0)
-    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' }).value).toBe(
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Post title' }).value).toBe(
       'Dark mode'
     )
   })

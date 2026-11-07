@@ -121,7 +121,7 @@ function renderHome(props: Partial<WidgetHomeProps> = {}) {
 }
 
 function typeTitle(value: string) {
-  fireEvent.change(screen.getByRole('textbox', { name: 'Feedback title' }), {
+  fireEvent.change(screen.getByRole('textbox', { name: 'Post title' }), {
     target: { value },
   })
 }

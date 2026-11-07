@@ -12,13 +12,13 @@
  * After a successful sign-in the router is invalidated so the _portal loader
  * re-runs; if the visitor is now authorized, the real portal replaces this.
  */
+import { PortalFooter } from '@/components/public/portal-footer'
 import { nameInitial } from '@/lib/shared/utils/initial'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { toast } from 'sonner'
-import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import {
   ArrowPathIcon,
@@ -201,7 +201,7 @@ function DecorativeBackdrop({
             {/* Faux submission box */}
             <div className="rounded-lg border border-border/40 bg-card p-4">
               <div className="flex h-9 items-center rounded-md border border-border/50 bg-muted/30 px-3 text-sm text-muted-foreground/50">
-                Suggest a feature or report a bug…
+                What's on your mind?
               </div>
             </div>
 
@@ -554,7 +554,7 @@ export interface PortalAccessGateProps
     Omit<GateCardProps, 'authConfig'>,
     Pick<
       PortalAccessGateError,
-      'authConfig' | 'themeStyles' | 'customCss' | 'userEmail' | 'locale'
+      'authConfig' | 'userEmail' | 'locale' | 'showPoweredBy' | 'workspaceSlug'
     > {}
 
 export function PortalAccessGate({
@@ -562,12 +562,12 @@ export function PortalAccessGate({
   workspaceName,
   logoUrl,
   authConfig,
-  themeStyles,
-  customCss,
   userEmail,
   locale,
   callbackUrl,
   autoOpenSignin,
+  showPoweredBy = true,
+  workspaceSlug,
 }: PortalAccessGateProps) {
   return (
     // The gate renders on the route's error path (a beforeLoad throw), which
@@ -578,12 +578,6 @@ export function PortalAccessGate({
     // fetches it client-side, which lands well before the form needs it.
     <PortalIntlProvider locale={locale ?? DEFAULT_LOCALE}>
       <div className="relative min-h-screen">
-        {/* Theme/custom CSS injected here too so the backdrop looks branded */}
-        {themeStyles && (
-          <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
-        )}
-        {customCss && <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(customCss) }} />}
-
         {/* Blurred decorative backdrop — a fake board, no real content */}
         <div
           className="absolute inset-0 overflow-hidden blur-sm"
@@ -607,6 +601,10 @@ export function PortalAccessGate({
             callbackUrl={callbackUrl}
             autoOpenSignin={autoOpenSignin}
           />
+        </div>
+        {/* The same footer as every portal page, over the backdrop's foot. */}
+        <div className="absolute inset-x-0 bottom-0 z-10">
+          <PortalFooter showPoweredBy={showPoweredBy} workspaceSlug={workspaceSlug} />
         </div>
       </div>
     </PortalIntlProvider>
