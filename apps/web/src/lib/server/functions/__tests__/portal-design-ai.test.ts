@@ -36,6 +36,7 @@ vi.mock('@tanstack/react-start', () => ({
 }))
 vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () => new Headers({ 'user-agent': 'vitest' }),
+  getRequest: () => ({ signal: new AbortController().signal }),
 }))
 const requireAuth = vi.fn()
 vi.mock('../auth-helpers', () => ({ requireAuth: (...args: unknown[]) => requireAuth(...args) }))
