@@ -2,7 +2,8 @@
 /**
  * Pointing at a look or a Home layout shows it on the canvas and changes
  * nothing; leaving shows the draft again; only choosing one changes the draft.
- * A workspace keeps its own looks beside the presets.
+ * A look keeps the workspace's own colours and fonts; "Use its colours too"
+ * takes them as well. A workspace keeps its own looks beside the presets.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -18,6 +19,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import { lookOf } from '@/lib/shared/design/looks'
+import { DESIGN_PRESETS } from '@/lib/shared/design/presets'
 import { newBlock } from '@/lib/shared/design/home'
 
 const fns = vi.hoisted(() => ({
@@ -99,27 +101,64 @@ describe('LookPicker', () => {
 
   it('shows a look on the canvas while pointed at, and changes the draft only when chosen', async () => {
     const update = vi.fn()
-    const design = defaultDesign()
+    const design = structuredClone(mine)
     render(wrap(<LookPicker design={design} update={update} />))
     const shown = renderHook(() => usePreviewedDesign())
 
-    const teal = await screen.findByRole('button', { name: 'Teal' })
-    fireEvent.pointerEnter(teal)
+    const studio = await screen.findByRole('button', { name: 'Studio' })
+    fireEvent.pointerEnter(studio)
+    // The brand's own colours, with the look's treatment.
     expect(shown.result.current?.brand.light.accent).toBe('#0f766e')
+    expect(shown.result.current?.layout.band).toBe('brand')
     expect(update).not.toHaveBeenCalled()
-    fireEvent.pointerLeave(teal)
+    fireEvent.pointerLeave(studio)
     expect(shown.result.current).toBeNull()
 
     // Focus previews as pointing does.
-    const studio = screen.getByRole('button', { name: 'Studio' })
     act(() => studio.focus())
     expect(shown.result.current?.layout.band).toBe('brand')
     fireEvent.click(studio)
     expect(shown.result.current).toBeNull()
     expect(update).toHaveBeenCalledTimes(1)
+    expect(update.mock.calls[0]![1]).toBe('Look: Studio')
     const draft = structuredClone(design)
     update.mock.calls[0]![0](draft)
     expect(draft.layout.band).toBe('brand')
+    expect(draft.brand.light).toEqual(mine.brand.light)
+    expect(draft.brand.fonts.heading).toEqual(mine.brand.fonts.heading)
+  })
+
+  it('takes a look’s colours and fonts too, as one step, from its second action', async () => {
+    const order: string[] = []
+    events.designerLookChosen.mockImplementation((source: string) => order.push(source))
+    const update = vi.fn<(change: (draft: PortalDesign) => void, label?: string) => void>(() => {
+      order.push('update')
+    })
+    const design = structuredClone(mine)
+    render(wrap(<LookPicker design={design} update={update} />))
+    const shown = renderHook(() => usePreviewedDesign())
+    const studio = DESIGN_PRESETS.find((each) => each.id === 'studio')!
+
+    const its = await screen.findByRole('button', { name: 'Studio: use its colours too' })
+    act(() => its.focus())
+    expect(shown.result.current?.brand.light.accent).toBe(studio.look.brand.light.accent)
+    fireEvent.click(its)
+    expect(shown.result.current).toBeNull()
+    expect(order).toEqual(['preset', 'update'])
+    expect(update.mock.calls[0]![1]).toBe('Look and colours: Studio')
+    const draft = structuredClone(design)
+    update.mock.calls[0]![0](draft)
+    expect(draft.brand.light).toEqual(studio.look.brand.light)
+    expect(draft.brand.fonts.heading).toEqual(studio.look.brand.fonts.heading)
+    expect(draft.mode).toBe(studio.look.mode)
+  })
+
+  it('draws each tile in the workspace’s own accent and logo', async () => {
+    render(wrap(<LookPicker design={mine} update={vi.fn()} logoUrl="/logo.png" />))
+    const studio = await screen.findByRole('button', { name: 'Studio' })
+    const band = studio.querySelector<HTMLElement>('[data-tile-band]')!
+    expect(band.style.background).toContain('#0f766e')
+    expect(studio.querySelector('img')?.getAttribute('src')).toBe('/logo.png')
   })
 
   it('saves the draft’s look under a name, and deletes a saved one', async () => {

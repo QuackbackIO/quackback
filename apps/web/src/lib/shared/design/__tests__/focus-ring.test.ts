@@ -24,7 +24,7 @@ const both = (design: PortalDesign): PortalDesign => ({ ...design, mode: 'auto' 
 const designs: Array<{ name: string; doc: PortalDesign }> = [
   ...DESIGN_PRESETS.map((preset) => ({
     name: `look ${preset.id}`,
-    doc: both(withLook(defaultDesign(), preset.look)),
+    doc: both(withLook(defaultDesign(), preset.look, { itsColours: true })),
   })),
   ...Object.entries(fixtures).map(([path, doc]) => ({
     name: `reference ${path.replace(/^.*\//, '')}`,

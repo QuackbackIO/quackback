@@ -105,6 +105,10 @@ export const THEME = {
   sameAsHeading: 'Same as heading',
   look: 'Look',
   looks: 'Looks',
+  /** A look's second action: take its colours and fonts as well as its treatment. */
+  useItsColours: 'Use its colours too',
+  lookStep: (name: string) => `Look: ${name}`,
+  lookAndColoursStep: (name: string) => `Look and colours: ${name}`,
   appearance: 'Appearance',
   appearances: { light: 'Light', dark: 'Dark', auto: 'Auto' },
   autoHelp: 'Auto follows the visitor’s device',

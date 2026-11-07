@@ -107,7 +107,7 @@ export function ThemeContent({
     <div className="-m-4 flex min-h-full flex-col" data-theme-sheet="">
       {view === 'looks' ? (
         <SubView title={THEME.looks} onBack={back}>
-          <LookPicker design={design} update={update} />
+          <LookPicker design={design} update={update} logoUrl={logoUrl} />
         </SubView>
       ) : view === 'background' ? (
         <SubView title={THEME.sections.pageBackground} onBack={back}>
