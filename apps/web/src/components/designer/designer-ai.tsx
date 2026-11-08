@@ -6,7 +6,7 @@ import {
   DesignComposer,
   type ChatContext,
 } from '@/components/admin/settings/appearance/design-composer'
-import type { Update } from '@/components/admin/settings/appearance/section-controls'
+import type { Update } from '@/components/admin/settings/appearance/design-update'
 import type { useDesignAi } from '@/components/admin/settings/appearance/use-design-ai'
 import type { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
 import { Button } from '@/components/ui/button'

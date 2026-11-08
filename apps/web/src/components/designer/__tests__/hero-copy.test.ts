@@ -120,13 +120,9 @@ describe('the builder’s components', () => {
   it('never show the word band', () => {
     const files = [
       ...sources(join(SRC, 'components', 'designer')),
-      ...[
-        'section-controls.tsx',
-        'focal-point.tsx',
-        'image-slot.tsx',
-        'design-composer.tsx',
-        'home-section.tsx',
-      ].map((name) => join(SRC, 'components', 'admin', 'settings', 'appearance', name)),
+      ...['focal-point.tsx', 'drawings.tsx', 'design-composer.tsx', 'home-section.tsx'].map(
+        (name) => join(SRC, 'components', 'admin', 'settings', 'appearance', name)
+      ),
     ]
     const found = files.flatMap((file) =>
       shownWords(readFileSync(file, 'utf8'))

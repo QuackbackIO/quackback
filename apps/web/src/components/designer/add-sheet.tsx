@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { Update } from '@/components/admin/settings/appearance/section-controls'
+import type { Update } from '@/components/admin/settings/appearance/design-update'
 import { addSheetGroups, type AddRow } from '@/lib/shared/design/add-sheet'
 import { HOME_BLOCKS_MAX, type HomeBlockType } from '@/lib/shared/design/home'
 import { homeSuggestions } from '@/lib/shared/design/overview'

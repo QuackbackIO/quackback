@@ -1,4 +1,4 @@
-import type { Update } from '@/components/admin/settings/appearance/section-controls'
+import type { Update } from '@/components/admin/settings/appearance/design-update'
 import type { DesignerPage } from '@/lib/shared/design/outline'
 import { PAGE_CHOICE_DEFAULTS, type PageChoices } from '@/lib/shared/design/page-choices'
 import type { PortalDesign } from '@/lib/shared/design/schema'

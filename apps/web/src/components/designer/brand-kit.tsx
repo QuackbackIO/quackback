@@ -1,5 +1,5 @@
 import { ChevronRightIcon } from '@heroicons/react/16/solid'
-import type { Update } from '@/components/admin/settings/appearance/section-controls'
+import type { Update } from '@/components/admin/settings/appearance/design-update'
 import { getFaviconUploadUrlFn, getShareImageUploadUrlFn } from '@/lib/server/functions/uploads'
 import { designAssetUrl } from '@/lib/shared/design/design-view'
 import type { PortalDesign } from '@/lib/shared/design/schema'

@@ -9,7 +9,7 @@
 import { useId, useMemo, useState, type ReactNode } from 'react'
 import { ChevronRightIcon, MinusIcon, PlusIcon } from '@heroicons/react/16/solid'
 import { DesignTiles } from '@/components/admin/settings/appearance/design-tiles'
-import { presignBandImage } from '@/components/admin/settings/appearance/section-controls'
+import { presignBandImage } from '@/components/admin/settings/appearance/design-update'
 import { Button } from '@/components/ui/button'
 import { prepareBackgroundImage, type PreparedBackground } from '@/lib/client/background-image'
 import { PAGE_BACKGROUND_SETTINGS } from '@/lib/shared/design/blocks'
