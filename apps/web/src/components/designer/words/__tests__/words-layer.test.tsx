@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { defaultDesign } from '@/lib/shared/design/schema'
 import type { WordsState } from '@/lib/shared/words-editor/extensions'
-import { setDesignerPreview } from '@/components/public/designer-preview-state'
+import { setDesignerPreview } from '@/components/public/preview-draft-context'
 import { editOnCanvas } from '../edit-on-canvas'
 import { WordsLayer } from '../words-layer'
 

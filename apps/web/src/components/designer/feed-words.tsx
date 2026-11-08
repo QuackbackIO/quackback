@@ -11,7 +11,7 @@ import {
   designerPreview,
   setDesignerPreview,
   subscribeDesignerPreview,
-} from '@/components/public/designer-preview-state'
+} from '@/components/public/preview-draft-context'
 import { setFeedWords, type FeedWordsPart } from '@/lib/shared/design/headline-words'
 import { inLanguage } from '@/lib/shared/design/labels'
 import type { PortalDesign } from '@/lib/shared/design/schema'

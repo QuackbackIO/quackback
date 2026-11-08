@@ -14,7 +14,7 @@ import {
   PREVIEW_STATE_MESSAGE,
   designerPreview,
   subscribeDesignerPreview,
-} from '@/components/public/designer-preview-state'
+} from '@/components/public/preview-draft-context'
 import { EDIT_ON_CANVAS } from './edit-on-canvas'
 import { WordsBubble } from './words-bubble'
 

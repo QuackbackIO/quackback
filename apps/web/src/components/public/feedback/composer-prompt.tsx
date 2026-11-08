@@ -15,8 +15,20 @@ export function ComposerPrompt({
   /** The field, given the placeholder it shows. */
   children: (placeholder: string) => ReactNode
 }) {
-  const designing = usePreviewSamples()
-  if (!designing) return <>{children(prompt)}</>
+  return composerPromptField(usePreviewSamples(), prompt, children)
+}
+
+/**
+ * The same, as a plain function for a field that renders on every keystroke:
+ * a wrapper component there would render again with it each time. The caller
+ * reads `designing` from usePreviewSamples.
+ */
+export function composerPromptField(
+  designing: boolean,
+  prompt: string,
+  children: (placeholder: string) => ReactNode
+): ReactNode {
+  if (!designing) return children(prompt)
   return (
     <span className="relative flex min-w-0 flex-1 items-center">
       {children('')}

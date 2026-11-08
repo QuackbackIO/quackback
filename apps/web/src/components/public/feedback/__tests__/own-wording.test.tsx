@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { act } from 'react'
-import { setDesignerPreview } from '@/components/public/designer-preview-state'
+import { setDesignerPreview } from '@/components/public/preview-draft-context'
 import {
   FeedCopyContext,
   PreviewSamplesContext,

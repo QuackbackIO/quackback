@@ -331,7 +331,7 @@ describe('what the builder asks the page to show', () => {
     posted.length = 0
     stop = startDesigning()
     expect(posted).toEqual([{ type: 'quackback:preview-state-ask' }])
-    const { designerPreview } = await import('../designer-preview-state')
+    const { designerPreview } = await import('../preview-draft-context')
     window.dispatchEvent(
       new MessageEvent('message', {
         data: { type: 'quackback:preview-state', empty: true },

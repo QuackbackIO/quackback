@@ -7,7 +7,7 @@
  * it imports nothing from the app but the frame's request headers and what
  * the frame was first loaded as.
  */
-import { PREVIEW_STATE_ASK, readPreviewState, setDesignerPreview } from './designer-preview-state'
+import { PREVIEW_STATE_ASK, readPreviewState, setDesignerPreview } from './preview-draft-context'
 import { thisDesignerFrame } from '@/lib/client/designer-frame'
 import { designerFrameHeaders } from '@/lib/shared/design/designer-frame'
 
