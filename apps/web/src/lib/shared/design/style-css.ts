@@ -200,10 +200,9 @@ function declarations(
       return [`min-height: ${v}`]
     case 'opacity':
       return [`opacity: ${v}`]
-    case 'ring':
-      return [`outline-color: ${v}`, 'outline-style: solid']
     case 'ringWidth':
-      return [`outline-width: ${v}`, 'outline-style: solid']
+      // The ring keeps the neutral focus colour; only its width is set.
+      return [`outline-width: ${v}`, 'outline-style: solid', 'outline-color: var(--ring)']
   }
 }
 
@@ -441,15 +440,8 @@ export function styleCss(
                 return null
               }
               if (prop === 'color') return textColour(mode, t)
-              if (prop === 'borderColor' || prop === 'ring') {
-                if (!set) return null
-                const c = styleColourValue(set as StyleColour, doc, t, mode)
-                if (prop === 'ring') {
-                  const used = solveContrast(c, [backdropOf(element, t)], 3) ?? t.foreground
-                  return used
-                }
-                return c
-              }
+              if (prop === 'borderColor')
+                return set ? styleColourValue(set as StyleColour, doc, t, mode) : null
               return set === undefined ? null : plainValue(prop, set)
             }
             function textColour(mode: Mode, t: Vars): string | null {

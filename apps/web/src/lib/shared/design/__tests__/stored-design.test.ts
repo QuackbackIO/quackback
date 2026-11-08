@@ -105,6 +105,29 @@ describe('reading a stored design', () => {
     expect((doc.brand as Json).logo).toHaveProperty('nameAccent')
   })
 
+  it('takes in a focus ring colour, gone since focus rings stay neutral, keeping its width', () => {
+    const doc = written({
+      style: {
+        button: { focus: { ring: 'accent', ringWidth: 3 } },
+        link: { focus: { ring: '#ff0000' } },
+      },
+      styleDark: { button: { focus: { ring: '#ffffff' } } },
+      overrides: [
+        {
+          id: 'abcdefgh',
+          target: { scope: 'page', page: 'home', element: 'input' },
+          style: { focus: { ring: 'support' } },
+        },
+      ],
+    }) as Json
+    const read = readStoredDesign(doc)
+    expect(read?.dropped).toEqual([])
+    expect(read?.design.style).toEqual({ button: { focus: { ringWidth: 3 } } })
+    expect(read?.design.styleDark).toBeUndefined()
+    expect(read?.design.overrides).toBeUndefined()
+    expect(portalDesign.safeParse(withoutRetiredKeys(doc)).success).toBe(true)
+  })
+
   it('does not change the document it was given', () => {
     const doc = written({ future: 1 })
     readStoredDesign(doc)

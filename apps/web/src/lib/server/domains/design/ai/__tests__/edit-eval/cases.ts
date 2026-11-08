@@ -987,15 +987,10 @@ function styleCases(): EvalCase[] {
       touches: ['style'],
     },
     {
-      name: 'style: a thick brand focus ring on buttons',
-      request: 'When buttons are focused with the keyboard, show a 3px ring in the brand colour',
-      ops: [
-        { op: 'theme', key: 'style.button.focus.ring', value: 'accent' },
-        { op: 'theme', key: 'style.button.focus.ringWidth', value: '3' },
-      ],
-      check: (d) =>
-        at(d, 'style.button.focus.ringWidth') === 3 &&
-        ['accent', '#4f46e5'].includes(String(at(d, 'style.button.focus.ring'))),
+      name: 'style: a thick focus ring on buttons, still neutral',
+      request: 'When buttons are focused with the keyboard, show a thicker 3px ring',
+      ops: [{ op: 'theme', key: 'style.button.focus.ringWidth', value: '3' }],
+      check: (d) => at(d, 'style.button.focus.ringWidth') === 3,
       touches: ['style'],
     },
     {

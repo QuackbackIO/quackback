@@ -100,7 +100,7 @@ const SECTION_PROPS: ReadonlyArray<{
   { title: SECTIONS.edge, props: ['borderColor', 'borderWidth', 'borderStyle'], optional: true },
   { title: SECTIONS.shadow, props: ['shadow'], optional: true },
   { title: SECTIONS.lift, props: ['lift'], optional: true },
-  { title: SECTIONS.focusRing, props: ['ring', 'ringWidth'], optional: true },
+  { title: SECTIONS.focusRing, props: ['ringWidth'], optional: true },
 ]
 
 /** A row's label within its section: Edge's "Edge colour" is its Colour. */
@@ -109,7 +109,6 @@ const ROW_LABELS: Partial<Record<StyleProp, string>> = {
   borderColor: 'Colour',
   borderWidth: 'Width',
   borderStyle: 'Style',
-  ring: 'Colour',
   ringWidth: 'Width',
   lift: 'Rise',
 }

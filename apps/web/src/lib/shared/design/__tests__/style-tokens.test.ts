@@ -14,6 +14,7 @@ import {
   blockStylePath,
   readStyleValue,
   stylePath,
+  styleText,
   styleTokens,
   type StyleToken,
 } from '../style-tokens'
@@ -75,6 +76,8 @@ describe('the style token registry', () => {
       ['style.button.base.radius', 2000],
       ['style.button.base.background', 'chartreuse'],
       ['style.card.focus.ring', 'accent'],
+      // Focus rings stay neutral: no colour, only a width.
+      ['style.button.focus.ring', 'accent'],
       ['style.button.base.lift', 2],
     ] as const
     for (const [path, value] of bad) {
@@ -90,6 +93,9 @@ describe('the style token registry', () => {
     expect(stylePath('styleDark.button.hover.background')).toBe('styleDark.button.hover.background')
     expect(stylePath('styleDark.button.base.radius')).toBeNull()
     expect(stylePath('style.headline.hover.color')).toBeNull()
+    expect(stylePath('style.button.focus.ring')).toBeNull()
+    expect(stylePath('styleDark.button.focus.ring')).toBeNull()
+    expect(stylePath('style.button.focus.ringWidth')).toBe('style.button.focus.ringWidth')
     expect(blockStylePath('style.card.hover.lift')).toBe('style.card.hover.lift')
     expect(blockStylePath('style.header.background')).toBeNull()
     expect(readStyleValue('radius', '12px')).toBe(12)
@@ -99,6 +105,14 @@ describe('the style token registry', () => {
       to: '#ffffff',
     })
     expect(readStyleValue('color', '#ABC')).toBe('#aabbcc')
+  })
+
+  it('offers no focus ring colour, to the panel or the AI: the ring stays neutral', () => {
+    expect(Object.keys(STYLE_PROPS)).not.toContain('ring')
+    expect(styleTokens().some((t) => t.prop === ('ring' as never))).toBe(false)
+    expect(styleText()).not.toContain('ring (colour)')
+    expect(styleText()).not.toContain('|ring>')
+    expect(styleText()).toContain('ringWidth (1 to 6px)')
   })
 
   it('has a property kind for each of its properties', () => {
@@ -118,7 +132,7 @@ describe('element styles, drawn', () => {
     const r = resolveDesign(
       design((d) => {
         d.style = {
-          button: { base: { radius: 4 }, hover: { lift: 2 }, focus: { ring: 'accent' } },
+          button: { base: { radius: 4 }, hover: { lift: 2 }, focus: { ringWidth: 3 } },
           navItem: { current: { weight: 700 } },
         }
       })
