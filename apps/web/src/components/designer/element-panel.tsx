@@ -9,9 +9,12 @@
  * for every one, a brand choice that sets it is that row's tiles, with
  * Custom for an exact value. Each unset row shows what it has, muted and in
  * whole pixels, and where it comes from; each row set here has a dot and
- * Reset. The places that keep their own values are listed at the foot.
+ * Reset. Where the canvas draws a value other than the row's (a headline is
+ * smaller on a phone, a text colour is moved so it reads), a muted second
+ * line says what is drawn, with Use this. The places that keep their own
+ * values are listed at the foot.
  */
-import { useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/16/solid'
 import {
   DropdownMenu,
@@ -45,6 +48,7 @@ import {
 import { backgroundPageOf } from '@/lib/shared/design/page-background'
 import type { DesignerPage } from '@/lib/shared/design/outline'
 import { PAGE_NAMES } from '@/lib/shared/design/names'
+import { cssColourHex, inUseNote, type DrawnSize } from '@/lib/shared/design/in-use'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
   COLOUR_PROPS,
@@ -77,7 +81,8 @@ import {
 import { ScopeLine, type ScopeOption } from './properties/scope-line'
 import { ScrubNumber } from './properties/scrub-number'
 import { FontField, TokenField } from './properties/token-field'
-import { colourTokens, fontTokens } from './properties/tokens'
+import { colourTokens, fontTokens, hexOf } from './properties/tokens'
+import type { Drawn } from './use-pick-reach'
 import { CHOICE_TILES, WORDS, everyOf, fromScope, resetTo } from './properties/words'
 
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -97,6 +102,13 @@ export function contextOf(pick: ElementPick, page: DesignerPage): ElementContext
 /** Kept per pick, so a new pick starts shared again; mount it with this as its key. */
 export const elementPanelKey = (pick: ElementPick) =>
   `${pick.element}|${pick.part ?? ''}|${pick.section ?? ''}`
+
+/** What the canvas draws the picked element with, at the width and in the mode it draws. */
+export interface DrawnElement {
+  values: Drawn
+  size: DrawnSize
+  dark: boolean
+}
 
 /** A row's tile for its exact field, after the brand's choices. */
 const CUSTOM = 'custom'
@@ -119,6 +131,7 @@ export function ElementPanel({
   onJump,
   reach,
   measure,
+  drawn = null,
   shared = false,
   initialScope,
   crumbs: ownCrumbs,
@@ -148,6 +161,8 @@ export function ElementPanel({
   reach?: Reach | null
   /** A number the picked element is drawn with, for rows nothing in the cascade or brand sets. */
   measure?: (prop: StyleProp) => number | undefined
+  /** What the canvas draws the picked element with now; null until it is read. */
+  drawn?: DrawnElement | null
   /** Every one of the kind only, with no one-offs: opened from Styles, away from any one. */
   shared?: boolean
   /** The scope it starts at, where it is opened for one, such as from a block's look. */
@@ -248,6 +263,46 @@ export function ElementPanel({
     return null
   }
 
+  /** A colour a row stores, a hex or a role's name, as the canvas's mode draws it. */
+  const colourHex = (colour: string): string | null => {
+    const token = tokens.find((each) => each.id === colour)
+    const css = token ? (drawn?.dark ? (token.dark ?? token.light) : token.light) : colour
+    return hexOf(css) ?? cssColourHex(css)
+  }
+  /** The second line, where what the canvas draws is not what the row has. */
+  const inUse = (prop: StyleProp, label: string, shown: unknown): ReactNode => {
+    if (!drawn) return null
+    const kind = STYLE_PROPS[prop].kind
+    // Light's colours are what a row stores; in dark mode the canvas draws dark's.
+    if (drawn.dark && (kind === 'colour' || kind === 'paint')) return null
+    // What a narrower place sets reaches the element in place of this row's value.
+    const reaching = effectiveValue(design, ctx, screen, state, prop)
+    if (reaching && reaching.value !== shown) return null
+    const note = inUseNote({
+      prop,
+      stored: shown,
+      drawn: drawn.values[prop],
+      size: drawn.size,
+      colourHex,
+    })
+    if (!note) return null
+    return (
+      <p
+        data-in-use={label}
+        className="-mt-0.5 flex min-w-0 items-center gap-1.5 ps-[100px] text-[11px] text-muted-foreground"
+      >
+        <span className="min-w-0 truncate">{note.text}</span>
+        <button
+          type="button"
+          onClick={() => write(prop, note.value)}
+          className="shrink-0 rounded hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+        >
+          {WORDS.useThis}
+        </button>
+      </p>
+    )
+  }
+
   const row = (prop: StyleProp): ReactNode => {
     if (!allowed(prop)) return null
     const info: StylePropInfo = STYLE_PROPS[prop]
@@ -338,56 +393,61 @@ export function ElementPanel({
         }
       }
     })()
+    const second = inUse(prop, label, here ?? from?.value)
     if (choice) {
       const custom = here !== undefined || customOpen.has(prop)
       return (
-        <PropertyRow
-          key={`${state}-${prop}`}
-          label={label}
-          find={elementRowFind(pick.element, prop)}
-          set={here !== undefined}
-          source={choice.reach ?? from?.from}
-          resetLabel={resetLabel}
-          onReset={() => write(prop, undefined)}
-        >
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <PropertyTiles
-              id={`${id}-choice`}
-              label={label}
-              value={custom ? CUSTOM : choice.value || undefined}
-              options={[...choice.options, [CUSTOM, WORDS.custom]]}
-              onChange={(value) => {
-                setCustomOpen((open) => {
-                  const next = new Set(open)
-                  if (value === CUSTOM) next.add(prop)
-                  else next.delete(prop)
-                  return next
-                })
-                if (value !== CUSTOM)
-                  update(
-                    (draft) => applyChoice(draft, pick.element, choice, value),
-                    undoName(label.toLowerCase())
-                  )
-              }}
-            />
-            {custom && <div className="flex min-w-0 items-center gap-1.5">{control}</div>}
-          </div>
-        </PropertyRow>
+        <Fragment key={`${state}-${prop}`}>
+          <PropertyRow
+            label={label}
+            find={elementRowFind(pick.element, prop)}
+            set={here !== undefined}
+            source={choice.reach ?? from?.from}
+            resetLabel={resetLabel}
+            onReset={() => write(prop, undefined)}
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <PropertyTiles
+                id={`${id}-choice`}
+                label={label}
+                value={custom ? CUSTOM : choice.value || undefined}
+                options={[...choice.options, [CUSTOM, WORDS.custom]]}
+                onChange={(value) => {
+                  setCustomOpen((open) => {
+                    const next = new Set(open)
+                    if (value === CUSTOM) next.add(prop)
+                    else next.delete(prop)
+                    return next
+                  })
+                  if (value !== CUSTOM)
+                    update(
+                      (draft) => applyChoice(draft, pick.element, choice, value),
+                      undoName(label.toLowerCase())
+                    )
+                }}
+              />
+              {custom && <div className="flex min-w-0 items-center gap-1.5">{control}</div>}
+            </div>
+          </PropertyRow>
+          {second}
+        </Fragment>
       )
     }
     return (
-      <PropertyRow
-        key={`${state}-${prop}`}
-        label={label}
-        find={elementRowFind(pick.element, prop)}
-        htmlFor={info.kind === 'number' ? id : undefined}
-        set={here !== undefined}
-        source={from?.from}
-        resetLabel={resetLabel}
-        onReset={() => write(prop, undefined)}
-      >
-        {control}
-      </PropertyRow>
+      <Fragment key={`${state}-${prop}`}>
+        <PropertyRow
+          label={label}
+          find={elementRowFind(pick.element, prop)}
+          htmlFor={info.kind === 'number' ? id : undefined}
+          set={here !== undefined}
+          source={from?.from}
+          resetLabel={resetLabel}
+          onReset={() => write(prop, undefined)}
+        >
+          {control}
+        </PropertyRow>
+        {second}
+      </Fragment>
     )
   }
 

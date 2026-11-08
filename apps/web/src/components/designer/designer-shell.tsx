@@ -189,7 +189,13 @@ export function DesignerShell({
     return () => clearInterval(timer)
   }, [jump, design])
   const pickedElement = picking.element
-  const pickReach = usePickReach(pickedElement, design, backgroundPageOf(page))
+  const canvasDark = (design.mode === 'auto' ? theme : design.mode) === 'dark'
+  const pickReach = usePickReach(
+    pickedElement,
+    design,
+    backgroundPageOf(page),
+    `${elementState}|${size}|${canvasDark}`
+  )
   // The picked element's own settings are found where they are, under More or not.
   const elementName = pickedElement ? pickName(pickedElement, design, backgroundPageOf(page)) : null
   const findHere = useMemo(
@@ -657,6 +663,9 @@ export function DesignerShell({
                       onUp={() => picking.pickElement(null)}
                       reach={pickReach.reach}
                       measure={pickReach.measure}
+                      drawn={
+                        pickReach.drawn ? { values: pickReach.drawn, size, dark: canvasDark } : null
+                      }
                       onJump={(place) => {
                         if (place.block) return pick(`block-${place.block}` as Selection)
                         const to =
