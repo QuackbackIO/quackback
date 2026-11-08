@@ -150,7 +150,7 @@ export type SettingField = Described &
         kind: 'source'
         key: string
         label: string
-        source: 'roadmaps' | 'categories' | 'boards' | 'columns'
+        source: 'roadmaps' | 'categories' | 'boards' | 'columns' | 'statuses'
         multiple: boolean
         any: string
         max?: number
@@ -359,6 +359,17 @@ const HOME: Record<HomeBlockType, HomeDef> = {
         about: 'The boards its posts come from, by name; none is every public board',
       },
       {
+        kind: 'source',
+        key: 'statusIds',
+        label: 'Status',
+        source: 'statuses',
+        multiple: true,
+        any: 'Open posts',
+        max: 12,
+        about:
+          'The statuses its posts are in, by name, such as the shipped ones; none is the open posts',
+      },
+      {
         kind: 'count',
         key: 'count',
         label: 'How many',
@@ -398,6 +409,7 @@ const HOME: Record<HomeBlockType, HomeDef> = {
       'sort',
       'count',
       'boardIds',
+      'statusIds',
       'showVotes',
       'showStatus',
       'showComments',
@@ -412,6 +424,13 @@ const HOME: Record<HomeBlockType, HomeDef> = {
           { op: 'set', target: 'ideas', key: 'sort', value: 'top' },
           { op: 'set', target: 'ideas', key: 'count', value: '5' },
           { op: 'set', target: 'ideas', key: 'boardIds', value: '["Billing"]' },
+        ],
+      },
+      {
+        request: 'Show what we recently shipped',
+        ops: [
+          { op: 'set', target: 'ideas', key: 'statusIds', value: '["Complete"]' },
+          { op: 'set', target: 'ideas', key: 'sort', value: 'new' },
         ],
       },
       {
@@ -674,6 +693,29 @@ const HOME: Record<HomeBlockType, HomeDef> = {
       },
     ],
   },
+  boards: {
+    name: 'Boards',
+    purpose: 'Your boards, with their posts',
+    job: 'hear',
+    own: [
+      {
+        kind: 'switch',
+        key: 'showCounts',
+        label: 'Post counts',
+        default: true,
+        about: 'Whether each board shows how many posts it has',
+      },
+      linkField,
+    ],
+    repeat: 'once',
+    ai: ['heading', 'showCounts', 'link'],
+    examples: [
+      {
+        request: 'List our boards beside the top posts',
+        ops: [{ op: 'add', key: 'boards', target: 'beside:ideas', value: '' }],
+      },
+    ],
+  },
   links: {
     name: 'Links',
     purpose: 'Links to your other places',
@@ -712,6 +754,7 @@ const ADD_ORDER: readonly HomeBlockType[] = [
   'status',
   'composer',
   'ideas',
+  'boards',
   'contact',
   'roadmap',
   'updates',

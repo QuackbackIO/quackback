@@ -265,6 +265,7 @@ function blockItems(
       label: field.label,
       terms: field.about.toLowerCase(),
     }))
+    if (block.type === 'ideas') rows.push(FIND.recentlyShipped)
     if (home >= 0 && blocks[home]!.id) {
       if (def.grid) rows.push(FIND.blockWidth)
       rows.push(FIND.blockBackground)

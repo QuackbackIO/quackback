@@ -77,6 +77,7 @@ export const HOME_LAYOUTS: readonly HomeLayout[] = [
 const PAGE_OF: Partial<Record<HomeBlockType, keyof PortalPageGates>> = {
   composer: 'feedback',
   ideas: 'feedback',
+  boards: 'feedback',
   roadmap: 'roadmap',
   updates: 'changelog',
   help_search: 'help',

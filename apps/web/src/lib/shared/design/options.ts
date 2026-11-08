@@ -130,6 +130,7 @@ export const DESIGN_OPTIONS = {
     'status',
     'contact',
     'links',
+    'boards',
   ],
   /** A Home block's own look: the site's card, no card, a tint of the brand colour, or the brand colour. */
   blockTone: ['card', 'plain', 'tint', 'brand'],
@@ -222,4 +223,5 @@ export const BLOCK_SIZES: Record<
   status: { size: [4, 1], min: [3, 1] },
   contact: { size: [4, 1], min: [3, 1] },
   links: { size: [4, 1], min: [3, 1] },
+  boards: { size: [6, 1], min: [4, 1] },
 }

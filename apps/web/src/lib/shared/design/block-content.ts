@@ -24,7 +24,7 @@ const SHOWN_USUALLY = {
   showComments: { ideas: false },
   showDate: { updates: true },
   showSummary: { updates: false },
-  showCounts: { help_topics: true },
+  showCounts: { help_topics: true, boards: true },
   showIncidents: { status: true },
 } as const
 

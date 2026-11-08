@@ -216,7 +216,7 @@ export function setMenuShown(
 
 /** The Home blocks that show each part. */
 const PART_BLOCKS: Record<PortalPageType, HomeBlockType[]> = {
-  feedback: ['composer', 'ideas'],
+  feedback: ['composer', 'ideas', 'boards'],
   roadmap: ['roadmap'],
   changelog: ['updates'],
   help: ['help_search', 'help_topics'],

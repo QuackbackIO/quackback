@@ -63,7 +63,16 @@ const BLOCK_WORDS: Record<
     key: 'link',
     max: 40,
     name: 'Link',
-    types: ['ideas', 'roadmap', 'updates', 'help_search', 'help_topics', 'status', 'contact'],
+    types: [
+      'ideas',
+      'roadmap',
+      'updates',
+      'help_search',
+      'help_topics',
+      'status',
+      'contact',
+      'boards',
+    ],
   },
   text: { key: 'text', max: 160, name: 'Words', types: ['contact'] },
   empty: {

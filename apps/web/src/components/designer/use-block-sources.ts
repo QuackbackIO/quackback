@@ -17,11 +17,13 @@ export function blockSources({
   roadmaps = [],
   boards = [],
   categories = [],
+  statuses = [],
   roadmapId = null,
 }: {
   roadmaps?: ReadonlyArray<Named & { visibility: string; columns?: readonly Column[] }>
   boards?: ReadonlyArray<Named & { access?: { view?: string } | null }>
   categories?: ReadonlyArray<Named & { parentId?: string | null }>
+  statuses?: ReadonlyArray<Named>
   roadmapId?: string | null
 }): Required<BlockSources> {
   const pair = (each: Named) => [each.id, each.name] as const
@@ -35,16 +37,33 @@ export function blockSources({
     columns: (shown?.columns ?? []).flatMap((column) =>
       column.statusId ? [[column.statusId, column.name] as const] : []
     ),
+    statuses: statuses.map(pair),
   }
 }
 
-/** The workspace's roadmaps, boards and help topics, for the picked block's settings. */
-export function useBlockSources(roadmapId: string | null = null): Required<BlockSources> {
+/**
+ * The workspace's roadmaps, boards, help topics and statuses, for the picked
+ * block's settings, and the shipped statuses, for Top posts' "Recently shipped".
+ */
+export function useBlockSources(
+  roadmapId: string | null = null
+): Required<BlockSources> & { shipped?: readonly string[] } {
   const { data: roadmaps } = useQuery(adminQueries.roadmaps())
   const { data: boards } = useQuery(adminQueries.boardsForSettings())
   const { data: categories } = useQuery(publicHelpCenterQueries.categories())
+  const { data: statuses } = useQuery(adminQueries.statuses())
   return useMemo(
-    () => blockSources({ roadmaps, boards, categories, roadmapId }),
-    [roadmaps, boards, categories, roadmapId]
+    () => ({
+      ...blockSources({ roadmaps, boards, categories, statuses, roadmapId }),
+      shipped: shippedStatusIds(statuses),
+    }),
+    [roadmaps, boards, categories, statuses, roadmapId]
   )
+}
+
+/** The statuses posts are shipped in: those in the complete category, for "Recently shipped". */
+export function shippedStatusIds(
+  statuses: ReadonlyArray<{ id: string; category: string }> | undefined
+): string[] {
+  return (statuses ?? []).filter((status) => status.category === 'complete').map((s) => s.id)
 }

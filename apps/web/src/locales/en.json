@@ -2279,6 +2279,7 @@
   "portal.header.nav.home": "Home",
   "portal.home.ideas.title": "Top posts",
   "portal.home.ideas.titleNew": "Newest posts",
+  "portal.home.ideas.titleShipped": "Recently shipped",
   "portal.home.ideas.titleTrending": "Trending posts",
   "portal.home.ideas.all": "See all posts",
   "portal.home.ideas.empty": "No posts yet. Be the first.",

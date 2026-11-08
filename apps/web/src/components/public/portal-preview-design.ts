@@ -160,6 +160,7 @@ const BLOCK_TYPES = new Set([
   'status',
   'contact',
   'links',
+  'boards',
 ])
 
 const isPlace = (value: unknown) =>

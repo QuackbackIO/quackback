@@ -57,6 +57,8 @@ export function usualWords(block: HomeBlock, names: { roadmap?: string } = {}): 
       return { heading: say(homeMessages.contactTitle), link: say(homeMessages.contactStart) }
     case 'links':
       return { heading: block.title ?? say(homeMessages.linksTitle), link: null }
+    case 'boards':
+      return { heading: say(homeMessages.boardsTitle), link: say(homeMessages.ideasAll) }
     case 'welcome':
     case 'composer':
       return { heading: null, link: null }
@@ -91,6 +93,7 @@ const ELEMENTS: Record<HomeBlockType, readonly BlockStyleElement[]> = {
   status: ['block', 'heading', 'badge', 'link'],
   contact: ['block', 'heading', 'body', 'link'],
   links: ['block', 'heading', 'link'],
+  boards: ['block', 'heading', 'body', 'link'],
 }
 
 export const elementsOf = (type: HomeBlockType): readonly BlockStyleElement[] => ELEMENTS[type]

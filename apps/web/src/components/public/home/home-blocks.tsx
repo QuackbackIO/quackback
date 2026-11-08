@@ -407,17 +407,25 @@ function IdeasBlock({
   const votes = shows(block, 'showVotes')
   const withStatus = shows(block, 'showStatus')
   const comments = shows(block, 'showComments')
+  // Posts only in shipped statuses are what was recently shipped.
+  const shipped =
+    !!block.statusIds?.length &&
+    block.statusIds.every(
+      (id) => statuses?.find((status) => status.id === id)?.category === 'complete'
+    )
   return (
     <BlockCard
       block={block}
       index={index}
       sample={sample}
       title={intl.formatMessage(
-        block.sort === 'trending'
-          ? homeMessages.ideasTitleTrending
-          : block.sort === 'new'
-            ? homeMessages.ideasTitleNew
-            : homeMessages.ideasTitle
+        shipped
+          ? homeMessages.ideasTitleShipped
+          : block.sort === 'trending'
+            ? homeMessages.ideasTitleTrending
+            : block.sort === 'new'
+              ? homeMessages.ideasTitleNew
+              : homeMessages.ideasTitle
       )}
       action={{ label: intl.formatMessage(homeMessages.ideasAll), to: HOME_FEED_PATH }}
     >
@@ -887,6 +895,51 @@ function ContactBlock({
   )
 }
 
+/** The portal's boards, each with its posts, leading to the feed on that board. */
+function BoardsBlock({
+  block,
+  index,
+}: {
+  block: Extract<HomeBlock, { type: 'boards' }>
+  index: number
+}) {
+  const intl = useIntl()
+  const { data: boards } = useSuspenseQuery(portalQueries.boards())
+  if (boards.length === 0) return null
+  const counts = shows(block, 'showCounts')
+  return (
+    <BlockCard
+      block={block}
+      index={index}
+      title={intl.formatMessage(homeMessages.boardsTitle)}
+      action={{ label: intl.formatMessage(homeMessages.ideasAll), to: HOME_FEED_PATH }}
+    >
+      <ul className="divide-y divide-border/60">
+        {boards.map((board) => (
+          <li
+            key={board.id}
+            className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"
+          >
+            <Link
+              to={HOME_FEED_PATH}
+              search={{ board: board.slug }}
+              data-qb-item="board-name"
+              className="min-w-0 truncate font-medium text-foreground hover:underline"
+            >
+              {board.name}
+            </Link>
+            {counts && (
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {intl.formatMessage(homeMessages.boardPosts, { count: board.postCount })}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </BlockCard>
+  )
+}
+
 function LinksBlock({
   block,
   index,
@@ -929,6 +982,7 @@ const BLOCK_PAGE: Partial<Record<HomeBlock['type'], keyof PortalPageGates>> = {
   help_topics: 'help',
   status: 'status',
   contact: 'support',
+  boards: 'feedback',
 }
 
 /** One block, drawn when its page is on, with its data streamed in. */
@@ -971,6 +1025,8 @@ export function HomeBlockView({
         return <ContactBlock block={block} index={index} />
       case 'links':
         return <LinksBlock block={block} index={index} />
+      case 'boards':
+        return <BoardsBlock block={block} index={index} />
     }
   })()
   return <Suspense fallback={<BlockSkeleton block={block} index={index} />}>{body}</Suspense>

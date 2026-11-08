@@ -34,6 +34,7 @@ const NOTHING_YET: Record<Source, string> = {
   categories: 'No topics yet.',
   boards: 'No public boards yet.',
   columns: 'This roadmap has no columns yet.',
+  statuses: 'No statuses yet.',
 }
 
 /** The value that stands for leaving the pick to the portal, in a select that cannot hold null. */
@@ -317,7 +318,8 @@ function SourceSelect({
   )
 }
 
-function SourceList({
+/** A source of several picks: a list of boxes under its name, up to its most. */
+export function SourceList({
   field,
   value,
   sources,

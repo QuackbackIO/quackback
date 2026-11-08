@@ -25,6 +25,8 @@ export interface DesignerPlaces {
   categories: Array<{ id: string; name: string; path: string }>
   /** The public roadmaps' columns, each by its status, for Quackback AI to pick by name. */
   columns?: Array<{ id: string; name: string }>
+  /** The posts' statuses, for Quackback AI to pick by name, such as for recently shipped posts. */
+  statuses?: Array<{ id: string; name: string }>
   posts: DesignerPlace[]
   entries: DesignerPlace[]
   articles: DesignerPlace[]

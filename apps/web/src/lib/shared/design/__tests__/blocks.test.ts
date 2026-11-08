@@ -145,6 +145,7 @@ describe('the block registry', () => {
       'sort',
       'count',
       'boardIds',
+      'statusIds',
       'showVotes',
       'showStatus',
       'showComments',

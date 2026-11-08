@@ -78,6 +78,8 @@ const fetchPublicPostsSchema = z.object({
   sort: sortSchema,
   /** Home's Top posts: the public boards to draw from, and how many posts. */
   boardIds: z.array(boardIdSchema).max(10).optional(),
+  /** Home's Top posts: the statuses its posts are in, such as the shipped ones. */
+  statusIds: z.array(postStatusIdSchema).max(12).optional(),
   limit: z.number().int().min(1).max(20).optional(),
 })
 

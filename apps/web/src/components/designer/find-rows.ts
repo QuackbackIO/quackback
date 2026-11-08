@@ -143,6 +143,11 @@ export const FIND = {
   // A Home block's own
   blockWidth: row('block-width', BLOCK_WORDS.width, 'size columns layout'),
   blockBackground: row('block-background', BLOCK_WORDS.background, 'card plain tint brand look'),
+  recentlyShipped: row(
+    'block-recently-shipped',
+    'Recently shipped',
+    'shipped done complete status'
+  ),
   // The page's own
   pageTitle: row('page-title', WORDS.pageTitle, 'page title hero plain'),
   subscribe: row('page-subscribe', 'Subscribe', 'email'),

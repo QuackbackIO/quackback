@@ -32,6 +32,12 @@ vi.mock('@/lib/server/domains/help-center/help-center.article.query', () => ({
 vi.mock('@/lib/server/domains/changelog/changelog.public', () => ({
   listPublicChangelogs: hoisted.changelogs,
 }))
+vi.mock('@/lib/server/domains/statuses/status.service', () => ({
+  listPublicStatuses: async () => [
+    { id: 'status_planned', name: 'Planned' },
+    { id: 'status_complete', name: 'Complete' },
+  ],
+}))
 vi.mock('../designer-posts', () => ({ DESIGNER_POST_LIMIT: 12, listDesignerPosts: hoisted.posts }))
 
 const { listDesignerPlaces } = await import('../designer-places')
@@ -83,6 +89,11 @@ describe('listDesignerPlaces', () => {
       columns: [
         { id: 's1', name: 'Planned' },
         { id: 's2', name: 'Done' },
+      ],
+      // The posts' statuses, so Quackback AI can pick the shipped ones by name.
+      statuses: [
+        { id: 'status_planned', name: 'Planned' },
+        { id: 'status_complete', name: 'Complete' },
       ],
       categories: [
         { id: 'c1', name: 'First', path: '/hc/en/collections/1-first' },

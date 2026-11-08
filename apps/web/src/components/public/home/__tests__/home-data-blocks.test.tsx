@@ -67,6 +67,7 @@ interface World {
   entries?: Array<{ id: string; title: string; publishedAt: string; content: string }>
   components?: number
   categories?: Array<{ id: string; parentId: string | null; name: string }>
+  boards?: Array<{ id: string; slug: string; name: string; postCount: number }>
 }
 
 function client(world: World, block: HomeBlock): QueryClient {
@@ -77,8 +78,10 @@ function client(world: World, block: HomeBlock): QueryClient {
       hasMore: false,
     } as never)
   qc.setQueryData(portalQueries.statuses().queryKey, [
-    { id: 'status_planned', name: 'Planned', color: '#3b82f6' },
+    { id: 'status_planned', name: 'Planned', color: '#3b82f6', category: 'active' },
+    { id: 'status_shipped', name: 'Shipped', color: '#16a34a', category: 'complete' },
   ] as never)
+  qc.setQueryData(portalQueries.boards().queryKey, (world.boards ?? []) as never)
   qc.setQueryData(portalQueries.boardCapabilities().queryKey, {
     permissions: {},
     boards: [],
@@ -268,6 +271,47 @@ describe('Top posts', () => {
     const link = await screen.findByText('Every idea')
     expect(link.getAttribute('data-qb-words')).toBe('block-blockid001.link')
     expect(screen.queryByText('See all posts')).toBeNull()
+  })
+})
+
+describe('Top posts from chosen statuses', () => {
+  it('is headed Recently shipped while it shows only shipped statuses', async () => {
+    show(block({ type: 'ideas', sort: 'new', count: 5, statusIds: ['status_shipped'] }), {
+      posts: POSTS,
+    })
+    expect(await screen.findByText('Recently shipped')).toBeTruthy()
+    cleanup()
+    show(block({ type: 'ideas', sort: 'new', count: 5, statusIds: ['status_planned'] }), {
+      posts: POSTS,
+    })
+    expect(await screen.findByText('Newest posts')).toBeTruthy()
+  })
+})
+
+describe('Boards', () => {
+  const BOARDS = [
+    { id: 'board_a', slug: 'ideas', name: 'Ideas', postCount: 12 },
+    { id: 'board_b', slug: 'bugs', name: 'Bugs', postCount: 1 },
+  ]
+
+  it('lists the portal’s boards with their posts, each leading to its board', async () => {
+    show(block({ type: 'boards' }), { boards: BOARDS })
+    const ideas = await screen.findByText('Ideas')
+    expect(ideas.closest('a')?.getAttribute('href')).toBe('/feedback?board=ideas')
+    expect(screen.getByText('12 posts')).toBeTruthy()
+    expect(screen.getByText('1 post')).toBeTruthy()
+    expect(screen.getByText('Boards')).toBeTruthy()
+  })
+
+  it('leaves the counts off when told', async () => {
+    show(block({ type: 'boards', showCounts: false }), { boards: BOARDS })
+    await screen.findByText('Ideas')
+    expect(screen.queryByText('12 posts')).toBeNull()
+  })
+
+  it('draws nothing without boards', async () => {
+    const container = show(block({ type: 'boards' }), { boards: [] })
+    expect(await drawn(container)).toBeNull()
   })
 })
 

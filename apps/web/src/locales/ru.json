@@ -2279,6 +2279,7 @@
   "portal.header.nav.home": "Главная",
   "portal.home.ideas.title": "Популярные публикации",
   "portal.home.ideas.titleNew": "Новые публикации",
+  "portal.home.ideas.titleShipped": "Недавно выпущено",
   "portal.home.ideas.titleTrending": "Актуальные публикации",
   "portal.home.ideas.all": "Посмотреть все публикации",
   "portal.home.ideas.empty": "Публикаций пока нет. Станьте первым.",

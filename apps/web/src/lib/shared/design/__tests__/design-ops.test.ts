@@ -134,7 +134,7 @@ describe('setBlockSetting', () => {
     expect(setBlockSetting(design(), world, 'ideas', 'colour', 'red')).toMatchObject({
       ok: false,
       refusal: expect.stringContaining(
-        'it has heading, sort, count, boardIds, showVotes, showStatus, showComments, whenEmpty, emptyText or link'
+        'it has heading, sort, count, boardIds, statusIds, showVotes, showStatus, showComments, whenEmpty, emptyText or link'
       ),
     })
   })
