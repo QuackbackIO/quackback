@@ -20,6 +20,13 @@ describe('validateDesign', () => {
     expect(valid).toEqual(defaultDesign())
   })
 
+  it('takes a design written in format 2, with the hero’s keys named for the band', () => {
+    const doc = defaultDesign()
+    doc.layout.hero = 'brand'
+    doc.layout.heroShape = 'inset'
+    expect(validateDesign(asFormat2(doc))).toEqual(doc)
+  })
+
   it('refuses any other key it does not know', () => {
     expect(() => validateDesign({ ...defaultDesign(), future: { on: true } })).toThrow()
   })

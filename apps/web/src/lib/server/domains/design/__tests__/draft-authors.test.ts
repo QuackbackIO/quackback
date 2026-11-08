@@ -25,4 +25,10 @@ describe('draft authors', () => {
     expect(currentAuthors(authors, live, draft)).toEqual({ 'layout.cards': 'principal_ana' })
     expect(currentAuthors(null, live, draft)).toEqual({})
   })
+  it('finds the author a draft saved before format 3 marked by the hero key’s band name', () => {
+    const live = { layout: { hero: 'none', heroShape: 'full' } }
+    const draft = { layout: { hero: 'brand', heroShape: 'full' } }
+    const authors = { 'layout.band': authorKey(ana) }
+    expect(currentAuthors(authors, live, draft)).toEqual({ 'layout.hero': 'principal_ana' })
+  })
 })

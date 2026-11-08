@@ -199,7 +199,8 @@ export async function saveDraft(
     if (live && sameDesign(live, document)) return dropDraft(tx, row)
     await assertCssAllowed(tx, document, row.publishedRevisionId)
     const now = new Date()
-    const before = row.draft ?? published?.document ?? null
+    // Read as this build reads them, so a draft stored in an older format marks only what changed.
+    const before = row.draft ? storedDesign(row.draft, 'draft') : published ? live : null
     const by = authorKey(author.principalId, author.via)
     await tx
       .update(portalDesigns)

@@ -15,6 +15,7 @@
 import { normaliseColor } from './color'
 import { newBlock, settleHome, type HomeBlockType } from './home'
 import { LEGACY_WIDTH_COLUMNS, withGridPlaces } from './home-legacy'
+import { withHeroKeys, withHeroPath } from './migrations'
 import { BUNDLED_FONT_IDS } from './options'
 import { resolveDesign } from './resolve'
 import { portalDesign, type PortalDesign } from './schema'
@@ -521,6 +522,15 @@ export function changeState(
   return now === key(change.before) ? 'undone' : 'changed'
 }
 
+/** A change with format 2's hero keys in its path, or in the object it writes, under format 3's names. */
+function withHeroNames(change: DesignChangeRequest): DesignChangeRequest {
+  const path = withHeroPath(change.path)
+  const { value } = change
+  if ((path === 'layout' || path === 'brand') && isRecord(value))
+    return { path, value: withHeroKeys({ [path]: value })[path] }
+  return path === change.path ? change : { ...change, path }
+}
+
 export function applyDesignChanges(
   doc: PortalDesign,
   changes: DesignChangeRequest[],
@@ -543,8 +553,9 @@ export function applyDesignChanges(
   const outOfScope: string[] = []
   const refused: Array<{ path: string; reason: string }> = []
   for (const change of changes) {
-    const { path } = change
-    let { value } = change
+    // The model may still name the hero's keys as format 2 did (layout.bandShape).
+    const { path, value: given } = untrusted ? withHeroNames(change) : change
+    let value = given
     if (!inScope(path, scope) || (only && !only.some((field) => within(path, field)))) {
       outOfScope.push(path)
       continue

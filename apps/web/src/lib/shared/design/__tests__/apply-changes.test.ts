@@ -285,6 +285,33 @@ describe('applyDesignChanges', () => {
     ])
   })
 
+  it('takes the hero keys as format 2 named them from the model, under their new names', () => {
+    const untrusted = {
+      blockTypes: [],
+      links: new Set<string>(),
+      checkCss: () => null,
+      files: new Set<string>(),
+    }
+    const result = applyDesignChanges(
+      defaultDesign(),
+      [
+        { path: 'layout.band', value: 'brand' },
+        { path: 'layout.bandShape', value: 'inset' },
+        { path: 'layout', value: { ...defaultDesign().layout, hero: 'brand', bandArt: 'waves' } },
+      ],
+      'site',
+      untrusted
+    )
+    expect(result.refused).toEqual([])
+    expect(result.applied.map((change) => change.path)).toEqual([
+      'layout.hero',
+      'layout.heroShape',
+      'layout',
+    ])
+    expect(result.design.layout).toMatchObject({ hero: 'brand', heroArt: 'waves' })
+    expect(result.design.layout).not.toHaveProperty('bandArt')
+  })
+
   it('keeps the rest of a Home layout from the model when a block’s page is off', () => {
     const result = applyDesignChanges(
       defaultDesign(),
