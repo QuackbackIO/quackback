@@ -6,6 +6,7 @@ import { designerPublished } from '@/lib/client/builder-events'
 import type { DesignCheck } from '@/lib/shared/design/checks'
 import type { Selection } from '@/lib/shared/design/outline'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
+import type { PortalAddress } from '@/lib/shared/design/portal-address'
 import { opensFullReview, publishSummary } from '@/lib/shared/design/publish-summary'
 import { newWorkspaceLogo } from '@/lib/shared/design/workspace-logo'
 import { fullReviewReason, PublishSummaryDialog } from './publish-summary-dialog'
@@ -41,6 +42,7 @@ export function usePublishFlow({
   compare: () => ReactNode
 }) {
   const [step, setStep] = useState<'summary' | 'full' | null>(null)
+  const [published, setPublished] = useState<PortalAddress | null>(null)
   const [reason, setReason] = useState<string | undefined>()
   const newLogo = !!newWorkspaceLogo(draft.live, draft.design)
   const count = draft.changes.length
@@ -64,7 +66,9 @@ export function usePublishFlow({
     const offered = newLogo
     const outcome = await draft.publish(message, options)
     if (outcome.ok) {
-      toast.success('Published. Visitors see it now.')
+      // The live address on Publish itself; a toast only when the server sent none.
+      if (outcome.address) setPublished(outcome.address)
+      else toast.success('Published. Visitors see it now.')
       designerPublished(draft, { ...options, logoOffered: offered, fullReview })
     }
     return outcome
@@ -104,5 +108,12 @@ export function usePublishFlow({
       />
     </>
   )
-  return { start, reviewing: step === 'full', dialogs }
+  return {
+    start,
+    reviewing: step === 'full',
+    dialogs,
+    /** Where the portal went live, for the popover on Publish; null once it closes. */
+    published,
+    closePublished: () => setPublished(null),
+  }
 }

@@ -120,6 +120,8 @@ export const BUILDER_EVENTS = {
   /** A one-time coach mark dismissed. */
   designer_coach_dismissed: { coach: ['menu', 'brand'] },
   designer_preview_link_shared: {},
+  /** The live address after publishing: copied, opened, or on to a domain of its own. */
+  designer_live_link_used: { action: ['copy', 'open', 'domain'] },
   designer_versions_opened: {},
   designer_version_restored: { how: ['restore', 'copy'] },
   designer_look_applied: { source: LOOK_SOURCES, fields: 'count' },

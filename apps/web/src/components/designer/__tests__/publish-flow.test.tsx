@@ -4,7 +4,7 @@
  * than twelve changes or a check fails; either publishes, and says which.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { DesignCheck } from '@/lib/shared/design/checks'
 import { designChanges } from '@/lib/shared/design/diff'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
@@ -18,7 +18,8 @@ vi.mock('@/lib/client/builder-events', async (original) => ({
 vi.mock('@/lib/server/functions/portal-design', () => ({
   getPortalDesignFn: vi.fn(async () => ({ authors: {} })),
 }))
-vi.mock('sonner', () => ({ toast: { success: vi.fn() } }))
+const toast = vi.hoisted(() => ({ success: vi.fn() }))
+vi.mock('sonner', () => ({ toast }))
 
 afterEach(() => {
   cleanup()
@@ -34,11 +35,13 @@ const gates = {
   status: false,
 }
 
+const LIVE = { url: 'https://acme.quackback.io', offerDomain: true }
+
 function draftOf(change: (design: PortalDesign) => void, failing = 0) {
   const live = defaultDesign()
   const design = structuredClone(live)
   change(design)
-  const publish = vi.fn(async () => ({ ok: true as const }))
+  const publish = vi.fn(async () => ({ ok: true as const, address: LIVE }))
   const draft: PublishDraft = {
     live,
     design,
@@ -76,6 +79,7 @@ function Harness({
       <button type="button" onClick={() => void flow.start()}>
         Publish
       </button>
+      {flow.published && <output aria-label="Live address">{flow.published.url}</output>}
       {flow.dialogs}
     </>
   )
@@ -200,5 +204,19 @@ describe('Publish', () => {
     })
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(publish).not.toHaveBeenCalled()
+  })
+})
+
+describe('After publishing', () => {
+  it('hands the live address to Publish rather than a toast', async () => {
+    const { draft, failing } = draftOf(hideRoadmap)
+    render(<Harness draft={draft} failing={failing} />)
+    await clickPublish()
+    const dialog = screen.getByRole('dialog', { name: 'Publish 1 change?' })
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: /^Publish/ }))
+    })
+    expect(screen.getByLabelText('Live address').textContent).toBe(LIVE.url)
+    expect(toast.success).not.toHaveBeenCalled()
   })
 })

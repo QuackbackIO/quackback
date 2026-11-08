@@ -429,6 +429,8 @@ export function DesignerShell({
             }}
             onPreview={startPreview}
             onPublish={() => void publishing.start()}
+            published={publishing.published}
+            onPublishedClose={publishing.closePublished}
             onDiscard={discard}
             onDialog={dialogs.show}
           />

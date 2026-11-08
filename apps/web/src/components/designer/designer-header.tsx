@@ -22,6 +22,8 @@ import {
   type Sheet,
 } from '@/lib/shared/design/builder-chrome'
 import { cn } from '@/lib/shared/utils'
+import type { PortalAddress } from '@/lib/shared/design/portal-address'
+import { PublishedPopover } from './published-popover'
 
 const DEVICE_ICONS: Record<Device, typeof ComputerDesktopIcon> = {
   desktop: ComputerDesktopIcon,
@@ -169,6 +171,8 @@ export function DesignerHeader({
   onPublish,
   canPublish,
   changes,
+  published = null,
+  onPublishedClose = () => {},
 }: {
   returnPath: string
   onExit: () => void
@@ -195,6 +199,9 @@ export function DesignerHeader({
   /** Whether this person may publish; without it, Publish only reviews. */
   canPublish: boolean
   changes: number
+  /** Where the portal just went live, shown on Publish until closed. */
+  published?: PortalAddress | null
+  onPublishedClose?: () => void
 }) {
   return (
     <header
@@ -262,9 +269,11 @@ export function DesignerHeader({
           <EyeIcon className="size-4" aria-hidden="true" />
           Preview
         </Button>
-        <Button size="sm" className="px-4 font-semibold" disabled={!changes} onClick={onPublish}>
-          {canPublish ? 'Publish' : 'Review'}
-        </Button>
+        <PublishedPopover address={published} onClose={onPublishedClose}>
+          <Button size="sm" className="px-4 font-semibold" disabled={!changes} onClick={onPublish}>
+            {canPublish ? 'Publish' : 'Review'}
+          </Button>
+        </PublishedPopover>
       </div>
     </header>
   )

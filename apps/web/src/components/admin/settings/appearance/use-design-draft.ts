@@ -17,6 +17,7 @@ import { releaseOverrides } from '@/lib/shared/design/overrides'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { PortalDesignRevisionId } from '@quackback/ids'
 import type { DraftLastChange } from '@/lib/server/domains/design/draft-last-change'
+import type { PortalAddress } from '@/lib/shared/design/portal-address'
 
 /** How long the draft waits after a change before it saves. */
 export const DRAFT_SAVE_DELAY_MS = 600
@@ -28,6 +29,8 @@ export const UNDO_MERGE_MS = 1000
 const UNDO_LIMIT = 100
 
 type Outcome = { ok: true } | { ok: false; message: string }
+/** A publish's outcome: where the portal is now live. */
+type PublishOutcome = { ok: true; address?: PortalAddress } | { ok: false; message: string }
 
 /**
  * The Appearance draft: the design being edited, saved to the server shortly
@@ -295,7 +298,10 @@ export function useDesignDraft() {
 
   /** Publishes the draft as reviewed: a draft that moved since, or one in conflict, is refused. */
   const publish = useCallback(
-    async (message?: string, options: { workspaceLogo?: boolean } = {}): Promise<Outcome> => {
+    async (
+      message?: string,
+      options: { workspaceLogo?: boolean } = {}
+    ): Promise<PublishOutcome> => {
       await flush()
       if (blocked.current)
         return { ok: false, message: 'Choose whose changes to keep first, then publish.' }
@@ -315,7 +321,7 @@ export function useDesignDraft() {
               : result.message,
         }
       await refresh()
-      return { ok: true }
+      return { ok: true, address: result.address }
     },
     [refresh, flush]
   )
