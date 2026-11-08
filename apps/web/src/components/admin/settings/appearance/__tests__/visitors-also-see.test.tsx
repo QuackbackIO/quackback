@@ -11,6 +11,12 @@ vi.mock('@/lib/server/functions/portal-design-email', () => ({
   getSignInEmailSampleFn: sample.fn,
 }))
 
+vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  useWorkspaceSettings: () => ({ name: 'Acme Corp' }),
+  useBaseUrl: () => 'https://acme.test',
+}))
+
+import { defaultDesign } from '@/lib/shared/design/schema'
 import { VisitorsAlsoSee } from '../visitors-also-see'
 
 afterEach(() => {
@@ -34,5 +40,15 @@ describe('VisitorsAlsoSee', () => {
       expect(screen.getByText('The email sample could not be drawn.')).toBeTruthy()
     )
     expect(screen.queryByTitle('Sign-in email')).toBeNull()
+  })
+
+  it('shows a link to the portal as a shared post shows it, from the draft', async () => {
+    sample.fn.mockResolvedValue({ ok: true, html: '<p>Sign in</p>' })
+    const design = defaultDesign()
+    design.brand.logo.name = 'GitHub'
+    render(<VisitorsAlsoSee design={design} />)
+    const preview = await screen.findByRole('figure', { name: 'Link preview' })
+    expect(preview.textContent).toContain('GitHub')
+    expect(preview.textContent).toContain('acme.test')
   })
 })

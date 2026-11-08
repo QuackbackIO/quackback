@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { LinkPreview } from '@/components/designer/link-preview'
+import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
   getSignInEmailSampleFn,
   type EmailSampleResult,
@@ -6,14 +8,23 @@ import {
 
 /**
  * What else visitors get from the brand once it is published, read only:
- * the sign-in email, rendered by the server in the draft's colours.
+ * the sign-in email, rendered by the server in the draft's colours, and a
+ * link to the portal as a chat or social post shows it.
  */
-export function VisitorsAlsoSee() {
+export function VisitorsAlsoSee({ design }: { design?: PortalDesign }) {
   return (
     <section aria-label="Visitors also see" className="space-y-2">
       <h3 className="text-xs font-medium text-muted-foreground">Visitors also see</h3>
       <div className="flex flex-wrap gap-4">
         <SignInEmailSample />
+        {design && (
+          <div className="flex w-full max-w-xs flex-col gap-1.5">
+            <span aria-hidden="true" className="text-xs text-muted-foreground">
+              Link preview
+            </span>
+            <LinkPreview design={design} />
+          </div>
+        )}
       </div>
     </section>
   )

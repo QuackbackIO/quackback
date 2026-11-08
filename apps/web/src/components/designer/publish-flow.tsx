@@ -105,6 +105,7 @@ export function usePublishFlow({
         onPublish={(message, options) => publish(true, message, options)}
         canPublish={draft.canPublish}
         compare={step === 'full' ? compare() : null}
+        design={draft.design}
       />
     </>
   )
