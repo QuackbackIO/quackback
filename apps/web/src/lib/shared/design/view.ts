@@ -73,6 +73,8 @@ export interface BandImage {
   homeOnly?: boolean
   /** Behind the words under a measured veil: the band sets its photo words (--qb-photo-ink) on it. */
   shaded?: boolean
+  /** The smaller copies and the image itself by width, as an <img> srcset; absent for one file. */
+  srcSet?: string
 }
 
 /**

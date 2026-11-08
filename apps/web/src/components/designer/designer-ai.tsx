@@ -280,8 +280,8 @@ export function DesignerAi({
               onUploadFont: (font: UnmatchedFont) => onFonts(font),
               onFonts: () => onFonts(),
             })}
-            onHeroPhoto={(key) =>
-              update((draft) => writeHero(draft, { ...heroOf(draft), image: { key } }, 'image'))
+            onHeroPhoto={(image) =>
+              update((draft) => writeHero(draft, { ...heroOf(draft), image }, 'image'))
             }
           />
         )}

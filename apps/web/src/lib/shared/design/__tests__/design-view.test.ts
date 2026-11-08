@@ -132,6 +132,35 @@ describe('designView', () => {
     expect(designView(doc, 1).bandImage).not.toHaveProperty('alt')
   })
 
+  it('offers the smaller copies made on upload as a srcset, the full image last', () => {
+    const doc = defaultDesign()
+    doc.brand.bandImage = {
+      key: 'portal-images/room.webp',
+      width: 2560,
+      variants: [
+        { key: 'portal-images/room-640.webp', w: 640 },
+        { key: 'portal-images/room-1280.webp', w: 1280 },
+      ],
+    }
+    expect(designView(doc, 1).bandImage?.srcSet).toBe(
+      '/api/storage/portal-images/room-640.webp 640w,' +
+        '/api/storage/portal-images/room-1280.webp 1280w,' +
+        '/api/storage/portal-images/room.webp 2560w'
+    )
+  })
+
+  it('leaves an image stored before copies were made as the one file it is', () => {
+    const doc = defaultDesign()
+    doc.brand.bandImage = { key: 'portal-images/room.jpg' }
+    expect(designView(doc, 1).bandImage).not.toHaveProperty('srcSet')
+    // Copies without the full image's width still lead to it, which the browser cannot size.
+    doc.brand.bandImage = {
+      key: 'portal-images/room.jpg',
+      variants: [{ key: 'portal-images/room-640.webp', w: 640 }],
+    }
+    expect(designView(doc, 1).bandImage).not.toHaveProperty('srcSet')
+  })
+
   it('carries a name the header shows in place of the workspace’s', () => {
     const doc = defaultDesign()
     doc.brand.logo = { ...doc.brand.logo, display: 'name', name: 'Harbor & Pine' }

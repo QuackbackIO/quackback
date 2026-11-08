@@ -116,6 +116,36 @@ describe('portalDesign', () => {
   })
 })
 
+describe('the band image', () => {
+  const withImage = (bandImage: unknown) => {
+    const doc = defaultDesign() as unknown as { brand: Record<string, unknown> }
+    doc.brand.bandImage = bandImage
+    return doc
+  }
+
+  it('keeps an image stored as one file, as designs before copies were', () => {
+    expect(parse(withImage({ key: 'portal-images/room.jpg' })).success).toBe(true)
+  })
+
+  it('keeps its width and the smaller copies made on upload', () => {
+    const image = {
+      key: 'portal-images/room.webp',
+      width: 2560,
+      variants: [
+        { key: 'portal-images/room-640.webp', w: 640 },
+        { key: 'portal-images/room-1280.webp', w: 1280 },
+      ],
+    }
+    expect(parse(withImage(image)).success).toBe(true)
+  })
+
+  it('refuses a copy whose key would break the srcset it is written into', () => {
+    const bad = (key: string) => ({ key: 'portal-images/room.webp', variants: [{ key, w: 640 }] })
+    expect(parse(withImage(bad('portal-images/a b.webp 9999w, https://x'))).success).toBe(false)
+    expect(parse(withImage(bad('portal-images/a,b.webp'))).success).toBe(false)
+  })
+})
+
 describe('defaultDesign', () => {
   it('reproduces today’s portal', () => {
     const doc = defaultDesign()

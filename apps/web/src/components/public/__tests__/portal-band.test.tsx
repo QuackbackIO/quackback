@@ -255,6 +255,44 @@ describe('PortalBand', () => {
     expect(band.hasAttribute('data-qb-band-image')).toBe(false)
   })
 
+  it('serves a side image at the size the screen needs, fetched first', () => {
+    const srcSet =
+      '/api/storage/portal-images/room-640.webp 640w,/api/storage/portal-images/room.webp 2560w'
+    root.portalDesign = {
+      ...view({ title: { en: 'Ideas' }, subtitle: {} }),
+      bandImage: { url: '/api/storage/portal-images/room.webp', place: 'side', srcSet },
+    }
+    mount()
+    const image = document.querySelector('img[data-qb-part=band-image]')!
+    expect(image.getAttribute('srcset')).toBe(srcSet)
+    expect(image.getAttribute('sizes')).toBe('(min-width:768px) 50vw,100vw')
+    expect(image.getAttribute('fetchpriority')).toBe('high')
+  })
+
+  it('leaves out a srcset that is not of stored files, and one an older design never had', () => {
+    root.portalDesign = {
+      ...view({ title: { en: 'Ideas' }, subtitle: {} }),
+      bandImage: {
+        url: '/api/storage/portal-images/room.webp',
+        place: 'side',
+        srcSet: 'https://example.com/x.webp 640w',
+      },
+    }
+    mount()
+    let image = document.querySelector('img[data-qb-part=band-image]')!
+    expect(image.hasAttribute('srcset')).toBe(false)
+    expect(image.hasAttribute('sizes')).toBe(false)
+    cleanup()
+    root.portalDesign = {
+      ...view({ title: { en: 'Ideas' }, subtitle: {} }),
+      bandImage: { url: '/api/storage/portal-images/room.jpg', place: 'side' },
+    }
+    mount()
+    image = document.querySelector('img[data-qb-part=band-image]')!
+    expect(image.hasAttribute('srcset')).toBe(false)
+    expect(image.getAttribute('fetchpriority')).toBe('high')
+  })
+
   it('puts a cover or pattern image behind the words, from storage only', () => {
     root.portalDesign = {
       ...view({ title: { en: 'Ideas' }, subtitle: {} }),

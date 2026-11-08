@@ -90,7 +90,7 @@ const IMAGE_PLACES = new Set(['side', 'edge', 'cover', 'pattern'])
 
 function readBandImage(value: unknown): BandImage | null {
   if (!value || typeof value !== 'object') return null
-  const { url, place, alt, homeOnly, shaded } = value as Record<string, unknown>
+  const { url, place, alt, homeOnly, shaded, srcSet } = value as Record<string, unknown>
   if (typeof url !== 'string' || !STORED_FILE.test(url) || !IMAGE_PLACES.has(place as string))
     return null
   return {
@@ -99,8 +99,12 @@ function readBandImage(value: unknown): BandImage | null {
     ...(typeof alt === 'string' ? { alt: alt.slice(0, 200) } : {}),
     ...(homeOnly === true ? { homeOnly: true } : {}),
     ...(shaded === true ? { shaded: true } : {}),
+    ...(typeof srcSet === 'string' && STORED_SRCSET.test(srcSet) ? { srcSet } : {}),
   }
 }
+
+/** A band image's srcset: stored files by width, and nothing else. */
+const STORED_SRCSET = /^\/api\/storage\/[\w./-]+ \d+w(?:,\/api\/storage\/[\w./-]+ \d+w)*$/
 
 /** A colour as a design stores it: hex, or oklch(). */
 const STORED_COLOUR = /^(#[\da-f]{6}|oklch\([\d.\s%]+\))$/i
