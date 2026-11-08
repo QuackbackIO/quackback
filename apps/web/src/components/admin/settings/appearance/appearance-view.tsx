@@ -8,7 +8,6 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import { restorePortalDesignVersionFn } from '@/lib/server/functions/portal-design'
 import { designChanges } from '@/lib/shared/design/diff'
-import { designAssetUrl } from '@/lib/shared/design/design-view'
 import { BUNDLED_FONTS } from '@/lib/shared/design/fonts'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
@@ -45,7 +44,9 @@ function logoOf(design: PortalDesign, workspaceLogo: string | null): string | nu
     display === 'wordmark'
       ? (wordmark.light?.key ?? mark.light?.key)
       : (mark.light?.key ?? wordmark.light?.key)
-  return key ? designAssetUrl(key) : workspaceLogo
+  // designAssetUrl's address, written here: importing design-view would load the
+  // portal's whole design view into admin settings.
+  return key ? `/api/storage/${key}` : workspaceLogo
 }
 
 /**
