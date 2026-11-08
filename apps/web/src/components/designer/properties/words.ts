@@ -17,6 +17,8 @@ export const WORDS = {
   /** Going back to the wider value. */
   reset: 'Reset',
   more: 'More',
+  /** The element state shown: "State: Normal". */
+  state: 'State',
   /** The brand sheet. */
   theme: 'Theme',
   fonts: 'Fonts',

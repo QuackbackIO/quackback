@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/shared/utils'
+import { keepOpen, rememberedOpen } from '../advanced'
 import { WORDS, setDifferentlyIn } from './words'
 
 /** A step of the breadcrumb: the last is where you are; the others pick that parent. */
@@ -259,14 +260,33 @@ export function PropertySection({
   )
 }
 
-/** Rows most people never need, closed until asked for; they stay in the page, so find reaches them. */
-export function PropertyMore({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false)
+/**
+ * Rows most people never need, closed until asked for; they stay in the page,
+ * so find reaches them. Remembered, it stays open for the visit once opened;
+ * it starts open where it holds something set.
+ */
+export function PropertyMore({
+  remember,
+  initiallyOpen = false,
+  children,
+}: {
+  /** Kept open for the rest of the visit once opened, under this name. */
+  remember?: string
+  initiallyOpen?: boolean
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(
+    () => initiallyOpen || (remember ? rememberedOpen(remember) : false)
+  )
   return (
     <details
       className="group mt-1"
       open={open || undefined}
-      onToggle={(event) => setOpen(event.currentTarget.open)}
+      onToggle={(event) => {
+        const now = event.currentTarget.open
+        setOpen(now)
+        if (remember) keepOpen(remember, now)
+      }}
     >
       <summary className="flex min-h-7 cursor-pointer list-none items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none [&::-webkit-details-marker]:hidden">
         <ChevronRightIcon

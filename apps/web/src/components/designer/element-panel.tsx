@@ -2,14 +2,24 @@
  * The properties of an element picked on the canvas, on the shared frame
  * (properties/). A change is shared by default: it starts at every one of
  * the element's kind, and the scope line offers the one-offs (just this one,
- * this block, this page) with what they reach. Its states are always shown,
- * with a dot on each that holds values. Rows are grouped as Fill, Text and
- * Shape; Edge and Shadow (and Lift, Focus ring in their states) are added
- * with "+"; the rest are under More. Each unset row shows what it has,
- * muted, and where it comes from; each row set here has a dot and Reset.
- * The places that keep their own values are listed at the foot.
+ * this block, this page) with what they reach. It opens simple, with its
+ * background, text colour and size and corners; the rest is under More,
+ * which stays open for the visit once opened. The state shown is one chip,
+ * "State: Normal", with the others in its menu. Each property is one row;
+ * for every one, a brand choice that sets it is that row's tiles, with
+ * Custom for an exact value. Each unset row shows what it has, muted and in
+ * whole pixels, and where it comes from; each row set here has a dot and
+ * Reset. The places that keep their own values are listed at the foot.
  */
 import { useMemo, useState, type ReactNode } from 'react'
+import { ChevronDownIcon } from '@heroicons/react/16/solid'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { pickName, singular, type ElementPick, type Reach } from '@/lib/shared/design/element-pick'
 import { partOf } from '@/lib/shared/design/parts-registry'
 import {
@@ -49,7 +59,6 @@ import {
   type StylePropInfo,
   type StyleState,
 } from '@/lib/shared/design/style-tokens'
-import { cn } from '@/lib/shared/utils'
 import { brandOf, everywhereValue, homeValuesOf, writeEverywhere } from './element-brand'
 import { ElementStyleSection, applyChoice, rowChoiceOf } from './element-style-section'
 import { StyleField } from './element-styles'
@@ -88,24 +97,27 @@ export function contextOf(pick: ElementPick, page: DesignerPage): ElementContext
 export const elementPanelKey = (pick: ElementPick) =>
   `${pick.element}|${pick.part ?? ''}|${pick.section ?? ''}`
 
-/** The panel's sections, in order: each one's props, and whether it is added with "+". */
-const SECTION_PROPS: ReadonlyArray<{
-  title: string
-  props: readonly StyleProp[]
-  optional: boolean
-}> = [
-  { title: SECTIONS.fill, props: ['background'], optional: false },
-  { title: SECTIONS.text, props: ['color', 'size', 'weight'], optional: false },
-  { title: SECTIONS.shape, props: ['radius', 'height', 'paddingX', 'paddingY'], optional: false },
-  { title: SECTIONS.edge, props: ['borderColor', 'borderWidth', 'borderStyle'], optional: true },
-  { title: SECTIONS.shadow, props: ['shadow'], optional: true },
-  { title: SECTIONS.lift, props: ['lift'], optional: true },
-  { title: SECTIONS.focusRing, props: ['ringWidth'], optional: true },
+/** The rows an element opens with, where it has them: its fill, its text colour and size, its corners. */
+const BASICS: readonly StyleProp[] = ['background', 'color', 'size', 'radius']
+
+/** The groups under More, in order, each with its props. */
+const SECTION_PROPS: ReadonlyArray<{ title: string; props: readonly StyleProp[] }> = [
+  { title: SECTIONS.fill, props: ['background'] },
+  {
+    title: SECTIONS.text,
+    props: ['color', 'size', 'weight', 'font', 'case', 'tracking', 'leading', 'underline'],
+  },
+  { title: SECTIONS.shape, props: ['radius', 'height', 'paddingX', 'paddingY'] },
+  { title: SECTIONS.edge, props: ['borderColor', 'borderWidth', 'borderStyle'] },
+  { title: SECTIONS.shadow, props: ['shadow'] },
+  { title: SECTIONS.lift, props: ['lift'] },
+  { title: SECTIONS.focusRing, props: ['ringWidth'] },
 ]
 
 /** A row's label within its section: Edge's "Edge colour" is its Colour. */
 const ROW_LABELS: Partial<Record<StyleProp, string>> = {
-  color: 'Colour',
+  color: 'Text colour',
+  size: 'Text size',
   borderColor: 'Colour',
   borderWidth: 'Width',
   borderStyle: 'Style',
@@ -182,7 +194,6 @@ export function ElementPanel({
   const [scope, setScope] = useState<ScopeName>(() =>
     initialScope && scopes.includes(initialScope) ? initialScope : defaultScope(ctx)
   )
-  const [added, setAdded] = useState<ReadonlySet<string>>(new Set())
   /** Rows whose Custom tile is picked, showing their exact field before a value is set. */
   const [customOpen, setCustomOpen] = useState<ReadonlySet<StyleProp>>(new Set())
   const at = scopes.includes(scope) ? scope : defaultScope(ctx)
@@ -227,8 +238,15 @@ export function ElementPanel({
         }
       : undefined
 
-  /** What a row has while nothing is set here, and where it comes from. */
+  /** What a row has while nothing is set here, and where it comes from, in whole pixels. */
   const inherited = (prop: StyleProp): { value: unknown; from: string } | null => {
+    const found = inheritedRaw(prop)
+    const info: StylePropInfo = STYLE_PROPS[prop]
+    return found && typeof found.value === 'number' && info.kind === 'number' && info.unit === 'px'
+      ? { ...found, value: Math.round(found.value) }
+      : found
+  }
+  const inheritedRaw = (prop: StyleProp): { value: unknown; from: string } | null => {
     const wider = widerValue(design, ctx, at, screen, state, prop)
     if (wider)
       return {
@@ -404,45 +422,21 @@ export function ElementPanel({
     )
   }
 
+  // It opens simple: the basics, else what most people change on it; the rest is under More.
+  const basicsOf = BASICS.filter(allowed)
+  const basics = basicsOf.length ? basicsOf : el.common.filter(allowed)
   const placed = new Set<StyleProp>(SECTION_PROPS.flatMap((s) => s.props))
-  const rest = (el.props as readonly StyleProp[]).filter((p) => !placed.has(p) && allowed(p))
-  // A rarer property most people change on this element sits in Text, not under More.
-  const restCommon = rest.filter((p) => el.common.includes(p))
-  const restMore = rest.filter((p) => !el.common.includes(p))
-  const hasValue = (prop: StyleProp) =>
-    readHere(prop) !== undefined ||
-    effectiveValue(design, ctx, screen, state, prop) !== null ||
-    everywhereValue(design, pick.element, prop) !== undefined
-
-  const sections = SECTION_PROPS.map((section) => {
-    const props = section.props.filter(allowed)
-    const extra = section.title === SECTIONS.text ? restCommon : []
-    if (!props.length && !extra.length) return null
-    const optional = section.optional && !props.some((p) => el.common.includes(p))
-    const shown = !optional || added.has(section.title) || props.some(hasValue)
-    return (
-      <PropertySection
-        key={section.title}
-        title={section.title}
-        onAdd={optional ? () => setAdded(new Set([...added, section.title])) : undefined}
-        added={shown}
-        onRemove={
-          optional
-            ? () => {
-                setAdded(new Set([...added].filter((t) => t !== section.title)))
-                if (props.some((p) => readHere(p) !== undefined))
-                  update((draft) => {
-                    for (const p of props) writeHere(draft, p, undefined)
-                  }, undoName(section.title.toLowerCase()))
-              }
-            : undefined
-        }
-      >
-        {props.map(row)}
-        {extra.map(row)}
-      </PropertySection>
-    )
-  })
+  const rest = (el.props as readonly StyleProp[]).filter(
+    (p) => !placed.has(p) && allowed(p) && !basics.includes(p)
+  )
+  const groups = [
+    ...SECTION_PROPS.map((section) => ({
+      title: section.title,
+      props: section.props.filter((p) => allowed(p) && !basics.includes(p)),
+    })),
+    { title: undefined, props: rest },
+  ].filter((group) => group.props.length > 0)
+  const moreSet = groups.some((group) => group.props.some((p) => readHere(p) !== undefined))
 
   const kinds = STYLE_ELEMENTS[pick.element].label.toLowerCase()
   const narrower: Array<ScopeOption<ScopeName>> = [
@@ -550,39 +544,7 @@ export function ElementPanel({
             </p>
           )}
           {el.states.length > 1 && (
-            <div
-              role="radiogroup"
-              aria-label="State"
-              className="flex gap-0.5 rounded-lg bg-muted p-0.5"
-            >
-              {el.states.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  role="radio"
-                  aria-checked={state === s}
-                  onClick={() => onState(s)}
-                  className={cn(
-                    'flex h-6 min-w-0 flex-1 items-center justify-center gap-1 truncate rounded-md px-1 text-[11px] focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
-                    state === s
-                      ? 'bg-background font-medium text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {STATE_INFO[s].label}
-                  {statesSet(s) && (
-                    <>
-                      <span
-                        aria-hidden="true"
-                        data-state-dot=""
-                        className="size-1 shrink-0 rounded-full bg-primary"
-                      />
-                      <span className="sr-only">, set</span>
-                    </>
-                  )}
-                </button>
-              ))}
-            </div>
+            <StateChip states={el.states} value={state} onChange={onState} isSet={statesSet} />
           )}
         </div>
       }
@@ -590,10 +552,17 @@ export function ElementPanel({
       {at === 'everywhere' && !phone && (
         <ElementStyleSection element={pick.element} name={name} design={design} update={update} />
       )}
-      {sections}
-      {restMore.length > 0 && (
+      {basics.length > 0 && <PropertySection>{basics.map(row)}</PropertySection>}
+      {groups.length > 0 && (
         <div className="border-b border-border px-4 py-1.5">
-          <PropertyMore>{restMore.map(row)}</PropertyMore>
+          <PropertyMore remember="element-more" initiallyOpen={moreSet}>
+            {groups.map((group) => (
+              <div key={group.title ?? 'rest'} className="space-y-0.5 pt-1">
+                {group.title && <h3 className="pt-1 text-xs font-semibold">{group.title}</h3>}
+                {group.props.map(row)}
+              </div>
+            ))}
+          </PropertyMore>
         </div>
       )}
     </PropertiesPanel>
@@ -608,4 +577,68 @@ function countAt(design: PortalDesign, ctx: ElementContext, at: ScopeName, scree
   for (const s of el.states)
     for (const p of el.props) if (readAt(design, ctx, at, screen, s, p) !== undefined) n++
   return n
+}
+
+/**
+ * The state shown, as one quiet chip, "State: Normal", with a menu of the
+ * element's states; a dot marks each that holds values, and the chip has one
+ * when a state other than the one shown does.
+ */
+function StateChip({
+  states,
+  value,
+  onChange,
+  isSet,
+}: {
+  states: readonly StyleState[]
+  value: StyleState
+  onChange: (state: StyleState) => void
+  isSet: (state: StyleState) => boolean
+}) {
+  const others = states.some((s) => s !== value && isSet(s))
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          data-state-chip=""
+          className="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+        >
+          {WORDS.state}: <span className="text-foreground">{STATE_INFO[value].label}</span>
+          {others && (
+            <>
+              <span
+                aria-hidden="true"
+                className="size-1 shrink-0 rounded-full bg-muted-foreground"
+              />
+              <span className="sr-only">, other states set</span>
+            </>
+          )}
+          <ChevronDownIcon className="size-3" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-40">
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(next) => onChange(next as StyleState)}
+        >
+          {states.map((s) => (
+            <DropdownMenuRadioItem key={s} value={s} className="text-[13px]">
+              {STATE_INFO[s].label}
+              {isSet(s) && (
+                <>
+                  <span
+                    aria-hidden="true"
+                    data-state-dot=""
+                    className="ms-auto size-1.5 shrink-0 rounded-full bg-muted-foreground"
+                  />
+                  <span className="sr-only">, set</span>
+                </>
+              )}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }

@@ -23,7 +23,7 @@ export function Advanced({
   remember?: string
   children: (open: boolean) => ReactNode
 }) {
-  const [open, setOpen] = useState(() => (remember ? remembered(remember) : false))
+  const [open, setOpen] = useState(() => (remember ? rememberedOpen(remember) : false))
   return (
     <details
       className="group rounded-lg border border-border"
@@ -31,7 +31,7 @@ export function Advanced({
       onToggle={(event) => {
         const now = event.currentTarget.open
         setOpen(now)
-        if (remember) keep(remember, now)
+        if (remember) keepOpen(remember, now)
         if (now && part) designerAdvancedOpened(part)
       }}
     >
@@ -50,7 +50,8 @@ export function Advanced({
 
 const KEY = 'qb-designer-open:'
 
-function remembered(name: string): boolean {
+/** Whether a disclosure was left open earlier in this visit. */
+export function rememberedOpen(name: string): boolean {
   try {
     return window.sessionStorage.getItem(KEY + name) === '1'
   } catch {
@@ -58,7 +59,8 @@ function remembered(name: string): boolean {
   }
 }
 
-function keep(name: string, open: boolean): void {
+/** Remembers a disclosure open, or forgets it, for the rest of the visit. */
+export function keepOpen(name: string, open: boolean): void {
   try {
     if (open) window.sessionStorage.setItem(KEY + name, '1')
     else window.sessionStorage.removeItem(KEY + name)
