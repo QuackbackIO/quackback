@@ -12,6 +12,9 @@ import { defaultDesign } from '@/lib/shared/design/schema'
 
 const flags = vi.hoisted(() => ({ extra: {} as Record<string, boolean> }))
 
+vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  useWorkspaceSettings: () => ({ name: 'Acme', brandingData: { logoUrl: '/logo.png' } }),
+}))
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: async () => {} }),
   ClientOnly: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -35,6 +38,11 @@ type Version = {
   createdAt: Date
 }
 let versions: Version[] = []
+
+// The portal's picture is a frame: drawn, never loaded, in a test.
+;(
+  window as unknown as { happyDOM: { settings: { disableIframePageLoading: boolean } } }
+).happyDOM.settings.disableIframePageLoading = true
 
 const { AppearanceView } = await import('../appearance-view')
 const { portalDesignQueries } = await import('@/lib/client/queries/portal-design')
@@ -103,8 +111,30 @@ describe('AppearanceView', () => {
     expect(screen.queryByRole('tab')).toBeNull()
     expect(screen.queryByRole('textbox')).toBeNull()
     expect(screen.queryByLabelText(/logo/i)).toBeNull()
-    expect(screen.getByRole('link', { name: 'Open the builder' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Open builder' }).getAttribute('href')).toBe(
       '/design?path=%2F&from=appearance'
+    )
+  })
+
+  it('shows the live portal: a picture of it, its logo, colours and fonts', () => {
+    mount({ changed: true })
+    const picture = screen.getByTitle('Your portal')
+    expect(picture.getAttribute('src')).toBe('/?theme=light&preview=true&sort=trending')
+    expect(picture.closest('[inert]')).toBeTruthy()
+    // The live design's, not the draft's: the draft's teal waits to publish.
+    const swatches = screen.getByRole('list', { name: 'Colours' })
+    expect(swatches.textContent).not.toContain('#0f766e')
+    expect(
+      Array.from(swatches.querySelectorAll('[data-swatch]')).map((s) => s.getAttribute('title'))
+    ).toEqual(['oklch(0.886 0.176 86)', '#ffffff', '#0a0a0a'])
+    expect(screen.getByText('Inter')).toBeTruthy()
+    expect(screen.getByAltText('Acme logo').getAttribute('src')).toBe('/logo.png')
+  })
+
+  it('leads to the Brand kit match row, and into the builder', () => {
+    mount()
+    expect(screen.getByRole('link', { name: 'Match your brand' }).getAttribute('href')).toBe(
+      '/design?path=%2F&from=appearance&brand=match'
     )
   })
 })

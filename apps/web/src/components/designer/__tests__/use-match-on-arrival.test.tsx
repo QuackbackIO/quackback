@@ -49,6 +49,13 @@ describe('arrivalAction', () => {
     })
   })
 
+  it("opens the Brand kit's match row from Settings > Portal's Match your brand", () => {
+    expect(arrivalAction({ from: 'appearance', brand: 'match', aiAvailable: true })).toEqual({
+      kind: 'brand-kit',
+    })
+    expect(arrivalAction({ from: 'appearance', aiAvailable: true })).toBeNull()
+  })
+
   it('does nothing on an ordinary visit', () => {
     expect(arrivalAction({ from: 'portal', aiAvailable: true })).toBeNull()
     expect(arrivalAction({ aiAvailable: true })).toBeNull()
@@ -87,6 +94,17 @@ describe('useMatchOnArrival', () => {
     renderHook(() => useMatchOnArrival(on))
     expect(on.start).not.toHaveBeenCalled()
     expect(on.openBrandKit).toHaveBeenCalledOnce()
+  })
+
+  it('clears the Brand kit request from the address once it opened', () => {
+    router.search = { from: 'appearance', brand: 'match' }
+    const on = hooks()
+    renderHook(() => useMatchOnArrival(on))
+    expect(on.openBrandKit).toHaveBeenCalledOnce()
+    const call = router.navigate.mock.calls[0]![0] as {
+      search: (prev: Record<string, string>) => Record<string, string | undefined>
+    }
+    expect(call.search({ from: 'appearance', brand: 'match', path: '/' }).brand).toBeUndefined()
   })
 
   it('leaves an ordinary visit alone', () => {

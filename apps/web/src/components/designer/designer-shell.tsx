@@ -19,7 +19,7 @@ import { AiPane } from './ai-pane'
 import { BuilderColumns, type Pane } from './builder-columns'
 import { useBuilderDialogs } from './builder-dialogs'
 import { BuilderSettings } from './builder-settings'
-import { BrandMatchProvider, type BrandMatchControl } from './brand-match-row'
+import { BRAND_MATCH_FIND, BrandMatchProvider, type BrandMatchControl } from './brand-match-row'
 import { useBrandWebsite } from './use-brand-website'
 import { BuilderTopBar } from './builder-top-bar'
 import { CanvasBar } from './canvas-bar'
@@ -33,7 +33,7 @@ import { backgroundPageOf } from '@/lib/shared/design/page-background'
 import { partOf, partSelector } from '@/lib/shared/design/parts-registry'
 import { pickLabel, pickName } from '@/lib/shared/design/element-pick'
 import { blockFindActions, elementFindItems } from './find-index'
-import { revealRow } from './find-reveal'
+import { FIND_ROOTS, revealRow } from './find-reveal'
 import { ADD_LAYOUTS_FIND } from './add-sheet'
 import { builderNavigation } from './quick-find'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
@@ -338,7 +338,10 @@ export function DesignerShell({
   useMatchOnArrival({
     start: (site) => void startBrandMatch({ website: site, from: 'onboarding' }),
     showAi: aiPane.expand,
-    openBrandKit: () => openTheme(),
+    openBrandKit: () => {
+      openTheme()
+      void revealRow({ root: FIND_ROOTS.theme, row: BRAND_MATCH_FIND })
+    },
   })
   const pickAndFocus = (key: Selection) => {
     pick(key)
