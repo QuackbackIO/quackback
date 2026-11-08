@@ -586,7 +586,7 @@ export function setHero(
 
 /* The pages' sections */
 
-const CHOICE_PAGES = ['changelog', 'help', 'roadmap'] as const
+const CHOICE_PAGES = ['changelog', 'help', 'roadmap', 'support'] as const
 /** Page settings that are no block of their own: each page's key, its field and its values. */
 const PAGE_EXTRAS: Record<
   string,

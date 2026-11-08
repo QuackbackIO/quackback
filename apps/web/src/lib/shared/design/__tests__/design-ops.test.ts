@@ -275,7 +275,9 @@ describe('setHero, setPageSection, setTheme and setWords', () => {
     ).toBeUndefined()
     expect(setPageSection(design(), world, 'help', 'colour', 'red')).toMatchObject({
       ok: false,
-      refusal: expect.stringContaining('it has topics, popular or search'),
+      refusal: expect.stringContaining(
+        'it has topics, popular, search, helpful, related or contact'
+      ),
     })
   })
 

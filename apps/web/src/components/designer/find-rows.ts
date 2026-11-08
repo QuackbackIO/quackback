@@ -132,6 +132,7 @@ export const FIND = {
   welcome: row('welcome-show', WORDS.show, 'welcome message intro'),
   prompt: row('feed-words-prompt', 'Prompt', 'composer words placeholder'),
   submit: row('feed-words-submit', 'Button', 'composer submit post words'),
+  requestWords: row('support-request-words', 'Button', 'new request conversation support words'),
   sort: row('feed-sort', 'Sort', 'default order trending top new'),
   previewEmpty: row('feed-preview-empty', 'Preview empty', 'no posts'),
   emptyTitle: row('feed-words-emptyTitle', 'Title', 'empty no posts words'),
@@ -287,6 +288,11 @@ export const PART_PANELS: readonly FindPanel[] = [
     ],
   },
   { place: 'filters', name: 'Filters', sections: [{ rows: [FIND.filtersSide] }] },
+  {
+    place: 'request',
+    name: 'New request',
+    sections: [{ title: WORDS.words, rows: [FIND.requestWords] }],
+  },
 ]
 
 /** The page's own panel, shown with nothing picked. */

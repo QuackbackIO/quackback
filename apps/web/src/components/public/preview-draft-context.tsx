@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react'
 import { useIntl } from 'react-intl'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import type { BandImage, DesignLogo } from '@/lib/shared/design/view'
+import type { BandImage, DesignLogo, PortalCopy } from '@/lib/shared/design/view'
 import type { PortalNavConfig, PortalWelcomeCard } from '@/lib/shared/types/settings'
 
 /**
@@ -143,8 +143,11 @@ export function usePreviewDesignNav(): PortalDesign['nav'] | undefined {
   return useContext(PreviewPagesContext)?.nav ?? undefined
 }
 
-/** The workspace's own wording for the composer and the empty feed, by language. */
-export type FeedCopy = PortalDesign['pages']['feedback']['copy']
+/**
+ * The workspace's own wording for the composer, the empty feed and the
+ * support page's New request button, by language.
+ */
+export type FeedCopy = PortalCopy
 
 /**
  * The own wording in force: the portal layout's from the saved design, and
@@ -156,7 +159,12 @@ export const FeedCopyContext = createContext<FeedCopy | undefined>(undefined)
  * The own wording in the visitor's language. A language left blank has none,
  * so its strings say the portal's own translation, never another language.
  */
-export function useFeedCopy(): { prompt?: string; submit?: string; emptyTitle?: string } {
+export function useFeedCopy(): {
+  prompt?: string
+  submit?: string
+  emptyTitle?: string
+  request?: string
+} {
   const copy = useContext(FeedCopyContext)
   const locale = useIntl().locale.toLowerCase()
   return useMemo(
@@ -164,6 +172,7 @@ export function useFeedCopy(): { prompt?: string; submit?: string; emptyTitle?: 
       prompt: copy?.prompt?.[locale] || undefined,
       submit: copy?.submit?.[locale] || undefined,
       emptyTitle: copy?.emptyTitle?.[locale] || undefined,
+      request: copy?.request?.[locale] || undefined,
     }),
     [copy, locale]
   )

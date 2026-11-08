@@ -28,7 +28,12 @@ import { normaliseColor } from './color'
 import { BUNDLED_FONT_IDS, DESIGN_OPTIONS } from './options'
 import { GRID_COLUMNS, MAX_ROWS } from './home-grid'
 import { withGridPlaces } from './home-legacy'
-import { changelogChoicesSchema, helpChoicesSchema, roadmapChoicesSchema } from './page-choices'
+import {
+  changelogChoicesSchema,
+  helpChoicesSchema,
+  roadmapChoicesSchema,
+  supportChoicesSchema,
+} from './page-choices'
 import { pageBackgroundSchema, pageBackgroundsSchema } from './page-background'
 
 const helpCenterCategoryIdSchema = typeIdSchema('kb_category')
@@ -586,6 +591,11 @@ export const portalDesignV2 = z
         changelog: changelogChoicesSchema.optional(),
         help: helpChoicesSchema.optional(),
         roadmap: roadmapChoicesSchema.optional(),
+        /** The support page's choices, and its New request button's own words by language. */
+        support: supportChoicesSchema
+          .extend({ request: localizedUpTo(24).optional() })
+          .strict()
+          .optional(),
       })
       .strict(),
     nav: z

@@ -35,6 +35,8 @@ export type WordsField =
   | { kind: 'button'; part: 'label' | 'secondLabel' }
   /** The composer's prompt and button, and the empty feed's title. */
   | { kind: 'feed'; part: FeedWordsPart }
+  /** The support page's New request button. */
+  | { kind: 'support'; part: 'request' }
 
 /** The feed's own words, as the design keeps them under `pages.feedback.copy`. */
 export type FeedWordsPart = 'prompt' | 'submit' | 'emptyTitle'
@@ -48,6 +50,9 @@ export const FEED_WORDS: Record<FeedWordsPart, { max: number; name: string }> = 
 
 /** The most a hero button's words hold. */
 export const BUTTON_WORDS_MAX = 40
+
+/** The most the support page's New request button's words hold. */
+export const REQUEST_WORDS_MAX = 24
 
 /** Where each of a block's own plain words is stored, its length, and the blocks that have it. */
 const BLOCK_WORDS: Record<
@@ -80,6 +85,7 @@ export function readWordsField(field: unknown): WordsField | null {
   if (field === 'feedback.welcome') return { kind: 'welcome' }
   if (field === 'home.button') return { kind: 'button', part: 'label' }
   if (field === 'home.secondButton') return { kind: 'button', part: 'secondLabel' }
+  if (field === 'support.request') return { kind: 'support', part: 'request' }
   const feed = /^feedback\.(prompt|submit|emptyTitle)$/.exec(field)
   if (feed) return { kind: 'feed', part: feed[1] as FeedWordsPart }
   const block = /^block-([a-z0-9]{8,24})\.(heading|body|link|text|empty)$/.exec(field)
@@ -141,6 +147,7 @@ export function setWords(
   if (field.kind === 'page') setHeadlineWords(draft, field.page, field.part, locale, text)
   else if (field.kind === 'button') setButtonWords(draft, field.part, locale, text)
   else if (field.kind === 'feed') setFeedWords(draft, field.part, locale, text)
+  else if (field.kind === 'support') setRequestWords(draft, locale, text)
   else if (field.kind === 'block' && ownPart(field))
     setBlockWords(draft, field.id, field.part as BlockWordsPart, locale, text)
   else if (field.kind === 'block' && field.part !== 'body')
@@ -153,7 +160,7 @@ export function setWords(
 /** What kind of words a mark names: a headline's title, rich words, or plain. */
 export function wordsKindOf(field: WordsField): WordsKind {
   if (field.kind === 'page') return field.part === 'title' ? 'headline' : 'plain'
-  if (field.kind === 'button' || field.kind === 'feed') return 'plain'
+  if (field.kind === 'button' || field.kind === 'feed' || field.kind === 'support') return 'plain'
   if (field.kind === 'block') return field.part === 'body' ? 'rich' : 'plain'
   return 'rich'
 }
@@ -163,6 +170,7 @@ export function wordsLimitOf(field: WordsField): number | null {
   if (field.kind === 'page') return 280
   if (field.kind === 'button') return BUTTON_WORDS_MAX
   if (field.kind === 'feed') return FEED_WORDS[field.part].max
+  if (field.kind === 'support') return REQUEST_WORDS_MAX
   const own = ownPart(field)
   if (own) return own.max
   if (field.kind === 'block' && field.part !== 'body') return 60
@@ -174,6 +182,7 @@ export function wordsName(field: WordsField): string {
   if (field.kind === 'welcome') return 'Welcome message'
   if (field.kind === 'button') return field.part === 'label' ? 'Button' : 'Second button'
   if (field.kind === 'feed') return FEED_WORDS[field.part].name
+  if (field.kind === 'support') return 'New request button'
   const own = ownPart(field)
   if (own) return own.name
   if (field.kind === 'block') return field.part === 'body' ? 'Welcome' : 'Block heading'
@@ -186,6 +195,7 @@ export const wordsByLanguage = (field: WordsField) =>
   field.kind === 'page' ||
   field.kind === 'button' ||
   field.kind === 'feed' ||
+  field.kind === 'support' ||
   (field.kind === 'block' && field.part !== 'body')
 
 const blockOfId = (design: PortalDesign, id: string) =>
@@ -223,6 +233,7 @@ export function wordsDocOf(design: PortalDesign, field: WordsField, locale: stri
   if (field.kind === 'button')
     return plainDoc(design.pages.home.button?.[field.part]?.[locale] ?? '')
   if (field.kind === 'feed') return plainDoc(design.pages.feedback.copy[field.part]?.[locale] ?? '')
+  if (field.kind === 'support') return plainDoc(design.pages.support?.request?.[locale] ?? '')
   if (field.kind === 'block') {
     const block = blockOfId(design, field.id)
     const own = ownPart(field)
@@ -247,6 +258,7 @@ export function wordsElsewhere(
   if (field.kind === 'page') byLocale = headlineOf(design, field.page)?.[field.part]
   else if (field.kind === 'button') byLocale = design.pages.home.button?.[field.part]
   else if (field.kind === 'feed') byLocale = design.pages.feedback.copy[field.part]
+  else if (field.kind === 'support') byLocale = design.pages.support?.request
   else if (field.kind === 'block' && own)
     byLocale = ownWordsOf(blockOfId(design, field.id), own.key)
   else if (field.kind === 'block' && field.part !== 'body')
@@ -356,6 +368,22 @@ export function setFeedWords(
   else delete words[locale]
   if (Object.keys(words).length) copy[part] = words
   else delete copy[part]
+}
+
+/**
+ * Sets the support page's New request button words in one language; emptied
+ * in every language, it takes the portal's, and a page with nothing else set
+ * is left out.
+ */
+export function setRequestWords(draft: PortalDesign, locale: string, text: string): void {
+  const { request, ...rest } = draft.pages.support ?? {}
+  const words = { ...request }
+  const value = text.trim() ? text.slice(0, REQUEST_WORDS_MAX) : ''
+  if (value) words[locale] = value
+  else delete words[locale]
+  const next = Object.keys(words).length ? { ...rest, request: words } : rest
+  if (Object.keys(next).length) draft.pages.support = next
+  else delete draft.pages.support
 }
 
 /** Sets one part of a page's headline in one language; empty text removes it. */

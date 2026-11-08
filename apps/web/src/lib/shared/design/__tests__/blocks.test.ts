@@ -21,7 +21,12 @@ import {
 import { newBlock, type HomeBlock } from '../home'
 import { BLOCK_SIZES, DESIGN_OPTIONS } from '../options'
 import { BLOCK_NAMES } from '../outline'
-import { changelogChoicesSchema, helpChoicesSchema, roadmapChoicesSchema } from '../page-choices'
+import {
+  changelogChoicesSchema,
+  helpChoicesSchema,
+  roadmapChoicesSchema,
+  supportChoicesSchema,
+} from '../page-choices'
 import { defaultDesign, homeBlockSchema } from '../schema'
 import { shows, whenEmptyOf } from '../block-content'
 
@@ -41,6 +46,7 @@ const SECTION_SCHEMAS = {
   changelog: changelogChoicesSchema,
   help: helpChoicesSchema,
   roadmap: roadmapChoicesSchema,
+  support: supportChoicesSchema,
 }
 
 function block<T extends HomeBlock['type']>(

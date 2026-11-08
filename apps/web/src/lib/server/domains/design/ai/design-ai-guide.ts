@@ -196,7 +196,11 @@ function guideLines(
     ],
     [
       ['pages.help'],
-      `The Help Center's home; leave a field out for its usual look. pages.help.topics: ${DESIGN_OPTIONS.helpTopics.join(', ')}; pages.help.popular: true or false (popular articles under the topics); pages.help.search: ${DESIGN_OPTIONS.searchSize.join(', ')} (the search under the title).`,
+      `The Help Center's home; leave a field out for its usual look. pages.help.topics: ${DESIGN_OPTIONS.helpTopics.join(', ')}; pages.help.popular: true or false (popular articles under the topics); pages.help.search: ${DESIGN_OPTIONS.searchSize.join(', ')} (the search under the title). The end of each article: pages.help.helpful: true or false (asks "Was this helpful?"); pages.help.related: 0, 2 or 4 (how many related articles it ends with); pages.help.contact: true or false (a Contact support link).`,
+    ],
+    [
+      ['pages.support'],
+      `The Support page; leave a field out for its usual look. pages.support.suggest: true or false (help articles suggested while a new request is written, with the help center on); pages.support.request: the New request button's words by language, like the headline, 24 characters; leave it out for the portal's own.`,
     ],
     [
       ['pages.roadmap'],
@@ -402,7 +406,7 @@ export const OPS_EXAMPLES: Array<{ request: string; picked?: string; answer: Ops
 
 /** The operations and the rules for them, as every Ask AI prompt tells them. */
 export const OPS_RULES = `Operations (${OP_KINDS.join(', ')}):
-- set: target a Home block (its id from the context, or its type when Home has one of it), "hero", or a page ("changelog page", "help page", "roadmap page", "feedback page"); key one of its settings below, or on a Home block its own look, style.<element>.<state>.<property>; value its new value.
+- set: target a Home block (its id from the context, or its type when Home has one of it), "hero", or a page ("changelog page", "help page", "roadmap page", "support page", "feedback page"); key one of its settings below, or on a Home block its own look, style.<element>.<state>.<property>; value its new value.
 - add: key a block type; target where it goes: top, bottom, above:<block>, below:<block> or beside:<block>; value its settings as JSON, such as {"count":5}, or "".
 - move: target a Home block; value where it goes, as for add.
 - resize: target a Home block; value full, half, third, two thirds, wider, narrower, taller, shorter, or columns of 12.

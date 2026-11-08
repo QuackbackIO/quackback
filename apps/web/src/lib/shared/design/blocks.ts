@@ -24,6 +24,7 @@ import {
   changelogChoicesSchema,
   helpChoicesSchema,
   roadmapChoicesSchema,
+  supportChoicesSchema,
   type PageChoices,
 } from './page-choices'
 import { homeBlockSchema, type PortalDesign } from './schema'
@@ -43,7 +44,9 @@ export const SECTION_TYPES = [
   'help.topics',
   'help.popular',
   'help.search',
+  'help.article',
   'roadmap.board',
+  'support.request',
 ] as const
 export type SectionType = (typeof SECTION_TYPES)[number]
 export type BlockType = HomeBlockType | SectionType | 'hero'
@@ -54,7 +57,9 @@ const SECTION_KEYS = {
   'help.topics': ['topics'],
   'help.popular': ['popular'],
   'help.search': ['search'],
+  'help.article': ['helpful', 'related', 'contact'],
   'roadmap.board': ['board', 'votes'],
+  'support.request': ['suggest'],
 } as const satisfies Record<SectionType, readonly string[]>
 
 /** A page section as a block: its type and its choices, today's where the design makes none. */
@@ -63,7 +68,9 @@ export type SectionBlock =
   | ({ type: 'help.topics' } & Pick<PageChoices['help'], 'topics'>)
   | ({ type: 'help.popular' } & Pick<PageChoices['help'], 'popular'>)
   | ({ type: 'help.search' } & Pick<PageChoices['help'], 'search'>)
+  | ({ type: 'help.article' } & Pick<PageChoices['help'], 'helpful' | 'related' | 'contact'>)
   | ({ type: 'roadmap.board' } & Pick<PageChoices['roadmap'], 'board' | 'votes'>)
+  | ({ type: 'support.request' } & Pick<PageChoices['support'], 'suggest'>)
 export type AnyBlock = HomeBlock | SectionBlock | HeroBlock
 
 type Option<T> = readonly [value: T, name: string]
@@ -832,6 +839,64 @@ const SECTIONS: Record<SectionType, Omit<BlockDef, 'type' | 'pages' | 'addable' 
       },
     ],
   },
+  'help.article': {
+    name: 'End of article',
+    purpose: 'What each help article ends with',
+    job: 'answers',
+    fields: [
+      {
+        kind: 'switch',
+        key: 'helpful',
+        label: 'Was this helpful?',
+        about: 'Whether each article ends by asking "Was this helpful?"',
+      },
+      {
+        kind: 'count',
+        key: 'related',
+        label: 'Related articles',
+        options: [0, 2, 4],
+        names: { 0: 'None' },
+        about: 'How many related articles each article ends with; 0 lists none',
+      },
+      {
+        kind: 'switch',
+        key: 'contact',
+        label: 'Contact link',
+        about: 'Whether each article ends with a link to contact support, with support on',
+      },
+    ],
+    ai: ['helpful', 'related', 'contact'],
+    examples: [
+      {
+        request: 'End help articles with a link to contact us, and no related articles',
+        ops: [
+          { op: 'set', target: 'help page', key: 'contact', value: 'true' },
+          { op: 'set', target: 'help page', key: 'related', value: '0' },
+        ],
+      },
+    ],
+  },
+  'support.request': {
+    name: 'New request',
+    purpose: 'How visitors start a request',
+    job: 'hear',
+    fields: [
+      {
+        kind: 'switch',
+        key: 'suggest',
+        label: 'Suggest articles while typing',
+        about:
+          'Whether help articles are suggested as a visitor writes a new request; only with the help center on',
+      },
+    ],
+    ai: ['suggest'],
+    examples: [
+      {
+        request: 'Stop suggesting help articles on new support requests',
+        ops: [{ op: 'set', target: 'support page', key: 'suggest', value: 'false' }],
+      },
+    ],
+  },
   'roadmap.board': {
     name: 'Board',
     purpose: 'How the roadmap’s posts are laid out',
@@ -1304,13 +1369,16 @@ function sectionSummary(block: SectionBlock): string[] {
   const def = SECTIONS[block.type]
   return def.fields.map((field) => {
     const value = (block as Record<string, unknown>)[field.key]
+    if (field.kind === 'count')
+      return value === 0
+        ? `no ${field.label.toLowerCase()}`
+        : `${String(value)} ${field.label.toLowerCase()}`
     if (field.kind === 'switch') {
       const shown = value === true
-      return field.key === 'votes'
-        ? `votes ${shown ? 'shown' : 'hidden'}`
-        : shown
-          ? 'Shown'
-          : 'Hidden'
+      if (field.key === 'votes') return `votes ${shown ? 'shown' : 'hidden'}`
+      // A section of several switches names each; one alone is the section itself.
+      if (def.fields.length > 1) return `${field.label} ${shown ? 'on' : 'off'}`
+      return shown ? 'Shown' : 'Hidden'
     }
     if (field.kind !== 'choice') return String(value)
     if (field.key === 'images') return value === 'none' ? 'no images' : `${String(value)} images`
@@ -1340,6 +1408,7 @@ const SECTION_SCHEMAS = {
   changelog: changelogChoicesSchema,
   help: helpChoicesSchema,
   roadmap: roadmapChoicesSchema,
+  support: supportChoicesSchema,
 } as const
 
 const listed = (values: readonly unknown[]) => {

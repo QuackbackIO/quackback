@@ -22,7 +22,7 @@ const HERO_BY_PATH = new Map<string, HeroKey>(
 )
 
 const PAGE_CHOICE =
-  /^pages\.(changelog|help|roadmap)\.(entries|images|subscribe|topics|popular|search|board|votes)$/
+  /^pages\.(changelog|help|roadmap|support)\.(entries|images|subscribe|topics|popular|search|helpful|related|contact|board|votes|suggest)$/
 const WORDS =
   /^pages\.(?:(home|feedback)\.headline|titles\.(roadmap|changelog|help|support))\.(title|subtitle)$/
 

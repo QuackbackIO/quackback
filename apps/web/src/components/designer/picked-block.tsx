@@ -31,6 +31,7 @@ import { BlockPanel } from './block-settings-panel'
 import type { Crumb } from './properties/properties-panel'
 import { BlockLayout, BlockLook, BlockWords, ElementRows, LOOK_NAMES } from './block-sections'
 import { ElementPanel } from './element-panel'
+import { RequestWords } from './feed-words'
 import { PropertySection } from './properties/properties-panel'
 import { ReachNote } from './properties/scope-line'
 import { BLOCK_ACTIONS, BLOCK_SECTIONS, BLOCK_TONES, WORDS } from './properties/words'
@@ -164,6 +165,11 @@ export function PickedBlock({
         sources={sources}
         crumbs={crumbs ?? [{ label: PAGE_NAMES[page] }, { label: def.name }]}
         notes={found.length ? found : undefined}
+        words={
+          section === 'support.request' ? (
+            <RequestWords design={design} update={update} locale={locale} />
+          ) : undefined
+        }
         look={
           <SectionLook
             section={section}

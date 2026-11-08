@@ -173,6 +173,7 @@ export const SCOPE_NAMES: Record<Exclude<DesignAiScope, 'site'>, string> = {
   roadmap: 'Roadmap page',
   changelog: 'Changelog page',
   help: 'Help Center page',
+  support: 'Support page',
 }
 
 const opKey = (op: FlatOp) => JSON.stringify([op.op, op.target ?? '', op.key ?? '', op.value ?? ''])

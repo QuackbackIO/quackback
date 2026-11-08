@@ -61,6 +61,8 @@ const SECTION_FIELDS: Array<[RegExp, DesignerPage, string]> = [
   [/^pages\.help\.topics\b/, 'help', 'topics'],
   [/^pages\.help\.popular\b/, 'help', 'popular'],
   [/^pages\.help\.search\b/, 'help', 'hero'],
+  [/^pages\.help\.(helpful|related|contact)\b/, 'help', 'article'],
+  [/^pages\.support\b/, 'support', 'request'],
   [/^pages\.feedback\.welcome\b/, 'feedback', 'welcome'],
   [/^(pages\.feedback\.(copy|defaultSort)|layout\.postCardHides)\b/, 'feedback', 'feed'],
   [/^layout\.filters\b/, 'feedback', 'filters'],

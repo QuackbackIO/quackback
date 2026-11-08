@@ -101,7 +101,9 @@ export const SECTION_ELEMENTS: Record<SectionType, readonly StyleElement[]> = {
   'help.topics': ['panel', 'heading', 'body'],
   'help.popular': ['panel', 'link'],
   'help.search': ['input'],
+  'help.article': ['panel', 'link'],
   'roadmap.board': ['postCard', 'vote', 'badge'],
+  'support.request': ['button'],
 }
 
 /** A block's own look fields, other than its element looks. */

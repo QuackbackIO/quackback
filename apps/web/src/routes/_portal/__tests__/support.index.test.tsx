@@ -43,6 +43,7 @@ const getMyConversationsFn = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/functions/conversation', () => ({ getMyConversationsFn }))
 
 import { Route } from '../support.index'
+import { FeedCopyContext } from '@/components/public/preview-draft-context'
 
 function wrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -156,6 +157,29 @@ describe('portal support index — converged Messages surface', () => {
 
     expect(await screen.findByText('No conversations yet')).toBeTruthy()
     expect(screen.getAllByText('New conversation').length).toBeGreaterThan(0)
+  })
+
+  it('says the design’s own New request words, marked to be edited where they sit', async () => {
+    routeCtx.settings = {
+      featureFlags: { supportTickets: false, supportInbox: true },
+      portalConfig: { support: { enabled: true } },
+    }
+    const Wrapper = wrapper()
+    render(
+      <FeedCopyContext.Provider value={{ request: { en: 'Ask us' } }}>
+        <Page />
+      </FeedCopyContext.Provider>,
+      { wrapper: Wrapper }
+    )
+
+    expect(await screen.findByText('No conversations yet')).toBeTruthy()
+    expect(screen.queryByText('New conversation')).toBeNull()
+    const words = screen.getAllByText('Ask us')
+    expect(words.length).toBeGreaterThan(0)
+    for (const word of words) {
+      expect(word.getAttribute('data-qb-words')).toBe('support.request')
+      expect(word.closest('[data-qb-section="request"]')).toBeTruthy()
+    }
   })
 
   it('neither surface enabled: navigates home', () => {
