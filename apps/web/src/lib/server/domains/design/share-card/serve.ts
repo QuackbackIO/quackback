@@ -7,7 +7,7 @@
  * workspace and kept in a small in-memory cache.
  */
 import { logger } from '@/lib/server/logger'
-import { currentWorkspaceNamespace } from '@/lib/server/workspaces/workspace-keyed'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { designAssetUrl } from '@/lib/shared/design/design-view'
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -28,8 +28,6 @@ export interface BrandImageDeps {
   load: () => Promise<{ doc: PortalDesign; settings: PortalHeadSettings } | null>
   /** A stored file's bytes, or null when it cannot be read. */
   readObject: (key: string) => Promise<Uint8Array | null>
-  /** The workspace the cache keeps its images under. */
-  namespace: () => string
 }
 
 /** The favicon's side, in px: sharp at every size a browser asks for. */
@@ -39,13 +37,8 @@ const CACHE_ENTRIES = 64
 const FOREVER = 'public, max-age=31536000, immutable'
 const BRIEFLY = 'public, max-age=300'
 
-const cache = new Map<string, Uint8Array>()
-
-function remember(key: string, png: Uint8Array) {
-  cache.delete(key)
-  cache.set(key, png)
-  while (cache.size > CACHE_ENTRIES) cache.delete(cache.keys().next().value!)
-}
+/** Drawn images by version, each workspace's apart from the others'. */
+const cache = new WorkspaceKeyedCache<Uint8Array>(CACHE_ENTRIES)
 
 function png(bytes: Uint8Array, current: boolean): Response {
   return new Response(bytes as BodyInit, {
@@ -83,7 +76,7 @@ export async function serveBrandImage(
   if (query.get('kind') === 'icon') {
     if (!facts.iconKey) return notFound()
     const version = shortHash(facts.iconKey)
-    const key = `${deps.namespace()}:icon:${version}`
+    const key = `icon:${version}`
     const kept = cache.get(key)
     if (kept) return png(kept, asked === version)
     const icon = await pixels(deps, facts.iconKey)
@@ -94,7 +87,7 @@ export async function serveBrandImage(
         headers: { Location: designAssetUrl(facts.iconKey), 'Cache-Control': BRIEFLY },
       })
     const bytes = encodeShareCard(drawSquareIcon(icon, ICON_SIDE))
-    remember(key, bytes)
+    cache.set(key, bytes)
     return png(bytes, asked === version)
   }
 
@@ -102,7 +95,7 @@ export async function serveBrandImage(
   const shownPage = isShareCardPage(page) ? page : null
   const title = portalSiteName(settings)
   const version = `${shareCardVersion(facts)}${shortHash(title)}`
-  const key = `${deps.namespace()}:card:${version}:${shownPage ?? ''}`
+  const key = `card:${version}:${shownPage ?? ''}`
   const kept = cache.get(key)
   if (kept) return png(kept, asked === version)
 
@@ -116,7 +109,7 @@ export async function serveBrandImage(
       icon,
     })
   )
-  remember(key, bytes)
+  cache.set(key, bytes)
   log.debug({ ms: Math.round(performance.now() - started), page: shownPage }, 'share card drawn')
   return png(bytes, asked === version)
 }
@@ -178,6 +171,5 @@ export function brandImageDeps(): BrandImageDeps {
         return null
       }
     },
-    namespace: currentWorkspaceNamespace,
   }
 }

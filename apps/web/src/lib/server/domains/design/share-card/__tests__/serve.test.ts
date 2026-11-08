@@ -17,7 +17,6 @@ function deps(doc: PortalDesign | null, icon: Uint8Array | null = null) {
   const value: BrandImageDeps = {
     load: async () => (doc && settings ? { doc, settings } : null),
     readObject: read,
-    namespace: () => 'ws1',
   }
   return { value, read, settings }
 }
