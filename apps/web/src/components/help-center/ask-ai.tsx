@@ -330,7 +330,7 @@ function SourceList({
   if (sources.length === 0) return null
   return (
     <div className="pt-2 mt-1 border-t border-border/40">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1.5">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/60 mb-1.5">
         <FormattedMessage id={titleId} defaultMessage={titleDefault} />
       </p>
       <ol className="space-y-0.5">

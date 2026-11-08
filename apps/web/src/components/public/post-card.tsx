@@ -502,7 +502,7 @@ export function PostCard({
   )
 
   const tagClassName = cn(
-    'inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium',
+    'inline-flex items-center px-1.5 py-0 rounded text-xs font-medium',
     TAG_TINT
   )
 

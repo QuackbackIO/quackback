@@ -5,12 +5,13 @@
  * it is what visitors see after the solver's adjustments.
  */
 import type { ThemeVariables } from '@/lib/shared/theme/types'
-import { mixColor } from './color'
+import { mixOklch } from './color'
 import { bandContrast, headlineBehind } from './components'
 import { roleFill } from './colour-roles'
 import { contrastRatio, solveContrast } from './contrast'
 import { resolveDesign } from './resolve'
 import type { PortalDesign } from './schema'
+import { drawnSurfaces, type Drawn } from './surfaces'
 
 export interface ColourPair {
   mode: 'light' | 'dark'
@@ -63,39 +64,43 @@ const ROLE_NAMES = {
   extra2: 'the second extra colour',
 } as const
 
+/** The site's own colour for each thing a surface draws. */
+const DRAWN_IN: Record<Drawn, [Token, number]> = {
+  Text: ['foreground', 4.5],
+  'Secondary text': ['mutedForeground', 4.5],
+  Links: ['accentInk', 4.5],
+  'The focus ring': ['ring', 3],
+}
+
+/** The site's colours on the other surfaces it draws them on: tinted blocks, vote boxes, the footer. */
+function surfacePairs(doc: PortalDesign, vars: ThemeVariables, mode: ColourPair['mode']) {
+  const t = vars as Required<ThemeVariables>
+  return drawnSurfaces(doc, t, mode).flatMap((surface) =>
+    surface.draws.map((what) => {
+      const [token, target] = DRAWN_IN[what]
+      return pair(mode, what, surface.on, String(t[token]), surface.colour, target)
+    })
+  )
+}
+
 /**
- * The pairs Home blocks in a tone draw, for the tones and colours in use: a
- * tint of a brand colour under the site's text, or a brand colour under its
- * own text and the raised parts on it, such as vote boxes.
+ * The pairs Home blocks in a brand colour draw, for the colours in use: the
+ * colour under its own text, and the raised parts on it, such as vote boxes.
  */
 function tonePairs(doc: PortalDesign, vars: ThemeVariables, mode: ColourPair['mode']) {
-  const looks = new Map(
+  const roles = new Set(
     doc.pages.home.blocks
-      .filter((block) => block.look?.tone === 'tint' || block.look?.tone === 'brand')
-      .map((block) => {
-        const role = block.look?.colour ?? 'accent'
-        return [`${block.look!.tone} ${role}`, { tone: block.look!.tone!, role }] as const
-      })
+      .filter((block) => block.look?.tone === 'brand')
+      .map((block) => block.look?.colour ?? 'accent')
   )
-  const { card, foreground, mutedForeground, accentInk } = vars
   const pairs: ColourPair[] = []
-  for (const { tone, role } of looks.values()) {
+  for (const role of roles) {
     const { fill, ink } = roleFill(doc, vars as Required<ThemeVariables>, mode, role)
-    if (!fill) continue
-    const named = role === 'accent' ? null : ROLE_NAMES[role]
-    if (tone === 'tint' && card) {
-      const on = named ? `blocks tinted with ${named}` : 'tinted blocks'
-      const tint = mixColor(fill, card, 0.1)
-      if (foreground) pairs.push(pair(mode, 'Text', on, foreground, tint, 4.5))
-      if (mutedForeground) pairs.push(pair(mode, 'Secondary text', on, mutedForeground, tint, 4.5))
-      if (accentInk) pairs.push(pair(mode, 'Links', on, accentInk, tint, 4.5))
-    }
-    if (tone === 'brand' && ink) {
-      const on = named ? `blocks in ${named}` : 'brand colour blocks'
-      pairs.push(pair(mode, 'Text', on, ink, fill, 4.5))
-      const raised = mixColor(ink, fill, 0.05)
-      pairs.push(pair(mode, 'Text', `vote boxes in ${on}`, ink, raised, 4.5))
-    }
+    if (!fill || !ink) continue
+    const on = role === 'accent' ? 'brand colour blocks' : `blocks in ${ROLE_NAMES[role]}`
+    pairs.push(pair(mode, 'Text', on, ink, fill, 4.5))
+    const raised = mixOklch(ink, fill, 0.05)
+    pairs.push(pair(mode, 'Text', `vote boxes in ${on}`, ink, raised, 4.5))
   }
   return pairs
 }
@@ -135,7 +140,7 @@ export function colourPairs(doc: PortalDesign): ColourPair[] {
     const header = tokens['--qb-header-bg']
     if (doc.layout.headerOnBand && header && tokens['--qb-header-focus'])
       pairs.push(pair(mode, 'The focus ring', 'the header', tokens['--qb-header-focus'], header, 3))
-    pairs.push(...tonePairs(doc, vars, mode))
+    pairs.push(...surfacePairs(doc, vars, mode), ...tonePairs(doc, vars, mode))
   }
   for (const tuned of resolved.tuned) {
     const drawn = pair(

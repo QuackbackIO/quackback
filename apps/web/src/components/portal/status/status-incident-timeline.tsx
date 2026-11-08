@@ -61,7 +61,7 @@ export function StatusIncidentTimeline({
             <div key={update.id} className="flex items-baseline gap-2 text-[13px]">
               <span
                 className={cn(
-                  'shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold',
+                  'shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold',
                   style.soft,
                   style.text
                 )}
@@ -71,7 +71,7 @@ export function StatusIncidentTimeline({
               <span className="min-w-0 flex-1 whitespace-pre-line text-muted-foreground">
                 {update.body}
               </span>
-              <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground">
+              <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
                 {formatTimestamp(update.createdAt, true, intl.locale)}
               </span>
             </div>

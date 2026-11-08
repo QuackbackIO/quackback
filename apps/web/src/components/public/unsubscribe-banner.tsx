@@ -41,7 +41,7 @@ export function UnsubscribeBanner({ postId }: UnsubscribeBannerProps) {
       </div>
       <button
         onClick={() => setVisible(false)}
-        className="flex-shrink-0 text-success hover:text-success/80 transition-colors"
+        className="-m-1 flex-shrink-0 p-1 text-success hover:text-success/80 transition-colors"
         aria-label={intl.formatMessage({
           id: 'portal.unsubscribeBanner.dismiss',
           defaultMessage: 'Dismiss',

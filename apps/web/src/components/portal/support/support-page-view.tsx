@@ -208,7 +208,7 @@ export function SupportPageView({
                             })}
                         </span>
                         {(c.unreadCount ?? 0) > 0 && (
-                          <span className="inline-flex min-w-[18px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground">
+                          <span className="inline-flex min-w-[18px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold leading-[18px] text-primary-foreground">
                             {c.unreadCount}
                           </span>
                         )}
@@ -225,7 +225,7 @@ export function SupportPageView({
                               closed={ticket.stage.closed}
                               closedLabelId="portal.tickets.stage.closed"
                             />
-                            <span className="font-mono text-[11px] text-muted-foreground">
+                            <span className="font-mono text-xs text-muted-foreground">
                               {ticket.reference}
                             </span>
                           </>

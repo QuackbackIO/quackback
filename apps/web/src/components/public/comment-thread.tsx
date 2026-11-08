@@ -689,7 +689,7 @@ function CommentItem({
               </Tooltip>
             )}
             {comment.isPrivate && !insidePrivateCard && (
-              <Badge className="text-[11px] px-1.5 py-0 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0">
+              <Badge className="text-xs px-1.5 py-0 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0">
                 <LockClosedIcon className="h-2.5 w-2.5 me-0.5" />
                 {intl.formatMessage({
                   id: 'portal.commentThread.internalNote',
@@ -698,7 +698,7 @@ function CommentItem({
               </Badge>
             )}
             {isPinned && (
-              <Badge className="text-[11px] px-1.5 py-0 bg-primary/15 text-primary border-0">
+              <Badge className="text-xs px-1.5 py-0 bg-primary/15 text-primary border-0">
                 <MapPinIcon className="h-2.5 w-2.5 me-0.5" />
                 {intl.formatMessage({
                   id: 'portal.commentThread.pinnedBadge',

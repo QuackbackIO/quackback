@@ -97,7 +97,8 @@ function SheetContent({
         {children}
         <SheetPrimitive.Close
           className={cn(
-            'absolute top-4 end-4 rounded-xs',
+            // A 24px target, its icon where a 16px one sat.
+            'absolute top-3 end-3 rounded-xs p-1',
             'opacity-70 transition-opacity hover:opacity-100',
             'ring-offset-background focus:ring-ring focus:ring-2 focus:ring-offset-2 focus:outline-hidden',
             'data-open:bg-secondary disabled:pointer-events-none'

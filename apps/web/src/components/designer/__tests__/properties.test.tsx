@@ -18,6 +18,7 @@ import {
 import { ReachNote, ScopeLine } from '../properties/scope-line'
 import { SCOPE_NAMES } from '@/lib/shared/design/override-cascade'
 import { ScrubNumber } from '../properties/scrub-number'
+import { CanvasModeContext } from '../properties/canvas-mode'
 import { FontField, TokenField } from '../properties/token-field'
 import type { ColourToken, FontToken } from '../properties/tokens'
 import { COLOUR_NAMES, WORDS, resetTo } from '../properties/words'
@@ -389,6 +390,43 @@ describe('a brand colour field', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Page' }))
     expect(dark).toHaveBeenLastCalledWith('page')
     expect(light).not.toHaveBeenCalled()
+  })
+
+  it('draws the dark half in the dark colour of the role dark mode uses', () => {
+    const view = render(
+      <TokenField
+        id="bg"
+        label="Background"
+        value="accent"
+        tokens={TOKENS}
+        onChange={() => {}}
+        dark={{ value: 'ink', onChange: () => {} }}
+      />
+    )
+    const swatch = view.container.querySelector<HTMLElement>('[data-swatch=half]')!
+    expect(swatch.style.background).toContain('#eeeeee')
+    expect(swatch.style.background).not.toContain('#111111')
+  })
+
+  it('opens on the mode the canvas shows', async () => {
+    render(
+      <CanvasModeContext.Provider value="dark">
+        <TokenField
+          id="bg"
+          label="Background"
+          value="accent"
+          tokens={TOKENS}
+          onChange={() => {}}
+          dark={{ value: undefined, onChange: () => {} }}
+        />
+      </CanvasModeContext.Provider>
+    )
+    await act(async () =>
+      fireEvent.click(screen.getByRole('button', { name: 'Background: Brand colour' }))
+    )
+    expect((await screen.findByRole('radio', { name: 'Dark' })).getAttribute('aria-checked')).toBe(
+      'true'
+    )
   })
 
   it('draws a whole swatch when dark mode follows light', () => {

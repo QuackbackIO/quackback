@@ -68,6 +68,7 @@ import { useMatchOnArrival } from './use-match-on-arrival'
 import { useMenuEditing } from './use-menu-editing'
 import { usePreviewFollow } from './use-preview-follow'
 import { usePreviewMode } from './use-preview-mode'
+import { CanvasModeContext } from './properties/canvas-mode'
 import { useSaid } from './use-said'
 
 /** Escape inside these belongs to them. */
@@ -376,315 +377,327 @@ export function DesignerShell({
   const caption = deviceCaption(size)
 
   return (
-    <MotionConfig reducedMotion="user">
-      <div
-        className="flex h-dvh flex-col overflow-clip bg-muted/60"
-        onKeyDown={(event) => {
-          if (previewing) {
-            if (event.key === 'Escape') leavePreview()
-            return
-          }
-          blocks.blockKeys(event, () => dialogs.show('keys'))
-          if (event.key !== 'Escape' || event.defaultPrevented) return
-          if ((event.target as Element).closest(OWNS_ESCAPE)) return
-          const step = escapeStep(panel.state, selection ?? picking.elementKey, settingsOpen)
-          if (step === 'close-sheet') panel.close()
-          else if (step === 'up') {
-            // The panel stays, a level up: focus in it stays in it.
-            const kept = inSettings()
-            stepBack()
-            if (kept) focusSettings()
-          } else if (step === 'close-page') {
-            const lost = inSettings()
-            setPageClosed(true)
-            if (lost) focusBlocks()
-          }
-        }}
-      >
-        {settingsOpen && (
-          <a
-            href="#designer-settings"
-            className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:ring-2 focus:ring-muted-foreground"
-          >
-            Skip to properties
-          </a>
-        )}
-        {previewing ? (
-          <PreviewBar
-            page={page}
-            view={view}
-            size={size}
-            onSize={canvas.setSize}
-            onDone={() => leavePreview()}
-          />
-        ) : (
-          <BuilderTopBar
-            returnPath={returnPath}
-            workspaceName={workspaceName}
-            onExit={() => void exit()}
-            draft={draft}
-            view={view}
-            canvas={canvas}
-            nodes={nodes}
-            selection={selection}
-            onPick={pickAndFocus}
-            checks={checks}
-            onUndo={undo}
-            onRedo={redo}
-            onTurnOn={() => menu.setAdding(true)}
-            sheet={panel.state.sheet}
-            onSheet={(next) => {
-              panel.dispatch({ type: 'toggle', sheet: next })
-              setPane('settings')
-            }}
-            onPreview={startPreview}
-            onPublish={() => void publishing.start()}
-            onDiscard={discard}
-            onDialog={dialogs.show}
-          />
-        )}
-
-        {!previewing && (
-          <BuilderColumns
-            pane={column}
-            onPane={(next) => {
-              if (next === 'settings') setPageClosed(false)
-              setPane(next)
-            }}
-          />
-        )}
-        <div className="flex min-h-0 flex-1">
-          {!previewing && (
-            <AiPane pane={aiPane} hidden={column !== 'ai'}>
-              <DesignerAi
-                ai={ai}
-                draft={draft}
-                selection={selection}
-                selectionName={nameOf(selection) ?? null}
-                element={
-                  picking.element
-                    ? { element: picking.element.element, part: picking.element.part }
-                    : null
-                }
-                elementName={
-                  pickedElement ? pickLabel(pickedElement, design, backgroundPageOf(page)) : null
-                }
-                page={page}
-                pageName={PAGE_NAMES[page]}
-                update={update}
-                onClearSelection={() => setSelection(null)}
-                onCollapse={aiPane.collapse}
-                gates={gates}
-                onFonts={(font) => {
-                  openTheme()
-                  setPane('settings')
-                  revealThemeFonts(font)
-                }}
-                show={showChange}
-              />
-            </AiPane>
+    <CanvasModeContext.Provider value={design.mode === 'auto' ? theme : design.mode}>
+      <MotionConfig reducedMotion="user">
+        <div
+          className="flex h-dvh flex-col overflow-clip bg-muted/60"
+          onKeyDown={(event) => {
+            if (previewing) {
+              if (event.key === 'Escape') leavePreview()
+              return
+            }
+            blocks.blockKeys(event, () => dialogs.show('keys'))
+            if (event.key !== 'Escape' || event.defaultPrevented) return
+            if ((event.target as Element).closest(OWNS_ESCAPE)) return
+            const step = escapeStep(panel.state, selection ?? picking.elementKey, settingsOpen)
+            if (step === 'close-sheet') panel.close()
+            else if (step === 'up') {
+              // The panel stays, a level up: focus in it stays in it.
+              const kept = inSettings()
+              stepBack()
+              if (kept) focusSettings()
+            } else if (step === 'close-page') {
+              const lost = inSettings()
+              setPageClosed(true)
+              if (lost) focusBlocks()
+            }
+          }}
+        >
+          {settingsOpen && (
+            <a
+              href="#designer-settings"
+              className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:ring-2 focus:ring-muted-foreground"
+            >
+              Skip to properties
+            </a>
           )}
-          <main
-            aria-label="Page being edited"
-            className={cn(
-              'flex min-h-0 min-w-0 flex-1 flex-col p-4 pb-3',
-              !previewing && column !== 'page' && 'max-[1100px]:hidden'
-            )}
-          >
-            <p role="status" className="sr-only">
-              {said}
-            </p>
+          {previewing ? (
+            <PreviewBar
+              page={page}
+              view={view}
+              size={size}
+              onSize={canvas.setSize}
+              onDone={() => leavePreview()}
+            />
+          ) : (
+            <BuilderTopBar
+              returnPath={returnPath}
+              workspaceName={workspaceName}
+              onExit={() => void exit()}
+              draft={draft}
+              view={view}
+              canvas={canvas}
+              nodes={nodes}
+              selection={selection}
+              onPick={pickAndFocus}
+              checks={checks}
+              onFixCheck={(check) => check.fix && update(check.fix.apply, check.fix.label)}
+              onUndo={undo}
+              onRedo={redo}
+              onTurnOn={() => menu.setAdding(true)}
+              sheet={panel.state.sheet}
+              onSheet={(next) => {
+                panel.dispatch({ type: 'toggle', sheet: next })
+                setPane('settings')
+              }}
+              onPreview={startPreview}
+              onPublish={() => void publishing.start()}
+              onDiscard={discard}
+              onDialog={dialogs.show}
+            />
+          )}
+
+          {!previewing && (
+            <BuilderColumns
+              pane={column}
+              onPane={(next) => {
+                if (next === 'settings') setPageClosed(false)
+                setPane(next)
+              }}
+            />
+          )}
+          <div className="flex min-h-0 flex-1">
             {!previewing && (
-              <div className="mb-2 space-y-2 empty:hidden">
-                <DraftNotices draft={draft} />
-                {!draft.undoLabel && (
-                  <ReturnVisitNote savedAt={editor.draftSavedAt} now={now} onDiscard={discard} />
-                )}
-              </div>
-            )}
-            {!previewing && <CanvasBar view={view} note={follow.note} onBack={follow.back} />}
-            {caption && !previewing && (
-              <p className="pb-2 text-center text-xs text-muted-foreground">{caption}</p>
-            )}
-            <ClientOnly>
-              {view.widget ? (
-                <WidgetFrame
-                  design={canvasDesign}
-                  theme={design.mode === 'auto' ? theme : design.mode}
-                  locale={locale}
-                  title="Widget"
-                />
-              ) : page === 'post' && !postPath ? (
-                <p className="p-6 text-[13px] text-muted-foreground">
-                  {noPost ? 'There are no posts to show yet.' : 'Finding a post…'}
-                </p>
-              ) : (
-                <DesignerCanvas
+              <AiPane pane={aiPane} hidden={column !== 'ai'}>
+                <DesignerAi
+                  ai={ai}
+                  draft={draft}
+                  selection={selection}
+                  selectionName={nameOf(selection) ?? null}
+                  element={
+                    picking.element
+                      ? { element: picking.element.element, part: picking.element.part }
+                      : null
+                  }
+                  elementName={
+                    pickedElement ? pickLabel(pickedElement, design, backgroundPageOf(page)) : null
+                  }
                   page={page}
-                  postPath={view.here.item}
-                  visitor={view.visitor}
-                  sample={view.sample}
-                  onLocation={follow.onLocation}
-                  size={size}
-                  theme={design.mode === 'auto' ? theme : design.mode}
+                  pageName={PAGE_NAMES[page]}
+                  update={update}
+                  onClearSelection={() => setSelection(null)}
+                  onCollapse={aiPane.collapse}
+                  gates={gates}
+                  onFonts={(font) => {
+                    openTheme()
+                    setPane('settings')
+                    revealThemeFonts(font)
+                  }}
+                  show={showChange}
+                />
+              </AiPane>
+            )}
+            <main
+              aria-label="Page being edited"
+              className={cn(
+                'flex min-h-0 min-w-0 flex-1 flex-col p-4 pb-3',
+                !previewing && column !== 'page' && 'max-[1100px]:hidden'
+              )}
+            >
+              <p role="status" className="sr-only">
+                {said}
+              </p>
+              {!previewing && (
+                <div className="mb-2 space-y-2 empty:hidden">
+                  <DraftNotices draft={draft} />
+                  {!draft.undoLabel && (
+                    <ReturnVisitNote savedAt={editor.draftSavedAt} now={now} onDiscard={discard} />
+                  )}
+                </div>
+              )}
+              {!previewing && <CanvasBar view={view} note={follow.note} onBack={follow.back} />}
+              {caption && !previewing && (
+                <p className="pb-2 text-center text-xs text-muted-foreground">{caption}</p>
+              )}
+              <ClientOnly>
+                {view.widget ? (
+                  <WidgetFrame
+                    design={canvasDesign}
+                    theme={design.mode === 'auto' ? theme : design.mode}
+                    locale={locale}
+                    title="Widget"
+                  />
+                ) : page === 'post' && !postPath ? (
+                  <p className="p-6 text-[13px] text-muted-foreground">
+                    {noPost ? 'There are no posts to show yet.' : 'Finding a post…'}
+                  </p>
+                ) : (
+                  <DesignerCanvas
+                    page={page}
+                    postPath={view.here.item}
+                    visitor={view.visitor}
+                    sample={view.sample}
+                    onLocation={follow.onLocation}
+                    size={size}
+                    theme={design.mode === 'auto' ? theme : design.mode}
+                    locale={locale}
+                    sort={design.pages.feedback.defaultSort}
+                    refreshKey={`${draft.published?.number ?? 0}`}
+                    design={canvasDesign}
+                    structural={structural}
+                    zoom={previewing ? 'fit' : canvas.zoom}
+                    trying={previewing}
+                    onSelect={(section, link, target) => {
+                      menu.dismiss()
+                      setPageClosed(false)
+                      picking.select(section, link, target)
+                    }}
+                    onFollow={(link) => {
+                      const at = locationOfPath(link, design.nav.home.on)
+                      if (at && pages.includes(at.page)) setPage(at.page, at.item)
+                    }}
+                    onHover={picking.hover}
+                    onMenu={(target, how, node) => {
+                      menu.onMenu(target, how)
+                      // The logo is its own element; a menu item or sign in is picked too, so its look can be set.
+                      if (how === 'click' && target === 'logo') picking.select('logo', null)
+                      else if (how === 'click' && node) picking.select('header', null, node)
+                    }}
+                    onMenuHover={menu.setHovered}
+                    onWords={onWords}
+                    onKey={(key) => (key === 'undo' ? undo() : redo())}
+                    onEscape={() => {
+                      if (previewing) leavePreview()
+                      // The menu's hint shows while the menu is in play; Escape there closes it first.
+                      else if (coach.show && (menuHot || !!menu.hovered)) coach.dismiss()
+                      else if (!menu.dismiss()) stepBack()
+                    }}
+                    onLoad={picking.reload}
+                    layer={(frame) =>
+                      previewing ? null : (
+                        <>
+                          <CanvasLayer
+                            canvas={frame}
+                            hovered={picking.hovered}
+                            picked={selection}
+                            name={nameOf(selection) ?? null}
+                            homeOn={design.nav.home.on}
+                            pages={pages}
+                            onPage={setPage}
+                            onDuplicate={blocks.duplicateBlock}
+                            onRemove={blocks.removeBlock}
+                            onDeselect={stepBack}
+                            flash={changeFlash.flash}
+                            grid={{
+                              design,
+                              gates,
+                              update,
+                              begin: draft.begin,
+                              end: draft.end,
+                              say,
+                            }}
+                            elements={{
+                              design,
+                              page: backgroundPageOf(page),
+                              hovered: picking.hoveredElement,
+                              picked: picking.elementKey,
+                              force: elementState,
+                              onPick: picking.pickElement,
+                              say,
+                            }}
+                          />
+                          <WordsLayer canvas={frame} design={design} locale={locale} say={say} />
+                          <MenuLayer
+                            canvas={frame}
+                            design={design}
+                            gates={gates}
+                            settings={view.settings}
+                            update={update}
+                            editing={menu}
+                            headerHot={menuHot}
+                            coach={coach}
+                            onSample={view.showSample}
+                          />
+                          <AddDropLayer canvas={frame} drag={addDrag} />
+                        </>
+                      )
+                    }
+                  />
+                )}
+              </ClientOnly>
+            </main>
+            {!previewing && (
+              <BrandMatchProvider value={brandMatch}>
+                <BuilderSettings
+                  hidden={column !== 'settings'}
+                  open={settingsOpen}
+                  shown={shown}
+                  route={route}
+                  panel={panel}
+                  selection={selection}
+                  page={page}
+                  pages={pages.length}
+                  nodes={nodes}
+                  design={design}
+                  update={update}
+                  gates={gates}
                   locale={locale}
-                  sort={design.pages.feedback.defaultSort}
-                  refreshKey={`${draft.published?.number ?? 0}`}
-                  design={canvasDesign}
-                  structural={structural}
-                  zoom={previewing ? 'fit' : canvas.zoom}
-                  trying={previewing}
-                  onSelect={(section, link, target) => {
-                    menu.dismiss()
-                    setPageClosed(false)
-                    picking.select(section, link, target)
+                  phone={size === 'phone'}
+                  onPhone={(next) => canvas.setSize(next ? 'phone' : 'desktop')}
+                  checks={checks}
+                  logoUrl={logoUrl}
+                  cssWarnings={draft.report.css}
+                  menu={menu}
+                  pickedBlock={pickedBlock}
+                  onSelect={pick}
+                  onAdd={addBlock}
+                  drag={addDrag}
+                  onTheme={(more) => openTheme(more)}
+                  onElement={(element) =>
+                    picking.pickElement({ element, part: null, section: null, index: 0 })
+                  }
+                  say={say}
+                  onOverride={jumpTo}
+                  onBlock={(id) => {
+                    if (page !== 'home' && pages.includes('home')) setPage('home')
+                    panel.close()
+                    pick(`block-${id}`)
                   }}
-                  onFollow={(link) => {
-                    const at = locationOfPath(link, design.nav.home.on)
-                    if (at && pages.includes(at.page)) setPage(at.page, at.item)
-                  }}
-                  onHover={picking.hover}
-                  onMenu={(target, how, node) => {
-                    menu.onMenu(target, how)
-                    // The logo is its own element; a menu item or sign in is picked too, so its look can be set.
-                    if (how === 'click' && target === 'logo') picking.select('logo', null)
-                    else if (how === 'click' && node) picking.select('header', null, node)
-                  }}
-                  onMenuHover={menu.setHovered}
-                  onWords={onWords}
-                  onKey={(key) => (key === 'undo' ? undo() : redo())}
-                  onEscape={() => {
-                    if (previewing) leavePreview()
-                    // The menu's hint shows while the menu is in play; Escape there closes it first.
-                    else if (coach.show && (menuHot || !!menu.hovered)) coach.dismiss()
-                    else if (!menu.dismiss()) stepBack()
-                  }}
-                  onLoad={picking.reload}
-                  layer={(frame) =>
-                    previewing ? null : (
-                      <>
-                        <CanvasLayer
-                          canvas={frame}
-                          hovered={picking.hovered}
-                          picked={selection}
-                          name={nameOf(selection) ?? null}
-                          homeOn={design.nav.home.on}
-                          pages={pages}
-                          onPage={setPage}
-                          onDuplicate={blocks.duplicateBlock}
-                          onRemove={blocks.removeBlock}
-                          onDeselect={stepBack}
-                          flash={changeFlash.flash}
-                          grid={{ design, gates, update, begin: draft.begin, end: draft.end, say }}
-                          elements={{
-                            design,
-                            page: backgroundPageOf(page),
-                            hovered: picking.hoveredElement,
-                            picked: picking.elementKey,
-                            force: elementState,
-                            onPick: picking.pickElement,
-                            say,
-                          }}
-                        />
-                        <WordsLayer canvas={frame} design={design} locale={locale} say={say} />
-                        <MenuLayer
-                          canvas={frame}
-                          design={design}
-                          gates={gates}
-                          settings={view.settings}
-                          update={update}
-                          editing={menu}
-                          headerHot={menuHot}
-                          coach={coach}
-                          onSample={view.showSample}
-                        />
-                        <AddDropLayer canvas={frame} drag={addDrag} />
-                      </>
-                    )
+                  element={
+                    pickedElement && route.panel === 'element' ? (
+                      <ElementPanel
+                        key={elementPanelKey(pickedElement)}
+                        pick={pickedElement}
+                        page={page}
+                        blockName={
+                          pickedElement.section
+                            ? (nameOf(pickedElement.section as Selection) ?? null)
+                            : null
+                        }
+                        design={design}
+                        update={update}
+                        state={elementState}
+                        onState={setElementState}
+                        screen={size === 'phone' ? 'phone' : 'all'}
+                        onScreen={(next) => canvas.setSize(next === 'phone' ? 'phone' : 'desktop')}
+                        onUp={() => picking.pickElement(null)}
+                        reach={pickReach.reach}
+                        measure={pickReach.measure}
+                        drawn={
+                          pickReach.drawn
+                            ? { values: pickReach.drawn, size, dark: canvasDark }
+                            : null
+                        }
+                        onJump={(place) => {
+                          if (place.block) return pick(`block-${place.block}` as Selection)
+                          const to =
+                            place.page ?? (place.part ? partOf(design, place.part)?.pages[0] : null)
+                          if (to && to !== page && pages.includes(to as DesignerPage))
+                            setPage(to as DesignerPage)
+                        }}
+                      />
+                    ) : undefined
                   }
                 />
-              )}
-            </ClientOnly>
-          </main>
-          {!previewing && (
-            <BrandMatchProvider value={brandMatch}>
-              <BuilderSettings
-                hidden={column !== 'settings'}
-                open={settingsOpen}
-                shown={shown}
-                route={route}
-                panel={panel}
-                selection={selection}
-                page={page}
-                pages={pages.length}
-                nodes={nodes}
-                design={design}
-                update={update}
-                gates={gates}
-                locale={locale}
-                phone={size === 'phone'}
-                onPhone={(next) => canvas.setSize(next ? 'phone' : 'desktop')}
-                checks={checks}
-                logoUrl={logoUrl}
-                cssWarnings={draft.report.css}
-                menu={menu}
-                pickedBlock={pickedBlock}
-                onSelect={pick}
-                onAdd={addBlock}
-                drag={addDrag}
-                onTheme={(more) => openTheme(more)}
-                onElement={(element) =>
-                  picking.pickElement({ element, part: null, section: null, index: 0 })
-                }
-                say={say}
-                onOverride={jumpTo}
-                onBlock={(id) => {
-                  if (page !== 'home' && pages.includes('home')) setPage('home')
-                  panel.close()
-                  pick(`block-${id}`)
-                }}
-                element={
-                  pickedElement && route.panel === 'element' ? (
-                    <ElementPanel
-                      key={elementPanelKey(pickedElement)}
-                      pick={pickedElement}
-                      page={page}
-                      blockName={
-                        pickedElement.section
-                          ? (nameOf(pickedElement.section as Selection) ?? null)
-                          : null
-                      }
-                      design={design}
-                      update={update}
-                      state={elementState}
-                      onState={setElementState}
-                      screen={size === 'phone' ? 'phone' : 'all'}
-                      onScreen={(next) => canvas.setSize(next === 'phone' ? 'phone' : 'desktop')}
-                      onUp={() => picking.pickElement(null)}
-                      reach={pickReach.reach}
-                      measure={pickReach.measure}
-                      drawn={
-                        pickReach.drawn ? { values: pickReach.drawn, size, dark: canvasDark } : null
-                      }
-                      onJump={(place) => {
-                        if (place.block) return pick(`block-${place.block}` as Selection)
-                        const to =
-                          place.page ?? (place.part ? partOf(design, place.part)?.pages[0] : null)
-                        if (to && to !== page && pages.includes(to as DesignerPage))
-                          setPage(to as DesignerPage)
-                      }}
-                    />
-                  ) : undefined
-                }
-              />
-            </BrandMatchProvider>
-          )}
-        </div>
+              </BrandMatchProvider>
+            )}
+          </div>
 
-        <AddDragCard drag={addDrag} />
-        {publishing.dialogs}
-        {dialogs.dialogs}
-      </div>
-    </MotionConfig>
+          <AddDragCard drag={addDrag} />
+          {publishing.dialogs}
+          {dialogs.dialogs}
+        </div>
+      </MotionConfig>
+    </CanvasModeContext.Provider>
   )
 }

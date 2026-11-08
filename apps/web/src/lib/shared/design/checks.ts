@@ -1,13 +1,16 @@
 /**
  * Checks beyond colour, read from the design: text set too small, a hero
  * image without a description, link labels that do not say where they go,
- * Home blocks headed alike, buttons set too small, and a page background
- * softened so text reads on it. Each names the part that fixes it.
+ * Home blocks headed alike, buttons set too small, a page background
+ * softened so text reads on it, and a panel left light in dark mode. Each
+ * names the part that fixes it.
  */
+import { isLight } from './contrast'
 import type { Selection } from './outline'
 import { BACKGROUND_PAGE_NAMES, hasPageBackground } from './page-background'
 import { resolveDesign } from './resolve'
 import type { PortalDesign } from './schema'
+import { STYLE_ELEMENTS, type StyleState } from './style-tokens'
 
 export interface DesignCheck {
   id: string
@@ -15,6 +18,8 @@ export interface DesignCheck {
   text: string
   /** The part whose settings fix it. */
   part: Selection
+  /** A change that fixes it in one step, named for undo and the button. */
+  fix?: { label: string; apply: (draft: PortalDesign) => void }
 }
 
 /** The smallest text a design sets, in px. */
@@ -100,8 +105,55 @@ export function designChecks(design: PortalDesign): DesignCheck[] {
       })
     else seen.set(heading, key)
   })
-  checks.push(...backgroundChecks(design))
+  checks.push(...backgroundChecks(design), ...lightPanelChecks(design))
   return checks
+}
+
+/** Elements that are panels, which glare drawn light on a dark page. */
+const PANELS = ['postCard', 'panel', 'block', 'input', 'header', 'footer', 'hero'] as const
+/** The panels a page has one of, named as one. */
+const ONE_PANEL: Partial<Record<(typeof PANELS)[number], string>> = {
+  header: 'The header stays',
+  footer: 'The footer stays',
+  hero: 'The hero stays',
+}
+
+/**
+ * A panel the site's styles draw light on the dark page, as a dark value
+ * set light does: said once per kind, with a fix that draws it in the card
+ * colour in dark mode.
+ */
+function lightPanelChecks(design: PortalDesign): DesignCheck[] {
+  if (design.mode === 'light') return []
+  const resolved = resolveDesign(design)
+  const page = resolved.dark?.background
+  if (!page || isLight(page)) return []
+  return PANELS.flatMap((element) => {
+    const states = new Set([
+      ...Object.keys(design.style?.[element] ?? {}),
+      ...Object.keys(design.styleDark?.[element] ?? {}),
+    ]) as Set<StyleState>
+    const light = [...states].filter((state) => {
+      const fill = resolved.tokens.dark[`--qb-st-${element}-${state}-background`]
+      return !!fill && /^(#|oklch\()/.test(fill) && isLight(fill)
+    })
+    if (!light.length) return []
+    return [
+      {
+        id: `light-panel-${element}`,
+        text: `${ONE_PANEL[element] ?? `${STYLE_ELEMENTS[element].label} stay`} light in dark mode.`,
+        part: 'site:styles' as const,
+        fix: {
+          label: 'Use the card colour',
+          apply: (draft: PortalDesign) => {
+            const sheet = (draft.styleDark ??= {})
+            const own = (sheet[element] ??= {}) as Record<string, Record<string, unknown>>
+            for (const state of light) own[state] = { ...own[state], background: 'surface' }
+          },
+        },
+      },
+    ]
+  })
 }
 
 /**

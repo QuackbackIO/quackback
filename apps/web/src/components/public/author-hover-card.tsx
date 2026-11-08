@@ -227,7 +227,7 @@ function CardStat({ value, label }: { value: number; label: string }) {
   return (
     <div className="flex-1 text-center">
       <div className="text-sm font-semibold tabular-nums text-foreground">{value}</div>
-      <div className="text-[11px] leading-[14px] text-muted-foreground">{label}</div>
+      <div className="text-xs leading-4 text-muted-foreground">{label}</div>
     </div>
   )
 }

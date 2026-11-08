@@ -6,13 +6,15 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import type { DesignCheck } from '@/lib/shared/design/checks'
 import { DraftStatus } from '../draft-status'
 
 afterEach(cleanup)
 
-function show(count = 4, checks: { id: string; text: string; part: 'hero' }[] = []) {
+function show(count = 4, checks: DesignCheck[] = []) {
   const handlers = {
     onShowCheck: vi.fn(),
+    onFixCheck: vi.fn(),
     onSeeAll: vi.fn(),
     onDiscard: vi.fn(),
     onVersions: vi.fn(),
@@ -76,5 +78,19 @@ describe('the draft status', () => {
     expect(screen.getByText('1 thing to check')).toBeTruthy()
     fireEvent.click(screen.getByRole('menuitem', { name: /hero image has no description/ }))
     expect(onShowCheck).toHaveBeenCalledWith('hero')
+  })
+
+  it('fixes a check that has a fix in one step', async () => {
+    const check: DesignCheck = {
+      id: 'light-panel-postCard',
+      text: 'Post cards stay light in dark mode.',
+      part: 'site:styles',
+      fix: { label: 'Use the card colour', apply: () => {} },
+    }
+    const { onFixCheck, onShowCheck } = show(2, [check])
+    await open()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Use the card colour' }))
+    expect(onFixCheck).toHaveBeenCalledWith(check)
+    expect(onShowCheck).not.toHaveBeenCalled()
   })
 })
