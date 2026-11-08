@@ -40,6 +40,10 @@ export type Selection =
   | 'topics'
   | 'popular'
   | 'board'
+  /** A post's one vote control, its details and its comments. */
+  | 'vote'
+  | 'details'
+  | 'comments'
   | `block-${string}`
   /** A part of the menu or a page under one, such as `page:help` or `page:post`; see menu.ts. */
   | `page:${DesignerPage}`
@@ -134,7 +138,13 @@ export function outlineOf(design: PortalDesign, page: DesignerPage): OutlineNode
     nodes.push({ key: 'composer', label: 'Composer' })
     nodes.push({ key: 'feed', label: 'Feed' })
     nodes.push({ key: 'filters', label: 'Filters' })
-  } else if (page !== 'status' && page !== 'post') {
+  } else if (page === 'post') {
+    nodes.push(
+      { key: 'vote', label: 'Vote' },
+      { key: 'details', label: 'Details' },
+      { key: 'comments', label: 'Comments' }
+    )
+  } else if (page !== 'status') {
     nodes.push(...PAGE_SECTIONS[page](design))
   }
   return nodes

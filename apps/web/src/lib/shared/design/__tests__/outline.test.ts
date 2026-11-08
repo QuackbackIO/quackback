@@ -91,7 +91,14 @@ describe('outlineOf', () => {
       'board',
     ])
     expect(pageKeys(defaultDesign(), 'status')).toEqual(['site', 'header', 'logo'])
-    expect(pageKeys(defaultDesign(), 'post')).toEqual(['site', 'header', 'logo'])
+    expect(pageKeys(defaultDesign(), 'post')).toEqual([
+      'site',
+      'header',
+      'logo',
+      'vote',
+      'details',
+      'comments',
+    ])
   })
 
   it('names the hero Hero on every page that has one', () => {
@@ -122,7 +129,7 @@ describe('pages', () => {
     expect(pageOfPath('/b/ideas/posts/1', false)).toBe('post')
     expect(pageOfPath('/b/ideas', false)).toBeNull()
     expect(pagePath('post', '/b/ideas/posts/1')).toBe('/b/ideas/posts/1')
-    expect(pageKeys(defaultDesign(), 'post')).toEqual(['site', 'header', 'logo'])
+    expect(pageKeys(defaultDesign(), 'post')).toContain('vote')
     expect(pagePath('home')).toBe('/')
     expect(pagePath('help')).toBe('/hc')
   })

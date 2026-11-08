@@ -204,6 +204,10 @@ function guideLines(
       `The Roadmap page; leave a field out for its usual look. pages.roadmap.board: ${DESIGN_OPTIONS.roadmapBoard.join(', ')} (a column per status, or one list grouped by status); pages.roadmap.votes: true or false (the vote box on its cards).`,
     ],
     [
+      ['pages.post'],
+      `A post's own page, with three fixed parts; leave a field out for its usual look. pages.post.vote: ${DESIGN_OPTIONS.postVote.join(', ')} (where its one vote control sits: beside the title, or at the top of the details). pages.post.board, pages.post.tags, pages.post.date and pages.post.author: true or false (each detail beside the post; the status always shows). pages.post.subscribe: ${DESIGN_OPTIONS.postSubscribe.join(', ')} (Subscribe in the details, or beside the comments' heading). pages.post.comments: ${DESIGN_OPTIONS.commentOrder.join(', ')} (the comments' order; the pinned reply always leads).`,
+    ],
+    [
       [
         'pages.home.headline',
         'pages.home.composer',

@@ -125,7 +125,7 @@ export function describeBlock(type: HomeBlockType | 'hero', places: AiPlaces): s
 
 /** The pages' own settings, set with target the page's name. */
 function pagesText(places: AiPlaces): string {
-  const pages = ['changelog', 'help', 'roadmap'] as const
+  const pages = ['changelog', 'help', 'roadmap', 'post'] as const
   const lines = pages.map((page) => {
     const fields = SECTION_TYPES.filter((type) => type.startsWith(`${page}.`)).flatMap((type) =>
       blockOf(type)!.fields.map((field) => settingLine(field, places))
@@ -470,7 +470,7 @@ export function designContext(
     : null
   const element = pickedElement(design, input.picked, input.page)
   const hero = heroOf(design)
-  const choices = (['changelog', 'help', 'roadmap'] as const)
+  const choices = (['changelog', 'help', 'roadmap', 'post'] as const)
     .map((page) => {
       const made = { ...PAGE_CHOICE_DEFAULTS[page], ...design.pages[page] } as Record<
         string,

@@ -148,6 +148,12 @@ export const DESIGN_OPTIONS = {
   searchSize: ['standard', 'large'],
   /** The roadmap's board: a column per status, or one list grouped by status. */
   roadmapBoard: ['columns', 'list'],
+  /** Where a post's one vote control sits: beside its title, or in its details. */
+  postVote: ['title', 'details'],
+  /** Where a post's Subscribe sits: in its details, or over its comments. */
+  postSubscribe: ['details', 'comments'],
+  /** The order a post's comments read in; the pinned reply always leads. */
+  commentOrder: ['newest', 'oldest'],
 } as const
 
 export type DesignOption = keyof typeof DESIGN_OPTIONS

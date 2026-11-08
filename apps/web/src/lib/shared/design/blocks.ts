@@ -23,6 +23,7 @@ import {
   PAGE_CHOICE_DEFAULTS,
   changelogChoicesSchema,
   helpChoicesSchema,
+  postChoicesSchema,
   roadmapChoicesSchema,
   type PageChoices,
 } from './page-choices'
@@ -44,6 +45,9 @@ export const SECTION_TYPES = [
   'help.popular',
   'help.search',
   'roadmap.board',
+  'post.vote',
+  'post.details',
+  'post.comments',
 ] as const
 export type SectionType = (typeof SECTION_TYPES)[number]
 export type BlockType = HomeBlockType | SectionType | 'hero'
@@ -55,6 +59,9 @@ const SECTION_KEYS = {
   'help.popular': ['popular'],
   'help.search': ['search'],
   'roadmap.board': ['board', 'votes'],
+  'post.vote': ['vote'],
+  'post.details': ['board', 'tags', 'date', 'author', 'subscribe'],
+  'post.comments': ['comments'],
 } as const satisfies Record<SectionType, readonly string[]>
 
 /** A page section as a block: its type and its choices, today's where the design makes none. */
@@ -64,6 +71,12 @@ export type SectionBlock =
   | ({ type: 'help.popular' } & Pick<PageChoices['help'], 'popular'>)
   | ({ type: 'help.search' } & Pick<PageChoices['help'], 'search'>)
   | ({ type: 'roadmap.board' } & Pick<PageChoices['roadmap'], 'board' | 'votes'>)
+  | ({ type: 'post.vote' } & Pick<PageChoices['post'], 'vote'>)
+  | ({ type: 'post.details' } & Pick<
+      PageChoices['post'],
+      'board' | 'tags' | 'date' | 'author' | 'subscribe'
+    >)
+  | ({ type: 'post.comments' } & Pick<PageChoices['post'], 'comments'>)
 export type AnyBlock = HomeBlock | SectionBlock | HeroBlock
 
 type Option<T> = readonly [value: T, name: string]
@@ -869,6 +882,97 @@ const SECTIONS: Record<SectionType, Omit<BlockDef, 'type' | 'pages' | 'addable' 
       },
     ],
   },
+  'post.vote': {
+    name: 'Vote',
+    purpose: 'The post’s one vote control',
+    job: 'hear',
+    fields: [
+      {
+        kind: 'choice',
+        key: 'vote',
+        label: 'Position',
+        options: [
+          ['title', 'Beside title'],
+          ['details', 'In details'],
+        ],
+        looks: {
+          title: 'the vote box beside the post’s title',
+          details: 'the vote count and button at the top of the details',
+        },
+        about: 'Where the post’s one vote control sits',
+      },
+    ],
+    ai: ['vote'],
+    examples: [
+      {
+        request: 'Put the vote button in the post’s details',
+        ops: [{ op: 'set', target: 'post page', key: 'vote', value: 'details' }],
+      },
+    ],
+  },
+  'post.details': {
+    name: 'Details',
+    purpose: 'What shows beside the post; its status always does',
+    job: 'hear',
+    fields: [
+      { kind: 'switch', key: 'board', label: 'Board', group: 'Show', about: 'The post’s board' },
+      { kind: 'switch', key: 'tags', label: 'Tags', about: 'The post’s tags' },
+      { kind: 'switch', key: 'date', label: 'Date', about: 'When the post was made' },
+      { kind: 'switch', key: 'author', label: 'Author', about: 'Who made the post' },
+      {
+        kind: 'choice',
+        key: 'subscribe',
+        label: 'Subscribe',
+        options: [
+          ['details', 'In details'],
+          ['comments', 'Over comments'],
+        ],
+        looks: {
+          details: 'Subscribe at the foot of the details',
+          comments: 'Subscribe beside the comments’ heading, on every screen',
+        },
+        about: 'Where Subscribe sits',
+      },
+    ],
+    ai: ['board', 'tags', 'date', 'author', 'subscribe'],
+    examples: [
+      {
+        request: 'Hide the author and date on posts',
+        ops: [
+          { op: 'set', target: 'post page', key: 'author', value: 'false' },
+          { op: 'set', target: 'post page', key: 'date', value: 'false' },
+        ],
+      },
+    ],
+  },
+  'post.comments': {
+    name: 'Comments',
+    purpose: 'The post’s comments; the pinned reply always leads',
+    job: 'hear',
+    fields: [
+      {
+        kind: 'choice',
+        key: 'comments',
+        label: 'Order',
+        options: [
+          ['newest', 'Newest'],
+          ['oldest', 'Oldest'],
+        ],
+        looks: {
+          newest: 'newest comments first',
+          oldest: 'oldest comments first, as a conversation reads',
+        },
+        about: 'The order the comments read in, after the pinned reply',
+      },
+    ],
+    ai: ['comments'],
+    examples: [
+      {
+        request: 'Show the oldest comments first',
+        ops: [{ op: 'set', target: 'post page', key: 'comments', value: 'oldest' }],
+      },
+    ],
+  },
 }
 
 /** The hero's settings, in the order its panel shows them. */
@@ -1307,6 +1411,12 @@ function heroSummary(block: HeroBlock): string[] {
 
 function sectionSummary(block: SectionBlock): string[] {
   const def = SECTIONS[block.type]
+  if (block.type === 'post.details') {
+    const shown = def.fields
+      .filter((field) => field.kind === 'switch' && (block as Record<string, unknown>)[field.key])
+      .map((field) => field.label.toLowerCase())
+    return [shown.length ? `Status, ${shown.join(', ')}` : 'Status only']
+  }
   return def.fields.map((field) => {
     const value = (block as Record<string, unknown>)[field.key]
     if (field.kind === 'switch') {
@@ -1345,6 +1455,7 @@ const SECTION_SCHEMAS = {
   changelog: changelogChoicesSchema,
   help: helpChoicesSchema,
   roadmap: roadmapChoicesSchema,
+  post: postChoicesSchema,
 } as const
 
 const listed = (values: readonly unknown[]) => {

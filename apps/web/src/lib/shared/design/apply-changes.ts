@@ -51,6 +51,7 @@ export const DESIGN_AI_SCOPES = [
   'roadmap',
   'changelog',
   'help',
+  'post',
 ] as const
 export type DesignAiScope = (typeof DESIGN_AI_SCOPES)[number]
 
@@ -200,6 +201,7 @@ const SCOPE_FIELDS: Record<Exclude<DesignAiScope, 'site'>, readonly string[]> = 
   roadmap: ['pages.roadmap', 'pages.titles.roadmap'],
   changelog: ['pages.changelog', 'pages.titles.changelog'],
   help: ['pages.help', 'pages.titles.help'],
+  post: ['pages.post'],
 }
 
 const within = (path: string, field: string) => path === field || path.startsWith(`${field}.`)

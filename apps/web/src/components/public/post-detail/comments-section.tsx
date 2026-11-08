@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { useIntl } from 'react-intl'
 import { portalDetailQueries, type PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'
@@ -99,6 +99,10 @@ interface CommentsSectionProps {
   onImageUpload?: (file: File) => Promise<string>
   /** Team members with post.approve can approve/reject pending comments inline. */
   canModerate?: boolean
+  /** The order comments read in; the pinned reply leads either way. Newest when absent. */
+  order?: 'newest' | 'oldest'
+  /** What sits beside the heading, such as Subscribe. */
+  headerAction?: ReactNode
 }
 
 export function CommentsSection({
@@ -125,6 +129,8 @@ export function CommentsSection({
   remainingCommentCount,
   onImageUpload,
   canModerate = false,
+  order = 'newest',
+  headerAction,
 }: CommentsSectionProps) {
   const intl = useIntl()
   const commentCount = useMemo(() => countAllComments(comments), [comments])
@@ -154,20 +160,55 @@ export function CommentsSection({
   // commenting is unaffected by the board's reply rule.
   const replyPolicy = data?.replyPolicy
 
+  // More comments are older ones: under the newest, or over the oldest.
+  const showMore = hasMoreComments && onLoadMoreComments && (
+    <div className="mt-4 flex justify-center">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={isLoadingMoreComments}
+        onClick={onLoadMoreComments}
+      >
+        {isLoadingMoreComments
+          ? intl.formatMessage({
+              id: 'portal.postDetail.comments.loadingMore',
+              defaultMessage: 'Loading...',
+            })
+          : remainingCommentCount && remainingCommentCount > 0
+            ? intl.formatMessage(
+                {
+                  id: 'portal.postDetail.comments.showMoreCount',
+                  defaultMessage:
+                    'Show {count, plural, one {# more comment} other {# more comments}}',
+                },
+                { count: remainingCommentCount }
+              )
+            : intl.formatMessage({
+                id: 'portal.postDetail.comments.showMore',
+                defaultMessage: 'Show more comments',
+              })}
+      </Button>
+    </div>
+  )
+
   return (
     <div
       className="p-6 animate-in fade-in duration-200 fill-mode-backwards"
       style={{ animationDelay: '150ms' }}
     >
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
-        {intl.formatMessage(
-          {
-            id: 'portal.postDetail.comments',
-            defaultMessage: '{count, plural, one {# Comment} other {# Comments}}',
-          },
-          { count: commentCount }
-        )}
-      </h2>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {intl.formatMessage(
+            {
+              id: 'portal.postDetail.comments',
+              defaultMessage: '{count, plural, one {# Comment} other {# Comments}}',
+            },
+            { count: commentCount }
+          )}
+        </h2>
+        {headerAction}
+      </div>
 
       <AuthCommentsSection
         postId={postId}
@@ -195,38 +236,11 @@ export function CommentsSection({
         hideCommentForm={disableCommenting && !!adminUser}
         onImageUpload={onImageUpload}
         canModerate={canModerate}
+        oldestFirst={order === 'oldest'}
+        before={order === 'oldest' ? showMore : undefined}
       />
 
-      {hasMoreComments && onLoadMoreComments && (
-        <div className="mt-4 flex justify-center">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={isLoadingMoreComments}
-            onClick={onLoadMoreComments}
-          >
-            {isLoadingMoreComments
-              ? intl.formatMessage({
-                  id: 'portal.postDetail.comments.loadingMore',
-                  defaultMessage: 'Loading...',
-                })
-              : remainingCommentCount && remainingCommentCount > 0
-                ? intl.formatMessage(
-                    {
-                      id: 'portal.postDetail.comments.showMoreCount',
-                      defaultMessage:
-                        'Show {count, plural, one {# more comment} other {# more comments}}',
-                    },
-                    { count: remainingCommentCount }
-                  )
-                : intl.formatMessage({
-                    id: 'portal.postDetail.comments.showMore',
-                    defaultMessage: 'Show more comments',
-                  })}
-          </Button>
-        </div>
-      )}
+      {order === 'newest' && showMore}
     </div>
   )
 }

@@ -168,7 +168,8 @@ export function PickedBlock({
           <SectionLook
             section={section}
             name={def.name}
-            page={PAGE_NAMES[page]}
+            // A post's parts are every post's.
+            page={page === 'post' ? 'every post' : PAGE_NAMES[page]}
             onElement={setElement}
           />
         }
