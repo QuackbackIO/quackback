@@ -1,9 +1,21 @@
 import { useRouteContext, useRouterState } from '@tanstack/react-router'
-import { useMemo, type ReactNode } from 'react'
+import { lazy, Suspense, useMemo, type ReactNode } from 'react'
 import { PortalErrorContext } from '@/components/shared/error-page'
 import { backgroundPageOf, locationOfPath } from '@/lib/shared/design/paths'
 import { usePreviewDesignNav } from './preview-draft-context'
-import { PortalNotFound } from './portal-not-found'
+
+// Only a missing page draws it, so a page that is found never loads it (nor the
+// search field it holds, which would split into one more script on every page).
+const LazyNotFound = lazy(() =>
+  import('./portal-not-found').then((m) => ({ default: m.PortalNotFound }))
+)
+function PortalNotFound() {
+  return (
+    <Suspense fallback={null}>
+      <LazyNotFound />
+    </Suspense>
+  )
+}
 
 /** A turned-off page's sample, which the builder shows at /design-sample/<page>. */
 const SAMPLE = /^\/design-sample\/([a-z-]+)/
