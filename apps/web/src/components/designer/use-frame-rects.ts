@@ -19,7 +19,7 @@ export function blockElement(
   key: string,
   locate?: (doc: Document, key: string) => Element | null
 ): Element | null {
-  if (locate && (key.startsWith('el:') || key.startsWith('live:'))) return locate(doc, key)
+  if (locate && /^(el|live|flash):/.test(key)) return locate(doc, key)
   if (key === MENU_ROW_KEY)
     return [...doc.querySelectorAll('[data-qb-menu-row]')].find(drawn) ?? null
   if (key.startsWith('menu:')) {
@@ -92,7 +92,7 @@ export function useFrameRects(
   frame: HTMLIFrameElement | null,
   scale: number,
   keys: readonly (string | null)[],
-  /** Finds an element picked in a block (`el:` keys) or a live value in one (`live:` keys). */
+  /** Finds an element picked in a block (`el:` keys), a live value in one (`live:` keys) or a change outlined (`flash:` keys). */
   locate?: (doc: Document, key: string) => Element | null
 ): Partial<Record<string, Rect>> {
   const locating = useRef(locate)

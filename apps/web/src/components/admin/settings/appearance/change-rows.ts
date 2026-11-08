@@ -19,11 +19,18 @@ export interface RowSide {
   swatch?: string
 }
 
+/** What a row changed, as the canvas finds where it shows. */
+export interface RowChange {
+  path: string
+  before: unknown
+  after: unknown
+}
+
 export type ChangeRow =
   /** A field changed, "Thing: old → new". */
-  | { key: string; path: string; label: string; before: RowSide; after: RowSide }
+  | { key: string; path: string; at: RowChange; label: string; before: RowSide; after: RowSide }
   /** An operation, said as it was done: "Hero look: Brand colour with waves". */
-  | { key: string; path: string; text: string; swatch?: string }
+  | { key: string; path: string; at: RowChange; text: string; swatch?: string }
 
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
@@ -144,6 +151,7 @@ export function changeRows(changes: readonly AppliedDesignChange[]): ChangeRow[]
         rows.push({
           key: leaf.path,
           path: leaf.path,
+          at: { path: leaf.path, before: leaf.before, after: leaf.after },
           label: leaf.label,
           before: sideOf(leaf.path, leaf.before),
           after: sideOf(leaf.path, leaf.after),
@@ -164,6 +172,10 @@ export function changeRows(changes: readonly AppliedDesignChange[]): ChangeRow[]
       rows.push({
         key: `${change.path}|${op}`,
         path: leaf?.path ?? change.path,
+        // A field the operation is about, else everything its change did.
+        at: leaf
+          ? { path: leaf.path, before: leaf.before, after: leaf.after }
+          : { path: change.path, before: change.before, after: change.after },
         text: opWords(op, leaf),
         ...(swatch ? { swatch } : {}),
       })

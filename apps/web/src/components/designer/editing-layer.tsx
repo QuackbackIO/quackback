@@ -22,6 +22,9 @@ import { chipPlacement, outlineBox, type Rect } from '@/lib/shared/design/layer-
 /** The picked block's outline and chip: blue, edged in white, so it reads on any brand colour. */
 const PICKED = '#2563eb'
 
+/** What changed, outlined: neutral grey, never the brand's colour or the pick's blue. */
+const CHANGED = '#71717a'
+
 /** A chip size to place it by until it has been measured. */
 const CHIP_GUESS = { width: 220, height: 28 }
 
@@ -118,6 +121,7 @@ export function EditingLayer({
   onDown,
   grip,
   children,
+  changed = null,
 }: {
   /** The canvas's visible size on the layer. */
   room: { width: number; height: number }
@@ -144,6 +148,8 @@ export function EditingLayer({
   }
   /** More for the layer to draw, such as a block's resize handles. */
   children?: ReactNode
+  /** What a change touched, outlined for a moment; `seq` starts each outline afresh. */
+  changed?: { rects: Rect[]; seq: number } | null
 }) {
   const chip = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState(CHIP_GUESS)
@@ -178,6 +184,9 @@ export function EditingLayer({
           }}
         />
       )}
+      {changed?.rects.map((rect, at) => (
+        <ChangeOutline key={`${changed.seq}-${at}`} rect={rect} room={room} />
+      ))}
       {children}
       {place && name && (
         <ChipMenu name={name} onDuplicate={onDuplicate}>
@@ -235,6 +244,31 @@ export function EditingLayer({
         </ChipMenu>
       )}
     </div>
+  )
+}
+
+/**
+ * One thing a change touched, outlined in grey, edged in white so it reads on
+ * any colour. It fades once shown; with less motion asked for, it stays still
+ * until the canvas takes it away.
+ */
+function ChangeOutline({ rect, room }: { rect: Rect; room: { width: number; height: number } }) {
+  const [fading, setFading] = useState(false)
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setFading(true))
+    return () => cancelAnimationFrame(frame)
+  }, [])
+  return (
+    <div
+      data-change-outline=""
+      aria-hidden="true"
+      className={`absolute rounded-[3px] transition-opacity delay-500 duration-1000 ease-in motion-reduce:transition-none ${fading ? 'motion-safe:opacity-0' : 'opacity-100'}`}
+      style={{
+        ...outlineBox(rect, 2, room),
+        outline: `2px solid ${CHANGED}`,
+        boxShadow: '0 0 0 1px #fff, inset 0 0 0 1px #fff',
+      }}
+    />
   )
 }
 

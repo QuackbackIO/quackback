@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { ChevronDoubleLeftIcon, SparklesIcon } from '@heroicons/react/24/outline'
-import { AskAiPanel } from '@/components/admin/settings/appearance/ask-ai-panel'
+import {
+  AskAiPanel,
+  type ShowChange,
+} from '@/components/admin/settings/appearance/ask-ai-panel'
 import {
   DesignComposer,
   type ChatContext,
@@ -144,6 +147,7 @@ export function DesignerAi({
   onCollapse,
   gates,
   onFonts,
+  show,
 }: {
   /** The conversation, kept by the designer so a match made in the inspector joins it. */
   ai: ReturnType<typeof useDesignAi>
@@ -167,6 +171,8 @@ export function DesignerAi({
   gates?: Partial<PortalPageGates>
   /** Opens Theme's Brand kit fonts, with the upload for a font a brand match could not match. */
   onFonts?: (font?: UnmatchedFont) => void
+  /** Shows a change on the canvas from its Show changes row. */
+  show?: ShowChange
 }) {
   const { available } = useSuspenseQuery(portalDesignQueries.aiStatus()).data
   const { scope, blockId } = aiScopeOf(selection)
@@ -235,6 +241,7 @@ export function DesignerAi({
             steps={ai.steps}
             design={draft.design}
             update={update}
+            {...(show ? { show } : {})}
             renderBrand={(turn, index) =>
               turn.brand && (
                 <BrandLogoCard

@@ -310,6 +310,36 @@ describe('AskAiPanel', () => {
     expect(document.querySelectorAll('[data-changes] [data-swatch]')).toHaveLength(0)
   })
 
+  it('offers Show on each row the canvas can point at, which goes to the change', () => {
+    draft.layout.band = 'tint'
+    draft.shape.corners = 'pill'
+    const go = vi.fn()
+    mount({
+      show: { can: (at) => at.path.startsWith('layout.'), go },
+      turns: [
+        {
+          role: 'assistant',
+          text: 'Calmer.',
+          changes: [
+            { path: 'layout.band', before: 'none', after: 'tint', label: 'Hero look: Tint' },
+            { path: 'shape.corners', before: 'rounded', after: 'pill', label: 'Corners to pill' },
+          ],
+        },
+      ],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Show changes' }))
+    const shows = screen.getAllByRole('button', { name: /^Show / })
+    expect(shows.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Show Hero look: Tint on the page',
+    ])
+    expect(shows[0]!.textContent).toBe('Show')
+    fireEvent.click(shows[0]!)
+    expect(go).toHaveBeenCalledWith(
+      { path: 'layout.band', before: 'none', after: 'tint' },
+      'Hero look: Tint'
+    )
+  })
+
   it('reads a switch as On and Off', () => {
     mount({
       turns: [

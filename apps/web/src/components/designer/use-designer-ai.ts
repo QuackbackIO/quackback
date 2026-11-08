@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useCallback, useRef } from 'react'
 import { useDesignAi } from '@/components/admin/settings/appearance/use-design-ai'
 import {
   designPreview,
@@ -30,22 +30,38 @@ const openHome = (locale: SupportedLocale) => (design: PortalDesign) =>
     preview: designPreview,
   })
 
-/** Quackback AI's conversation for the designer, told the page and language shown. */
+/**
+ * Quackback AI's conversation for the designer, told the page and language
+ * shown. Each step the AI applies is reported with the draft before and
+ * after it, so the canvas can outline what changed.
+ */
 export function useDesignerAi(
   draft: Pick<
     ReturnType<typeof useDesignDraft>,
     'flush' | 'adopt' | 'update' | 'replace' | 'begin' | 'end' | 'design'
   >,
   view: { page: DesignerPage; locale: SupportedLocale },
-  workspaceName: string
+  workspaceName: string,
+  onApplied?: (before: PortalDesign, after: PortalDesign) => void
 ) {
   // The draft as it is when a request starts, read without re-rendering on every change.
   const latest = useRef(draft.design)
   latest.current = draft.design
+  const applied = useRef(onApplied)
+  applied.current = onApplied
+  const { adopt } = draft
+  const adoptAndShow = useCallback(
+    (...args: Parameters<typeof adopt>) => {
+      const before = latest.current
+      adopt(...args)
+      applied.current?.(before, args[0])
+    },
+    [adopt]
+  )
   return {
     ai: useDesignAi({
       flush: draft.flush,
-      adopt: draft.adopt,
+      adopt: adoptAndShow,
       update: draft.update,
       workspaceName,
       view,

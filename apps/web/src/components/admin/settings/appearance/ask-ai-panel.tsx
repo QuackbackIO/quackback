@@ -14,12 +14,38 @@ import {
 } from '@/lib/shared/design/apply-changes'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
-import { changeRows, type ChangeRow, type RowSide } from './change-rows'
+import { changeRows, type ChangeRow, type RowChange, type RowSide } from './change-rows'
 import { HeroPhotoChip } from './hero-photo-chip'
 import type { DesignAiTurn } from './use-design-ai'
 
 /** Changes the draft, naming the change for undo when a name is given. */
 type Update = (change: (draft: PortalDesign) => void, label?: string) => void
+
+/** Where a row's change shows on the canvas: whether it can be pointed at, and going there. */
+export interface ShowChange {
+  can: (at: RowChange) => boolean
+  /** Shows the change on the canvas; `words` is the row as it reads. */
+  go: (at: RowChange, words: string) => void
+}
+
+/** A row as it reads, for its Show's name and what is said once it is shown. */
+const rowWords = (row: ChangeRow) =>
+  'text' in row ? row.text : `${row.label}: ${row.before.words} → ${row.after.words}`
+
+/** A row's Show: to the page the change is on, its part outlined. */
+function ShowButton({ row, onShow }: { row: ChangeRow; onShow: ShowChange['go'] }) {
+  const words = rowWords(row)
+  return (
+    <button
+      type="button"
+      aria-label={`Show ${words} on the page`}
+      onClick={() => onShow(row.at, words)}
+      className="ms-auto rounded px-1 text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground"
+    >
+      Show
+    </button>
+  )
+}
 
 /** One side of a row: its words, beside a swatch only when it is an actual colour. */
 function RowValue({ side }: { side: RowSide }) {
@@ -54,6 +80,7 @@ function StepResult({
   notes,
   design,
   update,
+  show,
 }: {
   changes: AppliedDesignChange[]
   readability: string[]
@@ -61,6 +88,7 @@ function StepResult({
   /** The draft as it is now. */
   design: PortalDesign
   update: Update
+  show?: ShowChange
 }) {
   const [open, setOpen] = useState(false)
   const undo = (rows: AppliedDesignChange[]) => {
@@ -147,6 +175,9 @@ function StepResult({
                   ) : (
                     each.line
                   )}
+                  {each.row && show?.can(each.row.at) && (
+                    <ShowButton row={each.row} onShow={show.go} />
+                  )}
                 </li>
               ))}
             </ul>
@@ -221,6 +252,7 @@ export function AskAiPanel({
   onRecapture,
   onUploadFont,
   onFonts,
+  show,
 }: {
   available: boolean
   turns: DesignAiTurn[]
@@ -246,6 +278,8 @@ export function AskAiPanel({
   onUploadFont?: (font: UnmatchedFont) => void
   /** Opens the fonts in Theme's Brand kit. */
   onFonts?: () => void
+  /** Shows a change on the canvas, from its row's Show; without it, rows have none. */
+  show?: ShowChange
 }) {
   if (!available) {
     return (
@@ -302,6 +336,7 @@ export function AskAiPanel({
                     notes={turn.notes ?? []}
                     design={design}
                     update={update}
+                    {...(show ? { show } : {})}
                   />
                 )}
                 {turn.capture && (
