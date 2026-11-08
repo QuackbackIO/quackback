@@ -77,8 +77,8 @@ export const DESIGN_OPTIONS = {
   composerWidth: COMPOSER_WIDTHS,
   /** Home's hero's one main action: the composer, the help search, a call to action, or none. */
   mainAction: ['composer', 'search', 'button', 'none'],
-  /** Where the hero's call to action goes: it opens the composer, or goes to the roadmap. */
-  heroButtonTo: ['composer', 'roadmap'],
+  /** Where the hero's call to action goes: it opens the composer, or goes to the roadmap, help or support. */
+  heroButtonTo: ['composer', 'roadmap', 'help', 'support'],
   /**
    * The page behind everything: its own colour, a soft wash of a colour, a
    * gradient, an uploaded image, or a quiet pattern.

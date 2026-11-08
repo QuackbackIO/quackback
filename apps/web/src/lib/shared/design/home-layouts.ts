@@ -25,11 +25,12 @@ export const HOME_LAYOUTS: readonly HomeLayout[] = [
   {
     id: 'feedback',
     label: 'Feedback first',
-    description: 'Asking, then the top posts.',
+    description: 'Asking, then the top posts and the roadmap.',
     blocks: [
       ['composer', 12],
       ['ideas', 8],
       ['status', 4],
+      ['roadmap', 12],
       ['updates', 6],
       ['help_search', 6],
     ],

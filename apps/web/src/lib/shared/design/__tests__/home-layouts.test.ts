@@ -48,6 +48,14 @@ function drawnRows(blocks: HomeBlock[], gates: PortalPageGates, band: boolean): 
   return [...rows.values()]
 }
 
+describe('HOME_LAYOUTS', () => {
+  it('has Feedback first lead with the composer and show the roadmap across the page', () => {
+    const layout = HOME_LAYOUTS.find((each) => each.id === 'feedback')!
+    expect(layout.blocks[0]).toEqual(['composer', 12])
+    expect(layout.blocks).toContainEqual(['roadmap', 12])
+  })
+})
+
 describe('arrangeHome', () => {
   it('fills every drawn row, for every layout, every set of pages, composer in the band or not', () => {
     for (const layout of LAYOUTS)

@@ -208,7 +208,7 @@ export function writeHero(draft: PortalDesign, hero: HeroBlock, key: HeroKey): v
     case 'secondButton': {
       const { to: _to, second: _second, ...words } = draft.pages.home.button ?? {}
       const button = {
-        ...(hero.buttonTo === 'roadmap' ? { to: 'roadmap' as const } : {}),
+        ...(hero.buttonTo !== 'composer' ? { to: hero.buttonTo } : {}),
         ...(hero.secondButton ? { second: true } : {}),
         ...words,
       }

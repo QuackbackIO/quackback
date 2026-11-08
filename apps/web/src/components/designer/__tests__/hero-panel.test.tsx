@@ -317,7 +317,7 @@ describe('Main action', () => {
     expect(screen.queryByRole('radiogroup', { name: 'Goes to' })).toBeNull()
     fireEvent.click(within(group('Main action')).getByRole('radio', { name: 'Button' }))
     expect(screen.queryByRole('radiogroup', { name: 'Composer width' })).toBeNull()
-    expect(names('Goes to')).toEqual(['Composer', 'Roadmap'])
+    expect(names('Goes to')).toEqual(['Composer', 'Roadmap', 'Help', 'Support'])
     fireEvent.click(within(group('Goes to')).getByRole('radio', { name: 'Roadmap' }))
     expect(seen.design.pages.home.button).toEqual({ to: 'roadmap' })
     fireEvent.click(screen.getByRole('switch', { name: 'Second button' }))
@@ -332,9 +332,11 @@ describe('Main action', () => {
     show(start, 'home', { ...ALL_ON, help: false, roadmap: false })
     expect(names('Main action')).toEqual(['Composer', 'Button', 'None'])
     expect(screen.getByRole('img', { name: 'Search needs the help centre on.' })).toBeTruthy()
-    expect(names('Goes to')).toEqual(['Composer'])
+    expect(names('Goes to')).toEqual(['Composer', 'Support'])
     expect(
-      screen.getByRole('img', { name: 'The roadmap needs to be on for a button to go there.' })
+      screen.getByRole('img', {
+        name: 'The roadmap needs to be on for a button to go there. The help centre needs to be on for a button to go there.',
+      })
     ).toBeTruthy()
   })
 

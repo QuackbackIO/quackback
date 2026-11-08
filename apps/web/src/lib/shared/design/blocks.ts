@@ -1124,20 +1124,24 @@ const HERO: BlockDef = {
       options: [
         ['composer', 'Composer'],
         ['roadmap', 'Roadmap'],
+        ['help', 'Help'],
+        ['support', 'Support'],
       ],
       looks: {
         composer: 'the button opens the post box in the hero',
         roadmap: 'the button goes to the roadmap',
+        help: 'the button goes to the help center',
+        support: 'the button goes to support, to start a request',
       },
       about:
-        'Where Home’s call to action goes: it opens the post box in place, or goes to the roadmap. Only with Button as the main action',
+        'Where Home’s call to action goes: it opens the post box in place, or goes to the roadmap, the help center or support, each only while that page is on. Only with Button as the main action',
     },
     {
       kind: 'switch',
       key: 'secondButton',
       label: 'Second button',
       about:
-        'A quiet second button beside the call to action, going to the other place: the post box, or the roadmap. Only with Button as the main action',
+        'A quiet second button beside the call to action: to the roadmap beside the post box, else to the post box. Only with Button as the main action',
     },
     {
       kind: 'choice',
