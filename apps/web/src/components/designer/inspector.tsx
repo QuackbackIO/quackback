@@ -1,4 +1,11 @@
 import { useId, type ReactNode } from 'react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -16,6 +23,7 @@ import {
 import { ReachNote } from './properties/scope-line'
 import { SummaryRow } from './properties/summary-row'
 import { STYLE_CHOICES } from './properties/words'
+import { useBlockSources } from './use-block-sources'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -116,6 +124,7 @@ export function Inspector({
                 }
               />
             </PropertyRow>
+            <OpensOnRow design={design} update={update} />
           </PropertySection>
           <EmptyFeedWords design={design} update={update} locale={locale} />
           <PropertySection title="Post cards">
@@ -176,4 +185,52 @@ export function Inspector({
         </PropertySection>
       )
   }
+}
+
+/** Stands for every board in the select, which cannot hold an empty value. */
+const ALL_BOARDS = 'all'
+
+/** The board the feed opens on when the address names none: every board, or one. */
+function OpensOnRow({ design, update }: { design: PortalDesign; update: NamedUpdate }) {
+  const id = useId()
+  const { boards } = useBlockSources()
+  const stored = design.pages.feedback.openOn
+  // A board set before it was hidden stays offered, so the select still says it.
+  const shown =
+    stored && !boards.some(([board]) => board === stored)
+      ? [...boards, [stored, 'Hidden board'] as const]
+      : boards
+  const choose = (picked: string) =>
+    update((draft) => {
+      if (picked === ALL_BOARDS) delete draft.pages.feedback.openOn
+      else draft.pages.feedback.openOn = picked as typeof stored
+    }, FIND.opensOn.label)
+  return (
+    <PropertyRow
+      label={FIND.opensOn.label}
+      find={FIND.opensOn.id}
+      htmlFor={id}
+      set={stored !== undefined}
+      onReset={() => choose(ALL_BOARDS)}
+    >
+      <Select value={stored ?? ALL_BOARDS} onValueChange={choose}>
+        <SelectTrigger
+          id={id}
+          size="sm"
+          aria-label={FIND.opensOn.label}
+          className="h-7 w-full text-xs"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL_BOARDS}>All boards</SelectItem>
+          {shown.map(([board, name]) => (
+            <SelectItem key={board} value={board}>
+              {name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </PropertyRow>
+  )
 }

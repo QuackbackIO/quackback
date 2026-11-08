@@ -141,7 +141,7 @@ function pagesText(places: AiPlaces): string {
   )
   return [
     ...lines,
-    'feedback page (target "feedback page"):\n  sort: The order the feed opens in. Takes trending, top or new.',
+    'feedback page (target "feedback page"):\n  sort: The order the feed opens in. Takes trending, top or new.\n  opensOn: The board the feed opens on when the address names none. Takes a board by its name, or all boards.',
     ...examples,
   ].join('\n')
 }
@@ -480,7 +480,12 @@ export function designContext(
         .map((key) => `${key} ${String(made[key])}`)
         .join(', ')}`
     })
-    .concat(`feedback page: sort ${design.pages.feedback.defaultSort}`)
+    .concat(
+      `feedback page: sort ${design.pages.feedback.defaultSort}, opensOn ${
+        places.boards.find((board) => board.id === design.pages.feedback.openOn)?.name ??
+        'all boards'
+      }`
+    )
   const menu = menuParts(design, input.gates).map(
     (part) =>
       `${part.id} "${part.label}"${part.lands ? ' (visitors land here)' : ''}${part.shown ? '' : ' (hidden)'}`

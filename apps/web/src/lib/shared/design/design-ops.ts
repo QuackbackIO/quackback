@@ -604,6 +604,34 @@ const PAGE_EXTRAS: Record<
   },
 }
 
+/** The board the feed opens on, picked by name like a block's board. */
+const OPENS_ON: Extract<SettingField, { kind: 'source' }> = {
+  kind: 'source',
+  key: 'opensOn',
+  label: 'Feed opens on',
+  source: 'boards',
+  multiple: false,
+  any: 'All boards',
+  about: 'The board the feed opens on when the address names none',
+}
+
+/** Opens the feed on one board, or on every board with none named. */
+function setOpensOn(design: PortalDesign, world: OpWorld, value: unknown): OpResult {
+  const every = typeof value === 'string' && /^(all|every|any)( boards?)?$/.test(norm(value))
+  const read = every ? { value: null } : settingValue(OPENS_ON, value, world.places)
+  if ('refusal' in read) return refuse(read.refusal)
+  const draft = structuredClone(design)
+  if (typeof read.value === 'string')
+    draft.pages.feedback.openOn = read.value as PortalDesign['pages']['feedback']['openOn']
+  else delete draft.pages.feedback.openOn
+  return finish(
+    design,
+    draft,
+    `${OPENS_ON.label}: ${spokenValue(OPENS_ON, read.value, world.places)}`,
+    world
+  )
+}
+
 /** The page a target names, such as "roadmap page", "page:help" or "help center". */
 function pageOf(target: string | undefined): string | null {
   if (!target) return null
@@ -619,7 +647,11 @@ export function pageSettings(page: string): string[] {
   const own = SECTION_TYPES.filter((type) => type.startsWith(`${page}.`)).flatMap((type) =>
     blockOf(type)!.fields.map((field) => field.key)
   )
-  return [...own, ...Object.keys(PAGE_EXTRAS[page] ?? {})]
+  return [
+    ...own,
+    ...Object.keys(PAGE_EXTRAS[page] ?? {}),
+    ...(page === 'feedback' ? [OPENS_ON.key] : []),
+  ]
 }
 
 /** Sets one of a page's own settings: setPageSection(page, key, value). */
@@ -648,6 +680,7 @@ export function setPageSection(
     const label = `${PAGE_NAMES[page as PortalPageType]} ${field.label.toLowerCase()}: ${spokenValue(field, read.value, world.places)}`
     return finish(design, draft, label, world)
   }
+  if (page === 'feedback' && key === OPENS_ON.key) return setOpensOn(design, world, value)
   const extra = key ? PAGE_EXTRAS[page]?.[key] : undefined
   if (extra) {
     if (!extra.values.includes(value as string))

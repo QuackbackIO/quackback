@@ -83,6 +83,7 @@ const LABELS: Record<string, string> = {
   'layout.width': 'Page width',
   'layout.filters': 'Filters side',
   'pages.feedback.defaultSort': 'Default sort',
+  'pages.feedback.openOn': 'Feed opens on',
   'brand.logo.display': 'Full logo image',
   'nav.home.on': 'Home page',
   'nav.home.tab': 'Home in the menu',

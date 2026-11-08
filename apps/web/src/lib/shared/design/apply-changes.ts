@@ -130,6 +130,7 @@ const SCOPE_FIELDS: Record<Exclude<DesignAiScope, 'site'>, readonly string[]> = 
     'layout.width',
     'layout.postCardHides',
     'pages.feedback.defaultSort',
+    'pages.feedback.openOn',
     'pages.feedback.copy',
     'layout.status',
     'tune.card',

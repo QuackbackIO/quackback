@@ -570,6 +570,8 @@ export const portalDesignV2 = z
             headline,
             welcome: z.object({ show: z.boolean(), body: tiptapContentSchema }).strict(),
             defaultSort: sort,
+            /** The board the feed opens on when the address names none; absent is every board. */
+            openOn: boardIdSchema.optional(),
             copy: z
               .object({
                 prompt: localizedUpTo(60),

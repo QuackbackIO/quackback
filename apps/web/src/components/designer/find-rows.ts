@@ -133,6 +133,7 @@ export const FIND = {
   prompt: row('feed-words-prompt', 'Prompt', 'composer words placeholder'),
   submit: row('feed-words-submit', 'Button', 'composer submit post words'),
   sort: row('feed-sort', 'Sort', 'default order trending top new'),
+  opensOn: row('feed-opens-on', 'Opens on', 'board first default all boards'),
   previewEmpty: row('feed-preview-empty', 'Preview empty', 'no posts'),
   emptyTitle: row('feed-words-emptyTitle', 'Title', 'empty no posts words'),
   excerpt: row('feed-card-excerpt', 'Excerpt', 'post card line'),
@@ -281,7 +282,7 @@ export const PART_PANELS: readonly FindPanel[] = [
     place: 'feed',
     name: 'Feed',
     sections: [
-      { title: 'Posts', rows: [FIND.sort] },
+      { title: 'Posts', rows: [FIND.sort, FIND.opensOn] },
       { title: 'When empty', rows: [FIND.previewEmpty, FIND.emptyTitle] },
       { title: 'Post cards', rows: [FIND.excerpt, FIND.tags, FIND.details] },
     ],

@@ -179,8 +179,8 @@ function guideLines(
       'pages.feedback.welcome: {show, body}: the message above the feed; body is plain text, a blank line between paragraphs. When you turn it on with no text, write some.',
     ],
     [
-      ['pages.feedback.defaultSort'],
-      `pages.feedback.defaultSort: ${DESIGN_OPTIONS.sort.join(', ')}`,
+      ['pages.feedback.defaultSort', 'pages.feedback.openOn'],
+      `pages.feedback.defaultSort: ${DESIGN_OPTIONS.sort.join(', ')}. pages.feedback.openOn: the id of the board the feed opens on when the address names none; leave it out to open on every board.`,
     ],
     [
       ['pages.feedback.copy'],

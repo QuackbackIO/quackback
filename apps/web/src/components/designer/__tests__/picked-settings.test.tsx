@@ -29,6 +29,9 @@ vi.mock('../hero-panel', () => ({
   ),
 }))
 vi.mock('../picked-block', () => ({ PickedBlock: () => <p>Block settings</p> }))
+vi.mock('../use-block-sources', () => ({
+  useBlockSources: () => ({ boards: [], roadmaps: [], categories: [], columns: [] }),
+}))
 vi.mock('../page-background-settings', () => ({ PageBackgroundSection: () => null }))
 const edits = vi.hoisted(() => [] as string[])
 vi.mock('../words/edit-on-canvas', () => ({ editOnCanvas: (field: string) => edits.push(field) }))

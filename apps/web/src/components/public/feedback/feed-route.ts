@@ -98,6 +98,20 @@ export async function loadFeed(
   // Parse search params for initial SSR (not using loaderDeps to avoid re-execution)
   const searchParams = location.search as FeedSearch
 
+  // A design can open the feed on one board: a visit naming none goes on to it.
+  // The loader runs once per visit, so All boards picked on the page stays put.
+  const openOn = org.portalDesign?.engine === 'v2' ? org.portalDesign.feedback.openOn : null
+  if (openOn && searchParams.board === undefined) {
+    const boards = await queryClient.ensureQueryData(portalQueries.boards())
+    const board = boards.find((each) => each.id === openOn)
+    if (board)
+      throw redirect({
+        to: canonicalPath,
+        search: { ...searchParams, board: board.slug },
+        replace: true,
+      })
+  }
+
   // Fire-and-forget: kick the feed query off but DON'T await it, so the
   // document's first byte (header, hero, welcome card) flushes immediately
   // and the feed streams into the same HTML response via the router
