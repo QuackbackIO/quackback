@@ -1,22 +1,24 @@
 /**
  * The widget drawn in a design that is not published yet: the builder's
  * Widget sample and its publish review frame the widget with `?preview=true`
- * and post the draft, resolved, as they post it to the portal. Only that
+ * and post the draft design, as they post it to the portal; the frame reads
+ * it with the design schema and builds its view as the server would. Only that
  * frame loads this module, so no visitor's widget downloads it. Nothing in
  * the frame can be used: it is a picture of the widget, not the widget.
  */
 import { useEffect, useState } from 'react'
 import {
   applyDesignAttributes,
-  readDesignPreview,
-  type DesignPreview,
+  draftStylesheet,
+  readDraftView,
 } from '@/components/public/portal-preview-design'
+import type { DraftDesignView } from '@/components/public/preview-draft-context'
 import { loadBrandingFont } from '@/lib/shared/theme/font-loader'
 
 const HELD = ['click', 'submit', 'keydown'] as const
 
 export function WidgetDesignPreview() {
-  const [design, setDesign] = useState<DesignPreview | null>(null)
+  const [design, setDesign] = useState<DraftDesignView | null>(null)
 
   useEffect(() => {
     // Only a framed widget, from the page that frames it, takes a design.
@@ -24,7 +26,7 @@ export function WidgetDesignPreview() {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.source !== window.parent) return
       const message = event.data as { type?: string; design?: unknown } | null
-      if (message?.type === 'quackback:preview-design') setDesign(readDesignPreview(message.design))
+      if (message?.type === 'quackback:preview-design') setDesign(readDraftView(message.design))
     }
     window.addEventListener('message', onMessage)
     window.parent.postMessage(
@@ -48,5 +50,6 @@ export function WidgetDesignPreview() {
     for (const id of fontIds.split(' ').filter(Boolean)) loadBrandingFont(id).catch(() => {})
   }, [fontIds])
 
-  return design?.css ? <style data-preview-design="">{design.css}</style> : null
+  const css = design ? draftStylesheet(design) : ''
+  return css ? <style data-preview-design="">{css}</style> : null
 }

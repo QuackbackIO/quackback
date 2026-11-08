@@ -4,10 +4,7 @@ import { ClientOnly } from '@tanstack/react-router'
 import { MotionConfig } from 'framer-motion'
 import { cn } from '@/lib/shared/utils'
 import { DraftNotices } from '@/components/admin/settings/appearance/draft-notices'
-import {
-  designPreview,
-  useDesignDraft,
-} from '@/components/admin/settings/appearance/use-design-draft'
+import { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
 import { trackBuilder } from '@/lib/client/builder-events'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import { deviceCaption, escapeStep, panelView } from '@/lib/shared/design/builder-chrome'
@@ -141,7 +138,6 @@ export function DesignerShell({
   // Quackback AI's conversation.
   const { ai } = useDesignerAi(draft, { page, locale }, workspaceName, onAiApplied)
   const [now] = useState(() => new Date())
-  const livePreview = useMemo(() => designPreview(draft.live), [draft.live])
   const canvasDesign = useCanvasDesign(draft.preview)
   const checks = useMemo(() => designChecks(design), [design])
 
@@ -343,7 +339,7 @@ export function DesignerShell({
         theme={design.mode === 'auto' ? theme : design.mode}
         locale={locale}
         sort={design.pages.feedback.defaultSort}
-        live={livePreview}
+        live={draft.live}
         draft={draft.preview}
       />
     ),

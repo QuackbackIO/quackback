@@ -46,7 +46,7 @@ import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-import { usePreviewDesignAttributes, usePreviewLogo } from './preview-draft-context'
+import { usePortalDesign } from './preview-draft-context'
 import { LogoFilters } from './logo-filters'
 import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
@@ -329,17 +329,11 @@ export function PortalHeader({
     </div>
   )
 
-  // The design's header layout; in the admin preview, the draft's.
-  const previewAttributes = usePreviewDesignAttributes()
-  const savedDesign = settings?.portalDesign
-  const headerLayout =
-    previewAttributes?.['data-qb-header'] ??
-    (savedDesign?.engine === 'v2' ? savedDesign.attributes['data-qb-header'] : undefined) ??
-    'stacked'
-
-  // How the design shows the brand; in the admin preview, the draft's.
-  const previewLogo = usePreviewLogo()
-  const designLogo = previewLogo ?? (savedDesign?.engine === 'v2' ? savedDesign.logo : undefined)
+  // The design's header layout and how it shows the brand; in the builder, the draft's.
+  const portalDesign = usePortalDesign()
+  const v2Design = portalDesign?.engine === 'v2' ? portalDesign : undefined
+  const headerLayout = v2Design?.attributes['data-qb-header'] ?? 'stacked'
+  const designLogo = v2Design?.logo
   const brandName = designLogo?.name || orgName
   const wordmark = designLogo?.wordmark
   // A wordmark without a file shows the mark and name, as before one is uploaded.

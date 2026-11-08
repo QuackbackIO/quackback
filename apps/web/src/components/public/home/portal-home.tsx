@@ -1,8 +1,7 @@
 import { Suspense, type ReactNode } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import { AreaMessages } from '@/components/shared/area-messages'
 import { PortalBand } from '@/components/public/portal-band'
-import { usePreviewHome, usePreviewSamples } from '@/components/public/preview-draft-context'
+import { usePortalDesign, usePreviewSamples } from '@/components/public/preview-draft-context'
 import { withGridPlaces } from '@/lib/shared/design/home-legacy'
 import { drawnMainAction } from '@/lib/shared/design/main-action'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
@@ -54,16 +53,12 @@ export function PortalHome({
   /** Which pages exist, from the loader. */
   gates: PortalPageGates
 }) {
-  const design = useRouteContext({
-    from: '__root__',
-    select: (context) => context.settings?.portalDesign,
-  })
-  const draftHome = usePreviewHome()
+  const design = usePortalDesign()
   // In the builder a block with nothing to show draws samples, so none is left out.
   const samples = usePreviewSamples()
   if (design?.engine !== 'v2') return null
   // A Home stored before the grid, at widths, takes its places as it is drawn.
-  const home = withGridPlaces(draftHome ?? design.home) as typeof design.home
+  const home = withGridPlaces(design.home) as typeof design.home
   // The hero's main action: the composer moves into the band, the grid keeping every other
   // block's place; the help search or a call to action sit there with the composer on the grid.
   const action = drawnMainAction(home, gates)

@@ -16,7 +16,7 @@ import { runBuilderEditLoop, type ServerStep } from '@/lib/client/edit-loop'
 import { LOOP_BUDGET, stoppedReply, trailOf } from '@/lib/shared/design/agent/loop'
 import { routeRequest } from '@/lib/shared/design/agent/router'
 import { STYLE_REGISTRY } from '@/lib/shared/design/agent/style-registry'
-import { designPreview } from './use-design-draft'
+import { designPreviewCss } from './use-design-draft'
 import { snapToMark } from '@/lib/shared/design/brand-shots'
 import {
   isBrandStart,
@@ -483,7 +483,7 @@ export function useDesignAi({
                 adopt: (design, report, revision) =>
                   adopt(design, report as Report, requestLabel(text), revision),
                 ...(check.open ? { open: check.open } : {}),
-                previewCss: (design) => designPreview(design).css,
+                previewCss: designPreviewCss,
                 readWebsite: async (url) => {
                   const read = await readWebsiteFn({ data: { url } })
                   if (read.capture) captures.set(read.reading.host ?? url, read.capture)

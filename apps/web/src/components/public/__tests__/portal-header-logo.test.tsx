@@ -24,7 +24,7 @@ vi.mock('@/components/notifications', () => ({ NotificationBell: () => null }))
 vi.mock('@/components/shared/user-stats', () => ({ UserStatsBar: () => null }))
 
 const { PortalHeader } = await import('../portal-header')
-const { PreviewLogoContext } = await import('../preview-draft-context')
+const { PreviewDesignContext } = await import('../preview-draft-context')
 
 afterEach(cleanup)
 
@@ -49,9 +49,11 @@ async function mount(portalDesign?: unknown, preview?: Logo) {
       registeredAuthProviders: [],
     }),
     component: () => (
-      <PreviewLogoContext.Provider value={preview}>
+      <PreviewDesignContext.Provider
+        value={preview ? ({ ...(portalDesign as object), logo: preview } as never) : undefined}
+      >
         <PortalHeader orgName="Harbor" userRole="user" />
-      </PreviewLogoContext.Provider>
+      </PreviewDesignContext.Provider>
     ),
   })
   const home = createRoute({ getParentRoute: () => rootRoute, path: '/' })

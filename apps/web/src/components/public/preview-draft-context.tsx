@@ -2,8 +2,7 @@ import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNod
 import { useIntl } from 'react-intl'
 import { useRouteContext } from '@tanstack/react-router'
 import type { PageChoices } from '@/lib/shared/design/page-choices'
-import type { PortalDesign } from '@/lib/shared/design/schema'
-import type { BandImage, DesignLogo, PortalCopy } from '@/lib/shared/design/view'
+import type { PortalCopy, PortalDesignView } from '@/lib/shared/design/view'
 import type { PortalNavConfig, PortalWelcomeCard } from '@/lib/shared/types/settings'
 
 /**
@@ -86,28 +85,29 @@ export function usePreviewCss(): string | undefined {
   return useContext(PreviewCssContext)
 }
 
-/** A draft design's page headline: undefined outside a design preview, null when it has none. */
-export type PreviewHeadline = NonNullable<PortalDesign['pages']['feedback']['headline']> | null
+/** A design as a portal page draws it: the published one, or the builder's draft in its frame. */
+export type DraftDesignView = Extract<PortalDesignView, { engine: 'v2' }>
 
-export const PreviewHeadlineContext = createContext<PreviewHeadline | undefined>(undefined)
+/**
+ * The builder's draft as the portal reads it: the view the server would build
+ * for it, built in the frame with the same code (see PortalPreviewProvider).
+ * Undefined everywhere but the builder's frame, which provides it.
+ */
+export const PreviewDesignContext = createContext<DraftDesignView | undefined>(undefined)
 
-/** The draft design's feedback page headline, or undefined (always, outside a design preview). */
-export function usePreviewHeadline(): PreviewHeadline | undefined {
-  return useContext(PreviewHeadlineContext)
-}
-
-/** A draft design's Home and menu, as the design stores them. */
-export type PreviewDesignPages = {
-  home: PortalDesign['pages']['home'] | null
-  titles: NonNullable<PortalDesign['pages']['titles']>
-  nav: PortalDesign['nav'] | null
-}
-
-export const PreviewPagesContext = createContext<PreviewDesignPages | undefined>(undefined)
-
-/** A draft design's Home, or undefined (always, outside a design preview). */
-export function usePreviewHome(): PortalDesign['pages']['home'] | undefined {
-  return useContext(PreviewPagesContext)?.home ?? undefined
+/**
+ * The design the portal draws: the builder's draft while its frame previews
+ * one, else the published design from the route context. Every part of the
+ * portal that reads the design reads it here, so the canvas draws a draft
+ * through the same code that draws it once published.
+ */
+export function usePortalDesign(): PortalDesignView | undefined {
+  const draft = useContext(PreviewDesignContext)
+  const saved = useRouteContext({
+    from: '__root__',
+    select: (context) => context.settings?.portalDesign,
+  })
+  return draft ?? saved
 }
 
 /**
@@ -135,16 +135,6 @@ export function useDesignerPreview(): DesignerPreviewState {
   return designing ? state : NO_PREVIEW_STATE
 }
 
-/** A draft design's page titles, or undefined (always, outside a design preview). */
-export function usePreviewTitles(): PreviewDesignPages['titles'] | undefined {
-  return useContext(PreviewPagesContext)?.titles
-}
-
-/** A draft design's menu, or undefined (always, outside a design preview). */
-export function usePreviewDesignNav(): PortalDesign['nav'] | undefined {
-  return useContext(PreviewPagesContext)?.nav ?? undefined
-}
-
 /**
  * The workspace's own wording for the composer, the empty feed and the
  * support page's New request button, by language.
@@ -152,8 +142,8 @@ export function usePreviewDesignNav(): PortalDesign['nav'] | undefined {
 export type FeedCopy = PortalCopy
 
 /**
- * The own wording in force: the portal layout's from the saved design, and
- * the preview's from the draft below it. None outside a portal.
+ * The own wording in force, from the design the portal draws (the builder's
+ * draft in its frame), provided by PortalPreviewProvider. None outside a portal.
  */
 export const FeedCopyContext = createContext<FeedCopy | undefined>(undefined)
 
@@ -178,27 +168,6 @@ export function useFeedCopy(): {
     }),
     [copy, locale]
   )
-}
-
-export const PreviewBandImageContext = createContext<BandImage | null | undefined>(undefined)
-
-/** A draft design's band image: undefined outside a design preview, null when it has none. */
-export function usePreviewBandImage(): BandImage | null | undefined {
-  return useContext(PreviewBandImageContext)
-}
-
-export const PreviewLogoContext = createContext<DesignLogo | undefined>(undefined)
-
-/** A draft design's logo, or undefined (always, outside a design preview). */
-export function usePreviewLogo(): DesignLogo | undefined {
-  return useContext(PreviewLogoContext)
-}
-
-export const PreviewAttributesContext = createContext<Record<string, string> | undefined>(undefined)
-
-/** A draft design's structural attributes, or undefined (always, outside a design preview). */
-export function usePreviewDesignAttributes(): Record<string, string> | undefined {
-  return useContext(PreviewAttributesContext)
 }
 
 // Kept here, in a module every portal page already loads, rather than in a
@@ -348,15 +317,8 @@ export function readPortalPageChoices(
  * Without a design, or without a choice, each page is drawn as it always was.
  */
 export function usePageChoices(): PageChoices {
-  const saved = useRouteContext({
-    from: '__root__',
-    select: (context) => {
-      const design = context.settings?.portalDesign
-      return design?.engine === 'v2' ? design.attributes : undefined
-    },
-  })
-  const draft = usePreviewDesignAttributes()
-  const attributes = draft ?? saved
+  const design = usePortalDesign()
+  const attributes = design?.engine === 'v2' ? design.attributes : undefined
   return useMemo(() => readPortalPageChoices(attributes), [attributes])
 }
 

@@ -146,3 +146,14 @@ function feedbackWelcome(doc: PortalDesign): TiptapContent | null {
   const { show, body } = doc.pages.feedback.welcome
   return show && !isEmptyTiptapDoc(body as TiptapContent) ? (body as TiptapContent) : null
 }
+
+/**
+ * The stylesheet a preview frame draws a view with: its theme, then its own
+ * CSS, as the portal's head carries them. The builder matches the frame's
+ * text against it to know a design has been drawn.
+ */
+export function previewStylesheet(
+  view: Pick<Extract<PortalDesignView, { engine: 'v2' }>, 'themeStyles' | 'customCss'>
+): string {
+  return [view.themeStyles, view.customCss].filter(Boolean).join('\n')
+}

@@ -4,7 +4,7 @@ import {
   type PortalPageGates,
 } from '@/lib/shared/design/paths'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-import { usePreviewDesignNav } from './preview-draft-context'
+import { usePortalDesign } from './preview-draft-context'
 
 /** Which portal pages this viewer can open. */
 export function usePortalPageGates(): PortalPageGates {
@@ -23,8 +23,6 @@ export function useFeedbackPath(): '/' | '/feedback' {
 
 /** The design's menu: the draft's while previewing, else the saved one; none on the legacy theme. */
 export function useDesignNav() {
-  const settings = useWorkspaceSettings()
-  const draftNav = usePreviewDesignNav()
-  const design = settings?.portalDesign
-  return design?.engine === 'v2' ? (draftNav ?? design.nav) : undefined
+  const design = usePortalDesign()
+  return design?.engine === 'v2' ? design.nav : undefined
 }
