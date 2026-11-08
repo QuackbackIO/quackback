@@ -14,7 +14,7 @@
  * lighter on a dark fill.
  */
 import type { ThemeVariables } from '@/lib/shared/theme/types'
-import { mixColor } from './color'
+import { fitted, lchOf, mixColor, oklabDistance } from './color'
 import { SHADOW } from './tune'
 import { clearerInk, contrastRatio, solveContrast } from './contrast'
 import { roleFill } from './colour-roles'
@@ -114,8 +114,61 @@ export const STYLE_SHADOW_CSS = {
   glow: '0 0 0 4px color-mix(in oklch, var(--qb-accent) 22%, transparent)',
 } as const
 
-/** A named or exact colour, as this mode draws it. */
-export function styleColourValue(ref: StyleColour, doc: PortalDesign, t: Vars, mode: Mode): string {
+/** The roles an exact colour can be, to draw it as that role's own in dark mode. */
+const SNAP_ROLES = [
+  'accent',
+  'support',
+  'extra1',
+  'extra2',
+  'ink',
+  'muted',
+  'page',
+  'surface',
+  'raised',
+  'border',
+  'accent-text',
+  'on-accent',
+] as const
+/** Within this oklab distance an exact colour is the role it is near: a step no one would see. */
+const SNAP = 0.03
+
+/**
+ * An exact colour set for light, as dark mode draws it, in a design that
+ * shows both: the role it is in light, in that role's dark colour; else its
+ * lightness mirrored, light page to dark page and light text to dark text,
+ * in its own hue. Text on it is then solved to read as any text is. A
+ * design that shows only dark keeps the colour as set.
+ */
+function darkExact(hex: string, doc: PortalDesign, t: Vars, light: Vars | undefined): string {
+  if (!light) return hex
+  let near: StyleColour | null = null
+  let gap = SNAP
+  for (const role of SNAP_ROLES) {
+    const distance = oklabDistance(hex, styleColourValue(role, doc, light, 'light'))
+    if (distance < gap) [near, gap] = [role, distance]
+  }
+  if (near) return styleColourValue(near, doc, t, 'dark')
+  const [page, ink] = [lchOf(light.background).l, lchOf(light.foreground).l]
+  const [darkPage, darkInk] = [lchOf(t.background).l, lchOf(t.foreground).l]
+  const own = lchOf(hex)
+  const share = page === ink ? 0 : (own.l - ink) / (page - ink)
+  return fitted({ ...own, l: Math.min(1, Math.max(0, darkInk + (darkPage - darkInk) * share)) })
+}
+
+/**
+ * A named or exact colour, as this mode draws it. Given light's colours, an
+ * exact colour, white and black take a dark counterpart in dark mode: white
+ * (or #ffffff) is the card, black (or #000000) the text, any other as
+ * darkExact draws it.
+ */
+export function styleColourValue(
+  ref: StyleColour,
+  doc: PortalDesign,
+  t: Vars,
+  mode: Mode,
+  light?: Vars
+): string {
+  const dark = mode === 'dark' && !!light
   switch (ref) {
     case 'accent':
       return t.primary
@@ -140,13 +193,16 @@ export function styleColourValue(ref: StyleColour, doc: PortalDesign, t: Vars, m
     case 'on-accent':
       return t.primaryForeground
     case 'white':
-      return '#ffffff'
+      return dark ? t.card : '#ffffff'
     case 'black':
-      return '#000000'
+      return dark ? t.foreground : '#000000'
     case 'transparent':
       return 'transparent'
     default:
-      return ref
+      if (!dark) return ref
+      if (/^#f{6}$/i.test(ref)) return t.card
+      if (/^#0{6}$/i.test(ref)) return t.foreground
+      return darkExact(ref, doc, t, light)
   }
 }
 
@@ -155,14 +211,15 @@ function paintOf(
   paint: StylePaint,
   doc: PortalDesign,
   t: Vars,
-  mode: Mode
+  mode: Mode,
+  light?: Vars
 ): { css: string; colours: string[] } {
   if (typeof paint === 'string') {
-    const c = styleColourValue(paint, doc, t, mode)
+    const c = styleColourValue(paint, doc, t, mode, light)
     return { css: c, colours: c === 'transparent' ? [] : [c] }
   }
-  const from = styleColourValue(paint.from, doc, t, mode)
-  const to = styleColourValue(paint.to, doc, t, mode)
+  const from = styleColourValue(paint.from, doc, t, mode, light)
+  const to = styleColourValue(paint.to, doc, t, mode, light)
   return {
     css: `linear-gradient(${paint.angle ?? 180}deg, ${from}, ${to})`,
     colours: [from, to].filter((c) => c !== 'transparent'),
@@ -467,21 +524,25 @@ export function styleCss(
           for (const [mode, vars] of modes) {
             if (!vars) continue
             const t = vars as Vars
+            // Light's colours, for a colour set for light to take its dark counterpart (darkExact).
+            const fromLight = mode === 'dark' && light ? (light as Vars) : undefined
             const value = valueIn(mode, prop)
             if (value !== null) out.tokens[mode][name(prop)] = value
             function valueIn(mode: Mode, prop: StyleProp): string | null {
-              const set = (mode === 'dark' ? darkOwn[prop as 'color'] : undefined) ?? own[prop]
+              const darkSet = mode === 'dark' ? darkOwn[prop as 'color'] : undefined
+              const set = darkSet ?? own[prop]
+              const from = darkSet ? undefined : fromLight
               if (prop === 'background') {
-                if (set) return paintOf(set as StylePaint, doc, t, mode).css
+                if (set) return paintOf(set as StylePaint, doc, t, mode, from).css
                 if (derivedFill) {
-                  const fill = paintOf(base.background!, doc, t, mode).colours[0]
+                  const fill = paintOf(base.background!, doc, t, mode, fromLight).colours[0]
                   return fill ? shade(fill, state === 'active' ? 0.14 : 0.08) : null
                 }
                 return null
               }
               if (prop === 'color') return textColour(mode, t)
               if (prop === 'borderColor')
-                return set ? styleColourValue(set as StyleColour, doc, t, mode) : null
+                return set ? styleColourValue(set as StyleColour, doc, t, mode, from) : null
               return set === undefined ? null : plainValue(prop, set)
             }
             function textColour(mode: Mode, t: Vars): string | null {
@@ -493,18 +554,21 @@ export function styleCss(
                   solveContrast(t.foreground, fills, target)
                 return ink && clearerInk(ink, fills, [...inks, '#000000', '#ffffff'], target)
               }
-              const fillSet =
-                (mode === 'dark' ? darkOwn.background : undefined) ?? fillHere ?? fillBelow(state)
+              const darkFill = mode === 'dark' ? darkOwn.background : undefined
+              const fillSet = darkFill ?? fillHere ?? fillBelow(state)
               let fills: string[]
               if (fillSet) {
-                fills = paintOf(fillSet, doc, t, mode).colours
+                fills = paintOf(fillSet, doc, t, mode, darkFill ? undefined : fromLight).colours
                 if (derivedFill && !own.background && fills[0])
                   fills = [shade(fills[0], state === 'active' ? 0.14 : 0.08)]
               } else fills = []
               if (!fills.length) fills = [backdropOf(element, t)]
-              const setText = (mode === 'dark' ? darkOwn.color : undefined) ?? textHere
+              const darkText = mode === 'dark' ? darkOwn.color : undefined
+              const setText = darkText ?? textHere
               const target = element === 'headline' && large ? 3 : 4.5
-              const wanted = setText ? styleColourValue(setText, doc, t, mode) : null
+              const wanted = setText
+                ? styleColourValue(setText, doc, t, mode, darkText ? undefined : fromLight)
+                : null
               const used = wanted ? solveContrast(wanted, fills, target) : ownText(fills, target)
               const on = fills.reduce((worst, f) =>
                 contrastRatio(used ?? wanted ?? t.foreground, f) <

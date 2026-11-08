@@ -95,12 +95,23 @@ export function mixOklch(a: string, b: string, weight: number): string {
   return oklchToHex(formatOklch(mix(x.l, y.l), mix(x.c, y.c), h))
 }
 
-type Lch = { l: number; c: number; h: number }
+export type Lch = { l: number; c: number; h: number }
 
-function lchOf(color: string): Lch {
+export function lchOf(color: string): Lch {
   const parsed = parseOklch(color.startsWith('#') ? hexToOklch(color) : color)
   if (!parsed) throw new Error(`Cannot read "${color}"`)
   return parsed
+}
+
+/** How far apart two colours are in oklab: 0 for one colour, about 0.02 for a just visible step. */
+export function oklabDistance(a: string, b: string): number {
+  const lab = (color: string) => {
+    const { l, c, h } = lchOf(color)
+    const radians = (h * Math.PI) / 180
+    return [l, c * Math.cos(radians), c * Math.sin(radians)]
+  }
+  const [x, y] = [lab(a), lab(b)]
+  return Math.hypot(x[0]! - y[0]!, x[1]! - y[1]!, x[2]! - y[2]!)
 }
 
 /** Whether an oklch colour is one a screen shows, as linear sRGB in [0, 1]. */
@@ -121,7 +132,7 @@ function shown({ l, c, h }: Lch): boolean {
 }
 
 /** The colour as hex, giving up chroma (never hue or lightness) until a screen shows it. */
-function fitted(colour: Lch): string {
+export function fitted(colour: Lch): string {
   let { c } = colour
   if (!shown(colour)) {
     let [low, high] = [0, c]

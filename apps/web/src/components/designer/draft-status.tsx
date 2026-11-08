@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/16/solid'
 import {
   ArrowUturnLeftIcon,
@@ -59,6 +59,7 @@ export function DraftStatus({
   onFind,
   checks = [],
   onShowCheck = () => {},
+  onFixCheck = () => {},
 }: {
   count: number
   saving: boolean
@@ -74,6 +75,8 @@ export function DraftStatus({
   /** Things to check before publishing, each of which leads to the part that fixes it. */
   checks?: readonly DesignCheck[]
   onShowCheck?: (part: Selection) => void
+  /** Makes a check's one-step fix. */
+  onFixCheck?: (check: DesignCheck) => void
 }) {
   const [confirming, setConfirming] = useState(false)
   const { text, tone } = draftWords({ count, saving, failed, blocked })
@@ -125,10 +128,17 @@ export function DraftStatus({
                 {checks.length === 1 ? '1 thing to check' : `${checks.length} things to check`}
               </DropdownMenuLabel>
               {checks.map((check) => (
-                <DropdownMenuItem key={check.id} onClick={() => onShowCheck(check.part)}>
-                  <ExclamationTriangleIcon aria-hidden="true" />
-                  <span className="max-w-64 truncate">{check.text}</span>
-                </DropdownMenuItem>
+                <Fragment key={check.id}>
+                  <DropdownMenuItem onClick={() => onShowCheck(check.part)}>
+                    <ExclamationTriangleIcon aria-hidden="true" />
+                    <span className="max-w-64 truncate">{check.text}</span>
+                  </DropdownMenuItem>
+                  {check.fix && (
+                    <DropdownMenuItem className="ps-8" onClick={() => onFixCheck(check)}>
+                      {check.fix.label}
+                    </DropdownMenuItem>
+                  )}
+                </Fragment>
               ))}
             </>
           )}

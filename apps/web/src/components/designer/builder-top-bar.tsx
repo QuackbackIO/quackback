@@ -28,6 +28,7 @@ export function BuilderTopBar({
   selection,
   onPick,
   checks,
+  onFixCheck,
   onUndo,
   onRedo,
   onTurnOn,
@@ -50,6 +51,8 @@ export function BuilderTopBar({
   /** Picks a part and moves focus to its settings. */
   onPick: (selection: Selection) => void
   checks: readonly DesignCheck[]
+  /** Makes a check's one-step fix. */
+  onFixCheck: (check: DesignCheck) => void
   onUndo: () => void
   onRedo: () => void
   /** Turns a part on from the switcher, by way of the menu's "+". */
@@ -123,6 +126,7 @@ export function BuilderTopBar({
           onFind={() => onDialog('find')}
           checks={checks}
           onShowCheck={onPick}
+          onFixCheck={onFixCheck}
         />
       }
       sheet={sheet}
