@@ -13,6 +13,15 @@
  * The few paths written from two components today are listed, each with why
  * and what removes it. A listed path may lose a writer (the list then says
  * more than is true, which is harmless), never gain one.
+ *
+ * And one vocabulary for people and the AI: the builder changes Home's
+ * blocks and the pages' parts by dispatching the design's operations
+ * (lib/shared/design/dispatch.ts, through ./dispatcher), never by writing the
+ * draft itself, so what the operations check and lay out always runs. A
+ * direct write is a call of the draft's `update(…)` or a change function
+ * handed a `draft`. The files still writing directly are listed with how
+ * many writes each holds; a count may only go down, and a file not listed
+ * may hold none.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -71,6 +80,81 @@ const KNOWN: Record<string, { writers: readonly string[]; why: string }> = {
     writers: ['admin/settings/appearance/focal-point.tsx', 'designer/hero-panel.tsx'],
     why: 'The focal point control is a part of the hero panel, which also resets it',
   },
+}
+
+/**
+ * The direct writes each file still holds, and why. Every entry is a panel
+ * that writes something other than Home's blocks and the pages' parts (theme,
+ * brand kit, fonts, logo, element styles, menu, hero, backgrounds) or the
+ * plumbing operations go through; each count only goes down, as its writes
+ * become operations. Paths are relative to src/components.
+ */
+const DIRECT_WRITES: Record<string, { writes: number; why: string }> = {
+  'designer/dispatcher.ts': { writes: 1, why: 'Where every operation reaches the draft' },
+  'designer/use-designer-events.ts': {
+    writes: 1,
+    why: 'The counted update every panel is handed: it wraps the draft’s update',
+  },
+  'designer/versions-dialog.tsx': { writes: 1, why: 'Copies a whole version over the draft' },
+  'designer/designer-shell.tsx': { writes: 1, why: 'Applies a check’s own fix' },
+  'designer/designer-ai.tsx': { writes: 1, why: 'The hero image the AI pane uploads' },
+  'admin/settings/appearance/use-design-ai.ts': { writes: 2, why: 'The AI’s logo changes' },
+  'admin/settings/appearance/ask-ai-panel.tsx': { writes: 1, why: 'The AI’s brand changes' },
+  'admin/settings/appearance/home-section.tsx': {
+    writes: 2,
+    why: 'Edits a copy of one Links block its caller hands it; picked-block dispatches the result',
+  },
+  'designer/brand-kit-colours.tsx': { writes: 5, why: 'Brand colours' },
+  'designer/brand-kit-fonts.tsx': { writes: 6, why: 'Brand fonts' },
+  'designer/brand-kit.tsx': { writes: 4, why: 'Brand kit images and logo' },
+  'designer/brand-match-row.tsx': { writes: 1, why: 'A website’s brand applied' },
+  'admin/settings/appearance/closest-face.tsx': { writes: 2, why: 'Brand fonts' },
+  'admin/settings/appearance/fonts-section.tsx': { writes: 5, why: 'Brand fonts' },
+  'designer/logo-rows.tsx': { writes: 8, why: 'The logo' },
+  'admin/settings/appearance/logo-extras.ts': { writes: 1, why: 'The logo' },
+  'designer/look-picker.tsx': { writes: 1, why: 'A theme look' },
+  'designer/theme-sheet.tsx': { writes: 4, why: 'Theme' },
+  'admin/settings/appearance/css-section.tsx': { writes: 1, why: 'Custom CSS' },
+  'designer/element-panel.tsx': { writes: 5, why: 'Element styles' },
+  'designer/element-style-section.tsx': { writes: 4, why: 'Element styles' },
+  'designer/element-styles.tsx': { writes: 3, why: 'Element styles' },
+  'designer/overrides-list.tsx': { writes: 1, why: 'Element style overrides' },
+  'designer/header-panel.tsx': { writes: 3, why: 'The header' },
+  'designer/menu-add.tsx': { writes: 1, why: 'The menu' },
+  'designer/menu-link-form.tsx': { writes: 1, why: 'The menu' },
+  'designer/menu-part-settings.tsx': { writes: 2, why: 'The menu' },
+  'designer/use-menu-editing.ts': { writes: 4, why: 'The menu' },
+  'designer/hero-panel.tsx': { writes: 5, why: 'The hero, which the AI sets by hero.set' },
+  'admin/settings/appearance/focal-point.tsx': { writes: 1, why: 'The hero image’s focal point' },
+  'designer/use-composer-width.ts': { writes: 3, why: 'The composer’s width in the hero' },
+  'designer/page-background-settings.tsx': { writes: 2, why: 'Page backgrounds' },
+  'designer/page-panel.tsx': { writes: 2, why: 'Page titles in the hero, a theme field' },
+  'designer/inspector.tsx': {
+    writes: 5,
+    why: 'The feed page’s welcome switch, sort, opening board, post card fields and filters, which the AI sets by path',
+  },
+}
+
+/** A draft's update called, or a change function handed the draft (not its type). */
+const DIRECT =
+  /\bupdate\(\s*(?:\(\s*\w+(?:\s*:\s*\w+)?\s*\)\s*=>|\w+\s*=>)?|\(\s*draft(?:\s*:\s*\w+)?\s*\)\s*=>(?!\s*void\s*(?:[),;|}\n]|$))|\bdraft\s*=>/g
+
+/** How many direct writes a file's source holds. */
+const directWrites = (source: string) => [...source.matchAll(DIRECT)].length
+
+function builderFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name)
+    if (statSync(path).isDirectory()) return name === '__tests__' ? [] : builderFiles(path)
+    return /\.tsx?$/.test(name) ? [path] : []
+  })
+}
+
+/** Each file's direct writes beyond what its entry allows, or that holds some unlisted. */
+function overWritten(found: ReadonlyMap<string, number>): string[] {
+  return [...found]
+    .filter(([file, writes]) => writes > (DIRECT_WRITES[file]?.writes ?? 0))
+    .map(([file, writes]) => `${file}: ${writes}, allowed ${DIRECT_WRITES[file]?.writes ?? 0}`)
 }
 
 const WRITE =
@@ -158,3 +242,47 @@ function seconds(found: Map<string, string[]>): string[] {
     })
     .map(([path, files]) => `${path}: ${files.join(', ')}`)
 }
+
+describe('one vocabulary for the builder and the AI', () => {
+  const found = () =>
+    new Map(
+      ROOTS.flatMap(builderFiles).map((file) => [
+        relative(COMPONENTS, file).split('\\').join('/'),
+        directWrites(readFileSync(file, 'utf8')),
+      ])
+    )
+
+  it('counts updates and change functions, not their types or dispatched operations', () => {
+    expect(
+      directWrites(`
+        type Update = (change: (draft: PortalDesign) => void, label?: string) => void
+        update((draft) => void (draft.layout.width = width), 'Width')
+        draft.update((next) => moveHomeBlock(next, id, 1))
+        editing.update(
+          (draft) => editGrid(draft, gates, id, change),
+          'Move'
+        )
+        onFix={(check) => update(check.fix.apply, check.fix.label)}
+        set((draft) => { draft.mode = 'dark' })
+        dispatch({ op: 'block.set', block: id, key: 'count', value: 5 }, 'How many')
+      `)
+    ).toBe(5)
+  })
+
+  it('finds a panel that writes the draft beside the operations', () => {
+    const found = new Map([['designer/block-sections.tsx', 1]])
+    expect(overWritten(found)).toEqual(['designer/block-sections.tsx: 1, allowed 0'])
+  })
+
+  it('writes Home’s blocks and the pages’ parts only through operations', () => {
+    expect(overWritten(found())).toEqual([])
+  })
+
+  it('lists each file with the writes it still holds, so the list only shrinks', () => {
+    const now = found()
+    const stale = Object.entries(DIRECT_WRITES)
+      .filter(([file, { writes }]) => (now.get(file) ?? 0) !== writes)
+      .map(([file, { writes }]) => `${file}: ${now.get(file) ?? 0}, listed ${writes}`)
+    expect(stale).toEqual([])
+  })
+})

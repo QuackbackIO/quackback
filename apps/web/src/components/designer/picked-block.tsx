@@ -3,14 +3,9 @@ import { ExclamationTriangleIcon } from '@heroicons/react/16/solid'
 import { LinksOptions } from '@/components/admin/settings/appearance/home-section'
 import type { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import {
-  applySetting,
-  blockOf,
-  sectionOf,
-  writeSection,
-  type SectionType,
-} from '@/lib/shared/design/blocks'
+import { blockOf, sectionOf, type SectionType } from '@/lib/shared/design/blocks'
 import { sectionTypeOf } from '@/lib/shared/design/builder-chrome'
+import { settingLabel as labelOf } from '@/lib/shared/design/dispatch'
 import type { StyleState, StyleElement } from '@/lib/shared/design/style-tokens'
 import { blockPageOff, type HomeBlock } from '@/lib/shared/design/home'
 import { PAGE_NAMES } from '@/lib/shared/design/names'
@@ -23,13 +18,13 @@ import {
   SECTION_ELEMENTS,
   elementsOf,
   lookOutliers,
-  matchLook,
   type LookScope,
 } from './block-panel'
 import { BlockIcon } from './block-icon'
 import { BlockPanel, SourceList } from './block-settings-panel'
 import type { Crumb } from './properties/properties-panel'
 import { BlockLayout, BlockLook, BlockWords, ElementRows, LOOK_NAMES } from './block-sections'
+import { dispatcher } from './dispatcher'
 import { ElementPanel } from './element-panel'
 import { RequestWords } from './feed-words'
 import { PropertySection } from './properties/properties-panel'
@@ -99,6 +94,7 @@ export function PickedBlock({
   const screen: Screen = phone ? 'phone' : 'all'
   const [scope, setScope] = useState<LookScope>('every')
   const blocks = design.pages.home.blocks
+  const dispatch = dispatcher(design, update)
   const nameOf = (key: Selection) => {
     const at = blocks.find((each, i) => blockKey(each, i) === key)
     return at ? blockOf(at.type)?.name : undefined
@@ -183,9 +179,11 @@ export function PickedBlock({
           />
         }
         onChange={(key, value) => {
-          const result = applySetting(block, key, value, locale)
-          if (!result.ok) return say(result.refusal)
-          update((draft) => writeSection(draft, result.block), labelOf(section, key))
+          const done = dispatch(
+            { op: 'section.set', type: section, key, value, locale },
+            labelOf(section, key)
+          )
+          if (!done.ok) say(done.refusal)
         }}
       />
     )
@@ -199,20 +197,9 @@ export function PickedBlock({
   const offNote = off ? (
     <p>{`Visitors don’t see this block while the ${PAGE_NAMES[off]} page is off.`}</p>
   ) : null
-  const change = (apply: (draft: HomeBlock) => void, label: string) =>
-    update((draft) => {
-      const at = draft.pages.home.blocks[index]
-      if (at) apply(at)
-    }, label)
-  const set = (key: string, value: unknown) => {
-    const result = applySetting(block, key, value, locale)
-    if (!result.ok) return say(result.refusal)
-    update(
-      (draft) => {
-        draft.pages.home.blocks[index] = result.block
-      },
-      labelOf(block.type, key)
-    )
+  const set = (key: string, value: unknown, label = labelOf(block.type, key)) => {
+    const done = dispatch({ op: 'block.set', block: index, key, value, locale }, label)
+    if (!done.ok) say(done.refusal)
   }
   const owned = block.id ? (block as HomeBlock & { id: string }) : null
   const roadmap =
@@ -267,12 +254,7 @@ export function PickedBlock({
             locale={locale}
             roadmap={roadmap}
             onChange={set}
-            onBody={(body: TiptapContent) =>
-              change(
-                (draft) => void ((draft as typeof block & { body: TiptapContent }).body = body),
-                labelOf(block.type, 'body')
-              )
-            }
+            onBody={(body: TiptapContent) => set('body', body)}
           />
         )
       }
@@ -314,8 +296,8 @@ export function PickedBlock({
           })
           .join(', '),
         onReset: () =>
-          update(
-            (draft) => matchLook(draft, place.id, owned!.id),
+          dispatch(
+            { op: 'block.matchLook', id: place.id, to: owned!.id },
             `${lookName(place.id)}: ${WORDS.reset.toLowerCase()}`
           ),
         onGo: onSelect ? () => onSelect(`block-${place.id}` as Selection) : undefined,
@@ -328,7 +310,12 @@ export function PickedBlock({
               key={selection}
               block={block}
               withHeading={false}
-              change={(apply) => change(apply, labelOf(block.type, 'links'))}
+              change={(apply) => {
+                // The links edit a copy of the block; its links are set as any setting is.
+                const edited = structuredClone(block)
+                apply(edited)
+                set('links', edited.links)
+              }}
             />
           )
         if (field.key === 'statusIds' && block.type === 'ideas')
@@ -347,14 +334,15 @@ export function PickedBlock({
                   title={shipped.length ? undefined : 'No statuses in the Complete category yet'}
                   onClick={() => {
                     // The shipped statuses, newest first, as one step.
-                    const withStatuses = applySetting(block, 'statusIds', shipped.slice(0, 12))
-                    const next = withStatuses.ok
-                      ? applySetting(withStatuses.block, 'sort', 'new')
-                      : withStatuses
-                    if (!next.ok) return say(next.refusal)
-                    update((draft) => {
-                      draft.pages.home.blocks[index] = next.block
-                    }, `${name}: ${FIND.recentlyShipped.label.toLowerCase()}`)
+                    const done = dispatch(
+                      {
+                        op: 'block.setEach',
+                        block: index,
+                        settings: { statusIds: shipped.slice(0, 12), sort: 'new' },
+                      },
+                      `${name}: ${FIND.recentlyShipped.label.toLowerCase()}`
+                    )
+                    if (!done.ok) say(done.refusal)
                   }}
                   className="rounded text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none disabled:opacity-50"
                 >
@@ -390,11 +378,4 @@ function SectionLook({
       <ElementRows offered={SECTION_ELEMENTS[section]} onElement={onElement} />
     </PropertySection>
   )
-}
-
-/** A change named for the block and the setting, such as "Top posts: How many". */
-function labelOf(type: string, key: string): string {
-  const def = blockOf(type)
-  const field = def?.fields.find((each) => each.key === key)
-  return def ? `${def.name}${field ? `: ${field.label}` : ''}` : 'Block'
 }

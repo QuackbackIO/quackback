@@ -1,14 +1,8 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
-import {
-  duplicateHomeBlock,
-  insertHomeBlock,
-  moveHomeBlock,
-  placeHomeBlock,
-  settleHome,
-  type HomeBlockType,
-} from '@/lib/shared/design/home'
+import type { HomeBlockType } from '@/lib/shared/design/home'
 import { blockKey, BLOCK_NAMES, type Selection } from '@/lib/shared/design/outline'
+import { dispatcher } from './dispatcher'
 
 /** What a screen reader hears after a block moves. */
 export function movedSaid(name: string, position: number, count: number): string {
@@ -41,29 +35,27 @@ export function useBlockActions({
   const indexOf = (key: Selection | null) =>
     blocks.findIndex((block, i) => blockKey(block, i) === key)
   const idOf = (key: Selection) => key.slice('block-'.length)
+  const dispatch = dispatcher(draft.design, draft.update)
 
   const moveBlock = (key: Selection, by: -1 | 1) => {
     const at = indexOf(key)
     if (at < 0 || at + by < 0 || at + by >= blocks.length) return
-    draft.update((next) => moveHomeBlock(next, idOf(key), by), 'Move block')
+    dispatch({ op: 'block.step', id: idOf(key), by }, 'Move block')
     say(movedSaid(nameOf(key) ?? 'Block', at + by, blocks.length))
   }
   /** Puts a block at a place counted before it moves, as a drop reads. */
   const placeBlock = (key: Selection, place: number) => {
     const at = indexOf(key)
     if (at < 0) return
-    draft.update((next) => placeHomeBlock(next, idOf(key), place), 'Move block')
+    dispatch({ op: 'block.place', id: idOf(key), place }, 'Move block')
     say(movedSaid(nameOf(key) ?? 'Block', positionOf(at, place, blocks.length), blocks.length))
   }
   /** Adds a block under the picked block, else under them all; then picks it. */
   const addBlock = (type: HomeBlockType) => {
     const after = selection?.startsWith('block-') ? idOf(selection) : null
     const afterName = after && selection ? nameOf(selection) : undefined
-    let added = null as Selection | null
-    draft.update((next) => {
-      added = blockKey(insertHomeBlock(next, type, after), 0)
-    }, `Add ${BLOCK_NAMES[type]}`)
-    if (added) setSelection(added)
+    const done = dispatch({ op: 'block.add', type, after }, `Add ${BLOCK_NAMES[type]}`)
+    if (done.ok && done.block) setSelection(blockKey(done.block, 0))
     say(`${BLOCK_NAMES[type]} added ${afterName ? `under ${afterName}` : 'at the end of Home'}.`)
   }
 
@@ -75,28 +67,18 @@ export function useBlockActions({
     if (!key.startsWith('block-')) return
     const id = idOf(key)
     const name = nameOf(key) ?? 'Block'
-    let neighbour: Selection | null = null
-    draft.update((next) => {
-      const list = next.pages.home.blocks
-      const at = list.findIndex((block) => block.id === id)
-      const kept = list.filter((block) => block.id !== id)
-      const near = at < 0 ? undefined : (kept[at] ?? kept[at - 1])
-      neighbour = near ? blockKey(near, kept.indexOf(near)) : null
-      next.pages.home.blocks = kept
-      // What was under it floats up.
-      settleHome(next)
-    }, 'Remove block')
-    setSelection(neighbour)
+    // What was under it floats up, as removing a block settles Home.
+    const done = dispatch({ op: 'block.remove', block: id }, 'Remove block')
+    const near = done.ok ? done.near : null
+    setSelection(near ? blockKey(near, 0) : null)
     say(`${name} removed. Undo brings it back.`)
   }
   /** Copies a block in after it, and picks the copy. */
   const duplicateBlock = (key: Selection) => {
     if (!key.startsWith('block-')) return
     const name = nameOf(key) ?? 'Block'
-    let copy: string | null = null
-    draft.update((next) => {
-      copy = duplicateHomeBlock(next, idOf(key))?.id ?? null
-    }, 'Duplicate block')
+    const done = dispatch({ op: 'block.duplicate', id: idOf(key) }, 'Duplicate block')
+    const copy = done.ok ? done.block?.id : undefined
     if (copy) {
       setSelection(`block-${copy}`)
       say(`${name} copied.`)

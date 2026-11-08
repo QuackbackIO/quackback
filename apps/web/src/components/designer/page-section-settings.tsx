@@ -3,6 +3,7 @@ import type { DesignerPage } from '@/lib/shared/design/outline'
 import { PAGE_CHOICE_DEFAULTS, type PageChoices } from '@/lib/shared/design/page-choices'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { PropertyRow, PropertyTiles } from './properties/properties-panel'
+import { dispatcher } from './dispatcher'
 import { FIND } from './find-rows'
 import { WORDS } from './properties/words'
 
@@ -13,18 +14,13 @@ type ChoicePage = keyof PageChoices
  * it again leaves the design as it was before the page was touched.
  */
 function choose<P extends ChoicePage, K extends keyof PageChoices[P]>(
+  design: PortalDesign,
   update: Update,
   page: P,
   key: K,
   value: PageChoices[P][K]
 ) {
-  update((draft) => {
-    const made = { ...draft.pages[page] } as Record<string, unknown>
-    if (value === PAGE_CHOICE_DEFAULTS[page][key]) delete made[key as string]
-    else made[key as string] = value
-    if (Object.keys(made).length) (draft.pages as Record<string, unknown>)[page] = made
-    else delete draft.pages[page]
-  })
+  dispatcher(design, update)({ op: 'page.choice', page, key: key as string, value })
 }
 
 function current<P extends ChoicePage>(design: PortalDesign, page: P): PageChoices[P] {
@@ -57,7 +53,7 @@ export function PageTitleRows({
         find={FIND.subscribe.id}
         set={made(design, 'changelog', 'subscribe')}
         resetLabel={`${WORDS.reset} subscribe to beside`}
-        onReset={() => choose(update, 'changelog', 'subscribe', fallback)}
+        onReset={() => choose(design, update, 'changelog', 'subscribe', fallback)}
       >
         <PropertyTiles
           label="Subscribe"
@@ -71,7 +67,7 @@ export function PageTitleRows({
             ['beside', 'Beside'],
             ['under', 'Under'],
           ]}
-          onChange={(value) => choose(update, 'changelog', 'subscribe', value)}
+          onChange={(value) => choose(design, update, 'changelog', 'subscribe', value)}
         />
       </PropertyRow>
     )
@@ -84,7 +80,7 @@ export function PageTitleRows({
         find={FIND.search.id}
         set={made(design, 'help', 'search')}
         resetLabel={`${WORDS.reset} search to standard`}
-        onReset={() => choose(update, 'help', 'search', fallback)}
+        onReset={() => choose(design, update, 'help', 'search', fallback)}
       >
         <PropertyTiles
           label="Search size"
@@ -94,7 +90,7 @@ export function PageTitleRows({
             ['standard', 'Standard'],
             ['large', 'Large'],
           ]}
-          onChange={(value) => choose(update, 'help', 'search', value)}
+          onChange={(value) => choose(design, update, 'help', 'search', value)}
         />
       </PropertyRow>
     )

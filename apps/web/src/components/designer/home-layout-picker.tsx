@@ -3,12 +3,12 @@ import {
   arrangeHome,
   HOME_LAYOUTS,
   layoutFits,
-  takeHomeLayout,
   type HomeLayout,
 } from '@/lib/shared/design/home-layouts'
 import { composerInHero } from '@/lib/shared/design/main-action'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import { dispatcher } from './dispatcher'
 import { previewOnCanvas } from './look-preview'
 
 /**
@@ -51,8 +51,8 @@ export function HomeLayoutPicker({
               onBlur={hide}
               onClick={() => {
                 hide()
-                update(
-                  (draft) => takeHomeLayout(draft, layout, gates),
+                dispatcher(design, update)(
+                  { op: 'home.layout', layout, gates },
                   `Home layout: ${layout.label}`
                 )
               }}

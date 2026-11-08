@@ -10,8 +10,9 @@ import {
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
 import type { MenuPartId } from '@/lib/shared/design/menu'
-import { pageTree, setRowShown, treeRows, type TreeRow } from '@/lib/shared/design/page-tree'
+import { pageTree, treeRows, type TreeRow } from '@/lib/shared/design/page-tree'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
+import { dispatcher } from './dispatcher'
 import { PageTree } from './page-tree'
 import { useBlockActions } from './use-block-actions'
 import { cn } from '@/lib/shared/utils'
@@ -83,6 +84,7 @@ export function PagePanel({
 }) {
   const titles = design.layout.pageTitles
   const tree = useMemo(() => pageTree(design, gates, page, nodes), [design, gates, page, nodes])
+  const dispatch = dispatcher(design, update)
   const blocks = useBlockActions({
     draft: { design, update } as unknown as Pick<
       ReturnType<typeof useDesignDraft>,
@@ -146,7 +148,7 @@ export function PagePanel({
             onShown={(row, shown) => {
               if (row.menu) return act?.(row.menu, shown ? 'show' : 'hide', 'panel')
               const name = `${shown ? WORDS.show : WORDS.hide} ${row.label}`
-              update((draft) => void setRowShown(draft, row.key, shown), name)
+              dispatch({ op: 'part.shown', key: row.key, shown }, name)
               say?.(`${name}. Undo takes it back.`)
             }}
             onMove={(row, by) => {

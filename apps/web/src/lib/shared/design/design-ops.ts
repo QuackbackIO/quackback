@@ -3,9 +3,11 @@
  * free-form field paths. Each names what a person would: a block by its id,
  * type or name, a place by the blocks around it ("beside:help_search"), a
  * size in words ("half", "wider"), a board or roadmap by its name, a menu
- * item by its label. Each is built on the builder's own operations (the
- * block registry's applySetting, the hero's writeHero, Home's grid, the
- * menu's steps) and checked as the builder checks a person's change, then
+ * item by its label. Each resolves those words and then makes the builder's
+ * own operation: a setting of a block, a page section or the hero, and a
+ * block's removal, are the operations the builder's panels dispatch
+ * (dispatch.ts); placing and sizing go through Home's grid, and the menu
+ * through its steps. Each is checked as the builder checks a person's change, then
  * by the schema, the contrast solver and the checks on what the model may
  * bring. An operation never throws: it returns the design changed with a
  * label for its undo, or a refusal saying plainly why not.
@@ -13,8 +15,6 @@
 import {
   applySetting,
   blockOf,
-  sectionOf,
-  writeSection,
   SECTION_TYPES,
   type BlockDef,
   type SectionType,
@@ -29,14 +29,13 @@ import {
   type DesignValue,
   type UntrustedChanges,
 } from './apply-changes'
-import { heroOf, writeHero, type HeroKey } from './hero'
+import { applyDesignOp } from './dispatch'
 import {
   gridItemsOf,
   HOME_BLOCKS_MAX,
   homeBlockTypes,
   newBlock,
   placeHomeBlocks,
-  settleHome,
   type HomeBlock,
   type HomeBlockType,
 } from './home'
@@ -294,27 +293,13 @@ function urlsIn(value: unknown): string[] {
 
 /* Home's blocks */
 
-/** Other words a block type is known by. */
-const BLOCK_ALIASES: Partial<Record<HomeBlockType, readonly string[]>> = {
-  ideas: ['posts', 'top posts', 'popular posts', 'ideas'],
-  updates: ['updates', 'changelog updates', 'latest entries'],
-  help_search: ['help search', 'search'],
-  help_topics: ['help topics', 'topics'],
-  composer: ['composer', 'post box', 'write a post', 'new post'],
-  status: ['status'],
-  contact: ['contact', 'contact us'],
-  welcome: ['welcome', 'welcome message'],
-  links: ['links'],
-  boards: ['boards', 'board list', 'our boards'],
-  roadmap: ['roadmap'],
-}
-
 /** The block type a word names, by its type, name or another word for it. */
 export function blockTypeOf(word: string): HomeBlockType | null {
   const want = norm(word)
   return (
     DESIGN_OPTIONS.blockType.find((type) => {
-      const names = [type, blockOf(type)!.name, ...(BLOCK_ALIASES[type] ?? [])]
+      const def = blockOf(type)!
+      const names = [type, def.name, ...(def.aliases ?? [])]
       return names.some((name) => norm(name) === want)
     }) ?? null
   )
@@ -551,10 +536,15 @@ export function setBlockSetting(
       withKeptColours(world, (found.block as Record<string, unknown>)[field.key], read.value),
       'rich'
     )
-  const next = applySetting(found.block, field.key, read.value, world.locale)
-  if (!next.ok) return refuse(`${def.name}: ${next.refusal}`)
   const draft = structuredClone(design)
-  draft.pages.home.blocks[found.index] = next.block
+  const done = applyDesignOp(draft, {
+    op: 'block.set',
+    block: found.index,
+    key: field.key,
+    value: read.value,
+    locale: world.locale,
+  })
+  if (!done.ok) return refuse(`${def.name}: ${done.refusal}`)
   // Rich words are labelled as the builder's editor labels them: their words, or their formatting.
   const label =
     field.kind === 'words'
@@ -584,10 +574,9 @@ export function setHero(
     )
   const read = settingValue(field, value, world.places)
   if ('refusal' in read) return refuse(read.refusal)
-  const next = applySetting(heroOf(design), field.key, read.value)
-  if (!next.ok) return refuse(`Hero: ${next.refusal}`)
   const draft = structuredClone(design)
-  writeHero(draft, next.block, field.key as HeroKey)
+  const done = applyDesignOp(draft, { op: 'hero.set', key: field.key, value: read.value })
+  if (!done.ok) return refuse(`Hero: ${done.refusal}`)
   const label = `Hero ${field.label.toLowerCase()}: ${spokenValue(field, read.value, world.places)}`
   return finish(design, draft, label, world)
 }
@@ -678,13 +667,17 @@ export function setPageSection(
     const field = fieldOf(def, key)!
     const read = settingValue(field, value, world.places)
     if ('refusal' in read) return refuse(read.refusal)
-    const next = applySetting(sectionOf(design, type), field.key, read.value)
-    if (!next.ok)
-      return refuse(
-        `${PAGE_NAMES[page as PortalPageType]} ${def.name.toLowerCase()}: ${next.refusal}`
-      )
     const draft = structuredClone(design)
-    writeSection(draft, next.block)
+    const done = applyDesignOp(draft, {
+      op: 'section.set',
+      type,
+      key: field.key,
+      value: read.value,
+    })
+    if (!done.ok)
+      return refuse(
+        `${PAGE_NAMES[page as PortalPageType]} ${def.name.toLowerCase()}: ${done.refusal}`
+      )
     const label = `${PAGE_NAMES[page as PortalPageType]} ${field.label.toLowerCase()}: ${spokenValue(field, read.value, world.places)}`
     return finish(design, draft, label, world)
   }
@@ -1209,8 +1202,7 @@ export function removeBlock(
   const found = findBlock(design, ref)
   if (!found.ok) return refuse(found.refusal)
   const draft = structuredClone(design)
-  draft.pages.home.blocks.splice(found.index, 1)
-  settleHome(draft)
+  applyDesignOp(draft, { op: 'block.remove', block: found.index })
   return finish(design, draft, `Remove ${blockName(found.block)}`, world)
 }
 

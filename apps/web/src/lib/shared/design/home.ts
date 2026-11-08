@@ -12,6 +12,7 @@ import {
   type GridItem,
   type GridPlace,
 } from './home-grid'
+import { HOME_BLOCK_VIEWS, type HomeBlockView } from './blocks/view'
 import { BLOCK_SIZES } from './options'
 import { composerInHero } from './main-action'
 import type { PortalPageGates } from './paths'
@@ -19,8 +20,6 @@ import type { PortalDesign } from './schema'
 
 export type HomeBlock = PortalDesign['pages']['home']['blocks'][number]
 export type HomeBlockType = HomeBlock['type']
-
-const WELCOME_TEXT = 'Welcome! Share feedback, see what is coming next and find help.'
 
 /** A new block's id: ten random letters and digits. */
 function blockId(): string {
@@ -66,28 +65,7 @@ export function newBlock(type: HomeBlockType, place?: Partial<GridPlace>): HomeB
 type Unplaced = HomeBlock extends infer B ? (B extends unknown ? Omit<B, 'grid'> : never) : never
 
 function blockOf(type: HomeBlockType): Unplaced {
-  switch (type) {
-    case 'welcome':
-      return {
-        type,
-        body: {
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: WELCOME_TEXT }] }],
-        },
-      } as Unplaced
-    case 'ideas':
-      return { type, sort: 'trending', count: 3 }
-    case 'updates':
-      return { type, count: 3 }
-    case 'roadmap':
-      return { type, roadmapId: null }
-    case 'help_topics':
-      return { type, categoryIds: [] }
-    case 'links':
-      return { type, links: [{ label: 'Our website', url: 'https://example.com' }] }
-    default:
-      return { type } as Unplaced
-  }
+  return { type, ...structuredClone(VIEWS.get(type)!.made) } as Unplaced
 }
 
 /** The starter layout's rows after Welcome: each block, its columns of twelve and the part it needs. */
@@ -144,44 +122,25 @@ export function starterHomeBlocks(
   return packedBlocks([['welcome', 12], ...blocks.map(([type, w]) => [type, w] as const)])
 }
 
-/** The page each block shows the data of; a block whose page is off is not drawn. */
-const PAGE_OF: Partial<Record<HomeBlockType, keyof PortalPageGates>> = {
-  composer: 'feedback',
-  ideas: 'feedback',
-  roadmap: 'roadmap',
-  updates: 'changelog',
-  help_search: 'help',
-  help_topics: 'help',
-  status: 'status',
-  contact: 'support',
-  boards: 'feedback',
-}
+/** Each block's view (blocks/view.ts): its sizes, the page it needs and what a new one holds. */
+const VIEWS = new Map<string, HomeBlockView>(HOME_BLOCK_VIEWS.map((view) => [view.type, view]))
 
 /** The page a block needs that is off, so visitors do not see it; null when they do. */
 export function blockPageOff(
   type: HomeBlockType,
   gates: PortalPageGates
 ): keyof PortalPageGates | null {
-  const page = PAGE_OF[type]
+  const page = VIEWS.get(type)?.page
   return page && !gates[page] ? page : null
 }
 
 /** The block types a workspace's Home can show, from the pages it has. Links and welcome need none. */
 export function homeBlockTypes(gates: PortalPageGates): HomeBlockType[] {
-  const needs: Record<HomeBlockType, boolean> = {
-    welcome: true,
-    links: true,
-    composer: gates.feedback,
-    ideas: gates.feedback,
-    roadmap: gates.roadmap,
-    updates: gates.changelog,
-    help_search: gates.help,
-    help_topics: gates.help,
-    status: gates.status,
-    contact: gates.support,
-    boards: gates.feedback,
-  }
-  return (Object.keys(needs) as HomeBlockType[]).filter((type) => needs[type])
+  // Those needing no page first, then each whose page is on, each in the options' order.
+  return [
+    ...HOME_BLOCK_VIEWS.filter((view) => !view.page),
+    ...HOME_BLOCK_VIEWS.filter((view) => view.page && gates[view.page]),
+  ].map((view) => view.type)
 }
 
 /** Home's blocks as grid items, by id, at their least sizes. */
