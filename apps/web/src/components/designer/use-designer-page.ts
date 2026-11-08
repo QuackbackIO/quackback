@@ -9,7 +9,7 @@ import {
 } from '@/lib/shared/design/outline'
 import type { CanvasVisitor } from '@/lib/shared/design/designer-frame'
 import { portalPageGates } from '@/lib/shared/design/paths'
-import type { SamplePage } from '@/lib/shared/design/sample-pages'
+import { isPageSample, type SamplePage } from '@/lib/shared/design/sample-pages'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 
 /** Where the builder remembers the website a design is matched to. */
@@ -40,7 +40,9 @@ export function useDesignerPage(returnPath: string, design: PortalDesign) {
   const [sample, setSample] = useState<SamplePage | null>(null)
   const [visitor, setVisitor] = useState<CanvasVisitor>('out')
   const realPage = pages.includes(chosen) ? chosen : (pages[0] ?? 'feedback')
-  const page = sample ?? realPage
+  // The not-found sample is no page of the menu: the panels stay on the page underneath.
+  const pageSample = sample && isPageSample(sample) ? sample : null
+  const page = pageSample ?? realPage
 
   /** Shows a page, at an item of it or at the item it last showed; a sample gives way. */
   const setPage = useCallback((next: DesignerPage, item?: string | null) => {
@@ -78,7 +80,7 @@ export function useDesignerPage(returnPath: string, design: PortalDesign) {
     /** The portal's own pages, never a sample's: what Review compares and Find goes to. */
     pages,
     /** The pages the page picker lists: a sample's too while it is shown, so it can name it. */
-    shownPages: sample && !pages.includes(sample) ? [...pages, sample] : pages,
+    shownPages: pageSample && !pages.includes(pageSample) ? [...pages, pageSample] : pages,
     page,
     /** The page shown, or under a sample the real page the builder was on. */
     realPage,

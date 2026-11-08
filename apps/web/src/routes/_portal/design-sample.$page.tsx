@@ -7,6 +7,7 @@ import { RoadmapPageView } from '@/components/public/roadmap-page'
 import { FeedPage } from '@/components/public/feedback/feed-page'
 import { ChangelogPage } from '@/components/portal/changelog/changelog-page'
 import { SampleQueries } from '@/components/public/sample-queries'
+import { PortalNotFound } from '@/components/public/portal-not-found'
 import { getDesignerSampleFn } from '@/lib/server/functions/portal-designer'
 import { isSamplePage } from '@/lib/shared/design/sample-pages'
 import { DEFAULT_LOCALE, loadAreaMessages } from '@/lib/shared/i18n'
@@ -88,5 +89,7 @@ function SamplePage() {
           <ChangelogPage />
         </SampleQueries>
       )
+    case 'not-found':
+      return <PortalNotFound />
   }
 }

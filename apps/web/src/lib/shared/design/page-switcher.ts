@@ -7,7 +7,7 @@ import { MENU_WORDS } from './menu-words'
 import { landingOf, menuParts, type MenuPart } from './menu'
 import { PAGE_NAMES, type CanvasLocation, type DesignerPage } from './outline'
 import { portalFeedbackPath, type PortalPageGates, type PortalPageType } from './paths'
-import { isSamplePage, type SamplePage } from './sample-pages'
+import { isSamplePage, NOT_FOUND_SAMPLE, SAMPLE_NAMES, type SamplePage } from './sample-pages'
 import type { PortalDesign } from './schema'
 
 /** A place in the portal with its own address. */
@@ -192,6 +192,13 @@ export function switcherColumns({
             }),
           ]
         : []),
+      // The page an address with nothing at it shows: the brand, and its words.
+      row(
+        `sample:${NOT_FOUND_SAMPLE}`,
+        SAMPLE_NAMES[NOT_FOUND_SAMPLE],
+        { kind: 'sample', page: NOT_FOUND_SAMPLE },
+        { hint: SWITCHER_COPY.sample, keywords: ['404', 'missing', 'error', 'sample'] }
+      ),
     ],
   }
 

@@ -96,11 +96,23 @@ describe('the page switcher, by module', () => {
     expect(column(all, 'off').note).toBe('Samples until you turn them on')
   })
 
-  it('lists Home, the landing page, leaving out what is still to come', () => {
+  it('lists Home, the landing page, and the not-found page as a sample', () => {
     const general = column(columns({ here: { page: 'roadmap', item: null } }), 'general')
     expect(general.rows.map((row) => [row.label, row.hint, row.go.kind])).toEqual([
       ['Home', 'Landing page', 'page'],
+      ['Not found', 'Sample', 'sample'],
     ])
+  })
+
+  it('marks the not-found sample as where you are while it shows', () => {
+    const general = column(
+      columns({ here: { page: 'roadmap', item: null }, sample: 'not-found' }),
+      'general'
+    )
+    expect(general.rows.find((row) => row.label === 'Not found')).toMatchObject({
+      current: true,
+      go: { kind: 'sample', page: 'not-found' },
+    })
   })
 
   it('leaves Home out while it is off, and marks the page visitors land on', () => {

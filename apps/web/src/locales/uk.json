@@ -1919,6 +1919,8 @@
   "common.errorPage.technicalDetails": "Технічні подробиці",
   "common.errorPage.tryAgain": "Спробувати ще раз",
   "common.errorPage.goHome": "На головну",
+  "common.errorPage.notFound.board": "Перейти до дошки",
+  "common.errorPage.notFound.search": "Шукати дописи",
   "portal.header.auth.accountMenu": "Відкрити меню акаунта",
   "portal.feedback.header.titleLabel": "Заголовок допису",
   "portal.feedback.header.postingToBoard": "Публікація на дошці {board}",
