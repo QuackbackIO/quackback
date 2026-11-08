@@ -1,10 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { ChevronDoubleLeftIcon, SparklesIcon } from '@heroicons/react/24/outline'
-import {
-  AskAiPanel,
-  type ShowChange,
-} from '@/components/admin/settings/appearance/ask-ai-panel'
+import { AskAiPanel, type ShowChange } from '@/components/admin/settings/appearance/ask-ai-panel'
 import {
   DesignComposer,
   type ChatContext,
