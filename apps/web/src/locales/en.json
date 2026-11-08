@@ -1929,6 +1929,7 @@
   "portal.postDetail.metadata.retryIntegrations": "Sync integrations",
   "portal.changelog.entry.backLink": "Changelog",
   "portal.changelog.entry.shippedFeatures": "Shipped Features",
+  "portal.changelog.shippedFrom": "From {posts, plural, one {# post} other {# posts}} · {votes, plural, one {# vote} other {# votes}}",
   "portal.changelog.filter.all": "All",
   "portal.changelog.emptyFiltered.title": "No updates in this category yet",
   "portal.changelog.subscribed": "Subscribed",

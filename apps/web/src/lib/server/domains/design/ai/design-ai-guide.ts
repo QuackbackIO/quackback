@@ -192,7 +192,7 @@ function guideLines(
     ],
     [
       ['pages.changelog'],
-      `The Changelog page; leave a field out for its usual look. pages.changelog.entries: ${DESIGN_OPTIONS.changelogEntries.join(', ')} (timeline puts dates in a column beside each entry, cards puts each entry in a card, compact lists titles with a line of each); pages.changelog.images: ${DESIGN_OPTIONS.entryImage.join(', ')} (an entry's featured image: left off, across the entry, or small beside it); pages.changelog.subscribe: ${DESIGN_OPTIONS.titleAction.join(', ')} (the Subscribe button beside the title or under its words).`,
+      `The Changelog page; leave a field out for its usual look. pages.changelog.entries: ${DESIGN_OPTIONS.changelogEntries.join(', ')} (timeline puts dates in a column beside each entry, cards puts each entry in a card, compact lists titles with a line of each); pages.changelog.images: ${DESIGN_OPTIONS.entryImage.join(', ')} (an entry's featured image: left off, across the entry, or small beside it); pages.changelog.subscribe: ${DESIGN_OPTIONS.titleAction.join(', ')} (the Subscribe button beside the title or under its words); pages.changelog.shipped: true or false (the posts an entry shipped from, with how many and their votes).`,
     ],
     [
       ['pages.help'],

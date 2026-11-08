@@ -115,6 +115,7 @@ const LABELS: Record<string, string> = {
   'pages.changelog.entries': 'Changelog entries',
   'pages.changelog.images': 'Changelog images',
   'pages.changelog.subscribe': 'Subscribe button',
+  'pages.changelog.shipped': 'Shipped from posts',
   'pages.help': 'Help Center page',
   'pages.help.topics': 'Help topics',
   'pages.help.popular': 'Popular articles',

@@ -14,6 +14,8 @@ export const changelogChoicesSchema = z
     images: z.enum(DESIGN_OPTIONS.entryImage).optional(),
     /** Where the Subscribe button sits beside the title. */
     subscribe: z.enum(DESIGN_OPTIONS.titleAction).optional(),
+    /** The posts an entry shipped from, with their count and votes; absent shows them. */
+    shipped: z.boolean().optional(),
   })
   .strict()
 
@@ -62,7 +64,7 @@ export interface PageChoices {
 
 /** Today's pages: what a design without choices draws. */
 export const PAGE_CHOICE_DEFAULTS: PageChoices = {
-  changelog: { entries: 'timeline', images: 'none', subscribe: 'beside' },
+  changelog: { entries: 'timeline', images: 'none', subscribe: 'beside', shipped: true },
   help: {
     topics: 'cards',
     popular: true,

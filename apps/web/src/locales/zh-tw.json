@@ -1929,6 +1929,7 @@
   "portal.postDetail.metadata.retryIntegrations": "同步整合",
   "portal.changelog.entry.backLink": "更新日誌",
   "portal.changelog.entry.shippedFeatures": "已推出的功能",
+  "portal.changelog.shippedFrom": "來自 {posts} 則貼文 · {votes} 票",
   "portal.changelog.filter.all": "全部",
   "portal.changelog.emptyFiltered.title": "此類別尚無更新",
   "portal.changelog.subscribed": "已訂閱",

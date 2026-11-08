@@ -151,3 +151,32 @@ describe('the changelog list’s images', () => {
     }
   })
 })
+
+describe('the posts an entry shipped from', () => {
+  it('says how many posts and votes, over the posts, by default', () => {
+    const page = list()
+    expect(page.textContent).toContain('From 1 post · 12 votes')
+    expect(within(page).getByText('Search comments')).toBeTruthy()
+  })
+
+  it('says nothing for an entry linked to no posts', () => {
+    const entries = list().querySelectorAll('article')
+    expect(entries[1]!.textContent).not.toContain('From')
+  })
+
+  it('compact: the line alone, leading to the entry and its posts', () => {
+    const page = list({ entries: 'compact' })
+    const line = within(page).getByText('From 1 post · 12 votes')
+    expect(line.closest('a')?.getAttribute('href')).toBe('/changelog/$entryId')
+    expect(page.textContent).not.toContain('Search comments')
+  })
+
+  it('leaves the line and the posts off when the design hides them', () => {
+    for (const entries of ['timeline', 'cards', 'compact'] as const) {
+      const page = list({ entries, shipped: false })
+      expect(page.textContent, entries).not.toContain('From 1 post')
+      expect(page.textContent, entries).not.toContain('Search comments')
+      cleanup()
+    }
+  })
+})

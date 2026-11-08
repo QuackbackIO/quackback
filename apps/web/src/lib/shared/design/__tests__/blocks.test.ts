@@ -283,7 +283,12 @@ describe('a block’s summary', () => {
 
   it('reads page sections as their choices', () => {
     const design = defaultDesign()
-    expect(summaryOf(sectionOf(design, 'changelog.entries'))).toBe('Timeline · no images')
+    expect(summaryOf(sectionOf(design, 'changelog.entries'))).toBe(
+      'Timeline · no images · shipped from posts on'
+    )
+    expect(summaryOf(sectionOf(design, 'help.article'))).toBe(
+      'Was this helpful? on · 4 related articles · contact link off'
+    )
     expect(summaryOf(sectionOf(design, 'roadmap.board'))).toBe('Columns · votes shown')
     expect(summaryOf(sectionOf(design, 'help.popular'))).toBe('Shown')
     expect(summaryOf(sectionOf(design, 'help.search'))).toBe('Standard size')

@@ -366,6 +366,7 @@
   "portal.changelog.entryNotFound.backLink": "บันทึกการเปลี่ยนแปลง",
   "portal.changelog.entry.backLink": "บันทึกการเปลี่ยนแปลง",
   "portal.changelog.entry.shippedFeatures": "ฟีเจอร์ที่เปิดใช้แล้ว",
+  "portal.changelog.shippedFrom": "จาก {posts} โพสต์ · {votes} โหวต",
   "portal.changelog.filter.all": "ทั้งหมด",
   "portal.changelog.emptyFiltered.title": "ยังไม่มีอัปเดตในหมวดนี้",
   "portal.changelog.subscribed": "ติดตามแล้ว",

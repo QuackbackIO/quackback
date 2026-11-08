@@ -21,7 +21,12 @@ import { defaultDesign, portalDesign, type PortalDesign } from '../schema'
 
 function withChoices(): PortalDesign {
   const design = defaultDesign()
-  design.pages.changelog = { entries: 'cards', images: 'thumbnail', subscribe: 'under' }
+  design.pages.changelog = {
+    entries: 'cards',
+    images: 'thumbnail',
+    subscribe: 'under',
+    shipped: false,
+  }
   design.pages.help = {
     topics: 'list',
     popular: false,
@@ -44,6 +49,7 @@ describe('page choices in the design document', () => {
       entries: 'cards',
       images: 'thumbnail',
       subscribe: 'under',
+      shipped: false,
     })
     const bad = withChoices() as unknown as { pages: { help: { topics: string } } }
     bad.pages.help.topics = 'grid'
@@ -72,6 +78,7 @@ describe('page choices in the design document', () => {
       'data-qb-changelog-entries': 'cards',
       'data-qb-changelog-images': 'thumbnail',
       'data-qb-changelog-subscribe': 'under',
+      'data-qb-changelog-shipped': 'off',
       'data-qb-help-topics': 'list',
       'data-qb-help-popular': 'off',
       'data-qb-help-search': 'large',
@@ -83,7 +90,7 @@ describe('page choices in the design document', () => {
       'data-qb-support-suggest': 'off',
     })
     expect(readPageChoices(attributes)).toEqual({
-      changelog: { entries: 'cards', images: 'thumbnail', subscribe: 'under' },
+      changelog: { entries: 'cards', images: 'thumbnail', subscribe: 'under', shipped: false },
       help: {
         topics: 'list',
         popular: false,
@@ -105,7 +112,7 @@ describe('page choices in the design document', () => {
     )
     expect(readPageChoices({ 'data-qb-help-related': '7' }).help.related).toBe(4)
     expect(PAGE_CHOICE_DEFAULTS).toEqual({
-      changelog: { entries: 'timeline', images: 'none', subscribe: 'beside' },
+      changelog: { entries: 'timeline', images: 'none', subscribe: 'beside', shipped: true },
       help: {
         topics: 'cards',
         popular: true,
@@ -140,6 +147,7 @@ describe('page choices named, grouped and reachable by Quackback AI', () => {
   it('lets a request about the page set its choices', () => {
     const cases = [
       ['changelog', 'pages.changelog.entries', 'compact'],
+      ['changelog', 'pages.changelog.shipped', false],
       ['help', 'pages.help.popular', false],
       ['help', 'pages.help.related', 2],
       ['roadmap', 'pages.roadmap.board', 'list'],

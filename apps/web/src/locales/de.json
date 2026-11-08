@@ -1929,6 +1929,7 @@
   "portal.postDetail.metadata.retryIntegrations": "Integrationen synchronisieren",
   "portal.changelog.entry.backLink": "Neuigkeiten",
   "portal.changelog.entry.shippedFeatures": "Veröffentlichte Features",
+  "portal.changelog.shippedFrom": "Aus {posts, plural, one {# Beitrag} other {# Beiträgen}} · {votes, plural, one {# Stimme} other {# Stimmen}}",
   "portal.changelog.filter.all": "Alle",
   "portal.changelog.emptyFiltered.title": "In dieser Kategorie gibt es noch keine Neuigkeiten",
   "portal.changelog.subscribed": "Abonniert",

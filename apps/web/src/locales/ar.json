@@ -1929,6 +1929,7 @@
   "portal.postDetail.metadata.retryIntegrations": "مزامنة التكاملات",
   "portal.changelog.entry.backLink": "آخر المستجدات",
   "portal.changelog.entry.shippedFeatures": "الميزات المُطلقة",
+  "portal.changelog.shippedFrom": "من {posts, plural, one {# منشور} other {# منشورات}} · {votes, plural, one {# صوت} other {# أصوات}}",
   "portal.changelog.filter.all": "الكل",
   "portal.changelog.emptyFiltered.title": "لا توجد تحديثات في هذه الفئة بعد",
   "portal.changelog.subscribed": "مشترك",

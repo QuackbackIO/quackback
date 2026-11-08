@@ -1929,6 +1929,7 @@
   "portal.postDetail.metadata.retryIntegrations": "Синхронізувати інтеграції",
   "portal.changelog.entry.backLink": "Журнал змін",
   "portal.changelog.entry.shippedFeatures": "Випущені функції",
+  "portal.changelog.shippedFrom": "З {posts, plural, one {# допису} other {# дописів}} · {votes, plural, one {# голос} few {# голоси} many {# голосів} other {# голосу}}",
   "portal.changelog.filter.all": "Усі",
   "portal.changelog.emptyFiltered.title": "У цій категорії ще немає оновлень",
   "portal.changelog.subscribed": "Ви підписані",

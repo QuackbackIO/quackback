@@ -1929,6 +1929,7 @@
   "portal.postDetail.metadata.retryIntegrations": "Sincronizar integrações",
   "portal.changelog.entry.backLink": "Changelog",
   "portal.changelog.entry.shippedFeatures": "Recursos lançados",
+  "portal.changelog.shippedFrom": "De {posts, plural, one {# post} other {# posts}} · {votes, plural, one {# voto} other {# votos}}",
   "portal.changelog.filter.all": "Todos",
   "portal.changelog.emptyFiltered.title": "Ainda não há atualizações nesta categoria",
   "portal.changelog.subscribed": "Assinado",

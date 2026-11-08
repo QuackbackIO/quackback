@@ -1929,6 +1929,7 @@
   "portal.postDetail.metadata.retryIntegrations": "Синхронизировать интеграции",
   "portal.changelog.entry.backLink": "Журнал изменений",
   "portal.changelog.entry.shippedFeatures": "Выпущенные функции",
+  "portal.changelog.shippedFrom": "Из {posts, plural, one {# поста} other {# постов}} · {votes, plural, one {# голос} few {# голоса} many {# голосов} other {# голоса}}",
   "portal.changelog.filter.all": "Все",
   "portal.changelog.emptyFiltered.title": "В этой категории пока нет обновлений",
   "portal.changelog.subscribed": "Вы подписаны",

@@ -1929,6 +1929,7 @@
   "portal.postDetail.metadata.retryIntegrations": "Integraties synchroniseren",
   "portal.changelog.entry.backLink": "Changelog",
   "portal.changelog.entry.shippedFeatures": "Opgeleverde functies",
+  "portal.changelog.shippedFrom": "Uit {posts, plural, one {# bericht} other {# berichten}} · {votes, plural, one {# stem} other {# stemmen}}",
   "portal.changelog.filter.all": "Alles",
   "portal.changelog.emptyFiltered.title": "Nog geen updates in deze categorie",
   "portal.changelog.subscribed": "Geabonneerd",

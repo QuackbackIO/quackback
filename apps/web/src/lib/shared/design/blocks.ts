@@ -53,7 +53,7 @@ export type BlockType = HomeBlockType | SectionType | 'hero'
 
 type ChoicePage = keyof PageChoices
 const SECTION_KEYS = {
-  'changelog.entries': ['entries', 'images'],
+  'changelog.entries': ['entries', 'images', 'shipped'],
   'help.topics': ['topics'],
   'help.popular': ['popular'],
   'help.search': ['search'],
@@ -64,7 +64,10 @@ const SECTION_KEYS = {
 
 /** A page section as a block: its type and its choices, today's where the design makes none. */
 export type SectionBlock =
-  | ({ type: 'changelog.entries' } & Pick<PageChoices['changelog'], 'entries' | 'images'>)
+  | ({ type: 'changelog.entries' } & Pick<
+      PageChoices['changelog'],
+      'entries' | 'images' | 'shipped'
+    >)
   | ({ type: 'help.topics' } & Pick<PageChoices['help'], 'topics'>)
   | ({ type: 'help.popular' } & Pick<PageChoices['help'], 'popular'>)
   | ({ type: 'help.search' } & Pick<PageChoices['help'], 'search'>)
@@ -754,8 +757,15 @@ const SECTIONS: Record<SectionType, Omit<BlockDef, 'type' | 'pages' | 'addable' 
         },
         about: 'How an entry’s featured image shows',
       },
+      {
+        kind: 'switch',
+        key: 'shipped',
+        label: 'Shipped from posts',
+        about:
+          'Whether an entry linked to posts shows them, with how many and their votes, such as "From 3 posts · 412 votes"',
+      },
     ],
-    ai: ['entries', 'images'],
+    ai: ['entries', 'images', 'shipped'],
     examples: [
       {
         request: 'Show compact changelog entries with small images',
@@ -1377,7 +1387,8 @@ function sectionSummary(block: SectionBlock): string[] {
       const shown = value === true
       if (field.key === 'votes') return `votes ${shown ? 'shown' : 'hidden'}`
       // A section of several switches names each; one alone is the section itself.
-      if (def.fields.length > 1) return `${field.label} ${shown ? 'on' : 'off'}`
+      if (def.fields.length > 1)
+        return `${field.label.charAt(0).toLowerCase()}${field.label.slice(1)} ${shown ? 'on' : 'off'}`
       return shown ? 'Shown' : 'Hidden'
     }
     if (field.kind !== 'choice') return String(value)
