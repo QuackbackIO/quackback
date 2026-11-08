@@ -13,8 +13,8 @@ describe('an element’s brand layer', () => {
     design.tune = { button: { radius: 14, fill: 'support' }, card: { border: 2, shadow: 'deep' } }
     expect(brandOf(design, 'button', 'radius')).toBe(14)
     expect(brandOf(design, 'button', 'background')).toBe('support')
-    expect(brandOf(design, 'card', 'borderWidth')).toBe(2)
-    expect(brandOf(design, 'card', 'shadow')).toBe('deep')
+    expect(brandOf(design, 'postCard', 'borderWidth')).toBe(2)
+    expect(brandOf(design, 'panel', 'shadow')).toBe('deep')
   })
 
   it('gives a button its own label weight before the shared label one', () => {

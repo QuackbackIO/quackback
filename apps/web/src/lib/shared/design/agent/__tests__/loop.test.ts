@@ -329,7 +329,7 @@ describe('the edit loop', () => {
           plan: 'Rounder cards',
           styles: [
             {
-              element: 'card',
+              element: 'postCard',
               state: 'base',
               block: '',
               property: 'radius',
@@ -339,7 +339,7 @@ describe('the edit loop', () => {
           ],
           checks: [
             {
-              element: 'card',
+              element: 'postCard',
               state: 'base',
               block: '',
               target: '',
@@ -362,7 +362,7 @@ describe('the edit loop', () => {
       deps: { step, read },
     })
     if (!result.ok) throw new Error(result.message)
-    expect(read).toHaveBeenCalledWith([{ element: 'card', state: 'base', block: '' }], 'before')
+    expect(read).toHaveBeenCalledWith([{ element: 'postCard', state: 'base', block: '' }], 'before')
     expect(result.steps[0]!.checks[0]!.ok).toBe(true)
   })
 
@@ -508,7 +508,7 @@ describe('the edit loop', () => {
           ? answer({
               plan: 'Cards',
               styles: [
-                { ...hoverStyle('darker'), element: 'card', property: 'shadow', value: 'soft' },
+                { ...hoverStyle('darker'), element: 'postCard', property: 'shadow', value: 'soft' },
               ],
             })
           : answer({ plan: 'Done', done: true })
@@ -531,9 +531,11 @@ describe('the edit loop', () => {
     if (!result.ok) throw new Error(result.message)
     expect(result.applied).toEqual([])
     expect(result.reply).toBe('That is outside what was picked, so nothing changed.')
-    expect(result.notes).toEqual(['Left alone, as it is outside what was picked: cards on hover.'])
+    expect(result.notes).toEqual([
+      'Left alone, as it is outside what was picked: post cards on hover.',
+    ])
     expect(asked[1]!.turns[0]!.refused).toEqual([
-      { what: 'Cards on hover', reason: 'outside what was picked: left alone' },
+      { what: 'Post cards on hover', reason: 'outside what was picked: left alone' },
     ])
   })
 
@@ -622,8 +624,8 @@ describe('the tool schemas', () => {
   })
 
   it('narrows the context to the elements asked for', () => {
-    const text = registryText(R, ['card'])
-    expect(text).toContain('- card (')
+    const text = registryText(R, ['postCard'])
+    expect(text).toContain('- postCard (')
     expect(text).not.toContain('- button (')
     expect(text).toContain('- shadow:')
     expect(text).not.toContain('- font-size:')
@@ -642,11 +644,13 @@ describe('the edit loop, stopped', () => {
       ],
       design
     )
-    const read = vi.fn(async (targets: Parameters<LoopDeps['read']>[0], which: 'before' | 'now') => {
-      // Stop lands while the first step's result is checked.
-      if (which === 'now') stop.abort()
-      return staticReadings(which === 'before' ? original : design.current, R, targets)
-    })
+    const read = vi.fn(
+      async (targets: Parameters<LoopDeps['read']>[0], which: 'before' | 'now') => {
+        // Stop lands while the first step's result is checked.
+        if (which === 'now') stop.abort()
+        return staticReadings(which === 'before' ? original : design.current, R, targets)
+      }
+    )
     const result = await runEditLoop({
       registry: R,
       design: original,

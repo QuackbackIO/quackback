@@ -51,6 +51,7 @@ function stateSelector(el: StyleElementInfo, state: StyleState): string {
   if (state === 'base') return ''
   if (state === 'current')
     return `:is(${el.current ?? '[aria-current=page], [data-state=on]'}, [data-qb-force=current])`
+  if (state === 'focus' && el.focus) return `:is(${el.focus}, [data-qb-force=focus])`
   return STATE_SELECTOR[state]
 }
 
@@ -65,7 +66,14 @@ const SHADES: ReadonlySet<StyleElement> = new Set([
 ])
 
 /** Elements whose fill sits on a card rather than on the page, when they draw none of their own. */
-const ON_CARD: ReadonlySet<StyleElement> = new Set(['card', 'block', 'input', 'badge', 'chip'])
+const ON_CARD: ReadonlySet<StyleElement> = new Set([
+  'postCard',
+  'panel',
+  'block',
+  'input',
+  'badge',
+  'chip',
+])
 
 /** Large text, which reads at 3:1. */
 const LARGE: ReadonlySet<StyleElement> = new Set(['headline'])

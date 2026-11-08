@@ -83,11 +83,11 @@ export function widthTiles(minW: number): Array<readonly [string, string]> {
 const ELEMENTS: Record<HomeBlockType, readonly BlockStyleElement[]> = {
   welcome: ['block', 'heading', 'body', 'link'],
   composer: ['input', 'button'],
-  ideas: ['block', 'heading', 'card', 'vote', 'badge', 'body', 'link'],
-  roadmap: ['block', 'heading', 'card', 'vote', 'link'],
-  updates: ['block', 'heading', 'card', 'body', 'link'],
+  ideas: ['block', 'heading', 'postCard', 'vote', 'badge', 'body', 'link'],
+  roadmap: ['block', 'heading', 'postCard', 'vote', 'link'],
+  updates: ['block', 'heading', 'panel', 'body', 'link'],
   help_search: ['block', 'heading', 'input', 'link'],
-  help_topics: ['block', 'heading', 'card', 'body', 'link'],
+  help_topics: ['block', 'heading', 'panel', 'body', 'link'],
   status: ['block', 'heading', 'badge', 'link'],
   contact: ['block', 'heading', 'body', 'link'],
   links: ['block', 'heading', 'link'],
@@ -97,11 +97,11 @@ export const elementsOf = (type: HomeBlockType): readonly BlockStyleElement[] =>
 
 /** The elements each page section a visitor knows as a block draws. */
 export const SECTION_ELEMENTS: Record<SectionType, readonly StyleElement[]> = {
-  'changelog.entries': ['card', 'heading', 'body', 'link', 'chip'],
-  'help.topics': ['card', 'heading', 'body'],
-  'help.popular': ['card', 'link'],
+  'changelog.entries': ['panel', 'heading', 'body', 'link', 'chip'],
+  'help.topics': ['panel', 'heading', 'body'],
+  'help.popular': ['panel', 'link'],
   'help.search': ['input'],
-  'roadmap.board': ['card', 'vote', 'badge'],
+  'roadmap.board': ['postCard', 'vote', 'badge'],
 }
 
 /** A block's own look fields, other than its element looks. */

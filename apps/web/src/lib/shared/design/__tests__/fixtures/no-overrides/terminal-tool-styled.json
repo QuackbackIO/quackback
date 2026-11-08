@@ -228,7 +228,7 @@
         "lift": 2
       }
     },
-    "card": {
+    "postCard": {
       "hover": {
         "shadow": "lifted",
         "lift": 1

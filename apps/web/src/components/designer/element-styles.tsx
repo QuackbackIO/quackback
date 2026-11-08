@@ -440,14 +440,24 @@ function Sample({ element, force }: { element: StyleElement; force?: StyleState 
           Roadmap
         </span>
       )
-    case 'card':
+    case 'postCard':
       return (
         <div
           data-qb-surface="card"
+          data-qb-post=""
           className="w-40 rounded-lg border border-border/50 bg-card p-3 text-sm"
           {...f}
         >
           A post card
+        </div>
+      )
+    case 'panel':
+      return (
+        <div
+          data-qb-surface="card"
+          className="w-40 rounded-lg border border-border/50 bg-card p-3 text-sm"
+        >
+          Filters
         </div>
       )
     case 'block':

@@ -169,8 +169,10 @@ const SCOPE_FIELDS: Record<Exclude<DesignAiScope, 'site'>, readonly string[]> = 
     'layout.postCardHides',
     'tune.card',
     'shape.corners',
-    'style.card',
-    'styleDark.card',
+    'style.postCard',
+    'styleDark.postCard',
+    'style.panel',
+    'styleDark.panel',
   ],
   vote: [
     'layout.tint',

@@ -198,3 +198,97 @@ describe('reading a stored design with a value this build does not offer', () =>
     expect(readStoredDesign(written({ 'layout.nav': 7 }))).toBeNull()
   })
 })
+
+describe('reading a design stored before cards split into post cards and panels', () => {
+  /** A stored design whose one look was every card's, as the builder wrote it before. */
+  const before = () => {
+    const doc = structuredClone(stored()) as unknown as Json
+    doc.style = {
+      card: { base: { radius: 4, borderColor: 'accent', shadow: 'soft' }, hover: { lift: 2 } },
+    }
+    doc.styleDark = { card: { base: { borderColor: '#93c5fd' } } }
+    doc.stylePhone = { card: { base: { radius: 2 }, hover: { lift: 1 } } }
+    return doc
+  }
+
+  it('keeps the look: post cards take all of it, panels its normal look', () => {
+    const read = readStoredDesign(before())!
+    expect(read.dropped).toEqual([])
+    expect(read.design.style).toEqual({
+      postCard: { base: { radius: 4, borderColor: 'accent', shadow: 'soft' }, hover: { lift: 2 } },
+      panel: { base: { radius: 4, borderColor: 'accent', shadow: 'soft' } },
+    })
+    expect(read.design.styleDark).toEqual({
+      postCard: { base: { borderColor: '#93c5fd' } },
+      panel: { base: { borderColor: '#93c5fd' } },
+    })
+    expect(read.design.stylePhone).toEqual({
+      postCard: { base: { radius: 2 }, hover: { lift: 1 } },
+      panel: { base: { radius: 2 } },
+    })
+  })
+
+  it('splits a page’s card look in two, and gives the filters’ own look to panels', () => {
+    const doc = before()
+    doc.overrides = [
+      {
+        id: 'page:feedback:card',
+        target: { scope: 'page', page: 'feedback', element: 'card' },
+        style: { base: { background: 'raised' }, hover: { lift: 3 } },
+      },
+      {
+        id: 'part:feed.filters:card',
+        target: { scope: 'part', part: 'feed.filters', element: 'card' },
+        style: { base: { radius: 0 } },
+      },
+    ]
+    const read = readStoredDesign(doc)!
+    expect(read.dropped).toEqual([])
+    expect(read.design.overrides).toEqual([
+      {
+        id: 'page:feedback:postCard',
+        target: { scope: 'page', page: 'feedback', element: 'postCard' },
+        style: { base: { background: 'raised' }, hover: { lift: 3 } },
+      },
+      {
+        id: 'part:feed.filters:panel',
+        target: { scope: 'part', part: 'feed.filters', element: 'panel' },
+        style: { base: { radius: 0 } },
+      },
+      {
+        id: 'page:feedback:panel',
+        target: { scope: 'page', page: 'feedback', element: 'panel' },
+        style: { base: { background: 'raised' } },
+      },
+    ])
+  })
+
+  it('splits a Home block’s own card look the same way', () => {
+    const doc = before()
+    const block = newBlock('ideas')
+    ;(block as unknown as Json).look = {
+      style: { card: { base: { radius: 8 }, hover: { lift: 2 } } },
+    }
+    ;((doc.pages as Json).home as Json).blocks = [block]
+    const read = readStoredDesign(doc)!
+    expect(read.design.pages.home.blocks[0]!.look?.style).toEqual({
+      postCard: { base: { radius: 8 }, hover: { lift: 2 } },
+      panel: { base: { radius: 8 } },
+    })
+  })
+
+  it('leaves a design that has post cards and panels already as it is', () => {
+    const doc = structuredClone(stored()) as unknown as Json
+    doc.style = { postCard: { hover: { lift: 2 } } }
+    expect(withoutRetiredKeys(doc)).toBe(doc)
+    expect(readStoredDesign(doc)!.design.style).toEqual({ postCard: { hover: { lift: 2 } } })
+  })
+
+  it('migrates a card look sent by an older builder or the AI, never changing what was sent', () => {
+    const sent = before()
+    const copy = structuredClone(sent)
+    const migrated = withoutRetiredKeys(sent) as Json
+    expect(sent).toEqual(copy)
+    expect(portalDesign.safeParse(migrated).success).toBe(true)
+  })
+})

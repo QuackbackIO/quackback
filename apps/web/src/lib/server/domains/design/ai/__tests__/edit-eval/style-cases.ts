@@ -128,9 +128,9 @@ export const STYLE_CASES: StyleCase[] = [
     name: 'cards with a subtle shadow',
     request: 'Give the cards a subtle shadow',
     ops: [],
-    styles: [s('card', 'shadow', 'subtle')],
+    styles: [s('postCard', 'shadow', 'subtle')],
     check: (d) => {
-      const sh = shadowStrength(v(d, 'card').values.shadow)
+      const sh = shadowStrength(v(d, 'postCard').values.shadow)
       return sh.present && sh.alpha <= 0.2 && sh.blur <= 16
     },
     touches: STYLE,
@@ -139,10 +139,10 @@ export const STYLE_CASES: StyleCase[] = [
     name: 'cards: shadow, no border',
     request: 'Cards with a soft shadow and no border',
     ops: [],
-    styles: [s('card', 'shadow', 'soft'), s('card', 'borderWidth', '0')],
+    styles: [s('postCard', 'shadow', 'soft'), s('postCard', 'borderWidth', '0')],
     check: (d) =>
-      shadowStrength(v(d, 'card').values.shadow).present &&
-      n(v(d, 'card').values['borderWidth']) === 0,
+      shadowStrength(v(d, 'postCard').values.shadow).present &&
+      n(v(d, 'postCard').values['borderWidth']) === 0,
     touches: STYLE,
   },
   {
@@ -190,11 +190,11 @@ export const STYLE_CASES: StyleCase[] = [
       { op: 'theme', key: 'headlineSpacing', value: 'tight' },
       { op: 'theme', key: 'cards', value: 'bordered' },
     ],
-    styles: [s('card', 'borderColor', '#24252b'), s('card', 'shadow', 'none')],
+    styles: [s('postCard', 'borderColor', '#24252b'), s('postCard', 'shadow', 'none')],
     check: (d) => {
       const page = colour(d, 'page', 'background')
-      const edge = colour(d, 'card', 'borderColor')
-      const card = colour(d, 'card', 'background') ?? page
+      const edge = colour(d, 'postCard', 'borderColor')
+      const card = colour(d, 'postCard', 'background') ?? page
       const tight =
         d.layout.density === 'compact' ||
         d.brand.fonts.tracking === 'tight' ||
@@ -202,7 +202,7 @@ export const STYLE_CASES: StyleCase[] = [
       return (
         L(page) < 0.3 &&
         tight &&
-        n(v(d, 'card').values['borderWidth']) >= 1 &&
+        n(v(d, 'postCard').values['borderWidth']) >= 1 &&
         !!edge &&
         !!card &&
         contrastRatio(edge, card) <= 2 &&
@@ -302,9 +302,9 @@ export const STYLE_CASES: StyleCase[] = [
     name: 'rounder cards, pill buttons, darker hover',
     request: 'Rounder cards and pill buttons, and make the buttons a bit darker on hover',
     ops: [{ op: 'theme', key: 'buttons', value: 'pill' }],
-    styles: [s('card', 'radius', '16'), s('button', 'background', 'darker', 'hover')],
+    styles: [s('postCard', 'radius', '16'), s('button', 'background', 'darker', 'hover')],
     check: (d, before) =>
-      n(v(d, 'card').values.radius) > n(v(before, 'card').values.radius) &&
+      n(v(d, 'postCard').values.radius) > n(v(before, 'postCard').values.radius) &&
       n(v(d, 'button').values.radius) >= 99 &&
       darkerOnHover(d),
     touches: [...STYLED, 'tune', 'shape'],
@@ -317,11 +317,11 @@ export const STYLE_CASES: StyleCase[] = [
       { op: 'theme', key: 'surface', value: '#ffffff' },
       { op: 'theme', key: 'cards', value: 'bordered' },
     ],
-    styles: [s('card', 'borderWidth', '1')],
+    styles: [s('postCard', 'borderWidth', '1')],
     check: (d) =>
       near(colour(d, 'page', 'background'), '#f7f3ec', 0.02) &&
-      near(colour(d, 'card', 'background'), '#ffffff', 0.02) &&
-      n(v(d, 'card').values['borderWidth']) >= 1,
+      near(colour(d, 'postCard', 'background'), '#ffffff', 0.02) &&
+      n(v(d, 'postCard').values['borderWidth']) >= 1,
     touches: ['brand.light', 'layout.cards', 'tune.card', ...STYLED],
   },
   {
@@ -329,10 +329,10 @@ export const STYLE_CASES: StyleCase[] = [
     request: 'Add a soft shadow when hovering these',
     picked: { scope: 'card' },
     ops: [],
-    styles: [s('card', 'shadow', 'soft', 'hover')],
+    styles: [s('postCard', 'shadow', 'soft', 'hover')],
     check: (d, before) =>
-      shadowStrength(v(d, 'card', 'hover').values.shadow).present &&
-      v(d, 'card').values.shadow === v(before, 'card').values.shadow,
+      shadowStrength(v(d, 'postCard', 'hover').values.shadow).present &&
+      v(d, 'postCard').values.shadow === v(before, 'postCard').values.shadow,
     touches: STYLED,
   },
 ]

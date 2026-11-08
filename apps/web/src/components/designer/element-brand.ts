@@ -66,7 +66,12 @@ export const EXACT_ROWS: Partial<
     weight: [ref('label', 'weight')],
     tracking: [ref('label', 'tracking')],
   },
-  card: {
+  postCard: {
+    radius: [ref('card', 'radius')],
+    borderWidth: [ref('card', 'border')],
+    shadow: [ref('card', 'shadow')],
+  },
+  panel: {
     radius: [ref('card', 'radius')],
     borderWidth: [ref('card', 'border')],
     shadow: [ref('card', 'shadow')],

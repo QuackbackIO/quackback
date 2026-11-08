@@ -130,9 +130,42 @@ describe('the elements', () => {
     expect(screen.getByRole('button', { name: /^Main buttons/ }).textContent).toBe(
       'Main buttons2 set·Brand colour · Pill'
     )
-    for (const name of ['Cards', 'Menu items', 'Page headlines', 'Home blocks', 'Images', 'Logo'])
+    for (const name of [
+      'Post cards',
+      'Panels',
+      'Menu items',
+      'Page headlines',
+      'Home blocks',
+      'Images',
+      'Logo',
+    ])
       expect(screen.getByRole('button', { name: new RegExp(`^${name}`) })).toBeTruthy()
     expect(screen.queryByText(/and \d+ more/)).toBeNull()
+  })
+
+  it('lists the elements most changed first, in the order the portal is read', () => {
+    renderPanel(defaultDesign())
+    const names = screen
+      .getAllByRole('listitem')
+      .map((item) => item.querySelector('span')!.textContent)
+    expect(names.slice(0, 10)).toEqual([
+      'Main buttons',
+      'Links',
+      'Menu items',
+      'Post cards',
+      'Panels',
+      'Vote boxes',
+      'Tags',
+      'Page headlines',
+      'Section headings',
+      'Fields',
+    ])
+  })
+
+  it('lists post cards only while Feedback or the roadmap is on, and panels always', () => {
+    renderPanel(defaultDesign(), { ...ALL_ON, feedback: false, roadmap: false })
+    expect(screen.queryByRole('button', { name: /^Post cards/ })).toBeNull()
+    expect(screen.getByRole('button', { name: /^Panels/ })).toBeTruthy()
   })
 
   it('sets a brand choice and an exact value from the element’s panel, and keeps no second copy', () => {

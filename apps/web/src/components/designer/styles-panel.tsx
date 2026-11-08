@@ -23,7 +23,7 @@ type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => vo
 /** The element kinds each part used on every page is drawn as (style-tokens.ts). */
 export const PART_STYLES: Record<DesignElement, readonly StyleElement[]> = {
   button: ['button'],
-  card: ['card'],
+  card: ['postCard', 'panel'],
   vote: ['vote'],
   status: ['badge', 'chip'],
   menu: ['navItem'],
@@ -37,11 +37,40 @@ export const PART_STYLES: Record<DesignElement, readonly StyleElement[]> = {
   logo: [],
 }
 
-/** The elements no part is drawn as, listed after the parts': the page's own regions. */
-const REGIONS: readonly StyleElement[] = ['block', 'header', 'footer', 'divider', 'image']
+/**
+ * The elements in the order Elements lists them: the ones most changed
+ * first, then the rest of the parts', then the page's own regions.
+ */
+const ORDER: readonly StyleElement[] = [
+  'button',
+  'link',
+  'navItem',
+  'postCard',
+  'panel',
+  'vote',
+  'chip',
+  'headline',
+  'heading',
+  'input',
+  'secondary',
+  'ghost',
+  'badge',
+  'subtitle',
+  'body',
+  'block',
+  'header',
+  'footer',
+  'divider',
+  'image',
+]
 
-/** The parts listed first, the rest in the order the registry has them. */
-const FIRST: readonly DesignElement[] = ['button', 'card', 'vote', 'status']
+/** Every element some part is drawn as; the rest are the page's own regions, always listed. */
+const PART_OF = new Set<StyleElement>(Object.values(PART_STYLES).flat())
+
+/** Elements drawn only where a module is on: post cards with Feedback or the roadmap. */
+const GATED: Partial<Record<StyleElement, (gates: PortalPageGates) => boolean>> = {
+  postCard: (gates) => gates.feedback || gates.roadmap,
+}
 
 /** What an element's brand choices are, in a word or two; null where it has none. */
 export function elementValue(element: StyleElement, design: PortalDesign): string | null {
@@ -51,7 +80,7 @@ export function elementValue(element: StyleElement, design: PortalDesign): strin
       return `${STYLE_CHOICES.fill[design.shape.fill === 'ink' ? 'ink' : 'accent']} · ${
         STYLE_CHOICES.buttonShape[design.shape.buttons ?? 'match']
       }`
-    case 'card':
+    case 'postCard':
       return STYLE_CHOICES.cards[design.layout.cards]
     case 'vote':
       return design.brand.light.support ? STYLE_CHOICES.tint[design.layout.tint ?? 'neutral'] : null
@@ -85,15 +114,11 @@ const setCount = (design: PortalDesign, element: StyleElement) =>
 /** What Styles lists: each element the pages that are on draw, the page's regions, then the logo. */
 export function stylesElements(gates: PortalPageGates): Array<StyleElement | 'logo'> {
   const parts = partsInUse(gates)
-  const ordered = [
-    ...FIRST.filter((p) => parts.includes(p)),
-    ...parts.filter((p) => !FIRST.includes(p)),
-  ]
-  return [
-    ...ordered.flatMap((p) => PART_STYLES[p]),
-    ...REGIONS,
-    ...(parts.includes('logo') ? (['logo'] as const) : []),
-  ]
+  const drawn = new Set<StyleElement>(parts.flatMap((p) => PART_STYLES[p]))
+  const listed = ORDER.filter(
+    (element) => (drawn.has(element) || !PART_OF.has(element)) && (GATED[element]?.(gates) ?? true)
+  )
+  return [...listed, ...(parts.includes('logo') ? (['logo'] as const) : [])]
 }
 
 /**

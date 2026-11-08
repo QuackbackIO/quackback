@@ -282,8 +282,8 @@ describe('element styles in the context', () => {
   })
 
   it('names style keys as Theme does, and a block’s own look through set', () => {
-    expect(themePath('style.card.hover.lift')).toBe('style.card.hover.lift')
-    expect(themePath('style.card.focus.lift')).toBeNull()
+    expect(themePath('style.postCard.hover.lift')).toBe('style.postCard.hover.lift')
+    expect(themePath('style.postCard.focus.lift')).toBeNull()
     const d = design()
     const id = d.pages.home.blocks[0]!.id!
     const world: OpWorld = { gates: GATES, places }
@@ -292,14 +292,14 @@ describe('element styles in the context', () => {
       world,
       [
         { op: 'theme', key: 'style.link.hover.underline', value: 'underline' },
-        { op: 'set', target: id, key: 'style.card.base.radius', value: '0' },
+        { op: 'set', target: id, key: 'style.postCard.base.radius', value: '0' },
       ],
       { scope: 'site' }
     )
     expect(result.refused).toEqual([])
     expect(result.design.style?.link?.hover?.underline).toBe('underline')
     expect(
-      result.design.pages.home.blocks.find((b) => b.id === id)!.look?.style?.card?.base?.radius
+      result.design.pages.home.blocks.find((b) => b.id === id)!.look?.style?.postCard?.base?.radius
     ).toBe(0)
   })
 })

@@ -101,7 +101,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
       ]
     case 'vote':
       return second ? [tint] : []
-    case 'card':
+    case 'postCard':
       return [
         {
           label: 'Look',
@@ -112,6 +112,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
             ['card', 'border'],
             ['card', 'shadow'],
           ],
+          reach: 'Post cards and panels',
         },
         {
           label: 'Density',
@@ -338,7 +339,8 @@ export function ElementStyleSection({
       </PropertyRow>
     )
   }
-  if (element === 'card') rows.push(<CardTitleRows key="title" design={design} update={update} />)
+  if (element === 'postCard')
+    rows.push(<CardTitleRows key="title" design={design} update={update} />)
   if (!rows.length) return null
   return <PropertySection title={SECTIONS.style}>{rows}</PropertySection>
 }

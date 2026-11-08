@@ -111,8 +111,8 @@ describe('overrides in the publish summary', () => {
     live.overrides = [
       { id: 'page:feedback:button', target: feedback, style: { base: { radius: 2 } } },
       {
-        id: 'page:roadmap:card',
-        target: { scope: 'page', page: 'roadmap', element: 'card' },
+        id: 'page:roadmap:postCard',
+        target: { scope: 'page', page: 'roadmap', element: 'postCard' },
         style: { base: { radius: 2 } },
       },
     ]
@@ -125,7 +125,7 @@ describe('overrides in the publish summary', () => {
     expect(result.overrides).toEqual([
       { kind: 'Added', title: 'Call to action · Hero', detail: 'This one: background' },
       { kind: 'Changed', title: 'Main buttons on Feedback', detail: 'This page: corners' },
-      { kind: 'Removed', title: 'Cards on Roadmap' },
+      { kind: 'Removed', title: 'Post cards on Roadmap' },
     ])
     expect(result.look.map((row) => row.kind)).not.toContain('Other')
   })

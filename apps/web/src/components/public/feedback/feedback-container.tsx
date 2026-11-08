@@ -604,6 +604,7 @@ export function FeedbackContainer({
                     <div
                       key={post.id}
                       data-qb-surface="card"
+                      data-qb-post=""
                       className="bg-card border border-border/40 rounded-lg shadow-sm overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
                       style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
                     >

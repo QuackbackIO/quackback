@@ -110,10 +110,12 @@ describe('a block’s look, shared by every Home block', () => {
 
   it('keeps a block’s element looks when its tone is cleared', () => {
     const design = home(
-      block('ideas', 'aaaaaaaa', { tone: 'plain', style: { card: { base: { radius: 4 } } } })
+      block('ideas', 'aaaaaaaa', { tone: 'plain', style: { postCard: { base: { radius: 4 } } } })
     )
     writeLook(design, 'every', 'aaaaaaaa', 'tone', undefined)
-    expect(design.pages.home.blocks[0]!.look).toEqual({ style: { card: { base: { radius: 4 } } } })
+    expect(design.pages.home.blocks[0]!.look).toEqual({
+      style: { postCard: { base: { radius: 4 } } },
+    })
   })
 
   it('reads the shared value from what most of the other blocks hold', () => {

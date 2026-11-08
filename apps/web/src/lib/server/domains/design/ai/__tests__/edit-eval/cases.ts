@@ -1028,9 +1028,9 @@ function styleCases(): EvalCase[] {
     {
       name: 'block style: cards in top posts rise on hover',
       request: 'In Top posts only, cards should rise a few pixels on hover',
-      ops: [{ op: 'set', target: 'ideas00001', key: 'style.card.hover.lift', value: '3' }],
+      ops: [{ op: 'set', target: 'ideas00001', key: 'style.postCard.hover.lift', value: '3' }],
       check: (d) => {
-        const lift = blockLook(d, 'ideas00001', 'card.hover.lift')
+        const lift = blockLook(d, 'ideas00001', 'postCard.hover.lift')
         return typeof lift === 'number' && lift > 0
       },
       touches: ['pages.home.blocks'],

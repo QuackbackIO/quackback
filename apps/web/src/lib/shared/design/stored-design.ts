@@ -6,6 +6,7 @@
  * except for the keys designs no longer have, which no document keeps.
  */
 import { defaultDesign, portalDesign, type PortalDesign } from './schema'
+import { withSplitCards } from './split-cards'
 
 type Path = ReadonlyArray<PropertyKey>
 
@@ -24,11 +25,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
 
 /**
- * A design document without the keys designs no longer have, so one stored,
+ * A design document without the keys designs no longer have, and with the
+ * looks of elements since split carried over (split-cards.ts), so one stored,
  * sent or written before they went still reads. The document given stays as it is.
  */
-export function withoutRetiredKeys(input: unknown): unknown {
-  if (!isRecord(input)) return input
+export function withoutRetiredKeys(given: unknown): unknown {
+  if (!isRecord(given)) return given
+  const input = withSplitCards(given)
   const brand = input.brand
   const logo = isRecord(brand) ? brand.logo : undefined
   const retiredLogo = isRecord(logo) && RETIRED_LOGO_KEYS.some((key) => Object.hasOwn(logo, key))

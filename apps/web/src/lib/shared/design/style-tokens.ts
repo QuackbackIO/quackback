@@ -233,6 +233,8 @@ export interface StyleElementInfo {
   selector: string
   /** The selector of its `current` state, where it has one; its own state attribute. */
   current?: string
+  /** The selector of its `focus` state, where it is not focused itself but holds what is. */
+  focus?: string
   states: readonly StyleState[]
   props: readonly StyleProp[]
   /**
@@ -330,18 +332,35 @@ export const STYLE_ELEMENTS = {
       value: 700,
     },
   },
-  card: {
-    label: 'Cards',
-    about: 'post cards and other cards',
-    selector: '[data-qb-surface=card]',
-    states: ['base', 'hover'],
+  postCard: {
+    label: 'Post cards',
+    about: 'the card of each post in the feed and on the roadmap',
+    selector: '[data-qb-post]',
+    focus: ':has(:focus-visible)',
+    states: ['base', 'hover', 'focus'],
     props: [...BOX, 'lift'],
     common: ['background', 'borderColor', 'radius', 'shadow'],
-    aliases: ['cards', 'post card', 'panel', 'tiles'],
+    aliases: ['cards', 'post card', 'post cards', 'posts', 'tiles'],
     example: {
-      request: 'Cards should rise 2px with a deeper shadow on hover',
+      request: 'Post cards should rise 2px with a deeper shadow on hover',
       state: 'hover',
       prop: 'lift',
+      value: 2,
+    },
+  },
+  panel: {
+    label: 'Panels',
+    about:
+      'boxes that are not posts, such as the filters, the welcome message and a post’s details',
+    selector: '[data-qb-surface=card]:not([data-qb-post])',
+    states: ['base'],
+    props: BOX,
+    common: ['background', 'borderColor', 'radius', 'shadow'],
+    aliases: ['panel', 'boxes', 'sidebar', 'containers'],
+    example: {
+      request: 'Give the panels a 2px edge',
+      state: 'base',
+      prop: 'borderWidth',
       value: 2,
     },
   },
@@ -565,7 +584,8 @@ export const STYLE_ELEMENT_NAMES = Object.keys(STYLE_ELEMENTS) as StyleElement[]
 /** The elements a Home block's own look can set, inside it. */
 export const BLOCK_STYLE_ELEMENTS = [
   'block',
-  'card',
+  'postCard',
+  'panel',
   'heading',
   'body',
   'button',
@@ -779,7 +799,7 @@ export function stylePath(key: string): string | null {
   return `${root}.${element}.${state}.${prop}`
 }
 
-/** A Home block's style key, `style.card.hover.background`, to its path under the block's look. */
+/** A Home block's style key, `style.postCard.hover.background`, to its path under the block's look. */
 export function blockStylePath(key: string): string | null {
   const m = /^style\.(\w+)\.(?:(\w+)\.)?(\w+)$/.exec(key)
   if (!m) return null

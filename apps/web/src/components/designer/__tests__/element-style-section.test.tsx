@@ -52,7 +52,7 @@ describe('an element’s Style section', () => {
   })
 
   it('holds a post card title’s exact size, its only home', () => {
-    const { box } = mount('card')
+    const { box } = mount('postCard')
     fireEvent.change(screen.getByLabelText('Title size'), { target: { value: '18' } })
     expect(box.design.tune).toEqual({ card: { titleSize: 18 } })
     fireEvent.click(screen.getByRole('button', { name: 'Reset title size' }))

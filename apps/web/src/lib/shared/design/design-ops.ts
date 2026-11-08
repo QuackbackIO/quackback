@@ -506,12 +506,12 @@ export function setBlockSetting(
   const found = findBlock(design, ref)
   if (!found.ok) return refuse(found.refusal)
   const def = blockOf(found.block.type)!
-  // The block's own look of what is in it: style.card.hover.background (style-tokens.ts).
+  // The block's own look of what is in it: style.postCard.hover.background (style-tokens.ts).
   if (key && /^style\./.test(key)) {
     const at = blockStylePath(key)
     if (!at)
       return refuse(
-        `${def.name}'s own look sets ${listed(['block', 'card', 'heading', 'body', 'button', 'link', 'chip'])}, as style.<element>.<state>.<property>`
+        `${def.name}'s own look sets ${listed(['block', 'postCard', 'panel', 'heading', 'body', 'button', 'link', 'chip'])}, as style.<element>.<state>.<property>`
       )
     const read = readStyleValue(at.split('.').at(-1) as StyleProp, value)
     const draft = structuredClone(design)
@@ -705,7 +705,7 @@ const TUNE_ELEMENT: Record<string, string> = {
   body: 'body',
   link: 'link',
   button: 'button',
-  card: 'card',
+  card: 'postCard',
   field: 'input',
   secondary: 'secondary',
   label: 'navItem',
