@@ -10,6 +10,7 @@
  * visitor downloads it.
  */
 
+import { migrateDesign } from '@/lib/shared/design/migrations'
 import { designView, previewStylesheet } from '@/lib/shared/design/design-view'
 import { portalDesign } from '@/lib/shared/design/schema'
 import type { DraftDesignView } from './preview-draft-context'
@@ -48,7 +49,8 @@ function storedFilesOnly(view: DraftDesignView): DraftDesignView {
  */
 export function readDraftView(value: unknown): DraftDesignView | null {
   if (value === null || value === undefined) return null
-  const parsed = portalDesign.safeParse(value)
+  // Read the draft as a stored design is read: migrated to this build's format first.
+  const parsed = portalDesign.safeParse(migrateDesign(value))
   if (!parsed.success) return null
   return storedFilesOnly(designView(parsed.data, null))
 }
