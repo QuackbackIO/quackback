@@ -3,6 +3,7 @@ import type { DesignerPage } from '@/lib/shared/design/outline'
 import { PAGE_CHOICE_DEFAULTS, type PageChoices } from '@/lib/shared/design/page-choices'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { PropertyRow, PropertyTiles } from './properties/properties-panel'
+import { FIND } from './find-rows'
 import { WORDS } from './properties/words'
 
 type ChoicePage = keyof PageChoices
@@ -52,7 +53,8 @@ export function PageTitleRows({
     const fallback = PAGE_CHOICE_DEFAULTS.changelog.subscribe
     return (
       <PropertyRow
-        label="Subscribe"
+        label={FIND.subscribe.label}
+        find={FIND.subscribe.id}
         set={made(design, 'changelog', 'subscribe')}
         resetLabel={`${WORDS.reset} subscribe to beside`}
         onReset={() => choose(update, 'changelog', 'subscribe', fallback)}
@@ -78,7 +80,8 @@ export function PageTitleRows({
     const fallback = PAGE_CHOICE_DEFAULTS.help.search
     return (
       <PropertyRow
-        label="Search"
+        label={FIND.search.label}
+        find={FIND.search.id}
         set={made(design, 'help', 'search')}
         resetLabel={`${WORDS.reset} search to standard`}
         onReset={() => choose(update, 'help', 'search', fallback)}

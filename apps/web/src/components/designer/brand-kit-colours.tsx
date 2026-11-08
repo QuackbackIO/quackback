@@ -21,6 +21,7 @@ import { colourPairs, colourRowIssues, type ColourRowIssue } from '@/lib/shared/
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
+import { FIND, type FindRow } from './find-rows'
 import { PropertyMore, PropertyRow, PropertySection } from './properties/properties-panel'
 import { COLOUR_NAMES, THEME, WORDS, resetToValue } from './properties/words'
 
@@ -43,6 +44,16 @@ const DARK: ReadonlyArray<{ key: DarkRole; label: string }> = [
   { key: 'accent', label: COLOUR_NAMES.accent },
   { key: 'support', label: COLOUR_NAMES.support },
 ]
+/** Each colour row's stable name, which quick find shares. */
+const ROW_FIND: Record<'accent' | 'ink' | 'background' | MoreKey, FindRow> = {
+  accent: FIND.accent,
+  ink: FIND.ink,
+  background: FIND.pageColour,
+  surface: FIND.surface,
+  raised: FIND.raised,
+  muted: FIND.muted,
+  border: FIND.border,
+}
 const RESET_TO_AUTO = resetToValue(WORDS.auto.toLowerCase())
 
 /** One extra colour; clearing the first moves the second up. */
@@ -186,7 +197,7 @@ export function BrandKitColours({ design, update }: { design: PortalDesign; upda
     })),
   ]
   const row = (key: 'accent' | 'ink' | 'background', name: string) => (
-    <PropertyRow label={name} htmlFor={`kit-${key}`}>
+    <PropertyRow label={name} find={ROW_FIND[key].id} htmlFor={`kit-${key}`}>
       <ColourValue
         id={`kit-${key}`}
         name={name}
@@ -199,6 +210,7 @@ export function BrandKitColours({ design, update }: { design: PortalDesign; upda
     <div key={key}>
       <PropertyRow
         label={label}
+        find={ROW_FIND[key].id}
         htmlFor={`kit-${key}`}
         set={light[key] !== undefined}
         source={THEME.automatic}
@@ -243,7 +255,7 @@ export function BrandKitColours({ design, update }: { design: PortalDesign; upda
       <RowIssue name={COLOUR_NAMES.ink} issue={issues.ink} onFix={(fix) => set('ink', fix)} />
       {row('background', COLOUR_NAMES.page)}
       {added.map(({ id, name, value, write }) => (
-        <PropertyRow key={id} label={name} htmlFor={id}>
+        <PropertyRow key={id} label={name} find={id} htmlFor={id}>
           <ColourValue id={id} name={name} value={value} onChange={(v) => v && write(v)} />
           <Button
             variant="ghost"
@@ -387,7 +399,7 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
       else delete draft.brand.dark
     })
   return (
-    <details className="group/dark" data-dark-values="">
+    <details className="group/dark" data-dark-values="" data-find={FIND.darkMode.id}>
       <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2 rounded focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none [&::-webkit-details-marker]:hidden">
         <span className="w-[92px] shrink-0 truncate text-xs text-muted-foreground">
           {THEME.darkMode}

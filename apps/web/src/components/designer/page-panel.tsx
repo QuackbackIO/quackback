@@ -17,14 +17,12 @@ import {
   PropertySection,
   PropertyTiles,
 } from './properties/properties-panel'
+import { FIND, TITLED } from './find-rows'
 import { THEME, WORDS } from './properties/words'
 import type { Crumb } from './properties/properties-panel'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
-
-/** The pages whose title can sit plain or in a hero, as Home's and Feedback's always do. */
-const TITLED: readonly DesignerPage[] = ['roadmap', 'changelog', 'help', 'support']
 
 const link =
   'rounded text-xs underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
@@ -62,7 +60,8 @@ export function PagePanel({
       <PropertySection title={WORDS.page}>
         {TITLED.includes(page) && (
           <PropertyRow
-            label={WORDS.pageTitle}
+            label={FIND.pageTitle.label}
+            find={FIND.pageTitle.id}
             set={titles !== undefined}
             source={WORDS.titledPages}
             resetLabel={`${WORDS.reset} ${WORDS.pageTitle.toLowerCase()} to ${WORDS.titlePlain.toLowerCase()}`}
@@ -145,7 +144,7 @@ export function BackgroundRow({
   const shown = ownBg ?? siteBackground(design)
   return (
     <>
-      <PropertyRow label={WORDS.background} htmlFor={id}>
+      <PropertyRow label={FIND.pageBackground.label} find={FIND.pageBackground.id} htmlFor={id}>
         <button
           id={id}
           type="button"

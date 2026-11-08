@@ -32,9 +32,10 @@ import { usePickReach } from './use-pick-reach'
 import { backgroundPageOf } from '@/lib/shared/design/page-background'
 import { partOf, partSelector } from '@/lib/shared/design/parts-registry'
 import { pickLabel, pickName } from '@/lib/shared/design/element-pick'
-import { blockFindActions, elementFindItems } from '@/lib/shared/design/quick-find'
-import { ADD_LAYOUTS } from './add-sheet'
-import { revealSetting } from './quick-find'
+import { blockFindActions, elementFindItems } from './find-index'
+import { revealRow } from './find-reveal'
+import { ADD_LAYOUTS_FIND } from './add-sheet'
+import { builderNavigation } from './quick-find'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
 import { STYLE_ELEMENTS, type StyleState } from '@/lib/shared/design/style-tokens'
 import type { DesignerPage } from '@/lib/shared/design/outline'
@@ -195,13 +196,26 @@ export function DesignerShell({
       pickedElement && elementName ? elementFindItems(pickedElement.element, elementName) : [],
     [pickedElement?.element, elementName]
   )
+  const findSource = useMemo(
+    () => ({ design, gates, nodes, page, pages }),
+    [design, gates, nodes, page, pages]
+  )
+  // Quick find's way to a row: the sheets it is not in close, its page shows, its panel opens.
+  const navigation = builderNavigation({
+    dispatch: panel.dispatch,
+    page,
+    setPage,
+    pick,
+    setSelection,
+    open: () => {
+      setPane('settings')
+      setPageClosed(false)
+    },
+  })
   const dialogs = useBuilderDialogs({
     draft,
-    nodes,
-    page,
-    pages,
-    onSelect: pick,
-    onPage: setPage,
+    find: findSource,
+    navigation,
     extra: findHere,
     // Read as quick find opens, so they act on what is picked then.
     actions: () =>
@@ -210,7 +224,7 @@ export function DesignerShell({
         onAdd: () => panel.dispatch({ type: 'open', sheet: 'add' }),
         onLayouts: () => {
           panel.dispatch({ type: 'open', sheet: 'add' })
-          revealSetting(ADD_LAYOUTS)
+          void revealRow({ root: '#designer-sheet-add', row: ADD_LAYOUTS_FIND })
         },
         onDuplicate: selection ? () => blocks.duplicateBlock(selection) : undefined,
         onRemove: selection ? () => blocks.removeBlock(selection) : undefined,

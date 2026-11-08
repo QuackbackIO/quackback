@@ -17,6 +17,7 @@ import { inLanguage } from '@/lib/shared/design/labels'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { WordsRow } from './block-sections'
 import { PropertyRow, PropertySection } from './properties/properties-panel'
+import { FIND, type FindRow } from './find-rows'
 import { WORDS } from './properties/words'
 import { editOnCanvas } from './words/edit-on-canvas'
 
@@ -30,10 +31,11 @@ const USUAL: Record<FeedWordsPart, string> = {
   emptyTitle: 'Got something to say? Be the first to post',
 }
 
-const LABELS: Record<FeedWordsPart, string> = {
-  prompt: 'Prompt',
-  submit: 'Button',
-  emptyTitle: 'Title',
+/** Each of the feed's words rows, by its label and stable name (find-rows.ts). */
+const ROWS: Record<FeedWordsPart, FindRow> = {
+  prompt: FIND.prompt,
+  submit: FIND.submit,
+  emptyTitle: FIND.emptyTitle,
 }
 
 /** One of the feed's words: its own in the language shown, else the portal's, and Edit. */
@@ -55,10 +57,11 @@ function FeedWordsRow({
   const others = Object.entries(words)
     .filter(([other, text]) => other !== locale && text)
     .map(([, text]) => text)
-  const label = inLanguage(LABELS[part], locale)
+  const label = inLanguage(ROWS[part].label, locale)
   return (
     <WordsRow
       label={label}
+      find={ROWS[part].id}
       text={own}
       usual={USUAL[part]}
       set={!!own}
@@ -112,10 +115,14 @@ export function EmptyFeedWords({
   const [empty, setEmpty] = usePreviewEmpty()
   return (
     <PropertySection title="When empty">
-      <PropertyRow label="Preview empty" htmlFor={`${id}-empty`}>
+      <PropertyRow
+        label={FIND.previewEmpty.label}
+        find={FIND.previewEmpty.id}
+        htmlFor={`${id}-empty`}
+      >
         <Switch
           id={`${id}-empty`}
-          aria-label="Preview empty"
+          aria-label={FIND.previewEmpty.label}
           checked={empty}
           onCheckedChange={setEmpty}
         />

@@ -6,6 +6,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { BrandKitColours } from './brand-kit-colours'
 import { BrandKitFonts } from './brand-kit-fonts'
 import { BrandMatchRow } from './brand-match-row'
+import { FIND } from './find-rows'
 import { KitImageTile } from './kit-image-tile'
 import { LogoIconRow, LogoTitleRow } from './logo-rows'
 import { PropertyRow, PropertySection } from './properties/properties-panel'
@@ -84,7 +85,8 @@ export function BrandKitImages({
   return (
     <PropertySection title={THEME.sections.siteImages}>
       <PropertyRow
-        label={THEME.favicon}
+        label={FIND.favicon.label}
+        find={FIND.favicon.id}
         set={!!favicon}
         resetLabel={resetToValue(THEME.workspaceLogo.toLowerCase())}
         onReset={() => update((draft) => void (draft.brand.favicon = null))}
@@ -100,7 +102,8 @@ export function BrandKitImages({
         />
       </PropertyRow>
       <PropertyRow
-        label={THEME.shareImage}
+        label={FIND.shareImage.label}
+        find={FIND.shareImage.id}
         set={!!shareImage}
         resetLabel={resetToValue(THEME.automatic.toLowerCase())}
         onReset={() => update((draft) => void (draft.brand.shareImage = null))}

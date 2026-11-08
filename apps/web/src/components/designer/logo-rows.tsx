@@ -20,6 +20,7 @@ import { getWordmarkUploadUrlFn } from '@/lib/server/functions/uploads'
 import { designAssetUrl } from '@/lib/shared/design/design-view'
 import { setIcon, setLogoInk, setTitle, showFullLogo } from '@/lib/shared/design/logo'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import { FIND } from './find-rows'
 import { KitImageTile } from './kit-image-tile'
 import { PropertyRow } from './properties/properties-panel'
 import { ScrubNumber } from './properties/scrub-number'
@@ -53,7 +54,8 @@ export function LogoIconRow({
   const own = design.brand.logo.mark.light
   return (
     <PropertyRow
-      label={THEME.icon}
+      label={FIND.icon.label}
+      find={FIND.icon.id}
       set={!!own}
       source={THEME.draftNote}
       resetLabel={resetToValue(THEME.workspaceLogo.toLowerCase())}
@@ -77,7 +79,7 @@ export function LogoIconRow({
 /** The title beside the icon, in the theme's font; empty shows the workspace's name. */
 export function LogoTitleRow({ design, update }: { design: PortalDesign; update: Update }) {
   return (
-    <PropertyRow label={THEME.title} htmlFor="design-logo-name">
+    <PropertyRow label={FIND.title.label} find={FIND.title.id} htmlFor="design-logo-name">
       <Input
         id="design-logo-name"
         value={design.brand.logo.name ?? ''}
@@ -101,7 +103,7 @@ export function FullLogoRows({ design, update }: { design: PortalDesign; update:
   const wordmark = logo.wordmark.light
   return (
     <>
-      <PropertyRow label={THEME.fullLogo} htmlFor="design-full-logo">
+      <PropertyRow label={FIND.fullLogo.label} find={FIND.fullLogo.id} htmlFor="design-full-logo">
         <Switch
           id="design-full-logo"
           aria-label={THEME.fullLogoSwitch}
@@ -111,7 +113,8 @@ export function FullLogoRows({ design, update }: { design: PortalDesign; update:
       </PropertyRow>
       {full && (
         <PropertyRow
-          label={THEME.image}
+          label={FIND.logoImage.label}
+          find={FIND.logoImage.id}
           set={!!wordmark}
           resetLabel={`${WORDS.reset}: ${THEME.fullLogoEmpty.toLowerCase()}`}
           onReset={() => update((draft) => void (draft.brand.logo.wordmark.light = null))}
@@ -150,7 +153,8 @@ export function LogoHeightRow({ design, update }: { design: PortalDesign; update
     }, 'Logo height')
   return (
     <PropertyRow
-      label={THEME.height}
+      label={FIND.logoHeight.label}
+      find={FIND.logoHeight.id}
       htmlFor="design-logo-height"
       set={height !== undefined}
       resetLabel={resetToValue(`${LOGO_HEIGHT.usual} px`)}
@@ -210,7 +214,11 @@ export function LogoColourRow({
     }
   }
   return (
-    <PropertyRow label={THEME.logoColours} source={THEME.logoColoursHelp}>
+    <PropertyRow
+      label={FIND.logoColours.label}
+      find={FIND.logoColours.id}
+      source={THEME.logoColoursHelp}
+    >
       {colours.length > 0 ? (
         <span
           role="img"

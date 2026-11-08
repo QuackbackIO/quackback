@@ -31,6 +31,7 @@ import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { cn } from '@/lib/shared/utils'
 import { ElementStyleEditor, SITE_STYLE } from './element-styles'
+import { FIND, type FindRow } from './find-rows'
 import { MainActionRows } from './hero-main-action'
 import { HeroPhotoCrop } from './hero-photo-crop'
 import { BackgroundRow } from './page-panel'
@@ -59,6 +60,18 @@ type Scope = 'every' | 'page'
 /** The pages whose title the hero can hold, with what sits beside it. */
 const TITLED: readonly DesignerPage[] = ['changelog', 'help']
 
+/** The tiles rows' stable names, which quick find shares. */
+const TILE_FIND: Partial<Record<HeroKey, FindRow>> = {
+  height: FIND.heroHeight,
+  align: FIND.heroAlign,
+  shape: FIND.heroShape,
+  imagePhone: FIND.heroPhones,
+  glow: FIND.glow,
+  blend: FIND.blend,
+  fadeFrom: FIND.fadeFrom,
+  titles: FIND.otherPages,
+}
+
 const quiet =
   'rounded text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
 
@@ -80,15 +93,18 @@ function LookDrawing({ look }: { look: BandLook }) {
 /** A row of drawn tiles: its label above them, as they take the panel's width. */
 function DrawnRow({
   label,
+  find,
   help,
   children,
 }: {
   label: string
+  /** Its stable name, which quick find shares. */
+  find?: string
   help?: string
   children: ReactNode
 }) {
   return (
-    <div className="pt-1">
+    <div className="pt-1" data-find={find}>
       <span className="flex min-h-6 items-center gap-0.5">
         <span className="text-xs text-muted-foreground">{label}</span>
         {help && <Help text={help} />}
@@ -166,6 +182,7 @@ export function HeroPanel({
     return (
       <PropertyRow
         label={label}
+        find={TILE_FIND[key]?.id}
         set={stored !== undefined}
         resetLabel={`${WORDS.reset} to ${names[fallback]!.toLowerCase()}`}
         onReset={reset}
@@ -197,24 +214,26 @@ export function HeroPanel({
 
   const look = (
     <PropertySection title={HERO_WORDS.look} help={lookHelp.join(' ') || undefined}>
-      <PropertyDrawnTiles
-        id={`${id}-look`}
-        label={HERO_WORDS.look}
-        columns={4}
-        value={hero.look === CUSTOM_LOOK ? undefined : hero.look}
-        options={looks.map(
-          (each) =>
-            [
-              each.id,
-              HERO_LOOKS[each.id] ?? each.label,
-              <LookDrawing key={each.id} look={each} />,
-            ] as const
-        )}
-        onChange={(value) => change('look', value)}
-      />
+      <div data-find={FIND.heroLook.id}>
+        <PropertyDrawnTiles
+          id={`${id}-look`}
+          label={FIND.heroLook.label}
+          columns={4}
+          value={hero.look === CUSTOM_LOOK ? undefined : hero.look}
+          options={looks.map(
+            (each) =>
+              [
+                each.id,
+                HERO_LOOKS[each.id] ?? each.label,
+                <LookDrawing key={each.id} look={each} />,
+              ] as const
+          )}
+          onChange={(value) => change('look', value)}
+        />
+      </div>
       {shown('colour') && <ColourRow design={design} id={`${id}-colour`} change={change} />}
       {shown('art') && (
-        <DrawnRow label={HERO_WORDS.art}>
+        <DrawnRow label={FIND.heroArt.label} find={FIND.heroArt.id}>
           <PropertyDrawnTiles
             label={fieldOf('art').label}
             value={hero.art}
@@ -263,7 +282,8 @@ export function HeroPanel({
 
   const actionColour = shown('action') && (
     <PropertyRow
-      label={HERO_WORDS.buttonColour}
+      label={FIND.buttonColour.label}
+      find={FIND.buttonColour.id}
       set={design.shape.action !== undefined}
       resetLabel={`${WORDS.reset} to ${HERO_TILES.action.buttons.toLowerCase()}`}
       onReset={() => change('action', 'buttons')}
@@ -385,7 +405,8 @@ function ColourRow({
   const stored = design.layout.bandColour
   return (
     <PropertyRow
-      label={HERO_WORDS.colour}
+      label={FIND.heroColour.label}
+      find={FIND.heroColour.id}
       htmlFor={id}
       set={stored !== undefined}
       source={WORDS.fromBrand}
@@ -415,7 +436,7 @@ function FillRow({ design, update }: { design: PortalDesign; update: NamedUpdate
   const set = Object.keys(design.style?.hero ?? {}).length > 0
   return (
     <>
-      <PropertyRow label={HERO_WORDS.fillAndEdge} htmlFor={id} set={set}>
+      <PropertyRow label={FIND.heroFill.label} find={FIND.heroFill.id} htmlFor={id} set={set}>
         <button
           id={id}
           type="button"
@@ -507,7 +528,8 @@ function HeroImage({
         {image && (
           <>
             <PropertyRow
-              label={HERO_WORDS.image}
+              label={FIND.heroImage.label}
+              find={FIND.heroImage.id}
               htmlFor={`${id}-file`}
               set={!!image.homeOnly}
               source={image.homeOnly ? HERO_WORDS.justThisPage : undefined}

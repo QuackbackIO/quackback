@@ -303,6 +303,7 @@ export function PropertyMore({
  */
 export function PropertyRow({
   label,
+  find,
   htmlFor,
   set = false,
   source,
@@ -312,6 +313,8 @@ export function PropertyRow({
   children,
 }: {
   label: string
+  /** Its stable name, which quick find's index shares to lead to it (find-rows.ts). */
+  find?: string
   /** Advice about the row, on hovering the ⓘ after its label. */
   help?: string
   /** The control's id, so the label names it. */
@@ -329,6 +332,7 @@ export function PropertyRow({
     <div
       className="flex min-h-7 items-center gap-2"
       data-property-row=""
+      data-find={find}
       data-set={set || undefined}
     >
       <span className="flex w-[92px] shrink-0 items-center gap-0.5">

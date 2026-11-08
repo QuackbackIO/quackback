@@ -39,6 +39,7 @@ import {
   PropertyTiles,
   type Crumb,
 } from './properties/properties-panel'
+import { FIND } from './find-rows'
 import { ReachNote } from './properties/scope-line'
 import { SummaryRow } from './properties/summary-row'
 import { STYLE_CHOICES, WORDS } from './properties/words'
@@ -159,7 +160,7 @@ export function HeaderPanel({
       </PropertySection>
 
       <PropertySection title={HEADER_COPY.layout}>
-        <PropertyRow label={HEADER_COPY.layout}>
+        <PropertyRow label={FIND.headerLayout.label} find={FIND.headerLayout.id}>
           <PropertyTiles
             label={HEADER_COPY.layout}
             value={layout.header}
@@ -170,9 +171,9 @@ export function HeaderPanel({
           />
         </PropertyRow>
         {layout.header === 'inline' && (
-          <PropertyRow label="Menu position">
+          <PropertyRow label={FIND.menuPosition.label} find={FIND.menuPosition.id}>
             <PropertyTiles
-              label="Menu position"
+              label={FIND.menuPosition.label}
               value={layout.menuAlign ?? 'start'}
               options={[
                 ['start', 'By the logo'],
@@ -188,7 +189,11 @@ export function HeaderPanel({
           </PropertyRow>
         )}
         {layout.band !== 'none' && (
-          <PropertyRow label="Blend into hero" htmlFor={`${id}-blend`}>
+          <PropertyRow
+            label={FIND.headerBlend.label}
+            find={FIND.headerBlend.id}
+            htmlFor={`${id}-blend`}
+          >
             <Switch
               id={`${id}-blend`}
               aria-label="Header blends into the hero"
@@ -205,7 +210,7 @@ export function HeaderPanel({
       </PropertySection>
 
       <PropertySection title={HEADER_COPY.menu}>
-        <ul aria-label={HEADER_COPY.menu} className="-mx-1.5">
+        <ul aria-label={FIND.menu.label} data-find={FIND.menu.id} className="-mx-1.5">
           {parts.map((part) => (
             <MenuRow
               key={part.id}
@@ -224,7 +229,11 @@ export function HeaderPanel({
           <PlusIcon className="size-3.5" aria-hidden="true" />
           {HEADER_COPY.add}
         </Button>
-        <PropertyRow label={HEADER_COPY.land} source={HEADER_COPY.landHelp}>
+        <PropertyRow
+          label={FIND.landing.label}
+          find={FIND.landing.id}
+          source={HEADER_COPY.landHelp}
+        >
           <PropertyTiles
             label={HEADER_COPY.land}
             value={landing}

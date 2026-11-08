@@ -11,6 +11,7 @@ import { blockOf, type SettingField } from '@/lib/shared/design/blocks'
 import type { HeroBlock, HeroKey } from '@/lib/shared/design/hero'
 import { mainActionsOffered } from '@/lib/shared/design/main-action'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
+import { FIND } from './find-rows'
 import { PropertyRow, PropertyTiles } from './properties/properties-panel'
 import { HERO_WORDS } from './properties/words'
 
@@ -44,7 +45,11 @@ export function MainActionRows({
   const goes = choiceOf('buttonTo')
   return (
     <>
-      <PropertyRow label={HERO_WORDS.mainAction} help={said(offered.notes.actions)}>
+      <PropertyRow
+        label={FIND.mainAction.label}
+        find={FIND.mainAction.id}
+        help={said(offered.notes.actions)}
+      >
         <PropertyTiles
           label={action.label}
           value={hero.mainAction}
@@ -55,7 +60,7 @@ export function MainActionRows({
         />
       </PropertyRow>
       {shown('composerWidth') && (
-        <PropertyRow label={HERO_WORDS.composerWidth}>
+        <PropertyRow label={FIND.composerWidth.label} find={FIND.composerWidth.id}>
           <PropertyTiles
             label={width.label}
             value={hero.composerWidth}
@@ -65,7 +70,11 @@ export function MainActionRows({
         </PropertyRow>
       )}
       {shown('buttonTo') && (
-        <PropertyRow label={HERO_WORDS.goesTo} help={said(offered.notes.buttonTo)}>
+        <PropertyRow
+          label={FIND.goesTo.label}
+          find={FIND.goesTo.id}
+          help={said(offered.notes.buttonTo)}
+        >
           <PropertyTiles
             label={goes.label}
             value={hero.buttonTo}
@@ -77,7 +86,11 @@ export function MainActionRows({
         </PropertyRow>
       )}
       {shown('secondButton') && (
-        <PropertyRow label={HERO_WORDS.secondButton} htmlFor={`${id}-second`}>
+        <PropertyRow
+          label={FIND.secondButton.label}
+          find={FIND.secondButton.id}
+          htmlFor={`${id}-second`}
+        >
           <Switch
             id={`${id}-second`}
             aria-label={HERO_WORDS.secondButton}

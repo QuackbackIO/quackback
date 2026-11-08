@@ -729,6 +729,7 @@ export function PageBackgroundEntry({
   update,
   page,
   label,
+  find,
   onOpen,
 }: {
   design: PortalDesign
@@ -736,6 +737,8 @@ export function PageBackgroundEntry({
   page: string | null
   /** The row's own name, such as Background in Theme's Style; whose it is then joins the value. */
   label?: string
+  /** Its stable name, which quick find shares. */
+  find?: string
   onOpen?: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -745,7 +748,7 @@ export function PageBackgroundEntry({
   const shown = ownShown || siteBackground(design)
   const whose = own && ownShown ? THEME.pageOnly(BACKGROUND_PAGE_NAMES[own]) : THEME.everyPage
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-find={find}>
       <button
         type="button"
         aria-label={`${THEME.sections.pageBackground}: ${whose}: ${BACKGROUND_NAMES[shown.kind]}`}

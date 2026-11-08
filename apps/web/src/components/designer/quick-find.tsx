@@ -9,41 +9,141 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import type { DesignerPage, OutlineNode, Selection } from '@/lib/shared/design/outline'
-import { quickFindItems, type FindGroup, type FindItem } from '@/lib/shared/design/quick-find'
-import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { PanelAction } from '@/lib/shared/design/builder-chrome'
+import type { DesignerPage, Selection } from '@/lib/shared/design/outline'
 import { BlockIcon } from './block-icon'
+import {
+  findIndex,
+  findScore,
+  type FindGroup,
+  type FindItem,
+  type FindPlace,
+  type FindSource,
+} from './find-index'
+import { FIND_ROOTS, revealRow } from './find-reveal'
 
 const GROUPS: FindGroup[] = ['Blocks', 'Settings', 'Actions', 'Pages']
 
+/** How quick find gets to what was chosen: the builder's own steps. */
+export interface FindNavigation {
+  /**
+   * Shows a row's place: closes the sheets it is not in, shows its page,
+   * and opens Theme at its view or picks its part.
+   */
+  show: (place: FindPlace) => void
+  /** Picks a part, on its page. */
+  pick: (selection: Selection, page: DesignerPage) => void
+  page: (page: DesignerPage) => void
+}
+
 /**
- * Ctrl+K or Cmd+K, on the designer or its canvas, finds a block, an element,
- * a page, a setting or an action by name. A setting selects its block and
- * brings its control into view; an action is done.
+ * The builder's steps for quick find: Theme opens at the view asked for;
+ * any other row closes the sheets, then shows its page and picks its part
+ * (nothing, for the page's own panel), or stays in the panel open now.
+ */
+export function builderNavigation({
+  dispatch,
+  page,
+  setPage,
+  pick,
+  setSelection,
+  open,
+}: {
+  dispatch: (action: PanelAction) => void
+  page: DesignerPage
+  setPage: (page: DesignerPage) => void
+  pick: (selection: Selection) => void
+  setSelection: (selection: Selection | null) => void
+  /** Opens the properties: their column in a narrow window, and the page's panel if Escape closed it. */
+  open: () => void
+}): FindNavigation {
+  return {
+    show: (place) => {
+      open()
+      if (place.kind === 'theme') return dispatch({ type: 'open', sheet: 'theme', at: place.at })
+      // The picked element's panel and every part's lie under the sheets.
+      dispatch({ type: 'close' })
+      if (place.kind === 'here') return
+      if (place.page !== page) setPage(place.page)
+      if (place.selection) pick(place.selection)
+      else setSelection(null)
+    },
+    pick: (selection, on) => {
+      open()
+      dispatch({ type: 'close' })
+      if (on !== page) setPage(on)
+      pick(selection)
+    },
+    page: setPage,
+  }
+}
+
+/**
+ * Goes to what an entry finds: a row's panel, then the row itself, focused
+ * and outlined; a part, picked with focus in its panel; a page; or an
+ * action, done. Resolves to the control focused, where there is one.
+ */
+export async function followFind(
+  item: FindItem,
+  navigation: FindNavigation,
+  /** How long to wait for a row to draw. */
+  waitMs?: number
+): Promise<HTMLElement | null> {
+  const target = item.target
+  switch (target.kind) {
+    case 'page':
+      navigation.page(target.page)
+      return null
+    case 'action':
+      target.run()
+      return null
+    case 'part':
+      navigation.pick(target.selection, target.page)
+      return revealPanel()
+    case 'row':
+      navigation.show(target.place)
+      return revealRow({
+        root: target.place.kind === 'theme' ? FIND_ROOTS.theme : FIND_ROOTS.panel,
+        row: target.row,
+        opens: target.opens,
+        waitMs,
+      })
+  }
+}
+
+/** Focus in the properties, once a pick has drawn them. */
+function revealPanel(): Promise<HTMLElement | null> {
+  return new Promise((done) =>
+    requestAnimationFrame(() => {
+      const panel = document.getElementById('designer-settings')
+      panel?.focus()
+      done(panel)
+    })
+  )
+}
+
+/**
+ * Ctrl+K or Cmd+K, on the designer or its canvas, finds a part, a page, a
+ * setting or an action by name, each shown with where it is ("Theme › Style
+ * › Corners"). A setting closes what is in the way, goes to its page and
+ * panel, opens what it sits under, then focuses its control and outlines it;
+ * an action is done.
  */
 export function QuickFind({
-  nodes,
-  page,
-  pages,
-  onSelect,
-  onPage,
+  source,
+  navigation,
   opened,
   onOpened,
   extra,
-  design,
   actions,
 }: {
+  /** What the index is built from: the design, the pages that are on, the page shown. */
+  source: FindSource
+  navigation: FindNavigation
   /** More to find, such as the picked element's own settings. */
   extra?: readonly FindItem[]
-  /** The design, for each Home block's own settings. */
-  design?: PortalDesign
   /** The actions on offer as it opens, such as duplicating the picked block. */
   actions?: () => readonly FindItem[]
-  nodes: readonly OutlineNode[]
-  page: DesignerPage
-  pages: readonly DesignerPage[]
-  onSelect: (selection: Selection) => void
-  onPage: (page: DesignerPage) => void
   /** Open from elsewhere, such as the More menu; it opens itself on Ctrl+K too. */
   opened?: boolean
   onOpened?: (open: boolean) => void
@@ -85,25 +185,16 @@ export function QuickFind({
       window.removeEventListener('message', onMessage)
     }
   }, [setOpen])
+  // Built while open, from the design as it is; the actions are read then too.
   const items = useMemo(
-    () => [...(extra ?? []), ...quickFindItems(nodes, page, pages, design)],
-    [nodes, page, pages, extra, design]
+    () => (open ? [...(extra ?? []), ...findIndex(source), ...(actions?.() ?? [])] : []),
+    [open, extra, actions, source]
   )
-  const offered = useMemo(() => (open ? (actions?.() ?? []) : []), [open, actions])
+  const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
   const go = (item: FindItem) => {
-    const target = item.target
-    toSetting.current = false
+    toSetting.current = item.target.kind === 'row' || item.target.kind === 'part'
     setOpen(false)
-    if (target.kind === 'page') return onPage(target.page)
-    if (target.kind === 'action') return target.run()
-    if (target.kind === 'here') {
-      toSetting.current = true
-      return revealSetting(target.setting)
-    }
-    if (target.page) onPage(target.page)
-    onSelect(target.selection)
-    toSetting.current = !!target.setting
-    if (target.setting) revealSetting(target.setting)
+    void followFind(item, navigation)
   }
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -113,25 +204,36 @@ export function QuickFind({
         className="max-w-lg overflow-hidden p-0"
       >
         <DialogTitle className="sr-only">Find</DialogTitle>
-        <Command className="border-0 shadow-none">
+        <Command
+          className="border-0 shadow-none"
+          filter={(value, search) => {
+            const item = byId.get(value)
+            return item ? findScore(item, search) : 0
+          }}
+        >
           <CommandInput placeholder="Find a block, page, setting or action…" />
           <CommandList>
             <CommandEmpty>Nothing by that name.</CommandEmpty>
             {GROUPS.map((group) => (
               <CommandGroup key={group} heading={group}>
-                {[...items, ...offered]
+                {items
                   .filter((item) => item.group === group)
                   .map((item) => (
                     <CommandItem
-                      key={`${group}:${item.where ?? ''}:${item.label}`}
-                      value={[item.label, item.where, item.terms, group].filter(Boolean).join(' ')}
+                      key={item.id}
+                      value={item.id}
+                      data-find-item={item.id}
                       onSelect={() => go(item)}
                     >
                       {item.icon && <BlockIcon type={item.icon} />}
-                      <span>{item.label}</span>
-                      {item.where && (
-                        <span className="ms-auto text-xs text-muted-foreground">{item.where}</span>
-                      )}
+                      <span className="min-w-0 truncate">
+                        {item.path.map((step, at) => (
+                          <span key={at} className="text-muted-foreground">
+                            {step} ›{' '}
+                          </span>
+                        ))}
+                        {item.label}
+                      </span>
                     </CommandItem>
                   ))}
               </CommandGroup>
@@ -141,42 +243,4 @@ export function QuickFind({
       </DialogContent>
     </Dialog>
   )
-}
-
-/**
- * Brings the control under a label in the settings into view and focuses it,
- * once the part's settings have drawn.
- */
-export function revealSetting(label: string, tries = 20): void {
-  requestAnimationFrame(() => {
-    const settings = document.getElementById('designer-settings')
-    const wanted = label.toLowerCase()
-    const found = settings
-      ? [...settings.querySelectorAll<HTMLElement>('label, legend, h3, p, span')].find(
-          (each) => each.textContent?.trim().toLowerCase() === wanted
-        )
-      : undefined
-    if (!found) {
-      if (tries > 0) revealSetting(label, tries - 1)
-      return
-    }
-    // A setting under Advanced opens it first.
-    for (
-      let shut = found.closest('details');
-      shut;
-      shut = shut.parentElement?.closest('details') ?? null
-    )
-      shut.open = true
-    found.scrollIntoView({ block: 'center' })
-    const field =
-      (found instanceof HTMLLabelElement && found.htmlFor
-        ? document.getElementById(found.htmlFor)
-        : null) ??
-      found
-        .closest('fieldset, section, div')
-        ?.querySelector<HTMLElement>(
-          'input, textarea, select, button:not([disabled]), [role=radio][tabindex="0"], [role=switch]'
-        )
-    field?.focus({ preventScroll: true })
-  })
 }

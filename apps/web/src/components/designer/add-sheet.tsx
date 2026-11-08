@@ -10,8 +10,11 @@ import { HomeLayoutPicker } from './home-layout-picker'
 import type { AddDrag } from './use-add-drag'
 import { useNewParts } from './use-new-parts'
 
-/** The title over Home's layouts, which quick find leads to. */
+/** The title over Home's layouts. */
 export const ADD_LAYOUTS = 'Start Home from a layout'
+
+/** The layouts' stable name, which quick find's action leads to. */
+export const ADD_LAYOUTS_FIND = 'add-layouts'
 
 /** Where a drag or a click puts the new block, in a line. */
 export function addHint(after: string | null, onHome: boolean): string {
@@ -164,7 +167,11 @@ export function AddContent({
       {design.pages.home.blocks.length >= HOME_BLOCKS_MAX && (
         <p className="text-xs text-muted-foreground">Home holds {HOME_BLOCKS_MAX} blocks.</p>
       )}
-      <section aria-labelledby="add-layouts" className="space-y-2 border-t border-border pt-4">
+      <section
+        aria-labelledby="add-layouts"
+        data-find={ADD_LAYOUTS_FIND}
+        className="space-y-2 border-t border-border pt-4"
+      >
         <h3 id="add-layouts" className="text-xs font-medium text-muted-foreground">
           {ADD_LAYOUTS}
         </h3>

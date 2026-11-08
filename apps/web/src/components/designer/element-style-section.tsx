@@ -12,6 +12,7 @@ import { setTune } from '@/components/admin/settings/appearance/tune-fields'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { StyleElement, StyleProp } from '@/lib/shared/design/style-tokens'
 import { everywhereValue, writeEverywhere } from './element-brand'
+import { elementStyleFind } from './element-rows'
 import { PropertyRow, PropertySection, PropertyTiles } from './properties/properties-panel'
 import { ScrubNumber } from './properties/scrub-number'
 import { FontFaces, FontField } from './properties/token-field'
@@ -266,7 +267,12 @@ function BrandFontRow({
       draft.brand.fonts.headingWeight = closestWeight(font, draft.brand.fonts.headingWeight)
     }, `${FONT_NAMES[slot]}, ${WORDS.theme.toLowerCase()}`)
   return (
-    <PropertyRow label="Font" htmlFor={`element-${slot}-font`} source={reach}>
+    <PropertyRow
+      label="Font"
+      find={elementStyleFind(slot, 'Font')}
+      htmlFor={`element-${slot}-font`}
+      source={reach}
+    >
       <FontField
         id={`element-${slot}-font`}
         label="Font"
@@ -289,20 +295,23 @@ function BrandFontRow({
   )
 }
 
+/** A post card title's exact rows, as its Style section draws them. */
+export const CARD_TITLE_ROWS = [
+  { key: 'titleSize', label: 'Title size', min: 12, max: 28, step: 1, unit: 'px' },
+  { key: 'titleWeight', label: 'Title weight', min: 100, max: 900, step: 100, unit: undefined },
+] as const
+
 /** A post card title's exact size and weight: the tune is their only home. */
 function CardTitleRows({ design, update }: { design: PortalDesign; update: NamedUpdate }) {
   const card = design.tune?.card
-  const rows = [
-    { key: 'titleSize', label: 'Title size', min: 12, max: 28, step: 1, unit: 'px' },
-    { key: 'titleWeight', label: 'Title weight', min: 100, max: 900, step: 100, unit: undefined },
-  ] as const
-  return rows.map((row) => {
+  return CARD_TITLE_ROWS.map((row) => {
     const value = card?.[row.key]
     const id = `element-card-${row.key}`
     return (
       <PropertyRow
         key={row.key}
         label={row.label}
+        find={elementStyleFind('postCard', row.label)}
         htmlFor={id}
         set={value !== undefined}
         resetLabel={`${WORDS.reset} ${row.label.toLowerCase()}`}
@@ -355,7 +364,12 @@ export function ElementStyleSection({
     const masked = maskedBy(design, element, choice)
     const id = `element-style-${element}-${choice.label.toLowerCase()}`
     rows.push(
-      <PropertyRow key={choice.label} label={choice.label} source={choice.reach}>
+      <PropertyRow
+        key={choice.label}
+        label={choice.label}
+        find={elementStyleFind(element, choice.label)}
+        source={choice.reach}
+      >
         <PropertyTiles
           id={id}
           label={choice.label}

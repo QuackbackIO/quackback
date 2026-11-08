@@ -60,6 +60,7 @@ import {
   type StyleState,
 } from '@/lib/shared/design/style-tokens'
 import { brandOf, everywhereValue, homeValuesOf, writeEverywhere } from './element-brand'
+import { BASICS, SECTION_PROPS, elementRowFind, elementRowLabel } from './element-rows'
 import { ElementStyleSection, applyChoice, rowChoiceOf } from './element-style-section'
 import { StyleField } from './element-styles'
 import { placeDetail, valueText } from './set-differently'
@@ -77,7 +78,7 @@ import { ScopeLine, type ScopeOption } from './properties/scope-line'
 import { ScrubNumber } from './properties/scrub-number'
 import { FontField, TokenField } from './properties/token-field'
 import { colourTokens, fontTokens } from './properties/tokens'
-import { CHOICE_TILES, SECTIONS, WORDS, everyOf, fromScope, resetTo } from './properties/words'
+import { CHOICE_TILES, WORDS, everyOf, fromScope, resetTo } from './properties/words'
 
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
 
@@ -96,34 +97,6 @@ export function contextOf(pick: ElementPick, page: DesignerPage): ElementContext
 /** Kept per pick, so a new pick starts shared again; mount it with this as its key. */
 export const elementPanelKey = (pick: ElementPick) =>
   `${pick.element}|${pick.part ?? ''}|${pick.section ?? ''}`
-
-/** The rows an element opens with, where it has them: its fill, its text colour and size, its corners. */
-const BASICS: readonly StyleProp[] = ['background', 'color', 'size', 'radius']
-
-/** The groups under More, in order, each with its props. */
-const SECTION_PROPS: ReadonlyArray<{ title: string; props: readonly StyleProp[] }> = [
-  { title: SECTIONS.fill, props: ['background'] },
-  {
-    title: SECTIONS.text,
-    props: ['color', 'size', 'weight', 'font', 'case', 'tracking', 'leading', 'underline'],
-  },
-  { title: SECTIONS.shape, props: ['radius', 'height', 'paddingX', 'paddingY'] },
-  { title: SECTIONS.edge, props: ['borderColor', 'borderWidth', 'borderStyle'] },
-  { title: SECTIONS.shadow, props: ['shadow'] },
-  { title: SECTIONS.lift, props: ['lift'] },
-  { title: SECTIONS.focusRing, props: ['ringWidth'] },
-]
-
-/** A row's label within its section: Edge's "Edge colour" is its Colour. */
-const ROW_LABELS: Partial<Record<StyleProp, string>> = {
-  color: 'Text colour',
-  size: 'Text size',
-  borderColor: 'Colour',
-  borderWidth: 'Width',
-  borderStyle: 'Style',
-  ringWidth: 'Width',
-  lift: 'Rise',
-}
 
 /** A row's tile for its exact field, after the brand's choices. */
 const CUSTOM = 'custom'
@@ -279,7 +252,7 @@ export function ElementPanel({
     if (!allowed(prop)) return null
     const info: StylePropInfo = STYLE_PROPS[prop]
     const id = `style-${pick.element}-${state}-${prop}`
-    const label = ROW_LABELS[prop] ?? info.label
+    const label = elementRowLabel(prop)
     const here = readHere(prop)
     const from = inherited(prop)
     const resetLabel = from
@@ -371,6 +344,7 @@ export function ElementPanel({
         <PropertyRow
           key={`${state}-${prop}`}
           label={label}
+          find={elementRowFind(pick.element, prop)}
           set={here !== undefined}
           source={choice.reach ?? from?.from}
           resetLabel={resetLabel}
@@ -405,6 +379,7 @@ export function ElementPanel({
       <PropertyRow
         key={`${state}-${prop}`}
         label={label}
+        find={elementRowFind(pick.element, prop)}
         htmlFor={info.kind === 'number' ? id : undefined}
         set={here !== undefined}
         source={from?.from}

@@ -4,6 +4,7 @@ import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { StyleElement } from '@/lib/shared/design/style-tokens'
 import { ComposerWords, EmptyFeedWords } from './feed-words'
+import { FIND } from './find-rows'
 import { HomeLayoutPicker } from './home-layout-picker'
 import {
   PropertiesPanel,
@@ -14,7 +15,7 @@ import {
 } from './properties/properties-panel'
 import { ReachNote } from './properties/scope-line'
 import { SummaryRow } from './properties/summary-row'
-import { STYLE_CHOICES, WORDS } from './properties/words'
+import { STYLE_CHOICES } from './properties/words'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -29,9 +30,9 @@ function Reach({ phrase }: { phrase: string }) {
 
 /** What a post card shows besides its title and votes, each with its full name for a reader. */
 const CARD_FIELDS = [
-  ['excerpt', 'Excerpt', 'Show a line of each post'],
-  ['tags', 'Tags', 'Show tags'],
-  ['meta', 'Details', 'Show the author, date and comments'],
+  ['excerpt', FIND.excerpt, 'Show a line of each post'],
+  ['tags', FIND.tags, 'Show tags'],
+  ['meta', FIND.details, 'Show the author, date and comments'],
 ] as const
 
 /**
@@ -75,7 +76,8 @@ export function Inspector({
       return frame(
         <PropertySection>
           <PropertyRow
-            label={WORDS.show}
+            label={FIND.welcome.label}
+            find={FIND.welcome.id}
             htmlFor={`${id}-welcome`}
             source="Its words are edited on the page"
           >
@@ -100,7 +102,7 @@ export function Inspector({
         <>
           <PropertySection title="Posts">
             <Reach phrase="the feed on this page" />
-            <PropertyRow label="Sort">
+            <PropertyRow label={FIND.sort.label} find={FIND.sort.id}>
               <PropertyTiles
                 label="Default sort"
                 value={design.pages.feedback.defaultSort}
@@ -128,8 +130,8 @@ export function Inspector({
               value={STYLE_CHOICES.status[layout.status ?? 'colour']}
               onOpen={() => onElement?.('badge')}
             />
-            {CARD_FIELDS.map(([field, label, full]) => (
-              <PropertyRow key={field} label={label} htmlFor={`${id}-${field}`}>
+            {CARD_FIELDS.map(([field, row, full]) => (
+              <PropertyRow key={field} label={row.label} find={row.id} htmlFor={`${id}-${field}`}>
                 <Switch
                   id={`${id}-${field}`}
                   aria-label={full}
@@ -152,9 +154,9 @@ export function Inspector({
       return frame(
         <PropertySection>
           <Reach phrase="the filters" />
-          <PropertyRow label="Side">
+          <PropertyRow label={FIND.filtersSide.label} find={FIND.filtersSide.id}>
             <PropertyTiles
-              label="Side"
+              label={FIND.filtersSide.label}
               value={layout.filters}
               options={[
                 ['end', 'Right'],

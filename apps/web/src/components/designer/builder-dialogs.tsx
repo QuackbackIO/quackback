@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import type { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
-import type { DesignerPage, OutlineNode, Selection } from '@/lib/shared/design/outline'
-import type { FindItem } from '@/lib/shared/design/quick-find'
-import { QuickFind } from './quick-find'
+import type { FindItem, FindSource } from './find-index'
+import { QuickFind, type FindNavigation } from './quick-find'
 import { SharePreviewDialog } from './share-preview'
 import { ShortcutsDialog } from './shortcuts-dialog'
 import { VersionsDialog } from './versions-dialog'
@@ -16,24 +15,20 @@ type Dialog = 'versions' | 'find' | 'share' | 'keys'
  */
 export function useBuilderDialogs({
   draft,
-  nodes,
-  page,
-  pages,
-  onSelect,
-  onPage,
+  find,
+  navigation,
   extra,
   actions,
 }: {
+  /** What quick find's index is built from. */
+  find: FindSource
+  /** How quick find gets to what was chosen. */
+  navigation: FindNavigation
   /** More for quick find, such as the picked element's settings. */
   extra?: readonly FindItem[]
   /** Quick find's actions, read as it opens. */
   actions?: () => readonly FindItem[]
   draft: ReturnType<typeof useDesignDraft>
-  nodes: readonly OutlineNode[]
-  page: DesignerPage
-  pages: readonly DesignerPage[]
-  onSelect: (selection: Selection) => void
-  onPage: (page: DesignerPage) => void
 }) {
   const [open, setOpen] = useState<Dialog | null>(null)
   const set = (dialog: Dialog) => (shown: boolean) =>
@@ -45,15 +40,11 @@ export function useBuilderDialogs({
       <>
         <ShortcutsDialog open={open === 'keys'} onOpenChange={set('keys')} />
         <QuickFind
-          nodes={nodes}
-          page={page}
-          pages={pages}
-          onSelect={onSelect}
-          onPage={onPage}
+          source={find}
+          navigation={navigation}
           opened={open === 'find'}
           onOpened={set('find')}
           extra={extra}
-          design={draft.design}
           actions={actions}
         />
         <SharePreviewDialog

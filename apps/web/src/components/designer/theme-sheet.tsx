@@ -11,12 +11,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/16/solid'
 import { CssFields, type CssWarning } from '@/components/admin/settings/appearance/css-section'
 import { designerAdvancedOpened } from '@/lib/client/builder-events'
+import type { ThemeAt } from '@/lib/shared/design/builder-chrome'
 import { hoverTileOf, writeHoverTile, type HoverTile } from '@/lib/shared/design/hover-lift'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
 import type { StyleElement, StyleState } from '@/lib/shared/design/style-tokens'
 import { BrandKit, BrandKitImages } from './brand-kit'
+import { ADVANCED_OPEN, FIND } from './find-rows'
 import { ElementPanel } from './element-panel'
 import { currentLookName, LookPicker, useSavedLooks } from './look-picker'
 import { PageBackgroundEntry, PageBackgroundSection } from './page-background-settings'
@@ -55,9 +57,19 @@ function SubView({
 }
 
 /** A row that opens a sub-view: its value, and a chevron. */
-function OpenRow({ label, value, onOpen }: { label: string; value: string; onOpen: () => void }) {
+function OpenRow({
+  label,
+  find,
+  value,
+  onOpen,
+}: {
+  label: string
+  find?: string
+  value: string
+  onOpen: () => void
+}) {
   return (
-    <PropertyRow label={label}>
+    <PropertyRow label={label} find={find}>
       <button
         type="button"
         aria-label={`${label}: ${value}`}
@@ -93,6 +105,7 @@ function AdvancedSection({
           type="button"
           aria-expanded={open}
           aria-controls="theme-advanced-rows"
+          data-find-open={ADVANCED_OPEN}
           onClick={() => {
             if (!open) designerAdvancedOpened('site:styles')
             setOpen(!open)
@@ -110,8 +123,10 @@ function AdvancedSection({
       <div id="theme-advanced-rows" hidden={!open} className="mt-1 space-y-2">
         {open && (
           <>
-            <p className="text-xs text-muted-foreground">{THEME.customCss}</p>
-            <CssFields design={design} update={update} warnings={cssWarnings} />
+            <div data-find={FIND.customCss.id} className="space-y-2">
+              <p className="text-xs text-muted-foreground">{FIND.customCss.label}</p>
+              <CssFields design={design} update={update} warnings={cssWarnings} />
+            </div>
           </>
         )}
       </div>
@@ -126,6 +141,9 @@ type View =
   | { kind: 'background' }
   | { kind: 'element'; element: StyleElement }
 
+const viewAt = (at: ThemeAt | undefined): View =>
+  at?.element ? { kind: 'element', element: at.element } : { kind: 'main' }
+
 export function ThemeContent({
   design,
   update,
@@ -133,6 +151,7 @@ export function ThemeContent({
   logoUrl,
   cssWarnings,
   more = false,
+  at,
   page = null,
   onLogo,
   onOverride,
@@ -152,11 +171,22 @@ export function ThemeContent({
   cssWarnings: readonly CssWarning[]
   /** Opened for a style set elsewhere, such as the page's width: Style is scrolled to. */
   more?: boolean
+  /** The view quick find asks for: Theme itself, or an element's panel in a state. */
+  at?: ThemeAt
   /** The page the canvas shows, whose own background "Just this page" sets. */
   page?: string | null
 }) {
-  const [view, setView] = useState<View>({ kind: 'main' })
-  const [state, setState] = useState<StyleState>('base')
+  const [view, setView] = useState<View>(() => viewAt(at))
+  const [state, setState] = useState<StyleState>(at?.state ?? 'base')
+  // Each time quick find asks for a view, it shows in the same render, even with the sheet open.
+  const [seenAt, setSeenAt] = useState(at)
+  if (at !== seenAt) {
+    setSeenAt(at)
+    if (at) {
+      setView(viewAt(at))
+      setState(at.state ?? 'base')
+    }
+  }
   const saved = useSavedLooks()
   const style = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -201,13 +231,14 @@ export function ThemeContent({
           <div ref={style} className="contents">
             <PropertySection title={THEME.sections.style}>
               <OpenRow
-                label={THEME.look}
+                label={FIND.look.label}
+                find={FIND.look.id}
                 value={currentLookName(design, saved) ?? THEME.custom}
                 onOpen={() => setView({ kind: 'looks' })}
               />
-              <PropertyRow label="Corners">
+              <PropertyRow label={FIND.corners.label} find={FIND.corners.id}>
                 <PropertyTiles
-                  label="Corners"
+                  label={FIND.corners.label}
                   value={design.shape.corners}
                   options={
                     Object.entries(CORNER_NAMES) as Array<
@@ -217,7 +248,11 @@ export function ThemeContent({
                   onChange={(corners) => update((draft) => void (draft.shape.corners = corners))}
                 />
               </PropertyRow>
-              <PropertyRow label={THEME.appearance} source={THEME.autoHelp}>
+              <PropertyRow
+                label={FIND.appearance.label}
+                find={FIND.appearance.id}
+                source={THEME.autoHelp}
+              >
                 <PropertyTiles
                   label={THEME.appearance}
                   value={design.mode}
@@ -229,7 +264,7 @@ export function ThemeContent({
                   onChange={(mode) => update((draft) => void (draft.mode = mode))}
                 />
               </PropertyRow>
-              <PropertyRow label={THEME.pageWidth}>
+              <PropertyRow label={FIND.pageWidth.label} find={FIND.pageWidth.id}>
                 <PropertyTiles
                   label={THEME.pageWidth}
                   value={design.layout.width}
@@ -241,7 +276,7 @@ export function ThemeContent({
                   }
                 />
               </PropertyRow>
-              <PropertyRow label={THEME.hover}>
+              <PropertyRow label={FIND.hover.label} find={FIND.hover.id}>
                 <PropertyTiles
                   label={THEME.hover}
                   value={hoverTileOf(design)}
@@ -253,7 +288,8 @@ export function ThemeContent({
                 design={design}
                 update={update}
                 page={page}
-                label={THEME.background}
+                label={FIND.background.label}
+                find={FIND.background.id}
                 onOpen={() => setView({ kind: 'background' })}
               />
             </PropertySection>
