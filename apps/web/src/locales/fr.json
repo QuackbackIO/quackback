@@ -1410,6 +1410,7 @@
   "ask.destination.settings_ticket-statuses": "Statuts des tickets",
   "ask.destination.settings_general": "Général",
   "ask.destination.settings_domains": "Domaines",
+  "ask.destination.settings_email": "E-mail",
   "ask.destination.settings_widget": "Widget",
   "ask.destination.settings_members": "Membres et équipes",
   "ask.destination.settings_security_authentication": "Accès et sécurité",

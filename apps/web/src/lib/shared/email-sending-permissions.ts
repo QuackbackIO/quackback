@@ -22,8 +22,10 @@ export const SUPPORT_SENDER_PERMISSIONS = [
  * manages the product that sends it, so its settings page can say.
  */
 export const SURFACE_SENDER_READ_PERMISSIONS = {
-  support: SUPPORT_SENDER_PERMISSIONS,
   feedback: [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.BOARD_MANAGE],
   changelog: [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CHANGELOG_MANAGE],
   status: [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.STATUS_PAGE_MANAGE],
 } as const satisfies Record<string, readonly PermissionKey[]>
+
+/** A kind of email whose product settings page shows its From. */
+export type ProductSenderSurface = keyof typeof SURFACE_SENDER_READ_PERMISSIONS

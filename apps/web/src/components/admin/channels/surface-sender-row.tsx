@@ -9,13 +9,12 @@ import { SettingRow } from '@/components/admin/settings/setting-row'
 import { Button } from '@/components/ui/button'
 import { surfaceSenderQuery } from '@/lib/client/queries/channel-accounts'
 import { useHasPermission } from '@/lib/client/hooks/use-root-context'
-import { EMAIL_SENDING_PERMISSION } from '@/lib/shared/email-sending-permissions'
+import {
+  EMAIL_SENDING_PERMISSION,
+  type ProductSenderSurface,
+} from '@/lib/shared/email-sending-permissions'
 
-export function SurfaceSenderRow({
-  surface,
-}: {
-  surface: 'support' | 'feedback' | 'changelog' | 'status'
-}) {
+export function SurfaceSenderRow({ surface }: { surface: ProductSenderSurface }) {
   const { data } = useQuery(surfaceSenderQuery(surface))
   const canChange = useHasPermission(EMAIL_SENDING_PERMISSION)
   if (!data?.from) return null

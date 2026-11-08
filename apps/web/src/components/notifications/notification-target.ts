@@ -92,12 +92,12 @@ export function getNotificationTarget(
     return { to: '/admin/inbox', search: { i: notification.ticketId } }
   }
 
-  // Sending domain bells open the email channel settings, where the records are.
+  // Sending domain bells open Settings → Email, where the records are.
   if (
     notification.type === 'sending_domain_live' ||
     notification.type === 'sending_domain_needs_attention'
   ) {
-    return { to: '/admin/settings/channels/email' }
+    return { to: '/admin/settings/email' }
   }
 
   // Deep-link to the specific changelog entry when we have its id. Rows created

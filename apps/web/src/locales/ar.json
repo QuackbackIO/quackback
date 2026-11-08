@@ -1410,6 +1410,7 @@
   "ask.destination.settings_ticket-statuses": "حالات التذاكر",
   "ask.destination.settings_general": "عام",
   "ask.destination.settings_domains": "النطاقات",
+  "ask.destination.settings_email": "البريد الإلكتروني",
   "ask.destination.settings_widget": "الأداة",
   "ask.destination.settings_members": "الأعضاء والفرق",
   "ask.destination.settings_security_authentication": "الوصول والأمان",

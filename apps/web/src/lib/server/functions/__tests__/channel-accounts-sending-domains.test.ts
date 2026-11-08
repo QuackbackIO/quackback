@@ -21,6 +21,7 @@ vi.mock('@tanstack/react-start', () => ({
 
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
+  workspaceName: { value: 'Acme' as string | undefined },
   defaultTeamId: vi.fn(),
   restart: vi.fn(),
   deleteDomain: vi.fn(),
@@ -52,7 +53,7 @@ vi.mock('@/lib/server/domains/channel-accounts/outbound-identity', async (import
 
 vi.mock('@/lib/server/domains/settings/settings.helpers', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/domains/settings/settings.helpers')>()),
-  requireSettingsCached: async () => ({ name: 'Acme' }),
+  requireSettingsCached: async () => ({ name: hoisted.workspaceName.value }),
 }))
 
 vi.mock('@/lib/server/domains/channel-accounts/sending-address', () => ({
@@ -67,7 +68,10 @@ vi.mock('@/lib/server/functions/auth-helpers', async (importOriginal) => ({
   requireAuth: hoisted.requireAuth,
 }))
 
-vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', () => ({
+vi.mock('@/lib/server/domains/channel-accounts/sender-resolver', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('@/lib/server/domains/channel-accounts/sender-resolver')
+  >()),
   resolveSender: hoisted.resolveSender,
 }))
 
@@ -549,6 +553,29 @@ describe('getSurfaceSenderFn', () => {
     expect(await surfaceSender({ data: { surface: 'changelog' } })).toEqual({
       from: 'Acme <noreply@mail.quackback.test>',
     })
+  })
+
+  it('shows the bare address when there is no name to put on it', async () => {
+    actingWith('changelog.manage')
+    hoisted.workspaceName.value = ''
+    hoisted.resolveSender.mockResolvedValue({
+      from: 'hello@acme.com',
+      source: 'default',
+      senderName: null,
+    })
+    try {
+      expect(await surfaceSender({ data: { surface: 'changelog' } })).toEqual({
+        from: 'hello@acme.com',
+      })
+    } finally {
+      hoisted.workspaceName.value = 'Acme'
+    }
+  })
+
+  it('does not report a support sender, which depends on the conversation', async () => {
+    actingWith('settings.manage')
+    await expect(surfaceSender({ data: { surface: 'support' } })).rejects.toThrow()
+    expect(hoisted.resolveSender).not.toHaveBeenCalled()
   })
 
   it.each([

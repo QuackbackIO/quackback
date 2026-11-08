@@ -1404,6 +1404,7 @@
   "ask.destination.settings_workflows": "自動化流程",
   "ask.destination.settings_general": "一般",
   "ask.destination.settings_domains": "網域",
+  "ask.destination.settings_email": "電子郵件",
   "ask.destination.settings_notifications": "通知",
   "ask.destination.settings_portal": "入口網站",
   "ask.destination.settings_widget": "小工具",
