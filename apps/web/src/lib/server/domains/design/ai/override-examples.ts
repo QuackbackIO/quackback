@@ -41,7 +41,7 @@ export const OVERRIDE_OPS_EXAMPLES = [
       outOfScope: false,
       ops: [
         op(
-          { op: 'override', target: 'page:help', key: 'card.base.radius', value: '0' },
+          { op: 'override', target: 'page:help', key: 'panel.base.radius', value: '0' },
           'cards on the help center to square corners'
         ),
       ],

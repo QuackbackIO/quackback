@@ -74,7 +74,7 @@ const FIELDS: Record<string, Record<string, string>> = {
     weight: 'button.weight',
     case: 'button.case',
   },
-  card: { radius: 'card.radius', borderWidth: 'card.border', shadow: 'card.shadow' },
+  postCard: { radius: 'card.radius', borderWidth: 'card.border', shadow: 'card.shadow' },
   headline: {
     size: 'headline.size',
     weight: 'headline.weight',

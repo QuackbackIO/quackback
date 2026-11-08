@@ -72,7 +72,7 @@ describe('planning a style', () => {
     const shadow = planStyle(
       design(),
       R,
-      style({ element: 'card', property: 'shadow', value: 'subtle' })
+      style({ element: 'postCard', property: 'shadow', value: 'subtle' })
     )
     expect(shadow).toMatchObject({ ok: true, plan: { kind: 'field', path: 'tune.card.shadow' } })
   })
@@ -115,10 +115,10 @@ describe('planning a style', () => {
     expect(
       refusal(style({ element: 'headline', state: 'hover', property: 'color', value: '#000' }))
     ).toMatch(/no hover state/)
-    expect(refusal(style({ element: 'card', property: 'size', value: '14' }))).toMatch(
+    expect(refusal(style({ element: 'postCard', property: 'size', value: '14' }))).toMatch(
       /cannot take size/
     )
-    expect(refusal(style({ element: 'card', property: 'shadow', value: 'glowing' }))).toMatch(
+    expect(refusal(style({ element: 'postCard', property: 'shadow', value: 'glowing' }))).toMatch(
       /shadow can be/
     )
     expect(
@@ -127,11 +127,11 @@ describe('planning a style', () => {
     expect(refusal(style({ element: 'button', property: 'height', value: '200' }))).toMatch(
       /24 to 72px/
     )
-    expect(refusal(style({ element: 'card', property: 'background', value: 'teal-ish' }))).toMatch(
-      /not a colour/
-    )
     expect(
-      refusal(style({ element: 'card', block: 'status', property: 'radius', value: '4' }))
+      refusal(style({ element: 'postCard', property: 'background', value: 'teal-ish' }))
+    ).toMatch(/not a colour/)
+    expect(
+      refusal(style({ element: 'postCard', block: 'status', property: 'radius', value: '4' }))
     ).toMatch(/no status block/)
   })
 
@@ -172,7 +172,7 @@ describe('applying a step', () => {
       [
         style({ element: 'button', state: 'hover', property: 'background', value: 'darker' }),
         style({ element: 'button', state: 'hover', property: 'lift', value: '2' }),
-        style({ element: 'card', property: 'radius', value: '12' }),
+        style({ element: 'postCard', property: 'radius', value: '12' }),
       ]
     )
     expect(out.refused).toEqual([])
@@ -260,12 +260,12 @@ describe('applying a step', () => {
       R,
       [],
       [
-        style({ element: 'card', property: 'radius', value: '12' }),
+        style({ element: 'postCard', property: 'radius', value: '12' }),
         style({ element: 'button', property: 'radius', value: '4' }),
       ],
       { scope: 'button' }
     )
-    expect(out.outOfScope).toEqual(['Cards'])
+    expect(out.outOfScope).toEqual(['Post cards'])
     expect(out.design.tune?.button?.radius).toBe(4)
   })
 

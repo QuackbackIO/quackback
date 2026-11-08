@@ -57,7 +57,7 @@ const KNOWN: Record<string, { writers: readonly string[]; why: string }> = {
       'designer/brand-kit-fonts.tsx',
       'designer/element-style-section.tsx',
     ],
-    why: 'Heading weight: brand kit fonts and the heading element (F49)',
+    why: 'Heading weight: brand kit fonts, and the heading element matching it to a new heading font (F49)',
   },
   'brand.fonts.body': {
     writers: [
@@ -66,30 +66,6 @@ const KNOWN: Record<string, { writers: readonly string[]; why: string }> = {
       'designer/brand-kit-fonts.tsx',
     ],
     why: 'The font picker and its closest-face offer are parts of the brand kit fonts',
-  },
-  'layout.cards': {
-    writers: ['designer/element-style-section.tsx', 'designer/inspector.tsx'],
-    why: 'Card look: the Feed part and the card element (F49: a summary row on the part)',
-  },
-  'layout.density': {
-    writers: ['designer/element-style-section.tsx', 'designer/inspector.tsx'],
-    why: 'Density: the Feed part and the card element (F49: a summary row on the part)',
-  },
-  'layout.status': {
-    writers: ['designer/element-style-section.tsx', 'designer/inspector.tsx'],
-    why: 'Status look: the Feed part and the status element (F49: a summary row on the part)',
-  },
-  tune: {
-    writers: ['admin/settings/appearance/tune-fields.tsx', 'designer/inspector.tsx'],
-    why: 'Card shadow on the Feed part, exact values on elements (F49: a summary row)',
-  },
-  'layout.nav': {
-    writers: ['designer/element-style-section.tsx', 'designer/header-panel.tsx'],
-    why: 'Menu style: the header and the menu item element (F49)',
-  },
-  'layout.navText': {
-    writers: ['designer/element-style-section.tsx', 'designer/header-panel.tsx'],
-    why: 'Menu text: the header and the menu item element (F49)',
   },
   'layout.imagePoint': {
     writers: ['admin/settings/appearance/focal-point.tsx', 'designer/hero-panel.tsx'],

@@ -84,8 +84,8 @@ describe('the override operation', () => {
 
   it('reads a page as people name it', () => {
     for (const target of ['roadmap page', 'the Roadmap page', 'page:Roadmap']) {
-      const result = ok(applyOp(design(), model, op(target, 'card.shadow', 'lifted')))
-      expect(findOverride(result.design, 'page:roadmap:card'), target).toBeDefined()
+      const result = ok(applyOp(design(), model, op(target, 'postCard.shadow', 'lifted')))
+      expect(findOverride(result.design, 'page:roadmap:postCard'), target).toBeDefined()
     }
     const help = ok(applyOp(design(), model, op('help center', 'link.color', 'support')))
     expect(findOverride(help.design, 'page:help:link')).toBeDefined()
@@ -195,14 +195,14 @@ describe('the override operation', () => {
     )
     expect(block.done).toHaveLength(2)
     expect(block.outOfScope.map((each) => each.target)).toEqual(['part:block.updates001.heading'])
-    const roadmap = applyOps(d, model, [op('page:roadmap', 'card.shadow', 'soft')], {
+    const roadmap = applyOps(d, model, [op('page:roadmap', 'postCard.shadow', 'soft')], {
       scope: 'roadmap',
     })
     expect(roadmap.done).toHaveLength(1)
     const buttons = applyOps(
       d,
       model,
-      [op('page:roadmap', 'button.radius', '4'), op('page:roadmap', 'card.radius', '4')],
+      [op('page:roadmap', 'button.radius', '4'), op('page:roadmap', 'postCard.radius', '4')],
       { scope: 'button' }
     )
     expect(buttons.done).toHaveLength(1)

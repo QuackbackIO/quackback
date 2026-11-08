@@ -8,6 +8,7 @@ import type { DesignerPage, OutlineNode, Selection } from '@/lib/shared/design/o
 import type { PanelRoute } from '@/lib/shared/design/panel-routes'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { StyleElement } from '@/lib/shared/design/style-tokens'
 import { PanelSheet } from './panel-sheet'
 import { PickedSettings } from './picked-settings'
 import { RightPanel } from './right-panel'
@@ -47,6 +48,7 @@ export function BuilderSettings({
   onAdd,
   drag,
   onTheme,
+  onElement,
   say,
   element,
   onOverride,
@@ -91,6 +93,8 @@ export function BuilderSettings({
   /** Dragging a block from Add onto the page. */
   drag?: Pick<AddDrag, 'press'>
   onTheme: (more?: boolean) => void
+  /** Picks every one of an element kind, from a part's summary row of its look. */
+  onElement?: (element: StyleElement) => void
   say: (words: string) => void
 }) {
   return (
@@ -142,6 +146,7 @@ export function BuilderSettings({
           checks={checks}
           menu={menu}
           onSelect={onSelect}
+          onElement={onElement}
           onTheme={onTheme}
           logoUrl={logoUrl}
           say={say}

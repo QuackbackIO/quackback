@@ -93,29 +93,29 @@ describe('checks', () => {
   })
 
   it('compares an element at rest with the design before the request', () => {
-    const before = readings([[at('card'), reading({ radius: '8px' })]])
-    const now = readings([[at('card'), reading({ radius: '16px' })]])
+    const before = readings([[at('postCard'), reading({ radius: '8px' })]])
+    const now = readings([[at('postCard'), reading({ radius: '16px' })]])
     expect(
-      judge(check({ element: 'card', property: 'radius', expect: 'more' }), now, before).ok
+      judge(check({ element: 'postCard', property: 'radius', expect: 'more' }), now, before).ok
     ).toBe(true)
     expect(
-      judge(check({ element: 'card', property: 'radius', expect: 'less' }), now, before).ok
+      judge(check({ element: 'postCard', property: 'radius', expect: 'less' }), now, before).ok
     ).toBe(false)
   })
 
   it('calls a faint shadow subtle and a deep one not', () => {
     const subtle = readings([
-      [at('card'), reading({ shadow: 'rgba(0, 0, 0, 0.06) 0px 1px 2px 0px' })],
+      [at('postCard'), reading({ shadow: 'rgba(0, 0, 0, 0.06) 0px 1px 2px 0px' })],
     ])
     const deep = readings([
-      [at('card'), reading({ shadow: 'rgba(0, 0, 0, 0.35) 0px 20px 40px 0px' })],
+      [at('postCard'), reading({ shadow: 'rgba(0, 0, 0, 0.35) 0px 20px 40px 0px' })],
     ])
-    const c = check({ element: 'card', property: 'shadow', expect: 'subtle' })
+    const c = check({ element: 'postCard', property: 'shadow', expect: 'subtle' })
     expect(judge(c, subtle).ok).toBe(true)
     expect(judge(c, deep).ok).toBe(false)
-    expect(judge(check({ element: 'card', property: 'shadow', expect: 'none' }), subtle).ok).toBe(
-      false
-    )
+    expect(
+      judge(check({ element: 'postCard', property: 'shadow', expect: 'none' }), subtle).ok
+    ).toBe(false)
   })
 
   it('reads text on its own fill, or what is behind when it has none', () => {
@@ -136,13 +136,13 @@ describe('checks', () => {
   })
 
   it('calls an edge subtle when it barely stands off what is behind', () => {
-    const now = readings([[at('card'), reading({ borderColor: '#26262b' }, '#1c1c21')]])
+    const now = readings([[at('postCard'), reading({ borderColor: '#26262b' }, '#1c1c21')]])
     expect(
-      judge(check({ element: 'card', property: 'borderColor', expect: 'subtle' }), now).ok
+      judge(check({ element: 'postCard', property: 'borderColor', expect: 'subtle' }), now).ok
     ).toBe(true)
-    const loud = readings([[at('card'), reading({ borderColor: '#ffffff' }, '#1c1c21')]])
+    const loud = readings([[at('postCard'), reading({ borderColor: '#ffffff' }, '#1c1c21')]])
     expect(
-      judge(check({ element: 'card', property: 'borderColor', expect: 'subtle' }), loud).ok
+      judge(check({ element: 'postCard', property: 'borderColor', expect: 'subtle' }), loud).ok
     ).toBe(false)
   })
 
@@ -189,7 +189,7 @@ describe('checks', () => {
     const checks = readabilityChecks([
       { ...at('button', 'hover'), property: 'background' },
       { ...at('button', 'hover'), property: 'color' },
-      { ...at('card'), property: 'shadow' },
+      { ...at('postCard'), property: 'shadow' },
       { ...at('page'), property: 'background' },
     ])
     expect(checks).toEqual([

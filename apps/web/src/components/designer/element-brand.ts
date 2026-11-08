@@ -4,8 +4,8 @@
  * what every one of its kind has: the panel shows it as set at its widest
  * scope, writes there, and Reset clears it back to the theme, so an exact
  * value never hides behind a style value. Exact values another element
- * shares (the menu's and buttons' label) and the brand's choices are what a
- * row has from the brand.
+ * shares (the menu's and buttons' label, post cards' and panels' card) and
+ * the brand's choices are what a row has from the brand.
  */
 import { setTune, type TuneGroupName } from '@/components/admin/settings/appearance/tune-fields'
 import { brandValue, writeAt, type ElementContext } from '@/lib/shared/design/override-cascade'
@@ -77,7 +77,12 @@ export const EXACT_ROWS: Partial<
     weight: [ref('label', 'weight')],
     tracking: [ref('label', 'tracking')],
   },
-  card: {
+  postCard: {
+    radius: [ref('card', 'radius')],
+    borderWidth: [ref('card', 'border')],
+    shadow: [ref('card', 'shadow')],
+  },
+  panel: {
     radius: [ref('card', 'radius')],
     borderWidth: [ref('card', 'border')],
     shadow: [ref('card', 'shadow')],
@@ -92,8 +97,8 @@ export const EXACT_ROWS: Partial<
 
 /**
  * Each element's own tune group, which reaches only its kind: every one of
- * them has its values. The label group is the menu's and buttons' both, so it
- * is no one element's.
+ * them has its values. The label group is the menu's and buttons' both, and
+ * the card group post cards' and panels' both, so neither is one element's.
  */
 const OWN_GROUP: Partial<Record<StyleElement, TuneGroupName>> = {
   headline: 'headline',
@@ -101,7 +106,6 @@ const OWN_GROUP: Partial<Record<StyleElement, TuneGroupName>> = {
   subtitle: 'subtitle',
   body: 'body',
   button: 'button',
-  card: 'card',
   input: 'field',
   link: 'link',
 }

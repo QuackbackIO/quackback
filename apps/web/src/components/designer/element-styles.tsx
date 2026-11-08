@@ -440,14 +440,36 @@ function Sample({ element, force }: { element: StyleElement; force?: StyleState 
           Roadmap
         </span>
       )
-    case 'card':
+    case 'tab':
+      return (
+        <button
+          type="button"
+          data-qb-part="tab"
+          aria-pressed={force === 'current'}
+          className="rounded-item px-3 py-1.5 text-sm text-muted-foreground"
+          {...f}
+        >
+          Trending
+        </button>
+      )
+    case 'postCard':
       return (
         <div
           data-qb-surface="card"
+          data-qb-post=""
           className="w-40 rounded-lg border border-border/50 bg-card p-3 text-sm"
           {...f}
         >
           A post card
+        </div>
+      )
+    case 'panel':
+      return (
+        <div
+          data-qb-surface="card"
+          className="w-40 rounded-lg border border-border/50 bg-card p-3 text-sm"
+        >
+          Filters
         </div>
       )
     case 'block':

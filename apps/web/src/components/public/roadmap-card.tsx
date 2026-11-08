@@ -42,6 +42,7 @@ export function RoadmapCard({
     // is inside the other.
     <div
       data-qb-surface="card"
+      data-qb-post=""
       className="roadmap-card relative flex bg-[var(--post-card-background)] [border-radius:var(--radius)] border border-[var(--post-card-border)]/50 shadow-sm hover:bg-[var(--post-card-background)]/80 transition-colors"
     >
       {!votes ? null : voting ? (

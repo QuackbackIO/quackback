@@ -50,6 +50,7 @@ const gates: PortalPageGates = {
 function show(selection: Selection | null, page: DesignerPage, start = defaultDesign()) {
   const seen = { design: start, labels: [] as Array<string | undefined> }
   const onSelect = vi.fn()
+  const onElement = vi.fn()
   const menu = { act: vi.fn(), land: vi.fn(), setAdding: vi.fn() }
   function Harness() {
     const [design, setDesign] = useState(start)
@@ -73,13 +74,14 @@ function show(selection: Selection | null, page: DesignerPage, start = defaultDe
         locale="en"
         menu={menu}
         onSelect={onSelect}
+        onElement={onElement}
         onTheme={vi.fn()}
         say={vi.fn()}
       />
     )
   }
   render(<Harness />)
-  return { seen, onSelect, menu }
+  return { seen, onSelect, onElement, menu }
 }
 
 const crumbs = () => screen.getByRole('navigation', { name: 'Where it is' }).textContent
@@ -156,7 +158,7 @@ describe('PickedSettings', () => {
   })
 
   it('splits the feed: this page’s sort apart from every post card’s look', () => {
-    const { seen } = show('feed', 'feedback')
+    const { seen, onElement } = show('feed', 'feedback')
     const posts = screen.getByRole('region', { name: 'Posts' })
     const cards = screen.getByRole('region', { name: 'Post cards' })
     expect(posts.querySelector('[data-reach-note]')?.textContent).toBe(
@@ -165,15 +167,18 @@ describe('PickedSettings', () => {
     expect(cards.querySelector('[data-reach-note]')?.textContent).toBe('Applies to every post card')
     fireEvent.click(within(posts).getByRole('radio', { name: 'New' }))
     expect(seen.design.pages.feedback.defaultSort).toBe('new')
-    // Every name in full, as the vocabulary has it.
-    expect(within(cards).getByRole('radiogroup', { name: 'Density' }).textContent).toBe(
-      'CompactComfortableSpacious'
-    )
-    fireEvent.click(within(cards).getByRole('radio', { name: 'Rows' }))
-    expect(seen.design.layout.cards).toBe('list')
+    // The look is the element's: a row picks it.
+    fireEvent.click(within(cards).getByRole('button', { name: /^Post card look: / }))
+    expect(onElement).toHaveBeenCalledWith('postCard')
     fireEvent.click(within(cards).getByRole('switch', { name: 'Show tags' }))
     expect(seen.design.layout.postCardHides).toEqual(['tags'])
-    expect(seen.labels).toEqual(['Default sort', 'Cards', 'Post cards'])
+    expect(seen.labels).toEqual(['Default sort', 'Post cards'])
+  })
+
+  it('picks the menu items’ element from the header’s look row', () => {
+    const { onElement } = show('header', 'feedback')
+    fireEvent.click(screen.getByRole('button', { name: /^Menu look: / }))
+    expect(onElement).toHaveBeenCalledWith('navItem')
   })
 
   it('turns the welcome message off with its words left to the page', () => {

@@ -9,8 +9,6 @@
 import type { ReactNode } from 'react'
 import { closestWeight, uploadedFonts } from '@/components/admin/settings/appearance/fonts-section'
 import { setTune } from '@/components/admin/settings/appearance/tune-fields'
-import { fontWeights } from '@/lib/shared/design/fonts'
-import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { StyleElement, StyleProp } from '@/lib/shared/design/style-tokens'
 import { everywhereValue, writeEverywhere } from './element-brand'
@@ -107,15 +105,38 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
       ]
     case 'vote':
       return second ? [tint] : []
-    case 'card':
+    case 'postCard':
       return [
         {
           label: 'Look',
           value: layout.cards,
           options: tiles(STYLE_CHOICES.cards),
-          apply: (draft, v) => void (draft.layout.cards = v as typeof layout.cards),
+          apply: (draft, v) => {
+            draft.layout.cards = v as typeof layout.cards
+            // The card exact values post cards and panels share would take the look's place.
+            setTune(draft, 'card', 'border', undefined)
+            setTune(draft, 'card', 'shadow', undefined)
+          },
           masks: ['borderWidth', 'shadow'],
+          reach: 'Post cards and panels',
         },
+        ...(layout.cards === 'raised'
+          ? [
+              {
+                label: 'Shadow',
+                value:
+                  design.tune?.card?.shadow && design.tune.card.shadow !== 'none'
+                    ? design.tune.card.shadow
+                    : 'lifted',
+                options: tiles(STYLE_CHOICES.shadow),
+                apply: (draft: PortalDesign, v: string) =>
+                  setTune(draft, 'card', 'shadow', v as 'soft'),
+                prop: 'shadow' as const,
+                masks: ['shadow'] as const,
+                reach: 'Post cards and panels',
+              },
+            ]
+          : []),
         {
           label: 'Density',
           value: layout.density,
@@ -179,21 +200,6 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
             void (draft.brand.fonts.headlineColour = v as Fonts['headlineColour']),
           prop: 'color',
           masks: ['color'],
-        },
-      ]
-    case 'heading':
-      return [
-        {
-          label: 'Weight',
-          value: String(fonts.headingWeight),
-          options: DESIGN_OPTIONS.headingWeight
-            .filter((weight) => fontWeights(fonts.heading).includes(weight))
-            .map((weight) => [String(weight), String(weight)] as const),
-          apply: (draft, v) =>
-            void (draft.brand.fonts.headingWeight = Number(v) as Fonts['headingWeight']),
-          prop: 'weight',
-          masks: ['weight'],
-          reach: 'Section headings, and headlines without their own weight',
         },
       ]
     default:
@@ -365,7 +371,8 @@ export function ElementStyleSection({
       </PropertyRow>
     )
   }
-  if (element === 'card') rows.push(<CardTitleRows key="title" design={design} update={update} />)
+  if (element === 'postCard')
+    rows.push(<CardTitleRows key="title" design={design} update={update} />)
   if (!rows.length) return null
   return <PropertySection title={SECTIONS.style}>{rows}</PropertySection>
 }

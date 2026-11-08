@@ -30,6 +30,7 @@ import {
 import { PAGE_NAMES } from '@/lib/shared/design/outline'
 import type { PortalPageGates, PortalPageType } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { StyleElement } from '@/lib/shared/design/style-tokens'
 import { cn } from '@/lib/shared/utils'
 import {
   PropertiesPanel,
@@ -39,7 +40,8 @@ import {
   type Crumb,
 } from './properties/properties-panel'
 import { ReachNote } from './properties/scope-line'
-import { COLOUR_NAMES, WORDS } from './properties/words'
+import { SummaryRow } from './properties/summary-row'
+import { STYLE_CHOICES, WORDS } from './properties/words'
 import { Tag } from './tag'
 import { useNewParts } from './use-new-parts'
 
@@ -52,13 +54,6 @@ const LAYOUTS = [
   ['stacked', 'Stacked'],
   ['inline', 'Inline'],
   ['centered', 'Centred'],
-] as const
-
-const MENU_STYLES = [
-  ['tabs', 'Tabs'],
-  ['underline', 'Underline'],
-  ['pills', 'Pills'],
-  ['plain', 'Plain'],
 ] as const
 
 /** What the logo shows, in a word or two, on its row. */
@@ -118,6 +113,7 @@ export function HeaderPanel({
   onAdd,
   onLogo,
   onLanding,
+  onElement,
 }: {
   crumbs: readonly Crumb[]
   /** How many pages the builder shows, each with the header. */
@@ -130,6 +126,8 @@ export function HeaderPanel({
   /** Picks the logo, its own element in the header. */
   onLogo: () => void
   onLanding: (target: 'home' | PortalPageType) => void
+  /** Picks the element whose look a summary row shows: every menu item. */
+  onElement?: (element: StyleElement) => void
 }) {
   const id = useId()
   const fresh = useNewParts(gates)
@@ -239,25 +237,11 @@ export function HeaderPanel({
       </PropertySection>
 
       <PropertySection title={HEADER_COPY.menuStyle}>
-        <PropertyRow label="Style">
-          <PropertyTiles
-            label={HEADER_COPY.menuStyle}
-            value={layout.nav}
-            options={MENU_STYLES}
-            onChange={(nav) => update((draft) => void (draft.layout.nav = nav), 'Menu style')}
-          />
-        </PropertyRow>
-        <PropertyRow label="Text">
-          <PropertyTiles
-            label="Menu text"
-            value={layout.navText ?? 'muted'}
-            options={[
-              ['muted', COLOUR_NAMES.muted],
-              ['ink', COLOUR_NAMES.ink],
-            ]}
-            onChange={(text) => update((draft) => void (draft.layout.navText = text), 'Menu text')}
-          />
-        </PropertyRow>
+        <SummaryRow
+          label="Menu look"
+          value={`${STYLE_CHOICES.menu[layout.nav]} · ${STYLE_CHOICES.menuText[layout.navText ?? 'muted']}`}
+          onOpen={() => onElement?.('navItem')}
+        />
       </PropertySection>
     </PropertiesPanel>
   )

@@ -13,6 +13,11 @@ import { brandOf, everywhereValue, writeEverywhere } from '../element-brand'
 describe('an element’s brand layer', () => {
   it('reads a shared exact value and the brand’s choices as what the row has from the brand', () => {
     const design = defaultDesign()
+    // The card group reaches post cards and panels both, so it is neither one's own.
+    design.tune = { card: { border: 2, shadow: 'deep' } }
+    expect(brandOf(design, 'postCard', 'borderWidth')).toBe(2)
+    expect(brandOf(design, 'panel', 'shadow')).toBe('deep')
+    expect(everywhereValue(design, 'postCard', 'borderWidth')).toBeUndefined()
     design.tune = { label: { weight: 500 } }
     expect(brandOf(design, 'button', 'weight')).toBe(500)
     expect(brandOf(design, 'navItem', 'weight')).toBe(500)
@@ -54,17 +59,13 @@ describe('an element’s brand layer', () => {
 
   it('keeps a value its exact value cannot hold in the style, clearing the exact value', () => {
     const design = defaultDesign()
-    design.tune = { card: { radius: 12 }, button: { case: 'upper', fill: 'support' } }
-    // Past a card's exact range.
-    writeEverywhere(design, 'card', 'radius', 200)
-    expect(design.style).toEqual({ card: { base: { radius: 200 } } })
+    design.tune = { button: { case: 'upper', fill: 'support' } }
     // Lower case has no exact value.
     writeEverywhere(design, 'button', 'case', 'lower')
     // Colours stay in the style, which follows dark mode; the exact fill is light mode's only.
     writeEverywhere(design, 'button', 'background', 'ink')
     expect(design.tune).toBeUndefined()
     expect(design.style).toEqual({
-      card: { base: { radius: 200 } },
       button: { base: { case: 'lower', background: 'ink' } },
     })
   })
@@ -72,7 +73,11 @@ describe('an element’s brand layer', () => {
   it('never writes a value another element shares', () => {
     const design = defaultDesign()
     writeEverywhere(design, 'button', 'size', 15)
+    writeEverywhere(design, 'postCard', 'radius', 12)
     expect(design.tune).toBeUndefined()
-    expect(design.style).toEqual({ button: { base: { size: 15 } } })
+    expect(design.style).toEqual({
+      button: { base: { size: 15 } },
+      postCard: { base: { radius: 12 } },
+    })
   })
 })

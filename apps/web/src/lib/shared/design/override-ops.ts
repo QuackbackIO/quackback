@@ -353,7 +353,7 @@ export function overrideLabel(o: OverrideOp): string {
 const SCOPE_ELEMENTS: Partial<Record<DesignAiScope, readonly StyleElement[]>> = {
   button: ['button'],
   secondary: ['secondary', 'ghost'],
-  card: ['card'],
+  card: ['postCard', 'panel'],
   vote: ['vote'],
   field: ['input'],
   status: ['badge'],

@@ -36,6 +36,7 @@ function show(change?: (draft: PortalDesign) => void) {
     onAdd: vi.fn(),
     onLogo: vi.fn(),
     onLanding: vi.fn(),
+    onElement: vi.fn(),
   }
   function Harness() {
     const [design, setDesign] = useState(start)
@@ -157,6 +158,15 @@ describe('HeaderPanel', () => {
   it('has no blend into a hero that is plain', () => {
     show((draft) => void (draft.layout.band = 'none'))
     expect(screen.queryByRole('switch', { name: 'Header blends into the hero' })).toBeNull()
+  })
+
+  it('shows the menu items’ look as one row that picks their element, never a second editor', () => {
+    const { onElement, seen } = show((draft) => void (draft.layout.nav = 'pills'))
+    expect(screen.queryByRole('radiogroup', { name: 'Menu style' })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Menu text' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Menu look: Pills · Grey' }))
+    expect(onElement).toHaveBeenCalledWith('navItem')
+    expect(seen.labels).toEqual([])
   })
 
   it('leads to the logo, its own element, and to adding to the menu', () => {

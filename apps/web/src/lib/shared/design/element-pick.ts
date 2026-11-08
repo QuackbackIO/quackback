@@ -32,6 +32,7 @@ export interface ElementPick {
 export const PICKABLE: readonly StyleElement[] = [
   'vote',
   'navItem',
+  'tab',
   'button',
   'secondary',
   'ghost',
@@ -45,7 +46,8 @@ export const PICKABLE: readonly StyleElement[] = [
   'image',
   'divider',
   'body',
-  'card',
+  'postCard',
+  'panel',
 ]
 
 const sectionNode = (node: Element) => node.closest('[data-qb-section]')
@@ -290,7 +292,9 @@ const ONE: Record<StyleElement, string> = {
   ghost: 'Quiet button',
   link: 'Link',
   navItem: 'Menu item',
-  card: 'Card',
+  tab: 'Tab',
+  postCard: 'Post card',
+  panel: 'Panel',
   block: 'Home block',
   input: 'Field',
   badge: 'Status marker',

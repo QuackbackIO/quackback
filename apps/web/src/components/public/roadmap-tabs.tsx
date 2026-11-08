@@ -37,10 +37,11 @@ export function RoadmapTabs({ roadmaps, selectedId, onSelect }: RoadmapTabsProps
               key={roadmap.id}
               type="button"
               role="tab"
+              data-qb-part="tab"
               aria-selected={isActive}
               onClick={() => onSelect(roadmap.id)}
               className={cn(
-                'rounded-full text-sm px-3 py-1 whitespace-nowrap transition-colors shrink-0',
+                'rounded-item text-sm px-3 py-1 whitespace-nowrap transition-colors shrink-0',
                 isActive
                   ? 'bg-foreground/10 text-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'

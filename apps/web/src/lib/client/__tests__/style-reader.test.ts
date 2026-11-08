@@ -112,7 +112,7 @@ describe('the builder’s loop', () => {
         styles: [],
         checks: [
           {
-            element: 'card',
+            element: 'postCard',
             state: 'base',
             block: '',
             target: '',

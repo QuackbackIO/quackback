@@ -76,9 +76,12 @@ describe('the style token registry', () => {
       ['style.headline.hover.color', '#000000'],
       ['style.button.base.radius', 2000],
       ['style.button.base.background', 'chartreuse'],
-      ['style.card.focus.ring', 'accent'],
+      ['style.postCard.focus.ring', 'accent'],
       // Focus rings stay neutral: no colour, only a width.
       ['style.button.focus.ring', 'accent'],
+      ['style.panel.hover.background', 'raised'],
+      ['style.panel.base.lift', 2],
+      ['style.card.base.radius', 4],
       ['style.button.base.lift', 2],
     ] as const
     for (const [path, value] of bad) {
@@ -97,7 +100,7 @@ describe('the style token registry', () => {
     expect(stylePath('style.button.focus.ring')).toBeNull()
     expect(stylePath('styleDark.button.focus.ring')).toBeNull()
     expect(stylePath('style.button.focus.ringWidth')).toBe('style.button.focus.ringWidth')
-    expect(blockStylePath('style.card.hover.lift')).toBe('style.card.hover.lift')
+    expect(blockStylePath('style.postCard.hover.lift')).toBe('style.postCard.hover.lift')
     expect(blockStylePath('style.header.background')).toBeNull()
     expect(readStyleValue('radius', '12px')).toBe(12)
     expect(readStyleValue('background', 'brand colour')).toBe('accent')
@@ -158,11 +161,11 @@ describe('element styles, drawn', () => {
     const r = resolveDesign(
       design((d) => {
         d.brand.light.accent = '#4f46e5'
-        d.style = { card: { base: { borderColor: 'accent' } } }
+        d.style = { postCard: { base: { borderColor: 'accent' } } }
       })
     )
-    expect(r.tokens.light['--qb-st-card-base-borderColor']).toBe(r.light!.primary)
-    expect(r.tokens.dark['--qb-st-card-base-borderColor']).toBe(r.dark!.primary)
+    expect(r.tokens.light['--qb-st-postCard-base-borderColor']).toBe(r.light!.primary)
+    expect(r.tokens.dark['--qb-st-postCard-base-borderColor']).toBe(r.dark!.primary)
   })
 
   it('draws hover and pressed fills from a set fill, a little darker, with readable text', () => {
@@ -273,9 +276,9 @@ describe('element styles, drawn', () => {
             grid: { x: 0, y: 0, w: 6, h: 1 },
           },
         ] as PortalDesign['pages']['home']['blocks']
-        d.style = { card: { base: { radius: 4 } } }
+        d.style = { postCard: { base: { radius: 4 } } }
         d.pages.home.blocks[0]!.look = {
-          style: { block: { base: { background: 'raised' } }, card: { hover: { lift: 2 } } },
+          style: { block: { base: { background: 'raised' } }, postCard: { hover: { lift: 2 } } },
         }
       })
     )
@@ -283,9 +286,41 @@ describe('element styles, drawn', () => {
     expect(r.styleCss).toContain(
       '[data-portal-theme]:not(#qb) [data-qb-section="block-ideas00001"] {'
     )
-    expect(r.styleCss).toContain(
-      '[data-qb-section="block-ideas00001"] [data-qb-surface=card]:is(:hover'
+    expect(r.styleCss).toContain('[data-qb-section="block-ideas00001"] [data-qb-post]:is(:hover')
+  })
+
+  it('styles tabs and filters, pressed or selected ones as Current', () => {
+    const r = resolveDesign(
+      design((d) => {
+        d.style = { tab: { base: { radius: 0 }, current: { background: 'accent' } } }
+      })
     )
+    expect(r.styleCss).toContain('[data-qb-part=tab] { border-radius')
+    expect(r.styleCss).toContain(
+      '[data-qb-part=tab]:is(:is([aria-pressed=true], [aria-selected=true], [aria-current=page]), [data-qb-force=current]) { background'
+    )
+    // Its text moves until it reads on the brand colour.
+    expect(r.tokens.light['--qb-st-tab-current-color']).toBeDefined()
+  })
+
+  it('styles post cards apart from panels, a post card focused while what it holds is', () => {
+    const r = resolveDesign(
+      design((d) => {
+        d.style = {
+          postCard: { hover: { lift: 2 }, focus: { borderColor: 'accent' } },
+          panel: { base: { radius: 0 } },
+        }
+      })
+    )
+    expect(r.styleCss).toContain('[data-qb-post]:is(:hover, [data-qb-force=hover])')
+    expect(r.styleCss).toContain(
+      '[data-qb-post]:is(:has(:focus-visible), [data-qb-force=focus]) { border-color'
+    )
+    expect(r.styleCss).toContain(
+      '[data-portal-theme]:not(#qb) [data-qb-surface=card]:not([data-qb-post]) { border-radius'
+    )
+    // A panel never lifts: nothing clicks it.
+    expect(r.styleCss).not.toMatch(/data-qb-post\]\):is\(:hover/)
   })
 
   it('draws a divider as one line in its colour, width and style', () => {

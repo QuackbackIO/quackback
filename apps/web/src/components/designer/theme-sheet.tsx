@@ -11,6 +11,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/16/solid'
 import { CssFields, type CssWarning } from '@/components/admin/settings/appearance/css-section'
 import { designerAdvancedOpened } from '@/lib/client/builder-events'
+import { hoverTileOf, writeHoverTile, type HoverTile } from '@/lib/shared/design/hover-lift'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
@@ -243,18 +244,9 @@ export function ThemeContent({
               <PropertyRow label={THEME.hover}>
                 <PropertyTiles
                   label={THEME.hover}
-                  value={design.shape.hover ?? 'none'}
-                  options={
-                    Object.entries(THEME.hovers) as Array<
-                      [NonNullable<PortalDesign['shape']['hover']> | 'none', string]
-                    >
-                  }
-                  onChange={(hover) =>
-                    update((draft) => {
-                      if (hover === 'none') delete draft.shape.hover
-                      else draft.shape.hover = hover
-                    }, THEME.hover)
-                  }
+                  value={hoverTileOf(design)}
+                  options={Object.entries(THEME.hovers) as Array<[HoverTile, string]>}
+                  onChange={(hover) => update((draft) => writeHoverTile(draft, hover), THEME.hover)}
                 />
               </PropertyRow>
               <PageBackgroundEntry

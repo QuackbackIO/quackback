@@ -60,11 +60,24 @@ describe('an element’s Style section', () => {
   })
 
   it('holds a post card title’s exact size, its only home', () => {
-    const { box } = mount('card')
+    const { box } = mount('postCard')
     fireEvent.change(screen.getByLabelText('Title size'), { target: { value: '18' } })
     expect(box.design.tune).toEqual({ card: { titleSize: 18 } })
     fireEvent.click(screen.getByRole('button', { name: 'Reset title size' }))
     expect(box.design.tune).toBeUndefined()
+  })
+
+  it('keeps the post cards’ shadow out of Style: it is the Shadow row’s, while the look is Raised', () => {
+    const design = defaultDesign()
+    design.layout.cards = 'raised'
+    mount('postCard', design)
+    expect(screen.getByRole('radiogroup', { name: 'Look' })).toBeTruthy()
+    expect(screen.queryByRole('radiogroup', { name: 'Shadow' })).toBeNull()
+  })
+
+  it('leaves the heading weight to the brand kit’s fonts, its one home', () => {
+    mount('heading')
+    expect(screen.queryByRole('radiogroup', { name: 'Weight' })).toBeNull()
   })
 
   it('is not there for an element with no brand choices', () => {

@@ -41,8 +41,10 @@ beforeEach(() => {
       </section>
       <section id="block" data-qb-section="block-abcdefgh" data-qb-part="home-block" data-qb-surface="card">
         <h2 id="heading" data-qb-part="section-heading">Top posts</h2>
-        <article id="card1" data-qb-surface="card"><button id="vote1" data-qb-part="vote-button">3</button></article>
-        <article id="card2" data-qb-surface="card"><button id="vote2" data-qb-part="vote-button">5</button></article>
+        <article id="card1" data-qb-surface="card" data-qb-post=""><button id="vote1" data-qb-part="vote-button">3</button></article>
+        <article id="card2" data-qb-surface="card" data-qb-post=""><button id="vote2" data-qb-part="vote-button">5</button></article>
+        <aside id="panel" data-qb-surface="card"><span id="panel-words">Filters</span></aside>
+        <button id="tab" data-qb-part="tab" aria-pressed="true"><span id="tab-words">Top</span></button>
         <a id="more" data-qb-link="" href="/">All posts</a>
       </section>
     </div>`
@@ -72,7 +74,19 @@ describe('pickAt', () => {
       section: 'block-abcdefgh',
       index: 1,
     })
-    expect(at('card1')?.pick).toMatchObject({ element: 'card', part: null, index: 0 })
+    expect(at('card1')?.pick).toMatchObject({ element: 'postCard', part: null, index: 0 })
+  })
+
+  it('picks a tab as Tabs and filters, never the block it sits in', () => {
+    expect(at('tab-words')?.pick).toMatchObject({ element: 'tab', part: null, index: 0 })
+    expect(pickName(at('tab')!.pick, design, 'home')).toBe('Tab')
+  })
+
+  it('picks a post card as Post cards and a box that is no post as Panels', () => {
+    expect(at('card2')?.pick).toMatchObject({ element: 'postCard', index: 1 })
+    expect(at('panel-words')?.pick).toMatchObject({ element: 'panel', index: 0 })
+    expect(pickName(at('card2')!.pick, design, 'home')).toBe('Post card')
+    expect(pickName(at('panel')!.pick, design, 'home')).toBe('Panel')
   })
 
   it('leaves the block’s own box to the block', () => {
@@ -93,10 +107,12 @@ describe('pickAt', () => {
   it('lists what a block holds, in reading order, for moving between them', () => {
     expect(picksIn(document, 'block-abcdefgh', design, 'home').map((p) => p.element)).toEqual([
       'heading',
-      'card',
+      'postCard',
       'vote',
-      'card',
+      'postCard',
       'vote',
+      'panel',
+      'tab',
       'link',
     ])
   })

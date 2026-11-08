@@ -140,9 +140,9 @@ export const OVERRIDE_CASES: EvalCase[] = [
   {
     name: 'override page: lifted cards on the changelog',
     request: 'Give the cards on the changelog a lifted shadow, just there',
-    ops: [{ op: 'override', target: 'page:changelog', key: 'card.base.shadow', value: 'lifted' }],
+    ops: [{ op: 'override', target: 'page:changelog', key: 'panel.base.shadow', value: 'lifted' }],
     check: (d) =>
-      valueOf(own(d, 'page:changelog:card'), 'base', 'shadow') === 'lifted' && noWider(d, 'card'),
+      valueOf(own(d, 'page:changelog:panel'), 'base', 'shadow') === 'lifted' && noWider(d, 'panel'),
     touches: OVERRIDES,
   },
   {

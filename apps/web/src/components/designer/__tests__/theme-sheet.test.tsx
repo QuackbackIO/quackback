@@ -199,14 +199,32 @@ describe('Theme', () => {
     expect(seen.design.layout.width).toBe('wide')
   })
 
-  it('sets hover motion under Style, None clearing it', () => {
+  it('writes Hover’s Lift as post cards’ and main buttons’ hover under Style, None taking it back', () => {
     const { seen } = renderTheme(defaultDesign())
     const style = screen.getByRole('region', { name: 'Style' })
     expect(within(style).getByRole('radiogroup', { name: 'Hover' })).toBeTruthy()
     fireEvent.click(radio('Hover', 'Lift'))
-    expect(seen.design.shape.hover).toBe('lift')
+    // One source: the element Hover values, never a motion of its own.
+    expect(seen.design.shape).not.toHaveProperty('hover')
+    expect(seen.design.style).toEqual({
+      postCard: { hover: { lift: 2, shadow: 'floating' } },
+      button: { hover: { lift: 2, shadow: 'floating' } },
+    })
+    expect(radio('Hover', 'Lift').getAttribute('aria-checked')).toBe('true')
     fireEvent.click(radio('Hover', 'None'))
-    expect(seen.design.shape.hover).toBeUndefined()
+    expect(seen.design.shape).not.toHaveProperty('hover')
+    expect(seen.design.style).toBeUndefined()
+  })
+
+  it('keeps an element’s own hover when Lift goes, and shows Lift for a lift set on post cards', () => {
+    const design = defaultDesign()
+    design.style = { postCard: { hover: { lift: 4, borderColor: 'accent' } } }
+    const { seen } = renderTheme(design)
+    expect(radio('Hover', 'Lift').getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(radio('Hover', 'Arrow'))
+    expect(seen.design.shape.hover).toBe('arrow')
+    expect(seen.design.style).toEqual({ postCard: { hover: { borderColor: 'accent' } } })
+    expect(radio('Hover', 'Arrow').getAttribute('aria-checked')).toBe('true')
   })
 
   it('opens at Style when asked from elsewhere, such as the page’s width', () => {
@@ -247,8 +265,43 @@ describe('Theme', () => {
     expect(elements.getByRole('button', { name: /^Main buttons/ }).textContent).toBe(
       'Main buttons2 set·Brand colour · Pill'
     )
-    for (const name of ['Cards', 'Menu items', 'Page headlines', 'Home blocks', 'Images'])
+    for (const name of [
+      'Post cards',
+      'Panels',
+      'Menu items',
+      'Page headlines',
+      'Home blocks',
+      'Images',
+    ])
       expect(elements.getByRole('button', { name: new RegExp(`^${name}`) })).toBeTruthy()
+  })
+
+  it('lists the elements most changed first, in the order the portal is read', () => {
+    renderTheme(defaultDesign())
+    const names = within(screen.getByRole('region', { name: 'Elements' }))
+      .getAllByRole('listitem')
+      .map((item) => item.querySelector('span')!.textContent)
+    expect(names.slice(0, 11)).toEqual([
+      'Main buttons',
+      'Links',
+      'Menu items',
+      'Tabs and filters',
+      'Post cards',
+      'Panels',
+      'Vote boxes',
+      'Tags',
+      'Page headlines',
+      'Section headings',
+      'Fields',
+    ])
+  })
+
+  it('lists post cards, tabs and filters only while Feedback or the roadmap is on, and panels always', () => {
+    renderTheme(defaultDesign(), { gates: { ...ALL_ON, feedback: false, roadmap: false } })
+    const elements = within(screen.getByRole('region', { name: 'Elements' }))
+    expect(elements.queryByRole('button', { name: /^Post cards/ })).toBeNull()
+    expect(elements.queryByRole('button', { name: /^Tabs and filters/ })).toBeNull()
+    expect(elements.getByRole('button', { name: /^Panels/ })).toBeTruthy()
   })
 
   it('sets a brand choice and an exact value from an element’s panel, and keeps no second copy', () => {

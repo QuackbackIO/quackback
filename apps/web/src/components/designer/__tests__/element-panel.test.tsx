@@ -312,15 +312,38 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     expect(screen.queryByLabelText('Custom corners')).toBeNull()
   })
 
-  it('shows a section heading’s weight once, as the value in use', () => {
+  it('shows a section heading’s weight once, as its exact value: the brand kit’s fonts hold the brand’s', () => {
     const design = home()
     design.style = { heading: { base: { weight: 700 } } }
     const heading = { element: 'heading', part: null, section: null, index: 0 } as const
     mount(heading as never, design)
-    expect(screen.getAllByRole('radiogroup', { name: 'Weight' })).toHaveLength(1)
-    expect(tiles('Weight').getByRole('radio', { name: 'Custom', checked: true })).toBeTruthy()
-    expect((screen.getByLabelText('Custom weight') as HTMLInputElement).value).toBe('700')
-    expect(screen.queryAllByLabelText('Weight', { selector: 'input' })).toEqual([])
+    expect(screen.queryByRole('radiogroup', { name: 'Weight' })).toBeNull()
+    expect(screen.getAllByLabelText('Weight', { selector: 'input' })).toHaveLength(1)
+    expect((screen.getByLabelText('Weight', { selector: 'input' }) as HTMLInputElement).value).toBe(
+      '700'
+    )
+  })
+
+  it('folds the post cards’ shadow into their Shadow row while the look is Raised', () => {
+    const design = home()
+    design.layout.cards = 'bordered'
+    const postCard = { element: 'postCard', part: null, section: null, index: 0 } as const
+    const { box } = mount(postCard as never, design)
+    expect(screen.queryByRole('radio', { name: 'Deep' })).toBeTruthy()
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Shadow' })).queryByRole('radio', {
+        name: 'Custom',
+      })
+    ).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: 'Raised' }))
+    expect(
+      tiles('Shadow')
+        .getAllByRole('radio')
+        .map((t) => t.textContent)
+    ).toEqual(['Soft', 'Lifted', 'Floating', 'Deep', 'Custom'])
+    fireEvent.click(tiles('Shadow').getByRole('radio', { name: 'Deep' }))
+    expect(box.design.tune).toEqual({ card: { shadow: 'deep' } })
+    expect(box.labels.at(-1)).toBe('Post card: shadow, everywhere')
   })
 
   it('folds a headline’s scale into its Size row', () => {

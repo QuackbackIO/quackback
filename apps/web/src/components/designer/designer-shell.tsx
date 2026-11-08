@@ -602,6 +602,9 @@ export function DesignerShell({
                 onAdd={addBlock}
                 drag={addDrag}
                 onTheme={(more) => openTheme(more)}
+                onElement={(element) =>
+                  picking.pickElement({ element, part: null, section: null, index: 0 })
+                }
                 say={say}
                 onOverride={jumpTo}
                 onBlock={(id) => {

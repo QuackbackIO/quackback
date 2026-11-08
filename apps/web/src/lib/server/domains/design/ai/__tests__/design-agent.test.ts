@@ -315,13 +315,15 @@ describe('a step keeps to what was picked and how far the chip says it reaches',
     const reply = await step(
       {
         ...hoverDarker,
-        styles: [{ ...hoverDarker.styles[0]!, element: 'card', property: 'shadow', value: 'soft' }],
+        styles: [
+          { ...hoverDarker.styles[0]!, element: 'postCard', property: 'shadow', value: 'soft' },
+        ],
       },
       { message: 'Add a shadow to the cards', scope: 'band', within: 'every', page: 'home' }
     )
     if (!reply.ok) throw new Error(reply.message)
-    expect(reply.design.style?.card).toBeUndefined()
-    expect(reply.outcome.outOfScope).toEqual(['Cards on hover'])
+    expect(reply.design.style?.postCard).toBeUndefined()
+    expect(reply.outcome.outOfScope).toEqual(['Post cards on hover'])
   })
 
   it('tells the model how far it may reach', async () => {

@@ -244,6 +244,7 @@ export const STYLE_CHOICES = {
   tint: { neutral: 'Neutral', support: COLOUR_NAMES.support },
   cards: { bordered: 'Outline', raised: 'Raised', list: 'Rows', filled: 'Filled' },
   density: { compact: 'Compact', comfortable: 'Comfortable', spacious: 'Spacious' },
+  shadow: { soft: 'Soft', lifted: 'Lifted', floating: 'Floating', deep: 'Deep' },
   status: { colour: 'Dot', ink: COLOUR_NAMES.ink, pill: 'Tag', brand: 'Logo colours' },
   secondary: { outline: 'Outline', tint: 'Tint', text: 'Text only' },
 } as const

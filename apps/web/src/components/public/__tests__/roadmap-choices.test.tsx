@@ -168,6 +168,8 @@ describe('the roadmap’s choices', () => {
     expect(groups[0]!.querySelector('h2')!.textContent).toContain('Planned')
     expect(groups[1]!.querySelector('h2')!.textContent).toContain('In progress')
     expect(groups[0]!.querySelectorAll('[data-qb-surface="card"]')).toHaveLength(2)
+    // Each is a post card, which Post cards style apart from panels.
+    expect(groups[0]!.querySelectorAll('[data-qb-surface="card"][data-qb-post]')).toHaveLength(2)
   })
 
   it('leaves the vote box off the cards, keeping the count out of them too', () => {
