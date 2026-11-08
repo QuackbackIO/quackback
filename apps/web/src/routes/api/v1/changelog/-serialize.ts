@@ -10,6 +10,7 @@ export function formatChangelogResponse(entry: {
   contentJson: TiptapContent | null
   publishedAt: Date | null
   displayDate: Date | null
+  featuredImageUrl?: string | null
   createdAt: Date
   updatedAt: Date
   linkedPosts?: ChangelogLinkedPost[]
@@ -20,6 +21,7 @@ export function formatChangelogResponse(entry: {
     content: contentJsonToMarkdown(entry.contentJson, entry.content),
     publishedAt: entry.publishedAt?.toISOString() || null,
     displayDate: entry.displayDate?.toISOString() || null,
+    featuredImageUrl: entry.featuredImageUrl ?? null,
     createdAt: entry.createdAt.toISOString(),
     updatedAt: entry.updatedAt.toISOString(),
     linkedPosts: (entry.linkedPosts ?? []).map((post) => ({
