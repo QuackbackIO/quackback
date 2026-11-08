@@ -102,3 +102,10 @@ describe('DESIGN_DEFAULTS', () => {
     expect(logoValue(doc.brand.logo, 'height')).toBe(32)
   })
 })
+
+describe('defaults written out where a module must not load the table', () => {
+  it('give the hero image the same place as DESIGN_DEFAULTS', async () => {
+    const { IMAGE_PLACE_DEFAULT } = await import('../composer-width')
+    expect(IMAGE_PLACE_DEFAULT).toBe(DESIGN_DEFAULTS.layout.imagePlace)
+  })
+})

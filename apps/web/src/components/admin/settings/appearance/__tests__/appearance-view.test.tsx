@@ -62,6 +62,8 @@ function editorState(changed = false) {
     revision: 'rev1',
     authors: {},
     draftSavedAt: null,
+    // The server counts what the draft changes: the accent and the density.
+    waiting: changed ? 2 : 0,
     canPublish: true,
   }
 }

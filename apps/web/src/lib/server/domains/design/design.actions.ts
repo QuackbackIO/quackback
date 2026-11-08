@@ -11,6 +11,7 @@ import type { PortalDesignRevisionId } from '@quackback/ids'
 import { db, type PortalDesignSource } from '@/lib/server/db'
 import { DomainException } from '@/lib/shared/errors'
 import { convertLegacyBranding } from '@/lib/shared/design/convert'
+import { designChanges } from '@/lib/shared/design/diff'
 import { withBlockIds } from '@/lib/shared/design/home'
 import { mergePatch } from '@/lib/shared/design/merge-patch'
 import { resolveDesign, type DesignAdjustment } from '@/lib/shared/design/resolve'
@@ -69,6 +70,8 @@ export interface DesignEditorState {
   authors: Record<string, string>
   /** When the draft was last saved, or null without a draft. */
   draftSavedAt: string | null
+  /** How many changes the draft waits to publish; 0 without a draft. */
+  waiting: number
 }
 
 function reportOf(doc: PortalDesign): DesignReport {
@@ -129,6 +132,7 @@ export async function readDesignForEditing(): Promise<DesignEditorState> {
     revision,
     authors,
     draftSavedAt: state?.draftSavedAt?.toISOString() ?? null,
+    waiting: source === 'draft' ? designChanges(shownLive, shown).length : 0,
   }
 }
 

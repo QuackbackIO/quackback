@@ -66,6 +66,7 @@ function editorState() {
     revision: server.revision,
     authors: {},
     draftSavedAt: null,
+    waiting: 0,
     canPublish: true,
   }
 }

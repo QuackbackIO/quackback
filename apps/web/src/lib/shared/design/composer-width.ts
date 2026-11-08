@@ -9,13 +9,15 @@
  * centred, else the words' full width.
  */
 import type { PortalDesign } from './schema'
-import { layoutValue } from './defaults'
 
 /**
  * The steps, narrowest first. DESIGN_OPTIONS reads them from here, so the
  * portal's hero can size its composer without loading every design option.
  */
 export const COMPOSER_WIDTHS = ['narrow', 'medium', 'wide', 'full'] as const
+
+/** The hero image's place when the design names none. */
+export const IMAGE_PLACE_DEFAULT = 'side'
 
 export type ComposerWidth = (typeof COMPOSER_WIDTHS)[number]
 
@@ -59,7 +61,9 @@ export function drawnComposerWidth(
 export function composerSetting(design: PortalDesign): ComposerSetting {
   const { layout } = design
   return {
-    side: !!design.brand.bandImage && layoutValue(layout, 'imagePlace') === 'side',
+    // DESIGN_DEFAULTS.layout.imagePlace, written here (a test holds them equal): importing
+    // defaults.ts would split this module into one more script on every portal page.
+    side: !!design.brand.bandImage && (layout.imagePlace ?? IMAGE_PLACE_DEFAULT) === 'side',
     centred: (layout.bandAlign ?? (layout.header === 'centered' ? 'centre' : 'left')) === 'centre',
   }
 }
