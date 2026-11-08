@@ -47,6 +47,7 @@ export const SCOPE_LABEL: Record<DesignAiScope, string> = {
   changelog: 'Changelog page',
   help: 'Help Center page',
   post: 'Post page',
+  support: 'Support page',
 }
 
 /** An example request for each part, so the box says what a request there can change. */

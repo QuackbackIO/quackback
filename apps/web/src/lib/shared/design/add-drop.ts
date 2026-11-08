@@ -16,6 +16,7 @@ import type { PortalDesign } from './schema'
 const NEEDS: Partial<Record<HomeBlockType, PortalPageType>> = {
   composer: 'feedback',
   ideas: 'feedback',
+  boards: 'feedback',
   roadmap: 'roadmap',
   updates: 'changelog',
   help_search: 'help',

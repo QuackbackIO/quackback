@@ -12,7 +12,11 @@ import {
   setDesignerPreview,
   subscribeDesignerPreview,
 } from '@/components/public/preview-draft-context'
-import { setFeedWords, type FeedWordsPart } from '@/lib/shared/design/headline-words'
+import {
+  setFeedWords,
+  setRequestWords,
+  type FeedWordsPart,
+} from '@/lib/shared/design/headline-words'
 import { inLanguage } from '@/lib/shared/design/labels'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import { WordsRow } from './block-sections'
@@ -133,6 +137,42 @@ export function EmptyFeedWords({
         update={update}
         locale={locale}
         onEdit={() => setEmpty(true)}
+      />
+    </PropertySection>
+  )
+}
+
+/** What the support page's New request button says without words of its own. */
+const REQUEST_USUAL = 'New conversation'
+
+/** The support page's New request button words: its own in the language shown, and Edit. */
+export function RequestWords({
+  design,
+  update,
+  locale,
+}: {
+  design: PortalDesign
+  update: NamedUpdate
+  locale: string
+}) {
+  const words = design.pages.support?.request ?? {}
+  const own = words[locale] || null
+  const others = Object.entries(words)
+    .filter(([other, text]) => other !== locale && text)
+    .map(([, text]) => text)
+  const label = inLanguage(FIND.requestWords.label, locale)
+  return (
+    <PropertySection title={WORDS.words}>
+      <WordsRow
+        label={label}
+        find={FIND.requestWords.id}
+        text={own}
+        usual={REQUEST_USUAL}
+        set={!!own}
+        others={others}
+        resetLabel={`${WORDS.reset} to “${REQUEST_USUAL}”`}
+        onReset={() => update((draft) => setRequestWords(draft, locale, ''), `${label}: words`)}
+        onEdit={() => editOnCanvas('support.request')}
       />
     </PropertySection>
   )

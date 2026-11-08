@@ -27,15 +27,18 @@ import {
   type LookScope,
 } from './block-panel'
 import { BlockIcon } from './block-icon'
-import { BlockPanel } from './block-settings-panel'
+import { BlockPanel, SourceList } from './block-settings-panel'
 import type { Crumb } from './properties/properties-panel'
 import { BlockLayout, BlockLook, BlockWords, ElementRows, LOOK_NAMES } from './block-sections'
 import { ElementPanel } from './element-panel'
+import { RequestWords } from './feed-words'
 import { PropertySection } from './properties/properties-panel'
 import { ReachNote } from './properties/scope-line'
 import { BLOCK_ACTIONS, BLOCK_SECTIONS, BLOCK_TONES, WORDS } from './properties/words'
 import { useBlockActions } from './use-block-actions'
 import { useBlockSources } from './use-block-sources'
+import { FIND } from './find-rows'
+import { PropertyRow } from './properties/properties-panel'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -115,6 +118,7 @@ export function PickedBlock({
   })
   const picked = blocks.find((each, i) => blockKey(each, i) === selection)
   const sources = useBlockSources(picked?.type === 'roadmap' ? picked.roadmapId : null)
+  const shipped = sources.shipped ?? []
   const found = checks.map((text) => (
     <p key={text} className="flex items-start gap-1.5 text-foreground">
       <ExclamationTriangleIcon
@@ -164,6 +168,11 @@ export function PickedBlock({
         sources={sources}
         crumbs={crumbs ?? [{ label: PAGE_NAMES[page] }, { label: def.name }]}
         notes={found.length ? found : undefined}
+        words={
+          section === 'support.request' ? (
+            <RequestWords design={design} update={update} locale={locale} />
+          ) : undefined
+        }
         look={
           <SectionLook
             section={section}
@@ -321,6 +330,38 @@ export function PickedBlock({
               withHeading={false}
               change={(apply) => change(apply, labelOf(block.type, 'links'))}
             />
+          )
+        if (field.key === 'statusIds' && block.type === 'ideas')
+          return (
+            <>
+              <SourceList
+                field={field as Extract<typeof field, { kind: 'source' }>}
+                value={block.statusIds}
+                sources={sources}
+                onChange={(value) => set('statusIds', value)}
+              />
+              <PropertyRow label={FIND.recentlyShipped.label} find={FIND.recentlyShipped.id}>
+                <button
+                  type="button"
+                  disabled={shipped.length === 0}
+                  title={shipped.length ? undefined : 'No statuses in the Complete category yet'}
+                  onClick={() => {
+                    // The shipped statuses, newest first, as one step.
+                    const withStatuses = applySetting(block, 'statusIds', shipped.slice(0, 12))
+                    const next = withStatuses.ok
+                      ? applySetting(withStatuses.block, 'sort', 'new')
+                      : withStatuses
+                    if (!next.ok) return say(next.refusal)
+                    update((draft) => {
+                      draft.pages.home.blocks[index] = next.block
+                    }, `${name}: ${FIND.recentlyShipped.label.toLowerCase()}`)
+                  }}
+                  className="rounded text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none disabled:opacity-50"
+                >
+                  Use
+                </button>
+              </PropertyRow>
+            </>
           )
         return field.kind === 'links' ? null : undefined
       }}

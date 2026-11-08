@@ -4,6 +4,7 @@ import { FormattedMessage } from 'react-intl'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { ChangelogEntryDetail } from '@/components/portal/changelog'
 import { BackLink } from '@/components/ui/back-link'
+import { usePageChoices } from '@/components/public/use-page-choices'
 import type { ChangelogId } from '@quackback/ids'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
@@ -65,6 +66,7 @@ export const Route = createFileRoute('/_portal/changelog/$entryId')({
 function ChangelogEntryPage() {
   const { entryId } = Route.useLoaderData()
   const { data: entry } = useSuspenseQuery(publicChangelogQueries.detail(entryId))
+  const { shipped } = usePageChoices().changelog
 
   return (
     <div className="mx-auto max-w-[var(--qb-page-max,72rem)] w-full px-4 sm:px-6 py-8">
@@ -78,6 +80,7 @@ function ChangelogEntryPage() {
           featuredImageUrl={entry.featuredImageUrl}
           linkedPosts={entry.linkedPosts}
           categories={entry.categories}
+          shipped={shipped}
         />
       </div>
     </div>

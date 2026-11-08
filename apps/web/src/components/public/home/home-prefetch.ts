@@ -60,6 +60,8 @@ export function prefetchHome(
       void queryClient.prefetchQuery(portalQueries.statuses())
       void queryClient.prefetchQuery(portalQueries.boardCapabilities())
     }
+    if (block.type === 'boards' && gates.feedback)
+      void queryClient.prefetchQuery(portalQueries.boards())
     if (block.type === 'composer' && gates.feedback) {
       void queryClient.prefetchQuery(portalQueries.boards())
       void queryClient.prefetchQuery(portalQueries.boardCapabilities())

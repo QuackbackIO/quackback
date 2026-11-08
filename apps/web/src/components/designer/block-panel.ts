@@ -57,6 +57,8 @@ export function usualWords(block: HomeBlock, names: { roadmap?: string } = {}): 
       return { heading: say(homeMessages.contactTitle), link: say(homeMessages.contactStart) }
     case 'links':
       return { heading: block.title ?? say(homeMessages.linksTitle), link: null }
+    case 'boards':
+      return { heading: say(homeMessages.boardsTitle), link: say(homeMessages.ideasAll) }
     case 'welcome':
     case 'composer':
       return { heading: null, link: null }
@@ -91,6 +93,7 @@ const ELEMENTS: Record<HomeBlockType, readonly BlockStyleElement[]> = {
   status: ['block', 'heading', 'badge', 'link'],
   contact: ['block', 'heading', 'body', 'link'],
   links: ['block', 'heading', 'link'],
+  boards: ['block', 'heading', 'body', 'link'],
 }
 
 export const elementsOf = (type: HomeBlockType): readonly BlockStyleElement[] => ELEMENTS[type]
@@ -101,10 +104,12 @@ export const SECTION_ELEMENTS: Record<SectionType, readonly StyleElement[]> = {
   'help.topics': ['panel', 'heading', 'body'],
   'help.popular': ['panel', 'link'],
   'help.search': ['input'],
+  'help.article': ['panel', 'link'],
   'roadmap.board': ['postCard', 'vote', 'badge'],
   'post.vote': ['vote'],
   'post.details': ['panel', 'badge', 'chip'],
   'post.comments': ['panel', 'body'],
+  'support.request': ['button'],
 }
 
 /** A block's own look fields, other than its element looks. */

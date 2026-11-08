@@ -39,6 +39,9 @@ export type Selection =
   | 'entries'
   | 'topics'
   | 'popular'
+  /** The end of each help article; the support page's way to start a request. */
+  | 'article'
+  | 'request'
   | 'board'
   /** A post's one vote control, its details and its comments. */
   | 'vote'
@@ -101,8 +104,9 @@ const PAGE_SECTIONS: Record<
       key: 'popular',
       label: design.pages.help?.popular === false ? 'Popular articles (off)' : 'Popular articles',
     },
+    { key: 'article', label: 'End of article' },
   ],
-  support: () => [],
+  support: () => [{ key: 'request', label: 'New request' }],
 }
 
 /** The parts of a page, in the order a visitor meets them, after what every page shares. */

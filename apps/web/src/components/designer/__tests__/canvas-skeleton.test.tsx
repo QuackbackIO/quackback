@@ -20,7 +20,12 @@ describe('skeletonOf', () => {
       'part',
       'part',
     ])
-    expect(skeletonOf(outlineOf(design, 'post')).map((part) => part.kind)).toEqual(['header'])
+    expect(skeletonOf(outlineOf(design, 'post')).map((part) => part.kind)).toEqual([
+      'header',
+      'part',
+      'part',
+      'part',
+    ])
   })
 
   it('draws Home’s blocks at their width on the grid', () => {

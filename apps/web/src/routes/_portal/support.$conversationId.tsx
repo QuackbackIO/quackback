@@ -1,6 +1,6 @@
 import { createFileRoute, Navigate, useNavigate, useLoaderData } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
@@ -20,12 +20,48 @@ import {
   PORTAL_MY_CONVERSATIONS_QUERY_KEY,
 } from '@/lib/client/queries/portal-support'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
+import { isProductEnabled } from '@/lib/shared/types/settings'
+import { hcArticlePath } from '@/lib/shared/help-center-url'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { usePageChoices } from '@/components/public/use-page-choices'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 
 export const Route = createFileRoute('/_portal/support/$conversationId')({
   component: SupportThreadPage,
 })
+
+/** A help article suggested as a new request is written: enough to link to it. */
+type SuggestedArticle = { urlId: number; slug: string; title: string }
+
+/**
+ * Help articles for a request being written, from the help center's search,
+ * as the widget suggests them. Articles open in a new tab, so the words
+ * written so far stay.
+ */
+function useArticleSuggestions(on: boolean) {
+  const found = useRef(new Map<string, SuggestedArticle>())
+  return useMemo(() => {
+    if (!on) return undefined
+    return {
+      search: async (q: string, signal: AbortSignal) => {
+        const params = new URLSearchParams({ q, limit: '3' })
+        const res = await fetch(`/api/widget/kb-search?${params.toString()}`, { signal })
+        if (!res.ok) return []
+        const json = (await res.json()) as { data?: { articles?: SuggestedArticle[] } }
+        const articles = json.data?.articles ?? []
+        for (const article of articles) found.current.set(article.slug, article)
+        return articles
+      },
+      onSelect: (slug: string) => {
+        const article = found.current.get(slug)
+        if (!article) return
+        const path = hcArticlePath({ locale: DEFAULT_LOCALE, urlId: article.urlId, slug })
+        window.open(path, '_blank', 'noopener')
+      },
+    }
+  }, [on])
+}
 
 const OFFLINE: ConversationPresence = {
   agentsOnline: false,
@@ -58,6 +94,13 @@ function SupportThreadPage() {
 
   const user = session?.user
   const isLoggedIn = !!user && user.principalType !== 'anonymous'
+
+  // A new request suggests help articles as it is written, while the design
+  // asks for it and the help center is on.
+  const suggest = usePageChoices().support.suggest
+  const helpSearch = useArticleSuggestions(
+    suggest && conversationId === 'new' && isProductEnabled(settings?.featureFlags, 'helpCenter')
+  )
 
   // Team availability for the presence strip — portal twin of the widget's
   // shared presence query (cookie-authed, so no headers needed).
@@ -130,6 +173,7 @@ function SupportThreadPage() {
             uploadFile={upload}
             presence={presenceQuery.data ?? OFFLINE}
             embedOpenMode="navigate"
+            helpSearch={helpSearch}
             onConversationStarted={onConversationStarted}
           />
         </div>

@@ -162,6 +162,8 @@ export interface AiPlaces {
   categories: readonly NamedThing[]
   /** The public roadmaps' columns, each by its status. */
   columns?: readonly NamedThing[]
+  /** The posts' statuses, such as Planned or Complete. */
+  statuses?: readonly NamedThing[]
 }
 
 /** What a workspace has of one kind, none when it was not read. */
@@ -303,6 +305,7 @@ const BLOCK_ALIASES: Partial<Record<HomeBlockType, readonly string[]>> = {
   contact: ['contact', 'contact us'],
   welcome: ['welcome', 'welcome message'],
   links: ['links'],
+  boards: ['boards', 'board list', 'our boards'],
   roadmap: ['roadmap'],
 }
 
@@ -373,7 +376,12 @@ const SOURCES = {
   roadmaps: 'roadmap',
   categories: 'help topic',
   columns: 'roadmap column',
+  statuses: 'status',
 } as const
+
+/** A kind of thing, more than one. */
+const many = (kind: keyof typeof SOURCES) =>
+  SOURCES[kind].endsWith('s') ? `${SOURCES[kind]}es` : `${SOURCES[kind]}s`
 
 /** A workspace's thing by name or id, or why there is none. */
 function pick(
@@ -386,7 +394,7 @@ function pick(
     things.find((thing) => norm(thing.name) === norm(word)) ??
     things.find((thing) => norm(thing.name).startsWith(norm(word)))
   if (found) return found
-  if (things.length === 0) return `This workspace has no public ${SOURCES[kind]}s`
+  if (things.length === 0) return `This workspace has no public ${many(kind)}`
   return `There is no ${SOURCES[kind]} called ${quoted(word)}; there are ${listed(things.map((thing) => thing.name))}`
 }
 
@@ -457,7 +465,7 @@ function settingValue(
         return { value: ids[0] ?? null }
       }
       if (field.max && ids.length > field.max)
-        return { refusal: `${field.label} takes up to ${field.max} ${SOURCES[field.source]}s` }
+        return { refusal: `${field.label} takes up to ${field.max} ${many(field.source)}` }
       return { value: ids }
     }
     case 'image':
@@ -586,7 +594,7 @@ export function setHero(
 
 /* The pages' sections */
 
-const CHOICE_PAGES = ['changelog', 'help', 'roadmap', 'post'] as const
+const CHOICE_PAGES = ['changelog', 'help', 'roadmap', 'post', 'support'] as const
 /** Page settings that are no block of their own: each page's key, its field and its values. */
 const PAGE_EXTRAS: Record<
   string,

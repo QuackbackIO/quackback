@@ -13,10 +13,17 @@ const QUERY_KEY = ['changelog', 'my-subscription'] as const
 
 /**
  * Self-serve Subscribe/Subscribed toggle for a signed-in, identified portal
- * user. Rendered only when the caller is authenticated (anonymous visitors
- * have no email to subscribe) — see the `enabled` check the caller passes.
+ * user: the changelog's leading action. Anonymous visitors have no email to
+ * subscribe, so with `enabled` off it offers Subscribe as a way to sign in
+ * (`onSignIn`), or nothing without one.
  */
-export function ChangelogSubscribeButton({ enabled }: { enabled: boolean }) {
+export function ChangelogSubscribeButton({
+  enabled,
+  onSignIn,
+}: {
+  enabled: boolean
+  onSignIn?: () => void
+}) {
   const queryClient = useQueryClient()
   const { data } = useQuery({
     queryKey: QUERY_KEY,
@@ -34,14 +41,20 @@ export function ChangelogSubscribeButton({ enabled }: { enabled: boolean }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
   })
 
-  if (!enabled) return null
+  if (!enabled)
+    return onSignIn ? (
+      <Button size="sm" className="shrink-0 gap-1.5" onClick={onSignIn}>
+        <BellIcon className="h-4 w-4" />
+        <FormattedMessage id="portal.changelog.subscribe" defaultMessage="Subscribe" />
+      </Button>
+    ) : null
 
   const subscribed = data?.subscribed ?? false
   const isPending = subscribeMutation.isPending || unsubscribeMutation.isPending
 
   return (
     <Button
-      variant="outline"
+      variant={subscribed ? 'outline' : 'default'}
       size="sm"
       className="shrink-0 gap-1.5"
       disabled={isPending}
@@ -52,13 +65,11 @@ export function ChangelogSubscribeButton({ enabled }: { enabled: boolean }) {
       ) : (
         <BellIcon className="h-4 w-4" />
       )}
-      <span className="sr-only sm:not-sr-only">
-        {subscribed ? (
-          <FormattedMessage id="portal.changelog.subscribed" defaultMessage="Subscribed" />
-        ) : (
-          <FormattedMessage id="portal.changelog.subscribe" defaultMessage="Subscribe" />
-        )}
-      </span>
+      {subscribed ? (
+        <FormattedMessage id="portal.changelog.subscribed" defaultMessage="Subscribed" />
+      ) : (
+        <FormattedMessage id="portal.changelog.subscribe" defaultMessage="Subscribe" />
+      )}
     </Button>
   )
 }

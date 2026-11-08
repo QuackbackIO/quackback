@@ -50,10 +50,12 @@ export function aiScopeOf(selection: Selection | null): {
     entries: 'changelog',
     topics: 'help',
     popular: 'help',
+    article: 'help',
     board: 'roadmap',
     vote: 'post',
     details: 'post',
     comments: 'post',
+    request: 'support',
   }
   return { scope: scopes[selection] ?? 'site' }
 }

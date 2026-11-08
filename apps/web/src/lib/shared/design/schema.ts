@@ -33,6 +33,7 @@ import {
   helpChoicesSchema,
   postChoicesSchema,
   roadmapChoicesSchema,
+  supportChoicesSchema,
 } from './page-choices'
 import { pageBackgroundSchema, pageBackgroundsSchema } from './page-background'
 
@@ -262,6 +263,8 @@ export const homeBlockSchema = z.discriminatedUnion('type', [
       count: z.union([z.literal(3), z.literal(5), z.literal(10)]),
       /** Public boards to draw from; absent or empty is every board. */
       boardIds: z.array(boardIdSchema).max(10).optional(),
+      /** The statuses its posts are in, such as the shipped ones; absent or empty is the open ones. */
+      statusIds: z.array(postStatusIdSchema).max(12).optional(),
       /** What each post shows; absent is votes and status on, comments off. */
       showVotes: shown,
       showStatus: shown,
@@ -337,6 +340,15 @@ export const homeBlockSchema = z.discriminatedUnion('type', [
       ...own,
       /** Its line of words; absent is its usual one. */
       text: localizedUpTo(160).optional(),
+      ...linkWords,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('boards'),
+      ...own,
+      /** How many posts each board has; absent is on. */
+      showCounts: shown,
       ...linkWords,
     })
     .strict(),
@@ -594,6 +606,11 @@ export const portalDesignV2 = z
         help: helpChoicesSchema.optional(),
         roadmap: roadmapChoicesSchema.optional(),
         post: postChoicesSchema.optional(),
+        /** The support page's choices, and its New request button's own words by language. */
+        support: supportChoicesSchema
+          .extend({ request: localizedUpTo(24).optional() })
+          .strict()
+          .optional(),
       })
       .strict(),
     nav: z

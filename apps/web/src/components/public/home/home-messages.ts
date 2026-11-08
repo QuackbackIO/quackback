@@ -13,6 +13,8 @@ export const homeMessages = defineMessages({
   },
   ideasTitleTrending: { id: 'portal.home.ideas.titleTrending', defaultMessage: 'Trending posts' },
   ideasTitleNew: { id: 'portal.home.ideas.titleNew', defaultMessage: 'Newest posts' },
+  /** Top posts showing only shipped statuses. */
+  ideasTitleShipped: { id: 'portal.home.ideas.titleShipped', defaultMessage: 'Recently shipped' },
   ideasAll: {
     id: 'portal.home.ideas.all',
     defaultMessage: 'See all posts',
@@ -39,6 +41,11 @@ export const homeMessages = defineMessages({
   },
   contactStart: { id: 'portal.home.contact.start', defaultMessage: 'Start a conversation' },
   linksTitle: { id: 'portal.home.links.title', defaultMessage: 'Links' },
+  boardsTitle: { id: 'portal.feedback.sidebar.boards', defaultMessage: 'Boards' },
+  boardPosts: {
+    id: 'portal.feedback.list.resultCount',
+    defaultMessage: '{count, plural, one {# post} other {# posts}}',
+  },
   roadmapEmpty: { id: 'portal.home.roadmap.empty', defaultMessage: 'Nothing on the roadmap yet.' },
   updatesEmpty: { id: 'portal.home.updates.empty', defaultMessage: 'No updates yet.' },
   helpTopicsEmpty: { id: 'portal.home.helpTopics.empty', defaultMessage: 'No help topics yet.' },

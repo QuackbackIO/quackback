@@ -81,6 +81,17 @@ describe('designView', () => {
     expect(designView(doc, 1).feedback.welcome).toBeNull()
   })
 
+  it('carries the New request button’s own words with the feed’s', () => {
+    const doc = defaultDesign()
+    doc.pages.feedback.copy = { submit: { en: 'Post' } }
+    expect(designView(doc, null).feedback.copy).toEqual({ submit: { en: 'Post' } })
+    doc.pages.support = { suggest: false, request: { en: 'Ask us' } }
+    expect(designView(doc, null).feedback.copy).toEqual({
+      submit: { en: 'Post' },
+      request: { en: 'Ask us' },
+    })
+  })
+
   it('carries the feedback page headline', () => {
     const doc = defaultDesign()
     doc.pages.feedback.headline = { title: { en: 'Ideas' }, subtitle: {} }

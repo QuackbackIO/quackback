@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { FormattedMessage } from 'react-intl'
 import { LinkIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -42,6 +43,8 @@ interface ChangelogEntryCardProps {
   /** The entry's featured image, and how it shows; none leaves it off. */
   featuredImageUrl?: string | null
   image?: EntryImage
+  /** The posts it shipped from, with how many and their votes; true unless the design hides them. */
+  shipped?: boolean
 }
 
 type ChangelogEntries = PageChoices['changelog']['entries']
@@ -62,8 +65,10 @@ export function ChangelogEntryCard({
   layout = 'timeline',
   featuredImageUrl = null,
   image = 'none',
+  shipped = true,
 }: ChangelogEntryCardProps) {
   const tagStyle = useTagStyle()
+  const posts = shipped ? linkedPosts : []
   const shown = image === 'none' ? null : featuredImageUrl
   const labels = categories.length > 0 && (
     <div className="mb-2 flex flex-wrap gap-1.5">
@@ -132,6 +137,15 @@ export function ChangelogEntryCard({
           <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
             {contentPreview(content, 240)}
           </p>
+          {posts.length > 0 && (
+            <Link
+              to="/changelog/$entryId"
+              params={{ entryId: id }}
+              className="mt-1 block text-xs text-muted-foreground hover:text-foreground hover:underline"
+            >
+              <ShippedFrom posts={posts} />
+            </Link>
+          )}
           {wide}
         </div>
         {thumbnail}
@@ -154,7 +168,7 @@ export function ChangelogEntryCard({
             {heading('text-2xl font-bold')}
             {wide}
             <EntryBody content={content} contentJson={contentJson} />
-            <LinkedPosts posts={linkedPosts} />
+            <LinkedPosts posts={posts} />
           </div>
           {thumbnail}
         </div>
@@ -188,7 +202,7 @@ export function ChangelogEntryCard({
         {wide}
 
         <EntryBody content={content} contentJson={contentJson} />
-        <LinkedPosts posts={linkedPosts} />
+        <LinkedPosts posts={posts} />
       </div>
       {thumbnail}
     </article>
@@ -211,11 +225,28 @@ function EntryBody({
   )
 }
 
-/** The posts an entry shipped, each with its votes and status. */
+/** How many posts an entry shipped from and their votes: "From 3 posts · 412 votes". */
+export function ShippedFrom({ posts }: { posts: readonly Pick<LinkedPost, 'voteCount'>[] }) {
+  return (
+    <FormattedMessage
+      id="portal.changelog.shippedFrom"
+      defaultMessage="From {posts, plural, one {# post} other {# posts}} · {votes, plural, one {# vote} other {# votes}}"
+      values={{
+        posts: posts.length,
+        votes: posts.reduce((sum, post) => sum + post.voteCount, 0),
+      }}
+    />
+  )
+}
+
+/** The posts an entry shipped, under how many and their votes, each with its votes and status. */
 function LinkedPosts({ posts }: { posts: LinkedPost[] }) {
   if (posts.length === 0) return null
   return (
     <div className="mt-6 grid gap-2">
+      <p className="text-xs font-medium text-muted-foreground">
+        <ShippedFrom posts={posts} />
+      </p>
       {posts.map((post) => (
         <Link
           key={post.id}

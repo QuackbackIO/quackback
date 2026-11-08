@@ -90,6 +90,7 @@ const SLOTS_OF: Record<string, readonly BlockSlot[]> = {
   status: ['heading', 'link'],
   contact: ['heading', 'button'],
   links: ['heading', 'link'],
+  boards: ['heading', 'link'],
 }
 
 const at = (page: string, rest: string) => `[data-qb-page=${page}] ${rest}`

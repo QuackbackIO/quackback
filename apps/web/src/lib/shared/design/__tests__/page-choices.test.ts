@@ -21,9 +21,22 @@ import { defaultDesign, portalDesign, type PortalDesign } from '../schema'
 
 function withChoices(): PortalDesign {
   const design = defaultDesign()
-  design.pages.changelog = { entries: 'cards', images: 'thumbnail', subscribe: 'under' }
-  design.pages.help = { topics: 'list', popular: false, search: 'large' }
+  design.pages.changelog = {
+    entries: 'cards',
+    images: 'thumbnail',
+    subscribe: 'under',
+    shipped: false,
+  }
+  design.pages.help = {
+    topics: 'list',
+    popular: false,
+    search: 'large',
+    helpful: false,
+    related: 2,
+    contact: true,
+  }
   design.pages.roadmap = { board: 'list', votes: false }
+  design.pages.support = { suggest: false }
   return design
 }
 
@@ -36,6 +49,7 @@ describe('page choices in the design document', () => {
       entries: 'cards',
       images: 'thumbnail',
       subscribe: 'under',
+      shipped: false,
     })
     const bad = withChoices() as unknown as { pages: { help: { topics: string } } }
     bad.pages.help.topics = 'grid'
@@ -64,17 +78,30 @@ describe('page choices in the design document', () => {
       'data-qb-changelog-entries': 'cards',
       'data-qb-changelog-images': 'thumbnail',
       'data-qb-changelog-subscribe': 'under',
+      'data-qb-changelog-shipped': 'off',
       'data-qb-help-topics': 'list',
       'data-qb-help-popular': 'off',
       'data-qb-help-search': 'large',
+      'data-qb-help-helpful': 'off',
+      'data-qb-help-related': '2',
+      'data-qb-help-contact': 'on',
       'data-qb-roadmap-board': 'list',
       'data-qb-roadmap-votes': 'off',
+      'data-qb-support-suggest': 'off',
     })
     expect(readPageChoices(attributes)).toEqual({
-      changelog: { entries: 'cards', images: 'thumbnail', subscribe: 'under' },
-      help: { topics: 'list', popular: false, search: 'large' },
+      changelog: { entries: 'cards', images: 'thumbnail', subscribe: 'under', shipped: false },
+      help: {
+        topics: 'list',
+        popular: false,
+        search: 'large',
+        helpful: false,
+        related: 2,
+        contact: true,
+      },
       roadmap: { board: 'list', votes: false },
       post: PAGE_CHOICE_DEFAULTS.post,
+      support: { suggest: false },
     })
   })
 
@@ -84,9 +111,17 @@ describe('page choices in the design document', () => {
     expect(readPageChoices({ 'data-qb-changelog-entries': 'spiral' }).changelog.entries).toBe(
       'timeline'
     )
+    expect(readPageChoices({ 'data-qb-help-related': '7' }).help.related).toBe(4)
     expect(PAGE_CHOICE_DEFAULTS).toEqual({
-      changelog: { entries: 'timeline', images: 'none', subscribe: 'beside' },
-      help: { topics: 'cards', popular: true, search: 'standard' },
+      changelog: { entries: 'timeline', images: 'none', subscribe: 'beside', shipped: true },
+      help: {
+        topics: 'cards',
+        popular: true,
+        search: 'standard',
+        helpful: true,
+        related: 4,
+        contact: false,
+      },
       roadmap: { board: 'columns', votes: true },
       post: {
         vote: 'title',
@@ -97,7 +132,15 @@ describe('page choices in the design document', () => {
         subscribe: 'details',
         comments: 'newest',
       },
+      support: { suggest: true },
     })
+  })
+
+  it('keeps the support page’s request button words out of its attributes', () => {
+    const design = defaultDesign()
+    design.pages.support = { request: { en: 'Ask us' } }
+    expect(portalDesign.parse(design).pages.support).toEqual({ request: { en: 'Ask us' } })
+    expect(pageChoiceAttributes(design)).toEqual({})
   })
 })
 
@@ -114,8 +157,12 @@ describe('page choices named, grouped and reachable by Quackback AI', () => {
   it('lets a request about the page set its choices', () => {
     const cases = [
       ['changelog', 'pages.changelog.entries', 'compact'],
+      ['changelog', 'pages.changelog.shipped', false],
       ['help', 'pages.help.popular', false],
+      ['help', 'pages.help.related', 2],
       ['roadmap', 'pages.roadmap.board', 'list'],
+      ['support', 'pages.support.suggest', false],
+      ['support', 'pages.support.request', { en: 'Ask us' }],
     ] as const
     for (const [scope, path, value] of cases) {
       const result = applyDesignChanges(defaultDesign(), [{ path, value }], scope)
@@ -153,8 +200,10 @@ describe('page sections in the outline', () => {
       'hero',
       'topics',
       'popular',
+      'article',
     ])
     expect(pageKeys(defaultDesign(), 'roadmap')).toEqual(['header', 'logo', 'hero', 'board'])
+    expect(pageKeys(defaultDesign(), 'support')).toEqual(['header', 'logo', 'hero', 'request'])
   })
 
   it('lists Popular articles when off, so it can be turned back on', () => {

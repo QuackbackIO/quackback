@@ -116,10 +116,17 @@ const LABELS: Record<string, string> = {
   'pages.changelog.entries': 'Changelog entries',
   'pages.changelog.images': 'Changelog images',
   'pages.changelog.subscribe': 'Subscribe button',
+  'pages.changelog.shipped': 'Shipped from posts',
   'pages.help': 'Help Center page',
   'pages.help.topics': 'Help topics',
   'pages.help.popular': 'Popular articles',
   'pages.help.search': 'Help search size',
+  'pages.help.helpful': 'Was this helpful?',
+  'pages.help.related': 'Related articles',
+  'pages.help.contact': 'Contact link',
+  'pages.support': 'Support page',
+  'pages.support.suggest': 'Suggested articles',
+  'pages.support.request': 'New request button',
   'pages.roadmap': 'Roadmap page',
   'pages.roadmap.board': 'Roadmap board',
   'pages.roadmap.votes': 'Roadmap votes',
@@ -270,6 +277,7 @@ const CHANGE_GROUPS: Array<[group: string, matches: RegExp]> = [
   ['Changelog page', /^pages\.changelog\b/],
   ['Help Center page', /^pages\.help\b/],
   ['Post page', /^pages\.post\b/],
+  ['Support page', /^pages\.support\b/],
 ]
 
 /** The part of the portal a change belongs to, for grouping a review. */

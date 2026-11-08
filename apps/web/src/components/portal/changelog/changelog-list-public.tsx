@@ -25,9 +25,12 @@ const ROW_CLASS = { timeline: 'py-10 first:pt-0', cards: '', compact: 'py-5 firs
 export function ChangelogListPublic({
   entries: layout = 'timeline',
   images = 'none',
+  shipped = true,
 }: {
   entries?: PageChoices['changelog']['entries']
   images?: PageChoices['changelog']['images']
+  /** The posts each entry shipped from; shown unless the design hides them. */
+  shipped?: boolean
 } = {}) {
   const intl = useIntl()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
@@ -134,6 +137,7 @@ export function ChangelogListPublic({
                 layout={layout}
                 featuredImageUrl={entry.featuredImageUrl}
                 image={images}
+                shipped={shipped}
               />
             </div>
           ))}

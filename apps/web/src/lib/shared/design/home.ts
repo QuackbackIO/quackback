@@ -154,6 +154,7 @@ const PAGE_OF: Partial<Record<HomeBlockType, keyof PortalPageGates>> = {
   help_topics: 'help',
   status: 'status',
   contact: 'support',
+  boards: 'feedback',
 }
 
 /** The page a block needs that is off, so visitors do not see it; null when they do. */
@@ -178,6 +179,7 @@ export function homeBlockTypes(gates: PortalPageGates): HomeBlockType[] {
     help_topics: gates.help,
     status: gates.status,
     contact: gates.support,
+    boards: gates.feedback,
   }
   return (Object.keys(needs) as HomeBlockType[]).filter((type) => needs[type])
 }
