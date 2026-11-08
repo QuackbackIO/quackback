@@ -5,12 +5,13 @@ import {
   type EmailChannelConfigDTO,
 } from '@/lib/server/functions/channel-accounts'
 
-type SenderSurface = 'support' | 'feedback' | 'changelog' | 'status'
+import type { ProductSenderSurface } from '@/lib/shared/email-sending-permissions'
 
 export const emailChannelKeys = {
   config: () => ['email-channel-config'] as const,
   /** Under the config key, so every sender change refreshes it too. */
-  surfaceSender: (surface: SenderSurface) => ['email-channel-config', 'sender', surface] as const,
+  surfaceSender: (surface: ProductSenderSurface) =>
+    ['email-channel-config', 'sender', surface] as const,
 }
 
 /** How often the card re-reads while a domain is being checked automatically. */
@@ -41,7 +42,7 @@ export const emailChannelConfigQuery = () =>
   })
 
 /** The From one kind of email goes out under now, for its product's settings page. */
-export const surfaceSenderQuery = (surface: SenderSurface) =>
+export const surfaceSenderQuery = (surface: ProductSenderSurface) =>
   queryOptions({
     queryKey: emailChannelKeys.surfaceSender(surface),
     queryFn: () => getSurfaceSenderFn({ data: { surface } }),

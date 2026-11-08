@@ -19,7 +19,10 @@ import {
   SUPPORT_SENDER_PERMISSIONS,
   SURFACE_SENDER_READ_PERMISSIONS,
 } from '@/lib/shared/email-sending-permissions'
-import { resolveSender } from '@/lib/server/domains/channel-accounts/sender-resolver'
+import {
+  bareSenderAddress,
+  resolveSender,
+} from '@/lib/server/domains/channel-accounts/sender-resolver'
 import {
   defaultTeamId,
   getInboundRoute,
@@ -426,21 +429,18 @@ export const setEmailSenderFn = createServerFn({ method: 'POST' })
  * thread keeps its own sender (see `resolveSender`).
  */
 export const getSurfaceSenderFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ surface: z.enum(['support', 'feedback', 'changelog', 'status']) }))
+  .validator(z.object({ surface: z.enum(['feedback', 'changelog', 'status']) }))
   .handler(async ({ data }): Promise<{ from: string | null }> => {
     assertAnyPermission(await requireAuth(), SURFACE_SENDER_READ_PERMISSIONS[data.surface])
     const { requireSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')
-    const workspaceName = (await requireSettingsCached()).name
+    const workspaceName = (await requireSettingsCached()).name?.trim()
     const resolved = await resolveSender({ surface: data.surface })
-    if (resolved) {
-      return { from: `${resolved.senderName ?? workspaceName} <${bareFrom(resolved.from)}>` }
-    }
-    const platform = await defaultFromAddress()
-    return { from: platform ? `${workspaceName} <${bareFrom(platform)}>` : null }
+    const from = resolved?.from ?? (await defaultFromAddress())
+    if (!from) return { from: null }
+    const name = resolved?.senderName?.trim() || workspaceName
+    const address = bareSenderAddress(from)
+    return { from: name ? `${name} <${address}>` : address }
   })
-
-/** The addr-spec of a From, without any display name. */
-const bareFrom = (from: string): string => /<([^>]+)>/.exec(from)?.[1] ?? from
 
 export const restartSendingDomainChecksFn = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.string() }))

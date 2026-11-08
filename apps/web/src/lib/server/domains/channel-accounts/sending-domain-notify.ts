@@ -1,5 +1,5 @@
 /**
- * Telling the people who manage email channels when a sending domain changes
+ * Telling the people who manage email settings when a sending domain changes
  * what customers receive: it went live, or it stopped verifying and replies
  * fell back to the default address.
  *
@@ -237,7 +237,7 @@ async function emailManagers(
         domain: domain.domain,
         record,
         deadline,
-        settingsUrl: base ? `${base}/admin/settings/channels/email` : null,
+        settingsUrl: base ? `${base}/admin/settings/email` : null,
         workspaceName: workspace?.settings?.name,
       })
       sent += 1

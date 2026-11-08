@@ -7,21 +7,14 @@ import { EmailTransportCard } from '@/components/admin/channels/email-transport-
 import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
 
-/** The product whose email each sender row covers. */
-const SURFACE_PRODUCT = {
-  support: 'support',
-  feedback: 'feedback',
-  changelog: 'changelog',
-  status: 'status',
-} as const satisfies Record<SenderSurfaceKey, Parameters<typeof isProductEnabled>[1]>
+/** The kinds of email that belong to a product; each has a row while it is on. */
+const SURFACES: readonly SenderSurfaceKey[] = ['support', 'feedback', 'changelog', 'status']
 
 /** The kinds of email with a row of their own: one per product that is on. */
 export function senderSurfacesFor(
   flags: Partial<FeatureFlags> | null | undefined
 ): SenderSurfaceKey[] {
-  return (Object.keys(SURFACE_PRODUCT) as SenderSurfaceKey[]).filter((surface) =>
-    isProductEnabled(flags, SURFACE_PRODUCT[surface])
-  )
+  return SURFACES.filter((surface) => isProductEnabled(flags, surface))
 }
 
 export function WorkspaceEmailPage() {

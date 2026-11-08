@@ -69,8 +69,8 @@ export function sendingDomainDeadline(domain: string, deadline: string): string 
 }
 
 /**
- * Sent to the people who manage email channels when a verified sending domain
- * stops verifying, because from that moment replies leave from the default
+ * Sent to the people who manage the workspace's email settings when a verified sending domain
+ * stops verifying, because from that moment its email leaves from the default
  * address instead of the domain; or, with a deadline, when its ownership record
  * goes missing and it will stop verifying on that date unless the record is
  * added back.
@@ -94,7 +94,7 @@ export function SendingDomainAttentionEmail({
       <Text style={typography.text}>
         {deadline
           ? sendingDomainDeadline(domain, deadline)
-          : 'Replies send from the default address until it is fixed.'}
+          : 'Email from this domain sends from the default address until it is fixed.'}
       </Text>
       {settingsUrl ? (
         <Text style={typography.text}>
@@ -105,7 +105,7 @@ export function SendingDomainAttentionEmail({
         </Text>
       ) : null}
       <TransactionalFooter>
-        You&apos;re receiving this because you manage email channels
+        You&apos;re receiving this because you manage email settings
         {workspaceName ? ` for ${workspaceName}` : ''}.
       </TransactionalFooter>
     </EmailLayout>

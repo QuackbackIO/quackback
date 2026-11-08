@@ -1404,6 +1404,7 @@
   "ask.destination.settings_workflows": "Робочі процеси",
   "ask.destination.settings_general": "Загальні",
   "ask.destination.settings_domains": "Домени",
+  "ask.destination.settings_email": "Електронна пошта",
   "ask.destination.settings_notifications": "Сповіщення",
   "ask.destination.settings_portal": "Портал",
   "ask.destination.settings_widget": "Віджет",

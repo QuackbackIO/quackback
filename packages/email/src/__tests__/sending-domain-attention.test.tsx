@@ -41,7 +41,9 @@ describe('SendingDomainAttentionEmail', () => {
     )
     expect(text).toContain('Sending from acme.com needs attention')
     expect(text).toContain('The return path record (MX qb-bounce.acme.com) is missing.')
-    expect(text).toContain('Replies send from the default address until it is fixed.')
+    expect(text).toContain(
+      'Email from this domain sends from the default address until it is fixed.'
+    )
     expect(text).toContain('to see every record and verify.')
   })
 

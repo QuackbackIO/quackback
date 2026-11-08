@@ -1404,6 +1404,7 @@
   "ask.destination.settings_workflows": "Workflows",
   "ask.destination.settings_general": "General",
   "ask.destination.settings_domains": "Domains",
+  "ask.destination.settings_email": "Email",
   "ask.destination.settings_notifications": "Notifications",
   "ask.destination.settings_portal": "Portal",
   "ask.destination.settings_widget": "Widget",

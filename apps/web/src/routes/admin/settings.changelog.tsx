@@ -12,6 +12,7 @@ import { updateChangelogSettingsFn } from '@/lib/server/functions/settings'
 import { changelogCategoryQueries, changelogSettingsQueries } from '@/lib/client/queries/changelog'
 import { DEFAULT_CHANGELOG_SETTINGS, type ChangelogSettings } from '@/lib/shared/changelog-settings'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { surfaceSenderQuery } from '@/lib/client/queries/channel-accounts'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { adminPageHead } from '@/lib/client/admin-head'
@@ -26,7 +27,6 @@ export const Route = createFileRoute('/admin/settings/changelog')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.CHANGELOG_MANAGE)
     const ensure = readBatch(context.queryClient)
-    const { surfaceSenderQuery } = await import('@/lib/client/queries/channel-accounts')
     await Promise.all([
       ensure(changelogSettingsQueries.get()),
       // The Email card's "Sent from" line, so it renders from the document.
