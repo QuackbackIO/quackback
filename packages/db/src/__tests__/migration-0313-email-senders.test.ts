@@ -6,10 +6,10 @@ import { createDb, type Database } from '../client'
 
 /**
  * 0313 records which address each kind of email sends from. Every existing
- * address keeps sending what it sent: one address used everywhere becomes the
- * workspace default, and otherwise each module's oldest address becomes that
- * surface's override. The file is applied twice against scratch tables, and the
- * second run must change nothing.
+ * email keeps the sender it had: support and changelog keep their addresses,
+ * feedback and status stay on the platform address, and no default is written.
+ * The file is applied twice against scratch tables, and the second run must
+ * change nothing, even after an admin has cleared a sender in between.
  */
 const MIGRATION = readFileSync(join(__dirname, '../../drizzle/0313_email_senders.sql'), 'utf8')
   .replace(/"channel_accounts"/g, '"_m0313_channel_accounts"')
@@ -35,7 +35,10 @@ type Seed = {
 type Sender = { surface: string; mode: string; address: string | null }
 
 /** Apply the migration twice over these rows, returning the senders after each run. */
-async function backfill(rows: Seed[]): Promise<{ first: Sender[]; second: Sender[] }> {
+async function backfill(
+  rows: Seed[],
+  between?: string
+): Promise<{ first: Sender[]; second: Sender[] }> {
   let result: { first: Sender[]; second: Sender[] } | null = null
   await db!
     .transaction(async (tx) => {
@@ -69,6 +72,7 @@ async function backfill(rows: Seed[]): Promise<{ first: Sender[]; second: Sender
         `)) as unknown as Sender[]
       await tx.execute(sql.raw(MIGRATION))
       const first = [...(await read())]
+      if (between) await tx.execute(sql.raw(between))
       await tx.execute(sql.raw(MIGRATION))
       result = { first, second: [...(await read())] }
       throw new Error('rollback')
@@ -81,89 +85,86 @@ async function backfill(rows: Seed[]): Promise<{ first: Sender[]; second: Sender
 }
 
 describe.skipIf(!dbAvailable)('migration 0313 email senders', () => {
-  it('makes one address used everywhere the workspace default', async () => {
+  const INBOUND = { address: null, role: 'inbound', module: null } as const
+
+  it('keeps support on its address, and writes no default for the other modules', async () => {
     const { first, second } = await backfill([
       { address: 'help@acme.com', module: 'support' },
       { address: 'help@acme.com', module: 'feedback' },
-      { address: 'old@acme.com', module: 'feedback', deleted: true },
+      { address: 'old@acme.com', module: 'support', deleted: true },
     ])
-    expect(first).toEqual([{ surface: 'default', mode: 'address', address: 'help@acme.com' }])
+    expect(first).toEqual([{ surface: 'support', mode: 'address', address: 'help@acme.com' }])
     expect(second).toEqual(first)
   })
 
-  it('makes a removed address no part of the choice', async () => {
-    const { first, second } = await backfill([
-      { address: 'help@acme.com', module: 'support' },
-      { address: 'old@acme.com', module: 'feedback', deleted: true },
-      { address: 'new@acme.com', module: 'changelog', deleted: true },
-    ])
-    expect(first).toEqual([{ surface: 'default', mode: 'address', address: 'help@acme.com' }])
-    expect(second).toEqual(first)
+  it('leaves a lone changelog address on changelog alone', async () => {
+    const { first } = await backfill([{ address: 'news@acme.com', module: 'changelog' }])
+    expect(first).toEqual([{ surface: 'changelog', mode: 'address', address: 'news@acme.com' }])
   })
 
-  it("makes each module's oldest address that surface's override", async () => {
+  it("keeps each sending module's oldest address, and feedback on the platform", async () => {
     const { first, second } = await backfill([
       { address: 'help@acme.com', module: 'support' },
       { address: 'news@acme.com', module: 'changelog' },
       { address: 'later@acme.com', module: 'support' },
       { address: 'ideas@acme.com', module: 'feedback' },
+      { address: 'gone@acme.com', module: 'changelog', deleted: true },
     ])
     expect(first).toEqual([
       { surface: 'changelog', mode: 'address', address: 'news@acme.com' },
-      { surface: 'feedback', mode: 'address', address: 'ideas@acme.com' },
       { surface: 'support', mode: 'address', address: 'help@acme.com' },
     ])
     expect(second).toEqual(first)
   })
 
   it('replies from the inbox for a workspace that forwards its support inbox here', async () => {
-    const { first, second } = await backfill([
-      { address: null, role: 'inbound', module: null, forwardingTarget: 'support@acme.com' },
-    ])
+    const { first, second } = await backfill([{ ...INBOUND, forwardingTarget: 'support@acme.com' }])
     expect(first).toEqual([{ surface: 'support', mode: 'inbox', address: null }])
     expect(second).toEqual(first)
   })
 
-  it('keeps one address as the default beside the inbox', async () => {
-    const { first, second } = await backfill([
-      { address: null, role: 'inbound', module: null, forwardingTarget: 'support@acme.com' },
+  it('replies from the inbox when it forwards a different address than support sends from', async () => {
+    const { first } = await backfill([
+      { ...INBOUND, forwardingTarget: 'support@acme.com' },
       { address: 'help@acme.com', module: 'support' },
     ])
-    expect(first).toEqual([
-      { surface: 'default', mode: 'address', address: 'help@acme.com' },
-      { surface: 'support', mode: 'inbox', address: null },
-    ])
-    expect(second).toEqual(first)
+    expect(first).toEqual([{ surface: 'support', mode: 'inbox', address: null }])
   })
 
-  it('makes the old support address the default when the inbox replaces it', async () => {
-    const { first, second } = await backfill([
-      { address: null, role: 'inbound', module: null, forwardingTarget: 'support@acme.com' },
-      { address: 'help@acme.com', module: 'support' },
-      { address: 'news@acme.com', module: 'changelog' },
+  it('keeps the support address when it is the one forwarded in', async () => {
+    const { first } = await backfill([
+      { ...INBOUND, forwardingTarget: 'Support@Acme.com' },
+      { address: 'support@acme.com', module: 'support' },
     ])
-    expect(first).toEqual([
-      { surface: 'changelog', mode: 'address', address: 'news@acme.com' },
-      { surface: 'default', mode: 'address', address: 'help@acme.com' },
-      { surface: 'support', mode: 'inbox', address: null },
-    ])
-    expect(second).toEqual(first)
+    expect(first).toEqual([{ surface: 'support', mode: 'address', address: 'support@acme.com' }])
   })
 
-  it('chooses the inbox for the platform route too, which forwards nothing', async () => {
-    const { first } = await backfill([{ address: null, role: 'inbound', module: null }])
+  it('keeps the support address beside the platform route, which forwards nothing', async () => {
+    const { first } = await backfill([INBOUND, { address: 'help@acme.com', module: 'support' }])
+    expect(first).toEqual([{ surface: 'support', mode: 'address', address: 'help@acme.com' }])
+  })
+
+  it('chooses the inbox for the platform route alone', async () => {
+    const { first } = await backfill([INBOUND])
     expect(first).toEqual([{ surface: 'support', mode: 'inbox', address: null }])
   })
 
   it('does not count a removed inbound route', async () => {
-    const { first } = await backfill([
-      { address: null, role: 'inbound', module: null, deleted: true },
-    ])
+    const { first } = await backfill([{ ...INBOUND, deleted: true }])
     expect(first).toEqual([])
   })
 
   it('writes nothing for a workspace with no sending address', async () => {
     const { first } = await backfill([])
     expect(first).toEqual([])
+  })
+
+  it('does not write back a sender cleared after it ran', async () => {
+    const { first, second } = await backfill(
+      [{ address: 'help@acme.com', module: 'support' }],
+      'DELETE FROM "_m0311_email_senders"'
+    )
+    expect(first).toEqual([{ surface: 'support', mode: 'address', address: 'help@acme.com' }])
+    expect(second).toEqual([])
   })
 })
