@@ -20,7 +20,7 @@ import {
   type OverridePlace,
   type PanelAction,
 } from './properties/properties-panel'
-import { BLOCK_SECTIONS, KINDS, WORDS } from './properties/words'
+import { BLOCK_SECTIONS, WORDS } from './properties/words'
 
 type Source = Extract<SettingField, { kind: 'source' }>['source']
 /** What the workspace has to pick from, each as its id and name. */
@@ -113,7 +113,6 @@ export function BlockPanel({
       title={def.name}
       icon={icon}
       about={def.purpose}
-      kind={KINDS.block}
       actions={actions}
       overrides={overrides}
       scope={notes ? <div className="space-y-1.5 text-xs">{notes}</div> : undefined}

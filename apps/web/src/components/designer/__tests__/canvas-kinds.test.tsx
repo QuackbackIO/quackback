@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 /**
  * The canvas marks each kind of content as the owner approved: static words
- * in dashed blue that say they are edited in place, a data item that styles
- * every item of its kind in its block and opens where it goes, the
- * product's interface locked to style only, and live values that say where
- * they come from and where they are changed.
+ * in dashed blue, a data item that styles every item of its kind in its
+ * block, marked with a database glyph, and opens where it goes, and the
+ * product's own interface in dotted slate. Tags name the element and where
+ * it is, "Heading · Top posts", with no kind tag and no Live badge.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -107,7 +107,8 @@ describe('the canvas’s kinds of content', () => {
     const tag = await screen.findByRole('button', {
       name: /^Post title · Top posts, your data, styling all 3, picked/,
     })
-    expect(tag.textContent).toContain('styling all 3')
+    expect(tag.textContent).toBe('Post title · Top posts')
+    expect(tag.querySelector('[data-content-glyph]')).toBeTruthy()
     await waitFor(() => expect(container.querySelectorAll('[data-element-also]')).toHaveLength(2))
     expect(container.querySelector('[data-element-picked]')!.getAttribute('data-kind')).toBe(
       'dynamic'
@@ -120,7 +121,7 @@ describe('the canvas’s kinds of content', () => {
     expect(screen.queryByRole('button', { name: /^Open the link/ })).toBeNull()
   })
 
-  it('says static words are edited in place, in dashed blue', async () => {
+  it('outlines static words in dashed blue, the tag saying only what and where', async () => {
     const { container } = show({
       picked: 'block-abcdefgh',
       hovered: 'el:block-abcdefgh|heading|block.abcdefgh.heading|0',
@@ -130,17 +131,18 @@ describe('the canvas’s kinds of content', () => {
     expect(outline.dataset.kind).toBe('static')
     expect(outline.style.outline).toContain('dashed')
     expect(container.querySelector('[data-element-hover-tag]')!.textContent).toBe(
-      'Heading · Top postsStatic · edit in place'
+      'Heading · Top posts'
     )
+    expect(container.querySelector('[data-content-glyph]')).toBeNull()
   })
 
-  it('locks the product’s own interface to style only', async () => {
+  it('tags the product’s own interface with no kind words', async () => {
     show({
       picked: 'block-abcdefgh',
       element: 'el:block-abcdefgh|vote||0',
     })
-    const tag = await screen.findByRole('button', { name: /product interface, style only, picked/ })
-    expect(tag.textContent).toContain('style only')
+    const tag = await screen.findByRole('button', { name: /, picked\. Tab moves/ })
+    expect(tag.textContent).not.toMatch(/style only|System|Static|Dynamic/)
     expect(tag.style.background).not.toBe('')
     expect(screen.queryByRole('button', { name: /^Open/ })).toBeNull()
   })
@@ -153,13 +155,11 @@ describe('the canvas’s kinds of content', () => {
     expect(await screen.findByRole('button', { name: 'Open status page' })).toBeDefined()
   })
 
-  it('badges a live value, saying where it comes from and where it is changed', async () => {
-    show({ picked: 'block-statusbk' })
-    const badge = await screen.findByRole('button', { name: 'Live: from your status page' })
-    fireEvent.focus(badge)
-    expect(screen.getByRole('note').textContent).toContain('From your status page.')
-    expect(screen.getByRole('link', { name: 'Change in Settings' }).getAttribute('href')).toBe(
-      '/admin/settings/status'
-    )
+  it('shows no Live badge on a live value', async () => {
+    const { container } = show({ picked: 'block-statusbk' })
+    // Once the picked block's chip is drawn, a badge would be too.
+    await waitFor(() => expect(container.querySelector('[data-chip-name]')).not.toBeNull())
+    expect(screen.queryByRole('button', { name: /^Live/ })).toBeNull()
+    expect(container.querySelector('[data-live-badge]')).toBeNull()
   })
 })

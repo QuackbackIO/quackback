@@ -13,10 +13,7 @@ import {
   ITEM_NAMES,
   ITEMS_OF,
   KIND_LOOK,
-  LIVE_SOURCES,
   destinationName,
-  liveOf,
-  livesIn,
 } from '../content-kinds'
 import { contrastRatio } from '../contrast'
 import { itemPartsOf, partsOf } from '../parts-registry'
@@ -112,21 +109,6 @@ describe('content kinds', () => {
     for (let i = 1; i < light.length; i++)
       expect(light[i]! - light[i - 1]!).toBeGreaterThanOrEqual(0.04)
     expect(new Set(looks.map((look) => look.dash)).size).toBe(3)
-  })
-
-  it('reads live values from their marks, the vote box too, the first of each source', () => {
-    document.body.innerHTML = `<section id="s">
-      <p id="status" data-qb-live="status">All good</p>
-      <button id="v1" data-qb-part="vote-button">3</button>
-      <button id="v2" data-qb-part="vote-button">5</button>
-      <p id="odd" data-qb-live="nonsense">?</p>
-    </section>`
-    expect(liveOf(document.getElementById('status')!)).toBe('status')
-    expect(liveOf(document.getElementById('v2')!)).toBe('votes')
-    expect(liveOf(document.getElementById('odd')!)).toBeNull()
-    expect(livesIn(document.getElementById('s')!).map((l) => l.node.id)).toEqual(['status', 'v1'])
-    for (const live of Object.values(LIVE_SOURCES))
-      expect(live.settings).toMatch(/^\/admin\/settings\/[a-z-]+$/)
   })
 
   it('names where a link goes, by the page and the item there', () => {

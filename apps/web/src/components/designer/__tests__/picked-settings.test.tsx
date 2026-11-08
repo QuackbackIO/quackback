@@ -121,8 +121,8 @@ describe('PickedSettings', () => {
   it('shows the words every page uses on the frame', () => {
     show('site:words', 'home')
     expect(crumbs()).toBe('HomeWords')
-    expect(document.querySelector('[data-scope-line]')?.textContent).toContain(
-      'Changing the words on every page'
+    expect(document.querySelector('[data-reach-note]')?.textContent).toContain(
+      'Applies to the words on every page'
     )
   })
 
@@ -130,8 +130,8 @@ describe('PickedSettings', () => {
     const { seen } = show('feed', 'feedback')
     const posts = screen.getByRole('region', { name: 'Posts' })
     const cards = screen.getByRole('region', { name: 'Post cards' })
-    expect(within(posts).getByText(/Changing/).textContent).toBe('Changing the feed on this page')
-    expect(within(cards).getByText(/Changing/).textContent).toBe('Changing every post card')
+    expect(within(posts).getByText(/Applies/).textContent).toBe('Applies to the feed on this page')
+    expect(within(cards).getByText(/Applies/).textContent).toBe('Applies to every post card')
     fireEvent.click(within(posts).getByRole('radio', { name: 'New' }))
     expect(seen.design.pages.feedback.defaultSort).toBe('new')
     // Every name in full, as the vocabulary has it.

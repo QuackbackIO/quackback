@@ -415,7 +415,14 @@ export function BlockLook({
         className="pb-1.5"
         one={BLOCK_WORDS.homeBlock}
         widest={{ id: 'every', phrase: EVERY_HOME_BLOCK, count: blocks.length }}
-        narrower={[{ id: 'one', link: WORDS.justThisOne, phrase: 'just this one', detail: name }]}
+        narrower={[
+          {
+            id: 'one',
+            link: WORDS.justThisOne,
+            phrase: WORDS.justThisOne.toLowerCase(),
+            detail: name,
+          },
+        ]}
         value={scope}
         onChange={onScope}
       />

@@ -64,13 +64,7 @@ export function PagePanel({
   const titles = design.layout.pageTitles
   const parts = nodes.filter((node) => node.key !== 'site')
   return (
-    <PropertiesPanel
-      crumbs={crumbs}
-      title={title}
-      kind={WORDS.page}
-      data-page-panel=""
-      className="pb-24"
-    >
+    <PropertiesPanel crumbs={crumbs} title={title} data-page-panel="" className="pb-24">
       <PropertySection title={WORDS.page}>
         {TITLED.includes(page) && (
           <PropertyRow

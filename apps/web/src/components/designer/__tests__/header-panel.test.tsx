@@ -72,8 +72,8 @@ describe('HeaderPanel', () => {
   it('sits on the frame, saying it changes the header on every page', () => {
     show()
     expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Header and menu')
-    expect(document.querySelector('[data-scope-line]')?.textContent).toContain(
-      'Changing the header (5 pages)'
+    expect(document.querySelector('[data-reach-note]')?.textContent).toBe(
+      'Applies to the header (5 pages)'
     )
   })
 

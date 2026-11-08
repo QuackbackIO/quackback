@@ -5,13 +5,15 @@
  * frame; what is not here yet is still each panel's own.
  */
 import { MENU_WORDS } from '@/lib/shared/design/menu-words'
+import { SCOPE_WORDS } from '@/lib/shared/design/names'
 import type { ColourRoleName } from '@/lib/shared/design/style-tokens'
 
 export const WORDS = {
-  /** A one-off: the narrowest scope, a single registered part. */
-  justThisOne: 'Just this one',
-  thisBlock: 'This block',
-  thisPage: 'This page',
+  /** The scope ladder, narrowest first, from its one table. */
+  justThisOne: SCOPE_WORDS.part,
+  thisBlock: SCOPE_WORDS.block,
+  thisPage: SCOPE_WORDS.page,
+  everywhere: SCOPE_WORDS.everywhere,
   /** The places a wider change does not reach, in the overrides footer. */
   setDifferently: 'Set differently',
   /** Going back to the wider value. */
@@ -179,6 +181,9 @@ export const FONT_NAMES = {
 /** "Changing every main button", from one of the kind, such as "Main button". */
 export const everyOf = (one: string) => `every ${one.toLowerCase()}`
 
+/** A reach that is the only one, as a plain sentence: "Applies to the header". */
+export const appliesTo = (phrase: string) => `Applies to ${phrase}`
+
 /** "Back to every main button". */
 export const backToEvery = (one: string) => `Back to ${everyOf(one)}`
 
@@ -242,9 +247,6 @@ export const SECTIONS = {
   lift: 'Lift',
   focusRing: 'Focus ring',
 } as const
-
-/** What a picked thing is, beside its title: a block on a page, and an element inside one. */
-export const KINDS = { block: 'Block', element: 'Element' } as const
 
 /** A block's own actions, in its panel's ⋯ menu and in Find. */
 export const BLOCK_ACTIONS = {

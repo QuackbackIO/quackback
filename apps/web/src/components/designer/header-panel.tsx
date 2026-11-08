@@ -37,7 +37,7 @@ import {
   PropertyTiles,
   type Crumb,
 } from './properties/properties-panel'
-import { ScopeLine } from './properties/scope-line'
+import { ReachNote } from './properties/scope-line'
 import { COLOUR_NAMES, WORDS } from './properties/words'
 import { Tag } from './tag'
 import { useNewParts } from './use-new-parts'
@@ -131,18 +131,9 @@ export function HeaderPanel({
     <PropertiesPanel
       crumbs={crumbs}
       title={HEADER_COPY.title}
-      kind={WORDS.everyPage}
       className="pb-24"
       data-header-panel=""
-      scope={
-        <ScopeLine
-          one="header"
-          widest={{ id: 'everywhere', phrase: 'the header', count: pages, countNote: 'pages' }}
-          narrower={[]}
-          value="everywhere"
-          onChange={() => {}}
-        />
-      }
+      scope={<ReachNote phrase="the header" count={pages} countNote="pages" />}
     >
       <PropertySection title={HEADER_COPY.layout}>
         <PropertyRow label={HEADER_COPY.layout}>

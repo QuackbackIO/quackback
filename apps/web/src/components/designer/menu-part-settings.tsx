@@ -66,7 +66,6 @@ export function MenuPartSettings({
     <PropertiesPanel
       crumbs={crumbs}
       title={link.label}
-      kind={WORDS.link}
       actions={[
         { label: WORDS.rename, onSelect: onRename },
         { label: WORDS.removeLink, onSelect: remove },

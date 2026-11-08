@@ -1,6 +1,6 @@
 /**
  * The properties frame every panel shares, Figma style: a breadcrumb whose
- * crumbs pick the parent, a title with its kind and an optional ⋯ menu, an
+ * crumbs pick the parent, a title with an optional ⋯ menu, an
  * optional scope line, titled sections of compact rows, and a footer listing
  * the places set differently, shown only when there are some.
  *
@@ -60,7 +60,6 @@ export function PropertiesPanel({
   title,
   icon,
   about,
-  kind,
   actions,
   scope,
   overrides = [],
@@ -74,8 +73,6 @@ export function PropertiesPanel({
   icon?: ReactNode
   /** What it is for, said on hovering the title. */
   about?: string
-  /** What it is, as a tag beside the title: "Element", "Block", "Page". */
-  kind?: string
   /** The ⋯ menu; none shows no menu. */
   actions?: readonly PanelAction[]
   /** The scope line, under the title. */
@@ -122,7 +119,6 @@ export function PropertiesPanel({
           <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold" title={about}>
             {title}
           </h2>
-          {kind && <span className="text-[11px] text-muted-foreground">{kind}</span>}
           {actions && actions.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

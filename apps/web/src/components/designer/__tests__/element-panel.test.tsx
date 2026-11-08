@@ -100,6 +100,8 @@ describe('the picked element’s properties', () => {
     expect(screen.getByRole('navigation', { name: 'Where it is' }).textContent).toBe(
       'HomeHeroCall to action'
     )
+    // No kind tag mixed in with the scope.
+    expect(view.container.querySelector('header')!.textContent).not.toContain('Element')
     expect(line(view)).toBe('Changing every main button')
     expect(screen.getByRole('button', { name: 'Just this one' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'This page' })).toBeTruthy()
@@ -206,7 +208,7 @@ describe('the picked element’s properties', () => {
     expect(
       findOverride(box.design, { scope: 'part', part: 'hero.home.cta', element: 'button' })?.style
     ).toEqual({ base: { size: 18 } })
-    expect(box.labels.at(-1)).toBe('Call to action · Hero: size, this one')
+    expect(box.labels.at(-1)).toBe('Call to action · Hero: size, just this one')
   })
 
   it('shows an unset value as what it has, says where from, and resets a set one to it', () => {

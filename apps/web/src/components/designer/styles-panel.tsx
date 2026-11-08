@@ -128,7 +128,6 @@ export function StylesPanel({
       <PropertiesPanel
         crumbs={[{ label: 'Styles', onSelect: back }, { label: ELEMENT_NAMES.logo }]}
         title={ELEMENT_NAMES.logo}
-        kind="Element"
       >
         <div className="space-y-4 px-4 py-3">
           <LogoControls design={design} update={update} logoUrl={logoUrl} />

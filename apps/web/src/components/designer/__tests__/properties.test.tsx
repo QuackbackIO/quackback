@@ -15,11 +15,12 @@ import {
   PropertySection,
   PropertyTiles,
 } from '../properties/properties-panel'
-import { ScopeLine } from '../properties/scope-line'
+import { ReachNote, ScopeLine } from '../properties/scope-line'
+import { SCOPE_NAMES } from '@/lib/shared/design/override-cascade'
 import { ScrubNumber } from '../properties/scrub-number'
 import { FontField, TokenField } from '../properties/token-field'
 import type { ColourToken, FontToken } from '../properties/tokens'
-import { COLOUR_NAMES, resetTo } from '../properties/words'
+import { COLOUR_NAMES, WORDS, resetTo } from '../properties/words'
 
 afterEach(cleanup)
 
@@ -30,7 +31,6 @@ describe('the panel frame', () => {
       <PropertiesPanel
         crumbs={[{ label: 'Home' }, { label: 'Top posts', onSelect: up }, { label: 'Main button' }]}
         title="Main button"
-        kind="Element"
       >
         <p>rows</p>
       </PropertiesPanel>
@@ -39,7 +39,8 @@ describe('the panel frame', () => {
     expect(up).toHaveBeenCalledOnce()
     expect(screen.queryByRole('button', { name: 'Main button' })).toBeNull()
     expect(screen.getByRole('heading', { name: 'Main button' })).toBeTruthy()
-    expect(screen.getByText('Element')).toBeTruthy()
+    // No kind tag beside the title: what it is shows in the trail.
+    expect(screen.queryByText('Element')).toBeNull()
   })
 
   it('shows the overrides footer only when something is set differently, each with Reset', () => {
@@ -429,5 +430,23 @@ describe('a brand font field', () => {
     await act(async () => fireEvent.click(chip))
     fireEvent.click(await screen.findByRole('button', { name: /Body font/ }))
     expect(onChange).toHaveBeenLastCalledWith('body')
+  })
+})
+
+describe('one ladder of scope words', () => {
+  it('names each scope from the one table, for the panels and the undo steps alike', () => {
+    expect(SCOPE_NAMES).toEqual({
+      part: WORDS.justThisOne,
+      block: WORDS.thisBlock,
+      page: WORDS.thisPage,
+      everywhere: WORDS.everywhere,
+    })
+  })
+
+  it('says a single reach as a plain sentence, with no ladder', () => {
+    const view = render(<ReachNote phrase="the header" count={5} countNote="pages" />)
+    expect(view.container.textContent).toBe('Applies to the header (5 pages)')
+    expect(view.container.querySelector('[data-scope-line]')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
   })
 })

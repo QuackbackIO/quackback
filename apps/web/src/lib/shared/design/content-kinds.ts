@@ -5,9 +5,6 @@
  * the product owns its interface, which is styled only and stays
  * translated. Every pickable thing has one of them, said here and in the
  * parts registry, never guessed by the canvas.
- *
- * Live values (a status line, vote counts) are data too: each says where it
- * comes from and where in the settings it is changed.
  */
 import type { CanvasLocation } from './outline'
 import type { StyleElement } from './style-tokens'
@@ -62,49 +59,6 @@ export const ITEMS_OF: Partial<Record<string, readonly ItemMark[]>> = {
   updates: ['entry-title'],
   help_search: ['article-title'],
   status: ['incident-title'],
-}
-
-/** Where a live value comes from, and the settings page it is changed on. */
-export interface LiveSource {
-  /** Said after "From your": "status page". */
-  source: string
-  /** The admin settings page it is changed on. */
-  settings: string
-}
-
-/** Live values, by their `data-qb-live` mark. */
-export const LIVE_SOURCES = {
-  status: { source: 'status page', settings: '/admin/settings/status' },
-  votes: { source: 'feedback votes', settings: '/admin/settings/feedback' },
-} as const satisfies Record<string, LiveSource>
-export type LiveMark = keyof typeof LIVE_SOURCES
-
-/** Values the product draws live without a mark of their own, by the part they are. */
-const LIVE_PARTS: Array<[selector: string, mark: LiveMark]> = [
-  ['[data-qb-part=vote-button]', 'votes'],
-]
-
-/** The live value a node is, if any. */
-export function liveOf(node: Element): LiveMark | null {
-  const mark = node.getAttribute('data-qb-live')
-  if (mark && mark in LIVE_SOURCES) return mark as LiveMark
-  for (const [selector, live] of LIVE_PARTS) if (node.matches(selector)) return live
-  return null
-}
-
-/** Every live value a section draws, the first of each source only, in reading order. */
-export function livesIn(scope: ParentNode): Array<{ node: Element; mark: LiveMark }> {
-  const seen = new Set<LiveMark>()
-  const out: Array<{ node: Element; mark: LiveMark }> = []
-  const selector = ['[data-qb-live]', ...LIVE_PARTS.map(([s]) => s)].join(', ')
-  for (const node of scope.querySelectorAll(selector)) {
-    if (node.closest('[hidden], [aria-hidden=true]')) continue
-    const mark = liveOf(node)
-    if (!mark || seen.has(mark)) continue
-    seen.add(mark)
-    out.push({ node, mark })
-  }
-  return out
 }
 
 /** What a place on the portal is called after "Open": "post", "status page". */

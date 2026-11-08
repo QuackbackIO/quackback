@@ -1,17 +1,18 @@
 // @vitest-environment happy-dom
 /**
  * The picked and pointed elements' tags keep clear of the block's chip, and
- * a live value's badge follows its words, or sits on the corner of its box.
+ * say what an element is and where, "Headline · Hero", with no jargon: a
+ * database glyph marks the workspace's own content, and nothing else does.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { ElementOutlines } from '../element-outline'
 
 afterEach(cleanup)
 
 const room = { width: 1200, height: 800 }
 const heading = { left: 100, top: 210, width: 300, height: 24 }
-const item = { rect: heading, name: 'Heading · Top posts', kind: 'static' as const, note: 'Static' }
+const item = { rect: heading, name: 'Heading · Top posts', kind: 'static' as const, editable: true }
 
 const tagTop = (container: HTMLElement) =>
   container.querySelector<HTMLElement>('[data-element-hover-tag]')!.parentElement!.style.top
@@ -41,26 +42,32 @@ describe('ElementOutlines', () => {
     expect(tagTop(clear.container)).toBe('190px')
   })
 
-  it('puts a live badge after its words, or on the corner of its box', () => {
-    const live = {
-      rect: { left: 100, top: 300, width: 200, height: 20 },
-      source: 'status page',
-      settings: '/admin/settings/status',
-    }
+  it('names the element and where it is, with no kind tag', () => {
     const { container } = render(
       <ElementOutlines
         room={room}
         hovered={null}
-        picked={null}
-        lives={[
-          { ...live, words: true },
-          { ...live, words: false },
-        ]}
+        picked={{ ...item, name: 'Headline · Hero' }}
         onStep={vi.fn()}
       />
     )
-    const [after, corner] = [...container.querySelectorAll<HTMLElement>('[data-live-badge]')]
-    expect([after!.style.left, after!.style.top]).toEqual(['306px', '301px'])
-    expect([corner!.style.left, corner!.style.top]).toEqual(['294px', '289px'])
+    const tag = screen.getByRole('button', { name: /^Headline · Hero/ })
+    expect(tag.textContent).toBe('Headline · Hero')
+    expect(container.querySelector('[data-kind-note]')).toBeNull()
+    expect(container.querySelector('[data-content-glyph]')).toBeNull()
+    expect(container.textContent).not.toMatch(/Static|Dynamic|style only|Live/)
+  })
+
+  it('marks the workspace’s own content with a database glyph', () => {
+    const { container } = render(
+      <ElementOutlines
+        room={room}
+        hovered={null}
+        picked={{ ...item, name: 'Post title · Top posts', kind: 'dynamic', editable: false }}
+        onStep={vi.fn()}
+      />
+    )
+    expect(container.querySelector('[data-content-glyph]')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Post title · Top posts, your data/ })).toBeTruthy()
   })
 })

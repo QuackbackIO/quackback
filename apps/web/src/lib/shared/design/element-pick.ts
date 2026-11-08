@@ -368,10 +368,3 @@ export function pickTraits(
     link: portalLinkOf(node),
   }
 }
-
-/** What a pick's chip says of its kind: "Static · edit in place", "styling all 3", "style only". */
-export function kindNote(traits: Pick<PickTraits, 'kind' | 'count' | 'editable'>): string {
-  if (traits.kind === 'static') return traits.editable ? 'Static · edit in place' : 'Static'
-  if (traits.kind === 'dynamic') return traits.count > 1 ? `styling all ${traits.count}` : 'Dynamic'
-  return 'style only'
-}

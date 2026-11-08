@@ -19,7 +19,7 @@ export function blockElement(
   key: string,
   locate?: (doc: Document, key: string) => Element | null
 ): Element | null {
-  if (locate && /^(el|live|flash):/.test(key)) return locate(doc, key)
+  if (locate && /^(el|flash):/.test(key)) return locate(doc, key)
   if (key === MENU_ROW_KEY)
     return [...doc.querySelectorAll('[data-qb-menu-row]')].find(drawn) ?? null
   if (key.startsWith('menu:')) {
@@ -37,18 +37,10 @@ export function blockElement(
 
 /**
  * Where an element is drawn: its own box, or for the menu's row the box its
- * items fill, since the row itself can stretch across the header, and for a
- * live value the box of its words.
+ * items fill, since the row itself can stretch across the header.
  */
 function boxOf(key: string, element: Element): Rect {
   const own = element.getBoundingClientRect()
-  // A live value's words, which may sit in a line much wider than they are.
-  if (key.startsWith('live:') && element.hasAttribute('data-qb-live')) {
-    const range = element.ownerDocument.createRange?.()
-    range?.selectNodeContents(element)
-    const words = range?.getBoundingClientRect?.()
-    return words && words.width > 0 ? words : own
-  }
   if (key !== MENU_ROW_KEY) return own
   const items = [...element.querySelectorAll('[data-qb-menu]')]
     .filter(drawn)
@@ -92,7 +84,7 @@ export function useFrameRects(
   frame: HTMLIFrameElement | null,
   scale: number,
   keys: readonly (string | null)[],
-  /** Finds an element picked in a block (`el:` keys), a live value in one (`live:` keys) or a change outlined (`flash:` keys). */
+  /** Finds an element picked in a block (`el:` keys) or a change outlined (`flash:` keys). */
   locate?: (doc: Document, key: string) => Element | null
 ): Partial<Record<string, Rect>> {
   const locating = useRef(locate)

@@ -6,7 +6,6 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  kindNote,
   locatePick,
   pickAt,
   pickKey,
@@ -198,7 +197,6 @@ describe('what a pick is: its kind of content', () => {
   it('says static words are static, and editable where they are stored', () => {
     expect(traitsOf('headline')).toMatchObject({ kind: 'static', editable: true, count: 1 })
     expect(traitsOf('heading')).toMatchObject({ kind: 'static', editable: true })
-    expect(kindNote(traitsOf('headline')!)).toBe('Static · edit in place')
   })
 
   it('says one data item styles every item of its kind in the block, and where it goes', () => {
@@ -206,14 +204,11 @@ describe('what a pick is: its kind of content', () => {
     expect(traits).toMatchObject({ kind: 'dynamic', editable: false, count: 3 })
     expect(traits.others).toEqual([0, 2])
     expect(traits.link).toBe('/b/ideas/posts/p2')
-    expect(kindNote(traits)).toBe('styling all 3')
     expect(traitsOf('badge1')).toMatchObject({ kind: 'dynamic', count: 1 })
-    expect(kindNote(traitsOf('badge1')!)).toBe('Dynamic')
   })
 
   it('says the product’s own interface is style only, never edited in place', () => {
     expect(traitsOf('vote1')).toMatchObject({ kind: 'system', editable: false, count: 1 })
-    expect(kindNote(traitsOf('vote1')!)).toBe('style only')
     expect(traitsOf('cta')).toMatchObject({ kind: 'static' })
   })
 

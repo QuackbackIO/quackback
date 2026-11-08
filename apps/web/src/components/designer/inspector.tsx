@@ -10,7 +10,7 @@ import {
   PropertyTiles,
   type Crumb,
 } from './properties/properties-panel'
-import { ScopeLine } from './properties/scope-line'
+import { ReachNote } from './properties/scope-line'
 import { STYLE_CHOICES, WORDS } from './properties/words'
 
 /** Changes the draft under a name, so undo says what it takes back. */
@@ -23,16 +23,7 @@ const capital = (value: string) => value[0]!.toUpperCase() + value.slice(1)
 
 /** What a change in a section reaches, said once at its top. */
 function Reach({ phrase }: { phrase: string }) {
-  return (
-    <ScopeLine
-      one={phrase}
-      widest={{ id: 'here', phrase }}
-      narrower={[]}
-      value="here"
-      onChange={() => {}}
-      className="pb-1"
-    />
-  )
+  return <ReachNote phrase={phrase} className="pb-1" />
 }
 
 /** What a post card shows besides its title and votes, each with its full name for a reader. */
@@ -65,15 +56,14 @@ export function Inspector({
 }) {
   const id = useId()
   const { layout } = design
-  const frame = (kind: string, children: ReactNode) => (
-    <PropertiesPanel crumbs={crumbs} title={title} kind={kind} className="pb-24" data-part-panel="">
+  const frame = (children: ReactNode) => (
+    <PropertiesPanel crumbs={crumbs} title={title} className="pb-24" data-part-panel="">
       {children}
     </PropertiesPanel>
   )
   switch (selection) {
     case 'welcome':
       return frame(
-        WORDS.thisPage,
         <PropertySection>
           <PropertyRow
             label={WORDS.show}
@@ -96,7 +86,6 @@ export function Inspector({
       )
     case 'feed':
       return frame(
-        'Part',
         <>
           <PropertySection title="Posts">
             <Reach phrase="the feed on this page" />
@@ -196,7 +185,6 @@ export function Inspector({
       )
     case 'filters':
       return frame(
-        'Part',
         <PropertySection>
           <Reach phrase="the filters" />
           <PropertyRow label="Side">
@@ -216,7 +204,6 @@ export function Inspector({
       )
     case 'home':
       return frame(
-        WORDS.thisPage,
         <PropertySection title="Start from">
           <HomeLayoutPicker design={design} update={update} gates={gates} />
         </PropertySection>

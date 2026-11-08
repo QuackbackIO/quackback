@@ -5,7 +5,7 @@
  */
 import { effectiveValues } from './effective-values'
 import { styleValueWords } from './labels'
-import { BLOCK_NAMES } from './names'
+import { BLOCK_NAMES, SCOPE_WORDS } from './names'
 import { partOf } from './parts-registry'
 import type { PortalDesign } from './schema'
 import {
@@ -59,12 +59,8 @@ export interface ElementContext {
   block: string | null
 }
 
-export const SCOPE_NAMES: Record<ScopeName, string> = {
-  part: 'This one',
-  block: 'This block',
-  page: 'This page',
-  everywhere: 'Everywhere',
-}
+/** Each scope's name, from the one ladder of scope words. */
+export const SCOPE_NAMES: Record<ScopeName, string> = SCOPE_WORDS
 
 const inBlock = (ctx: ElementContext) =>
   !!ctx.block && (BLOCK_STYLE_ELEMENTS as readonly string[]).includes(ctx.element)

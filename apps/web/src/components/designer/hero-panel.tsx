@@ -48,7 +48,7 @@ import {
 import { ScopeLine } from './properties/scope-line'
 import { colourTokens } from './properties/tokens'
 import { TokenField } from './properties/token-field'
-import { COLOUR_NAMES, HERO_LOOKS, HERO_TILES, HERO_WORDS, KINDS, WORDS } from './properties/words'
+import { COLOUR_NAMES, HERO_LOOKS, HERO_TILES, HERO_WORDS, WORDS } from './properties/words'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -302,7 +302,6 @@ export function HeroPanel({
       crumbs={crumbs}
       title={def.name}
       about={def.purpose}
-      kind={KINDS.block}
       overrides={overrides}
       scope={
         <div className="space-y-1.5">

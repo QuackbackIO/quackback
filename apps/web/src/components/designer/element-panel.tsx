@@ -130,13 +130,7 @@ const CUSTOM = 'custom'
 
 /** How a scope reads in a source line: "every main button", "this page". */
 const scopeWords = (scope: ScopeName, one: string) =>
-  scope === 'everywhere'
-    ? everyOf(one)
-    : scope === 'page'
-      ? 'this page'
-      : scope === 'block'
-        ? 'this block'
-        : 'just this one'
+  scope === 'everywhere' ? everyOf(one) : SCOPE_NAMES[scope].toLowerCase()
 
 export function ElementPanel({
   pick,
@@ -441,7 +435,14 @@ export function ElementPanel({
   const kinds = STYLE_ELEMENTS[pick.element].label.toLowerCase()
   const narrower: Array<ScopeOption<ScopeName>> = [
     ...(scopes.includes('part')
-      ? [{ id: 'part' as const, link: WORDS.justThisOne, phrase: 'just this one', detail: name }]
+      ? [
+          {
+            id: 'part' as const,
+            link: WORDS.justThisOne,
+            phrase: WORDS.justThisOne.toLowerCase(),
+            detail: name,
+          },
+        ]
       : []),
     ...(scopes.includes('block')
       ? [
@@ -515,7 +516,6 @@ export function ElementPanel({
         ]
       }
       title={crumb}
-      kind="Element"
       actions={actions}
       overrides={overrides}
       scope={

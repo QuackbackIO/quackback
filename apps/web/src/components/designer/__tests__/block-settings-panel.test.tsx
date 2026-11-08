@@ -25,12 +25,12 @@ const topPosts = () => ({ ...newBlock('ideas'), sort: 'trending', count: 3 }) as
 afterEach(cleanup)
 
 describe('a block’s settings panel', () => {
-  it('names the block, says what it is for on hover, and calls it a block', () => {
+  it('names the block and says what it is for on hover, with no kind tag', () => {
     mount(topPosts())
     const name = screen.getByRole('heading', { level: 2, name: 'Top posts' })
     expect(name.getAttribute('title')).toBe('The posts visitors vote for most')
     expect(screen.queryByText('The posts visitors vote for most')).toBeNull()
-    expect(screen.getByText('Block')).toBeTruthy()
+    expect(screen.queryByText('Block')).toBeNull()
   })
 
   it('shows its settings in the registry’s order, under Content', () => {
