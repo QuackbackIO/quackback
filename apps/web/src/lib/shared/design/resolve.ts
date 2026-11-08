@@ -271,6 +271,26 @@ export function resolveDesign(doc: PortalDesign): ResolvedDesign {
   }
 }
 
+/** Each design object's resolution, while that object lives. */
+const resolvedByDesign = new WeakMap<PortalDesign, ResolvedDesign>()
+
+/**
+ * resolveDesign once per design object, for the builder's readers that each
+ * resolve the draft they are handed (the preview, the checks, the panels).
+ * Keyed by the object, never its content: the draft history makes a new
+ * object for every change (a copy edited, or patches applied) and never
+ * edits one in place, so an object resolved once stays resolved. Callers
+ * read the result and never change it, as it is shared.
+ */
+export function resolveDesignCached(doc: PortalDesign): ResolvedDesign {
+  let resolved = resolvedByDesign.get(doc)
+  if (!resolved) {
+    resolved = resolveDesign(doc)
+    resolvedByDesign.set(doc, resolved)
+  }
+  return resolved
+}
+
 /** What a tune's light-mode colours sit on: the page, and the band behind a headline. */
 function tuneSurface(
   doc: PortalDesign,

@@ -8,7 +8,7 @@
 import { isLight } from './contrast'
 import type { Selection } from './outline'
 import { BACKGROUND_PAGE_NAMES, hasPageBackground } from './page-background'
-import { resolveDesign } from './resolve'
+import { resolveDesignCached } from './resolve'
 import type { PortalDesign } from './schema'
 import { STYLE_ELEMENTS, type StyleState } from './style-tokens'
 
@@ -125,7 +125,7 @@ const ONE_PANEL: Partial<Record<(typeof PANELS)[number], string>> = {
  */
 function lightPanelChecks(design: PortalDesign): DesignCheck[] {
   if (design.mode === 'light') return []
-  const resolved = resolveDesign(design)
+  const resolved = resolveDesignCached(design)
   const page = resolved.dark?.background
   if (!page || isLight(page)) return []
   return PANELS.flatMap((element) => {
@@ -162,7 +162,7 @@ function lightPanelChecks(design: PortalDesign): DesignCheck[] {
  */
 function backgroundChecks(design: PortalDesign): DesignCheck[] {
   if (!hasPageBackground(design)) return []
-  const { backgrounds } = resolveDesign(design)
+  const { backgrounds } = resolveDesignCached(design)
   const softened = new Set<string>()
   for (const mode of [backgrounds.light, backgrounds.dark]) {
     if (!mode) continue

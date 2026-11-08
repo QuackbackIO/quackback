@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select'
 import { ColourField, toHex } from '@/components/admin/settings/appearance/colour-field'
 import { layoutAttributes } from '@/lib/shared/design/components'
-import { renderDesignCss, resolveDesign } from '@/lib/shared/design/resolve'
+import { renderDesignCss, resolveDesignCached } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import {
   COLOUR_ROLES,
@@ -596,7 +596,7 @@ export function StylePreview({
 }) {
   const css = useMemo(() => {
     try {
-      return renderDesignCss(resolveDesign(design))
+      return renderDesignCss(resolveDesignCached(design))
     } catch {
       return ''
     }

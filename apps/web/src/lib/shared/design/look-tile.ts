@@ -5,7 +5,7 @@
  */
 import { bandContrast } from './components'
 import { fontStack } from './fonts'
-import { resolveDesign } from './resolve'
+import { resolveDesignCached } from './resolve'
 import type { PortalDesign } from './schema'
 
 export interface LookTile {
@@ -26,7 +26,7 @@ export interface LookTile {
 
 /** A design drawn small, in the mode it opens in. */
 export function lookTile(design: PortalDesign): LookTile {
-  const resolved = resolveDesign(design)
+  const resolved = resolveDesignCached(design)
   const mode = resolved.light ? 'light' : 'dark'
   const vars = (resolved[mode] ?? resolved.light ?? resolved.dark)!
   const tokens = resolved.tokens[mode]
