@@ -217,6 +217,18 @@ describe('DesignerCanvas', () => {
     expect(onLocation).not.toHaveBeenCalled()
   })
 
+  it('draws the skeleton, busy, until its own frame says it is ready', () => {
+    const { send, frame } = show(false, { skeleton: <p>Loading shapes</p> })
+    const box = document.querySelector('[data-canvas-box]')!
+    expect(box.getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByText('Loading shapes')).toBeTruthy()
+    send({ type: 'quackback:preview-ready' }, {} as Window)
+    expect(screen.queryByText('Loading shapes')).not.toBeNull()
+    send({ type: 'quackback:preview-ready' }, frame)
+    expect(screen.queryByText('Loading shapes')).toBeNull()
+    expect(box.getAttribute('aria-busy')).toBe('false')
+  })
+
   it('offers no Try it of its own', () => {
     show()
     expect(screen.queryByRole('button', { name: 'Try it' })).toBeNull()
