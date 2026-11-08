@@ -254,6 +254,8 @@ export function heroSettingShown(key: HeroKey, design: PortalDesign, page: Desig
     case 'headerBlend':
       return band !== 'none'
     case 'mainAction':
+    case 'height':
+      // The list pages follow Home's look at a compact height of their own.
       return page === 'home'
     case 'composerWidth':
       return (

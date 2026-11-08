@@ -137,11 +137,12 @@ function guideLines(
         'layout.blend',
         'layout.bandAlign',
         'layout.bandShape',
+        'layout.bandHeight',
         'layout.headerOnBand',
         'layout.imagePlace',
         'brand.bandImage',
       ],
-      `layout.band (behind a page headline): ${DESIGN_OPTIONS.band.join(', ')}; support fills it with the second colour and blend runs the accent into it, as a line, with layout.blend mesh, a soft mesh beside the words, or with layout.blend ribbon, a diagonal ribbon sweeping past the words. It shows only with a headline; when you add one and there is no headline, write one. layout.bandAlign: ${DESIGN_OPTIONS.bandAlign.join(', ')}. layout.bandShape: full, inset (a rounded panel within the page), panel (the words on a block of the second colour), split (a rounded panel with the words on one half and a side band image flush in the other). layout.headerOnBand: true puts the header in the band's colour. layout.bandColour (the colour a brand, tint or fade band is drawn in): ${DESIGN_OPTIONS.colourRole.join(', ')}, where extra1 and extra2 are brand.light.extra's; leave it out for the brand colour. layout.imagePlace (for an uploaded band image): ${DESIGN_OPTIONS.imagePlace.join(', ')}.`,
+      `layout.band (behind a page headline): ${DESIGN_OPTIONS.band.join(', ')}; support fills it with the second colour and blend runs the accent into it, as a line, with layout.blend mesh, a soft mesh beside the words, or with layout.blend ribbon, a diagonal ribbon sweeping past the words. It shows only with a headline; when you add one and there is no headline, write one. layout.bandAlign: ${DESIGN_OPTIONS.bandAlign.join(', ')}. layout.bandShape: full, inset (a rounded panel within the page), panel (the words on a block of the second colour), split (a rounded panel with the words on one half and a side band image flush in the other). layout.bandHeight: ${DESIGN_OPTIONS.bandHeight.join(', ')}, the room Home's hero gives its words; the other pages' heroes take Home's look at a compact height of their own. layout.headerOnBand: true puts the header in the band's colour. layout.bandColour (the colour a brand, tint or fade band is drawn in): ${DESIGN_OPTIONS.colourRole.join(', ')}, where extra1 and extra2 are brand.light.extra's; leave it out for the brand colour. layout.imagePlace (for an uploaded band image): ${DESIGN_OPTIONS.imagePlace.join(', ')}.`,
     ],
     [
       ['layout.status'],

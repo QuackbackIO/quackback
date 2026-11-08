@@ -69,7 +69,6 @@ const TILE_FIND: Partial<Record<HeroKey, FindRow>> = {
   glow: FIND.glow,
   blend: FIND.blend,
   fadeFrom: FIND.fadeFrom,
-  titles: FIND.otherPages,
 }
 
 const quiet =
@@ -116,9 +115,10 @@ function DrawnRow({
 
 /**
  * The hero's panel on the properties frame: one scope line (the hero is the
- * same on every page; Home alone can keep an image of its own), its Look
- * with the colour it draws in and its art, its Layout, its Image, Home's
- * Main action, the rarely used rows under More, and its fill and the page's
+ * same on every page; Home alone can keep an image of its own), Home's Main
+ * action first, its Look with the colour it draws in and its art, its Image,
+ * its Layout (a height on Home alone: the list pages' heroes are compact),
+ * the rarely used rows under More, and its fill and the page's
  * background as summary rows. The words are edited on the page itself. Each
  * change is an undo step named for it, such as "Hero: Look".
  */
@@ -348,9 +348,16 @@ export function HeroPanel({
         image
       ) : (
         <>
+          {home && (
+            <PropertySection title={HERO_WORDS.mainAction}>
+              <MainActionRows hero={hero} gates={gates} shown={shown} onChange={change} />
+              {actionColour}
+            </PropertySection>
+          )}
           {look}
+          {image}
           <PropertySection title={HERO_WORDS.layout}>
-            {tiles('height', HERO_WORDS.height, layout.bandHeight, 'roomy')}
+            {shown('height') && tiles('height', HERO_WORDS.height, layout.bandHeight, 'roomy')}
             {tiles(
               'align',
               HERO_WORDS.align,
@@ -361,13 +368,6 @@ export function HeroPanel({
             )}
             {tiles('shape', HERO_WORDS.shape, layout.bandShape, 'full')}
           </PropertySection>
-          {image}
-          {home && (
-            <PropertySection title={HERO_WORDS.mainAction}>
-              <MainActionRows hero={hero} gates={gates} shown={shown} onChange={change} />
-              {actionColour}
-            </PropertySection>
-          )}
           {title}
           <PropertySection
             more={
@@ -376,7 +376,6 @@ export function HeroPanel({
                 {shown('blend') && tiles('blend', HERO_WORDS.blend, layout.blend, 'linear')}
                 {shown('fadeFrom') &&
                   tiles('fadeFrom', HERO_WORDS.fadeFrom, layout.fadeFrom, 'top')}
-                {tiles('titles', HERO_WORDS.otherPages, layout.pageTitles, 'plain')}
                 {!home && actionColour}
               </>
             }

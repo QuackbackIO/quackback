@@ -1026,7 +1026,8 @@ const HERO: BlockDef = {
         roomy: 'the usual room',
         tall: 'a lot of room, the boldest',
       },
-      about: 'How much room the hero gives its words, top and bottom',
+      about:
+        'How much room Home’s hero gives its words, top and bottom; the other pages’ heroes are always short',
     },
     {
       kind: 'choice',
