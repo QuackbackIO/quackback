@@ -57,6 +57,7 @@ function mount(
     shared?: boolean
     initialScope?: 'block'
     drawn?: Parameters<typeof ElementPanel>[0]['drawn']
+    onScreen?: (screen: 'all' | 'phone') => void
   } = {}
 ) {
   const box = { design, labels: [] as Array<string | undefined>, state: 'base' as StyleState }
@@ -81,7 +82,7 @@ function mount(
       state={box.state}
       onState={onState}
       screen={extra.screen ?? 'all'}
-      onScreen={() => {}}
+      onScreen={extra.onScreen ?? (() => {})}
       onUp={() => {}}
       reach={extra.reach}
       shared={extra.shared}
@@ -265,10 +266,44 @@ describe('the picked element’s properties', () => {
     expect(view.container.textContent).not.toContain('Set differently')
   })
 
-  it('says phone values are shown, with the way back', () => {
-    const { view } = mount(cta, home(), { screen: 'phone' })
-    expect(view.container.textContent).toContain('Phone values · All screens')
+  it('shows the screen it edits as a chip under the scope line, not in the ⋯ menu', () => {
+    const onScreen = vi.fn()
+    mount(cta, home(), { onScreen })
+    const chip = within(screen.getByRole('radiogroup', { name: 'Editing' }))
+    expect(chip.getByRole('radio', { name: 'All screens' }).getAttribute('aria-checked')).toBe(
+      'true'
+    )
+    fireEvent.click(chip.getByRole('radio', { name: 'Phone' }))
+    expect(onScreen).toHaveBeenCalledWith('phone')
+    // Nothing set, so there is nothing else for the ⋯ menu to hold.
+    expect(screen.queryByRole('button', { name: /more actions$/ })).toBeNull()
+  })
+
+  it('tints its scope block on a phone, with the chip on Phone and the way back', () => {
+    const onScreen = vi.fn()
+    const { view } = mount(cta, home(), { screen: 'phone', onScreen })
+    expect(view.container.querySelector('[data-phone-mode]')).toBeTruthy()
+    const chip = within(screen.getByRole('radiogroup', { name: 'Editing' }))
+    expect(chip.getByRole('radio', { name: 'Phone' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(chip.getByRole('radio', { name: 'All screens' }))
+    expect(onScreen).toHaveBeenCalledWith('all')
     expect(screen.queryByRole('heading', { name: 'Fill' })).toBeNull()
+  })
+
+  it('marks a row set for phones, and on a phone offers its all-screens value back', () => {
+    const design = home()
+    design.stylePhone = { headline: { base: { size: 31 } } }
+    const sizeRow = () =>
+      screen.getByText('Text size').closest('[data-property-row]')!.parentElement!
+    const wide = mount(headline, design)
+    expect(within(sizeRow()).getByText('Set for phones')).toBeTruthy()
+    expect(wide.view.container.querySelectorAll('[data-phone-dot]')).toHaveLength(1)
+    cleanup()
+    const { box } = mount(headline, design, { screen: 'phone' })
+    expect(within(sizeRow()).queryByRole('button', { name: /^Reset/ })).toBeNull()
+    fireEvent.click(within(sizeRow()).getByRole('button', { name: 'Use all-screens value' }))
+    expect(box.design.stylePhone?.headline?.base?.size).toBeUndefined()
+    expect(box.labels.at(-1)).toBe('Headline: size, everywhere, phones')
   })
 })
 

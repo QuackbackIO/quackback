@@ -122,6 +122,8 @@ export function BuilderSettings({
             drag={drag}
             onOverride={onOverride}
             onBlock={onBlock}
+            phone={phone}
+            onPhone={onPhone}
             onLogo={() => {
               panel.close()
               onSelect('logo')

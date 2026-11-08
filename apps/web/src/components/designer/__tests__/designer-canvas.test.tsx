@@ -115,6 +115,17 @@ describe('DesignerCanvas', () => {
     return { ...handlers, frame, send }
   }
 
+  it('tints its frame on a phone, where changes are phone values, but not in preview', () => {
+    show()
+    const frameOf = (title: string) => screen.getByTitle(title).parentElement!
+    expect(frameOf('Feedback, phone, light').hasAttribute('data-phone-mode')).toBe(true)
+    cleanup()
+    show(true)
+    expect(
+      frameOf('Feedback, phone, light, preview, links work').hasAttribute('data-phone-mode')
+    ).toBe(false)
+  })
+
   it('hands on a click, the pointer, words and undo from its frame', () => {
     const { send, onSelect, onHover, onWords, onKey } = show()
     send({ type: 'quackback:preview-section', section: 'band' })

@@ -13,6 +13,11 @@
  * smaller on a phone, a text colour is moved so it reads), a muted second
  * line says what is drawn, with Use this. The places that keep their own
  * values are listed at the foot.
+ *
+ * Under the scope line, a chip says which screens a change goes to: all
+ * screens, or phones. On the Phone canvas the scope block is tinted, a row
+ * set for phones has a tinted dot and "Use all-screens value"; on all screens
+ * a row whose phones differ has a tinted dot.
  */
 import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/16/solid'
@@ -23,6 +28,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/shared/utils'
 import { pickName, singular, type ElementPick, type Reach } from '@/lib/shared/design/element-pick'
 import { partOf } from '@/lib/shared/design/parts-registry'
 import {
@@ -78,6 +84,7 @@ import {
   type OverridePlace,
   type PanelAction,
 } from './properties/properties-panel'
+import { PHONE_TINT, PHONE_WORDS } from './properties/phone-mode'
 import { ScopeLine, type ScopeOption } from './properties/scope-line'
 import { ScrubNumber } from './properties/scrub-number'
 import { FontField, TokenField } from './properties/token-field'
@@ -394,6 +401,14 @@ export function ElementPanel({
       }
     })()
     const second = inUse(prop, label, here ?? from?.value)
+    // Phones' own value: on a phone it can go back to all screens'; elsewhere a dot says it is there.
+    const phoneRow = {
+      phoneSet:
+        !phone &&
+        (PHONE_PROPS as readonly string[]).includes(prop) &&
+        readAt(design, ctx, at, 'phone', state, prop) !== undefined,
+      onUseAllScreens: phone ? () => write(prop, undefined) : undefined,
+    }
     if (choice) {
       const custom = here !== undefined || customOpen.has(prop)
       return (
@@ -405,6 +420,7 @@ export function ElementPanel({
             source={choice.reach ?? from?.from}
             resetLabel={resetLabel}
             onReset={() => write(prop, undefined)}
+            {...phoneRow}
           >
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <PropertyTiles
@@ -443,6 +459,7 @@ export function ElementPanel({
           source={from?.from}
           resetLabel={resetLabel}
           onReset={() => write(prop, undefined)}
+          {...phoneRow}
         >
           {control}
         </PropertyRow>
@@ -527,13 +544,6 @@ export function ElementPanel({
           },
         ]
       : []),
-    ...(onScreen
-      ? [
-          phone
-            ? { label: 'All screens', onSelect: () => onScreen('all') }
-            : { label: 'Phone values', onSelect: () => onScreen('phone') },
-        ]
-      : []),
   ]
 
   const statesSet = (s: StyleState) =>
@@ -554,7 +564,10 @@ export function ElementPanel({
       actions={actions}
       overrides={overrides}
       scope={
-        <div className="space-y-2">
+        <div
+          className={cn('space-y-2', phone && PHONE_TINT.block)}
+          data-phone-mode={phone || undefined}
+        >
           <ScopeLine
             one={one}
             widest={{
@@ -566,20 +579,13 @@ export function ElementPanel({
             value={at}
             onChange={setScope}
           />
-          {phone && onScreen && (
-            <p className="text-xs text-muted-foreground">
-              Phone values ·{' '}
-              <button
-                type="button"
-                onClick={() => onScreen('all')}
-                className="rounded underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-              >
-                All screens
-              </button>
-            </p>
-          )}
-          {el.states.length > 1 && (
-            <StateChip states={el.states} value={state} onChange={onState} isSet={statesSet} />
+          {(onScreen || el.states.length > 1) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {onScreen && <ScreenChip value={screen} onChange={onScreen} />}
+              {el.states.length > 1 && (
+                <StateChip states={el.states} value={state} onChange={onState} isSet={statesSet} />
+              )}
+            </div>
           )}
         </div>
       }
@@ -612,6 +618,48 @@ function countAt(design: PortalDesign, ctx: ElementContext, at: ScopeName, scree
   for (const s of el.states)
     for (const p of el.props) if (readAt(design, ctx, at, screen, s, p) !== undefined) n++
   return n
+}
+
+/**
+ * Which screens a change goes to, always in view under the scope line: all
+ * screens, or phones, which shows the canvas as a phone. Phone is tinted.
+ */
+function ScreenChip({ value, onChange }: { value: Screen; onChange: (screen: Screen) => void }) {
+  const options: Array<[Screen, string]> = [
+    ['all', PHONE_WORDS.allScreens],
+    ['phone', PHONE_WORDS.phone],
+  ]
+  return (
+    <div
+      role="radiogroup"
+      aria-label={PHONE_WORDS.editing}
+      data-screen-chip=""
+      className="inline-flex h-6 items-center rounded-md border border-border p-0.5"
+    >
+      {options.map(([screen, label]) => {
+        const on = value === screen
+        return (
+          <button
+            key={screen}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(screen)}
+            className={cn(
+              'h-full rounded px-1.5 text-[11px] focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none',
+              on
+                ? screen === 'phone'
+                  ? PHONE_TINT.chip
+                  : 'bg-foreground text-background'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 /**

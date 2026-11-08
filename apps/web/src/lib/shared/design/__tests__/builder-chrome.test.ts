@@ -157,8 +157,11 @@ describe('devices', () => {
 
   it('names the width over the canvas for tablet and phone only', () => {
     expect(deviceCaption('desktop')).toBeNull()
-    expect(deviceCaption('tablet')).toBe('Tablet, 768 px wide')
-    expect(deviceCaption('phone')).toBe('Phone, 390 px wide')
+    // Tablet has no values of its own: it shows, and edits, all screens'.
+    expect(deviceCaption('tablet')).toBe(
+      'Tablet, 768 px wide · Tablet shows your all-screens values'
+    )
+    expect(deviceCaption('phone')).toBe('Phone, 390 px wide · Editing phone values')
   })
 })
 

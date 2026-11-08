@@ -9,6 +9,8 @@ import { samplePath, type SamplePage } from '@/lib/shared/design/sample-pages'
 import { isWordsDoc, type WordsDoc } from '@/lib/shared/design/rich-words'
 import { readWordsField, wordsKindOf, wordsLimitOf } from '@/lib/shared/design/headline-words'
 import { checkedWords } from '@/lib/shared/design/words-schema'
+import { cn } from '@/lib/shared/utils'
+import { PHONE_TINT } from './properties/phone-mode'
 
 /** The widths a visitor's browser lays the portal out at: desktop, tablet and phone. */
 export const CANVAS_WIDTHS = { desktop: 1280, tablet: 768, phone: 390 } as const
@@ -307,6 +309,7 @@ export function DesignerCanvas({
   }, [])
 
   const width = CANVAS_WIDTHS[size]
+  const phoneMode = size === 'phone' && !trying
   const { scale, height, outer, room: drawn } = frameBox(room, width, zoom)
   const src = canvasSrc({ page, theme, locale, sort, postPath, visitor, sample })
   return (
@@ -315,7 +318,12 @@ export function DesignerCanvas({
       className={`relative h-full min-h-0 w-full flex-1 ${zoom === 'fit' ? 'overflow-hidden' : 'overflow-auto'}`}
     >
       <div
-        className="relative mx-auto overflow-hidden rounded-lg border border-border bg-background shadow-sm"
+        // On a phone a change is a phone value, so the frame is tinted; a preview edits nothing.
+        data-phone-mode={phoneMode || undefined}
+        className={cn(
+          'relative mx-auto overflow-hidden rounded-lg border bg-background shadow-sm',
+          phoneMode ? PHONE_TINT.frame : 'border-border'
+        )}
         style={outer}
       >
         <iframe

@@ -191,10 +191,16 @@ export const DEVICE_NAMES: Record<Device, string> = {
   phone: 'Phone',
 }
 
-/** The line over a tablet or phone canvas; desktop needs none. */
+/** What a change made on each device's canvas goes to: tablet has no values of its own. */
+const DEVICE_EDITS: Record<Exclude<Device, 'desktop'>, string> = {
+  tablet: 'Tablet shows your all-screens values',
+  phone: 'Editing phone values',
+}
+
+/** The line over a tablet or phone canvas, with what a change there goes to; desktop needs none. */
 export function deviceCaption(device: Device): string | null {
   if (device === 'desktop') return null
-  return `${DEVICE_NAMES[device]}, ${DEVICE_WIDTHS[device]} px wide`
+  return `${DEVICE_NAMES[device]}, ${DEVICE_WIDTHS[device]} px wide · ${DEVICE_EDITS[device]}`
 }
 
 /* Undo and redo */

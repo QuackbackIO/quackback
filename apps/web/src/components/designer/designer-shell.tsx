@@ -69,6 +69,7 @@ import { useMenuEditing } from './use-menu-editing'
 import { usePreviewFollow } from './use-preview-follow'
 import { usePreviewMode } from './use-preview-mode'
 import { CanvasModeContext } from './properties/canvas-mode'
+import { PHONE_TINT } from './properties/phone-mode'
 import {
   RefusalFallback,
   RefusalLines,
@@ -520,7 +521,14 @@ export function DesignerShell({
               )}
               {!previewing && <CanvasBar view={view} note={follow.note} onBack={follow.back} />}
               {caption && !previewing && (
-                <p className="pb-2 text-center text-xs text-muted-foreground">{caption}</p>
+                <p
+                  className={cn(
+                    'pb-2 text-center text-xs',
+                    size === 'phone' ? PHONE_TINT.caption : 'text-muted-foreground'
+                  )}
+                >
+                  {caption}
+                </p>
               )}
               <ClientOnly>
                 {view.widget ? (
