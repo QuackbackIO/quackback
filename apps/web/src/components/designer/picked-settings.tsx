@@ -7,6 +7,7 @@ import type { DesignerPage, OutlineNode, Selection } from '@/lib/shared/design/o
 import type { PanelRoute, RouteCrumb } from '@/lib/shared/design/panel-routes'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { StyleElement } from '@/lib/shared/design/style-tokens'
 import { HeaderPanel } from './header-panel'
 import { HeroPanel } from './hero-panel'
 import { Inspector, type InspectorPart } from './inspector'
@@ -66,6 +67,7 @@ export function PickedSettings({
   checks,
   menu,
   onSelect,
+  onElement,
   onTheme,
   say,
 }: {
@@ -88,6 +90,8 @@ export function PickedSettings({
   checks?: readonly DesignCheck[]
   menu: Pick<MenuEditing, 'act' | 'land' | 'setAdding'>
   onSelect: (selection: Selection | null) => void
+  /** Picks every one of an element kind, from a part's summary row of its look. */
+  onElement?: (element: StyleElement) => void
   /** Opens Theme, at its More options when asked. */
   onTheme: (more?: boolean) => void
   say: (words: string) => void
@@ -112,6 +116,7 @@ export function PickedSettings({
           onAdd={() => menu.setAdding(true)}
           onTheme={() => onTheme()}
           onLanding={menu.land}
+          onElement={onElement}
         />
       )
     case 'link':
@@ -167,6 +172,7 @@ export function PickedSettings({
           design={design}
           update={update}
           gates={gates}
+          onElement={onElement}
         />
       )
     case 'page':

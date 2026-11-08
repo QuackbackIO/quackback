@@ -59,6 +59,22 @@ describe('an element’s Style section', () => {
     expect(box.design.tune).toBeUndefined()
   })
 
+  it('holds the post cards’ shadow, which a raised look takes, as a named step', () => {
+    const design = defaultDesign()
+    design.layout.cards = 'bordered'
+    const { box } = mount('postCard', design)
+    expect(screen.queryByRole('radiogroup', { name: 'Shadow' })).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: 'Raised' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Deep' }))
+    expect(box.design.tune).toEqual({ card: { shadow: 'deep' } })
+    expect(box.labels.at(-1)).toBe('Thing: shadow, everywhere')
+  })
+
+  it('leaves the heading weight to the brand kit’s fonts, its one home', () => {
+    mount('heading')
+    expect(screen.queryByRole('radiogroup', { name: 'Weight' })).toBeNull()
+  })
+
   it('is not there for an element with no brand choices', () => {
     const { view } = mount('input')
     expect(view.container.innerHTML).toBe('')

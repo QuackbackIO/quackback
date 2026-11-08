@@ -8,8 +8,6 @@
 import type { ReactNode } from 'react'
 import { closestWeight, uploadedFonts } from '@/components/admin/settings/appearance/fonts-section'
 import { setTune, type TuneGroupName } from '@/components/admin/settings/appearance/tune-fields'
-import { fontWeights } from '@/lib/shared/design/fonts'
-import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { StyleElement } from '@/lib/shared/design/style-tokens'
 import { PropertyRow, PropertySection, PropertyTiles } from './properties/properties-panel'
@@ -114,6 +112,20 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
           ],
           reach: 'Post cards and panels',
         },
+        ...(layout.cards === 'raised'
+          ? [
+              {
+                label: 'Shadow',
+                value:
+                  design.tune?.card?.shadow && design.tune.card.shadow !== 'none'
+                    ? design.tune.card.shadow
+                    : 'lifted',
+                options: tiles(STYLE_CHOICES.shadow),
+                apply: (draft: PortalDesign, v: string) =>
+                  setTune(draft, 'card', 'shadow', v as 'soft'),
+              },
+            ]
+          : []),
         {
           label: 'Density',
           value: layout.density,
@@ -172,20 +184,6 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
           apply: (draft, v) =>
             void (draft.brand.fonts.headlineColour = v as Fonts['headlineColour']),
           masks: [['headline', 'colour']],
-        },
-      ]
-    case 'heading':
-      return [
-        {
-          label: 'Weight',
-          value: String(fonts.headingWeight),
-          options: DESIGN_OPTIONS.headingWeight
-            .filter((weight) => fontWeights(fonts.heading).includes(weight))
-            .map((weight) => [String(weight), String(weight)] as const),
-          apply: (draft, v) =>
-            void (draft.brand.fonts.headingWeight = Number(v) as Fonts['headingWeight']),
-          masks: [['heading', 'weight']],
-          reach: 'Section headings, and headlines without their own weight',
         },
       ]
     default:

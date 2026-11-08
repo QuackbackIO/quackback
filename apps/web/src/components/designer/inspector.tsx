@@ -2,6 +2,7 @@ import { useId, type ReactNode } from 'react'
 import { Switch } from '@/components/ui/switch'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { StyleElement } from '@/lib/shared/design/style-tokens'
 import { HomeLayoutPicker } from './home-layout-picker'
 import {
   PropertiesPanel,
@@ -11,6 +12,7 @@ import {
   type Crumb,
 } from './properties/properties-panel'
 import { ScopeLine } from './properties/scope-line'
+import { SummaryRow } from './properties/summary-row'
 import { STYLE_CHOICES, WORDS } from './properties/words'
 
 /** Changes the draft under a name, so undo says what it takes back. */
@@ -18,8 +20,6 @@ type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => vo
 
 /** The parts the inspector has panels for. */
 export type InspectorPart = 'welcome' | 'feed' | 'filters' | 'home'
-
-const capital = (value: string) => value[0]!.toUpperCase() + value.slice(1)
 
 /** What a change in a section reaches, said once at its top. */
 function Reach({ phrase }: { phrase: string }) {
@@ -44,8 +44,9 @@ const CARD_FIELDS = [
 
 /**
  * The panels of the page's other parts, on the properties frame: the
- * welcome message, the feed (what this page sorts by, apart from how every
- * post card looks), the filters, and how Home starts. Home's blocks are
+ * welcome message, the feed (what this page sorts by and what each post card
+ * shows; how post cards and statuses look is their elements', reached by a
+ * summary row), the filters, and how Home starts. Home's blocks are
  * listed in the Blocks menu, and words are edited where the page draws them.
  */
 export function Inspector({
@@ -55,6 +56,7 @@ export function Inspector({
   design,
   update,
   gates,
+  onElement,
 }: {
   selection: InspectorPart
   crumbs: readonly Crumb[]
@@ -62,6 +64,8 @@ export function Inspector({
   design: PortalDesign
   update: NamedUpdate
   gates: PortalPageGates
+  /** Picks the element whose look a summary row shows, such as every post card. */
+  onElement?: (element: StyleElement) => void
 }) {
   const id = useId()
   const { layout } = design
@@ -117,63 +121,16 @@ export function Inspector({
           </PropertySection>
           <PropertySection title="Post cards">
             <Reach phrase="every post card" />
-            <PropertyRow label="Cards">
-              <PropertyTiles
-                label="Cards"
-                value={layout.cards}
-                options={(['bordered', 'raised', 'list', 'filled'] as const).map(
-                  (cards) => [cards, STYLE_CHOICES.cards[cards]] as const
-                )}
-                onChange={(cards) => update((draft) => void (draft.layout.cards = cards), 'Cards')}
-              />
-            </PropertyRow>
-            {layout.cards === 'raised' && (
-              <PropertyRow label="Shadow">
-                <PropertyTiles
-                  label="Shadow"
-                  value={
-                    design.tune?.card?.shadow && design.tune.card.shadow !== 'none'
-                      ? design.tune.card.shadow
-                      : 'lifted'
-                  }
-                  options={(['soft', 'lifted', 'floating', 'deep'] as const).map(
-                    (shadow) => [shadow, capital(shadow)] as const
-                  )}
-                  onChange={(shadow) =>
-                    update(
-                      (draft) => void ((draft.tune ??= {}).card = { ...draft.tune.card, shadow }),
-                      'Card shadow'
-                    )
-                  }
-                />
-              </PropertyRow>
-            )}
-            <PropertyRow label="Density">
-              <PropertyTiles
-                label="Density"
-                value={layout.density}
-                options={(['compact', 'comfortable', 'spacious'] as const).map(
-                  (density) => [density, STYLE_CHOICES.density[density]] as const
-                )}
-                onChange={(density) =>
-                  update((draft) => void (draft.layout.density = density), 'Density')
-                }
-              />
-            </PropertyRow>
-            <PropertyRow label="Status">
-              <PropertyTiles
-                label="Status"
-                value={layout.status ?? 'colour'}
-                options={(['colour', 'ink', 'pill', 'brand'] as const)
-                  .filter(
-                    (status) => status !== 'brand' || (design.brand.logoColours?.length ?? 0) > 1
-                  )
-                  .map((status) => [status, STYLE_CHOICES.status[status]] as const)}
-                onChange={(status) =>
-                  update((draft) => void (draft.layout.status = status), 'Status')
-                }
-              />
-            </PropertyRow>
+            <SummaryRow
+              label="Post card look"
+              value={`${STYLE_CHOICES.cards[layout.cards]} · ${STYLE_CHOICES.density[layout.density]}`}
+              onOpen={() => onElement?.('postCard')}
+            />
+            <SummaryRow
+              label="Status look"
+              value={STYLE_CHOICES.status[layout.status ?? 'colour']}
+              onOpen={() => onElement?.('badge')}
+            />
             {CARD_FIELDS.map(([field, label, full]) => (
               <PropertyRow key={field} label={label} htmlFor={`${id}-${field}`}>
                 <Switch
