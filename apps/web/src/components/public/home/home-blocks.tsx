@@ -61,7 +61,7 @@ import {
   type GridPlace,
 } from '@/lib/shared/design/home-grid'
 import { homeGridItems } from '@/lib/shared/design/home'
-import { BLOCK_TINT } from '@/lib/shared/design/tints'
+import { blockTintCss } from '@/lib/shared/design/tints'
 import { popularArticlesQuery } from './home-prefetch'
 
 export type HomeBlock = PortalDesign['pages']['home']['blocks'][number]
@@ -154,10 +154,7 @@ function toneStyle(
   const own = role && role !== 'accent'
   const fill = own ? `var(--qb-role-${role}, ${accent})` : accent
   const ink = own ? `var(--qb-on-role-${role}, ${onAccent})` : onAccent
-  if (tone === 'tint')
-    return {
-      background: `color-mix(in oklch, ${fill} ${BLOCK_TINT}%, var(--qb-surface, var(--card)))`,
-    }
+  if (tone === 'tint') return { background: blockTintCss(fill) }
   // The design CSS draws every part inside in --qb-tone-ink.
   return {
     '--qb-tone-fill': fill,
@@ -378,7 +375,7 @@ function SampleTag() {
   return (
     <span
       data-qb-sample=""
-      className="self-start rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+      className="self-start rounded-full border border-dashed border-border px-2 py-0.5 text-xs font-medium text-muted-foreground"
     >
       {intl.formatMessage(homeMessages.sample)}
     </span>
