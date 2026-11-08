@@ -2,6 +2,7 @@ import { useRouterState } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ErrorPageCopy, FriendlyShell } from '@/components/shared/error-page'
+import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 import { useFeedbackPath } from './use-portal-paths'
 
 /** A post's address: its board's slug is the second segment. */
@@ -70,7 +71,9 @@ export function PortalNotFound() {
                 </Button>
               )}
               <Button variant="outline" asChild>
-                <a href="/">{copy({ id: 'common.errorPage.goHome', defaultMessage: 'Go home' })}</a>
+                <a href={PORTAL_LANDING}>
+                  {copy({ id: 'common.errorPage.goHome', defaultMessage: 'Go home' })}
+                </a>
               </Button>
             </div>
           </>
