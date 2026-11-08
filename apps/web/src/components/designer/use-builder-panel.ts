@@ -9,8 +9,8 @@ const focusButton = (sheet: Sheet) =>
   )
 
 /**
- * The sheet open over the right panel, Theme or Add, and whether Theme shows
- * More options. Each opening is counted; closing hands focus back to the
+ * The sheet open over the right panel, Theme or Add, and whether Theme opens
+ * at its Style. Each opening is counted; closing hands focus back to the
  * button that opened it, while "Back to <pick>" leaves it in the panel.
  */
 export function useBuilderPanel() {

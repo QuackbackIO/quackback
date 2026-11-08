@@ -129,7 +129,7 @@ export function DesignerShell({
     nodes,
     design,
     page,
-    // The brand kit and the styles are in Theme; the styles under More options.
+    // The brand kit and the styles are in Theme; the styles open it at Style.
     onPanel: (part) => panel.dispatch({ type: 'open', sheet: 'theme', more: part === 'styles' }),
     onPicked: () => setPane('settings'),
     say,

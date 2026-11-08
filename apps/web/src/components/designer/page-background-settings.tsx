@@ -728,11 +728,14 @@ export function PageBackgroundEntry({
   design,
   update,
   page,
+  label,
   onOpen,
 }: {
   design: PortalDesign
   update: NamedUpdate
   page: string | null
+  /** The row's own name, such as Background in Theme's Style; whose it is then joins the value. */
+  label?: string
   onOpen?: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -752,10 +755,12 @@ export function PageBackgroundEntry({
         className="flex min-h-7 w-full items-center gap-2 rounded-md text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
       >
         <span className="w-[92px] shrink-0 truncate text-muted-foreground">
-          {onOpen ? whose : THEME.sections.pageBackground}
+          {label ?? (onOpen ? whose : THEME.sections.pageBackground)}
         </span>
         <span className="min-w-0 flex-1 truncate px-1.5">
-          {onOpen ? BACKGROUND_NAMES[shown.kind] : `${whose}: ${BACKGROUND_NAMES[shown.kind]}`}
+          {onOpen && !label
+            ? BACKGROUND_NAMES[shown.kind]
+            : `${whose}: ${BACKGROUND_NAMES[shown.kind]}`}
         </span>
         <ChevronRightIcon
           className={cn('size-3.5 text-muted-foreground', !onOpen && open && 'rotate-90')}

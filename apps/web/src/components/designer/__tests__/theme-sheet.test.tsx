@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 /**
  * Theme, a sheet over the right panel, on the properties frame: titled
- * sections in order (brand kit, colours, fonts, style, page background, site
- * images), a closed More with the looks of each part and custom CSS, and the
- * places set differently at its foot. No paragraphs in the normal state. The
- * hero's settings are its own, never here, and opening Theme writes nothing.
+ * sections in a fixed order (brand kit, colours, fonts, style, elements, site
+ * images, advanced), the elements always in view, custom CSS under a closed
+ * Advanced, and the places set differently at its foot. No paragraphs in the
+ * normal state. The hero's settings are its own, never here, and opening
+ * Theme writes nothing.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
@@ -13,10 +14,11 @@ import { useState } from 'react'
 import { defaultDesign, portalDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 
-vi.mock('@/lib/client/builder-events', () => ({
+const events = vi.hoisted(() => ({
   designerAdvancedOpened: vi.fn(),
   designerLookChosen: vi.fn(),
 }))
+vi.mock('@/lib/client/builder-events', () => events)
 vi.mock('@/lib/client/queries/portal-design', () => ({
   portalDesignQueries: {
     aiStatus: () => ({ queryKey: ['ai-status'], queryFn: async () => ({ available: true }) }),
@@ -38,7 +40,9 @@ vi.mock('@/lib/server/functions/uploads', () => ({
   checkS3ConfiguredFn: async () => ({ configured: true }),
 }))
 vi.mock('@/components/admin/settings/branding/custom-css-editor', () => ({
-  CustomCssEditor: () => <textarea aria-label="CSS" />,
+  CustomCssEditor: ({ value, onChange }: { value: string; onChange: (css: string) => void }) => (
+    <textarea aria-label="CSS" value={value} onChange={(event) => onChange(event.target.value)} />
+  ),
 }))
 
 const { ThemeContent } = await import('../theme-sheet')
@@ -63,20 +67,21 @@ function imported(): PortalDesign {
   return design
 }
 
-function renderTheme(start: PortalDesign, { page = null as string | null } = {}) {
+function renderTheme(
+  start: PortalDesign,
+  { page = null as string | null, gates = ALL_ON, more = false } = {}
+) {
   const seen = { design: start, updates: 0, labels: [] as string[] }
   const jumps: string[] = []
   function Harness() {
     const [design, setDesign] = useState(start)
-    const [more, setMore] = useState(false)
     return (
       <ThemeContent
         design={design}
-        gates={ALL_ON}
+        gates={gates}
         logoUrl={null}
         cssWarnings={[]}
         more={more}
-        onMore={setMore}
         page={page}
         onOverride={(o) => jumps.push(o.id)}
         update={(change, label) => {
@@ -100,9 +105,12 @@ function renderTheme(start: PortalDesign, { page = null as string | null } = {})
 
 const radio = (group: string, name: string) =>
   within(screen.getByRole('radiogroup', { name: group })).getByRole('radio', { name })
-const more = () => document.getElementById('theme-more')!.querySelector('summary')!
+const advanced = () => screen.getByRole('button', { name: 'Advanced' })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  events.designerAdvancedOpened.mockReset()
+})
 
 describe('Theme', () => {
   it('opening it writes nothing, even over a hero no look makes', async () => {
@@ -113,16 +121,20 @@ describe('Theme', () => {
     expect(seen.design).toEqual(before)
   })
 
-  it('is titled sections in order, with no paragraph in the normal state', () => {
+  it('is titled sections in a fixed order, with no paragraph in the normal state', () => {
     const { view } = renderTheme(defaultDesign())
     expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
       'Brand kit',
       'Colours',
       'Fonts',
       'Style',
-      'Page background',
+      'Elements',
       'Site images',
+      'Advanced',
     ])
+    // One kind of disclosure at the top level: Advanced. Nothing hides under More.
+    expect(view.container.querySelector('#theme-more')).toBeNull()
+    expect(view.container.querySelector('[data-theme-sheet] > details')).toBeNull()
     expect(view.container.textContent).not.toMatch(/All of this is in your draft/)
     expect(view.container.textContent).not.toMatch(/set under Colours/)
   })
@@ -132,8 +144,7 @@ describe('Theme', () => {
     start.brand.bandImage = { key: 'portal-images/room.jpg' }
     start.brand.light.support = '#0ea5e9'
     renderTheme(start)
-    fireEvent.click(more())
-    fireEvent.click(screen.getByText('Advanced'))
+    fireEvent.click(advanced())
     for (const gone of [
       /top of each page/i,
       // The custom CSS part names (band, band-image) are code, not words.
@@ -176,6 +187,102 @@ describe('Theme', () => {
     expect(screen.getByRole('button', { name: 'Look: Custom' })).toBeTruthy()
   })
 
+  it('sets the page width under Style, with one name for each width', () => {
+    const { seen } = renderTheme(defaultDesign())
+    const style = screen.getByRole('region', { name: 'Style' })
+    const widths = within(within(style).getByRole('radiogroup', { name: 'Page width' }))
+      .getAllByRole('radio')
+      .map((r) => r.textContent)
+    expect(widths).toEqual(['Narrow', 'Standard', 'Wide'])
+    expect(screen.queryByText('Default')).toBeNull()
+    fireEvent.click(radio('Page width', 'Wide'))
+    expect(seen.design.layout.width).toBe('wide')
+  })
+
+  it('sets hover motion under Style, None clearing it', () => {
+    const { seen } = renderTheme(defaultDesign())
+    const style = screen.getByRole('region', { name: 'Style' })
+    expect(within(style).getByRole('radiogroup', { name: 'Hover' })).toBeTruthy()
+    fireEvent.click(radio('Hover', 'Lift'))
+    expect(seen.design.shape.hover).toBe('lift')
+    fireEvent.click(radio('Hover', 'None'))
+    expect(seen.design.shape.hover).toBeUndefined()
+  })
+
+  it('opens at Style when asked from elsewhere, such as the page’s width', () => {
+    const scroll = vi.fn()
+    const before = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = scroll
+    try {
+      renderTheme(defaultDesign(), { more: true })
+      expect(scroll).toHaveBeenCalled()
+      expect(scroll.mock.contexts[0]).toBe(screen.getByRole('region', { name: 'Style' }))
+    } finally {
+      Element.prototype.scrollIntoView = before
+    }
+  })
+
+  it('keeps the elements in view, each opening its panel in place with a way back', () => {
+    renderTheme(defaultDesign())
+    const elements = screen.getByRole('region', { name: 'Elements' })
+    expect(within(elements).getByRole('button', { name: /^Main buttons/ })).toBeTruthy()
+    fireEvent.click(within(elements).getByRole('button', { name: /^Vote boxes/ }))
+    expect(screen.getByRole('heading', { name: 'Vote boxes' })).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Where it is' }).textContent).toBe(
+      'ThemeVote boxes'
+    )
+    expect(document.querySelector('[data-scope-line] p')!.textContent).toBe(
+      'Changing every vote box'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Theme' }))
+    expect(screen.getByRole('region', { name: 'Elements' })).toBeTruthy()
+  })
+
+  it('lists every element in one list, each with its brand choices and what is set', () => {
+    const design = defaultDesign()
+    design.shape.buttons = 'pill'
+    design.style = { button: { base: { radius: 4 }, hover: { background: 'support' } } }
+    renderTheme(design)
+    const elements = within(screen.getByRole('region', { name: 'Elements' }))
+    expect(elements.getByRole('button', { name: /^Main buttons/ }).textContent).toBe(
+      'Main buttons2 set·Brand colour · Pill'
+    )
+    for (const name of ['Cards', 'Menu items', 'Page headlines', 'Home blocks', 'Images'])
+      expect(elements.getByRole('button', { name: new RegExp(`^${name}`) })).toBeTruthy()
+  })
+
+  it('sets a brand choice and an exact value from an element’s panel, and keeps no second copy', () => {
+    const { seen } = renderTheme(defaultDesign())
+    fireEvent.click(screen.getByRole('button', { name: /^Main buttons/ }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Pill' }))
+    expect(seen.design.shape.buttons).toBe('pill')
+    fireEvent.change(screen.getByLabelText('Corners'), { target: { value: '6' } })
+    expect(seen.design.style).toEqual({ button: { base: { radius: 6 } } })
+    expect(seen.design.tune).toBeUndefined()
+  })
+
+  it('lists only what the pages that are on draw, and no logo: the logo is picked on the page', () => {
+    renderTheme(defaultDesign(), { gates: { ...ALL_ON, feedback: false } })
+    const elements = screen.getByRole('region', { name: 'Elements' })
+    expect(within(elements).queryByRole('button', { name: /^Vote boxes/ })).toBeNull()
+    expect(within(elements).queryByRole('button', { name: /^Logo/ })).toBeNull()
+  })
+
+  it('keeps custom CSS under Advanced, closed at first, counting each opening', async () => {
+    const { seen } = renderTheme(defaultDesign())
+    expect(screen.queryByLabelText('CSS')).toBeNull()
+    expect(advanced().getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(advanced())
+    expect(events.designerAdvancedOpened).toHaveBeenCalledWith('site:styles')
+    fireEvent.change(await screen.findByLabelText('CSS'), {
+      target: { value: '[data-qb-part="post-card"] { color: red; }' },
+    })
+    expect(seen.design.css).toBe('[data-qb-part="post-card"] { color: red; }')
+    fireEvent.click(advanced())
+    expect(screen.queryByLabelText('CSS')).toBeNull()
+    expect(events.designerAdvancedOpened).toHaveBeenCalledTimes(1)
+  })
+
   it('shows the page background as a row, opening its editor with the scope line', () => {
     const { seen } = renderTheme(defaultDesign(), { page: 'roadmap' })
     fireEvent.click(screen.getByRole('button', { name: /^Page background: Every page/ }))
@@ -192,41 +299,6 @@ describe('Theme', () => {
     const images = screen.getByRole('region', { name: 'Site images' })
     expect(within(images).getByLabelText('Upload favicon')).toBeTruthy()
     expect(within(images).getByText('Automatic')).toBeTruthy()
-  })
-
-  it('keeps the looks of each part and custom CSS under More, closed at first', () => {
-    renderTheme(defaultDesign())
-    const details = more().closest('details')!
-    expect(details.open).toBe(false)
-    expect(screen.queryByText('Advanced')).toBeNull()
-    fireEvent.click(more())
-    expect(details.open).toBe(true)
-    expect(screen.getByText('Advanced')).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Vote boxes/ })).toBeTruthy()
-  })
-
-  it('offers a full logo under Site images, in place of the icon and title', () => {
-    const { seen } = renderTheme(defaultDesign())
-    const full = screen.getByRole('switch', { name: 'Use a full logo image instead' })
-    expect(full.getAttribute('aria-checked')).toBe('false')
-    fireEvent.click(full)
-    expect(seen.design.brand.logo.display).toBe('wordmark')
-    expect(screen.getByText('Shows icon and title')).toBeTruthy()
-    fireEvent.click(full)
-    expect(seen.design.brand.logo.display).toBe('mark_and_name')
-  })
-
-  it('keeps a stored wordmark design as it is: the full logo switch is on', () => {
-    const start = defaultDesign()
-    start.brand.logo.display = 'wordmark'
-    start.brand.logo.wordmark.light = { key: 'logos/full.svg' }
-    renderTheme(start)
-    expect(
-      screen
-        .getByRole('switch', { name: 'Use a full logo image instead' })
-        .getAttribute('aria-checked')
-    ).toBe('true')
-    expect(screen.getByLabelText('Replace full logo')).toBeTruthy()
   })
 
   it('lists the places set differently at its foot, each with Reset and a way to it', () => {

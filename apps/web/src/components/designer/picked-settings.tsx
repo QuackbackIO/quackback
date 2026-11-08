@@ -88,7 +88,7 @@ export function PickedSettings({
   checks?: readonly DesignCheck[]
   menu: Pick<MenuEditing, 'act' | 'land' | 'setAdding'>
   onSelect: (selection: Selection | null) => void
-  /** Opens Theme, at its More options when asked. */
+  /** Opens Theme, at its Style when asked. */
   onTheme: (more?: boolean) => void
   say: (words: string) => void
 }) {

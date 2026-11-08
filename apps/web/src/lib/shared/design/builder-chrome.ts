@@ -41,7 +41,7 @@ export function panelBaseOf(selection: string | null): PanelBase {
   return 'part'
 }
 
-/** The sheet open over the panel, and whether Theme shows More options. */
+/** The sheet open over the panel, and whether Theme opens at its Style. */
 export interface PanelState {
   sheet: Sheet | null
   more: boolean
@@ -52,7 +52,7 @@ export const NO_SHEET: PanelState = { sheet: null, more: false }
 export type PanelAction =
   /** Add or Theme in the top bar: opens its sheet, or closes it when open. */
   | { type: 'toggle'; sheet: Sheet }
-  /** Opens a sheet, Theme at More options if asked, such as from a search. */
+  /** Opens a sheet, Theme at its Style if asked, such as from a search. */
   | { type: 'open'; sheet: Sheet; more?: boolean }
   | { type: 'more'; open: boolean }
   | { type: 'close' }

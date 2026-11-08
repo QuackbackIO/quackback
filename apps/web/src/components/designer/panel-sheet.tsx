@@ -68,7 +68,6 @@ export function PanelSheet({
           logoUrl={logoUrl}
           cssWarnings={cssWarnings}
           more={state.more}
-          onMore={(open) => dispatch({ type: 'more', open })}
           page={page}
           onOverride={onOverride}
           onBlock={onBlock}
