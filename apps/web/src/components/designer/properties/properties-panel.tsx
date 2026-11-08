@@ -116,7 +116,10 @@ export function PropertiesPanel({
         )}
         <div className="flex items-center gap-2">
           {icon}
-          <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold" title={about}>
+          <h2
+            className="min-w-0 flex-1 truncate rounded-sm text-[15px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+            title={about}
+          >
             {title}
           </h2>
           {actions && actions.length > 0 && (

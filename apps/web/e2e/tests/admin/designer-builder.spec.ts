@@ -56,9 +56,12 @@ async function pickFromList(page: Page, name: string) {
     .getByRole('treeitem', { name, exact: true })
   await row.focus()
   await page.keyboard.press('Enter')
-  await expect(
-    page.getByRole('complementary', { name: 'Properties' }).getByRole('heading', { level: 2 })
-  ).toHaveText(name)
+  // Focus goes to the heading of the panel the pick opened.
+  const heading = page
+    .getByRole('complementary', { name: 'Properties' })
+    .getByRole('heading', { level: 2 })
+  await expect(heading).toHaveText(name)
+  await expect(heading).toBeFocused()
 }
 
 const settings = (page: Page) => page.getByRole('complementary', { name: 'Properties' })
@@ -92,6 +95,8 @@ test('picks a block, changes a setting and undoes it', async ({ page }) => {
   await expect(settings(page).getByRole('heading', { name: 'Blocks', level: 2 })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.locator('[data-page-panel]')).toBeVisible()
+  // Back on the page, focus is on the tree row the part sits under.
+  await expect(settings(page).getByRole('treeitem', { name: 'Blocks' })).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(settings(page)).not.toHaveAttribute('data-open', '')
   await expect(page.getByRole('main', { name: 'Page being edited' })).toBeFocused()

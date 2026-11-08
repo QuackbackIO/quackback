@@ -11,7 +11,7 @@ import {
 import { trackBuilder } from '@/lib/client/builder-events'
 import { portalDesignQueries } from '@/lib/client/queries/portal-design'
 import { deviceCaption, escapeStep, panelView } from '@/lib/shared/design/builder-chrome'
-import { panelFor } from '@/lib/shared/design/panel-routes'
+import { panelFor, upOf } from '@/lib/shared/design/panel-routes'
 import { designChecks } from '@/lib/shared/design/checks'
 import type { HomeBlockType } from '@/lib/shared/design/home'
 import { locationOfPath, outlineOf, PAGE_NAMES, type Selection } from '@/lib/shared/design/outline'
@@ -51,7 +51,15 @@ import { usePublishFlow } from './publish-flow'
 import { ReturnVisitNote } from './return-visit-note'
 import { ReviewCompare } from './review-compare'
 import { AddDragCard, AddDropLayer, useAddDrag } from './use-add-drag'
-import { focusCanvas, focusSettings, inSettings } from './settings-focus'
+import {
+  focusAfterStepUp,
+  focusCanvas,
+  focusHeading,
+  focusSettings,
+  inSettings,
+  treeReturnRow,
+  type TreeOrigin,
+} from './settings-focus'
 import { useAiPane } from './use-ai-pane'
 import { useBlockActions } from './use-block-actions'
 import { useBuilderPanel } from './use-builder-panel'
@@ -358,15 +366,19 @@ export function DesignerShell({
     focusSettings()
   }
   // A row of "On this page": its part picked, or its element as a click on the canvas picks it.
+  // Focus goes to the panel it opens, and Escape back to the page returns it to the row.
+  const treeOrigin = useRef<TreeOrigin | null>(null)
   const pickFromTree = (row: TreeRow) => {
     menu.dismiss()
     setPageClosed(false)
+    treeOrigin.current = { row: row.id, selection: row.key }
     const node = row.part ? partNode(row.part) : null
     if (node) picking.select(row.key, null, node)
     else {
       pick(row.key)
       setPane('settings')
     }
+    focusHeading()
   }
   /** An element part's node on the canvas as drawn now, if the page draws it. */
   const partNode = (id: string) => {
@@ -418,10 +430,13 @@ export function DesignerShell({
             const step = escapeStep(panel.state, selection ?? picking.elementKey, settingsOpen)
             if (step === 'close-sheet') panel.close()
             else if (step === 'up') {
-              // The panel stays, a level up: focus in it stays in it.
+              // The panel stays, a level up: focus in it stays in it, back on the
+              // page at the tree row that opened the part.
               const kept = inSettings()
+              const toPage = !picking.elementKey && upOf(selection) === null
+              const row = treeReturnRow(treeOrigin.current, selection)
               stepBack()
-              if (kept) focusSettings()
+              if (kept) focusAfterStepUp({ toPage, row })
             } else if (step === 'close-page') {
               const lost = inSettings()
               setPageClosed(true)

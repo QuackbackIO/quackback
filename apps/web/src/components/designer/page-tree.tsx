@@ -11,6 +11,7 @@ import { treeRows, type TreeRow } from '@/lib/shared/design/page-tree'
 import { cn } from '@/lib/shared/utils'
 import { BlockIcon } from './block-icon'
 import { WORDS } from './properties/words'
+import { treeRowSelector } from './settings-focus'
 
 /** Rows that start closed: the menu can be long, and is edited in the header's panel too. */
 const CLOSED = new Set(['header'])
@@ -20,9 +21,6 @@ const iconButton = cn(
   'grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40',
   ring
 )
-
-/** The tree row a builder region focuses, by the row's id. */
-export const treeRowSelector = (id: string) => `[data-tree-row="${CSS.escape(id)}"]`
 
 /**
  * The page's parts as a tree: one tab stop, the arrows to move through it,
