@@ -19,6 +19,11 @@ const events = vi.hoisted(() => ({
   designerLookChosen: vi.fn(),
 }))
 vi.mock('@/lib/client/builder-events', () => events)
+// Site images' link preview reads the workspace's name and address.
+vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  useWorkspaceSettings: () => ({ name: 'Acme' }),
+  useBaseUrl: () => 'https://acme.test',
+}))
 vi.mock('@/lib/client/queries/portal-design', () => ({
   portalDesignQueries: {
     aiStatus: () => ({ queryKey: ['ai-status'], queryFn: async () => ({ available: true }) }),

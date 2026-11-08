@@ -41,6 +41,7 @@ vi.mock('@/lib/shared/i18n', () => ({
   loadMessages: vi.fn(async () => ({})),
   loadPortalMessages: vi.fn(async () => ({})),
   DEFAULT_LOCALE: 'en',
+  normalizeLocale: (locale: string) => (locale === 'en' ? 'en' : null),
   SUPPORTED_LOCALES: ['en', 'de', 'fr', 'es', 'ar', 'ru', 'pt-br', 'zh-cn', 'zh-tw', 'nl', 'pl'],
 }))
 vi.mock('@/lib/shared/types/settings', () => ({
@@ -215,5 +216,47 @@ describe('_portal loader — portal-visibility gate + access.denied audit', () =
     expect(result?.gate?.type).toBe('portal-access-gate')
     // Locale carried so the gate's auth dialog renders under PortalIntlProvider.
     expect(result?.gate?.locale).toBe('en')
+  })
+})
+
+describe('_portal head: the brand reaches the tab and link previews', () => {
+  type Head = (ctx: object) => {
+    meta: Array<Record<string, string>>
+    links: Array<{ rel: string; href: string }>
+  }
+  const head = (routeOptions as unknown as { options: { head: Head } }).options.head
+
+  async function settingsWithDesign() {
+    const [{ designView }, { defaultDesign }] = await Promise.all([
+      import('@/lib/shared/design/design-view'),
+      import('@/lib/shared/design/schema'),
+    ])
+    const doc = defaultDesign()
+    doc.brand.logo.name = 'GitHub'
+    doc.brand.logo.mark.light = { key: 'logos/icon.svg' }
+    return { name: 'Acme Corp', portalDesign: designView(doc, 2), brandingData: null }
+  }
+
+  it('titles the tab with the Brand kit title and shows its icon', async () => {
+    const settings = await settingsWithDesign()
+    const out = head({
+      loaderData: { gate: null, baseUrl: 'https://acme.test' },
+      matches: [{ context: { settings } }],
+    })
+    expect(out.meta.find((m) => 'title' in m)?.title).toBe('GitHub')
+    expect(out.links.find((l) => l.rel === 'icon')?.href).toBe('/api/storage/logos/icon.svg')
+  })
+
+  it('shows the drawn card, large, and describes posts, not feature requests', async () => {
+    const settings = await settingsWithDesign()
+    const out = head({
+      loaderData: { gate: null, baseUrl: 'https://acme.test' },
+      matches: [{ context: { settings } }],
+    })
+    const content = (key: string) =>
+      out.meta.find((m) => m.property === key || m.name === key)?.content
+    expect(content('og:image')).toMatch(/^https:\/\/acme\.test\/brand\.png\?v=/)
+    expect(content('twitter:card')).toBe('summary_large_image')
+    expect(content('description')).not.toMatch(/feature request/i)
   })
 })

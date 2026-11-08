@@ -68,10 +68,10 @@ export const Route = createFileRoute('/_portal/')({
     return { landing: 'feed' as const, ...feed }
   },
   // Home's title, description and share tags are the portal's own, from its layout.
-  head: ({ loaderData }) =>
+  head: ({ loaderData, matches }) =>
     loaderData?.landing === 'home'
       ? { links: loaderData.baseUrl ? [{ rel: 'canonical', href: loaderData.baseUrl }] : [] }
-      : feedHead(loaderData),
+      : feedHead(loaderData, matches),
   component: PortalLanding,
 })
 

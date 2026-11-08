@@ -46,6 +46,12 @@ import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
 import { usePreviewCss } from '@/components/public/preview-draft-context'
 import { BrandStatusColours } from '@/components/public/brand-status-colours'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
+import {
+  portalFavicon,
+  portalHeadWords,
+  portalShareImage,
+  portalSiteName,
+} from '@/lib/shared/portal-head'
 import { shownName } from '@/lib/shared/greeting-name'
 
 /**
@@ -258,7 +264,6 @@ export const Route = createFileRoute('/_portal')({
     ])
 
     const brandingData = settings?.brandingData ?? null
-    const faviconData = settings?.faviconData ?? null
     const publicPortalConfig = settings?.publicPortalConfig ?? null
 
     // Custom CSS comes after the theme, so it cascades over it.
@@ -292,10 +297,6 @@ export const Route = createFileRoute('/_portal')({
       baseUrl: baseUrl ?? '',
       userRole,
       brandingData,
-      faviconData,
-      // The design's own favicon and share image, ahead of the workspace's.
-      designIcons:
-        settings.portalDesign?.engine === 'v2' ? (settings.portalDesign.icons ?? null) : null,
       customCss,
       configFontSans,
       themeMode,
@@ -317,45 +318,40 @@ export const Route = createFileRoute('/_portal')({
     const styles = portalDesignStyles(portalTheme(settings))
     const fontLinks = portalFontLinks(settings)
 
+    const siteName = portalSiteName(settings)
+    const favicon = portalFavicon(settings)
+
     // Access gate: a valid 200 sign-in page, but keep it out of search indexes.
     if (loaderData?.gate) {
       return {
         meta: [
-          { title: `Sign in · ${loaderData.gate.workspaceName}` },
+          { title: `Sign in · ${siteName}` },
           { name: 'robots', content: 'noindex, nofollow' },
         ],
-        links: [{ rel: 'icon', href: loaderData.gate.logoUrl || '/logo.png' }, ...fontLinks],
+        links: [{ rel: 'icon', href: favicon }, ...fontLinks],
         styles,
       }
     }
 
-    // Favicon priority: dedicated favicon > workspace logo > default logo.png
-    const faviconUrl =
-      loaderData?.designIcons?.favicon ||
-      loaderData?.faviconData?.url ||
-      loaderData?.brandingData?.logoUrl ||
-      '/logo.png'
-
-    const workspaceName = loaderData?.workspaceName ?? 'Quackback'
-    const description = `Share feedback, vote on feature requests, and track the ${workspaceName} roadmap.`
-    // Social share image: workspace logo, then the bundled default.
-    const ogImageUrl = loaderData?.designIcons?.shareImage
-      ? `${loaderData.baseUrl}${loaderData.designIcons.shareImage}`
-      : resolvePortalOgImageUrl(loaderData?.brandingData, loaderData?.baseUrl)
+    const description = portalHeadWords(settings).portal(siteName)
+    // The design's share image or its drawn card; a legacy portal keeps its logo.
+    const card = portalShareImage(settings, loaderData?.baseUrl)
+    const ogImage = card ?? resolvePortalOgImageUrl(settings?.brandingData, loaderData?.baseUrl)
 
     const meta: Array<Record<string, string>> = [
-      { title: workspaceName },
+      { title: siteName },
       { name: 'description', content: description },
-      { property: 'og:site_name', content: workspaceName },
-      { property: 'og:title', content: workspaceName },
+      { property: 'og:site_name', content: siteName },
+      { property: 'og:title', content: siteName },
       { property: 'og:description', content: description },
-      { property: 'og:image', content: ogImageUrl },
-      { name: 'twitter:title', content: workspaceName },
+      { property: 'og:image', content: ogImage },
+      ...(card ? [{ name: 'twitter:card', content: 'summary_large_image' }] : []),
+      { name: 'twitter:title', content: siteName },
       { name: 'twitter:description', content: description },
     ]
     return {
       meta,
-      links: [{ rel: 'icon', href: faviconUrl }, ...fontLinks],
+      links: [{ rel: 'icon', href: favicon }, ...fontLinks],
       styles,
     }
   },

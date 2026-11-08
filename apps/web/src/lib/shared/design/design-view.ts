@@ -12,6 +12,13 @@ import { rewritePartAliases } from './parts'
 import { designFontIds, fontStack, uploadedFontFaces } from './fonts'
 import { renderDesignCss, resolveDesign, type ResolvedDesign } from './resolve'
 import { readableStatusColours } from './status-colours'
+import {
+  shareCardFacts,
+  shareCardVersion,
+  shortHash,
+  squareIconPath,
+  themeColours,
+} from './share-card'
 import type { PortalDesign } from './schema'
 import type { BandImage, DesignLogo, PortalDesignView } from './view'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
@@ -45,6 +52,9 @@ export function designView(
     icons: {
       favicon: doc.brand.favicon ? designAssetUrl(doc.brand.favicon.key) : null,
       shareImage: doc.brand.shareImage ? designAssetUrl(doc.brand.shareImage.key) : null,
+      mark: markIcon(doc),
+      card: shareCardVersion(shareCardFacts(doc, resolved)),
+      themeColor: themeColours(resolved),
     },
     statusColours: statusColours(doc, resolved),
   }
@@ -58,6 +68,17 @@ function statusColours(doc: PortalDesign, resolved: ResolvedDesign): string[] | 
   const vars = resolved.light ?? resolved.dark
   const backgrounds = [vars?.background, vars?.card].filter((bg): bg is string => !!bg)
   return backgrounds.length ? readableStatusColours(colours, backgrounds) : [...colours]
+}
+
+/**
+ * The brand icon as a favicon: an SVG as it is, since it scales; any other
+ * image fitted into a square on the server, so a wide icon is not squashed.
+ */
+function markIcon(doc: PortalDesign): string | null {
+  const { mark } = doc.brand.logo
+  const key = (mark.light ?? mark.dark)?.key
+  if (!key) return null
+  return /\.svg$/i.test(key) ? designAssetUrl(key) : squareIconPath(shortHash(key))
 }
 
 /** Where the portal loads a stored brand file from: its own origin. */

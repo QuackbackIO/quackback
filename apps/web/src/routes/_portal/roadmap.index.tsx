@@ -5,6 +5,13 @@ import { RoadmapPageView } from '@/components/public/roadmap-page'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import {
+  headSettings,
+  pageShareMeta,
+  pageTitle,
+  portalHeadWords,
+  portalSiteName,
+} from '@/lib/shared/portal-head'
 
 const searchSchema = z.object({
   roadmap: z.string().optional(),
@@ -40,11 +47,12 @@ export const Route = createFileRoute('/_portal/roadmap/')({
       userRole: userRole ?? null,
     }
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, matches }) => {
     if (!loaderData) return {}
-    const { workspaceName, baseUrl } = loaderData
-    const title = `Roadmap - ${workspaceName}`
-    const description = `See what ${workspaceName} is working on and what's coming next.`
+    const { baseUrl } = loaderData
+    const settings = headSettings(matches)
+    const title = pageTitle(settings, 'roadmap')
+    const description = portalHeadWords(settings).roadmap(portalSiteName(settings))
     const canonicalUrl = baseUrl ? `${baseUrl}/roadmap` : ''
     return {
       meta: [
@@ -55,6 +63,7 @@ export const Route = createFileRoute('/_portal/roadmap/')({
         ...(canonicalUrl ? [{ property: 'og:url', content: canonicalUrl }] : []),
         { name: 'twitter:title', content: title },
         { name: 'twitter:description', content: description },
+        ...pageShareMeta(settings, baseUrl, 'roadmap'),
       ],
       links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
     }

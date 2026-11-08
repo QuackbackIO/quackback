@@ -37,6 +37,7 @@ import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { rssAlternateLink } from '@/lib/shared/rss-alternate'
 import { isStatusFeedReadable } from '@/lib/shared/status-settings'
 import { portalThemeMode } from '@/lib/shared/design/view'
+import { portalThemeColors } from '@/lib/shared/portal-head'
 
 // The toast renderer is its own chunk: the root module ships with every
 // document (the embedded widget included), and a toast fired before it mounts
@@ -348,6 +349,13 @@ function RootDocument({
       <head>
         {!themeClass && <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />}
         <DocumentHead />
+        {/* The browser's chrome in the portal's page colour, per mode. */}
+        {portalThemeColors(
+          portalDesign,
+          defaultTheme === 'light' || defaultTheme === 'dark' ? defaultTheme : undefined
+        ).map((tag) => (
+          <meta key={tag.media ?? 'all'} name="theme-color" {...tag} />
+        ))}
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
         {effects}
