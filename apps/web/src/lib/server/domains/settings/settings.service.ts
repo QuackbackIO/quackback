@@ -1,3 +1,4 @@
+import { portalHeadTemplates } from './portal-head-words'
 import {
   db,
   eq,
@@ -1123,6 +1124,7 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
         portalDesign.switchable && { portalDesignSwitchable: true as const }),
       brandingData,
       faviconData: brandingData.faviconUrl ? { url: brandingData.faviconUrl } : null,
+      portalHeadWords: portalHeadTemplates({ helpCenterConfig }),
       managedFieldPaths: org.managedFieldPaths ?? [],
       state: (org.state as 'active' | 'suspended' | 'deleting' | null) ?? 'active',
       verifiedDomains,

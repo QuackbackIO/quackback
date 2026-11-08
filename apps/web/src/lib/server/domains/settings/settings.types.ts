@@ -1,3 +1,4 @@
+import type { PortalHeadTemplates } from '@/lib/shared/portal-head'
 /**
  * Settings configuration types
  *
@@ -1123,6 +1124,8 @@ export interface WorkspaceSettings {
   portalDesignSwitchable?: true
   brandingData: SettingsBrandingData
   faviconData: { url: string } | null
+  /** The portal head's words in the workspace's main language. */
+  portalHeadWords?: PortalHeadTemplates
   /** Dot-paths managed by `/etc/quackback/config.yaml`. Matching in-app
    *  form controls render disabled when the path appears here. Empty
    *  list = nothing locked. */

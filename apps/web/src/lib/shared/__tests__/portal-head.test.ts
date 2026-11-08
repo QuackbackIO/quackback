@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { designView } from '@/lib/shared/design/design-view'
 import { defaultDesign } from '@/lib/shared/design/schema'
 import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
+import { portalHeadTemplates } from '@/lib/server/domains/settings/portal-head-words'
 import {
   pageShareMeta,
   pageTitle,
@@ -38,7 +39,13 @@ describe('portalMainLanguage', () => {
   })
 
   it('writes the head in it, whoever is visiting', () => {
-    const settings = { ...withDesign(), helpCenterConfig: { locales: { default: 'fr' } } }
+    const helpCenterConfig = { locales: { default: 'fr' } }
+    // The server puts the main language's words in the settings, as getWorkspaceSettings does.
+    const settings = {
+      ...withDesign(),
+      helpCenterConfig,
+      portalHeadWords: portalHeadTemplates({ helpCenterConfig }),
+    }
     expect(pageTitle(settings, 'roadmap')).toBe('Feuille de route - Acme Corp')
     expect(portalHeadWords(settings).changelog('Acme')).toBe('Les dernières nouveautés de Acme.')
   })
@@ -61,9 +68,19 @@ describe('the head words', () => {
     expect(english.portal('Acme')).toMatch(/posts/)
   })
 
+  it('fall back to English when the settings carry none, such as settings cached before', () => {
+    expect(
+      portalHeadWords({ helpCenterConfig: { locales: { default: 'fr' } } }).pages.roadmap
+    ).toBe('Roadmap')
+  })
+
   it('have every page and description in every language, with the name in each', () => {
     for (const locale of SUPPORTED_LOCALES) {
-      const words = portalHeadWords({ helpCenterConfig: { locales: { default: locale } } })
+      const helpCenterConfig = { locales: { default: locale } }
+      const words = portalHeadWords({
+        helpCenterConfig,
+        portalHeadWords: portalHeadTemplates({ helpCenterConfig }),
+      })
       expect(words.portal('ZZNAME')).toContain('ZZNAME')
       expect(words.entry('ZZTITLE', 'ZZNAME')).toContain('ZZTITLE')
       expect(Object.values(words.pages).every((name) => name.length > 0)).toBe(true)
