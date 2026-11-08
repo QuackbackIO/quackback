@@ -48,6 +48,8 @@ export const WORDS = {
   onThisPage: 'On this page',
   everyPage: 'Every page',
   words: 'Words',
+  /** The header's logo, its own element. */
+  logo: 'Logo',
   pageTitle: 'Title',
   titlePlain: 'Plain',
   titleInHero: 'In the hero',

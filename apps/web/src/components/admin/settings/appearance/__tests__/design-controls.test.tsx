@@ -7,7 +7,7 @@
  */
 import { selectWords, wordsEditor } from '@/components/designer/words/__tests__/words-test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
@@ -44,7 +44,6 @@ vi.mock('@/lib/client/queries/admin', () => ({
   adminQueries: { roadmaps: () => ({ queryKey: ['roadmaps'], queryFn: async () => [] }) },
 }))
 
-const { LogoControls } = await import('../logo-controls')
 const { TypeStyleControls } = await import('../type-shape-controls')
 const { FeedControls, HeaderControls, HeadlineFields } = await import('../section-controls')
 
@@ -59,10 +58,7 @@ function mount(panel: 'brand' | 'sections', start: PortalDesign = defaultDesign(
       setDesign(next)
     }
     return panel === 'brand' ? (
-      <>
-        <LogoControls design={design} update={update} />
-        <TypeStyleControls design={design} update={update} />
-      </>
+      <TypeStyleControls design={design} update={update} />
     ) : (
       <>
         <HeaderControls design={design} update={update} />
@@ -85,7 +81,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('the type, logo and button controls', () => {
+describe('the type and button controls', () => {
   it('sets headline size, tracking and case together as a type style', () => {
     const seen = mount('brand')
     expect(screen.getByRole('radio', { name: 'Quiet' }).getAttribute('aria-checked')).toBe('true')
@@ -95,34 +91,6 @@ describe('the type, logo and button controls', () => {
       tracking: 'tight',
       headlineCase: 'upper',
     })
-  })
-
-  it('shows the full logo slot once asked for, and stores an uploaded SVG’s key', async () => {
-    const put = vi.fn(async () => new Response(null, { status: 200 }))
-    vi.stubGlobal('fetch', put)
-    const seen = mount('brand')
-    expect(screen.queryByLabelText('Full logo', { selector: 'input[type=file]' })).toBeNull()
-    fireEvent.click(screen.getByRole('switch', { name: 'Use a full logo image instead' }))
-    expect(seen.design.brand.logo.display).toBe('wordmark')
-    const file = new File(['<svg/>'], 'wordmark.svg', { type: 'image/svg+xml' })
-    await act(async () => {
-      fireEvent.change(screen.getByLabelText('Full logo', { selector: 'input[type=file]' }), {
-        target: { files: [file] },
-      })
-    })
-    await waitFor(() =>
-      expect(seen.design.brand.logo.wordmark.light).toEqual({ key: 'header-logos/w.svg' })
-    )
-    expect(uploads.asked).toEqual([
-      {
-        fn: 'wordmark',
-        data: { filename: 'wordmark.svg', contentType: 'image/svg+xml', fileSize: 6 },
-      },
-    ])
-    expect(put).toHaveBeenCalledWith(
-      'https://storage.example.com/put',
-      expect.objectContaining({ method: 'PUT' })
-    )
   })
 })
 

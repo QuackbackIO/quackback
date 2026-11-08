@@ -25,6 +25,8 @@ export type Selection =
   /** A part of the site's styles, such as its colours; see SITE_PARTS. */
   | `site:${SitePart}`
   | 'header'
+  /** The header's logo, its own element on every page. */
+  | 'logo'
   /** The top of each page, with its headline: one block on every page that has one. */
   | 'hero'
   | 'welcome'
@@ -112,7 +114,7 @@ export function outlineOf(design: PortalDesign, page: DesignerPage): OutlineNode
         label: SITE_PARTS[part],
       })),
     },
-    { key: 'header', label: 'Header and menu' },
+    { key: 'header', label: 'Header and menu', children: [{ key: 'logo', label: 'Logo' }] },
   ]
   // Every page with a headline has a hero; the status page and a post do not.
   if (page !== 'status' && page !== 'post') nodes.push({ key: 'hero', label: 'Hero' })

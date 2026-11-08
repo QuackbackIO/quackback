@@ -39,6 +39,7 @@ describe('outlineOf', () => {
     expect(pageKeys(withHome(), 'home')).toEqual([
       'site',
       'header',
+      'logo',
       'hero',
       'home',
       'block-ideas00001',
@@ -69,6 +70,7 @@ describe('outlineOf', () => {
     expect(pageKeys(design, 'feedback')).toEqual([
       'site',
       'header',
+      'logo',
       'hero',
       'welcome',
       'feed',
@@ -80,9 +82,15 @@ describe('outlineOf', () => {
   })
 
   it('gives the other pages their hero and their own sections, and Status none', () => {
-    expect(pageKeys(defaultDesign(), 'roadmap')).toEqual(['site', 'header', 'hero', 'board'])
-    expect(pageKeys(defaultDesign(), 'status')).toEqual(['site', 'header'])
-    expect(pageKeys(defaultDesign(), 'post')).toEqual(['site', 'header'])
+    expect(pageKeys(defaultDesign(), 'roadmap')).toEqual([
+      'site',
+      'header',
+      'logo',
+      'hero',
+      'board',
+    ])
+    expect(pageKeys(defaultDesign(), 'status')).toEqual(['site', 'header', 'logo'])
+    expect(pageKeys(defaultDesign(), 'post')).toEqual(['site', 'header', 'logo'])
   })
 
   it('names the hero Hero on every page that has one', () => {
@@ -113,7 +121,7 @@ describe('pages', () => {
     expect(pageOfPath('/b/ideas/posts/1', false)).toBe('post')
     expect(pageOfPath('/b/ideas', false)).toBeNull()
     expect(pagePath('post', '/b/ideas/posts/1')).toBe('/b/ideas/posts/1')
-    expect(pageKeys(defaultDesign(), 'post')).toEqual(['site', 'header'])
+    expect(pageKeys(defaultDesign(), 'post')).toEqual(['site', 'header', 'logo'])
     expect(pagePath('home')).toBe('/')
     expect(pagePath('help')).toBe('/hc')
   })
@@ -141,6 +149,15 @@ describe('pages', () => {
     expect(locationOfPath('/settings/profile', false)).toBeNull()
     expect(locationOfPath('/design-sample/status', false)).toBeNull()
     expect(pagePath('changelog', '/changelog/entry_1')).toBe('/changelog/entry_1')
+  })
+})
+
+describe('the header', () => {
+  it('holds the logo, its own element, on every page', () => {
+    for (const page of ['home', 'feedback', 'roadmap', 'status', 'post'] as const) {
+      const header = outlineOf(defaultDesign(), page).find((node) => node.key === 'header')!
+      expect(header.children).toEqual([{ key: 'logo', label: 'Logo' }])
+    }
   })
 })
 

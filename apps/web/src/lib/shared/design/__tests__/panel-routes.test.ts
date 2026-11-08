@@ -57,6 +57,18 @@ describe('panelFor', () => {
     expect(panelFor('home', false, 'home', nameOf).panel).toBe('blocks')
   })
 
+  it('puts the logo under the header, as its own element', () => {
+    expect(panelFor('logo', false, 'roadmap', nameOf)).toEqual({
+      panel: 'logo',
+      crumbs: [
+        { label: 'Roadmap', to: null },
+        { label: 'Header and menu', to: 'header' },
+        { label: 'Logo' },
+      ],
+      up: 'header',
+    })
+  })
+
   it('shows the header for a page of the menu, which has no panel of its own', () => {
     expect(panelFor('page:roadmap', false, 'home', nameOf).panel).toBe('header')
   })
@@ -73,6 +85,7 @@ describe('upOf', () => {
   it('goes up one level, and from the page to nothing', () => {
     expect(upOf('block-a')).toBe('home')
     expect(upOf('link:docs')).toBe('header')
+    expect(upOf('logo')).toBe('header')
     expect(upOf('hero')).toBeNull()
     expect(upOf('home')).toBeNull()
     expect(upOf(null)).toBeNull()

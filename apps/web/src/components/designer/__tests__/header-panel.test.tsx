@@ -2,8 +2,8 @@
 /**
  * The header's panel on the properties frame: its layout (with the blend
  * into the hero), the menu as rows with Hide or Show on each and the rest
- * under ⋯, the landing page as tiles, the menu's style, and the logo's way
- * to Theme. Names change where the menu draws them, never in the list.
+ * under ⋯, the landing page as tiles, the menu's style, and a row into the
+ * logo, its own element. Names change where the menu draws them, never in the list.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
@@ -34,7 +34,7 @@ function show(change?: (draft: PortalDesign) => void) {
   const props = {
     act: vi.fn(),
     onAdd: vi.fn(),
-    onTheme: vi.fn(),
+    onLogo: vi.fn(),
     onLanding: vi.fn(),
   }
   function Harness() {
@@ -159,10 +159,11 @@ describe('HeaderPanel', () => {
     expect(screen.queryByRole('switch', { name: 'Header blends into the hero' })).toBeNull()
   })
 
-  it('leads to Theme for the logo, and to adding to the menu', () => {
-    const { onTheme, onAdd } = show()
-    fireEvent.click(screen.getByRole('button', { name: 'Change the logo in Theme' }))
-    expect(onTheme).toHaveBeenCalled()
+  it('leads to the logo, its own element, and to adding to the menu', () => {
+    const { onLogo, onAdd } = show((draft) => void (draft.brand.logo.display = 'wordmark'))
+    expect(screen.queryByRole('button', { name: 'Theme' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Logo: Full logo' }))
+    expect(onLogo).toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Add to the menu' }))
     expect(onAdd).toHaveBeenCalled()
   })

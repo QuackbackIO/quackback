@@ -38,6 +38,7 @@ export function aiScopeOf(selection: Selection | null): {
   const scopes: Record<string, DesignAiScope> = {
     site: 'brand',
     header: 'header',
+    logo: 'logo',
     // The hero's fields are stored under its older name, band.
     hero: 'band',
     welcome: 'welcome',

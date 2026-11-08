@@ -133,6 +133,7 @@ export function ThemeContent({
   cssWarnings,
   more = false,
   page = null,
+  onLogo,
   onOverride,
   onBlock,
 }: {
@@ -140,6 +141,8 @@ export function ThemeContent({
   onOverride?: (o: StyleOverride) => void
   /** Picks a Home block, whose own look a place set differently is. */
   onBlock?: (blockId: string) => void
+  /** Picks the logo on the page, where its size and placement are set. */
+  onLogo?: () => void
   design: PortalDesign
   /** Changes the draft, under a name for its undo where one is given. */
   update: Update
@@ -193,7 +196,7 @@ export function ThemeContent({
         </SubView>
       ) : (
         <>
-          <BrandKit design={design} update={update} logoUrl={logoUrl} />
+          <BrandKit design={design} update={update} logoUrl={logoUrl} onLogo={onLogo} />
           <div ref={style} className="contents">
             <PropertySection title={THEME.sections.style}>
               <OpenRow

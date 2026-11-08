@@ -10,6 +10,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { HeaderPanel } from './header-panel'
 import { HeroPanel } from './hero-panel'
 import { Inspector, type InspectorPart } from './inspector'
+import { LogoPanel } from './logo-panel'
 import { MenuPartSettings } from './menu-part-settings'
 import { PagePanel } from './page-panel'
 import { PickedBlock } from './picked-block'
@@ -47,7 +48,7 @@ export function crumbsOf(
 
 /**
  * What the right panel holds under any sheet, as the route table says: the
- * page's own panel with nothing picked, the header's and a menu link's, the
+ * page's own panel with nothing picked, the header's, the logo's and a menu link's, the
  * hero's, a block's, another part's, or the words every page uses. Never
  * blank: a pick with no panel of its own shows the page's.
  */
@@ -67,6 +68,7 @@ export function PickedSettings({
   menu,
   onSelect,
   onTheme,
+  logoUrl = null,
   say,
 }: {
   route: PanelRoute
@@ -90,6 +92,8 @@ export function PickedSettings({
   onSelect: (selection: Selection | null) => void
   /** Opens Theme, at its Style when asked. */
   onTheme: (more?: boolean) => void
+  /** The workspace's logo, which the logo's panel shows until the portal has its own. */
+  logoUrl?: string | null
   say: (words: string) => void
 }) {
   // A menu link is not in the outline, so the route names it by its key: it goes by its own name.
@@ -110,10 +114,12 @@ export function PickedSettings({
           update={update}
           act={menu.act}
           onAdd={() => menu.setAdding(true)}
-          onTheme={() => onTheme()}
+          onLogo={() => onSelect('logo')}
           onLanding={menu.land}
         />
       )
+    case 'logo':
+      return <LogoPanel crumbs={crumbs} design={design} update={update} logoUrl={logoUrl} />
     case 'link':
       return (
         <MenuPartSettings

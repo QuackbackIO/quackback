@@ -20,7 +20,6 @@ function Harness({ start }: { start: PortalDesign }) {
   return (
     <BrandKitColours
       design={design}
-      logoUrl={null}
       update={(change) =>
         setDesign((before) => {
           const next = structuredClone(before)

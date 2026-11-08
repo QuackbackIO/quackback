@@ -11,7 +11,7 @@ const drawn = (element: Element) => element.getClientRects().length > 0
 
 /**
  * The element a key marks in the frame's page, if the page draws it: a block
- * by its section, a menu item (`menu:<item>`) or the menu's row. The menu is
+ * by its section, the logo by its part, a menu item (`menu:<item>`) or the menu's row. The menu is
  * drawn once per width, so the one laid out is the one meant.
  */
 export function blockElement(
@@ -30,6 +30,8 @@ export function blockElement(
       ) ?? null
     )
   }
+  // The logo is its own element in the header, marked as a part rather than a section.
+  if (key === 'logo') return doc.querySelector('[data-qb-part="logo"]')
   for (const element of doc.querySelectorAll('[data-qb-section]'))
     if (element.getAttribute('data-qb-section') === key) return element
   return null
