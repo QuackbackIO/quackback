@@ -152,7 +152,7 @@ export const STYLE_PROPS = {
     label: 'Font',
     about: 'which of the design’s fonts',
   },
-  size: { ...num(10, 160, 1), label: 'Size', about: 'text size' },
+  size: { ...num(10, 200, 1), label: 'Size', about: 'text size' },
   weight: { ...num(100, 900, 100, ''), label: 'Weight', about: 'how heavy the text is' },
   case: {
     kind: 'choice',

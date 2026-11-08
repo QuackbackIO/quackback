@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { contrastRatio } from '../contrast'
 import { renderDesignCss, resolveDesign } from '../resolve'
 import { defaultDesign, portalDesign, type PortalDesign } from '../schema'
+import { tuneSchema } from '../tune'
 import {
   BLOCK_STYLE_ELEMENTS,
   STYLE_ELEMENTS,
@@ -113,6 +114,12 @@ describe('the style token registry', () => {
     expect(styleText()).not.toContain('ring (colour)')
     expect(styleText()).not.toContain('|ring>')
     expect(styleText()).toContain('ringWidth (1 to 6px)')
+  })
+
+  it('bounds a text size as an exact value does, so either layer holds the same sizes', () => {
+    expect(STYLE_PROPS.size).toMatchObject({ min: 10, max: 200 })
+    expect(tuneSchema.shape.headline.safeParse({ size: 200 }).success).toBe(true)
+    expect(tuneSchema.shape.headline.safeParse({ size: 201 }).success).toBe(false)
   })
 
   it('has a property kind for each of its properties', () => {

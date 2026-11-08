@@ -50,7 +50,7 @@ import {
   type StyleState,
 } from '@/lib/shared/design/style-tokens'
 import { cn } from '@/lib/shared/utils'
-import { brandOf, clearExactValues, exactOf, exactValuesOf } from './element-brand'
+import { brandOf, everywhereValue, homeValuesOf, writeEverywhere } from './element-brand'
 import { ElementStyleSection } from './element-style-section'
 import { StyleField } from './element-styles'
 import { placeDetail, valueText } from './set-differently'
@@ -195,9 +195,19 @@ export function ElementPanel({
     styleAllows(pick.element, state, prop) &&
     (!phone || (PHONE_PROPS as readonly string[]).includes(prop))
 
+  // Every one's normal look on all screens is the element's brand layer: its exact value, else its style.
+  const widest = at === 'everywhere' && screen === 'all'
+  const readHere = (prop: StyleProp, s: StyleState = state) =>
+    widest && s === 'base'
+      ? everywhereValue(design, pick.element, prop)
+      : readAt(design, ctx, at, screen, s, prop)
+  const writeHere = (draft: PortalDesign, prop: StyleProp, value: unknown) =>
+    widest && state === 'base'
+      ? writeEverywhere(draft, pick.element, prop, value)
+      : writeAt(draft, ctx, at, screen, state, prop, value)
   const write = (prop: StyleProp, value: unknown) =>
     update(
-      (draft) => writeAt(draft, ctx, at, screen, state, prop, value === '' ? undefined : value),
+      (draft) => writeHere(draft, prop, value === '' ? undefined : value),
       undoName(STYLE_PROPS[prop].label.toLowerCase())
     )
   const darkOf = (prop: StyleProp) =>
@@ -225,12 +235,20 @@ export function ElementPanel({
               ? 'From all screens'
               : `From ${STATE_INFO.base.label}`,
       }
-    const brand = brandOf(design, pick.element, prop)
-    if (brand !== undefined)
+    // Every one's exact value, below this scope, state or screen.
+    const every = widest && state === 'base' ? undefined : everywhereValue(design, pick.element, prop)
+    if (every !== undefined)
       return {
-        value: brand,
-        from: exactOf(design, pick.element, prop) === undefined ? WORDS.fromBrand : WORDS.fromExact,
+        value: every,
+        from:
+          at !== 'everywhere'
+            ? fromScope(scopeWords('everywhere', one))
+            : state !== 'base'
+              ? `From ${STATE_INFO.base.label}`
+              : 'From all screens',
       }
+    const brand = brandOf(design, pick.element, prop)
+    if (brand !== undefined) return { value: brand, from: WORDS.fromBrand }
     // What the element is drawn with is the brand's only where nothing narrower sets it.
     if (!effectiveValue(design, ctx, screen, state, prop)) {
       const measured = measure?.(prop)
@@ -244,7 +262,7 @@ export function ElementPanel({
     const info: StylePropInfo = STYLE_PROPS[prop]
     const id = `style-${pick.element}-${state}-${prop}`
     const label = ROW_LABELS[prop] ?? info.label
-    const here = readAt(design, ctx, at, screen, state, prop)
+    const here = readHere(prop)
     const from = inherited(prop)
     const resetLabel = from
       ? resetTo(valueText(prop, from.value), from.from)
@@ -347,8 +365,9 @@ export function ElementPanel({
   const restCommon = rest.filter((p) => el.common.includes(p))
   const restMore = rest.filter((p) => !el.common.includes(p))
   const hasValue = (prop: StyleProp) =>
-    readAt(design, ctx, at, screen, state, prop) !== undefined ||
-    effectiveValue(design, ctx, screen, state, prop) !== null
+    readHere(prop) !== undefined ||
+    effectiveValue(design, ctx, screen, state, prop) !== null ||
+    everywhereValue(design, pick.element, prop) !== undefined
 
   const sections = SECTION_PROPS.map((section) => {
     const props = section.props.filter(allowed)
@@ -366,9 +385,9 @@ export function ElementPanel({
           optional
             ? () => {
                 setAdded(new Set([...added].filter((t) => t !== section.title)))
-                if (props.some((p) => readAt(design, ctx, at, screen, state, p) !== undefined))
+                if (props.some((p) => readHere(p) !== undefined))
                   update((draft) => {
-                    for (const p of props) writeAt(draft, ctx, at, screen, state, p, undefined)
+                    for (const p of props) writeHere(draft, p, undefined)
                   }, undoName(section.title.toLowerCase()))
               }
             : undefined
@@ -416,26 +435,20 @@ export function ElementPanel({
     onGo: onJump ? () => onJump(place) : undefined,
   }))
 
-  const values = countAt(design, ctx, at, screen)
-  const exact = at === 'everywhere' ? exactValuesOf(design, pick.element).length : 0
+  const homes = widest ? homeValuesOf(design, pick.element) : []
+  const values =
+    countAt(design, ctx, at, screen) +
+    homes.filter((p) => readAt(design, ctx, at, screen, 'base', p) === undefined).length
   const actions: PanelAction[] = [
     ...(values
       ? [
           {
             label: `Reset ${scopeWords(at, one)} (${values} ${values === 1 ? 'value' : 'values'})`,
-            onSelect: () => update((draft) => resetAt(draft, ctx, at, screen), undoName('reset')),
-          },
-        ]
-      : []),
-    ...(exact
-      ? [
-          {
-            label: `${WORDS.resetExact} (${exact})`,
             onSelect: () =>
-              update(
-                (draft) => clearExactValues(draft, pick.element),
-                undoName(WORDS.resetExact.toLowerCase())
-              ),
+              update((draft) => {
+                resetAt(draft, ctx, at, screen)
+                for (const p of homes) writeEverywhere(draft, pick.element, p, undefined)
+              }, undoName('reset')),
           },
         ]
       : []),
@@ -449,9 +462,7 @@ export function ElementPanel({
   ]
 
   const statesSet = (s: StyleState) =>
-    (el.props as readonly StyleProp[]).some(
-      (p) => readAt(design, ctx, at, screen, s, p) !== undefined
-    )
+    (el.props as readonly StyleProp[]).some((p) => readHere(p, s) !== undefined)
 
   return (
     <PropertiesPanel

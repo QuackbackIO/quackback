@@ -151,9 +151,11 @@ describe('the picked element’s properties', () => {
 
   it('writes at the scope picked, shared at first, as one named undo step', () => {
     const { box } = mount(cta)
-    fireEvent.change(screen.getByLabelText('Corners'), { target: { value: '4' } })
-    expect(box.design.style).toEqual({ button: { base: { radius: 4 } } })
-    expect(box.labels.at(-1)).toBe('Call to action · Hero: corners, everywhere')
+    fireEvent.change(screen.getByLabelText('Height'), { target: { value: '40' } })
+    // Every main button's height is its exact value: one home, nothing in the style.
+    expect(box.design.tune).toEqual({ button: { height: 40 } })
+    expect(box.design.style).toBeUndefined()
+    expect(box.labels.at(-1)).toBe('Call to action · Hero: height, everywhere')
     fireEvent.click(screen.getByRole('button', { name: 'Just this one' }))
     fireEvent.change(screen.getByLabelText('Size'), { target: { value: '18' } })
     expect(
@@ -228,30 +230,58 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     expect(screen.queryByRole('heading', { name: 'Style' })).toBeNull()
   })
 
-  it('shows an exact value as the row’s, from brand, and a choice it takes the place of as unpicked', () => {
+  it('shows an exact value as every one’s, set here, and resets it to the theme, not to an older value', () => {
+    // The brand match wrote the headline's size exactly; then it was changed here.
     const design = home()
-    design.tune = { button: { radius: 14 } }
-    const { box, view } = mount(cta, design)
-    const corners = screen.getByLabelText('Corners') as HTMLInputElement
-    expect(corners.placeholder).toBe('14')
-    expect(view.container.querySelector('[title="From brand, set exactly"]')).toBeTruthy()
-    const shape = style().getByRole('radiogroup', { name: 'Shape' })
-    expect(within(shape).queryAllByRole('radio', { checked: true })).toEqual([])
-    // Picking a shape makes it count again.
-    fireEvent.click(within(shape).getByRole('radio', { name: 'Round' }))
+    design.tune = { headline: { size: 48 } }
+    const { box, view } = mount(headline, design)
+    const size = () => screen.getByLabelText('Size') as HTMLInputElement
+    expect(size().value).toBe('48')
+    fireEvent.change(size(), { target: { value: '60' } })
+    expect(box.design.tune).toEqual({ headline: { size: 60 } })
+    expect(box.design.style).toBeUndefined()
+    fireEvent.click(screen.getByRole('button', { name: /^Reset to .* from brand$/ }))
     expect(box.design.tune).toBeUndefined()
-    expect(box.design.shape.buttons).toBe('rounded')
+    expect(box.design.style).toBeUndefined()
+    // Back to the theme's size, not the 48 the match once wrote.
+    expect(size().value).toBe('')
+    expect(size().placeholder).not.toBe('48')
+    expect(view.container.textContent).not.toContain('set exactly')
   })
 
-  it('clears an element’s exact values from its menu', async () => {
+  it('clears both layers an older design holds, so Reset never brings a value back', () => {
+    const design = home()
+    design.tune = { headline: { size: 48 } }
+    design.style = { headline: { base: { size: 60 } } }
+    const { box } = mount(headline, design)
+    expect((screen.getByLabelText('Size') as HTMLInputElement).value).toBe('60')
+    fireEvent.click(screen.getByRole('button', { name: /^Reset to .* from brand$/ }))
+    expect(box.design.tune).toBeUndefined()
+    expect(box.design.style).toBeUndefined()
+  })
+
+  it('shows every one’s exact value as where a one-off comes from', () => {
+    const design = home()
+    design.tune = { button: { radius: 14 } }
+    const { view } = mount(cta, design)
+    fireEvent.click(screen.getByRole('button', { name: 'Just this one' }))
+    expect((screen.getByLabelText('Corners') as HTMLInputElement).placeholder).toBe('14')
+    expect(view.container.querySelector('[title="From every main button"]')).toBeTruthy()
+  })
+
+  it('resets every main button’s values, its exact ones too, from its menu', async () => {
     const design = home()
     design.tune = { button: { radius: 14, height: 40 }, card: { radius: 3 } }
+    design.style = { button: { hover: { background: 'support' } } }
     const { box } = mount(cta, design)
     await act(async () => {
       fireEvent.keyDown(screen.getByRole('button', { name: /more actions/ }), { key: 'ArrowDown' })
     })
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Reset exact values (2)' }))
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Reset every main button (3 values)' })
+    )
     expect(box.design.tune).toEqual({ card: { radius: 3 } })
+    expect(box.design.style).toBeUndefined()
   })
 
   it('reads a headline’s brand colour choice, and its font from the brand', () => {

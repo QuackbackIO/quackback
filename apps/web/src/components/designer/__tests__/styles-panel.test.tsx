@@ -141,8 +141,9 @@ describe('the elements', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Pill' }))
     expect(seen.design.shape.buttons).toBe('pill')
     fireEvent.change(screen.getByLabelText('Corners'), { target: { value: '6' } })
-    expect(seen.design.style).toEqual({ button: { base: { radius: 6 } } })
-    expect(seen.design.tune).toBeUndefined()
+    // Every main button's exact corners: one home, no copy in the style.
+    expect(seen.design.tune).toEqual({ button: { radius: 6 } })
+    expect(seen.design.style).toBeUndefined()
     expect(screen.queryByText(/Exact values/)).toBeNull()
   })
 

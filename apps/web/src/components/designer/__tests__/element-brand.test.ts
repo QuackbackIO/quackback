@@ -1,44 +1,21 @@
 /**
- * An element's brand layer: the exact values a design holds for it (tune),
- * read as the value a row has from the brand, and its brand choices, read
- * where no exact value sets the property.
+ * An element's brand layer: the exact values a design holds for it (tune).
+ * An element's own exact value is what every one of its kind has, so the
+ * panel writes there at its widest scope and Reset clears it back to the
+ * theme. Values another element shares (the menu's and buttons' label) and
+ * the brand's choices are what a row has from the brand.
  */
 import { describe, expect, it } from 'vitest'
+import { brandValue } from '@/lib/shared/design/override-cascade'
 import { defaultDesign } from '@/lib/shared/design/schema'
-import { brandOf, clearExactValues, exactValuesOf } from '../element-brand'
+import { brandOf, everywhereValue, writeEverywhere } from '../element-brand'
 
 describe('an element’s brand layer', () => {
-  it('reads an exact value as what the row has from the brand', () => {
-    const design = defaultDesign()
-    design.tune = { button: { radius: 14, fill: 'support' }, card: { border: 2, shadow: 'deep' } }
-    expect(brandOf(design, 'button', 'radius')).toBe(14)
-    expect(brandOf(design, 'button', 'background')).toBe('support')
-    expect(brandOf(design, 'card', 'borderWidth')).toBe(2)
-    expect(brandOf(design, 'card', 'shadow')).toBe('deep')
-  })
-
-  it('gives a button its own label weight before the shared label one', () => {
+  it('reads a shared exact value and the brand’s choices as what the row has from the brand', () => {
     const design = defaultDesign()
     design.tune = { label: { weight: 500 } }
     expect(brandOf(design, 'button', 'weight')).toBe(500)
     expect(brandOf(design, 'navItem', 'weight')).toBe(500)
-    design.tune = { label: { weight: 500 }, button: { weight: 700 } }
-    expect(brandOf(design, 'button', 'weight')).toBe(700)
-    expect(brandOf(design, 'navItem', 'weight')).toBe(500)
-  })
-
-  it('says exact capitals and underlines in the style’s own words', () => {
-    const design = defaultDesign()
-    design.tune = { button: { case: 'upper' }, link: { underline: 'never' } }
-    expect(brandOf(design, 'button', 'case')).toBe('upper')
-    expect(brandOf(design, 'link', 'underline')).toBe('none')
-    design.tune = { link: { underline: 'hover' } }
-    // Only on pointer over has no one style value.
-    expect(brandOf(design, 'link', 'underline')).toBeUndefined()
-  })
-
-  it('reads the brand’s choices where no exact value is set', () => {
-    const design = defaultDesign()
     design.brand.fonts.headlineColour = 'accent'
     design.brand.fonts.labelCase = 'upper'
     design.shape.buttons = 'pill'
@@ -46,20 +23,56 @@ describe('an element’s brand layer', () => {
     expect(brandOf(design, 'button', 'case')).toBe('upper')
     expect(brandOf(design, 'navItem', 'case')).toBe('upper')
     expect(brandOf(design, 'button', 'radius')).toBe(999)
-    design.tune = { headline: { colour: 'support' } }
-    expect(brandOf(design, 'headline', 'color')).toBe('support')
   })
 
-  it('lists and clears the exact values an element has, leaving others', () => {
+  it('reads an element’s own exact value as every one’s, not as the brand’s', () => {
     const design = defaultDesign()
-    design.tune = { button: { radius: 14, height: 40 }, label: { size: 15 }, card: { radius: 4 } }
-    expect(exactValuesOf(design, 'button').map((v) => `${v.group}.${v.key}`)).toEqual([
-      'button.radius',
-      'button.height',
-      'label.size',
-    ])
-    expect(exactValuesOf(design, 'link')).toEqual([])
-    clearExactValues(design, 'button')
-    expect(design.tune).toEqual({ card: { radius: 4 } })
+    const theme = brandValue(design, 'headline', 'size')
+    design.tune = { headline: { size: 48 }, button: { radius: 14, case: 'upper' } }
+    expect(everywhereValue(design, 'headline', 'size')).toBe(48)
+    expect(brandOf(design, 'headline', 'size')).toBe(theme)
+    expect(everywhereValue(design, 'button', 'radius')).toBe(14)
+    // Capitals in the style's own words.
+    expect(everywhereValue(design, 'button', 'case')).toBe('upper')
+    // A style value set for every one comes first.
+    design.style = { headline: { base: { size: 60 } } }
+    expect(everywhereValue(design, 'headline', 'size')).toBe(60)
+  })
+
+  it('writes every one’s value to its exact value, clearing the style, and clears both on reset', () => {
+    const design = defaultDesign()
+    design.tune = { headline: { size: 48, weight: 300 } }
+    design.style = { headline: { base: { size: 60 } } }
+    writeEverywhere(design, 'headline', 'size', 72)
+    expect(design.tune).toEqual({ headline: { size: 72, weight: 300 } })
+    expect(design.style).toBeUndefined()
+    writeEverywhere(design, 'headline', 'size', undefined)
+    expect(design.tune).toEqual({ headline: { weight: 300 } })
+    writeEverywhere(design, 'button', 'case', 'none')
+    expect(design.tune?.button).toEqual({ case: 'sentence' })
+  })
+
+  it('keeps a value its exact value cannot hold in the style, clearing the exact value', () => {
+    const design = defaultDesign()
+    design.tune = { card: { radius: 12 }, button: { case: 'upper', fill: 'support' } }
+    // Past a card's exact range.
+    writeEverywhere(design, 'card', 'radius', 200)
+    expect(design.style).toEqual({ card: { base: { radius: 200 } } })
+    // Lower case has no exact value.
+    writeEverywhere(design, 'button', 'case', 'lower')
+    // Colours stay in the style, which follows dark mode; the exact fill is light mode's only.
+    writeEverywhere(design, 'button', 'background', 'ink')
+    expect(design.tune).toBeUndefined()
+    expect(design.style).toEqual({
+      card: { base: { radius: 200 } },
+      button: { base: { case: 'lower', background: 'ink' } },
+    })
+  })
+
+  it('never writes a value another element shares', () => {
+    const design = defaultDesign()
+    writeEverywhere(design, 'button', 'size', 15)
+    expect(design.tune).toBeUndefined()
+    expect(design.style).toEqual({ button: { base: { size: 15 } } })
   })
 })

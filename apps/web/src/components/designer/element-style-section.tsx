@@ -321,7 +321,7 @@ export function ElementStyleSection({
       <PropertyRow
         key={choice.label}
         label={choice.label}
-        source={masked.length ? WORDS.setExactly : choice.reach}
+        source={choice.reach}
       >
         <PropertyTiles
           id={id}

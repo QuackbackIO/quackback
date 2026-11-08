@@ -30,12 +30,6 @@ export const WORDS = {
   dark: 'Dark',
   /** Sources a value can come from, on hover. */
   fromBrand: 'From brand',
-  /** A brand value that is an exact value, not a choice's. */
-  fromExact: 'From brand, set exactly',
-  /** A choice an exact value takes the place of, on hover. */
-  setExactly: 'Set exactly: pick one to use it',
-  /** The panel's menu: clears an element's exact values. */
-  resetExact: 'Reset exact values',
   /** Corner steps, sharpest first. */
   corners: { sharp: 'Sharp', soft: 'Soft', round: 'Round', pill: 'Pill' },
   /** Letter case. */
