@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type { DesignCheck } from '@/lib/shared/design/checks'
 import { linkOf, type MenuPartId } from '@/lib/shared/design/menu'
 import type { DesignerPage, OutlineNode, Selection } from '@/lib/shared/design/outline'
+import type { TreeRow } from '@/lib/shared/design/page-tree'
 import type { PanelRoute, RouteCrumb } from '@/lib/shared/design/panel-routes'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -70,6 +71,7 @@ export function PickedSettings({
   onTheme,
   logoUrl = null,
   say,
+  onTreePick,
 }: {
   route: PanelRoute
   selection: Selection | null
@@ -97,6 +99,8 @@ export function PickedSettings({
   /** The workspace's logo, which the logo's panel shows until the portal has its own. */
   logoUrl?: string | null
   say: (words: string) => void
+  /** A row of the page's tree picked, as a click on the canvas picks it. */
+  onTreePick?: (row: TreeRow) => void
 }) {
   // A menu link is not in the outline, so the route names it by its key: it goes by its own name.
   const link = route.panel === 'link' && selection ? linkOf(design, selection as MenuPartId) : null
@@ -190,6 +194,10 @@ export function PickedSettings({
           nodes={nodes}
           onSelect={onSelect}
           onTheme={(more) => onTheme(more)}
+          gates={gates}
+          act={menu.act}
+          onPick={onTreePick}
+          say={say}
         />
       )
   }

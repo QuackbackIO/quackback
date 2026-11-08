@@ -85,6 +85,7 @@ describe('useAiPane', () => {
     expect(JSON.parse(localStorage.getItem(aiPaneKey('user_1'))!)).toEqual({
       collapsed: true,
       width: 360,
+      chosen: true,
     })
     act(() => result.current.resize(420))
     expect(JSON.parse(localStorage.getItem(aiPaneKey('user_1'))!).width).toBe(420)
@@ -109,6 +110,23 @@ describe('useAiPane', () => {
     act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { key: '/' })))
     expect(result.current.collapsed).toBe(false)
     expect(onShow).toHaveBeenCalledOnce()
+  })
+
+  it('starts collapsed once a brand match has run, giving the canvas the room', () => {
+    const { result } = renderHook(() => useAiPane(false, undefined, true))
+    expect(result.current.collapsed).toBe(true)
+    // A match shown in the pane opens it for now, but is not a choice to keep it open.
+    act(() => result.current.reveal())
+    expect(result.current.collapsed).toBe(false)
+    cleanup()
+    expect(renderHook(() => useAiPane(false, undefined, true)).result.current.collapsed).toBe(true)
+  })
+
+  it('keeps it open once opened by hand, though a match has run', () => {
+    const first = renderHook(() => useAiPane(false, undefined, true))
+    act(() => first.result.current.expand())
+    first.unmount()
+    expect(renderHook(() => useAiPane(false, undefined, true)).result.current.collapsed).toBe(false)
   })
 
   it('does not remember a width mid-drag', () => {

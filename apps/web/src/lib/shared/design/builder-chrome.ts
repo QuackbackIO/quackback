@@ -7,7 +7,6 @@
  */
 import type { SectionType } from './blocks'
 import { isMenuSelection } from './menu'
-import type { OutlineNode, Selection } from './outline'
 import type { StyleElement, StyleState } from './style-tokens'
 
 /** The sheets that open over the right panel. */
@@ -131,18 +130,6 @@ export function escapeStep(
   return pageOpen ? 'close-page' : null
 }
 
-/**
- * What can be picked on the page shown, in the order a visitor meets it: the
- * keyboard's way to the blocks the canvas draws. What every page shares is
- * in Theme, so it is not listed.
- */
-export function pageParts(nodes: readonly OutlineNode[]): { key: Selection; label: string }[] {
-  return nodes
-    .filter((node) => node.key !== 'site')
-    .flatMap((node) => (node.children ? node.children : [node]))
-    .map(({ key, label }) => ({ key, label }))
-}
-
 /* Ask AI's pane */
 
 /** Ask AI's pane on the left: its narrowest, widest and usual widths. */
@@ -165,8 +152,17 @@ export function paneWidthOnKey(key: string, width: number): number | null {
 /** The pane's width while its edge is dragged, kept within its limits. */
 export const paneWidthAt = clampPane
 
-/** The pane as remembered on this device: collapsed or not, and its width. */
-export function readAiPane(raw: string | null): { collapsed: boolean; width: number } {
+/**
+ * The pane as remembered on this device: collapsed or not, its width, and
+ * whether it was opened or closed by hand. Left to itself it starts collapsed
+ * once a brand match has run (`matched`), so the canvas has the room; a
+ * choice made by hand is kept. A collapse remembered before choices were
+ * marked was one.
+ */
+export function readAiPane(
+  raw: string | null,
+  matched = false
+): { collapsed: boolean; width: number; chosen: boolean } {
   let saved: unknown = null
   try {
     saved = raw ? JSON.parse(raw) : null
@@ -174,9 +170,11 @@ export function readAiPane(raw: string | null): { collapsed: boolean; width: num
     saved = null
   }
   const record = saved && typeof saved === 'object' ? (saved as Record<string, unknown>) : {}
+  const chosen = record.chosen === true || record.collapsed === true
   return {
-    collapsed: record.collapsed === true,
+    collapsed: chosen ? record.collapsed === true : matched,
     width: typeof record.width === 'number' ? clampPane(record.width) : AI_PANE.width,
+    chosen,
   }
 }
 

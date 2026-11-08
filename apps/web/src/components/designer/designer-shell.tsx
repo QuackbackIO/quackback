@@ -40,6 +40,7 @@ import { builderNavigation } from './quick-find'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
 import { STYLE_ELEMENTS, type StyleState } from '@/lib/shared/design/style-tokens'
 import type { DesignerPage } from '@/lib/shared/design/outline'
+import type { TreeRow } from '@/lib/shared/design/page-tree'
 import { useCanvasDesign } from './look-preview'
 import { MenuLayer } from './menu-layer'
 import { WordsLayer } from './words/words-layer'
@@ -50,7 +51,7 @@ import { usePublishFlow } from './publish-flow'
 import { ReturnVisitNote } from './return-visit-note'
 import { ReviewCompare } from './review-compare'
 import { AddDragCard, AddDropLayer, useAddDrag } from './use-add-drag'
-import { focusBlocks, focusSettings, inSettings } from './settings-focus'
+import { focusCanvas, focusSettings, inSettings } from './settings-focus'
 import { useAiPane } from './use-ai-pane'
 import { useBlockActions } from './use-block-actions'
 import { useBuilderPanel } from './use-builder-panel'
@@ -105,7 +106,8 @@ export function DesignerShell({
   const { previewing, enter: startPreview, leave: leavePreview } = usePreviewMode()
   const follow = usePreviewFollow({ previewing, ...view, homeOn: design.nav.home.on })
   const panel = useBuilderPanel()
-  const aiPane = useAiPane(previewing, () => setPane('ai'))
+  // Once the brand has been matched, the pane starts folded so the canvas has the room.
+  const aiPane = useAiPane(previewing, () => setPane('ai'), hasMatched(design))
   // What an AI step changed is outlined on the canvas for a moment, where this page shows it.
   const changeFlash = useChangeFlash()
   const shownPage = useRef(page)
@@ -345,7 +347,7 @@ export function DesignerShell({
   // Onboarding's /design?match=<site>: the brand match runs into the draft; or the Brand kit opens.
   useMatchOnArrival({
     start: (site) => void startBrandMatch({ website: site, from: 'onboarding' }),
-    showAi: aiPane.expand,
+    showAi: () => aiPane.reveal(true),
     openBrandKit: () => {
       openTheme()
       void revealRow({ root: FIND_ROOTS.theme, row: BRAND_MATCH_FIND })
@@ -354,6 +356,30 @@ export function DesignerShell({
   const pickAndFocus = (key: Selection) => {
     pick(key)
     focusSettings()
+  }
+  // A row of "On this page": its part picked, or its element as a click on the canvas picks it.
+  const pickFromTree = (row: TreeRow) => {
+    menu.dismiss()
+    setPageClosed(false)
+    const node = row.part ? partNode(row.part) : null
+    if (node) picking.select(row.key, null, node)
+    else {
+      pick(row.key)
+      setPane('settings')
+    }
+  }
+  /** An element part's node on the canvas as drawn now, if the page draws it. */
+  const partNode = (id: string) => {
+    const part = partOf(design, id)
+    const doc = document.querySelector<HTMLIFrameElement>(
+      'iframe[data-designer-canvas]'
+    )?.contentDocument
+    if (!part || !doc) return null
+    for (const element of part.elements) {
+      const node = doc.querySelector(partSelector(part, element))
+      if (node) return node
+    }
+    return null
   }
   // A Show changes row's Show: the page the change is on, its part outlined, its state forced.
   const showChange: ShowChange = {
@@ -399,7 +425,7 @@ export function DesignerShell({
             } else if (step === 'close-page') {
               const lost = inSettings()
               setPageClosed(true)
-              if (lost) focusBlocks()
+              if (lost) focusCanvas()
             }
           }}
         >
@@ -427,8 +453,6 @@ export function DesignerShell({
               draft={draft}
               view={view}
               canvas={canvas}
-              nodes={nodes}
-              selection={selection}
               onPick={pickAndFocus}
               checks={checks}
               onFixCheck={(check) => check.fix && update(check.fix.apply, check.fix.label)}
@@ -491,8 +515,11 @@ export function DesignerShell({
             )}
             <main
               aria-label="Page being edited"
+              data-designer-region=""
+              data-canvas-region=""
+              tabIndex={-1}
               className={cn(
-                'flex min-h-0 min-w-0 flex-1 flex-col p-4 pb-3',
+                'flex min-h-0 min-w-0 flex-1 flex-col p-4 pb-3 outline-none',
                 !previewing && column !== 'page' && 'max-[1100px]:hidden'
               )}
             >
@@ -642,6 +669,7 @@ export function DesignerShell({
                   menu={menu}
                   pickedBlock={pickedBlock}
                   onSelect={pick}
+                  onTreePick={pickFromTree}
                   onAdd={addBlock}
                   drag={addDrag}
                   onTheme={(more) => openTheme(more)}

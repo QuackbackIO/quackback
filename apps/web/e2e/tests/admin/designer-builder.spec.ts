@@ -49,11 +49,16 @@ async function startClean(page: Page) {
 
 const undoButton = (page: Page) => page.getByRole('button', { name: 'Undo', exact: true })
 
-/** Picks a block by keyboard, from the top bar's list of the page's blocks. */
+/** Picks a block by keyboard, from the page panel's tree of its parts. */
 async function pickFromList(page: Page, name: string) {
-  await page.getByRole('button', { name: 'Blocks on this page' }).click()
-  await page.getByRole('menuitem', { name, exact: true }).click()
-  await expect(page.getByRole('complementary', { name: 'Properties' })).toBeFocused()
+  const row = page
+    .getByRole('tree', { name: 'On this page' })
+    .getByRole('treeitem', { name, exact: true })
+  await row.focus()
+  await page.keyboard.press('Enter')
+  await expect(
+    page.getByRole('complementary', { name: 'Properties' }).getByRole('heading', { level: 2 })
+  ).toHaveText(name)
 }
 
 const settings = (page: Page) => page.getByRole('complementary', { name: 'Properties' })
@@ -89,7 +94,7 @@ test('picks a block, changes a setting and undoes it', async ({ page }) => {
   await expect(page.locator('[data-page-panel]')).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(settings(page)).not.toHaveAttribute('data-open', '')
-  await expect(page.getByRole('button', { name: 'Blocks on this page' })).toBeFocused()
+  await expect(page.getByRole('main', { name: 'Page being edited' })).toBeFocused()
 })
 
 test('a menu item opens its own menu, where Enter goes to its page', async ({ page }) => {

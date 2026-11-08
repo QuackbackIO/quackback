@@ -8,6 +8,6 @@ export const focusSettings = () =>
 export const inSettings = () =>
   !!document.getElementById('designer-settings')?.contains(document.activeElement)
 
-/** Focus, after the settings it was in closed: the blocks list, to pick another. */
-export const focusBlocks = () =>
-  requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-blocks-menu]')?.focus())
+/** Focus, after the settings it was in closed: the canvas, the page being edited. */
+export const focusCanvas = () =>
+  requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-canvas-region]')?.focus())

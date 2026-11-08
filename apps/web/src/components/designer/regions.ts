@@ -1,7 +1,6 @@
 /**
  * F6 and Shift+F6 move between the builder's regions in the order they
- * show: the top bar, the rail, the open panel and the right
- * panel. A toolbar takes focus on its button that takes Tab. Listened for on
+ * show: the top bar, Ask AI, the canvas and the properties. A toolbar takes focus on its button that takes Tab. Listened for on
  * the window, so it works from wherever focus is, the page's body included.
  */
 export function cycleRegions(event: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'preventDefault'>) {

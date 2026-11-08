@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { ChevronRightIcon } from '@heroicons/react/16/solid'
 import type { DesignerPage, OutlineNode, Selection } from '@/lib/shared/design/outline'
 import {
@@ -8,6 +8,12 @@ import {
   siteBackground,
 } from '@/lib/shared/design/page-background'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import type { useDesignDraft } from '@/components/admin/settings/appearance/use-design-draft'
+import type { MenuPartId } from '@/lib/shared/design/menu'
+import { pageTree, setRowShown, treeRows, type TreeRow } from '@/lib/shared/design/page-tree'
+import type { PortalPageGates } from '@/lib/shared/design/paths'
+import { PageTree } from './page-tree'
+import { useBlockActions } from './use-block-actions'
 import { cn } from '@/lib/shared/utils'
 import { PageBackgroundSection } from './page-background-settings'
 import { PageTitleRows } from './page-section-settings'
@@ -24,13 +30,23 @@ import type { Crumb } from './properties/properties-panel'
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
 
+/** Every page's gates open, for a panel shown without them. */
+const ALL_PAGES: PortalPageGates = {
+  feedback: true,
+  roadmap: true,
+  changelog: true,
+  help: true,
+  support: true,
+  status: true,
+}
+
 const link =
   'rounded text-xs underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none'
 
 /**
  * The page itself, shown with nothing picked: where its title sits, its
- * background and width, its parts as rows that pick each one, and the way
- * to Theme, which every page shares.
+ * background and width, its parts as a tree that picks, hides and moves
+ * them, and the way to Theme, which every page shares.
  */
 export function PagePanel({
   crumbs,
@@ -41,6 +57,10 @@ export function PagePanel({
   nodes,
   onSelect,
   onTheme,
+  gates = ALL_PAGES,
+  act,
+  onPick,
+  say,
 }: {
   crumbs: readonly Crumb[]
   title: string
@@ -52,9 +72,27 @@ export function PagePanel({
   onSelect: (selection: Selection) => void
   /** Opens Theme, at its Style for a style such as the page width. */
   onTheme: (more: boolean) => void
+  /** The pages that are on, for the menu's items. */
+  gates?: PortalPageGates
+  /** A menu item's actions, as the header's panel takes them. */
+  act?: (target: MenuPartId, action: 'show' | 'hide' | 'up' | 'down', from: 'panel') => void
+  /** A row of the tree picked, as a click on the canvas picks it; else onSelect picks its part. */
+  onPick?: (row: TreeRow) => void
+  /** Says what changed, on the builder's status line. */
+  say?: (words: string) => void
 }) {
   const titles = design.layout.pageTitles
-  const parts = nodes.filter((node) => node.key !== 'site')
+  const tree = useMemo(() => pageTree(design, gates, page, nodes), [design, gates, page, nodes])
+  const blocks = useBlockActions({
+    draft: { design, update } as unknown as Pick<
+      ReturnType<typeof useDesignDraft>,
+      'design' | 'update'
+    >,
+    selection: null,
+    setSelection: () => {},
+    nameOf: (key) => treeRows(tree).find((row) => row.key === key)?.label,
+    say: (words) => say?.(words),
+  })
   return (
     <PropertiesPanel crumbs={crumbs} title={title} data-page-panel="" className="pb-24">
       <PropertySection title={WORDS.page}>
@@ -99,21 +137,23 @@ export function PagePanel({
           </button>
         </PropertyRow>
       </PropertySection>
-      {parts.length > 0 && (
+      {tree.length > 0 && (
         <PropertySection title={WORDS.onThisPage}>
-          <ul aria-label={WORDS.onThisPage} className="-mx-1.5">
-            {parts.map((node) => (
-              <li key={node.key}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(node.key)}
-                  className="flex min-h-7 w-full items-center rounded-md px-1.5 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-                >
-                  {node.label}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <PageTree
+            label={WORDS.onThisPage}
+            rows={tree}
+            onPick={(row) => (onPick ? onPick(row) : onSelect(row.key))}
+            onShown={(row, shown) => {
+              if (row.menu) return act?.(row.menu, shown ? 'show' : 'hide', 'panel')
+              const name = `${shown ? WORDS.show : WORDS.hide} ${row.label}`
+              update((draft) => void setRowShown(draft, row.key, shown), name)
+              say?.(`${name}. Undo takes it back.`)
+            }}
+            onMove={(row, by) => {
+              if (row.menu) return act?.(row.menu, by < 0 ? 'up' : 'down', 'panel')
+              if (row.key.startsWith('block-')) blocks.moveBlock(row.key, by)
+            }}
+          />
         </PropertySection>
       )}
       <PropertySection title={WORDS.everyPage}>

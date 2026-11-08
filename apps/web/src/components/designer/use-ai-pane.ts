@@ -17,8 +17,11 @@ export interface AiPane {
   resizing: boolean
   /** Opens the pane, if collapsed, with the request box focused. */
   expand: () => void
-  /** Opens the pane, if collapsed, leaving focus where it is, such as for a match started elsewhere. */
-  reveal: () => void
+  /**
+   * Opens the pane, if collapsed, for a match started elsewhere, without it
+   * counting as opened by hand; focus stays where it is unless `focus`.
+   */
+  reveal: (focus?: boolean) => void
   collapse: () => void
   /** A width while the edge is dragged; `done` remembers it. */
   resize: (width: number, done?: boolean) => void
@@ -28,24 +31,32 @@ export interface AiPane {
 /**
  * Ask AI's pane on the left: collapsed to a rail or open, and how wide,
  * remembered on this device for the person signed in (read after the first
- * paint, so the server's page and the browser's agree). "/" anywhere outside
- * a field opens it with the request box focused; F6 walks the regions.
+ * paint, so the server's page and the browser's agree). Once a brand match
+ * has run (`matched`, as the builder opened) it starts collapsed, unless it
+ * was opened or closed by hand. "/" anywhere outside a field opens it with
+ * the request box focused; F6 walks the regions.
  */
-export function useAiPane(previewing: boolean, onShow: () => void = () => {}): AiPane {
+export function useAiPane(
+  previewing: boolean,
+  onShow: () => void = () => {},
+  matched = false
+): AiPane {
   const session = useSessionContext()
   const userId = session?.user?.id ?? null
-  const [state, setState] = useState(() => readAiPane(null))
+  // As the builder opened: a match run now does not fold away the pane showing it.
+  const [matchedAtOpen] = useState(matched)
+  const [state, setState] = useState(() => readAiPane(null, matchedAtOpen))
   const [resizing, setResizing] = useState(false)
   useEffect(() => {
     if (!userId) return
     try {
-      setState(readAiPane(localStorage.getItem(aiPaneKey(userId))))
+      setState(readAiPane(localStorage.getItem(aiPaneKey(userId)), matchedAtOpen))
     } catch {
       // Storage closed: the pane opens as usual.
     }
-  }, [userId])
+  }, [userId, matchedAtOpen])
   const remember = useCallback(
-    (next: { collapsed: boolean; width: number }) => {
+    (next: { collapsed: boolean; width: number; chosen: boolean }) => {
       setState(next)
       if (!userId) return
       try {
@@ -61,15 +72,22 @@ export function useAiPane(previewing: boolean, onShow: () => void = () => {}): A
   const show = useRef(onShow)
   show.current = onShow
   const expand = useCallback(() => {
-    if (latest.current.collapsed) remember({ ...latest.current, collapsed: false })
+    remember({ ...latest.current, collapsed: false, chosen: true })
     show.current()
     requestAnimationFrame(() => document.getElementById(AI_BOX_ID)?.focus())
   }, [remember])
-  const reveal = useCallback(() => {
-    if (latest.current.collapsed) remember({ ...latest.current, collapsed: false })
-    show.current()
-  }, [remember])
-  const collapse = useCallback(() => remember({ ...latest.current, collapsed: true }), [remember])
+  const reveal = useCallback(
+    (focus = false) => {
+      if (latest.current.collapsed) remember({ ...latest.current, collapsed: false })
+      show.current()
+      if (focus) requestAnimationFrame(() => document.getElementById(AI_BOX_ID)?.focus())
+    },
+    [remember]
+  )
+  const collapse = useCallback(
+    () => remember({ ...latest.current, collapsed: true, chosen: true }),
+    [remember]
+  )
   const resize = useCallback(
     (width: number, done = true) =>
       done ? remember({ ...latest.current, width }) : setState({ ...latest.current, width }),
