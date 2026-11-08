@@ -13,6 +13,7 @@ import {
   pickName,
   pickOfKey,
   measuredValue,
+  drawnValues,
   picksIn,
   reachOf,
   pickTraits,
@@ -151,6 +152,19 @@ describe('measuredValue', () => {
     node.style.letterSpacing = 'normal'
     node.style.fontSize = '16px'
     expect(measuredValue(node, 'tracking')).toBe(0)
+  })
+})
+
+describe('drawnValues', () => {
+  it('reads the numbers and colours an element is drawn with, for rows to compare', () => {
+    const node = document.getElementById('cta')!
+    node.style.fontSize = '30.8px'
+    node.style.color = 'rgb(143, 143, 143)'
+    node.style.backgroundColor = 'rgb(255, 255, 255)'
+    const drawn = drawnValues(node)
+    expect(drawn.size).toBe(30.8)
+    expect(drawn.color).toBe('rgb(143, 143, 143)')
+    expect(drawn.background).toBe('rgb(255, 255, 255)')
   })
 })
 

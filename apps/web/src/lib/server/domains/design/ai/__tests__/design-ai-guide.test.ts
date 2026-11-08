@@ -5,7 +5,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { tuneSchema } from '@/lib/shared/design/tune'
-import { fieldGuide, opsPrompt } from '../design-ai-guide'
+import { defaultDesign } from '@/lib/shared/design/schema'
+import { fieldGuide, opsPrompt, valuesNow } from '../design-ai-guide'
 
 const guide = fieldGuide(['welcome'], false)
 
@@ -77,5 +78,20 @@ describe('exact colours in the guide', () => {
     expect(text).toContain('colour: hex}')
     expect(text).toContain('fill: hex, ink: hex')
     expect(text).not.toContain('[object')
+  })
+})
+
+describe('the values now', () => {
+  it('says what the canvas draws: an element’s own look over the exact values', () => {
+    const design = defaultDesign()
+    design.tune = { headline: { size: 52 }, button: { radius: 4 } }
+    design.style = { headline: { base: { size: 56 } }, button: { base: { radius: 12 } } }
+    const now = valuesNow(design)
+    expect(now).toContain('headline 56px')
+    expect(now).toContain('buttons 12px corners')
+  })
+
+  it('says the headline size is the widest screen’s, smaller on phones', () => {
+    expect(valuesNow(defaultDesign())).toMatch(/headline 30px[^;]*smaller on phones/)
   })
 })

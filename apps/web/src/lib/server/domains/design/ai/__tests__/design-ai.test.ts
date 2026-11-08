@@ -248,7 +248,9 @@ describe('askDesignAi', () => {
     })
     const [guide, now] = model.calls[0]!.systemPrompts
     expect(now).toContain('The person picked the header in the preview. Change only it.')
-    expect(now).toContain('headline 72px, weight 700, spacing -0.02em')
+    expect(now).toContain(
+      'headline 72px, weight 700 on wide screens (smaller on phones), spacing -0.02em'
+    )
     expect(now).toContain('Menu, in order: feedback "Feedback" (visitors land here)')
     expect(guide).toContain('menuStyle: How the menu marks the current page')
     expect(guide).toContain('- move: target a Home block; value where it goes')

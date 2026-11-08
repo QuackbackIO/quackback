@@ -30,6 +30,8 @@ export const WORDS = {
   /** A colour's popover tabs. */
   brand: 'Brand',
   custom: 'Custom',
+  /** Stores the value the canvas draws, where a row's differs. */
+  useThis: 'Use this',
   light: 'Light',
   dark: 'Dark',
   /** Sources a value can come from, on hover. */

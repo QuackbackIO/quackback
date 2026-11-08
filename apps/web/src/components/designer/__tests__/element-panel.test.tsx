@@ -56,6 +56,7 @@ function mount(
     screen?: 'all' | 'phone'
     shared?: boolean
     initialScope?: 'block'
+    drawn?: Parameters<typeof ElementPanel>[0]['drawn']
   } = {}
 ) {
   const box = { design, labels: [] as Array<string | undefined>, state: 'base' as StyleState }
@@ -85,6 +86,7 @@ function mount(
       reach={extra.reach}
       shared={extra.shared}
       initialScope={extra.initialScope}
+      drawn={extra.drawn}
     />
   )
   const view = render(panel())
@@ -448,5 +450,54 @@ describe('the brand’s choices and exact values, in the same panel', () => {
     expect(box.design.pages.home.blocks[0]!.look).toEqual({
       style: { link: { base: { size: 13 } } },
     })
+  })
+})
+
+describe('what the canvas draws, where it is not what a row stores', () => {
+  const styled = () => {
+    const design = home()
+    design.style = { headline: { base: { size: 56, color: '#fefefe' } } }
+    return design
+  }
+  const note = (view: ReturnType<typeof render>, label: string) =>
+    view.container.querySelector(`[data-in-use="${label}"]`)
+
+  it('says a headline’s size is its widest, and the size this phone draws, with Use this', () => {
+    const { box, view } = mount(headline, styled(), {
+      screen: 'phone',
+      drawn: { values: { size: 30.8 }, size: 'phone', dark: false },
+    })
+    const size = note(view, 'Text size')!
+    expect(size.textContent).toContain('56 max · 31 on this phone')
+    fireEvent.click(within(size as HTMLElement).getByRole('button', { name: 'Use this' }))
+    expect(box.labels.at(-1)).toBe('Headline: size, everywhere, phones')
+    expect(box.design.stylePhone?.headline?.base?.size).toBe(31)
+  })
+
+  it('says a text colour is moved so it reads, and Use this stores the colour in use', () => {
+    const { box, view } = mount(headline, styled(), {
+      drawn: { values: { color: 'rgb(143, 143, 143)' }, size: 'desktop', dark: false },
+    })
+    const colour = note(view, 'Text colour')!
+    expect(colour.textContent).toContain('Shown as #8F8F8F so it reads')
+    fireEvent.click(within(colour as HTMLElement).getByRole('button', { name: 'Use this' }))
+    expect(box.design.style?.headline?.base?.color).toBe('#8f8f8f')
+  })
+
+  it('says nothing while the canvas draws what is stored, or before it is read', () => {
+    const { view } = mount(headline, styled(), {
+      drawn: { values: { size: 56, color: 'rgb(254, 254, 254)' }, size: 'desktop', dark: false },
+    })
+    expect(view.container.querySelector('[data-in-use]')).toBeNull()
+    cleanup()
+    const before = mount(headline, styled())
+    expect(before.view.container.querySelector('[data-in-use]')).toBeNull()
+  })
+
+  it('compares no colour while the canvas is dark, where light’s value is not the one drawn', () => {
+    const { view } = mount(headline, styled(), {
+      drawn: { values: { color: 'rgb(30, 30, 30)' }, size: 'desktop', dark: true },
+    })
+    expect(note(view, 'Text colour')).toBeNull()
   })
 })

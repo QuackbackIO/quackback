@@ -38,6 +38,8 @@ export function useDesignerPage(returnPath: string, design: PortalDesign) {
     start?.item ? { [start.page]: start.item } : {}
   )
   const [sample, setSample] = useState<SamplePage | null>(null)
+  // The widget, drawn in the design, shown in place of the page.
+  const [widget, setWidget] = useState(false)
   const [visitor, setVisitor] = useState<CanvasVisitor>('out')
   const realPage = pages.includes(chosen) ? chosen : (pages[0] ?? 'feedback')
   const page = sample ?? realPage
@@ -45,6 +47,7 @@ export function useDesignerPage(returnPath: string, design: PortalDesign) {
   /** Shows a page, at an item of it or at the item it last showed; a sample gives way. */
   const setPage = useCallback((next: DesignerPage, item?: string | null) => {
     setSample(null)
+    setWidget(false)
     setChosen(next)
     if (item !== undefined)
       setItems((before) => {
@@ -54,7 +57,14 @@ export function useDesignerPage(returnPath: string, design: PortalDesign) {
         return after
       })
   }, [])
-  const showSample = useCallback((next: SamplePage | null) => setSample(next), [])
+  const showSample = useCallback((next: SamplePage | null) => {
+    setWidget(false)
+    setSample(next)
+  }, [])
+  const showWidget = useCallback(() => {
+    setSample(null)
+    setWidget(true)
+  }, [])
 
   const [posts, setPosts] = useState<PickablePost[] | null>(null)
   useEffect(() => {
@@ -90,6 +100,9 @@ export function useDesignerPage(returnPath: string, design: PortalDesign) {
     posts: posts ?? [],
     sample,
     showSample,
+    /** Whether the widget's sample is shown in place of the page. */
+    widget,
+    showWidget,
     visitor,
     setVisitor,
   }

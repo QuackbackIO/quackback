@@ -19,7 +19,12 @@ import { BAND_LOOKS, bandLookOf, takeBandLook } from './curated'
 import { buttonToOf, composerInHero, mainActionOf, writeMainAction } from './main-action'
 import { DESIGN_OPTIONS } from './options'
 import type { DesignerPage } from './outline'
-import { imageShadeSchema, screenshotSourceSchema, type PortalDesign } from './schema'
+import {
+  imageShadeSchema,
+  imageVariantSchema,
+  screenshotSourceSchema,
+  type PortalDesign,
+} from './schema'
 
 /** The look a hero has when no curated look makes it, such as one Quackback AI drew. */
 export const CUSTOM_LOOK = 'custom'
@@ -62,6 +67,8 @@ const image = z
     screenshot: screenshotSourceSchema.optional(),
     shade: imageShadeSchema.optional(),
     homeOnly: z.boolean().optional(),
+    width: z.number().int().min(1).max(8192).optional(),
+    variants: z.array(imageVariantSchema).min(1).max(4).optional(),
   })
   .strict()
 

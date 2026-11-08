@@ -46,6 +46,10 @@ function headlineChars(title: string): number {
 
 /** A band image comes from the workspace's own storage. */
 const STORED_FILE = /^\/api\/storage\/[\w./-]+$/
+/** Its srcset: stored files by width, and nothing else. */
+const STORED_SRCSET = /^\/api\/storage\/[\w./-]+ \d+w(?:,\/api\/storage\/[\w./-]+ \d+w)*$/
+/** How wide a side image is drawn: about half the band beside the words, the full width under them. */
+const SIDE_SIZES = '(min-width:768px) 50vw,100vw'
 
 /**
  * The band's image behind its words: along the bottom (on wider screens),
@@ -426,6 +430,11 @@ export function PortalBand({
         {side && image && (
           <img
             src={image.url}
+            {...(image.srcSet && STORED_SRCSET.test(image.srcSet)
+              ? { srcSet: image.srcSet, sizes: SIDE_SIZES }
+              : {})}
+            // The hero is the page's largest paint: fetched first.
+            fetchPriority="high"
             alt={image.alt ?? ''}
             data-qb-part="band-image"
             className={cn(

@@ -70,6 +70,9 @@ export const MATCH_ROW = {
 /** Changes the draft as one step, named for its undo. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
 
+/** The row's stable name, which Settings > Portal's Match your brand leads to. */
+export const BRAND_MATCH_FIND = 'kit-match'
+
 /** What the builder lends the row: whether a match runs, the website it knows, and the start. */
 export interface BrandMatchControl {
   busy: boolean
@@ -559,7 +562,36 @@ export function BrandMatchRow({ design, update }: { design: PortalDesign; update
   const status = useQuery({ ...portalDesignQueries.aiStatus(), enabled: !!control })
   const [again, setAgain] = useState(false)
   if (!control || !status.data) return null
-  const withAi = status.data.available
+  return (
+    <div data-find={BRAND_MATCH_FIND}>
+      <MatchRowBody
+        control={control}
+        design={design}
+        update={update}
+        withAi={status.data.available}
+        again={again}
+        setAgain={setAgain}
+      />
+    </div>
+  )
+}
+
+/** The match form, or once a match has run the quiet row that opens it again. */
+function MatchRowBody({
+  control,
+  design,
+  update,
+  withAi,
+  again,
+  setAgain,
+}: {
+  control: BrandMatchControl
+  design: PortalDesign
+  update: NamedUpdate
+  withAi: boolean
+  again: boolean
+  setAgain: (again: boolean) => void
+}) {
   const close = { onCancel: () => setAgain(false) }
   if (!hasMatched(design) || again)
     return withAi ? (

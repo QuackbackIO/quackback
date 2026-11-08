@@ -73,8 +73,10 @@ export function BuilderTopBar({
           gates={view.gates}
           here={view.here}
           sample={view.sample}
+          widget={view.widget}
           onPage={view.setPage}
           onSample={view.showSample}
+          onWidget={view.showWidget}
           onTurnOn={onTurnOn}
         />
       }

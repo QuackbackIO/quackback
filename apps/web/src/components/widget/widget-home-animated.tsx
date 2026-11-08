@@ -12,7 +12,7 @@ import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/v
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
 import { Squares2X2Icon, PencilIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import {
-  LightBulbIcon,
+  ChatBubbleLeftIcon as PostsIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
   ChevronLeftIcon,
@@ -412,7 +412,7 @@ function SimilarIdeas({
         >
           <div className="px-3 pb-2">
             <p className="text-[11px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
-              <LightBulbIcon className="w-3 h-3" />
+              <PostsIcon className="w-3 h-3" />
               <FormattedMessage id="widget.home.similar.heading" defaultMessage={'Similar posts'} />
             </p>
             <div className="space-y-0.5">
@@ -1256,7 +1256,7 @@ export function WidgetHomeAnimated({
                 )}
                 {!isFetchingPosts && allPopularPosts.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-8 text-center animate-in fade-in duration-200 motion-reduce:animate-none">
-                    <LightBulbIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                    <PostsIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
                     <p className="text-sm font-medium text-muted-foreground/70">
                       {activeBoardSlug ? (
                         <FormattedMessage

@@ -14,11 +14,14 @@ export type ArrivalAction = { kind: 'match'; site: string } | { kind: 'brand-kit
 export function arrivalAction(input: {
   match?: string
   from?: string
+  /** `match`: Settings > Portal's Match your brand, which opens the Brand kit at its match row. */
+  brand?: string
   aiAvailable: boolean
 }): ArrivalAction | null {
   const site = input.match ? websiteIn(input.match) : null
   if (site && input.aiAvailable) return { kind: 'match', site }
-  if (input.match || input.from === 'onboarding') return { kind: 'brand-kit' }
+  if (input.match || input.from === 'onboarding' || input.brand === 'match')
+    return { kind: 'brand-kit' }
   return null
 }
 
@@ -44,11 +47,16 @@ export function useMatchOnArrival({
   const ran = useRef(false)
   useEffect(() => {
     if (ran.current) return
-    const action = arrivalAction({ match: search.match, from: search.from, aiAvailable: available })
+    const action = arrivalAction({
+      match: search.match,
+      from: search.from,
+      brand: search.brand,
+      aiAvailable: available,
+    })
     if (!action) return
     ran.current = true
     void navigate({
-      search: (prev) => ({ ...prev, match: undefined, from: undefined }),
+      search: (prev) => ({ ...prev, match: undefined, from: undefined, brand: undefined }),
       replace: true,
     })
     if (action.kind === 'match') {

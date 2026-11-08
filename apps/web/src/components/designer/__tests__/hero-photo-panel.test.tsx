@@ -128,6 +128,24 @@ describe('a hero photo cut from a screenshot, in the hero’s panel', () => {
     expect(seen.labels).toEqual(['Hero: Image'])
   })
 
+  it('drops the old crop’s smaller copies, which would draw the old picture', async () => {
+    vi.stubGlobal('Image', LoadedImage)
+    const start = fromShot()
+    start.brand.bandImage = {
+      ...start.brand.bandImage!,
+      width: 1600,
+      variants: [{ key: 'portal-images/hero-640.webp', w: 640 }],
+    }
+    const seen = show(start)
+    fireEvent.click(screen.getByRole('button', { name: MATCH_BRAND.adjustCrop }))
+    const save = await screen.findByRole('button', { name: MATCH_BRAND.save })
+    await waitFor(() => expect((save as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(save)
+    await waitFor(() => expect(seen.design.brand.bandImage?.key).toBe('portal-images/recrop.jpg'))
+    expect(seen.design.brand.bandImage).not.toHaveProperty('variants')
+    expect(seen.design.brand.bandImage).not.toHaveProperty('width')
+  })
+
   it('is no longer marked once the original replaces it', async () => {
     const seen = show(fromShot())
     const file = new File(['x'], 'original.jpg', { type: 'image/jpeg' })
@@ -195,7 +213,7 @@ describe('Add a hero photo', () => {
     expect(onChip).toHaveBeenCalledWith('Calmer hero')
     const file = new File(['x'], 'lake.jpg', { type: 'image/jpeg' })
     fireEvent.change(screen.getByLabelText(MATCH_BRAND.addHeroPhoto), { target: { files: [file] } })
-    await waitFor(() => expect(onHeroPhoto).toHaveBeenCalledWith('portal-images/lake.jpg'))
+    await waitFor(() => expect(onHeroPhoto).toHaveBeenCalledWith({ key: 'portal-images/lake.jpg' }))
     expect(onChip).toHaveBeenCalledTimes(1)
   })
 })

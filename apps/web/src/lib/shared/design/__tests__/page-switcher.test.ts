@@ -100,7 +100,20 @@ describe('the page switcher, by module', () => {
     const general = column(columns({ here: { page: 'roadmap', item: null } }), 'general')
     expect(general.rows.map((row) => [row.label, row.hint, row.go.kind])).toEqual([
       ['Home', 'Landing page', 'page'],
+      ['Widget', 'Sample', 'widget'],
     ])
+  })
+
+  it('offers the widget, drawn in the design, as a sample in General', () => {
+    const general = column(columns({ widget: true }), 'general')
+    expect(general.rows.find((row) => row.go.kind === 'widget')).toMatchObject({
+      label: 'Widget',
+      current: true,
+      hint: 'You are here',
+      keywords: expect.arrayContaining(['messenger', 'sample']),
+    })
+    // While the widget shows, no page of the portal is the one shown.
+    expect(general.rows.find((row) => row.label === 'Home')?.current).toBeUndefined()
   })
 
   it('leaves Home out while it is off, and marks the page visitors land on', () => {

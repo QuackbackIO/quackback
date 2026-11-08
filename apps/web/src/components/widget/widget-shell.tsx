@@ -7,7 +7,7 @@ import {
   XMarkIcon,
   HomeIcon,
   ChatBubbleLeftRightIcon,
-  LightBulbIcon,
+  ChatBubbleLeftIcon,
   NewspaperIcon,
   QuestionMarkCircleIcon,
   TicketIcon,
@@ -31,7 +31,7 @@ export type { WidgetTab }
 
 const TAB_CONFIG: {
   tab: WidgetTab
-  icon: typeof LightBulbIcon
+  icon: typeof ChatBubbleLeftIcon
   labelId: string
   defaultLabel: string
 }[] = [
@@ -50,7 +50,7 @@ const TAB_CONFIG: {
   },
   {
     tab: 'feedback',
-    icon: LightBulbIcon,
+    icon: ChatBubbleLeftIcon,
     labelId: 'widget.shell.tab.feedback',
     defaultLabel: 'Feedback',
   },

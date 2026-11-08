@@ -63,11 +63,33 @@ function statusColours(doc: PortalDesign, resolved: ResolvedDesign): string[] | 
 /** Where the portal loads a stored brand file from: its own origin. */
 export const designAssetUrl = (key: string) => `/api/storage/${key}`
 
+/**
+ * An uploaded image's srcset: its smaller copies, then the image itself, by
+ * width. Only when the image's own width is known, so the browser can size
+ * every candidate; an image stored as one file has none.
+ */
+export function imageSrcSet(image: {
+  key: string
+  width?: number
+  variants?: ReadonlyArray<{ key: string; w: number }>
+}): string | null {
+  if (!image.width || !image.variants?.length) return null
+  return [
+    ...image.variants
+      .filter((variant) => variant.w < image.width!)
+      .sort((a, b) => a.w - b.w)
+      .map((variant) => `${designAssetUrl(variant.key)} ${variant.w}w`),
+    `${designAssetUrl(image.key)} ${image.width}w`,
+  ].join(',')
+}
+
 function bandImage(doc: PortalDesign): BandImage | null {
   const image = doc.brand.bandImage
   if (!image) return null
+  const srcSet = imageSrcSet(image)
   return {
     url: designAssetUrl(image.key),
+    ...(srcSet ? { srcSet } : {}),
     place: doc.layout.imagePlace ?? 'side',
     ...(image.alt && !image.decorative ? { alt: image.alt } : {}),
     ...(image.homeOnly ? { homeOnly: true } : {}),

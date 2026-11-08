@@ -19,7 +19,7 @@ import { AiPane } from './ai-pane'
 import { BuilderColumns, type Pane } from './builder-columns'
 import { useBuilderDialogs } from './builder-dialogs'
 import { BuilderSettings } from './builder-settings'
-import { BrandMatchProvider, type BrandMatchControl } from './brand-match-row'
+import { BRAND_MATCH_FIND, BrandMatchProvider, type BrandMatchControl } from './brand-match-row'
 import { useBrandWebsite } from './use-brand-website'
 import { BuilderTopBar } from './builder-top-bar'
 import { CanvasBar } from './canvas-bar'
@@ -33,7 +33,8 @@ import { backgroundPageOf } from '@/lib/shared/design/page-background'
 import { partOf, partSelector } from '@/lib/shared/design/parts-registry'
 import { pickLabel, pickName } from '@/lib/shared/design/element-pick'
 import { blockFindActions, elementFindItems } from './find-index'
-import { revealRow } from './find-reveal'
+import { FIND_ROOTS, revealRow } from './find-reveal'
+import { WidgetFrame } from './widget-sample'
 import { ADD_LAYOUTS_FIND } from './add-sheet'
 import { builderNavigation } from './quick-find'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
@@ -188,7 +189,13 @@ export function DesignerShell({
     return () => clearInterval(timer)
   }, [jump, design])
   const pickedElement = picking.element
-  const pickReach = usePickReach(pickedElement, design, backgroundPageOf(page))
+  const canvasDark = (design.mode === 'auto' ? theme : design.mode) === 'dark'
+  const pickReach = usePickReach(
+    pickedElement,
+    design,
+    backgroundPageOf(page),
+    `${elementState}|${size}|${canvasDark}`
+  )
   // The picked element's own settings are found where they are, under More or not.
   const elementName = pickedElement ? pickName(pickedElement, design, backgroundPageOf(page)) : null
   const findHere = useMemo(
@@ -338,7 +345,10 @@ export function DesignerShell({
   useMatchOnArrival({
     start: (site) => void startBrandMatch({ website: site, from: 'onboarding' }),
     showAi: aiPane.expand,
-    openBrandKit: () => openTheme(),
+    openBrandKit: () => {
+      openTheme()
+      void revealRow({ root: FIND_ROOTS.theme, row: BRAND_MATCH_FIND })
+    },
   })
   const pickAndFocus = (key: Selection) => {
     pick(key)
@@ -497,7 +507,14 @@ export function DesignerShell({
               <p className="pb-2 text-center text-xs text-muted-foreground">{caption}</p>
             )}
             <ClientOnly>
-              {page === 'post' && !postPath ? (
+              {view.widget ? (
+                <WidgetFrame
+                  design={canvasDesign}
+                  theme={design.mode === 'auto' ? theme : design.mode}
+                  locale={locale}
+                  title="Widget"
+                />
+              ) : page === 'post' && !postPath ? (
                 <p className="p-6 text-[13px] text-muted-foreground">
                   {noPost ? 'There are no posts to show yet.' : 'Finding a post…'}
                 </p>
@@ -646,6 +663,9 @@ export function DesignerShell({
                       onUp={() => picking.pickElement(null)}
                       reach={pickReach.reach}
                       measure={pickReach.measure}
+                      drawn={
+                        pickReach.drawn ? { values: pickReach.drawn, size, dark: canvasDark } : null
+                      }
                       onJump={(place) => {
                         if (place.block) return pick(`block-${place.block}` as Selection)
                         const to =
