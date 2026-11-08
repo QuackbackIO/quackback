@@ -172,17 +172,3 @@ export function readPageChoices(
     support: read('support'),
   }
 }
-
-/**
- * Where a post draws its one vote control: beside the title at every width,
- * or in the details, which wide screens alone show, so beside the title on
- * narrower ones. Where the control is beside the title, the details show the
- * count alone over the team's voters list, or nothing.
- */
-export function postVotePlaces(
-  vote: Post['vote'],
-  voters: boolean
-): { title: 'always' | 'narrow'; details: 'button' | 'count' | 'none' } {
-  if (vote === 'details') return { title: 'narrow', details: 'button' }
-  return { title: 'always', details: voters ? 'count' : 'none' }
-}

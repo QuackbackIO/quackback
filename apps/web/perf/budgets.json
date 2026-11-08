@@ -80,7 +80,7 @@
       "serverRequests": 6,
       "requests": 45,
       "jsRequests": 39,
-      "jsKB": 68.8,
+      "jsKB": 70.5,
       "htmlTransferKB": 0,
       "componentRenders": 96
     },
@@ -98,7 +98,7 @@
       "serverRequests": 6,
       "requests": 45,
       "jsRequests": 39,
-      "jsKB": 68.8,
+      "jsKB": 70.5,
       "htmlTransferKB": 0,
       "componentRenders": 116
     },
@@ -170,7 +170,7 @@
       "serverRequests": 6,
       "requests": 45,
       "jsRequests": 39,
-      "jsKB": 68.8,
+      "jsKB": 70.5,
       "htmlTransferKB": 0,
       "componentRenders": 95
     },

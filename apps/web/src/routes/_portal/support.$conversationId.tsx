@@ -23,7 +23,7 @@ import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
-import { usePageChoices } from '@/components/public/use-page-choices'
+import { usePageChoices } from '@/components/public/preview-draft-context'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PORTAL_LANDING } from '@/lib/shared/design/paths'
 

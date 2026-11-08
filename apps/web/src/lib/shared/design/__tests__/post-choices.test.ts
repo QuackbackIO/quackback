@@ -5,6 +5,7 @@
  * page as it was (with one vote control), carried to the portal as
  * attributes, named, and reachable by Quackback AI.
  */
+import { postVotePlaces } from '@/components/public/preview-draft-context'
 import { describe, expect, it } from 'vitest'
 import { fieldGuide } from '@/lib/server/domains/design/ai/design-ai-guide'
 import { applyDesignChanges, scopeFields } from '../apply-changes'
@@ -15,12 +16,7 @@ import { changeGroup, changeLabel } from '../labels'
 import { panelFor } from '../panel-routes'
 import { canvasPickOf } from '../selection'
 import { outlineKeys, outlineOf } from '../outline'
-import {
-  PAGE_CHOICE_DEFAULTS,
-  pageChoiceAttributes,
-  postVotePlaces,
-  readPageChoices,
-} from '../page-choices'
+import { PAGE_CHOICE_DEFAULTS, pageChoiceAttributes, readPageChoices } from '../page-choices'
 import { defaultDesign, portalDesign } from '../schema'
 
 const GATES = {

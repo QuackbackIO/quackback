@@ -26,7 +26,7 @@ import {
 } from '@/components/help-center/help-center-head'
 import type { JSONContent } from '@tiptap/react'
 import { useBaseUrl, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-import { usePageChoices } from '@/components/public/use-page-choices'
+import { usePageChoices } from '@/components/public/preview-draft-context'
 
 const helpCenterApi = getRouteApi('/_portal/hc')
 
