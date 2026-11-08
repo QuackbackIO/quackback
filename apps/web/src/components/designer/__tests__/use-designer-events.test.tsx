@@ -131,3 +131,26 @@ describe('useCountedUpdate', () => {
     expect(events()).toEqual([['designer_setting_changed', { setting: 'layout.width' }]])
   })
 })
+
+describe('useCountedUpdate: a refused change', () => {
+  it('is not counted, and its reason goes to the line under its control', () => {
+    const refuse = vi.fn()
+    const clear = vi.fn()
+    const draft = {
+      update: (change: (next: PortalDesign) => void) => {
+        change(structuredClone(defaultDesign()))
+        return { ok: false, reason: 'Use 40 characters or fewer' }
+      },
+    }
+    const { result } = renderHook(() =>
+      useCountedUpdate(draft as unknown as Parameters<typeof useCountedUpdate>[0], 'help', {
+        refuse,
+        clear,
+      })
+    )
+    result.current((next) => void (next.nav.home.label = 'x'.repeat(41)), 'Home: label')
+    expect(events()).toEqual([])
+    expect(refuse).toHaveBeenCalledWith('Use 40 characters or fewer')
+    expect(clear).not.toHaveBeenCalled()
+  })
+})

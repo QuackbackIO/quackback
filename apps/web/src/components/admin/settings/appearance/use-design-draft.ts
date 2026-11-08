@@ -10,6 +10,7 @@ import {
   savePortalDesignDraftFn,
 } from '@/lib/server/functions/portal-design'
 import { designChanges } from '@/lib/shared/design/diff'
+import { checkDesign } from '@/lib/shared/design/check-design'
 import { changeLabel } from '@/lib/shared/design/labels'
 import { designView } from '@/lib/shared/design/design-view'
 import { createHistory, patchesBetween, type Author } from '@/lib/shared/design/history'
@@ -29,6 +30,8 @@ export const UNDO_MERGE_MS = 1000
 const UNDO_LIMIT = 100
 
 type Outcome = { ok: true } | { ok: false; message: string }
+/** A change's outcome: committed, or refused before it reached the draft, with why in a line. */
+export type ChangeOutcome = { ok: true } | { ok: false; reason: string }
 /** A publish's outcome: where the portal is now live. */
 type PublishOutcome = { ok: true; address?: PortalAddress } | { ok: false; message: string }
 
@@ -41,6 +44,12 @@ type PublishOutcome = { ok: true; address?: PortalAddress } | { ok: false; messa
  * at a time. When someone else changed the draft in between, the save is
  * refused and nothing more saves until the person chooses to load the other
  * changes or keep their own.
+ *
+ * A change runs the checks the server's save runs before it is committed, so
+ * a state the server would refuse never reaches the draft; the caller gets
+ * the reason in a line to show under its control. Should the server still
+ * refuse a save, that same document is never sent again, publishing waits,
+ * and the person can go back to the last saved draft in one step.
  */
 export function useDesignDraft() {
   const queryClient = useQueryClient()
@@ -60,6 +69,12 @@ export function useDesignDraft() {
     wait: 1000,
   })
   const latest = useRef(design)
+  // The last document the server saved, which going back after a refusal returns to.
+  const accepted = useRef(data.design)
+  // The document the server last refused, as sent, and why; it is never sent again.
+  const refused = useRef<{ doc: string; message: string } | null>(null)
+  // The last document known to pass the checks, so each change checks only what it makes.
+  const passed = useRef<PortalDesign | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Undo and redo: each change as labelled patches, a burst of the same change as one step.
   const [history] = useState(() => createHistory({ limit: UNDO_LIMIT, mergeMs: UNDO_MERGE_MS }))
@@ -77,6 +92,8 @@ export function useDesignDraft() {
   const save = useCallback((next: PortalDesign): Promise<void> => {
     const run = inflight.current.then(async () => {
       if (blocked.current) return
+      const sent = refused.current ? JSON.stringify(next) : null
+      if (refused.current && sent === refused.current.doc) return
       setSaving(true)
       try {
         const result = await savePortalDesignDraftFn({
@@ -86,6 +103,8 @@ export function useDesignDraft() {
         retry.current.wait = 1000
         if (result.ok) {
           revision.current = result.revision
+          accepted.current = next
+          refused.current = null
           setReport(result.report)
           setRefusal(null)
         } else if (result.code === 'REVISION_MISMATCH') {
@@ -93,6 +112,7 @@ export function useDesignDraft() {
           setConflict(true)
           setConflictChange(result.lastChange ?? null)
         } else {
+          refused.current = { doc: sent ?? JSON.stringify(next), message: result.message }
           setRefusal(result.message)
         }
       } catch {
@@ -153,16 +173,24 @@ export function useDesignDraft() {
    * named for what changed unless a name is given.
    */
   const update = useCallback(
-    (change: (draft: PortalDesign) => void, label?: string, by?: Author) => {
+    (change: (draft: PortalDesign) => void, label?: string, by?: Author): ChangeOutcome => {
       // A plain copy, not a proxy: the builder's changes may copy parts of what they are handed.
       const before = latest.current
       const next = structuredClone(before)
       change(next)
       // A choice picked again counts: the exact value it competes with goes, in the same step.
       releaseOverrides(before, next)
+      // What the server would refuse is never committed, unless the draft already fails without it.
+      const checked = checkDesign(next)
+      if (checked.ok) passed.current = next
+      else if (passed.current === before || checkDesign(before).ok) {
+        passed.current = before
+        return { ok: false, reason: checked.reason }
+      }
       const [patches, inverse] = patchesBetween(before, next)
       history.getState().push(label ?? nameOfChange(before, next), patches, inverse, undefined, by)
       commit(next)
+      return { ok: true }
     },
     [commit, history]
   )
@@ -182,6 +210,13 @@ export function useDesignDraft() {
     },
     [commit, history]
   )
+
+  /** After a refused save: back to the draft the server last saved, as an undo step, and saved. */
+  const recover = useCallback(() => {
+    refused.current = null
+    setRefusal(null)
+    replace(accepted.current, 'Back to last saved')
+  }, [replace])
 
   /** Takes back the last change, whoever made it. */
   const undo = useCallback(() => {
@@ -234,6 +269,10 @@ export function useDesignDraft() {
       history.getState().push(name, patches, inverse, undefined, 'ai')
       history.getState().end('ai')
       latest.current = next
+      // The server saved it already.
+      accepted.current = next
+      refused.current = null
+      setRefusal(null)
       setDesign(next)
       if (nextReport) setReport(nextReport)
       if (nextRevision) revision.current = nextRevision
@@ -260,6 +299,8 @@ export function useDesignDraft() {
     timer.current = null
     const fresh = await fetchEditor()
     latest.current = fresh.design
+    accepted.current = fresh.design
+    refused.current = null
     revision.current = fresh.revision
     blocked.current = false
     forget()
@@ -305,6 +346,7 @@ export function useDesignDraft() {
       await flush()
       if (blocked.current)
         return { ok: false, message: 'Choose whose changes to keep first, then publish.' }
+      if (refused.current) return { ok: false, message: refused.current.message }
       const result = await publishPortalDesignFn({
         data: {
           message,
@@ -358,6 +400,7 @@ export function useDesignDraft() {
       changes,
       report,
       refusal,
+      recover,
       conflict,
       /** Who changed the draft and when, while a conflict is open, if known. */
       conflictChange,
@@ -391,6 +434,7 @@ export function useDesignDraft() {
       changes,
       report,
       refusal,
+      recover,
       conflict,
       conflictChange,
       failed,

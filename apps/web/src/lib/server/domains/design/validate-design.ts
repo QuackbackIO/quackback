@@ -1,7 +1,6 @@
 import { ValidationError } from '@/lib/shared/errors'
-import { resolveDesign } from '@/lib/shared/design/resolve'
-import { portalDesign, type PortalDesign } from '@/lib/shared/design/schema'
-import { withoutRetiredKeys } from '@/lib/shared/design/stored-design'
+import { checkDesign } from '@/lib/shared/design/check-design'
+import type { PortalDesign } from '@/lib/shared/design/schema'
 import { withBlockIds } from '@/lib/shared/design/home'
 import { checkedWords, holdsMoreThanWords } from '@/lib/shared/design/words-schema'
 import { lintDesignCss } from './css-lint'
@@ -25,19 +24,13 @@ function withCheckedWords(design: PortalDesign): PortalDesign {
   return design
 }
 
-/** A document checked twice: by the schema, then by the contrast solver. */
+/** A document checked twice: by the schema, then by the contrast solver (check-design.ts), then its CSS. */
 export function validateDesign(input: unknown): PortalDesign {
-  const parsed = portalDesign.safeParse(withoutRetiredKeys(input))
-  if (!parsed.success) {
-    throw new ValidationError(
-      'INVALID_DESIGN',
-      parsed.error.issues.map((i) => i.message).join('; ')
-    )
-  }
-  const { errors } = resolveDesign(parsed.data)
-  if (errors.length > 0) throw new ValidationError('UNREADABLE_DESIGN', errors.join('; '))
-  if (parsed.data.css) {
-    const lint = lintDesignCss(parsed.data.css)
+  const checked = checkDesign(input)
+  if (!checked.ok) throw new ValidationError(checked.code, checked.message)
+  const design = checked.design
+  if (design.css) {
+    const lint = lintDesignCss(design.css)
     if (lint.errors.length > 0) {
       throw new ValidationError(
         'INVALID_CSS',
@@ -45,5 +38,5 @@ export function validateDesign(input: unknown): PortalDesign {
       )
     }
   }
-  return withBlockIds(withCheckedWords(parsed.data))
+  return withBlockIds(withCheckedWords(design))
 }
