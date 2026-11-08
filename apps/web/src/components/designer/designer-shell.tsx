@@ -34,6 +34,7 @@ import { partOf, partSelector } from '@/lib/shared/design/parts-registry'
 import { pickLabel, pickName } from '@/lib/shared/design/element-pick'
 import { blockFindActions, elementFindItems } from './find-index'
 import { FIND_ROOTS, revealRow } from './find-reveal'
+import { WidgetFrame } from './widget-sample'
 import { ADD_LAYOUTS_FIND } from './add-sheet'
 import { builderNavigation } from './quick-find'
 import type { StyleOverride } from '@/lib/shared/design/style-overrides'
@@ -500,7 +501,14 @@ export function DesignerShell({
               <p className="pb-2 text-center text-xs text-muted-foreground">{caption}</p>
             )}
             <ClientOnly>
-              {page === 'post' && !postPath ? (
+              {view.widget ? (
+                <WidgetFrame
+                  design={canvasDesign}
+                  theme={design.mode === 'auto' ? theme : design.mode}
+                  locale={locale}
+                  title="Widget"
+                />
+              ) : page === 'post' && !postPath ? (
                 <p className="p-6 text-[13px] text-muted-foreground">
                   {noPost ? 'There are no posts to show yet.' : 'Finding a post…'}
                 </p>

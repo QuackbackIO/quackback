@@ -2,7 +2,7 @@ import type { ComponentType } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { m, useReducedMotion } from 'framer-motion'
 import {
-  LightBulbIcon,
+  PencilSquareIcon,
   ChatBubbleLeftRightIcon,
   MagnifyingGlassIcon,
   ChevronRightIcon,
@@ -131,7 +131,7 @@ export function WidgetOverview({
         if (!tabs.feedback) return null
         return (
           <ActionCard
-            icon={LightBulbIcon}
+            icon={PencilSquareIcon}
             onClick={onLeaveFeedback}
             title={
               card.title ?? (

@@ -4,6 +4,7 @@ import type { PortalPreviewProps } from '@/components/admin/settings/branding/po
 import type { DesignerPage } from '@/lib/shared/design/outline'
 import { PAGE_NAMES } from '@/lib/shared/design/outline'
 import { DesignerCanvas } from './designer-canvas'
+import { WidgetFrame } from './widget-sample'
 
 const ignore = () => {}
 /** The same empty structural draft every render, so neither frame posts it again. */
@@ -39,52 +40,71 @@ export function ReviewCompare({
   draft: PortalPreviewProps['design']
 }) {
   const [page, setPage] = useState(start)
+  // The widget, which takes the brand too, in place of a page.
+  const [widget, setWidget] = useState(false)
+  const choice = (key: string, label: string, on: boolean, choose: () => void) => (
+    <button
+      key={key}
+      type="button"
+      aria-pressed={on}
+      onClick={choose}
+      className={
+        on
+          ? 'rounded-md bg-muted px-2 py-1 text-xs font-medium'
+          : 'rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted'
+      }
+    >
+      {label}
+    </button>
+  )
   const side = (label: string, design: PortalPreviewProps['design']) => (
     <figure className="m-0 flex min-w-0 flex-col gap-1.5">
       <figcaption className="text-xs font-medium text-muted-foreground">{label}</figcaption>
       {/* A picture to compare, not a page to use: it takes no focus or keys. */}
       <div className="h-[min(18rem,30dvh)]" inert>
         <ClientOnly>
-          <DesignerCanvas
-            page={page}
-            name={label}
-            postPath={page === start && item ? item : page === 'post' ? postPath : null}
-            size="desktop"
-            theme={theme}
-            locale={locale}
-            sort={sort}
-            refreshKey={label}
-            design={design}
-            structural={NO_STRUCTURE}
-            onSelect={ignore}
-            onWords={ignore}
-            onKey={ignore}
-          />
+          {widget ? (
+            <WidgetFrame
+              design={design}
+              theme={theme}
+              locale={locale}
+              title={`Widget, ${label.toLowerCase()}`}
+            />
+          ) : (
+            <DesignerCanvas
+              page={page}
+              name={label}
+              postPath={page === start && item ? item : page === 'post' ? postPath : null}
+              size="desktop"
+              theme={theme}
+              locale={locale}
+              sort={sort}
+              refreshKey={label}
+              design={design}
+              structural={NO_STRUCTURE}
+              onSelect={ignore}
+              onWords={ignore}
+              onKey={ignore}
+            />
+          )}
         </ClientOnly>
       </div>
     </figure>
   )
   return (
-    <section aria-label={`${PAGE_NAMES[page]}, before and after`} className="space-y-2">
-      {pages.length > 1 && (
-        <div role="group" aria-label="Page" className="flex flex-wrap gap-1">
-          {pages.map((each) => (
-            <button
-              key={each}
-              type="button"
-              aria-pressed={each === page}
-              onClick={() => setPage(each)}
-              className={
-                each === page
-                  ? 'rounded-md bg-muted px-2 py-1 text-xs font-medium'
-                  : 'rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted'
-              }
-            >
-              {PAGE_NAMES[each]}
-            </button>
-          ))}
-        </div>
-      )}
+    <section
+      aria-label={`${widget ? 'Widget' : PAGE_NAMES[page]}, before and after`}
+      className="space-y-2"
+    >
+      <div role="group" aria-label="Page" className="flex flex-wrap gap-1">
+        {pages.map((each) =>
+          choice(each, PAGE_NAMES[each], !widget && each === page, () => {
+            setWidget(false)
+            setPage(each)
+          })
+        )}
+        {choice('widget', 'Widget', widget, () => setWidget(true))}
+      </div>
       <div className="grid grid-cols-2 gap-4">
         {side('Live now', live)}
         {side('After you publish', draft)}

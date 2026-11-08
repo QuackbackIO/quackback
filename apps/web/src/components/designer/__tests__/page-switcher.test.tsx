@@ -36,7 +36,7 @@ const places: DesignerPlaces = {
 
 function show() {
   const design = defaultDesign()
-  const handlers = { onPage: vi.fn(), onSample: vi.fn(), onTurnOn: vi.fn() }
+  const handlers = { onPage: vi.fn(), onSample: vi.fn(), onWidget: vi.fn(), onTurnOn: vi.fn() }
   render(
     <SwitcherMenu
       columns={switcherColumns({
@@ -98,6 +98,14 @@ describe('SwitcherMenu', () => {
     expect(onSample).toHaveBeenCalledWith('support')
     fireEvent.click(screen.getByRole('option', { name: /Turn one on/ }))
     expect(onTurnOn).toHaveBeenCalled()
+  })
+
+  it('shows the widget, drawn in the design, from General', () => {
+    const { search, onWidget, onPage } = show()
+    fireEvent.change(search, { target: { value: 'messenger' } })
+    fireEvent.keyDown(search, { key: 'Enter' })
+    expect(onWidget).toHaveBeenCalledOnce()
+    expect(onPage).not.toHaveBeenCalled()
   })
 
   it('leaves out the pages the builder does not draw yet', () => {

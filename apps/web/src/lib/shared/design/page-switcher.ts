@@ -59,6 +59,8 @@ export type SwitcherGo =
   | { kind: 'page'; page: DesignerPage; item: string | null }
   | { kind: 'choose'; list: ChooseList }
   | { kind: 'sample'; page: SamplePage }
+  /** The widget, drawn in the design: a sample to look at, set in Settings > Widget. */
+  | { kind: 'widget' }
   | { kind: 'turn-on' }
   /** Not drawn by the builder yet. */
   | { kind: 'none' }
@@ -93,6 +95,7 @@ export const SWITCHER_COPY = {
   lands: MENU_WORDS.landingPage,
   choose: 'Choose one',
   sample: 'Sample',
+  widget: 'Widget',
   turnOn: 'Turn one on',
   hidden: MENU_WORDS.hidden,
   back: 'All pages',
@@ -135,17 +138,22 @@ export function switcherColumns({
   places,
   here,
   sample,
+  widget = false,
 }: {
   design: PortalDesign
   gates: PortalPageGates
   places: DesignerPlaces
   here: CanvasLocation
   sample: SamplePage | null
+  /** Whether the widget's sample is shown. */
+  widget?: boolean
 }): SwitcherColumn[] {
   const parts = menuParts(design, gates)
   const landing = landingOf(design, gates)
   const partOf = (type: PortalPageType) => parts.find((part) => part.id === type)
   const isHere = (go: SwitcherGo, alsoWhenNoItem = false) => {
+    if (widget) return go.kind === 'widget'
+    if (go.kind === 'widget') return false
     if (sample) return go.kind === 'sample' && go.page === sample
     if (go.kind === 'choose')
       return (
@@ -192,6 +200,12 @@ export function switcherColumns({
             }),
           ]
         : []),
+      row(
+        'widget',
+        SWITCHER_COPY.widget,
+        { kind: 'widget' },
+        { hint: SWITCHER_COPY.sample, keywords: ['Widget', 'messenger', 'sample'] }
+      ),
     ],
   }
 

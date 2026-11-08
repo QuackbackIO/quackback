@@ -80,24 +80,30 @@ export function PageSwitcher({
   gates,
   here,
   sample,
+  widget = false,
   onPage,
   onSample,
+  onWidget,
   onTurnOn,
 }: {
   design: PortalDesign
   gates: PortalPageGates
   here: CanvasLocation
   sample: SamplePage | null
+  /** Whether the widget's sample is shown. */
+  widget?: boolean
   onPage: (page: DesignerPage, item: string | null) => void
   onSample: (page: SamplePage) => void
+  /** Shows the widget, drawn in the design. */
+  onWidget: () => void
   /** "Turn one on": the menu's "+". */
   onTurnOn: () => void
 }) {
   const [open, setOpen] = useState(false)
   const { data: places, isPending } = usePlaces(open)
   const columns = useMemo(
-    () => switcherColumns({ design, gates, places: places ?? NO_PLACES, here, sample }),
-    [design, gates, places, here, sample]
+    () => switcherColumns({ design, gates, places: places ?? NO_PLACES, here, sample, widget }),
+    [design, gates, places, here, sample, widget]
   )
   const done = (then: () => void) => {
     setOpen(false)
@@ -120,7 +126,11 @@ export function PageSwitcher({
         >
           <span className="text-muted-foreground">{SWITCHER_COPY.page}</span>
           <span className="max-w-40 truncate font-semibold">
-            {sample ? PAGE_NAMES[sample] : pageName(design, gates, here.page)}
+            {widget
+              ? SWITCHER_COPY.widget
+              : sample
+                ? PAGE_NAMES[sample]
+                : pageName(design, gates, here.page)}
           </span>
           <ChevronDownIcon className="size-3.5" aria-hidden="true" />
         </Button>
@@ -132,6 +142,7 @@ export function PageSwitcher({
           loading={isPending}
           onPage={(page, item) => done(() => onPage(page, item))}
           onSample={(page) => done(() => onSample(page))}
+          onWidget={() => done(onWidget)}
           onTurnOn={() => done(onTurnOn)}
         />
       </PopoverContent>
@@ -146,6 +157,7 @@ export function SwitcherMenu({
   loading,
   onPage,
   onSample,
+  onWidget,
   onTurnOn,
 }: {
   columns: SwitcherColumn[]
@@ -153,6 +165,7 @@ export function SwitcherMenu({
   loading: boolean
   onPage: (page: DesignerPage, item: string | null) => void
   onSample: (page: SamplePage) => void
+  onWidget: () => void
   onTurnOn: () => void
 }) {
   const [choosing, setChoosing] = useState<ChooseList | null>(null)
@@ -171,6 +184,7 @@ export function SwitcherMenu({
     if (target.kind === 'page') onPage(target.page, target.item)
     else if (target.kind === 'choose') setChoosing(target.list)
     else if (target.kind === 'sample') onSample(target.page)
+    else if (target.kind === 'widget') onWidget()
     else if (target.kind === 'turn-on') onTurnOn()
   }
   // The page shown is where the arrows start.
@@ -228,7 +242,7 @@ export function SwitcherMenu({
                     <span
                       className={cn(
                         'ms-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground',
-                        row.go.kind === 'sample' &&
+                        (row.go.kind === 'sample' || row.go.kind === 'widget') &&
                           !row.current &&
                           'rounded border border-border bg-background px-1.5 text-[11px]'
                       )}
