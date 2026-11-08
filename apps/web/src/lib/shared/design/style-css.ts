@@ -7,7 +7,7 @@
  *
  * Text stays readable: wherever a state's text sits on a fill (its own, or
  * one it draws from its normal look), the text is moved in lightness until
- * it reads (4.5:1, a headline 3:1), and a fill set without text takes the
+ * it reads (4.5:1, a headline set large everywhere 3:1), and a fill set without text takes the
  * design's text or page colour, whichever reads, or where both sides of
  * light read, the one that reads clearer. Hover and pressed fills,
  * when left out, are drawn from a set normal fill: a little darker, or
@@ -76,8 +76,38 @@ const ON_CARD: ReadonlySet<StyleElement> = new Set([
   'chip',
 ])
 
-/** Large text, which reads at 3:1. */
-const LARGE: ReadonlySet<StyleElement> = new Set(['headline'])
+/** WCAG's large text, which reads at 3:1: 24px at any weight, or 18.66px (14pt) bold. */
+const LARGE_ANY = 24
+const LARGE_BOLD = 18.66
+
+/** The smallest a set size is drawn: a large one scales down on a phone (sizeCss). */
+const smallestOf = (v: number) => (v >= 28 ? Math.max(16, v * 0.6) : v)
+
+/**
+ * Whether every headline the design draws is large text: its smallest size
+ * wherever it is set, phones included, at least 24px, or 18.66px bold. Left
+ * unset, a headline is never under 24px (the band's floor, the page titles'
+ * smallest).
+ */
+export function largeHeadline(doc: PortalDesign): boolean {
+  const sizes: number[] = []
+  const weights: number[] = []
+  for (const scope of scopesOf(doc))
+    for (const [sheet, phone] of [
+      [scope.sheet, false],
+      [scope.dark, false],
+      [scope.phone, true],
+    ] as const)
+      for (const props of Object.values(sheet?.headline ?? {}) as Array<StyleProps | undefined>) {
+        if (typeof props?.size === 'number') sizes.push(phone ? props.size : smallestOf(props.size))
+        if (typeof props?.weight === 'number') weights.push(props.weight)
+      }
+  const smallest = Math.min(LARGE_ANY, ...sizes)
+  const weight = Math.min(
+    ...(weights.length ? weights : [doc.tune?.headline?.weight ?? doc.brand.fonts.headingWeight])
+  )
+  return smallest >= LARGE_ANY || (smallest >= LARGE_BOLD && weight >= 700)
+}
 
 export const STYLE_SHADOW_CSS = {
   ...SHADOW,
@@ -379,6 +409,7 @@ export function styleCss(
   dark: ThemeVariables | null
 ): StyleOutput {
   const scopes = scopesOf(doc)
+  const large = largeHeadline(doc)
   const out: StyleOutput = { tokens: { light: {}, dark: {} }, css: '', checks: [] }
   const rules: Record<Layer, string[]> = { style: [], page: [], block: [], part: [] }
   const phoneRules: Record<Layer, string[]> = { style: [], page: [], block: [], part: [] }
@@ -472,7 +503,7 @@ export function styleCss(
               } else fills = []
               if (!fills.length) fills = [backdropOf(element, t)]
               const setText = (mode === 'dark' ? darkOwn.color : undefined) ?? textHere
-              const target = LARGE.has(element) ? 3 : 4.5
+              const target = element === 'headline' && large ? 3 : 4.5
               const wanted = setText ? styleColourValue(setText, doc, t, mode) : null
               const used = wanted ? solveContrast(wanted, fills, target) : ownText(fills, target)
               const on = fills.reduce((worst, f) =>

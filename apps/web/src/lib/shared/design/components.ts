@@ -18,6 +18,7 @@ import { fontStack, wordGap } from './fonts'
 import { roleFill, roleTokens, textOn } from './colour-roles'
 import { votedInk } from './voted'
 import { supportTintColour } from './surfaces'
+import { largeHeadline } from './style-css'
 import { LOGO_FILTER } from './logo'
 import { pageChoiceAttributes } from './page-choices'
 import { drawFill, fillFor, hasPageBackground, type BackgroundPage } from './page-background'
@@ -249,6 +250,8 @@ function bandWords(
 ): { headline: string; subtitle: string; large: boolean } | null {
   if (doc.layout.band !== 'brand' && doc.layout.band !== 'support') return null
   if ((doc.layout.bandShape ?? 'full') === 'panel' || doc.brand.bandImage) return null
+  // A headline set smaller than large text anywhere reads as body text does.
+  if (!largeHeadline(doc)) return null
   const light = [t.background, t.foreground, NEAR_WHITE, '#ffffff'].filter(isLight)
   const headline = clearerInk(surface.ink, surface.behind, light, 3)
   if (headline === surface.ink) return null

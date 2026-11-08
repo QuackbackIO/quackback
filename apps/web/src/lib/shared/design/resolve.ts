@@ -37,7 +37,7 @@ import {
   type ModeBackgrounds,
 } from './page-background'
 import { wordsColourCss } from './words-colour'
-import { DESIGN_LAYERS, styleCss, type StyleCheck } from './style-css'
+import { DESIGN_LAYERS, largeHeadline, styleCss, type StyleCheck } from './style-css'
 import type { PortalDesign } from './schema'
 import { drawnSurfaces, surfacesDrawing, type Drawn, type Surface } from './surfaces'
 
@@ -288,6 +288,7 @@ function tuneSurface(
     background: light.background,
     band,
     mixed,
+    headline: largeHeadline(doc) ? 3 : 4.5,
     ...(page.length ? { page } : {}),
     ...(subtitle
       ? { subtitle: { ink: subtitle, target: tokens['--qb-band-subtitle-size'] ? 3 : 4.5 } }
