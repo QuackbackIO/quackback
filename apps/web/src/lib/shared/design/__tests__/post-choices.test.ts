@@ -5,7 +5,6 @@
  * page as it was (with one vote control), carried to the portal as
  * attributes, named, and reachable by Quackback AI.
  */
-import { postVotePlaces } from '@/components/public/preview-draft-context'
 import { describe, expect, it } from 'vitest'
 import { fieldGuide } from '@/lib/server/domains/design/ai/design-ai-guide'
 import { applyDesignChanges, scopeFields } from '../apply-changes'
@@ -135,20 +134,5 @@ describe('the post page’s parts', () => {
     })
     expect(result).toMatchObject({ ok: true })
     expect(result.ok && result.design.pages.post).toEqual({ vote: 'details' })
-  })
-})
-
-describe('one vote control on a post', () => {
-  it('beside the title: one control there at every width, none in the details', () => {
-    expect(postVotePlaces('title', false)).toEqual({ title: 'always', details: 'none' })
-  })
-
-  it('in the details: the control there, and beside the title only where the details are hidden', () => {
-    expect(postVotePlaces('details', false)).toEqual({ title: 'narrow', details: 'button' })
-  })
-
-  it('keeps a count over the voters list for the team, never a second control', () => {
-    expect(postVotePlaces('title', true)).toEqual({ title: 'always', details: 'count' })
-    expect(postVotePlaces('details', true)).toEqual({ title: 'narrow', details: 'button' })
   })
 })

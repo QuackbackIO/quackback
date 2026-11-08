@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   PAGE_CHOICE_VALUES,
   PORTAL_PAGE_CHOICES,
+  postVotePlaces,
   readPortalPageChoices,
 } from '@/components/public/preview-draft-context'
 import {
@@ -54,5 +55,20 @@ describe('the portal’s page choices', () => {
       }
     for (const attributes of cases)
       expect(readPortalPageChoices(attributes)).toEqual(readPageChoices(attributes))
+  })
+})
+
+describe('one vote control on a post', () => {
+  it('beside the title: one control there at every width, none in the details', () => {
+    expect(postVotePlaces('title', false)).toEqual({ title: 'always', details: 'none' })
+  })
+
+  it('in the details: the control there, and beside the title only where the details are hidden', () => {
+    expect(postVotePlaces('details', false)).toEqual({ title: 'narrow', details: 'button' })
+  })
+
+  it('keeps a count over the voters list for the team, never a second control', () => {
+    expect(postVotePlaces('title', true)).toEqual({ title: 'always', details: 'count' })
+    expect(postVotePlaces('details', true)).toEqual({ title: 'narrow', details: 'button' })
   })
 })
