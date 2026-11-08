@@ -24,6 +24,7 @@ import { ReachNote } from './properties/scope-line'
 import { SummaryRow } from './properties/summary-row'
 import { STYLE_CHOICES } from './properties/words'
 import { useBlockSources } from './use-block-sources'
+import { layoutValue } from '@/lib/shared/design/defaults'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -136,7 +137,7 @@ export function Inspector({
             />
             <SummaryRow
               label="Status look"
-              value={STYLE_CHOICES.status[layout.status ?? 'colour']}
+              value={STYLE_CHOICES.status[layoutValue(layout, 'status')]}
               onOpen={() => onElement?.('badge')}
             />
             {CARD_FIELDS.map(([field, row, full]) => (

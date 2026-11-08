@@ -9,6 +9,7 @@
  * centred, else the words' full width.
  */
 import type { PortalDesign } from './schema'
+import { layoutValue } from './defaults'
 
 /**
  * The steps, narrowest first. DESIGN_OPTIONS reads them from here, so the
@@ -58,7 +59,7 @@ export function drawnComposerWidth(
 export function composerSetting(design: PortalDesign): ComposerSetting {
   const { layout } = design
   return {
-    side: !!design.brand.bandImage && (layout.imagePlace ?? 'side') === 'side',
+    side: !!design.brand.bandImage && layoutValue(layout, 'imagePlace') === 'side',
     centred: (layout.bandAlign ?? (layout.header === 'centered' ? 'centre' : 'left')) === 'centre',
   }
 }

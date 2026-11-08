@@ -6,6 +6,7 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { STYLE_ELEMENTS, type StyleElement } from '@/lib/shared/design/style-tokens'
 import { PropertySection } from './properties/properties-panel'
 import { STYLE_CHOICES, THEME } from './properties/words'
+import { fontValue, layoutValue, shapeValue } from '@/lib/shared/design/defaults'
 
 /** The element kinds each part used on every page is drawn as (style-tokens.ts). */
 export const PART_STYLES: Record<DesignElement, readonly StyleElement[]> = {
@@ -67,20 +68,22 @@ export function elementValue(element: StyleElement, design: PortalDesign): strin
   switch (element) {
     case 'button':
       return `${STYLE_CHOICES.fill[design.shape.fill === 'ink' ? 'ink' : 'accent']} · ${
-        STYLE_CHOICES.buttonShape[design.shape.buttons ?? 'match']
+        STYLE_CHOICES.buttonShape[shapeValue(design.shape, 'buttons')]
       }`
     case 'postCard':
       return STYLE_CHOICES.cards[design.layout.cards]
     case 'vote':
-      return design.brand.light.support ? STYLE_CHOICES.tint[design.layout.tint ?? 'neutral'] : null
+      return design.brand.light.support
+        ? STYLE_CHOICES.tint[layoutValue(design.layout, 'tint')]
+        : null
     case 'badge':
     case 'chip':
-      return STYLE_CHOICES.status[design.layout.status ?? 'colour']
+      return STYLE_CHOICES.status[layoutValue(design.layout, 'status')]
     case 'navItem':
       return STYLE_CHOICES.menu[design.layout.nav]
     case 'headline':
-      return `${STYLE_CHOICES.scale[fonts.scale ?? 'standard']} · ${
-        STYLE_CHOICES.fill[fonts.headlineColour ?? 'ink']
+      return `${STYLE_CHOICES.scale[fontValue(fonts, 'scale')]} · ${
+        STYLE_CHOICES.fill[fontValue(fonts, 'headlineColour')]
       }`
     case 'heading':
       return String(fonts.headingWeight)
