@@ -1,24 +1,23 @@
+import { hoverTileOf, writeHoverTile } from '@/lib/shared/design/hover-lift'
 import type { PortalDesign } from '@/lib/shared/design/schema'
 import type { Update } from './section-controls'
 import { Choice } from './type-shape-controls'
 
-/** What buttons, post cards and block links do under the pointer. */
+/**
+ * What post cards, main buttons and block links do under the pointer. Lift is
+ * written as post cards' and main buttons' Hover values, its one source.
+ */
 export function HoverControls({ design, update }: { design: PortalDesign; update: Update }) {
   return (
     <Choice
       label="Hover"
-      value={design.shape.hover ?? 'none'}
+      value={hoverTileOf(design)}
       options={[
         ['none', 'None'],
         ['lift', 'Lift'],
         ['arrow', 'Arrow'],
       ]}
-      onChange={(hover) =>
-        update((draft) => {
-          if (hover === 'none') delete draft.shape.hover
-          else draft.shape.hover = hover
-        })
-      }
+      onChange={(hover) => update((draft) => writeHoverTile(draft, hover))}
     />
   )
 }

@@ -6,6 +6,7 @@
  * except for the keys designs no longer have, which no document keeps.
  */
 import { defaultDesign, portalDesign, type PortalDesign } from './schema'
+import { withHoverLift } from './hover-lift'
 import { withSplitCards } from './split-cards'
 
 type Path = ReadonlyArray<PropertyKey>
@@ -26,12 +27,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /**
  * A design document without the keys designs no longer have, and with the
- * looks of elements since split carried over (split-cards.ts), so one stored,
+ * looks of elements since split carried over (split-cards.ts) and Lift written
+ * as element Hover values (hover-lift.ts), so one stored,
  * sent or written before they went still reads. The document given stays as it is.
  */
 export function withoutRetiredKeys(given: unknown): unknown {
   if (!isRecord(given)) return given
-  const input = withSplitCards(given)
+  const input = withHoverLift(withSplitCards(given))
   const brand = input.brand
   const logo = isRecord(brand) ? brand.logo : undefined
   const retiredLogo = isRecord(logo) && RETIRED_LOGO_KEYS.some((key) => Object.hasOwn(logo, key))

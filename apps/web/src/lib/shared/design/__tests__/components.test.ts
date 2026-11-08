@@ -879,11 +879,11 @@ describe('layoutAttributes', () => {
     const inline = design((d) => {
       d.layout.header = 'inline'
       d.layout.menuAlign = 'centre'
-      d.shape.hover = 'lift'
+      d.shape.hover = 'arrow'
     })
     expect(layoutAttributes(inline)).toMatchObject({
       'data-qb-menu-align': 'centre',
-      'data-qb-hover': 'lift',
+      'data-qb-hover': 'arrow',
     })
     inline.layout.header = 'stacked'
     expect(layoutAttributes(inline)['data-qb-menu-align']).toBe('start')

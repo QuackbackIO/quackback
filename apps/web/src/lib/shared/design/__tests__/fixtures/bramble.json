@@ -44,8 +44,11 @@
     }
   },
   "shape": {
-    "corners": "pill",
-    "hover": "lift"
+    "corners": "pill"
+  },
+  "style": {
+    "postCard": { "hover": { "lift": 2, "shadow": "floating" } },
+    "button": { "hover": { "lift": 2, "shadow": "floating" } }
   },
   "layout": {
     "header": "stacked",

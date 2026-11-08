@@ -292,3 +292,24 @@ describe('reading a design stored before cards split into post cards and panels'
     expect(portalDesign.safeParse(migrated).success).toBe(true)
   })
 })
+
+describe('reading a design stored when Lift was a motion of its own', () => {
+  it('writes Lift as post cards’ and main buttons’ hover, keeping their own values', () => {
+    const doc = structuredClone(stored()) as unknown as Json
+    ;(doc.shape as Json).hover = 'lift'
+    doc.style = { button: { hover: { shadow: 'deep' } } }
+    const read = readStoredDesign(doc)!
+    expect(read.dropped).toEqual([])
+    expect(read.design.shape).not.toHaveProperty('hover')
+    expect(read.design.style).toEqual({
+      button: { hover: { lift: 2, shadow: 'deep' } },
+      postCard: { hover: { lift: 2, shadow: 'floating' } },
+    })
+  })
+
+  it('keeps Arrow as the links’ own', () => {
+    const doc = structuredClone(stored()) as unknown as Json
+    ;(doc.shape as Json).hover = 'arrow'
+    expect(readStoredDesign(doc)!.design.shape.hover).toBe('arrow')
+  })
+})

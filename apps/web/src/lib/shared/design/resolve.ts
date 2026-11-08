@@ -433,7 +433,7 @@ const TONE_INK = [
  * primary buttons and post cards; arrow adds one to each block's way on and
  * nudges it. Nothing moves for a visitor who asks for less motion.
  */
-const MOTION_CSS = `@layer design { [data-qb-menu-align=centre][data-portal-theme] .portal-header [data-qb-nav-row] > .portal-nav { justify-content: safe center; } [data-qb-hover=arrow][data-portal-theme] [data-qb-link]::after { content: '\\2192'; text-align: end; inset-inline-end: -1.25em; padding-block-start: inherit; } @media (prefers-reduced-motion: no-preference) { [data-qb-hover=lift][data-portal-theme] :is([data-qb-part=post-card], ${PRIMARY_BUTTONS}) { transition: transform 150ms ease, box-shadow 150ms ease; } [data-qb-hover=lift][data-portal-theme] :is([data-qb-part=post-card], ${PRIMARY_BUTTONS}):hover { transform: translateY(-2px); box-shadow: 0 6px 16px -4px rgb(0 0 0 / 0.18); } [data-qb-hover=arrow][data-portal-theme] [data-qb-link]::after { transition: transform 150ms ease; } [data-qb-hover=arrow][data-portal-theme] [data-qb-link]:hover::after { transform: translateX(3px); } } }`
+const MOTION_CSS = `@layer design { [data-qb-menu-align=centre][data-portal-theme] .portal-header [data-qb-nav-row] > .portal-nav { justify-content: safe center; } [data-qb-hover=arrow][data-portal-theme] [data-qb-link]::after { content: '\\2192'; text-align: end; inset-inline-end: -1.25em; padding-block-start: inherit; } @media (prefers-reduced-motion: no-preference) { [data-qb-hover=arrow][data-portal-theme] [data-qb-link]::after { transition: transform 150ms ease; } [data-qb-hover=arrow][data-portal-theme] [data-qb-link]:hover::after { transform: translateX(3px); } } }`
 
 const TONE_FILL = ['--primary-foreground', '--qb-on-accent', '--qb-fill-ink']
 const TONE_RAISED = [
