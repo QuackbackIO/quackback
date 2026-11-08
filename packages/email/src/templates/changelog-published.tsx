@@ -1,6 +1,7 @@
-import { Button, Heading, Section, Text } from '@react-email/components'
+import { Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
-import { typography, button, colors } from './shared-styles'
+import { typography, colors } from './shared-styles'
+import { BrandButton } from './brand-parts'
 
 interface ChangelogPublishedEmailProps {
   changelogTitle: string
@@ -77,9 +78,7 @@ export function ChangelogPublishedEmail({
 
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
-        <Button style={button.primary} href={changelogUrl}>
-          View Update
-        </Button>
+        <BrandButton href={changelogUrl}>View Update</BrandButton>
       </Section>
 
       {/* Footer */}

@@ -14,6 +14,7 @@ import type { DesignChange } from '@/lib/shared/design/diff'
 import type { SummaryRow } from '@/lib/shared/design/publish-summary'
 import type { DesignAdjustment } from '@/lib/shared/design/resolve'
 import { ChangeList } from './change-list'
+import { VisitorsAlsoSee } from './visitors-also-see'
 
 /** Every change in the draft, the readability check, and the one step that makes it live. */
 export function ReviewPublishDialog({
@@ -89,6 +90,8 @@ export function ReviewPublishDialog({
         </DialogHeader>
         <div className="-mx-1 min-h-0 space-y-4 overflow-y-auto px-1">
           {compare}
+          {/* Beside the page compare: what else the brand reaches, read only. */}
+          {compare && <VisitorsAlsoSee />}
           {menu && menu.length > 0 && (
             <section aria-label="Menu and landing" className="space-y-1">
               <h3 className="text-xs font-medium text-muted-foreground">Menu and landing</h3>

@@ -8,6 +8,7 @@
 
 import type { EventData } from './types'
 import type { ContactEmail } from '@/lib/server/email/recipient'
+import type { EmailBrand } from '@quackback/email'
 
 /**
  * Result of running a hook.
@@ -131,6 +132,8 @@ export interface EmailConfig {
   commentPreview?: string
   isTeamMember?: boolean
   logoUrl?: string
+  /** The published design's email colours; absent keeps Quackback gold. */
+  brand?: EmailBrand
   /** Link to the portal's per-type x per-channel notification preferences
    *  page. Not token-based — requires the recipient to be logged in. */
   preferencesUrl?: string
@@ -173,6 +176,8 @@ export interface TicketEmailConfig {
   /** Signed per-ticket inbound reply address; absent = no reply-by-email. */
   replyTo?: string
   logoUrl?: string
+  /** The published design's email colours; absent keeps Quackback gold. */
+  brand?: EmailBrand
   preferencesUrl?: string
 }
 

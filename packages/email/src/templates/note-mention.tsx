@@ -1,6 +1,7 @@
-import { Button, Heading, Section, Text } from '@react-email/components'
+import { Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
-import { typography, button, colors } from './shared-styles'
+import { typography, colors } from './shared-styles'
+import { AccentQuote, BrandButton } from './brand-parts'
 
 export interface NoteMentionEmailProps {
   /** Teammate who wrote the note. */
@@ -46,13 +47,12 @@ export function NoteMentionEmail({
       </Text>
 
       {paragraphs.length > 0 && (
-        <Section
+        <AccentQuote
           style={{
             backgroundColor: colors.surfaceMuted,
             borderRadius: '8px',
             padding: '16px 20px',
             marginBottom: '16px',
-            borderLeft: `3px solid ${colors.primary}`,
           }}
         >
           <Text
@@ -73,7 +73,7 @@ export function NoteMentionEmail({
               {p}
             </Text>
           ))}
-        </Section>
+        </AccentQuote>
       )}
 
       <Text style={{ ...typography.textSmall, color: colors.textMuted }}>
@@ -81,9 +81,7 @@ export function NoteMentionEmail({
       </Text>
 
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
-        <Button style={button.primary} href={conversationUrl}>
-          Open conversation
-        </Button>
+        <BrandButton href={conversationUrl}>Open conversation</BrandButton>
       </Section>
 
       {preferencesUrl ? (

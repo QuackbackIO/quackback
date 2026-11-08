@@ -1,6 +1,7 @@
-import { Button, Column, Heading, Row, Section, Text } from '@react-email/components'
+import { Column, Heading, Row, Section, Text } from '@react-email/components'
 import { EmailLayout, TransactionalFooter } from './email-layout'
-import { typography, button, colors } from './shared-styles'
+import { typography, colors } from './shared-styles'
+import { BrandButton } from './brand-parts'
 
 interface WelcomeEmailProps {
   name: string
@@ -44,9 +45,7 @@ export function WelcomeEmail({ name, workspaceName, dashboardUrl, logoUrl }: Wel
 
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginBottom: '32px' }}>
-        <Button style={button.primary} href={dashboardUrl}>
-          Go to Dashboard
-        </Button>
+        <BrandButton href={dashboardUrl}>Go to Dashboard</BrandButton>
       </Section>
 
       {/* Footer */}

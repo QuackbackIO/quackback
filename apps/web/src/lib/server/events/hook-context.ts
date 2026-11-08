@@ -7,7 +7,8 @@
 
 import { db } from '@/lib/server/db'
 import { getBaseUrl } from '@/lib/server/config'
-import { getEmailSafeUrl } from '@/lib/server/storage/s3'
+import type { EmailBrand } from '@quackback/email'
+import { emailBranding } from '@/lib/server/email/email-brand'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'hook-context' })
@@ -21,8 +22,10 @@ export interface HookContext {
   workspaceName: string
   /** Portal base URL for constructing post links */
   portalBaseUrl: string
-  /** Brand logo URL (proxied through app), or null if not set */
+  /** Email header image: the published brand icon, else the workspace logo; null if neither */
   logoUrl: string | null
+  /** The published design's email colours; absent keeps Quackback gold */
+  emailBrand?: EmailBrand
 }
 
 /**
@@ -32,7 +35,7 @@ export interface HookContext {
  */
 export async function buildHookContext(): Promise<HookContext | null> {
   const settings = await db.query.settings.findFirst({
-    columns: { name: true, logoKey: true },
+    columns: { name: true, logoKey: true, featureFlags: true },
   })
 
   if (!settings) {
@@ -40,9 +43,11 @@ export async function buildHookContext(): Promise<HookContext | null> {
     return null
   }
 
+  const { logoUrl, brand } = await emailBranding(settings)
   return {
     workspaceName: settings.name,
     portalBaseUrl: getBaseUrl(),
-    logoUrl: getEmailSafeUrl(settings.logoKey),
+    logoUrl: logoUrl ?? null,
+    ...(brand && { emailBrand: brand }),
   }
 }

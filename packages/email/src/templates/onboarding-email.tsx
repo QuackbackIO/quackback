@@ -1,6 +1,7 @@
-import { Button, Heading, Link, Section, Text } from '@react-email/components'
+import { Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
-import { typography, button, colors, utils } from './shared-styles'
+import { typography, colors } from './shared-styles'
+import { BrandButton, BrandLink } from './brand-parts'
 
 /**
  * The setup emails' content, already written in the recipient's language by
@@ -54,23 +55,16 @@ export function OnboardingEmail({
         <Section style={shareBox}>
           <Text style={shareLabel}>{share.label}</Text>
           <Text style={shareLink}>
-            <Link href={share.url} style={utils.link}>
-              {share.text}
-            </Link>
+            <BrandLink href={share.url}>{share.text}</BrandLink>
           </Text>
         </Section>
       ) : null}
       <Section style={{ textAlign: 'center', margin: '24px 0' }}>
-        <Button style={button.primary} href={cta.url}>
-          {cta.label}
-        </Button>
+        <BrandButton href={cta.url}>{cta.label}</BrandButton>
       </Section>
       {secondary ? (
         <Text style={typography.textSmall}>
-          {secondary.lead}{' '}
-          <Link href={secondary.url} style={utils.link}>
-            {secondary.label}
-          </Link>
+          {secondary.lead} <BrandLink href={secondary.url}>{secondary.label}</BrandLink>
         </Text>
       ) : null}
       <NotificationFooter

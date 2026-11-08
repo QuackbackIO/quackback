@@ -83,6 +83,8 @@ export { SesTenantPausedError } from './ses'
 export { setDefaultFromResolver, resetDefaultFromResolver } from './default-from'
 import { createElement } from 'react'
 import { EmailPoweredByProvider, resolveEmailPoweredBy } from './powered-by'
+import { EmailBrandProvider, type EmailBrand } from './brand'
+export { DEFAULT_EMAIL_BRAND, type EmailBrand } from './brand'
 import { resolvedDefaultFrom } from './default-from'
 
 /**
@@ -596,16 +598,41 @@ async function sendEmail(
     ticketId?: string | null
     postId?: string | null
     attachments?: EmailAttachment[]
+    /** The workspace's brand for buttons, links and accents; absent keeps Quackback gold. */
+    brand?: EmailBrand
   } & ThreadingOptions
 ): Promise<EmailResult> {
   const showPoweredBy = await resolveEmailPoweredBy()
+  const { brand, ...rest } = options
   return dispatch({
-    ...options,
+    ...rest,
     react: createElement(EmailPoweredByProvider, {
       value: showPoweredBy,
-      children: options.react,
+      children: createElement(EmailBrandProvider, { value: brand, children: options.react }),
     }),
   })
+}
+
+/**
+ * The sign-in email as a visitor would get it, for the designer's publish
+ * review. Rendered only, never sent; the sample code is not a real one.
+ */
+export async function renderSignInEmailSample(params: {
+  brand?: EmailBrand
+  logoUrl?: string
+  workspaceName?: string
+}): Promise<string> {
+  return render(
+    createElement(EmailBrandProvider, {
+      value: params.brand,
+      children: MagicLinkEmail({
+        signInUrl: '#',
+        code: '123456',
+        logoUrl: params.logoUrl,
+        workspaceName: params.workspaceName,
+      }),
+    })
+  )
 }
 
 /** A prerendered, custom-From email (no template). */
@@ -675,6 +702,8 @@ interface SendPortalInviteParams {
   workspaceName: string
   inviteLink: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
   personalMessage?: string
 }
 
@@ -682,6 +711,7 @@ export async function sendPortalInviteEmail(params: SendPortalInviteParams): Pro
   const { to, workspaceName, inviteLink, logoUrl, personalMessage } = params
 
   return sendEmail({
+    brand: params.brand,
     to,
     subject: `You've been invited to ${workspaceName}`,
     react: PortalInviteEmail({ workspaceName, inviteLink, logoUrl, personalMessage }),
@@ -783,6 +813,8 @@ interface SendMagicLinkParams {
   signInUrl: string
   code: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
   /** The workspace being signed in to, named in the subject beside the code. */
   workspaceName?: string
 }
@@ -798,6 +830,7 @@ export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<E
 
   log.debug('sending sign-in email')
   return sendEmail({
+    brand: params.brand,
     to,
     subject: magicLinkSubject(code, workspaceName),
     react: MagicLinkEmail({ signInUrl, code, logoUrl, workspaceName }),
@@ -820,6 +853,8 @@ interface SendSignupNotAllowedParams {
   to: ContactEmail
   workspaceName?: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }
 
 /**
@@ -834,6 +869,7 @@ export async function sendSignupNotAllowedEmail(
 
   log.debug('sending sign-in refusal email')
   return sendEmail({
+    brand: params.brand,
     to,
     subject: 'About your Quackback sign-in request',
     react: SignupNotAllowedEmail({ workspaceName, logoUrl }),
@@ -849,6 +885,8 @@ interface SendPasswordResetParams {
   to: SecureRecipient
   resetLink: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }
 
 export async function sendPasswordResetEmail(
@@ -858,6 +896,7 @@ export async function sendPasswordResetEmail(
 
   log.debug('sending password reset email')
   return sendEmail({
+    brand: params.brand,
     to,
     subject: 'Reset your Quackback password',
     react: PasswordResetEmail({ resetLink, logoUrl }),
@@ -996,6 +1035,8 @@ interface SendStatusChangeParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }
 
 /** The status email's subject. */
@@ -1017,6 +1058,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
   } = params
 
   return sendEmail({
+    brand: params.brand,
     to,
     subject: statusChangeSubject(newStatus),
     react: StatusChangeEmail({
@@ -1050,6 +1092,8 @@ interface SendNewCommentParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }
 
 export async function sendNewCommentEmail(params: SendNewCommentParams): Promise<EmailResult> {
@@ -1067,6 +1111,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
   } = params
 
   return sendEmail({
+    brand: params.brand,
     to,
     subject: `New comment on "${postTitle}"`,
     react: NewCommentEmail({
@@ -1104,6 +1149,8 @@ interface SendConversationMessageEmailParams {
   ctaUrl: string
   workspaceName: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
   /** Conversation-specific reply address so a visitor's reply routes back to
    *  the right thread (inbound email channel). */
   replyTo?: string
@@ -1203,6 +1250,7 @@ export async function sendConversationMessageEmail(
       })
 
   return sendEmail({
+    brand: params.brand,
     to,
     subject: copy.subject,
     react,
@@ -1333,6 +1381,8 @@ export interface SendTicketEventEmailParams {
   dueLabel?: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
   /** Per-team sending address override; absent = branded EMAIL_FROM. */
   from?: SendingIdentity
   /** Per-ticket inbound reply address (reply-by-email); absent = no Reply-To. */
@@ -1446,6 +1496,7 @@ export async function sendTicketEventEmail(
   const copy = ticketEventCopy(params)
 
   return sendEmail({
+    brand: params.brand,
     to: params.to,
     subject: copy.subject,
     react: TicketEventEmail({
@@ -1491,6 +1542,8 @@ export interface SendPostMentionEmailArgs {
   unsubscribeUrl?: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }
 
 export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Promise<EmailResult> {
@@ -1510,6 +1563,7 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
   const subject = `${displayName} mentioned you in "${postTitle}"`
 
   return sendEmail({
+    brand: args.brand,
     to,
     subject,
     react: PostMentionEmail({
@@ -1604,6 +1658,8 @@ interface SendChangelogPublishedParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
   /** Send from the changelog module's sending address (§4.8) instead of the
    *  branded EMAIL_FROM. Absent = the workspace default. */
   from?: SendingIdentity
@@ -1626,6 +1682,7 @@ export async function sendChangelogPublishedEmail(
   } = params
 
   return sendEmail({
+    brand: params.brand,
     to,
     subject: `New update: ${changelogTitle}`,
     react: ChangelogPublishedEmail({
@@ -1659,6 +1716,8 @@ interface SendFeedbackLinkedParams {
   preferencesUrl?: string
   attributedByName?: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }
 
 export async function sendFeedbackLinkedEmail(
@@ -1677,6 +1736,7 @@ export async function sendFeedbackLinkedEmail(
   } = params
 
   return sendEmail({
+    brand: params.brand,
     to,
     subject: `Your feedback has been linked to "${postTitle}"`,
     react: FeedbackLinkedEmail({
@@ -1711,6 +1771,8 @@ interface SendStatusIncidentPublishedParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }
 
 /** Sent once when a new incident is published on the workspace's status page. */
@@ -1732,6 +1794,7 @@ export async function sendStatusIncidentPublishedEmail(
   } = params
 
   return sendEmail({
+    brand: params.brand,
     to,
     subject: `Incident: ${incidentTitle}`,
     react: StatusIncidentPublishedEmail({
@@ -1770,6 +1833,8 @@ interface SendStatusMaintenanceScheduledParams {
   unsubscribeUrl: string
   preferencesUrl?: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }
 
 /** Sent once when maintenance is scheduled on the workspace's status page. */
@@ -1791,6 +1856,7 @@ export async function sendStatusMaintenanceScheduledEmail(
   } = params
 
   return sendEmail({
+    brand: params.brand,
     to,
     subject: `Scheduled maintenance: ${maintenanceTitle}`,
     react: StatusMaintenanceScheduledEmail({
@@ -1825,6 +1891,8 @@ interface SendCsatRequestEmailParams {
   ratingUrls: readonly [string, string, string, string, string]
   workspaceName: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
   /**
    * The same From the conversation's replies go out as; absent = the workspace
    * default.
@@ -1849,6 +1917,7 @@ export async function sendCsatRequestEmail(
   const { to, promptText, ratingUrls, workspaceName, logoUrl, from, conversationId } = params
 
   return sendEmail({
+    brand: params.brand,
     to,
     subject: 'How did we do?',
     react: CsatRequestEmail({ promptText, ratingUrls, workspaceName, logoUrl }),
@@ -1911,6 +1980,8 @@ export interface SendVerifyAddressEmailParams {
   code: string
   workspaceName?: string
   logoUrl?: string
+  /** The workspace's brand; absent keeps Quackback gold. */
+  brand?: EmailBrand
 }
 
 /**
@@ -1924,6 +1995,7 @@ export async function sendVerifyAddressEmail(
   const { to, code, workspaceName, logoUrl } = params
   log.debug('sending address verification code')
   return sendEmail({
+    brand: params.brand,
     to,
     subject: 'Confirm your email address',
     react: VerifyAddressEmail({ code, workspaceName, logoUrl }),
