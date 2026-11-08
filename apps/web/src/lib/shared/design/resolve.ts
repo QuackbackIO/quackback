@@ -40,6 +40,7 @@ import { wordsColourCss } from './words-colour'
 import { DESIGN_LAYERS, largeHeadline, styleCss, type StyleCheck } from './style-css'
 import type { PortalDesign } from './schema'
 import { drawnSurfaces, surfacesDrawing, type Drawn, type Surface } from './surfaces'
+import { layoutValue } from './defaults'
 
 type Mode = 'light' | 'dark'
 
@@ -281,7 +282,7 @@ function tuneSurface(
   const panel = doc.layout.band !== 'none' && doc.layout.bandShape === 'panel'
   const band = panel ? [tokens['--qb-band-panel-bg']!] : headlineBehind(doc, light, 'light')
   // An image under the words has no one colour to read on.
-  const mixed = !!doc.brand.bandImage && (doc.layout.imagePlace ?? 'side') !== 'side'
+  const mixed = !!doc.brand.bandImage && layoutValue(doc.layout, 'imagePlace') !== 'side'
   const page = backgrounds ? backgroundsBehind(backgrounds) : []
   const subtitle = tokens['--qb-band-subtitle']
   return {

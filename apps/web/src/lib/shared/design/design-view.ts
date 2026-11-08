@@ -23,6 +23,7 @@ import type { PortalDesign } from './schema'
 import type { BandImage, DesignLogo, PortalCopy, PortalDesignView } from './view'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import { layoutValue } from './defaults'
 
 export function designView(
   doc: PortalDesign,
@@ -118,7 +119,7 @@ function bandImage(doc: PortalDesign): BandImage | null {
   return {
     url: designAssetUrl(image.key),
     ...(srcSet ? { srcSet } : {}),
-    place: doc.layout.imagePlace ?? 'side',
+    place: layoutValue(doc.layout, 'imagePlace'),
     ...(image.alt && !image.decorative ? { alt: image.alt } : {}),
     ...(image.homeOnly ? { homeOnly: true } : {}),
     ...(photoShade(doc) ? { shaded: true } : {}),

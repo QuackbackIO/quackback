@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { defaultDesign, portalDesign } from '../schema'
 import { DESIGN_OPTIONS } from '../options'
 import { newBlock } from '../home'
-import { readStoredDesign, withoutRetiredKeys } from '../stored-design'
+import { migrateDesign } from '../migrations'
+import { readStoredDesign } from '../stored-design'
 
 type Json = Record<string, unknown>
 
@@ -82,11 +83,11 @@ describe('reading a stored design', () => {
 
   it('takes in a design that still has its words, without them', () => {
     const doc = written({ vocabulary: { post: 'idea', board: 'board' } })
-    const taken = withoutRetiredKeys(doc)
+    const taken = migrateDesign(doc)
     expect(portalDesign.safeParse(taken).success).toBe(true)
     expect(taken).not.toHaveProperty('vocabulary')
     expect(doc).toHaveProperty('vocabulary')
-    expect(withoutRetiredKeys(null)).toBeNull()
+    expect(migrateDesign(null)).toBeNull()
   })
 
   it('takes in a logo that still styles its name, without the retired name styles', () => {
@@ -97,7 +98,7 @@ describe('reading a stored design', () => {
       nameAccent: 'Pine',
       name: 'Harbor & Pine',
     })
-    const taken = withoutRetiredKeys(doc) as Json
+    const taken = migrateDesign(doc) as Json
     expect(portalDesign.safeParse(taken).success).toBe(true)
     expect((taken.brand as Json).logo).toMatchObject({ name: 'Harbor & Pine' })
     expect((taken.brand as Json).logo).not.toHaveProperty('nameColour')
@@ -125,7 +126,7 @@ describe('reading a stored design', () => {
     expect(read?.design.style).toEqual({ button: { focus: { ringWidth: 3 } } })
     expect(read?.design.styleDark).toBeUndefined()
     expect(read?.design.overrides).toBeUndefined()
-    expect(portalDesign.safeParse(withoutRetiredKeys(doc)).success).toBe(true)
+    expect(portalDesign.safeParse(migrateDesign(doc)).success).toBe(true)
   })
 
   it('does not change the document it was given', () => {
@@ -303,14 +304,14 @@ describe('reading a design stored before cards split into post cards and panels'
   it('leaves a design that has post cards and panels already as it is', () => {
     const doc = structuredClone(stored()) as unknown as Json
     doc.style = { postCard: { hover: { lift: 2 } } }
-    expect(withoutRetiredKeys(doc)).toBe(doc)
+    expect(migrateDesign(doc)).toBe(doc)
     expect(readStoredDesign(doc)!.design.style).toEqual({ postCard: { hover: { lift: 2 } } })
   })
 
   it('migrates a card look sent by an older builder or the AI, never changing what was sent', () => {
     const sent = before()
     const copy = structuredClone(sent)
-    const migrated = withoutRetiredKeys(sent) as Json
+    const migrated = migrateDesign(sent) as Json
     expect(sent).toEqual(copy)
     expect(portalDesign.safeParse(migrated).success).toBe(true)
   })
@@ -334,5 +335,52 @@ describe('reading a design stored when Lift was a motion of its own', () => {
     const doc = structuredClone(stored()) as unknown as Json
     ;(doc.shape as Json).hover = 'arrow'
     expect(readStoredDesign(doc)!.design.shape.hover).toBe('arrow')
+  })
+})
+
+describe('reading a design with many fields this build does not know', () => {
+  /** A design where a newer build changed everything it could: every optional option, keys, menu items and block looks. */
+  function manyBad(): { doc: Json; expected: string[] } {
+    const doc = structuredClone(stored()) as unknown as Json
+    const expected: string[] = []
+    for (const { path } of optionalEnumPaths()) {
+      const parent = path.slice(0, -1).reduce((node, key) => (node[key] ??= {}) as Json, doc)
+      parent[path.at(-1)!] = 'from-a-newer-build'
+      expected.push(path.join('.'))
+    }
+    for (const key of ['future', 'later', 'newer']) {
+      doc[key] = true
+      expected.push(key)
+    }
+    ;((doc.layout as Json).bandTexture as unknown) = 'paper'
+    expected.push('layout.bandTexture')
+    const items = (doc.nav as Json).items as unknown[]
+    ;(doc.nav as Json).items = [
+      { type: 'gallery', shown: true },
+      ...items,
+      { type: 'shop', shown: true },
+    ]
+    expected.push('nav.items.0', `nav.items.${items.length + 1}`)
+    const blocks = [newBlock('welcome'), newBlock('links'), newBlock('welcome')]
+    for (const block of blocks) (block as unknown as Json).look = { tone: 'glass' }
+    ;((doc.pages as Json).home as Json).blocks = blocks
+    expected.push(...blocks.map((_, i) => `pages.home.blocks.${i}.look`))
+    return { doc, expected }
+  }
+
+  it('reads it with every one dropped, parsing a few times however many there are', () => {
+    const { doc, expected } = manyBad()
+    expect(expected.length).toBeGreaterThan(30)
+    const parse = vi.spyOn(portalDesign, 'safeParse')
+    try {
+      const read = readStoredDesign(doc)
+      expect(read, 'the design still reads').not.toBeNull()
+      expect([...read!.dropped].sort()).toEqual([...expected].sort())
+      expect(read!.design.brand.light.accent).toBe('#0f766e')
+      expect(read!.design.nav.items).toEqual(stored().nav.items)
+      expect(parse.mock.calls.length).toBeLessThanOrEqual(4)
+    } finally {
+      parse.mockRestore()
+    }
   })
 })

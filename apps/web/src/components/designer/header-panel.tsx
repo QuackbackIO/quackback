@@ -45,6 +45,7 @@ import { SummaryRow } from './properties/summary-row'
 import { STYLE_CHOICES, WORDS } from './properties/words'
 import { Tag } from './tag'
 import { useNewParts } from './use-new-parts'
+import { layoutValue } from '@/lib/shared/design/defaults'
 
 /** Changes the draft under a name, so undo says what it takes back. */
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
@@ -174,7 +175,7 @@ export function HeaderPanel({
           <PropertyRow label={FIND.menuPosition.label} find={FIND.menuPosition.id}>
             <PropertyTiles
               label={FIND.menuPosition.label}
-              value={layout.menuAlign ?? 'start'}
+              value={layoutValue(layout, 'menuAlign')}
               options={[
                 ['start', 'By the logo'],
                 ['centre', 'Centred'],
@@ -248,7 +249,7 @@ export function HeaderPanel({
       <PropertySection title={HEADER_COPY.menuStyle}>
         <SummaryRow
           label="Menu look"
-          value={`${STYLE_CHOICES.menu[layout.nav]} · ${STYLE_CHOICES.menuText[layout.navText ?? 'muted']}`}
+          value={`${STYLE_CHOICES.menu[layout.nav]} · ${STYLE_CHOICES.menuText[layoutValue(layout, 'navText')]}`}
           onOpen={() => onElement?.('navItem')}
         />
       </PropertySection>

@@ -1,7 +1,7 @@
 import type { z } from 'zod'
 import { resolveDesign } from './resolve'
 import { portalDesign, type PortalDesign } from './schema'
-import { withoutRetiredKeys } from './stored-design'
+import { migrateDesign } from './migrations'
 
 /** Why a design cannot be saved: the code the server refuses it with, the details, and a one-line reason. */
 export type DesignCheck =
@@ -41,7 +41,7 @@ function reasonOf(issue: z.core.$ZodIssue): string {
  * its own CSS check on top (validate-design.ts).
  */
 export function checkDesign(input: unknown): DesignCheck {
-  const parsed = portalDesign.safeParse(withoutRetiredKeys(input))
+  const parsed = portalDesign.safeParse(migrateDesign(input))
   if (!parsed.success)
     return {
       ok: false,

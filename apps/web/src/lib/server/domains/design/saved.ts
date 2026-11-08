@@ -20,7 +20,7 @@ import {
 import { lookOf, SAVED_LOOKS_MAX, type DesignLook } from '@/lib/shared/design/looks'
 import { withBlockIds } from '@/lib/shared/design/home'
 import { portalDesign, type PortalDesign } from '@/lib/shared/design/schema'
-import { withoutRetiredKeys } from '@/lib/shared/design/stored-design'
+import { migrateDesign } from '@/lib/shared/design/migrations'
 import { designRow, storedDesign, type DesignAuthor } from './design.service'
 
 /** How many checkpoints a workspace keeps; the oldest goes when another is saved. */
@@ -53,7 +53,7 @@ export async function saveDesign(
   document: unknown,
   author: DesignAuthor
 ): Promise<{ ok: true; entry: SavedEntry } | SavedRefusal> {
-  const parsed = portalDesign.safeParse(withoutRetiredKeys(document))
+  const parsed = portalDesign.safeParse(migrateDesign(document))
   if (!parsed.success)
     return { ok: false, code: 'INVALID_DESIGN', message: 'That design could not be read.' }
   const design = withBlockIds(parsed.data)
