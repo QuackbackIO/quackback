@@ -64,6 +64,9 @@ export function canvasScale(room: number, width: number, zoom: CanvasZoom): numb
   return room > 0 ? Math.min(1, room / width) : 1
 }
 
+/** How long a loaded page that never says it is ready keeps its skeleton. */
+const LOADED_GRACE_MS = 3000
+
 /** The frame's border, drawn outside the page so the layer over it lines up exactly. */
 const FRAME_BORDER = 1
 
@@ -149,6 +152,7 @@ export function DesignerCanvas({
   onLoad,
   onLocation,
   layer,
+  skeleton,
 }: {
   page: DesignerPage
   /** The item the page shows, such as the post on the post page. */
@@ -192,6 +196,8 @@ export function DesignerCanvas({
   onLocation?: (path: string) => void
   /** The editing layer, drawn over the frame. */
   layer?: (canvas: CanvasFrame) => ReactNode
+  /** Shapes of the page's parts, drawn until the frame says its page is ready. */
+  skeleton?: ReactNode
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   // The frame element itself, for the layer: a new one each time the page loads afresh.
@@ -230,6 +236,9 @@ export function DesignerCanvas({
   })
   useEffect(() => tellDesigner(iframeRef.current?.contentWindow), [trying, tellDesigner])
 
+  // The frame that said its page is ready, by its key: a new page loads, and is not, until it says so.
+  const [readyKey, setReadyKey] = useState<string | null>(null)
+  const frameKey = useRef('')
   const handlers = useRef({
     onSelect,
     onFollow,
@@ -262,6 +271,7 @@ export function DesignerCanvas({
       )
         return
       const message = event.data as Record<string, unknown> | null
+      if (message?.type === 'quackback:preview-ready') setReadyKey(frameKey.current)
       const menu = isMenuTarget(message?.menu) ? message.menu : null
       // The element at the point the frame names, read from its own page.
       const target =
@@ -309,9 +319,21 @@ export function DesignerCanvas({
   const width = CANVAS_WIDTHS[size]
   const { scale, height, outer, room: drawn } = frameBox(room, width, zoom)
   const src = canvasSrc({ page, theme, locale, sort, postPath, visitor, sample })
+  const key = `${src}:${refreshKey}:${trying}`
+  frameKey.current = key
+  const ready = readyKey === key
+  // A page that never says it is ready (an error, say) is shown once it has loaded a while.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
+  useEffect(() => {
+    if (loadedKey !== key || ready) return
+    const timer = setTimeout(() => setReadyKey(key), LOADED_GRACE_MS)
+    return () => clearTimeout(timer)
+  }, [loadedKey, key, ready])
   return (
     <div
       ref={box}
+      data-canvas-box=""
+      aria-busy={skeleton ? !ready : undefined}
       className={`relative h-full min-h-0 w-full flex-1 ${zoom === 'fit' ? 'overflow-hidden' : 'overflow-auto'}`}
     >
       <div
@@ -320,9 +342,12 @@ export function DesignerCanvas({
       >
         <iframe
           // Leaving Preview loads the page afresh, back where the builder is.
-          key={`${src}:${refreshKey}:${trying}`}
+          key={key}
           ref={frameRef}
-          onLoad={onLoad}
+          onLoad={() => {
+            setLoadedKey(key)
+            onLoad?.()
+          }}
           src={src}
           title={[
             name,
@@ -347,6 +372,19 @@ export function DesignerCanvas({
             transformOrigin: 'top left',
           }}
         />
+        {skeleton && !ready && (
+          <div
+            className="pointer-events-none absolute top-0 left-0 overflow-hidden"
+            style={{
+              width,
+              height,
+              transform: scale < 1 ? `scale(${scale})` : undefined,
+              transformOrigin: 'top left',
+            }}
+          >
+            {skeleton}
+          </div>
+        )}
         {layer?.({ frame, scale, room: drawn })}
       </div>
     </div>

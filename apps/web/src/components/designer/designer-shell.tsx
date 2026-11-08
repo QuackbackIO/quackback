@@ -25,7 +25,8 @@ import { BuilderTopBar } from './builder-top-bar'
 import { CanvasBar } from './canvas-bar'
 import { CanvasLayer } from './canvas-layer'
 import { DesignerAi } from './designer-ai'
-import { DesignerCanvas } from './designer-canvas'
+import { CanvasSkeleton, skeletonOf } from './canvas-skeleton'
+import { CANVAS_WIDTHS, DesignerCanvas } from './designer-canvas'
 import { ElementPanel, elementPanelKey } from './element-panel'
 import { revealThemeFonts } from './brand-kit-fonts'
 import { usePickReach } from './use-pick-reach'
@@ -413,6 +414,8 @@ export function DesignerShell({
   const menuHot = picking.hovered === 'header' || selection === 'header'
   const pickedBlock = selection?.startsWith('block-') ? (nameOf(selection) ?? null) : null
   const caption = deviceCaption(size)
+  // What the canvas draws while the page loads: its parts, as shapes.
+  const skeleton = <CanvasSkeleton parts={skeletonOf(nodes, design.pages.home.blocks)} />
 
   return (
     <CanvasModeContext.Provider value={design.mode === 'auto' ? theme : design.mode}>
@@ -553,7 +556,19 @@ export function DesignerShell({
               {caption && !previewing && (
                 <p className="pb-2 text-center text-xs text-muted-foreground">{caption}</p>
               )}
-              <ClientOnly>
+              <ClientOnly
+                fallback={
+                  // Before the builder runs, the page's parts as shapes at the device's width.
+                  <div aria-busy="true" className="relative min-h-0 w-full flex-1 overflow-hidden">
+                    <div
+                      className="mx-auto overflow-hidden rounded-lg border border-border bg-background shadow-sm"
+                      style={{ maxWidth: CANVAS_WIDTHS[size] }}
+                    >
+                      {skeleton}
+                    </div>
+                  </div>
+                }
+              >
                 {view.widget ? (
                   <WidgetFrame
                     design={canvasDesign}
@@ -607,6 +622,7 @@ export function DesignerShell({
                       else if (!menu.dismiss()) stepBack()
                     }}
                     onLoad={picking.reload}
+                    skeleton={skeleton}
                     layer={(frame) =>
                       previewing ? null : (
                         <>
