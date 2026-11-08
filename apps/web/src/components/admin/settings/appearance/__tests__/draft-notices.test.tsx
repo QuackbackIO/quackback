@@ -3,8 +3,8 @@
  * The conflict notice says who changed the draft and when, so the person
  * knows whose changes they are choosing between.
  */
-import { afterEach, describe, expect, it } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { DraftNotices } from '../draft-notices'
 
 afterEach(cleanup)
@@ -41,5 +41,16 @@ describe('the conflict notice', () => {
 
   it('falls back to someone when the change is not known', () => {
     expect(notice(null)).toContain('Someone else changed the draft.')
+  })
+})
+
+describe('a refused save', () => {
+  it('says why, with a way back to the draft the server last saved', () => {
+    const recover = vi.fn()
+    const draft = { conflict: false, refusal: 'Line 1: @import is not allowed', recover }
+    render(<DraftNotices draft={draft as unknown as Draft} />)
+    expect(screen.getByRole('alert').textContent).toContain('Line 1: @import is not allowed')
+    fireEvent.click(screen.getByRole('button', { name: 'Back to last saved' }))
+    expect(recover).toHaveBeenCalledOnce()
   })
 })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ClientOnly } from '@tanstack/react-router'
 import { MotionConfig } from 'framer-motion'
@@ -79,6 +79,13 @@ import { useMenuEditing } from './use-menu-editing'
 import { usePreviewFollow } from './use-preview-follow'
 import { usePreviewMode } from './use-preview-mode'
 import { CanvasModeContext } from './properties/canvas-mode'
+import { PHONE_TINT } from './properties/phone-mode'
+import {
+  RefusalFallback,
+  RefusalLines,
+  useRefusalLines,
+  type RefusalValue,
+} from './properties/change-refusal'
 import { useSaid } from './use-said'
 
 /** Escape inside these belongs to them. */
@@ -262,7 +269,11 @@ export function DesignerShell({
   const column: Pane = pane === 'settings' && !settingsOpen ? 'page' : pane
 
   // Each change is named for the part it changes, so undo says what it takes back.
-  const update = useCountedUpdate(draft, page)
+  // A change the server would refuse is not made; why shows under the row that made it.
+  const refusalLines = useRefusalLines()
+  const { refuse, clear: clearRefusal } = refusalLines
+  const refusals = useMemo(() => ({ refuse, clear: clearRefusal }), [refuse, clearRefusal])
+  const update = useCountedUpdate(draft, page, refusals)
   const blocks = useBlockActions({ draft, selection, setSelection: pick, nameOf, say })
   const { structural, onWords } = useCanvasInput(design, update, locale)
   const menu = useMenuEditing({ design, gates, update, page, setPage, pick, say })
@@ -419,7 +430,7 @@ export function DesignerShell({
 
   return (
     <CanvasModeContext.Provider value={design.mode === 'auto' ? theme : design.mode}>
-      <MotionConfig reducedMotion="user">
+      <ShellProviders refusals={refusalLines.value}>
         <div
           className="flex h-dvh flex-col overflow-clip bg-muted/60"
           onKeyDown={(event) => {
@@ -547,6 +558,7 @@ export function DesignerShell({
               {!previewing && (
                 <div className="mb-2 space-y-2 empty:hidden">
                   <DraftNotices draft={draft} />
+                  <RefusalFallback value={refusalLines.value} />
                   {!draft.undoLabel && (
                     <ReturnVisitNote savedAt={editor.draftSavedAt} now={now} onDiscard={discard} />
                   )}
@@ -554,7 +566,14 @@ export function DesignerShell({
               )}
               {!previewing && <CanvasBar view={view} note={follow.note} onBack={follow.back} />}
               {caption && !previewing && (
-                <p className="pb-2 text-center text-xs text-muted-foreground">{caption}</p>
+                <p
+                  className={cn(
+                    'pb-2 text-center text-xs',
+                    size === 'phone' ? PHONE_TINT.caption : 'text-muted-foreground'
+                  )}
+                >
+                  {caption}
+                </p>
               )}
               <ClientOnly
                 fallback={
@@ -758,7 +777,16 @@ export function DesignerShell({
           {publishing.dialogs}
           {dialogs.dialogs}
         </div>
-      </MotionConfig>
+      </ShellProviders>
     </CanvasModeContext.Provider>
+  )
+}
+
+/** What every panel under the shell reads: reduced motion, and where a refused change says why. */
+function ShellProviders({ refusals, children }: { refusals: RefusalValue; children: ReactNode }) {
+  return (
+    <RefusalLines value={refusals}>
+      <MotionConfig reducedMotion="user">{children}</MotionConfig>
+    </RefusalLines>
   )
 }

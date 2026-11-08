@@ -1,9 +1,11 @@
 /**
  * Picking an element on the canvas: what is under the pointer, as the
- * builder names it. The innermost addressable element wins: a registered
- * part ("this one"), else an element kind the style registry knows (styled
- * for its page or everywhere). A block's own box is the block, not an
- * element in it.
+ * builder names it. The innermost addressable element wins, on every page:
+ * a registered part ("this one"), a listed item such as a post's title
+ * among them, else an element kind the style registry knows (styled for
+ * its page or everywhere). A block's own box is the block, not an element
+ * in it. What a change to a pick reaches is said in the pick's own noun
+ * and counted as that change reaches (pickScope, reachOf).
  *
  * A pick is kept as what it is (its kind, its part, its block) and which of
  * that kind's elements in the block it was, so it is found again when the
@@ -192,8 +194,15 @@ export interface Reach {
  * page drawn now can be counted: other pages are not drawn, so a site-wide
  * count is not known.
  */
-export function reachOf(doc: Document, pick: Pick<ElementPick, 'element' | 'section'>): Reach {
-  const selector = STYLE_ELEMENTS[pick.element].selector
+export function reachOf(
+  doc: Document,
+  pick: Pick<ElementPick, 'element' | 'section' | 'part'>,
+  design?: PortalDesign,
+  page?: OverridePage | null
+): Reach {
+  // A listed item's change reaches every item of its kind where it is listed: those are counted.
+  const item = design ? itemOf(pick, design, page ?? null) : null
+  const selector = item ? partSelector(item, pick.element) : STYLE_ELEMENTS[pick.element].selector
   const shown = (root: ParentNode | null) => {
     if (!root) return 0
     let n = 0
@@ -304,6 +313,43 @@ export function pickLabel(
   page: OverridePage | null
 ): string {
   return partOfPick(pick, design, page)?.label ?? singular(pick.element)
+}
+
+/** A pick's part, where it is a listed item (parts-registry.ts, `exact`). */
+function itemOf(pick: Pick<ElementPick, 'part'>, design: PortalDesign, page: OverridePage | null) {
+  const part = partOfPick(pick, design, page)
+  return part?.exact ? part : null
+}
+
+/** What a change to a pick reaches, as its scope line says it by default. */
+export interface PickScope {
+  /** Whether it is a listed item, which only its own part reaches. */
+  item: boolean
+  /** One of what it changes: "Post title", "Main button". */
+  one: string
+  /** What the change reaches: "every post title in Top posts", "every main button". */
+  phrase: string
+}
+
+/**
+ * What a change to a pick reaches, in the pick's own noun. A listed item,
+ * such as a post's title, is changed where it is listed, for every item
+ * there; anything else, for every one of its kind.
+ */
+export function pickScope(
+  pick: Pick<ElementPick, 'element' | 'part'>,
+  design: PortalDesign,
+  page: OverridePage | null
+): PickScope {
+  const item = itemOf(pick, design, page)
+  if (item)
+    return {
+      item: true,
+      one: item.label,
+      phrase: `every ${item.label.toLowerCase()} in ${item.group}`,
+    }
+  const one = singular(pick.element)
+  return { item: false, one, phrase: `every ${one.toLowerCase()}` }
 }
 
 function partOfPick(

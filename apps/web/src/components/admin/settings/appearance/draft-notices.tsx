@@ -22,7 +22,8 @@ function ConflictHeadline({ change }: { change: Draft['conflictChange'] }) {
 
 /**
  * What stops the draft from saving: a colleague's newer draft, which the
- * person chooses to load or to overwrite, or a change the server refused.
+ * person chooses to load or to overwrite, or a change the server refused,
+ * with a way back to the draft it last saved.
  */
 export function DraftNotices({ draft }: { draft: Draft }) {
   return (
@@ -49,9 +50,15 @@ export function DraftNotices({ draft }: { draft: Draft }) {
         </div>
       )}
       {draft.refusal && (
-        <p role="alert" className="text-[13px] text-destructive">
-          {draft.refusal}
-        </p>
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-2 text-[13px] text-destructive"
+        >
+          <p>{draft.refusal}</p>
+          <Button size="sm" variant="outline" onClick={() => draft.recover()}>
+            Back to last saved
+          </Button>
+        </div>
       )}
     </>
   )

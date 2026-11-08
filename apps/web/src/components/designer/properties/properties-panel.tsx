@@ -9,7 +9,7 @@
  * from on hover; a row set at this scope shows a dot and a Reset that names
  * what it goes back to.
  */
-import { useId, useState, type ReactNode } from 'react'
+import { Fragment, useId, useState, type ReactNode } from 'react'
 import {
   ChevronRightIcon,
   EllipsisHorizontalIcon,
@@ -26,6 +26,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/shared/utils'
 import { keepOpen, rememberedOpen } from '../advanced'
+import { RefusalText, useRowRefusal } from './change-refusal'
+import { PHONE_TINT, PHONE_WORDS } from './phone-mode'
 import { WORDS, setDifferentlyIn } from './words'
 
 /** A step of the breadcrumb: the last is where you are; the others pick that parent. */
@@ -302,7 +304,11 @@ export function PropertyMore({
 /**
  * One property: its label on the left, its control on the right. A value
  * set here shows a dot and Reset, whose tooltip names what it goes back to;
- * hovering the value says where it comes from.
+ * hovering the value says where it comes from. On the Phone canvas a value
+ * set for phones has a tinted dot and, in place of Reset, "Use all-screens
+ * value"; on every screen, a row whose phones differ has a tinted dot too.
+ * A change from its control
+ * that the draft refused says why in a line under it (change-refusal.tsx).
  */
 export function PropertyRow({
   label,
@@ -313,6 +319,8 @@ export function PropertyRow({
   help,
   resetLabel,
   onReset,
+  phoneSet = false,
+  onUseAllScreens,
   children,
 }: {
   label: string
@@ -329,41 +337,77 @@ export function PropertyRow({
   /** What Reset goes back to: "Reset to 8 px from brand". */
   resetLabel?: string
   onReset?: () => void
+  /** Phones have a value of their own, though this row is not phones'. */
+  phoneSet?: boolean
+  /** On the Phone canvas, for a row set for phones: lets its value go, back to all screens'. */
+  onUseAllScreens?: () => void
   children: ReactNode
 }) {
+  const refusal = useRowRefusal(useId())
+  const phoneHere = set && !!onUseAllScreens
   return (
-    <div
-      className="flex min-h-7 items-center gap-2"
-      data-property-row=""
-      data-find={find}
-      data-set={set || undefined}
-    >
-      <span className="flex w-[92px] shrink-0 items-center gap-0.5">
-        <label htmlFor={htmlFor} className="min-w-0 truncate text-xs text-muted-foreground">
-          {label}
-        </label>
-        {help && <Help text={help} />}
-      </span>
-      <div className="flex min-w-0 flex-1 items-center gap-1.5" title={set ? undefined : source}>
-        {children}
-      </div>
-      {set && (
-        <span className="flex shrink-0 items-center justify-end gap-1.5">
-          <span
-            aria-hidden="true"
-            data-set-dot=""
-            className="size-1.5 shrink-0 rounded-full bg-primary"
-          />
-          <span className="sr-only">Set here.</span>
-          {onReset && (
-            <ResetButton
-              label={resetLabel ?? `${WORDS.reset} ${label.toLowerCase()}`}
-              onReset={onReset}
-            />
-          )}
+    <Fragment>
+      <div
+        className="flex min-h-7 items-center gap-2"
+        data-property-row=""
+        data-find={find}
+        data-set={set || undefined}
+        {...refusal.handlers}
+      >
+        <span className="flex w-[92px] shrink-0 items-center gap-0.5">
+          <label htmlFor={htmlFor} className="min-w-0 truncate text-xs text-muted-foreground">
+            {label}
+          </label>
+          {help && <Help text={help} />}
         </span>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5" title={set ? undefined : source}>
+          {children}
+        </div>
+        {!set && phoneSet && (
+          <span className="flex shrink-0 items-center" title={PHONE_WORDS.setForPhones}>
+            <span
+              aria-hidden="true"
+              data-phone-dot=""
+              className={cn('size-1.5 shrink-0 rounded-full', PHONE_TINT.dot)}
+            />
+            <span className="sr-only">{PHONE_WORDS.setForPhones}</span>
+          </span>
+        )}
+        {set && (
+          <span className="flex shrink-0 items-center justify-end gap-1.5">
+            <span
+              aria-hidden="true"
+              data-set-dot=""
+              className={cn(
+                'size-1.5 shrink-0 rounded-full',
+                phoneHere ? PHONE_TINT.dot : 'bg-primary'
+              )}
+            />
+            <span className="sr-only">{phoneHere ? PHONE_WORDS.setForPhones : 'Set here.'}</span>
+            {onReset && !phoneHere && (
+              <ResetButton
+                label={resetLabel ?? `${WORDS.reset} ${label.toLowerCase()}`}
+                onReset={onReset}
+              />
+            )}
+          </span>
+        )}
+      </div>
+      {phoneHere && (
+        <p className="-mt-0.5 ps-[100px] text-[11px]">
+          <button
+            type="button"
+            onClick={onUseAllScreens}
+            className="rounded text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          >
+            {PHONE_WORDS.useAllScreens}
+          </button>
+        </p>
       )}
-    </div>
+      {refusal.message && (
+        <RefusalText message={refusal.message} className="ps-[100px] text-xs text-destructive" />
+      )}
+    </Fragment>
   )
 }
 

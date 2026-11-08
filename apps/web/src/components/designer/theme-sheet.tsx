@@ -153,10 +153,16 @@ export function ThemeContent({
   more = false,
   at,
   page = null,
+  phone = false,
+  onPhone,
   onLogo,
   onOverride,
   onBlock,
 }: {
+  /** Whether the canvas shows a phone: an element's panel then edits phone values. */
+  phone?: boolean
+  /** Shows the canvas as a phone, or on every screen. */
+  onPhone?: (phone: boolean) => void
   /** Picks an override's element on the canvas. */
   onOverride?: (o: StyleOverride) => void
   /** Picks a Home block, whose own look a place set differently is. */
@@ -208,7 +214,9 @@ export function ThemeContent({
           update={update}
           state={state}
           onState={setState}
-          screen="all"
+          // It follows the canvas, as a pick on the canvas does.
+          screen={phone ? 'phone' : 'all'}
+          onScreen={onPhone ? (next) => onPhone(next === 'phone') : undefined}
           onUp={back}
           shared
           crumbs={[{ label: WORDS.theme, onSelect: back }, { label: elementName(view.element) }]}

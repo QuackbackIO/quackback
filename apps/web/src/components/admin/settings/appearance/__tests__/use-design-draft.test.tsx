@@ -314,7 +314,9 @@ describe('useDesignDraft', () => {
       const first = structuredClone(result.current.design)
       first.layout.width = 'wide'
       act(() => result.current.adopt(first, undefined, 'Make it calmer', 'r2'))
-      act(() => result.current.update((draft) => void (draft.layout.density = 'compact'), 'Density'))
+      act(() =>
+        result.current.update((draft) => void (draft.layout.density = 'compact'), 'Density')
+      )
       act(() => result.current.end('ai'))
       expect(result.current.undoLabel).toBe('Density')
       act(() => result.current.undo())
@@ -400,6 +402,67 @@ describe('useDesignDraft', () => {
       expect(result.current.undoLabel).toBe('Discard draft')
       act(() => result.current.undo())
       expect(result.current.design.layout.width).toBe('wide')
+    })
+  })
+
+  describe('changes the server would refuse', () => {
+    it('never commits one: no undo step, no save, and a one-line reason back', async () => {
+      vi.useFakeTimers()
+      const { result } = setup()
+      let outcome: unknown
+      act(() => {
+        outcome = result.current.update(
+          (draft) => void (draft.nav.home.label = 'x'.repeat(41)),
+          'Home: label'
+        )
+      })
+      expect(outcome).toEqual({ ok: false, reason: 'Use 40 characters or fewer' })
+      expect(result.current.design.nav.home.label).toBeUndefined()
+      expect(result.current.undoLabel).toBeNull()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS * 2)
+      })
+      expect(server.saves).toEqual([])
+      // A change that passes still commits after one that did not.
+      act(() => {
+        outcome = result.current.update((draft) => void (draft.layout.width = 'wide'))
+      })
+      expect(outcome).toEqual({ ok: true })
+      expect(result.current.design.layout.width).toBe('wide')
+    })
+
+    it('never resends a document the server refused, and goes back to the last saved one', async () => {
+      vi.useFakeTimers()
+      server.results = [
+        { ok: false, code: 'INVALID_CSS', message: 'Line 1: @import is not allowed' },
+      ]
+      const { result } = setup()
+      act(() => result.current.update((draft) => void (draft.layout.width = 'wide')))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS)
+      })
+      expect(server.saves).toHaveLength(1)
+      expect(result.current.refusal).toBe('Line 1: @import is not allowed')
+      // Flushing, as publishing does, sends nothing new.
+      await act(async () => {
+        await result.current.flush()
+      })
+      expect(server.saves).toHaveLength(1)
+      let published: unknown
+      await act(async () => {
+        published = await result.current.publish()
+      })
+      expect(published).toEqual({ ok: false, message: 'Line 1: @import is not allowed' })
+      expect(server.published).toEqual([])
+      // Going back takes the draft to what the server last saved, as an undo step, and saves it.
+      act(() => result.current.recover())
+      expect(result.current.design.layout.width).toBe(defaultDesign().layout.width)
+      expect(result.current.refusal).toBeNull()
+      expect(result.current.undoLabel).toBe('Back to last saved')
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS)
+      })
+      expect(server.saves).toHaveLength(2)
     })
   })
 
