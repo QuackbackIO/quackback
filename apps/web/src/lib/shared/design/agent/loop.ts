@@ -141,7 +141,8 @@ export type LoopResult =
        * what did not come out as asked, what else a change reaches.
        */
       notes: string[]
-      stopped: 'done' | 'steps' | 'time' | 'failed' | 'stalled'
+      /** Why it ended; `stopped` is the person's Stop. */
+      stopped: 'done' | 'steps' | 'time' | 'failed' | 'stalled' | 'stopped'
       ms: number
     }
   | { ok: false; code: string; message: string }
@@ -167,6 +168,10 @@ export function trailOf(steps: readonly StepRecord[]): string[] {
 
 const lowerFirst = (text: string) => `${text.charAt(0).toLowerCase()}${text.slice(1)}`
 
+/** What a request stopped by the person says: whether anything it did stays. */
+export const stoppedReply = (changed: boolean) =>
+  changed ? 'Stopped. What changed so far stays.' : 'Stopped. Nothing changed.'
+
 /**
  * The reply, said only of what happened, in one sentence: what changed, how
  * far it reached beyond the page shown, and that the loop stopped early
@@ -185,6 +190,7 @@ export function loopReply(input: {
   reach?: string
 }): string {
   const { answer, applied, done, refused, unmet } = input
+  if (input.stopped === 'stopped') return stoppedReply(applied.length > 0)
   const why = plainReasons(refused.map((each) => each.reason))
   if (applied.length === 0) {
     if (refused.length > 0)
@@ -331,6 +337,8 @@ export async function runEditLoop(input: {
   budget?: LoopBudget
   /** What was picked and the page shown, for how far the reply says the changes reached. */
   pick?: { scope: DesignAiScope; page?: DesignerPage }
+  /** The person's Stop: no step starts after it, and what applied stays. */
+  signal?: AbortSignal
 }): Promise<LoopResult> {
   const { registry, deps } = input
   const budget = input.budget ?? LOOP_BUDGET
@@ -371,6 +379,10 @@ export async function runEditLoop(input: {
   const changed = () => lists.some((list) => list.length > 0)
   try {
     for (let step = 0; step < budget.steps; step++) {
+      if (input.signal?.aborted) {
+        stopped = 'stopped'
+        break
+      }
       const spent = now() - started - toolMs
       const usual = records.length
         ? records.reduce((sum, r) => sum + r.ms.step + r.ms.read, 0) / records.length
@@ -385,15 +397,23 @@ export async function runEditLoop(input: {
           : `Step ${step + 1}: correcting what the check found`
       )
       const stepStart = now()
-      const reply = await deps.step({
-        step,
-        turns: [...turns],
-        readings,
-        picture,
-        last: step === budget.steps - 1,
-        ...(website.length ? { website: [...website] } : {}),
-        ...(capture ? { capture } : {}),
-      })
+      let reply: StepReply
+      try {
+        reply = await deps.step({
+          step,
+          turns: [...turns],
+          readings,
+          picture,
+          last: step === budget.steps - 1,
+          ...(website.length ? { website: [...website] } : {}),
+          ...(capture ? { capture } : {}),
+        })
+      } catch (err) {
+        // A step cut off by Stop: what the steps before applied stays.
+        if (!input.signal?.aborted) throw err
+        stopped = 'stopped'
+        break
+      }
       const stepMs = now() - stepStart
       if (!reply.ok) {
         if (records.length === 0 && !changed()) return reply
@@ -520,9 +540,11 @@ export async function runEditLoop(input: {
       }
     }
   } catch (err) {
-    // Nothing changed: the request failed as a whole. Something did: it stays, with its Undo.
-    if (!changed()) throw err
-    stopped = 'failed'
+    // Stopped by the person: what applied stays. Otherwise, nothing changed: the
+    // request failed as a whole; something did: it stays, with its Undo.
+    if (input.signal?.aborted) stopped = 'stopped'
+    else if (!changed()) throw err
+    else stopped = 'failed'
   }
 
   const applied = mergeChanges(input.design, design, lists)

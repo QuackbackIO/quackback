@@ -279,6 +279,67 @@ describe('AskAiPanel', () => {
     expect(document.querySelector('ol')?.hasAttribute('aria-live')).toBe(false)
   })
 
+  it('says one row per operation, in words, with no swatch for a relative value', () => {
+    draft.layout.band = 'tint'
+    draft.style = { button: { hover: { background: 'oklch(from var(--primary) l c h)' } } }
+    mount({
+      turns: [
+        {
+          role: 'assistant',
+          text: 'Calmer.',
+          changes: [
+            // One look, two fields, each carrying the look's name, as the critique saw it.
+            { path: 'layout.band', before: 'none', after: 'tint', label: 'Hero look: Tint' },
+            { path: 'layout.bandArt', before: 'dots', after: null, label: 'Hero look: Tint' },
+            {
+              path: 'style',
+              before: null,
+              after: { button: { hover: { background: 'oklch(from var(--primary) l c h)' } } },
+              label: 'Main buttons on hover: background darker',
+            },
+          ],
+        },
+      ],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Show changes' }))
+    const rows = screen.getAllByRole('listitem').filter((row) => row.closest('[data-changes]'))
+    expect(rows.map((row) => row.textContent)).toEqual([
+      'Hero look: Tint',
+      'Main buttons on hover: background darker',
+    ])
+    expect(document.querySelectorAll('[data-changes] [data-swatch]')).toHaveLength(0)
+  })
+
+  it('offers Show on each row the canvas can point at, which goes to the change', () => {
+    draft.layout.band = 'tint'
+    draft.shape.corners = 'pill'
+    const go = vi.fn()
+    mount({
+      show: { can: (at) => at.path.startsWith('layout.'), go },
+      turns: [
+        {
+          role: 'assistant',
+          text: 'Calmer.',
+          changes: [
+            { path: 'layout.band', before: 'none', after: 'tint', label: 'Hero look: Tint' },
+            { path: 'shape.corners', before: 'rounded', after: 'pill', label: 'Corners to pill' },
+          ],
+        },
+      ],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Show changes' }))
+    const shows = screen.getAllByRole('button', { name: /^Show / })
+    expect(shows.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Show Hero look: Tint on the page',
+    ])
+    expect(shows[0]!.textContent).toBe('Show')
+    fireEvent.click(shows[0]!)
+    expect(go).toHaveBeenCalledWith(
+      { path: 'layout.band', before: 'none', after: 'tint' },
+      'Hero look: Tint'
+    )
+  })
+
   it('reads a switch as On and Off', () => {
     mount({
       turns: [

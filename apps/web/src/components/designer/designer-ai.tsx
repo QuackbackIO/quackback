@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { ChevronDoubleLeftIcon, SparklesIcon } from '@heroicons/react/24/outline'
-import { AskAiPanel } from '@/components/admin/settings/appearance/ask-ai-panel'
+import {
+  AskAiPanel,
+  type ShowChange,
+} from '@/components/admin/settings/appearance/ask-ai-panel'
 import {
   DesignComposer,
   type ChatContext,
@@ -55,17 +58,21 @@ export function aiScopeOf(selection: Selection | null): {
 /** The id of Ask AI's request box, which "/" focuses. */
 export const AI_BOX_ID = 'designer-ai-box'
 
-/** Before the first request: one line, and what to start from for this portal. */
+/** Before the first request: one line, and what to start from for this portal, page and pick. */
 function AiEmpty({
   design,
   gates,
+  page,
+  selection,
   onStarter,
 }: {
   design: PortalDesign
   gates?: Partial<PortalPageGates>
+  page?: DesignerPage
+  selection: Selection | null
   onStarter: (text: string) => void
 }) {
-  const starters = aiStarters(design, gates)
+  const starters = aiStarters(design, gates, { ...(page ? { page } : {}), selection })
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-3 py-8 text-center">
       <span className="grid size-10 place-items-center rounded-full border border-border">
@@ -141,6 +148,7 @@ export function DesignerAi({
   onCollapse,
   gates,
   onFonts,
+  show,
 }: {
   /** The conversation, kept by the designer so a match made in the inspector joins it. */
   ai: ReturnType<typeof useDesignAi>
@@ -154,7 +162,10 @@ export function DesignerAi({
   elementName?: string | null
   /** The page shown, which the picked part is on. */
   pageName: string
-  /** The page shown, by its id, which a request kept to one page keeps to. */
+  /**
+   * The page shown, by its id: the starters keep to it with nothing picked, and
+   * a request kept to one page keeps to it.
+   */
   page?: DesignerPage
   update: Update
   onClearSelection: () => void
@@ -164,6 +175,8 @@ export function DesignerAi({
   gates?: Partial<PortalPageGates>
   /** Opens Theme's Brand kit fonts, with the upload for a font a brand match could not match. */
   onFonts?: (font?: UnmatchedFont) => void
+  /** Shows a change on the canvas from its Show changes row. */
+  show?: ShowChange
 }) {
   const { available } = useSuspenseQuery(portalDesignQueries.aiStatus()).data
   const { scope, blockId } = aiScopeOf(selection)
@@ -232,7 +245,13 @@ export function DesignerAi({
         className="min-h-0 flex-1 overflow-y-auto px-4 py-3"
       >
         {available && ai.turns.length === 0 ? (
-          <AiEmpty design={draft.design} gates={gates} onStarter={fill} />
+          <AiEmpty
+            design={draft.design}
+            gates={gates}
+            page={page}
+            selection={selection}
+            onStarter={fill}
+          />
         ) : (
           <AskAiPanel
             available={available}
@@ -242,6 +261,7 @@ export function DesignerAi({
             steps={ai.steps}
             design={draft.design}
             update={update}
+            {...(show ? { show } : {})}
             renderBrand={(turn, index) =>
               turn.brand && (
                 <BrandLogoCard
@@ -275,6 +295,7 @@ export function DesignerAi({
             context={context}
             busy={ai.busy}
             limited={ai.limited}
+            onStop={ai.stop}
             onClearScope={onClearSelection}
             onAsk={(text, images, brand) =>
               // An element picked inside the selection rides along, so "just this" names it,

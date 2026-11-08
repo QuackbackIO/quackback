@@ -263,3 +263,22 @@ describe('isResponseFormatRejection', () => {
     expect(isResponseFormatRejection('response_format')).toBe(false)
   })
 })
+
+describe('structuredChat with a signal', () => {
+  it('hands the model call an abort controller that follows the signal', async () => {
+    hoisted.chat.mockResolvedValueOnce({ sentiment: 'positive', confidence: 0.9 })
+    const stop = new AbortController()
+    await structuredChat({ ...base, signal: stop.signal })
+    const controller = hoisted.chat.mock.calls[0][0].abortController as AbortController
+    expect(controller).toBeInstanceOf(AbortController)
+    expect(controller.signal.aborted).toBe(false)
+    stop.abort()
+    expect(controller.signal.aborted).toBe(true)
+  })
+
+  it('sends no abort controller without a signal', async () => {
+    hoisted.chat.mockResolvedValueOnce({ sentiment: 'positive', confidence: 0.9 })
+    await structuredChat(base)
+    expect(hoisted.chat.mock.calls[0][0].abortController).toBeUndefined()
+  })
+})

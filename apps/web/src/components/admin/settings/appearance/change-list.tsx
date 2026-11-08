@@ -31,11 +31,19 @@ export function ChangeValue({ value }: { value: unknown }) {
       </span>
     )
   }
-  if (typeof value === 'string') return <span>{VALUE_LABELS[value] ?? capital(value)}</span>
-  if (typeof value === 'boolean') return <span>{value ? 'On' : 'Off'}</span>
+  return <span>{valueWords(value)}</span>
+}
+
+/** A design value in words, as the tiles name it; a colour by its code. */
+export function valueWords(value: unknown): string {
+  if (value === undefined || value === null) return 'Automatic'
+  if (typeof value === 'string' && Object.hasOwn(BUNDLED_FONTS, value))
+    return BUNDLED_FONTS[value as BundledFontId].label
+  if (typeof value === 'string') return VALUE_LABELS[value] ?? (value ? capital(value) : 'None')
+  if (typeof value === 'boolean') return value ? 'On' : 'Off'
   const background = backgroundWords(value)
-  if (background) return <span>{background}</span>
-  return <span>{typeof value === 'object' ? 'Changed' : String(value)}</span>
+  if (background) return background
+  return typeof value === 'object' ? 'Changed' : String(value)
 }
 
 /** A page background, or the pages with their own, in words: "Gradient", "Roadmap: Pattern". */
@@ -109,6 +117,9 @@ export function shownValue(path: string, value: unknown): unknown {
   return plainValue(value)
 }
 
+/** A language's key in a field of words by language: en, de, pt-BR. */
+const LOCALE_KEY = /^[a-z]{2,3}(?:-[A-Za-z]{2,4})?$/
+
 /** An object value as one short line: a font by its name, text by its English or its words. */
 function plainValue(value: unknown): unknown {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
@@ -120,8 +131,11 @@ function plainValue(value: unknown): unknown {
     return text.length > 60 ? `${text.slice(0, 57)}…` : text || 'None'
   }
   if (typeof record.en === 'string') return record.en
-  // Words in another language say which.
-  const [locale, text] = Object.entries(record).find(([, words]) => typeof words === 'string') ?? []
+  // Words in another language say which. Only a map keyed by languages is words: a style's
+  // { background: "#12893c" } is not "#12893c (background)".
+  const entries = Object.entries(record)
+  if (!entries.length || !entries.every(([key]) => LOCALE_KEY.test(key))) return value
+  const [locale, text] = entries.find(([, words]) => typeof words === 'string') ?? []
   if (locale && typeof text === 'string') return `${text} (${languageName(locale)})`
   return value
 }

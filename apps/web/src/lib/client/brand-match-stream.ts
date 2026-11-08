@@ -100,13 +100,16 @@ export async function streamBrandMatch(
     recapture?: boolean
   },
   onStep: (step: string) => void,
-  fetcher: typeof fetch = fetch
+  fetcher: typeof fetch = fetch,
+  /** The person's Stop: the request ends, and the server saves nothing more. */
+  signal?: AbortSignal
 ): Promise<BrandMatchOutcome> {
   const res = await fetcher(BRAND_MATCH_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
     body: JSON.stringify(body),
+    ...(signal ? { signal } : {}),
   })
   if (!res.ok || !res.body) {
     const refusal = (await res.json().catch(() => null)) as { error?: { message?: string } } | null

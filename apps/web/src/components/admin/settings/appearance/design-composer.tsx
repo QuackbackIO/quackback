@@ -4,6 +4,7 @@ import {
   useState,
   type ClipboardEvent,
   type DragEvent,
+  type KeyboardEvent,
   type ReactNode,
 } from 'react'
 import { ExclamationTriangleIcon, XMarkIcon } from '@heroicons/react/16/solid'
@@ -105,6 +106,7 @@ export function DesignComposer({
   limited,
   onClearScope,
   onAsk,
+  onStop,
   prefill = null,
   below,
 }: {
@@ -121,6 +123,8 @@ export function DesignComposer({
   onClearScope: () => void
   /** A message; with screenshots, how they were read, for a brand started from them. */
   onAsk: (text: string, images?: ChatImage[], brand?: BrandContext) => void
+  /** Stops the request running; while one runs, Stop takes Send's place and Escape stops it. */
+  onStop?: () => void
   /**
    * Words to put in the box, such as an example chosen; a new `seq` puts them
    * in again. A hint instead says in the empty box what to put there.
@@ -200,6 +204,14 @@ export function DesignComposer({
     const added = read.filter((item): item is Attached => item !== null)
     if (added.length) setImages((current) => [...current, ...added].slice(0, MAX_IMAGES))
   }
+  // While a request runs, the send button is Stop: the same button, so focus stays on it.
+  const stoppable = busy && !!onStop
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape' || !stoppable || event.defaultPrevented) return
+    // Escape here stops the request; it does not also step back in the builder.
+    event.preventDefault()
+    onStop()
+  }
   const onPaste = (event: ClipboardEvent) => {
     const files = filesOf(event.clipboardData)
     if (!files.length) return
@@ -223,6 +235,7 @@ export function DesignComposer({
   return (
     <div
       onPaste={onPaste}
+      onKeyDown={onKeyDown}
       onDragOver={(event) => {
         if (!carriesFiles(event)) return
         event.preventDefault()
@@ -379,26 +392,38 @@ export function DesignComposer({
             </TooltipContent>
           </Tooltip>
         )}
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon-sm"
-          aria-label="Send"
-          className="ms-auto shrink-0 rounded-full focus-visible:ring-muted-foreground"
-          disabled={!sendable}
-          onClick={send}
-        >
-          <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
-            <path
-              d="M8 13V3M3.5 7.5 8 3l4.5 4.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon-sm"
+              aria-label={stoppable ? 'Stop' : 'Send'}
+              aria-keyshortcuts={stoppable ? 'Escape' : undefined}
+              className="ms-auto shrink-0 rounded-full focus-visible:ring-muted-foreground"
+              disabled={!stoppable && !sendable}
+              onClick={stoppable ? onStop : send}
+            >
+              {stoppable ? (
+                <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
+                  <rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="currentColor" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 16 16" className="size-4" aria-hidden="true">
+                  <path
+                    d="M8 13V3M3.5 7.5 8 3l4.5 4.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{stoppable ? 'Stop (Esc)' : 'Send'}</TooltipContent>
+        </Tooltip>
       </div>
     </div>
   )

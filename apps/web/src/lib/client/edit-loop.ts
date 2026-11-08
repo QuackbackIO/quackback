@@ -73,13 +73,19 @@ export interface EditLoopDeps {
 
 /** Runs a request through the loop from the builder. */
 export async function runBuilderEditLoop(
-  input: EditLoopRequest & { design: PortalDesign; targets: StyleTarget[]; budget: LoopBudget },
+  input: EditLoopRequest & {
+    design: PortalDesign
+    targets: StyleTarget[]
+    budget: LoopBudget
+    /** The person's Stop: no step starts after it, and what applied stays. */
+    signal?: AbortSignal
+  },
   deps: EditLoopDeps,
   registry: StyleRegistry = STYLE_REGISTRY
 ): Promise<LoopResult> {
   const original = input.design
   let current = original
-  const { design: _design, targets, budget, ...request } = input
+  const { design: _design, targets, budget, signal, ...request } = input
   // The frame opens while the first step is asked; reading waits for it.
   const opening: Promise<CheckFrame<PortalDesign> | null> = deps.open
     ? deps.open(original).catch(() => null)
@@ -96,6 +102,7 @@ export async function runBuilderEditLoop(
       targets,
       budget,
       pick: { scope: request.scope, ...(request.page ? { page: request.page } : {}) },
+      ...(signal ? { signal } : {}),
       deps: {
         progress: deps.progress,
         step: async (step) => {

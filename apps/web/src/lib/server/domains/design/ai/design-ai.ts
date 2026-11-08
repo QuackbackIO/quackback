@@ -279,6 +279,8 @@ export async function askDesignAi(input: {
   places?: AiPlaces
   /** The pages the portal has; every one when not given. */
   gates?: PortalPageGates
+  /** The builder's Stop: the model call ends with it. */
+  signal?: AbortSignal
 }): Promise<DesignAiResult> {
   const model = designAiModel()
   if (!model) {
@@ -366,6 +368,7 @@ export async function askDesignAi(input: {
       // A change to match a picture can take many operations.
       maxTokens: 4000,
       middleware: designUsage(model, 'edit'),
+      ...(input.signal ? { signal: input.signal } : {}),
     })
   try {
     // An answer that does not fit is asked for once more, then without the
