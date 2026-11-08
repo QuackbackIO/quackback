@@ -51,7 +51,7 @@ import {
 } from '@/lib/shared/design/style-tokens'
 import { cn } from '@/lib/shared/utils'
 import { brandOf, everywhereValue, homeValuesOf, writeEverywhere } from './element-brand'
-import { ElementStyleSection } from './element-style-section'
+import { ElementStyleSection, applyChoice, rowChoiceOf } from './element-style-section'
 import { StyleField } from './element-styles'
 import { placeDetail, valueText } from './set-differently'
 import {
@@ -112,6 +112,9 @@ const ROW_LABELS: Partial<Record<StyleProp, string>> = {
   ringWidth: 'Width',
   lift: 'Rise',
 }
+
+/** A row's tile for its exact field, after the brand's choices. */
+const CUSTOM = 'custom'
 
 /** How a scope reads in a source line: "every main button", "this page". */
 const scopeWords = (scope: ScopeName, one: string) =>
@@ -180,6 +183,8 @@ export function ElementPanel({
     initialScope && scopes.includes(initialScope) ? initialScope : defaultScope(ctx)
   )
   const [added, setAdded] = useState<ReadonlySet<string>>(new Set())
+  /** Rows whose Custom tile is picked, showing their exact field before a value is set. */
+  const [customOpen, setCustomOpen] = useState<ReadonlySet<StyleProp>>(new Set())
   const at = scopes.includes(scope) ? scope : defaultScope(ctx)
   const name = pickName(pick, design, ctx.page)
   const one = singular(pick.element)
@@ -236,7 +241,8 @@ export function ElementPanel({
               : `From ${STATE_INFO.base.label}`,
       }
     // Every one's exact value, below this scope, state or screen.
-    const every = widest && state === 'base' ? undefined : everywhereValue(design, pick.element, prop)
+    const every =
+      widest && state === 'base' ? undefined : everywhereValue(design, pick.element, prop)
     if (every !== undefined)
       return {
         value: every,
@@ -267,6 +273,9 @@ export function ElementPanel({
     const resetLabel = from
       ? resetTo(valueText(prop, from.value), from.from)
       : `${WORDS.reset} ${label.toLowerCase()}`
+    // For every one, a brand choice that sets this property is its row's tiles, with Custom for the exact field.
+    const choice = widest && state === 'base' ? rowChoiceOf(design, pick.element, prop) : undefined
+    const fieldLabel = choice ? `${WORDS.custom} ${label.toLowerCase()}` : label
     const control = (() => {
       switch (info.kind) {
         case 'paint':
@@ -277,7 +286,7 @@ export function ElementPanel({
             <>
               <TokenField
                 id={id}
-                label={label}
+                label={fieldLabel}
                 value={here as string | undefined}
                 inherited={typeof from?.value === 'string' ? from.value : undefined}
                 tokens={tokens}
@@ -306,7 +315,7 @@ export function ElementPanel({
           return (
             <ScrubNumber
               id={id}
-              label={label}
+              label={fieldLabel}
               value={typeof here === 'number' ? here : undefined}
               inherited={typeof from?.value === 'number' ? from.value : undefined}
               min={info.min}
@@ -321,7 +330,7 @@ export function ElementPanel({
             return (
               <FontField
                 id={id}
-                label={label}
+                label={fieldLabel}
                 value={here === 'display' ? 'headline' : (here as string | undefined)}
                 inherited={
                   from?.value === 'display' ? 'headline' : (from?.value as string | undefined)
@@ -334,7 +343,7 @@ export function ElementPanel({
           return (
             <PropertyTiles
               id={id}
-              label={label}
+              label={fieldLabel}
               value={here as string | undefined}
               inherited={from?.value as string | undefined}
               options={Object.entries(tiles) as Array<[string, string]>}
@@ -344,6 +353,42 @@ export function ElementPanel({
         }
       }
     })()
+    if (choice) {
+      const custom = here !== undefined || customOpen.has(prop)
+      return (
+        <PropertyRow
+          key={`${state}-${prop}`}
+          label={label}
+          set={here !== undefined}
+          source={choice.reach ?? from?.from}
+          resetLabel={resetLabel}
+          onReset={() => write(prop, undefined)}
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <PropertyTiles
+              id={`${id}-choice`}
+              label={label}
+              value={custom ? CUSTOM : choice.value || undefined}
+              options={[...choice.options, [CUSTOM, WORDS.custom]]}
+              onChange={(value) => {
+                setCustomOpen((open) => {
+                  const next = new Set(open)
+                  if (value === CUSTOM) next.add(prop)
+                  else next.delete(prop)
+                  return next
+                })
+                if (value !== CUSTOM)
+                  update(
+                    (draft) => applyChoice(draft, pick.element, choice, value),
+                    undoName(label.toLowerCase())
+                  )
+              }}
+            />
+            {custom && <div className="flex min-w-0 items-center gap-1.5">{control}</div>}
+          </div>
+        </PropertyRow>
+      )
+    }
     return (
       <PropertyRow
         key={`${state}-${prop}`}

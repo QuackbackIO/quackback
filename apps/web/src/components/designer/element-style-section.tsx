@@ -1,17 +1,19 @@
 /**
- * An element's Style section: the brand's choices for it as preset tiles,
- * at the element panel's widest scope. A choice is a preset for the rows
- * below it: picking Rounded shows Corners as its 999 px, from brand. Where
- * an exact value takes a choice's place, no tile is filled, and picking one
- * clears that exact value so the choice reaches the element again.
+ * An element's brand choices, at the element panel's widest scope. A choice
+ * that sets one property (Shape sets Corners, Scale sets Size) is that
+ * property's row: its tiles and a Custom tile for an exact value, drawn by
+ * the panel, so one property has one control. The choices that are not one
+ * property's (a menu's look, a card's density) are the Style section's tiles.
+ * Picking a choice clears the exact values that would take its place.
  */
 import type { ReactNode } from 'react'
 import { closestWeight, uploadedFonts } from '@/components/admin/settings/appearance/fonts-section'
-import { setTune, type TuneGroupName } from '@/components/admin/settings/appearance/tune-fields'
+import { setTune } from '@/components/admin/settings/appearance/tune-fields'
 import { fontWeights } from '@/lib/shared/design/fonts'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import type { StyleElement } from '@/lib/shared/design/style-tokens'
+import type { StyleElement, StyleProp } from '@/lib/shared/design/style-tokens'
+import { everywhereValue, writeEverywhere } from './element-brand'
 import { PropertyRow, PropertySection, PropertyTiles } from './properties/properties-panel'
 import { ScrubNumber } from './properties/scrub-number'
 import { FontFaces, FontField } from './properties/token-field'
@@ -23,13 +25,15 @@ type DesignFont = PortalDesign['brand']['fonts']['body']
 type Fonts = PortalDesign['brand']['fonts']
 
 /** A brand choice as tiles: its value, how it is written, and the exact values that take its place. */
-interface TileChoice {
+export interface TileChoice {
   label: string
   value: string
   options: ReadonlyArray<readonly [string, string]>
   apply: (draft: PortalDesign, value: string) => void
-  /** Exact values that, set, decide what this choice would. */
-  masks?: ReadonlyArray<readonly [TuneGroupName, string]>
+  /** The property it sets, whose row it is part of; none for a choice of the Style section. */
+  prop?: StyleProp
+  /** Properties whose exact values, set for every one, decide what this choice would. */
+  masks?: readonly StyleProp[]
   /** Where else the choice reaches, on hover. */
   reach?: string
 }
@@ -57,7 +61,8 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
     value: fonts.labelCase ?? 'sentence',
     options: tiles(STYLE_CHOICES.capitals),
     apply: capitals(),
-    masks: element === 'button' ? [['button', 'case']] : [],
+    prop: 'case',
+    masks: ['case'],
     reach: 'Menu items and main buttons',
   }
   switch (element) {
@@ -68,17 +73,16 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
           value: shape.buttons ?? 'match',
           options: tiles(STYLE_CHOICES.buttonShape),
           apply: (draft, v) => void (draft.shape.buttons = v as typeof shape.buttons),
-          masks: [['button', 'radius']],
+          prop: 'radius',
+          masks: ['radius'],
         },
         {
           label: 'Fill',
           value: shape.fill === 'ink' ? 'ink' : 'accent',
           options: tiles(STYLE_CHOICES.fill),
           apply: (draft, v) => void (draft.shape.fill = v as typeof shape.fill),
-          masks: [
-            ['button', 'fill'],
-            ['button', 'ink'],
-          ],
+          prop: 'background',
+          masks: ['background', 'color'],
         },
         labelCase,
       ]
@@ -95,6 +99,8 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
           value: layout.navText ?? 'muted',
           options: tiles(STYLE_CHOICES.menuText),
           apply: (draft, v) => void (draft.layout.navText = v as typeof layout.navText),
+          prop: 'color',
+          masks: ['color'],
         },
         labelCase,
         ...(second ? [tint] : []),
@@ -108,10 +114,7 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
           value: layout.cards,
           options: tiles(STYLE_CHOICES.cards),
           apply: (draft, v) => void (draft.layout.cards = v as typeof layout.cards),
-          masks: [
-            ['card', 'border'],
-            ['card', 'shadow'],
-          ],
+          masks: ['borderWidth', 'shadow'],
         },
         {
           label: 'Density',
@@ -149,20 +152,24 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
           value: fonts.scale ?? 'standard',
           options: tiles(STYLE_CHOICES.scale),
           apply: (draft, v) => void (draft.brand.fonts.scale = v as Fonts['scale']),
-          masks: [['headline', 'size']],
+          prop: 'size',
+          masks: ['size'],
         },
         {
           label: 'Spacing',
           value: fonts.tracking ?? 'normal',
           options: tiles(STYLE_CHOICES.spacing),
           apply: (draft, v) => void (draft.brand.fonts.tracking = v as Fonts['tracking']),
-          masks: [['headline', 'tracking']],
+          prop: 'tracking',
+          masks: ['tracking'],
         },
         {
           label: 'Capitals',
           value: fonts.headlineCase ?? 'sentence',
           options: tiles(STYLE_CHOICES.capitals),
           apply: (draft, v) => void (draft.brand.fonts.headlineCase = v as Fonts['headlineCase']),
+          prop: 'case',
+          masks: ['case'],
         },
         {
           label: 'Colour',
@@ -170,7 +177,8 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
           options: tiles(STYLE_CHOICES.fill),
           apply: (draft, v) =>
             void (draft.brand.fonts.headlineColour = v as Fonts['headlineColour']),
-          masks: [['headline', 'colour']],
+          prop: 'color',
+          masks: ['color'],
         },
       ]
     case 'heading':
@@ -183,7 +191,8 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
             .map((weight) => [String(weight), String(weight)] as const),
           apply: (draft, v) =>
             void (draft.brand.fonts.headingWeight = Number(v) as Fonts['headingWeight']),
-          masks: [['heading', 'weight']],
+          prop: 'weight',
+          masks: ['weight'],
           reach: 'Section headings, and headlines without their own weight',
         },
       ]
@@ -192,8 +201,29 @@ export function choicesOf(design: PortalDesign, element: StyleElement): TileChoi
   }
 }
 
-const tuned = (design: PortalDesign, [group, key]: readonly [TuneGroupName, string]) =>
-  (design.tune?.[group] as Record<string, unknown> | undefined)?.[key] !== undefined
+/** The choice that is a property's row for an element, if one is. */
+export function rowChoiceOf(
+  design: PortalDesign,
+  element: StyleElement,
+  prop: StyleProp
+): TileChoice | undefined {
+  return choicesOf(design, element).find((choice) => choice.prop === prop)
+}
+
+/** The choice's properties whose exact values, set for every one, take its place. */
+export const maskedBy = (design: PortalDesign, element: StyleElement, choice: TileChoice) =>
+  (choice.masks ?? []).filter((prop) => everywhereValue(design, element, prop) !== undefined)
+
+/** Picks a choice in a draft, clearing the exact values that would take its place. */
+export function applyChoice(
+  draft: PortalDesign,
+  element: StyleElement,
+  choice: TileChoice,
+  value: string
+): void {
+  choice.apply(draft, value)
+  for (const prop of choice.masks ?? []) writeEverywhere(draft, element, prop, undefined)
+}
 
 /**
  * A brand font as an element's font row: a chip linked to the brand's slot.
@@ -310,29 +340,26 @@ export function ElementStyleSection({
   design: PortalDesign
   update: NamedUpdate
 }) {
-  const choices = choicesOf(design, element)
+  // A choice that is one property's sits in that property's row.
+  const choices = choicesOf(design, element).filter((choice) => !choice.prop)
   const rows: ReactNode[] = []
   if (element === 'headline' || element === 'heading')
     rows.push(<BrandFontRow key="font" slot={element} design={design} update={update} />)
   for (const choice of choices) {
-    const masked = (choice.masks ?? []).filter((m) => tuned(design, m))
+    const masked = maskedBy(design, element, choice)
     const id = `element-style-${element}-${choice.label.toLowerCase()}`
     rows.push(
-      <PropertyRow
-        key={choice.label}
-        label={choice.label}
-        source={choice.reach}
-      >
+      <PropertyRow key={choice.label} label={choice.label} source={choice.reach}>
         <PropertyTiles
           id={id}
           label={choice.label}
           value={masked.length || !choice.value ? undefined : choice.value}
           options={choice.options}
           onChange={(value) =>
-            update((draft) => {
-              choice.apply(draft, value)
-              for (const [group, key] of masked) setTune(draft, group, key, undefined)
-            }, `${name}: ${choice.label.toLowerCase()}, everywhere`)
+            update(
+              (draft) => applyChoice(draft, element, choice, value),
+              `${name}: ${choice.label.toLowerCase()}, everywhere`
+            )
           }
         />
       </PropertyRow>

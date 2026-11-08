@@ -6,7 +6,7 @@
  * opened. (Corners are in Theme itself; the hero's look is in its own panel.)
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
 import { defaultDesign, type PortalDesign } from '@/lib/shared/design/schema'
@@ -140,7 +140,12 @@ describe('the elements', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Main buttons/ }))
     fireEvent.click(screen.getByRole('radio', { name: 'Pill' }))
     expect(seen.design.shape.buttons).toBe('pill')
-    fireEvent.change(screen.getByLabelText('Corners'), { target: { value: '6' } })
+    fireEvent.click(
+      within(screen.getByRole('radiogroup', { name: 'Corners' })).getByRole('radio', {
+        name: 'Custom',
+      })
+    )
+    fireEvent.change(screen.getByLabelText('Custom corners'), { target: { value: '6' } })
     // Every main button's exact corners: one home, no copy in the style.
     expect(seen.design.tune).toEqual({ button: { radius: 6 } })
     expect(seen.design.style).toBeUndefined()

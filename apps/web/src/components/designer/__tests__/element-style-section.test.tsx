@@ -1,14 +1,15 @@
 // @vitest-environment happy-dom
 /**
- * An element's Style section: the brand's choices for it as tiles, each a
- * named undo step, a choice an exact value takes the place of left unpicked
- * until picked again, and nothing for an element with no choices.
+ * An element's Style section: the brand's choices that are no one
+ * property's, as tiles, each a named undo step; a choice that sets one
+ * property is that property's row instead. Picking a choice clears the exact
+ * values that took its place. Nothing for an element with no such choices.
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { defaultDesign, portalDesign, type PortalDesign } from '@/lib/shared/design/schema'
 import type { StyleElement } from '@/lib/shared/design/style-tokens'
-import { ElementStyleSection } from '../element-style-section'
+import { ElementStyleSection, applyChoice, rowChoiceOf } from '../element-style-section'
 
 afterEach(cleanup)
 
@@ -29,26 +30,33 @@ function mount(element: StyleElement, start: PortalDesign = defaultDesign()) {
 }
 
 describe('an element’s Style section', () => {
-  it('sets the menu’s and buttons’ capitals from menu items, as a named step', () => {
+  it('sets a menu’s look from menu items, as a named step', () => {
     const { box } = mount('navItem')
-    fireEvent.click(
-      screen.getByRole('radiogroup', { name: 'Capitals' }).querySelector('[role=radio]:last-child')!
-    )
-    expect(box.design.brand.fonts.labelCase).toBe('upper')
-    expect(box.labels.at(-1)).toBe('Thing: capitals, everywhere')
+    fireEvent.click(screen.getByRole('radio', { name: 'Pills' }))
+    expect(box.design.layout.nav).toBe('pills')
+    expect(box.labels.at(-1)).toBe('Thing: menu, everywhere')
   })
 
-  it('gives a headline scale back from an exact size when picked', () => {
+  it('leaves a choice that sets one property to that property’s row', () => {
+    mount('navItem')
+    expect(screen.queryByRole('radiogroup', { name: 'Capitals' })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Text' })).toBeNull()
+    cleanup()
+    mount('headline')
+    expect(screen.queryByRole('radiogroup', { name: 'Scale' })).toBeNull()
+    expect(rowChoiceOf(defaultDesign(), 'headline', 'size')?.label).toBe('Scale')
+    expect(rowChoiceOf(defaultDesign(), 'button', 'radius')?.label).toBe('Shape')
+  })
+
+  it('gives a headline scale back from an exact size when picked, in either layer', () => {
     const design = defaultDesign()
     design.tune = { headline: { size: 60, weight: 600 } }
-    const { box } = mount('headline', design)
-    expect(screen.getByRole('radio', { name: 'Standard' }).getAttribute('aria-checked')).toBe(
-      'false'
-    )
-    fireEvent.click(screen.getByRole('radio', { name: 'Large' }))
-    expect(box.design.brand.fonts.scale).toBe('large')
+    design.style = { headline: { base: { size: 64 } } }
+    applyChoice(design, 'headline', rowChoiceOf(design, 'headline', 'size')!, 'large')
+    expect(design.brand.fonts.scale).toBe('large')
     // Only what took the scale's place is cleared.
-    expect(box.design.tune).toEqual({ headline: { weight: 600 } })
+    expect(design.tune).toEqual({ headline: { weight: 600 } })
+    expect(design.style).toBeUndefined()
   })
 
   it('holds a post card title’s exact size, its only home', () => {
