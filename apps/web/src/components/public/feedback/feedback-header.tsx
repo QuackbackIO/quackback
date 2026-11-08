@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { useIntl } from 'react-intl'
 import { useFeedCopy } from '@/components/public/preview-draft-context'
 import { PencilIcon } from '@heroicons/react/24/solid'
+import { ComposerPrompt } from './composer-prompt'
 import type { FeedbackHeaderProps } from './feedback-header-animated'
 
 // Defer framer-motion (~360KB minified) to a client-only chunk. The portal
@@ -36,26 +37,32 @@ export function FeedbackHeaderFallback({ title, onTitleChange, onFocus }: Fallba
         <div className="flex-shrink-0 w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
           <PencilIcon className="w-4 h-4 text-primary" />
         </div>
-        <input
-          type="text"
-          placeholder={
+        <ComposerPrompt
+          prompt={
             copy.prompt ??
             intl.formatMessage({
               id: 'portal.feedback.header.titlePlaceholder',
               defaultMessage: "What's on your mind?",
             })
           }
-          readOnly={!onTitleChange}
-          maxLength={TITLE_MAX_LENGTH}
-          value={onTitleChange ? title : undefined}
-          onChange={onTitleChange && ((event) => onTitleChange(event.target.value))}
-          onFocus={onFocus}
-          aria-label={intl.formatMessage({
-            id: 'portal.feedback.header.titleLabel',
-            defaultMessage: 'Post title',
-          })}
-          className="min-w-0 flex-1 text-ellipsis bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground placeholder:font-normal"
-        />
+        >
+          {(placeholder) => (
+            <input
+              type="text"
+              placeholder={placeholder}
+              readOnly={!onTitleChange}
+              maxLength={TITLE_MAX_LENGTH}
+              value={onTitleChange ? title : undefined}
+              onChange={onTitleChange && ((event) => onTitleChange(event.target.value))}
+              onFocus={onFocus}
+              aria-label={intl.formatMessage({
+                id: 'portal.feedback.header.titleLabel',
+                defaultMessage: 'Post title',
+              })}
+              className="min-w-0 flex-1 text-ellipsis bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground placeholder:font-normal"
+            />
+          )}
+        </ComposerPrompt>
       </div>
     </div>
   )

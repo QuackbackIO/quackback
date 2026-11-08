@@ -10,7 +10,8 @@ const nameOf = (key: string | null) => (key ? names[key] : undefined)
 
 describe('panelFor', () => {
   it('shows the page with nothing picked, and for the site or a pick it has no panel for', () => {
-    for (const pick of [null, 'site', 'site:brand', 'nonsense'] as const)
+    // The words panel is gone: words are edited where each page draws them.
+    for (const pick of [null, 'site', 'site:brand', 'site:words', 'nonsense'] as const)
       expect(panelFor(pick as never, false, 'roadmap', nameOf)).toMatchObject({
         panel: 'page',
         crumbs: [{ label: 'Roadmap' }],
@@ -27,7 +28,10 @@ describe('panelFor', () => {
       { label: 'Help Center', to: null },
       { label: 'Hero' },
     ])
-    expect(panelFor('site:words', false, 'home', nameOf)).toMatchObject({ panel: 'words' })
+    expect(panelFor('composer', false, 'feedback', nameOf)).toMatchObject({
+      panel: 'part',
+      crumbs: [{ label: 'Feedback', to: null }, { label: 'Composer' }],
+    })
     expect(panelFor('feed', false, 'feedback', nameOf)).toMatchObject({
       panel: 'part',
       crumbs: [{ label: 'Feedback', to: null }, { label: 'Feed' }],
@@ -57,6 +61,18 @@ describe('panelFor', () => {
     expect(panelFor('home', false, 'home', nameOf).panel).toBe('blocks')
   })
 
+  it('puts the logo under the header, as its own element', () => {
+    expect(panelFor('logo', false, 'roadmap', nameOf)).toEqual({
+      panel: 'logo',
+      crumbs: [
+        { label: 'Roadmap', to: null },
+        { label: 'Header and menu', to: 'header' },
+        { label: 'Logo' },
+      ],
+      up: 'header',
+    })
+  })
+
   it('shows the header for a page of the menu, which has no panel of its own', () => {
     expect(panelFor('page:roadmap', false, 'home', nameOf).panel).toBe('header')
   })
@@ -73,6 +89,7 @@ describe('upOf', () => {
   it('goes up one level, and from the page to nothing', () => {
     expect(upOf('block-a')).toBe('home')
     expect(upOf('link:docs')).toBe('header')
+    expect(upOf('logo')).toBe('header')
     expect(upOf('hero')).toBeNull()
     expect(upOf('home')).toBeNull()
     expect(upOf(null)).toBeNull()

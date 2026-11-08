@@ -2,6 +2,7 @@ import { useId } from 'react'
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  ChevronRightIcon,
   EllipsisHorizontalIcon,
   EyeIcon,
   EyeSlashIcon,
@@ -60,6 +61,14 @@ const MENU_STYLES = [
   ['plain', 'Plain'],
 ] as const
 
+/** What the logo shows, in a word or two, on its row. */
+const LOGO_SHOWS: Record<PortalDesign['brand']['logo']['display'], string> = {
+  mark_and_name: 'Icon and title',
+  mark: 'Icon',
+  name: 'Title',
+  wordmark: 'Full logo',
+}
+
 interface RowAction {
   action: PanelAction
   label: string
@@ -93,10 +102,11 @@ function rowActions(design: PortalDesign, gates: PortalPageGates, part: MenuPart
 }
 
 /**
- * The header's panel, on the properties frame: its layout, the menu as rows
- * (Hide or Show on the row, the rest under ⋯, a link opening its own
- * settings), the landing page, and the menu's style. Names are changed where
- * the menu draws them. There is one header, on every page.
+ * The header's panel, on the properties frame: a row into the logo (its own
+ * element), its layout, the menu as rows (Hide or Show on the row, the rest
+ * under ⋯, a link opening its own settings), the landing page, and the
+ * menu's style. Names are changed where the menu draws them. There is one
+ * header, on every page.
  */
 export function HeaderPanel({
   crumbs,
@@ -106,7 +116,7 @@ export function HeaderPanel({
   update,
   act,
   onAdd,
-  onTheme,
+  onLogo,
   onLanding,
 }: {
   crumbs: readonly Crumb[]
@@ -117,7 +127,8 @@ export function HeaderPanel({
   update: NamedUpdate
   act: (target: MenuPart['id'], action: PanelAction, from: 'panel') => void
   onAdd: () => void
-  onTheme: () => void
+  /** Picks the logo, its own element in the header. */
+  onLogo: () => void
   onLanding: (target: 'home' | PortalPageType) => void
 }) {
   const id = useId()
@@ -135,6 +146,20 @@ export function HeaderPanel({
       data-header-panel=""
       scope={<ReachNote phrase="the header" count={pages} countNote="pages" />}
     >
+      <PropertySection>
+        <PropertyRow label={HEADER_COPY.logo}>
+          <button
+            type="button"
+            aria-label={`${HEADER_COPY.logo}: ${LOGO_SHOWS[design.brand.logo.display]}`}
+            onClick={onLogo}
+            className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+          >
+            <span className="min-w-0 flex-1 truncate">{LOGO_SHOWS[design.brand.logo.display]}</span>
+            <ChevronRightIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+          </button>
+        </PropertyRow>
+      </PropertySection>
+
       <PropertySection title={HEADER_COPY.layout}>
         <PropertyRow label={HEADER_COPY.layout}>
           <PropertyTiles
@@ -213,22 +238,7 @@ export function HeaderPanel({
         </PropertyRow>
       </PropertySection>
 
-      <PropertySection
-        title={HEADER_COPY.menuStyle}
-        more={
-          <PropertyRow label={HEADER_COPY.logo}>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 px-2 text-[11px]"
-              aria-label={HEADER_COPY.logoAction}
-              onClick={onTheme}
-            >
-              {WORDS.theme}
-            </Button>
-          </PropertyRow>
-        }
-      >
+      <PropertySection title={HEADER_COPY.menuStyle}>
         <PropertyRow label="Style">
           <PropertyTiles
             label={HEADER_COPY.menuStyle}

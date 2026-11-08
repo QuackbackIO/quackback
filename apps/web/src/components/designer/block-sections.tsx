@@ -164,7 +164,7 @@ export function BlockWords({
 }
 
 /** One of a block's words: what it says, read only, with Edit on the canvas. */
-function WordsRow({
+export function WordsRow({
   label,
   text,
   usual,

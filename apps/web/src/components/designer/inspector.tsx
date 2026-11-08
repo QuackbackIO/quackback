@@ -2,6 +2,7 @@ import { useId, type ReactNode } from 'react'
 import { Switch } from '@/components/ui/switch'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import { ComposerWords, EmptyFeedWords } from './feed-words'
 import { HomeLayoutPicker } from './home-layout-picker'
 import {
   PropertiesPanel,
@@ -17,7 +18,7 @@ import { STYLE_CHOICES, WORDS } from './properties/words'
 type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
 
 /** The parts the inspector has panels for. */
-export type InspectorPart = 'welcome' | 'feed' | 'filters' | 'home'
+export type InspectorPart = 'welcome' | 'composer' | 'feed' | 'filters' | 'home'
 
 const capital = (value: string) => value[0]!.toUpperCase() + value.slice(1)
 
@@ -35,8 +36,9 @@ const CARD_FIELDS = [
 
 /**
  * The panels of the page's other parts, on the properties frame: the
- * welcome message, the feed (what this page sorts by, apart from how every
- * post card looks), the filters, and how Home starts. Home's blocks are
+ * welcome message, the composer's words, the feed (what this page sorts by
+ * and its empty title, apart from how every post card looks), the filters,
+ * and how Home starts. Home's blocks are
  * listed in the Blocks menu, and words are edited where the page draws them.
  */
 export function Inspector({
@@ -46,6 +48,7 @@ export function Inspector({
   design,
   update,
   gates,
+  locale = 'en',
 }: {
   selection: InspectorPart
   crumbs: readonly Crumb[]
@@ -53,6 +56,8 @@ export function Inspector({
   design: PortalDesign
   update: NamedUpdate
   gates: PortalPageGates
+  /** The language the canvas shows, whose words the rows show and edit. */
+  locale?: string
 }) {
   const id = useId()
   const { layout } = design
@@ -84,6 +89,8 @@ export function Inspector({
           </PropertyRow>
         </PropertySection>
       )
+    case 'composer':
+      return frame(<ComposerWords design={design} update={update} locale={locale} />)
     case 'feed':
       return frame(
         <>
@@ -104,6 +111,7 @@ export function Inspector({
               />
             </PropertyRow>
           </PropertySection>
+          <EmptyFeedWords design={design} update={update} locale={locale} />
           <PropertySection title="Post cards">
             <Reach phrase="every post card" />
             <PropertyRow label="Cards">

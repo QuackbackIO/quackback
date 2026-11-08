@@ -118,6 +118,10 @@ export function BuilderSettings({
             drag={drag}
             onOverride={onOverride}
             onBlock={onBlock}
+            onLogo={() => {
+              panel.close()
+              onSelect('logo')
+            }}
           />
         )
       }
@@ -139,6 +143,7 @@ export function BuilderSettings({
           menu={menu}
           onSelect={onSelect}
           onTheme={onTheme}
+          logoUrl={logoUrl}
           say={say}
         />
       )}

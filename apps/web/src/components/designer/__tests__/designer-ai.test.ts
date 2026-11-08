@@ -18,6 +18,8 @@ describe('aiScopeOf', () => {
     // An item of the menu is in the header.
     expect(aiScopeOf('page:help')).toEqual({ scope: 'header' })
     expect(aiScopeOf('link:docs')).toEqual({ scope: 'header' })
+    // The logo is its own element, reaching the logo's fields.
+    expect(aiScopeOf('logo')).toEqual({ scope: 'logo' })
   })
 
   it('keeps a request about a page’s section to that page', () => {

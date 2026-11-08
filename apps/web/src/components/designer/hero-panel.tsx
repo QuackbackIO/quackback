@@ -6,7 +6,7 @@ import {
   ImagePlaceDrawing,
 } from '@/components/admin/settings/appearance/drawings'
 import { FocalPoint } from '@/components/admin/settings/appearance/focal-point'
-import { presignBandImage } from '@/components/admin/settings/appearance/section-controls'
+import { presignBandImage } from '@/components/admin/settings/appearance/design-update'
 import { useImageUpload } from '@/components/admin/settings/appearance/use-image-upload'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'

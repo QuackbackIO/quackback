@@ -1,24 +1,11 @@
-import { useState } from 'react'
 import { ChevronRightIcon } from '@heroicons/react/16/solid'
-import { CssFields, type CssWarning } from '@/components/admin/settings/appearance/css-section'
-import { LogoControls, LogoHeight } from '@/components/admin/settings/appearance/logo-controls'
-import { HoverControls } from '@/components/admin/settings/appearance/motion-controls'
 import { partsInUse } from '@/lib/shared/design/curated'
-import { ELEMENT_NAMES, type DesignElement } from '@/lib/shared/design/elements'
+import type { DesignElement } from '@/lib/shared/design/elements'
 import type { PortalPageGates } from '@/lib/shared/design/paths'
 import type { PortalDesign } from '@/lib/shared/design/schema'
-import {
-  STYLE_ELEMENTS,
-  type StyleElement,
-  type StyleState,
-} from '@/lib/shared/design/style-tokens'
-import { Advanced } from './advanced'
-import { ElementPanel } from './element-panel'
-import { PropertiesPanel } from './properties/properties-panel'
-import { STYLE_CHOICES } from './properties/words'
-import { Segmented } from './segmented'
-
-type NamedUpdate = (change: (draft: PortalDesign) => void, label?: string) => void
+import { STYLE_ELEMENTS, type StyleElement } from '@/lib/shared/design/style-tokens'
+import { PropertySection } from './properties/properties-panel'
+import { STYLE_CHOICES, THEME } from './properties/words'
 
 /** The element kinds each part used on every page is drawn as (style-tokens.ts). */
 export const PART_STYLES: Record<DesignElement, readonly StyleElement[]> = {
@@ -82,147 +69,74 @@ const setCount = (design: PortalDesign, element: StyleElement) =>
     0
   )
 
-/** What Styles lists: each element the pages that are on draw, the page's regions, then the logo. */
-export function stylesElements(gates: PortalPageGates): Array<StyleElement | 'logo'> {
+/**
+ * What Theme's Elements lists: each element the pages that are on draw, then
+ * the page's regions. The logo is not one: it is picked on the page, in the header.
+ */
+export function stylesElements(gates: PortalPageGates): StyleElement[] {
   const parts = partsInUse(gates)
   const ordered = [
     ...FIRST.filter((p) => parts.includes(p)),
     ...parts.filter((p) => !FIRST.includes(p)),
   ]
-  return [
-    ...ordered.flatMap((p) => PART_STYLES[p]),
-    ...REGIONS,
-    ...(parts.includes('logo') ? (['logo'] as const) : []),
-  ]
+  return [...ordered.flatMap((p) => PART_STYLES[p]), ...REGIONS]
 }
 
+/** An element's name, as its row and its panel's breadcrumb say it. */
+export const elementName = (element: StyleElement) => STYLE_ELEMENTS[element].label
+
 /**
- * Styles: how the portal uses the brand kit (its looks are Theme's own):
- * every element the portal draws, each with its brand choices in a word;
- * one opens the same element panel a pick on the canvas does, for every one
- * of its kind. The page's width sits below; motion, the logo's size and
- * custom CSS wait under Advanced.
+ * Theme's Elements, always in view: every element the portal draws, each
+ * with its brand choices in a word and how many values are set on it. One
+ * opens the same element panel a pick on the canvas does, for every one of
+ * its kind.
  */
-export function StylesPanel({
+export function ThemeElements({
   design,
-  update,
   gates,
-  logoUrl = null,
-  cssWarnings = [],
+  onOpen,
 }: {
   design: PortalDesign
-  update: NamedUpdate
   gates: PortalPageGates
-  logoUrl?: string | null
-  cssWarnings?: readonly CssWarning[]
+  onOpen: (element: StyleElement) => void
 }) {
-  // An element's panel opens in place, with a way back to the styles.
-  const [open, setOpen] = useState<StyleElement | 'logo' | null>(null)
-  const [state, setState] = useState<StyleState>('base')
-  const back = () => {
-    setOpen(null)
-    setState('base')
-  }
-  if (open === 'logo')
-    return (
-      <PropertiesPanel
-        crumbs={[{ label: 'Styles', onSelect: back }, { label: ELEMENT_NAMES.logo }]}
-        title={ELEMENT_NAMES.logo}
-      >
-        <div className="space-y-4 px-4 py-3">
-          <LogoControls design={design} update={update} logoUrl={logoUrl} />
-        </div>
-      </PropertiesPanel>
-    )
-  if (open)
-    return (
-      <ElementPanel
-        key={open}
-        pick={{ element: open, part: null, section: null, index: 0 }}
-        page="home"
-        blockName={null}
-        design={design}
-        update={update}
-        state={state}
-        onState={setState}
-        screen="all"
-        onUp={back}
-        shared
-        crumbs={[{ label: 'Styles', onSelect: back }, { label: STYLE_ELEMENTS[open].label }]}
-      />
-    )
   return (
-    <div className="space-y-7">
-      <section className="space-y-3" aria-labelledby="styles-elements">
-        <h3 id="styles-elements" className="text-[13px] font-medium">
-          Elements
-        </h3>
-        <ul className="space-y-0.5">
-          {stylesElements(gates).map((element) => {
-            const name = element === 'logo' ? ELEMENT_NAMES.logo : STYLE_ELEMENTS[element].label
-            const value = element === 'logo' ? null : elementValue(element, design)
-            const set = element === 'logo' ? 0 : setCount(design, element)
-            return (
-              <li key={element}>
-                <button
-                  type="button"
-                  onClick={() => setOpen(element)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-[13px] hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                >
-                  <span className="shrink-0 font-medium">{name}</span>
-                  <span className="ms-auto flex min-w-0 items-center gap-1.5 truncate text-xs text-muted-foreground">
-                    {set > 0 && (
-                      <>
-                        <span
-                          aria-hidden="true"
-                          data-set-dot=""
-                          className="size-1.5 shrink-0 rounded-full bg-primary"
-                        />
-                        {set} set
-                      </>
-                    )}
-                    {set > 0 && value && <span aria-hidden="true">·</span>}
-                    {value}
-                  </span>
-                  <ChevronRightIcon
-                    className="size-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      </section>
-
-      <Segmented
-        label="Page width"
-        value={design.layout.width}
-        options={[
-          ['narrow', 'Narrow'],
-          ['default', 'Default'],
-          ['wide', 'Wide'],
-        ]}
-        onChange={(width) => update((draft) => void (draft.layout.width = width))}
-      />
-
-      <Advanced part="site:styles" hint="Motion, logo size, CSS">
-        {(shown) => (
-          <>
-            <HoverControls design={design} update={update} />
-            {design.brand.logo.display !== 'name' && (
-              <section className="space-y-3">
-                <h3 className="text-[13px] font-medium">Logo size</h3>
-                <LogoHeight design={design} update={update} />
-              </section>
-            )}
-            <section className="space-y-3">
-              <h3 className="text-[13px] font-medium">Custom CSS</h3>
-              {shown && <CssFields design={design} update={update} warnings={cssWarnings} />}
-            </section>
-          </>
-        )}
-      </Advanced>
-    </div>
+    <PropertySection title={THEME.sections.elements}>
+      <ul className="-mx-1.5">
+        {stylesElements(gates).map((element) => {
+          const value = elementValue(element, design)
+          const set = setCount(design, element)
+          return (
+            <li key={element}>
+              <button
+                type="button"
+                onClick={() => onOpen(element)}
+                className="flex min-h-7 w-full items-center gap-2 rounded-md px-1.5 text-start text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
+              >
+                <span className="shrink-0">{elementName(element)}</span>
+                <span className="ms-auto flex min-w-0 items-center gap-1.5 truncate text-muted-foreground">
+                  {set > 0 && (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        data-set-dot=""
+                        className="size-1.5 shrink-0 rounded-full bg-primary"
+                      />
+                      {set} set
+                    </>
+                  )}
+                  {set > 0 && value && <span aria-hidden="true">·</span>}
+                  {value}
+                </span>
+                <ChevronRightIcon
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </PropertySection>
   )
 }

@@ -1,6 +1,5 @@
 import { ExclamationTriangleIcon } from '@heroicons/react/16/solid'
 import type { ReactNode } from 'react'
-import type { Update } from '@/components/admin/settings/appearance/section-controls'
 import type { DesignCheck } from '@/lib/shared/design/checks'
 import { linkOf, type MenuPartId } from '@/lib/shared/design/menu'
 import type { DesignerPage, OutlineNode, Selection } from '@/lib/shared/design/outline'
@@ -10,11 +9,11 @@ import type { PortalDesign } from '@/lib/shared/design/schema'
 import { HeaderPanel } from './header-panel'
 import { HeroPanel } from './hero-panel'
 import { Inspector, type InspectorPart } from './inspector'
+import { LogoPanel } from './logo-panel'
 import { MenuPartSettings } from './menu-part-settings'
 import { PagePanel } from './page-panel'
 import { PickedBlock } from './picked-block'
 import type { Crumb } from './properties/properties-panel'
-import { SiteInspector } from './site-inspector'
 import type { MenuEditing } from './use-menu-editing'
 
 /** Changes the draft under a name, so undo says what it takes back. */
@@ -47,8 +46,8 @@ export function crumbsOf(
 
 /**
  * What the right panel holds under any sheet, as the route table says: the
- * page's own panel with nothing picked, the header's and a menu link's, the
- * hero's, a block's, another part's, or the words every page uses. Never
+ * page's own panel with nothing picked, the header's, the logo's and a menu link's, the
+ * hero's, a block's, or another part's. Never
  * blank: a pick with no panel of its own shows the page's.
  */
 export function PickedSettings({
@@ -67,6 +66,7 @@ export function PickedSettings({
   menu,
   onSelect,
   onTheme,
+  logoUrl = null,
   say,
 }: {
   route: PanelRoute
@@ -88,8 +88,10 @@ export function PickedSettings({
   checks?: readonly DesignCheck[]
   menu: Pick<MenuEditing, 'act' | 'land' | 'setAdding'>
   onSelect: (selection: Selection | null) => void
-  /** Opens Theme, at its More options when asked. */
+  /** Opens Theme, at its Style when asked. */
   onTheme: (more?: boolean) => void
+  /** The workspace's logo, which the logo's panel shows until the portal has its own. */
+  logoUrl?: string | null
   say: (words: string) => void
 }) {
   // A menu link is not in the outline, so the route names it by its key: it goes by its own name.
@@ -110,10 +112,12 @@ export function PickedSettings({
           update={update}
           act={menu.act}
           onAdd={() => menu.setAdding(true)}
-          onTheme={() => onTheme()}
+          onLogo={() => onSelect('logo')}
           onLanding={menu.land}
         />
       )
+    case 'logo':
+      return <LogoPanel crumbs={crumbs} design={design} update={update} logoUrl={logoUrl} />
     case 'link':
       return (
         <MenuPartSettings
@@ -125,8 +129,6 @@ export function PickedSettings({
           onRemoved={() => onSelect('header')}
         />
       )
-    case 'words':
-      return <SiteInspector crumbs={crumbs} design={design} update={update as Update} />
     case 'hero':
       return (
         <HeroPanel
@@ -167,6 +169,7 @@ export function PickedSettings({
           design={design}
           update={update}
           gates={gates}
+          locale={locale}
         />
       )
     case 'page':

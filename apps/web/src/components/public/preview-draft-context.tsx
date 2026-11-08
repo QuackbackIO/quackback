@@ -1,6 +1,12 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react'
 import { useIntl } from 'react-intl'
 import type { PortalDesign } from '@/lib/shared/design/schema'
+import {
+  NO_PREVIEW_STATE,
+  designerPreview,
+  subscribeDesignerPreview,
+  type DesignerPreviewState,
+} from './designer-preview-state'
 import type { BandImage, DesignLogo } from '@/lib/shared/design/view'
 import type { PortalNavConfig, PortalWelcomeCard } from '@/lib/shared/types/settings'
 
@@ -117,6 +123,20 @@ export const PreviewSamplesContext = createContext(false)
 
 export function usePreviewSamples(): boolean {
   return useContext(PreviewSamplesContext)
+}
+
+/**
+ * What the builder asks the page it designs to show, such as the feed with no
+ * posts; nothing outside the builder's canvas, its Preview too.
+ */
+export function useDesignerPreview(): DesignerPreviewState {
+  const designing = usePreviewSamples()
+  const state = useSyncExternalStore(
+    subscribeDesignerPreview,
+    designerPreview,
+    () => NO_PREVIEW_STATE
+  )
+  return designing ? state : NO_PREVIEW_STATE
 }
 
 /** A draft design's page titles, or undefined (always, outside a design preview). */

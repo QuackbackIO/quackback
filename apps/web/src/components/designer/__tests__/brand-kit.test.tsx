@@ -56,13 +56,14 @@ function imported(): PortalDesign {
 }
 
 function renderKit(start: PortalDesign) {
-  const seen = { design: start, updates: 0 }
+  const seen = { design: start, updates: 0, logo: 0 }
   function Harness() {
     const [design, setDesign] = useState(start)
     return (
       <BrandKit
         design={design}
         logoUrl="/workspace-logo.png"
+        onLogo={() => (seen.logo += 1)}
         update={(change) => {
           seen.updates += 1
           const next = structuredClone(design)
@@ -124,6 +125,22 @@ describe('the fonts', () => {
 })
 
 describe('the logo: an icon and a title', () => {
+  it('leads to the logo as the header draws it for its size and placement', () => {
+    const { seen } = renderKit(defaultDesign())
+    expect(screen.queryByLabelText('Height')).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Use a full logo image instead' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Size and placement' }))
+    expect(seen.logo).toBe(1)
+  })
+
+  it('keeps the logo colours in the logo’s own panel, only offering them beside the brand colour', () => {
+    const start = defaultDesign()
+    start.brand.logoColours = ['#0058a3', '#e4002b']
+    renderKit(start)
+    expect(screen.queryByRole('img', { name: /^Logo colours: / })).toBeNull()
+    expect(screen.getByRole('group', { name: 'From your logo' })).toBeTruthy()
+  })
+
   it('shows the workspace logo as the icon until the portal has its own, and drafts an upload', async () => {
     const { seen } = renderKit(defaultDesign())
     expect(screen.getByText('Workspace logo')).toBeTruthy()

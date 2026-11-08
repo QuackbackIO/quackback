@@ -27,7 +27,10 @@ export function PanelSheet({
   drag,
   onOverride,
   onBlock,
+  onLogo,
 }: {
+  /** Picks the logo on the page, from the brand kit's Size and placement. */
+  onLogo?: () => void
   /** Picks an override's element on the canvas. */
   onOverride?: (o: StyleOverride) => void
   /** Picks a Home block, from Theme's places set differently. */
@@ -68,10 +71,10 @@ export function PanelSheet({
           logoUrl={logoUrl}
           cssWarnings={cssWarnings}
           more={state.more}
-          onMore={(open) => dispatch({ type: 'more', open })}
           page={page}
           onOverride={onOverride}
           onBlock={onBlock}
+          onLogo={onLogo}
         />
       ) : (
         <AddContent

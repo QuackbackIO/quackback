@@ -13,7 +13,7 @@ import {
   type OwnFontRequest,
 } from '@/components/admin/settings/appearance/fonts-section'
 import { loadFontPreviews } from '@/components/admin/settings/appearance/font-previews'
-import type { Update } from '@/components/admin/settings/appearance/section-controls'
+import type { Update } from '@/components/admin/settings/appearance/design-update'
 import { FONT_PAIRS, fontPairOf, takeFontPair } from '@/lib/shared/design/curated'
 import { BUNDLED_FONTS, closestWeight, fontStack, fontWeights } from '@/lib/shared/design/fonts'
 import { DESIGN_OPTIONS } from '@/lib/shared/design/options'

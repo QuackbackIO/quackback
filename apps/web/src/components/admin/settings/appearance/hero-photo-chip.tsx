@@ -1,7 +1,7 @@
 import { useId } from 'react'
 import { MATCH_BRAND } from '@/lib/shared/design/match-brand'
 import { cn } from '@/lib/shared/utils'
-import { presignBandImage } from './section-controls'
+import { presignBandImage } from './design-update'
 import { useImageUpload } from './use-image-upload'
 
 /**

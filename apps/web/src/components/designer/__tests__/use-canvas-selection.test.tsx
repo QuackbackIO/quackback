@@ -6,7 +6,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
-import type { OutlineNode } from '@/lib/shared/design/outline'
+import { outlineOf, type OutlineNode } from '@/lib/shared/design/outline'
 import { defaultDesign } from '@/lib/shared/design/schema'
 import { nodeLabel, useCanvasSelection } from '../use-canvas-selection'
 
@@ -28,6 +28,25 @@ function picking() {
 }
 
 describe('useCanvasSelection', () => {
+  it('picks the logo, its own element in the header, and Escape goes up to the header', () => {
+    const real = outlineOf(defaultDesign(), 'roadmap')
+    const hook = renderHook(() =>
+      useCanvasSelection({
+        nodes: real,
+        design,
+        page: 'roadmap',
+        onPanel: vi.fn(),
+        onPicked: vi.fn(),
+        say: vi.fn(),
+      })
+    )
+    act(() => hook.result.current.select('logo', null))
+    expect(hook.result.current.selection).toBe('logo')
+    expect(hook.result.current.nameOf('logo')).toBe('Logo')
+    act(() => hook.result.current.stepBack())
+    expect(hook.result.current.selection).toBe('header')
+  })
+
   it('names parts and their children from the outline', () => {
     expect(nodeLabel(nodes, 'block-aaaaaaaa')).toBe('Welcome')
     expect(nodeLabel(nodes, null)).toBeUndefined()

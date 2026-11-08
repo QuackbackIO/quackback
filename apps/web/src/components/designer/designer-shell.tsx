@@ -129,7 +129,7 @@ export function DesignerShell({
     nodes,
     design,
     page,
-    // The brand kit and the styles are in Theme; the styles under More options.
+    // The brand kit and the styles are in Theme; the styles open it at Style.
     onPanel: (part) => panel.dispatch({ type: 'open', sheet: 'theme', more: part === 'styles' }),
     onPicked: () => setPane('settings'),
     say,
@@ -515,8 +515,9 @@ export function DesignerShell({
                   onHover={picking.hover}
                   onMenu={(target, how, node) => {
                     menu.onMenu(target, how)
-                    // A menu item, the logo or sign in is picked too, so its look can be set.
-                    if (how === 'click' && node) picking.select('header', null, node)
+                    // The logo is its own element; a menu item or sign in is picked too, so its look can be set.
+                    if (how === 'click' && target === 'logo') picking.select('logo', null)
+                    else if (how === 'click' && node) picking.select('header', null, node)
                   }}
                   onMenuHover={menu.setHovered}
                   onWords={onWords}

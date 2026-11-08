@@ -136,9 +136,15 @@ describe('page choices named, grouped and reachable by Quackback AI', () => {
 
 describe('page sections in the outline', () => {
   it('lists each page’s sections in the order a visitor meets them', () => {
-    expect(pageKeys(defaultDesign(), 'changelog')).toEqual(['header', 'hero', 'entries'])
-    expect(pageKeys(defaultDesign(), 'help')).toEqual(['header', 'hero', 'topics', 'popular'])
-    expect(pageKeys(defaultDesign(), 'roadmap')).toEqual(['header', 'hero', 'board'])
+    expect(pageKeys(defaultDesign(), 'changelog')).toEqual(['header', 'logo', 'hero', 'entries'])
+    expect(pageKeys(defaultDesign(), 'help')).toEqual([
+      'header',
+      'logo',
+      'hero',
+      'topics',
+      'popular',
+    ])
+    expect(pageKeys(defaultDesign(), 'roadmap')).toEqual(['header', 'logo', 'hero', 'board'])
   })
 
   it('lists Popular articles when off, so it can be turned back on', () => {

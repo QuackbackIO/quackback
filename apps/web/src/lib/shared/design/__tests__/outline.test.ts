@@ -39,6 +39,7 @@ describe('outlineOf', () => {
     expect(pageKeys(withHome(), 'home')).toEqual([
       'site',
       'header',
+      'logo',
       'hero',
       'home',
       'block-ideas00001',
@@ -69,8 +70,10 @@ describe('outlineOf', () => {
     expect(pageKeys(design, 'feedback')).toEqual([
       'site',
       'header',
+      'logo',
       'hero',
       'welcome',
+      'composer',
       'feed',
       'filters',
     ])
@@ -80,9 +83,15 @@ describe('outlineOf', () => {
   })
 
   it('gives the other pages their hero and their own sections, and Status none', () => {
-    expect(pageKeys(defaultDesign(), 'roadmap')).toEqual(['site', 'header', 'hero', 'board'])
-    expect(pageKeys(defaultDesign(), 'status')).toEqual(['site', 'header'])
-    expect(pageKeys(defaultDesign(), 'post')).toEqual(['site', 'header'])
+    expect(pageKeys(defaultDesign(), 'roadmap')).toEqual([
+      'site',
+      'header',
+      'logo',
+      'hero',
+      'board',
+    ])
+    expect(pageKeys(defaultDesign(), 'status')).toEqual(['site', 'header', 'logo'])
+    expect(pageKeys(defaultDesign(), 'post')).toEqual(['site', 'header', 'logo'])
   })
 
   it('names the hero Hero on every page that has one', () => {
@@ -113,7 +122,7 @@ describe('pages', () => {
     expect(pageOfPath('/b/ideas/posts/1', false)).toBe('post')
     expect(pageOfPath('/b/ideas', false)).toBeNull()
     expect(pagePath('post', '/b/ideas/posts/1')).toBe('/b/ideas/posts/1')
-    expect(pageKeys(defaultDesign(), 'post')).toEqual(['site', 'header'])
+    expect(pageKeys(defaultDesign(), 'post')).toEqual(['site', 'header', 'logo'])
     expect(pagePath('home')).toBe('/')
     expect(pagePath('help')).toBe('/hc')
   })
@@ -144,6 +153,15 @@ describe('pages', () => {
   })
 })
 
+describe('the header', () => {
+  it('holds the logo, its own element, on every page', () => {
+    for (const page of ['home', 'feedback', 'roadmap', 'status', 'post'] as const) {
+      const header = outlineOf(defaultDesign(), page).find((node) => node.key === 'header')!
+      expect(header.children).toEqual([{ key: 'logo', label: 'Logo' }])
+    }
+  })
+})
+
 describe('looks are not in the outline', () => {
   it('lists blocks and sections only, never the elements the styles set', () => {
     for (const page of ['home', 'feedback', 'roadmap', 'status', 'post'] as const) {
@@ -155,9 +173,8 @@ describe('looks are not in the outline', () => {
 })
 
 describe('what every page shares, in the outline', () => {
-  it('lists the words; the brand kit, styles and readability are in Theme', () => {
+  it('lists nothing under it: the brand kit and styles are in Theme, words on each page', () => {
     const site = outlineOf(defaultDesign(), 'feedback')[0]!
-    expect(site).toMatchObject({ key: 'site', label: 'Every page' })
-    expect(site.children?.map((node) => [node.key, node.label])).toEqual([['site:words', 'Words']])
+    expect(site).toEqual({ key: 'site', label: 'Every page' })
   })
 })

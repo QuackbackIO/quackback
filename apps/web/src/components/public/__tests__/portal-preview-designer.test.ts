@@ -34,6 +34,8 @@ beforeEach(() => {
       <button id="cta" data-qb-label="">Share</button>
     </div>`
   stop = startDesigning()
+  // Starting, it asks the builder what to show (see 'what the builder asks the page to show').
+  posted.length = 0
 })
 
 afterEach(() => {
@@ -323,9 +325,41 @@ describe('previewHref', () => {
   })
 })
 
+describe('what the builder asks the page to show', () => {
+  it('asks once it listens, and draws the feed empty or the composer open as asked', async () => {
+    stop()
+    posted.length = 0
+    stop = startDesigning()
+    expect(posted).toEqual([{ type: 'quackback:preview-state-ask' }])
+    const { designerPreview } = await import('../designer-preview-state')
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'quackback:preview-state', empty: true },
+        origin: window.location.origin,
+        source: window.parent,
+      })
+    )
+    expect(designerPreview()).toEqual({ empty: true, composer: false })
+    // Asked to edit the composer's button, the frame opens the composer, where its button is.
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'quackback:words-edit', field: 'feedback.submit' },
+        origin: window.location.origin,
+        source: window.parent,
+      })
+    )
+    expect(designerPreview()).toEqual({ empty: true, composer: true })
+    // Designing stops: nothing is asked any more.
+    stop()
+    stop = () => {}
+    expect(designerPreview()).toEqual({ empty: false, composer: false })
+  })
+})
+
 describe('startTrying', () => {
   it('lets clicks act, keeps links in the preview, sends nothing, and hands Escape back', () => {
     stop()
+    posted.length = 0
     const assign = vi.fn()
     vi.spyOn(window, 'location', 'get').mockReturnValue({
       ...window.location,

@@ -4,21 +4,19 @@
  * first; a second and extra colours are added with "+ Add colour"; the
  * worked-out ones (cards, raised parts, secondary text, borders) wait under
  * More, each Auto until set, then marked with a dot and Reset. Dark mode
- * names the same colours as light, and the logo's own colours close it.
+ * names the same colours as light.
  */
 import { useMemo, useState } from 'react'
 import {
   CheckCircleIcon,
   ChevronRightIcon,
   ExclamationTriangleIcon,
-  EyeDropperIcon,
   MinusIcon,
   PlusIcon,
 } from '@heroicons/react/16/solid'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ColourField, toHex } from '@/components/admin/settings/appearance/colour-field'
-import { imagePalette } from '@/lib/client/image-palette'
 import { colourPairs, colourRowIssues, type ColourRowIssue } from '@/lib/shared/design/colour-pairs'
 import { resolveDesign } from '@/lib/shared/design/resolve'
 import type { PortalDesign } from '@/lib/shared/design/schema'
@@ -139,17 +137,10 @@ export function ColourValue({
 
 /**
  * The brand's colours by the job each does, the dark values worked out from
- * them (or set by hand), and the logo's own colours.
+ * them (or set by hand). The logo's own colours are offered beside the brand
+ * colour; they are set in the logo's panel.
  */
-export function BrandKitColours({
-  design,
-  update,
-  logoUrl,
-}: {
-  design: PortalDesign
-  update: Update
-  logoUrl: string | null
-}) {
+export function BrandKitColours({ design, update }: { design: PortalDesign; update: Update }) {
   const { light } = design.brand
   const extra = light.extra ?? []
   const [adding, setAdding] = useState(false)
@@ -298,7 +289,6 @@ export function BrandKitColours({
         {MORE.filter(({ key }) => !(key === 'muted' && issues.muted)).map(moreRow)}
       </PropertyMore>
       {design.mode !== 'light' && <DarkValues design={design} update={update} />}
-      <LogoColourRow design={design} update={update} logoUrl={logoUrl} />
     </PropertySection>
   )
 }
@@ -447,75 +437,5 @@ function DarkValues({ design, update }: { design: PortalDesign; update: Update }
         )}
       </div>
     </details>
-  )
-}
-
-/**
- * The logo's own colours, taken from the logo, for status markers drawn in
- * the brand's colours: swatches, a pick from the logo, and Clear.
- */
-function LogoColourRow({
-  design,
-  update,
-  logoUrl,
-}: {
-  design: PortalDesign
-  update: Update
-  logoUrl: string | null
-}) {
-  const colours = design.brand.logoColours ?? []
-  const [busy, setBusy] = useState(false)
-  const take = async () => {
-    if (!logoUrl) return
-    setBusy(true)
-    try {
-      const blob = await (await fetch(logoUrl)).blob()
-      const found = (await imagePalette(blob, 6)).map((colour) => colour.toLowerCase())
-      update((draft) => {
-        if (found.length) draft.brand.logoColours = found.slice(0, 6)
-      })
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <PropertyRow label={THEME.logoColours} source={THEME.logoColoursHelp}>
-      {colours.length > 0 ? (
-        <span
-          role="img"
-          className="flex gap-1 px-1.5"
-          aria-label={`${THEME.logoColours}: ${colours.join(', ')}`}
-        >
-          {colours.map((colour) => (
-            <Swatch key={colour} colour={colour} />
-          ))}
-        </span>
-      ) : (
-        <span className="px-1.5 text-xs text-muted-foreground">{WORDS.none}</span>
-      )}
-      <span className="ms-auto flex items-center gap-0.5">
-        {logoUrl && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="size-6"
-            disabled={busy}
-            aria-label={busy ? THEME.reading : THEME.pickFromLogo}
-            onClick={() => void take()}
-          >
-            <EyeDropperIcon className="size-3.5" aria-hidden="true" />
-          </Button>
-        )}
-        {colours.length > 0 && (
-          <button
-            type="button"
-            onClick={() => update((draft) => void delete draft.brand.logoColours)}
-            className="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none"
-          >
-            {THEME.clear}
-          </button>
-        )}
-      </span>
-    </PropertyRow>
   )
 }

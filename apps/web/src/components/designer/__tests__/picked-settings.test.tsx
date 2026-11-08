@@ -30,11 +30,13 @@ vi.mock('../hero-panel', () => ({
 }))
 vi.mock('../picked-block', () => ({ PickedBlock: () => <p>Block settings</p> }))
 vi.mock('../page-background-settings', () => ({ PageBackgroundSection: () => null }))
-vi.mock('@/components/admin/settings/appearance/words-section', () => ({
-  WordsSection: () => <p>Words settings</p>,
-}))
+const edits = vi.hoisted(() => [] as string[])
+vi.mock('../words/edit-on-canvas', () => ({ editOnCanvas: (field: string) => edits.push(field) }))
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  edits.length = 0
+})
 
 const gates: PortalPageGates = {
   feedback: true,
@@ -118,20 +120,49 @@ describe('PickedSettings', () => {
     expect(onSelect).toHaveBeenCalledWith(null)
   })
 
-  it('shows the words every page uses on the frame', () => {
-    show('site:words', 'home')
-    expect(crumbs()).toBe('HomeWords')
-    expect(document.querySelector('[data-reach-note]')?.textContent).toContain(
-      'Applies to the words on every page'
-    )
+  it('has no Words panel: the old address shows the page', () => {
+    show('site:words' as Selection, 'home')
+    expect(document.querySelector('[data-page-panel]')).not.toBeNull()
+    expect(document.querySelector('[data-words-panel]')).toBeNull()
+  })
+
+  it('gives the composer its words, each shown in the language viewed and edited on the page', () => {
+    const start = defaultDesign()
+    start.pages.feedback.copy = { prompt: { en: 'Tell us', fr: 'Dites-nous' } }
+    const { seen } = show('composer', 'feedback', start)
+    expect(crumbs()).toBe('FeedbackComposer')
+    const words = screen.getByRole('region', { name: 'Words' })
+    expect(within(words).getByText('Tell us')).toBeTruthy()
+    // Without words of its own, the button shows what the page says, in grey.
+    expect(within(words).getByText('Post').className).toContain('text-muted-foreground')
+    fireEvent.click(within(words).getByRole('button', { name: 'Edit prompt' }))
+    fireEvent.click(within(words).getByRole('button', { name: 'Edit button' }))
+    expect(edits).toEqual(['feedback.prompt', 'feedback.submit'])
+    fireEvent.click(within(words).getByRole('button', { name: "Reset to “What's on your mind?”" }))
+    expect(seen.design.pages.feedback.copy.prompt).toEqual({ fr: 'Dites-nous' })
+  })
+
+  it('puts the empty feed’s title on the feed, previewed empty to edit it on the page', () => {
+    show('feed', 'feedback')
+    const empty = screen.getByRole('region', { name: 'When empty' })
+    const preview = within(empty).getByRole('switch', { name: 'Preview empty' })
+    expect(preview.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(within(empty).getByRole('button', { name: 'Edit title' }))
+    expect(edits).toEqual(['feedback.emptyTitle'])
+    // Editing the title shows the feed empty, where the title is.
+    expect(preview.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(preview)
+    expect(preview.getAttribute('aria-checked')).toBe('false')
   })
 
   it('splits the feed: this page’s sort apart from every post card’s look', () => {
     const { seen } = show('feed', 'feedback')
     const posts = screen.getByRole('region', { name: 'Posts' })
     const cards = screen.getByRole('region', { name: 'Post cards' })
-    expect(within(posts).getByText(/Applies/).textContent).toBe('Applies to the feed on this page')
-    expect(within(cards).getByText(/Applies/).textContent).toBe('Applies to every post card')
+    expect(posts.querySelector('[data-reach-note]')?.textContent).toBe(
+      'Applies to the feed on this page'
+    )
+    expect(cards.querySelector('[data-reach-note]')?.textContent).toBe('Applies to every post card')
     fireEvent.click(within(posts).getByRole('radio', { name: 'New' }))
     expect(seen.design.pages.feedback.defaultSort).toBe('new')
     // Every name in full, as the vocabulary has it.
