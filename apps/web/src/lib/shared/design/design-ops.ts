@@ -293,27 +293,13 @@ function urlsIn(value: unknown): string[] {
 
 /* Home's blocks */
 
-/** Other words a block type is known by. */
-const BLOCK_ALIASES: Partial<Record<HomeBlockType, readonly string[]>> = {
-  ideas: ['posts', 'top posts', 'popular posts', 'ideas'],
-  updates: ['updates', 'changelog updates', 'latest entries'],
-  help_search: ['help search', 'search'],
-  help_topics: ['help topics', 'topics'],
-  composer: ['composer', 'post box', 'write a post', 'new post'],
-  status: ['status'],
-  contact: ['contact', 'contact us'],
-  welcome: ['welcome', 'welcome message'],
-  links: ['links'],
-  boards: ['boards', 'board list', 'our boards'],
-  roadmap: ['roadmap'],
-}
-
 /** The block type a word names, by its type, name or another word for it. */
 export function blockTypeOf(word: string): HomeBlockType | null {
   const want = norm(word)
   return (
     DESIGN_OPTIONS.blockType.find((type) => {
-      const names = [type, blockOf(type)!.name, ...(BLOCK_ALIASES[type] ?? [])]
+      const def = blockOf(type)!
+      const names = [type, def.name, ...(def.aliases ?? [])]
       return names.some((name) => norm(name) === want)
     }) ?? null
   )

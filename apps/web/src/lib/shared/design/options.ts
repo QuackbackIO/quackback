@@ -1,4 +1,5 @@
 import { COMPOSER_WIDTHS } from './composer-width'
+import { HOME_BLOCK_TYPES, HOME_BLOCK_VIEWS } from './blocks/view'
 
 /**
  * Every choice a portal design offers, in one place. The design schema, the
@@ -119,19 +120,8 @@ export const DESIGN_OPTIONS = {
   /** Which side of the feed the filters sit on, `end` being the reading end. */
   filters: ['end', 'start'],
   sort: ['trending', 'top', 'new'],
-  blockType: [
-    'welcome',
-    'composer',
-    'ideas',
-    'roadmap',
-    'updates',
-    'help_search',
-    'help_topics',
-    'status',
-    'contact',
-    'links',
-    'boards',
-  ],
+  /** Home's blocks, from their own modules (blocks/view.ts). */
+  blockType: HOME_BLOCK_TYPES,
   /** A Home block's own look: the site's card, no card, a tint of the brand colour, or the brand colour. */
   blockTone: ['card', 'plain', 'tint', 'brand'],
   blockAlign: ['start', 'centre'],
@@ -215,19 +205,9 @@ export type BlockType = (typeof DESIGN_OPTIONS.blockType)[number]
  * the block's content, so a block never shows blank space it did not ask
  * for; more rows make it taller than its content.
  */
-export const BLOCK_SIZES: Record<
+export const BLOCK_SIZES = Object.fromEntries(
+  HOME_BLOCK_VIEWS.map((view) => [view.type, { size: view.size, min: view.min }])
+) as Record<
   BlockType,
   { readonly size: readonly [w: number, h: number]; readonly min: readonly [w: number, h: number] }
-> = {
-  welcome: { size: [12, 1], min: [3, 1] },
-  composer: { size: [12, 1], min: [4, 1] },
-  ideas: { size: [6, 1], min: [4, 1] },
-  roadmap: { size: [12, 1], min: [6, 1] },
-  updates: { size: [6, 1], min: [4, 1] },
-  help_search: { size: [6, 1], min: [4, 1] },
-  help_topics: { size: [12, 1], min: [4, 1] },
-  status: { size: [4, 1], min: [3, 1] },
-  contact: { size: [4, 1], min: [3, 1] },
-  links: { size: [4, 1], min: [3, 1] },
-  boards: { size: [6, 1], min: [4, 1] },
-}
+>
